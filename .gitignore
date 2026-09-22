@@ -46,3 +46,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Gradle 会把插件构建产物放在 android/build 下
+android/build/
