@@ -15,11 +15,23 @@ class MediaItemCollection extends StatelessWidget {
     required this.items,
     required this.sourceName,
     this.padding = const EdgeInsets.only(bottom: AppSpacing.lg),
+    this.onTapItem,
+    this.onLongPressItem,
+    this.badgeOf,
   });
 
   final List<MediaItem> items;
   final String sourceName;
   final EdgeInsets padding;
+
+  /// 自定义点击行为；不传时默认进入详情页。
+  final void Function(MediaItem item)? onTapItem;
+
+  /// 长按行为（书架用它做「移出书架」）。
+  final void Function(MediaItem item)? onLongPressItem;
+
+  /// 右上角角标文案（书架用它显示阅读进度）。
+  final String? Function(MediaItem item)? badgeOf;
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +39,14 @@ class MediaItemCollection extends StatelessWidget {
         AppBreakpoints.of(MediaQuery.sizeOf(context).width) ==
         WindowSizeClass.compact;
 
-    void open(MediaItem item) => context.push(AppRoutes.detail, extra: item);
+    void open(MediaItem item) {
+      final handler = onTapItem;
+      if (handler != null) {
+        handler(item);
+        return;
+      }
+      context.push(AppRoutes.detail, extra: item);
+    }
 
     if (isCompact) {
       return ListView.builder(
@@ -36,7 +55,11 @@ class MediaItemCollection extends StatelessWidget {
         itemBuilder: (context, index) => MediaItemRow(
           item: items[index],
           sourceName: sourceName,
+          badge: badgeOf?.call(items[index]),
           onTap: () => open(items[index]),
+          onLongPress: onLongPressItem == null
+              ? null
+              : () => onLongPressItem!(items[index]),
         ),
       );
     }
@@ -53,7 +76,11 @@ class MediaItemCollection extends StatelessWidget {
       itemBuilder: (context, index) => MediaItemCard(
         item: items[index],
         sourceName: sourceName,
+        badge: badgeOf?.call(items[index]),
         onTap: () => open(items[index]),
+        onLongPress: onLongPressItem == null
+            ? null
+            : () => onLongPressItem!(items[index]),
       ),
     );
   }
@@ -69,11 +96,19 @@ class MediaItemCard extends StatelessWidget {
     required this.item,
     required this.sourceName,
     this.onTap,
+    this.onLongPress,
+    this.badge,
   });
 
   final MediaItem item;
   final String sourceName;
   final VoidCallback? onTap;
+
+  /// 长按行为（书架用它做「移出书架」）。
+  final VoidCallback? onLongPress;
+
+  /// 封面右上角角标（阅读进度 / 未读章数）。
+  final String? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -82,17 +117,47 @@ class MediaItemCard extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       borderRadius: AppRadius.cardRadius,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Expanded(
-            child: ClipRRect(
-              borderRadius: AppRadius.cardRadius,
-              child: AspectRatio(
-                aspectRatio: 2 / 3,
-                child: _Cover(url: item.coverUrl),
-              ),
+            child: Stack(
+              children: <Widget>[
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: AppRadius.cardRadius,
+                    child: AspectRatio(
+                      aspectRatio: 2 / 3,
+                      child: MediaCover(url: item.coverUrl),
+                    ),
+                  ),
+                ),
+                if (badge != null)
+                  Positioned(
+                    right: AppSpacing.xxs,
+                    top: AppSpacing.xxs,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.xs,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: palette.updateBadge,
+                        borderRadius: AppRadius.pillRadius,
+                      ),
+                      child: Text(
+                        badge!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 11,
+                          color: const Color(0xFF1A1A1A),
+                          fontWeight: AppTypography.medium,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(height: AppSpacing.xs),
@@ -131,11 +196,15 @@ class MediaItemRow extends StatelessWidget {
     required this.item,
     required this.sourceName,
     this.onTap,
+    this.onLongPress,
+    this.badge,
   });
 
   final MediaItem item;
   final String sourceName;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final String? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -144,6 +213,7 @@ class MediaItemRow extends StatelessWidget {
 
     return ListTile(
       onTap: onTap,
+      onLongPress: onLongPress,
       contentPadding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
         vertical: AppSpacing.xxs,
@@ -153,7 +223,7 @@ class MediaItemRow extends StatelessWidget {
         child: SizedBox(
           width: 44,
           height: 62,
-          child: _Cover(url: item.coverUrl),
+          child: MediaCover(url: item.coverUrl),
         ),
       ),
       title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
@@ -169,12 +239,32 @@ class MediaItemRow extends StatelessWidget {
           color: palette.mutedForeground,
         ),
       ),
+      trailing: badge == null
+          ? null
+          : Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.xs,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: palette.updateBadge,
+                borderRadius: AppRadius.pillRadius,
+              ),
+              child: Text(
+                badge!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontSize: 11,
+                  color: const Color(0xFF1A1A1A),
+                ),
+              ),
+            ),
     );
   }
 }
 
-class _Cover extends StatelessWidget {
-  const _Cover({required this.url});
+/// 封面图：地址缺失或加载失败时落回占位底色，不允许破图撑坏布局。
+class MediaCover extends StatelessWidget {
+  const MediaCover({super.key, required this.url});
 
   final String? url;
 

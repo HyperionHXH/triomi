@@ -671,6 +671,15 @@ class $MediaItemsTable extends MediaItems
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _urlMeta = const VerificationMeta('url');
+  @override
+  late final GeneratedColumn<String> url = GeneratedColumn<String>(
+    'url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _coverUrlMeta = const VerificationMeta(
     'coverUrl',
   );
@@ -759,6 +768,7 @@ class $MediaItemsTable extends MediaItems
     remoteId,
     type,
     title,
+    url,
     coverUrl,
     author,
     description,
@@ -803,6 +813,12 @@ class $MediaItemsTable extends MediaItems
       );
     } else if (isInserting) {
       context.missing(_titleMeta);
+    }
+    if (data.containsKey('url')) {
+      context.handle(
+        _urlMeta,
+        url.isAcceptableOrUnknown(data['url']!, _urlMeta),
+      );
     }
     if (data.containsKey('cover_url')) {
       context.handle(
@@ -882,6 +898,10 @@ class $MediaItemsTable extends MediaItems
         DriftSqlType.string,
         data['${effectivePrefix}title'],
       )!,
+      url: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}url'],
+      ),
       coverUrl: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}cover_url'],
@@ -931,6 +951,11 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
   final String remoteId;
   final MediaType type;
   final String title;
+
+  /// 详情页地址（相对地址在入库前已补全为绝对地址）。
+  ///
+  /// 必须持久化：从书架点进详情要靠它，丢了就得重新搜一次。
+  final String? url;
   final String? coverUrl;
   final String? author;
   final String? description;
@@ -950,6 +975,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
     required this.remoteId,
     required this.type,
     required this.title,
+    this.url,
     this.coverUrl,
     this.author,
     this.description,
@@ -970,6 +996,9 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
       );
     }
     map['title'] = Variable<String>(title);
+    if (!nullToAbsent || url != null) {
+      map['url'] = Variable<String>(url);
+    }
     if (!nullToAbsent || coverUrl != null) {
       map['cover_url'] = Variable<String>(coverUrl);
     }
@@ -1003,6 +1032,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
       remoteId: Value(remoteId),
       type: Value(type),
       title: Value(title),
+      url: url == null && nullToAbsent ? const Value.absent() : Value(url),
       coverUrl: coverUrl == null && nullToAbsent
           ? const Value.absent()
           : Value(coverUrl),
@@ -1042,6 +1072,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
         serializer.fromJson<String>(json['type']),
       ),
       title: serializer.fromJson<String>(json['title']),
+      url: serializer.fromJson<String?>(json['url']),
       coverUrl: serializer.fromJson<String?>(json['coverUrl']),
       author: serializer.fromJson<String?>(json['author']),
       description: serializer.fromJson<String?>(json['description']),
@@ -1062,6 +1093,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
         $MediaItemsTable.$convertertype.toJson(type),
       ),
       'title': serializer.toJson<String>(title),
+      'url': serializer.toJson<String?>(url),
       'coverUrl': serializer.toJson<String?>(coverUrl),
       'author': serializer.toJson<String?>(author),
       'description': serializer.toJson<String?>(description),
@@ -1078,6 +1110,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
     String? remoteId,
     MediaType? type,
     String? title,
+    Value<String?> url = const Value.absent(),
     Value<String?> coverUrl = const Value.absent(),
     Value<String?> author = const Value.absent(),
     Value<String?> description = const Value.absent(),
@@ -1091,6 +1124,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
     remoteId: remoteId ?? this.remoteId,
     type: type ?? this.type,
     title: title ?? this.title,
+    url: url.present ? url.value : this.url,
     coverUrl: coverUrl.present ? coverUrl.value : this.coverUrl,
     author: author.present ? author.value : this.author,
     description: description.present ? description.value : this.description,
@@ -1106,6 +1140,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
       remoteId: data.remoteId.present ? data.remoteId.value : this.remoteId,
       type: data.type.present ? data.type.value : this.type,
       title: data.title.present ? data.title.value : this.title,
+      url: data.url.present ? data.url.value : this.url,
       coverUrl: data.coverUrl.present ? data.coverUrl.value : this.coverUrl,
       author: data.author.present ? data.author.value : this.author,
       description: data.description.present
@@ -1128,6 +1163,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
           ..write('remoteId: $remoteId, ')
           ..write('type: $type, ')
           ..write('title: $title, ')
+          ..write('url: $url, ')
           ..write('coverUrl: $coverUrl, ')
           ..write('author: $author, ')
           ..write('description: $description, ')
@@ -1146,6 +1182,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
     remoteId,
     type,
     title,
+    url,
     coverUrl,
     author,
     description,
@@ -1163,6 +1200,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
           other.remoteId == this.remoteId &&
           other.type == this.type &&
           other.title == this.title &&
+          other.url == this.url &&
           other.coverUrl == this.coverUrl &&
           other.author == this.author &&
           other.description == this.description &&
@@ -1178,6 +1216,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
   final Value<String> remoteId;
   final Value<MediaType> type;
   final Value<String> title;
+  final Value<String?> url;
   final Value<String?> coverUrl;
   final Value<String?> author;
   final Value<String?> description;
@@ -1192,6 +1231,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
     this.remoteId = const Value.absent(),
     this.type = const Value.absent(),
     this.title = const Value.absent(),
+    this.url = const Value.absent(),
     this.coverUrl = const Value.absent(),
     this.author = const Value.absent(),
     this.description = const Value.absent(),
@@ -1207,6 +1247,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
     required String remoteId,
     required MediaType type,
     required String title,
+    this.url = const Value.absent(),
     this.coverUrl = const Value.absent(),
     this.author = const Value.absent(),
     this.description = const Value.absent(),
@@ -1225,6 +1266,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
     Expression<String>? remoteId,
     Expression<String>? type,
     Expression<String>? title,
+    Expression<String>? url,
     Expression<String>? coverUrl,
     Expression<String>? author,
     Expression<String>? description,
@@ -1240,6 +1282,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
       if (remoteId != null) 'remote_id': remoteId,
       if (type != null) 'type': type,
       if (title != null) 'title': title,
+      if (url != null) 'url': url,
       if (coverUrl != null) 'cover_url': coverUrl,
       if (author != null) 'author': author,
       if (description != null) 'description': description,
@@ -1257,6 +1300,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
     Value<String>? remoteId,
     Value<MediaType>? type,
     Value<String>? title,
+    Value<String?>? url,
     Value<String?>? coverUrl,
     Value<String?>? author,
     Value<String?>? description,
@@ -1272,6 +1316,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
       remoteId: remoteId ?? this.remoteId,
       type: type ?? this.type,
       title: title ?? this.title,
+      url: url ?? this.url,
       coverUrl: coverUrl ?? this.coverUrl,
       author: author ?? this.author,
       description: description ?? this.description,
@@ -1300,6 +1345,9 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
     }
     if (title.present) {
       map['title'] = Variable<String>(title.value);
+    }
+    if (url.present) {
+      map['url'] = Variable<String>(url.value);
     }
     if (coverUrl.present) {
       map['cover_url'] = Variable<String>(coverUrl.value);
@@ -1338,6 +1386,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
           ..write('remoteId: $remoteId, ')
           ..write('type: $type, ')
           ..write('title: $title, ')
+          ..write('url: $url, ')
           ..write('coverUrl: $coverUrl, ')
           ..write('author: $author, ')
           ..write('description: $description, ')
@@ -1410,6 +1459,15 @@ class $ChaptersTable extends Chapters
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+  );
+  static const VerificationMeta _urlMeta = const VerificationMeta('url');
+  @override
+  late final GeneratedColumn<String> url = GeneratedColumn<String>(
+    'url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
   );
   static const VerificationMeta _numberMeta = const VerificationMeta('number');
   @override
@@ -1485,6 +1543,7 @@ class $ChaptersTable extends Chapters
     itemSourceId,
     itemRemoteId,
     title,
+    url,
     number,
     sortIndex,
     volumeTitle,
@@ -1549,6 +1608,12 @@ class $ChaptersTable extends Chapters
       );
     } else if (isInserting) {
       context.missing(_titleMeta);
+    }
+    if (data.containsKey('url')) {
+      context.handle(
+        _urlMeta,
+        url.isAcceptableOrUnknown(data['url']!, _urlMeta),
+      );
     }
     if (data.containsKey('number')) {
       context.handle(
@@ -1624,6 +1689,10 @@ class $ChaptersTable extends Chapters
         DriftSqlType.string,
         data['${effectivePrefix}title'],
       )!,
+      url: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}url'],
+      ),
       number: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}number'],
@@ -1666,6 +1735,9 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
   final String itemRemoteId;
   final String title;
 
+  /// 章节页地址（取正文要用）。
+  final String? url;
+
   /// 章节号，支持 4.5 / 4.a 这类小数与字母后缀（参考 Mihon 的章节号识别）。
   final double? number;
 
@@ -1685,6 +1757,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
     required this.itemSourceId,
     required this.itemRemoteId,
     required this.title,
+    this.url,
     this.number,
     required this.sortIndex,
     this.volumeTitle,
@@ -1700,6 +1773,9 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
     map['item_source_id'] = Variable<String>(itemSourceId);
     map['item_remote_id'] = Variable<String>(itemRemoteId);
     map['title'] = Variable<String>(title);
+    if (!nullToAbsent || url != null) {
+      map['url'] = Variable<String>(url);
+    }
     if (!nullToAbsent || number != null) {
       map['number'] = Variable<double>(number);
     }
@@ -1724,6 +1800,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
       itemSourceId: Value(itemSourceId),
       itemRemoteId: Value(itemRemoteId),
       title: Value(title),
+      url: url == null && nullToAbsent ? const Value.absent() : Value(url),
       number: number == null && nullToAbsent
           ? const Value.absent()
           : Value(number),
@@ -1752,6 +1829,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
       itemSourceId: serializer.fromJson<String>(json['itemSourceId']),
       itemRemoteId: serializer.fromJson<String>(json['itemRemoteId']),
       title: serializer.fromJson<String>(json['title']),
+      url: serializer.fromJson<String?>(json['url']),
       number: serializer.fromJson<double?>(json['number']),
       sortIndex: serializer.fromJson<int>(json['sortIndex']),
       volumeTitle: serializer.fromJson<String?>(json['volumeTitle']),
@@ -1769,6 +1847,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
       'itemSourceId': serializer.toJson<String>(itemSourceId),
       'itemRemoteId': serializer.toJson<String>(itemRemoteId),
       'title': serializer.toJson<String>(title),
+      'url': serializer.toJson<String?>(url),
       'number': serializer.toJson<double?>(number),
       'sortIndex': serializer.toJson<int>(sortIndex),
       'volumeTitle': serializer.toJson<String?>(volumeTitle),
@@ -1784,6 +1863,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
     String? itemSourceId,
     String? itemRemoteId,
     String? title,
+    Value<String?> url = const Value.absent(),
     Value<double?> number = const Value.absent(),
     int? sortIndex,
     Value<String?> volumeTitle = const Value.absent(),
@@ -1796,6 +1876,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
     itemSourceId: itemSourceId ?? this.itemSourceId,
     itemRemoteId: itemRemoteId ?? this.itemRemoteId,
     title: title ?? this.title,
+    url: url.present ? url.value : this.url,
     number: number.present ? number.value : this.number,
     sortIndex: sortIndex ?? this.sortIndex,
     volumeTitle: volumeTitle.present ? volumeTitle.value : this.volumeTitle,
@@ -1814,6 +1895,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
           ? data.itemRemoteId.value
           : this.itemRemoteId,
       title: data.title.present ? data.title.value : this.title,
+      url: data.url.present ? data.url.value : this.url,
       number: data.number.present ? data.number.value : this.number,
       sortIndex: data.sortIndex.present ? data.sortIndex.value : this.sortIndex,
       volumeTitle: data.volumeTitle.present
@@ -1837,6 +1919,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
           ..write('itemSourceId: $itemSourceId, ')
           ..write('itemRemoteId: $itemRemoteId, ')
           ..write('title: $title, ')
+          ..write('url: $url, ')
           ..write('number: $number, ')
           ..write('sortIndex: $sortIndex, ')
           ..write('volumeTitle: $volumeTitle, ')
@@ -1854,6 +1937,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
     itemSourceId,
     itemRemoteId,
     title,
+    url,
     number,
     sortIndex,
     volumeTitle,
@@ -1870,6 +1954,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
           other.itemSourceId == this.itemSourceId &&
           other.itemRemoteId == this.itemRemoteId &&
           other.title == this.title &&
+          other.url == this.url &&
           other.number == this.number &&
           other.sortIndex == this.sortIndex &&
           other.volumeTitle == this.volumeTitle &&
@@ -1884,6 +1969,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
   final Value<String> itemSourceId;
   final Value<String> itemRemoteId;
   final Value<String> title;
+  final Value<String?> url;
   final Value<double?> number;
   final Value<int> sortIndex;
   final Value<String?> volumeTitle;
@@ -1897,6 +1983,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
     this.itemSourceId = const Value.absent(),
     this.itemRemoteId = const Value.absent(),
     this.title = const Value.absent(),
+    this.url = const Value.absent(),
     this.number = const Value.absent(),
     this.sortIndex = const Value.absent(),
     this.volumeTitle = const Value.absent(),
@@ -1911,6 +1998,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
     required String itemSourceId,
     required String itemRemoteId,
     required String title,
+    this.url = const Value.absent(),
     this.number = const Value.absent(),
     this.sortIndex = const Value.absent(),
     this.volumeTitle = const Value.absent(),
@@ -1929,6 +2017,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
     Expression<String>? itemSourceId,
     Expression<String>? itemRemoteId,
     Expression<String>? title,
+    Expression<String>? url,
     Expression<double>? number,
     Expression<int>? sortIndex,
     Expression<String>? volumeTitle,
@@ -1943,6 +2032,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
       if (itemSourceId != null) 'item_source_id': itemSourceId,
       if (itemRemoteId != null) 'item_remote_id': itemRemoteId,
       if (title != null) 'title': title,
+      if (url != null) 'url': url,
       if (number != null) 'number': number,
       if (sortIndex != null) 'sort_index': sortIndex,
       if (volumeTitle != null) 'volume_title': volumeTitle,
@@ -1959,6 +2049,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
     Value<String>? itemSourceId,
     Value<String>? itemRemoteId,
     Value<String>? title,
+    Value<String?>? url,
     Value<double?>? number,
     Value<int>? sortIndex,
     Value<String?>? volumeTitle,
@@ -1973,6 +2064,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
       itemSourceId: itemSourceId ?? this.itemSourceId,
       itemRemoteId: itemRemoteId ?? this.itemRemoteId,
       title: title ?? this.title,
+      url: url ?? this.url,
       number: number ?? this.number,
       sortIndex: sortIndex ?? this.sortIndex,
       volumeTitle: volumeTitle ?? this.volumeTitle,
@@ -2000,6 +2092,9 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
     }
     if (title.present) {
       map['title'] = Variable<String>(title.value);
+    }
+    if (url.present) {
+      map['url'] = Variable<String>(url.value);
     }
     if (number.present) {
       map['number'] = Variable<double>(number.value);
@@ -2033,6 +2128,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
           ..write('itemSourceId: $itemSourceId, ')
           ..write('itemRemoteId: $itemRemoteId, ')
           ..write('title: $title, ')
+          ..write('url: $url, ')
           ..write('number: $number, ')
           ..write('sortIndex: $sortIndex, ')
           ..write('volumeTitle: $volumeTitle, ')
@@ -5120,6 +5216,7 @@ typedef $$MediaItemsTableCreateCompanionBuilder = MediaItemsCompanion Function({
   required String remoteId,
   required MediaType type,
   required String title,
+  Value<String?> url,
   Value<String?> coverUrl,
   Value<String?> author,
   Value<String?> description,
@@ -5135,6 +5232,7 @@ typedef $$MediaItemsTableUpdateCompanionBuilder = MediaItemsCompanion Function({
   Value<String> remoteId,
   Value<MediaType> type,
   Value<String> title,
+  Value<String?> url,
   Value<String?> coverUrl,
   Value<String?> author,
   Value<String?> description,
@@ -5173,6 +5271,11 @@ class $$MediaItemsTableFilterComposer
 
   ColumnFilters<String> get title => $composableBuilder(
     column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get url => $composableBuilder(
+    column: $table.url,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5246,6 +5349,11 @@ class $$MediaItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get url => $composableBuilder(
+    column: $table.url,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get coverUrl => $composableBuilder(
     column: $table.coverUrl,
     builder: (column) => ColumnOrderings(column),
@@ -5307,6 +5415,9 @@ class $$MediaItemsTableAnnotationComposer
 
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get url =>
+      $composableBuilder(column: $table.url, builder: (column) => column);
 
   GeneratedColumn<String> get coverUrl =>
       $composableBuilder(column: $table.coverUrl, builder: (column) => column);
@@ -5372,6 +5483,7 @@ class $$MediaItemsTableTableManager
                 Value<String> remoteId = const Value.absent(),
                 Value<MediaType> type = const Value.absent(),
                 Value<String> title = const Value.absent(),
+                Value<String?> url = const Value.absent(),
                 Value<String?> coverUrl = const Value.absent(),
                 Value<String?> author = const Value.absent(),
                 Value<String?> description = const Value.absent(),
@@ -5386,6 +5498,7 @@ class $$MediaItemsTableTableManager
                 remoteId: remoteId,
                 type: type,
                 title: title,
+                url: url,
                 coverUrl: coverUrl,
                 author: author,
                 description: description,
@@ -5402,6 +5515,7 @@ class $$MediaItemsTableTableManager
                 required String remoteId,
                 required MediaType type,
                 required String title,
+                Value<String?> url = const Value.absent(),
                 Value<String?> coverUrl = const Value.absent(),
                 Value<String?> author = const Value.absent(),
                 Value<String?> description = const Value.absent(),
@@ -5416,6 +5530,7 @@ class $$MediaItemsTableTableManager
                 remoteId: remoteId,
                 type: type,
                 title: title,
+                url: url,
                 coverUrl: coverUrl,
                 author: author,
                 description: description,
@@ -5466,6 +5581,7 @@ typedef $$ChaptersTableCreateCompanionBuilder = ChaptersCompanion Function({
   required String itemSourceId,
   required String itemRemoteId,
   required String title,
+  Value<String?> url,
   Value<double?> number,
   Value<int> sortIndex,
   Value<String?> volumeTitle,
@@ -5480,6 +5596,7 @@ typedef $$ChaptersTableUpdateCompanionBuilder = ChaptersCompanion Function({
   Value<String> itemSourceId,
   Value<String> itemRemoteId,
   Value<String> title,
+  Value<String?> url,
   Value<double?> number,
   Value<int> sortIndex,
   Value<String?> volumeTitle,
@@ -5520,6 +5637,11 @@ class $$ChaptersTableFilterComposer
 
   ColumnFilters<String> get title => $composableBuilder(
     column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get url => $composableBuilder(
+    column: $table.url,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5588,6 +5710,11 @@ class $$ChaptersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get url => $composableBuilder(
+    column: $table.url,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get number => $composableBuilder(
     column: $table.number,
     builder: (column) => ColumnOrderings(column),
@@ -5646,6 +5773,9 @@ class $$ChaptersTableAnnotationComposer
 
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get url =>
+      $composableBuilder(column: $table.url, builder: (column) => column);
 
   GeneratedColumn<double> get number =>
       $composableBuilder(column: $table.number, builder: (column) => column);
@@ -5708,6 +5838,7 @@ class $$ChaptersTableTableManager
                 Value<String> itemSourceId = const Value.absent(),
                 Value<String> itemRemoteId = const Value.absent(),
                 Value<String> title = const Value.absent(),
+                Value<String?> url = const Value.absent(),
                 Value<double?> number = const Value.absent(),
                 Value<int> sortIndex = const Value.absent(),
                 Value<String?> volumeTitle = const Value.absent(),
@@ -5721,6 +5852,7 @@ class $$ChaptersTableTableManager
                 itemSourceId: itemSourceId,
                 itemRemoteId: itemRemoteId,
                 title: title,
+                url: url,
                 number: number,
                 sortIndex: sortIndex,
                 volumeTitle: volumeTitle,
@@ -5736,6 +5868,7 @@ class $$ChaptersTableTableManager
                 required String itemSourceId,
                 required String itemRemoteId,
                 required String title,
+                Value<String?> url = const Value.absent(),
                 Value<double?> number = const Value.absent(),
                 Value<int> sortIndex = const Value.absent(),
                 Value<String?> volumeTitle = const Value.absent(),
@@ -5749,6 +5882,7 @@ class $$ChaptersTableTableManager
                 itemSourceId: itemSourceId,
                 itemRemoteId: itemRemoteId,
                 title: title,
+                url: url,
                 number: number,
                 sortIndex: sortIndex,
                 volumeTitle: volumeTitle,

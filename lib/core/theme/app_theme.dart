@@ -252,6 +252,15 @@ abstract final class AppTheme {
 }
 
 /// 便捷读取语义色板。
+///
+/// 缺少扩展时按亮度回退到默认色板：这样在单测或嵌入场景里少配一次主题也不会
+/// 直接抛 null 检查错误，页面仍能画出可用的配色。
 extension AppPaletteContext on BuildContext {
-  AppPalette get palette => Theme.of(this).extension<AppPalette>()!;
+  AppPalette get palette {
+    final theme = Theme.of(this);
+    return theme.extension<AppPalette>() ??
+        (theme.brightness == Brightness.dark
+            ? AppPalette.dark
+            : AppPalette.light);
+  }
 }

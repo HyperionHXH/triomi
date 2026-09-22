@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/chapter.dart';
 import '../../core/models/media_item.dart';
+import '../../core/models/media_type.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/router/app_router.dart';
 import '../../core/source/source_api.dart';
@@ -13,6 +14,8 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../library/data/library_providers.dart';
+import '../reader/manga_reader_page.dart';
 
 /// 详情页：作品信息 + 章节目录。
 ///
@@ -167,7 +170,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                     ),
                   ),
                 ),
-              _ChapterSection(chapters: data.chapters),
+              _ChapterSection(item: data.item, chapters: data.chapters),
             ],
           );
         },
@@ -190,13 +193,13 @@ class _DetailData {
   final String? error;
 }
 
-class _Header extends StatelessWidget {
+class _Header extends ConsumerWidget {
   const _Header({required this.data});
 
   final _DetailData data;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final palette = context.palette;
     final item = data.item;
@@ -285,26 +288,7 @@ class _Header extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: AppSpacing.md),
-                Row(
-                  children: <Widget>[
-                    Tooltip(
-                      message: '加入书架将在 M2 随书架一起开放',
-                      child: FilledButton.icon(
-                        onPressed: null,
-                        icon: const Icon(Icons.bookmark_add_outlined, size: 18),
-                        label: const Text('加入书架'),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.xs),
-                    IconButton(
-                      tooltip: '在来源中打开',
-                      onPressed: item.url == null
-                          ? null
-                          : () => context.push('${AppRoutes.detail}?open=1'),
-                      icon: const Icon(Icons.open_in_new, size: 20),
-                    ),
-                  ],
-                ),
+                _FollowButton(item: item),
               ],
             ),
           ),
@@ -315,8 +299,9 @@ class _Header extends StatelessWidget {
 }
 
 class _ChapterSection extends StatelessWidget {
-  const _ChapterSection({required this.chapters});
+  const _ChapterSection({required this.item, required this.chapters});
 
+  final MediaItem? item;
   final List<Chapter> chapters;
 
   @override
@@ -408,12 +393,9 @@ class _ChapterSection extends StatelessWidget {
                             color: palette.mutedForeground,
                           )
                         : const Icon(Icons.chevron_right, size: 18),
-                    onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          '阅读器将在 M2 开放（章节：${entry.value[index].title}）',
-                        ),
-                      ),
+                    onTap: () => _openChapter(
+                      context,
+                      chapters.indexOf(entry.value[index]),
                     ),
                   ),
                 ],
@@ -424,5 +406,87 @@ class _ChapterSection extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  /// 打开章节：漫画进阅读器；番剧与小说在对应里程碑落地前给出明确说明，
+  /// 而不是弹一句"暂不支持"。
+  void _openChapter(BuildContext context, int index) {
+    final target = item;
+    if (target == null || index < 0 || index >= chapters.length) return;
+
+    if (target.type == MediaType.manga) {
+      context.push(
+        AppRoutes.reader,
+        extra: MangaReaderArgs(
+          item: target,
+          chapters: chapters,
+          initialIndex: index,
+        ),
+      );
+      return;
+    }
+
+    final hint = switch (target.type) {
+      MediaType.anime => '视频播放器将在 M3 提供',
+      MediaType.novel => '小说阅读器将在 M4 提供',
+      MediaType.manga => '',
+    };
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$hint（章节：${chapters[index].title}）')),
+    );
+  }
+}
+
+/// 加入 / 移出书架。
+class _FollowButton extends ConsumerWidget {
+  const _FollowButton({required this.item});
+
+  final MediaItem item;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final membership = ref.watch(
+      inLibraryProvider((sourceId: item.sourceId, remoteId: item.remoteId)),
+    );
+
+    if (membership.isLoading) {
+      return const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+
+    if (membership.value ?? false) {
+      return OutlinedButton.icon(
+        onPressed: () => _setMembership(context, ref, add: false),
+        icon: const Icon(Icons.check, size: 18),
+        label: const Text('已在书架'),
+      );
+    }
+
+    return FilledButton.icon(
+      onPressed: () => _setMembership(context, ref, add: true),
+      icon: const Icon(Icons.bookmark_add_outlined, size: 18),
+      label: const Text('加入书架'),
+    );
+  }
+
+  Future<void> _setMembership(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool add,
+  }) async {
+    final repository = ref.read(libraryRepositoryProvider);
+    if (add) {
+      await repository.addToLibrary(item);
+    } else {
+      await repository.removeFromLibrary(item.sourceId, item.remoteId);
+    }
+    ref.invalidate(inLibraryProvider);
+    ref.invalidate(libraryProvider);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(add ? '已加入书架' : '已移出书架')));
   }
 }

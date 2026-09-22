@@ -2,10 +2,10 @@
 
 > **文档用途**：本文件是完整的需求 + 调研 + 方案 + 任务拆解，交给下一个 AI 模型（或人类开发者）直接动工。读完后应能不依赖任何外部上下文开始写代码。
 >
-> **文档版本**：v1.3（2026-09-22，补记 M1 实施结论：声明式规则先行、JS 沙箱延后）
+> **文档版本**：v1.4（2026-09-22，M2 漫画闭环落地：阅读器四模式 + 书架 + 历史）
 >
-> **实施进度**：M0（脚手架）✅ ｜ M1（规则引擎）✅ 声明式部分 ｜ 项目位于 `D:\noval_and_manga\triomi`
-> 复查记录见 `triomi/docs/M0_REVIEW.md`、`triomi/docs/M1_REVIEW.md`；规则写法见 `triomi/docs/RULE_FORMAT.md`
+> **实施进度**：M0（脚手架）✅ ｜ M1（规则引擎，声明式部分）✅ ｜ M2（漫画闭环）✅ ｜ 项目位于 `D:\noval_and_manga\triomi`
+> 复查记录见 `triomi/docs/M0_REVIEW.md`、`M1_REVIEW.md`、`M2_REVIEW.md`；规则写法见 `triomi/docs/RULE_FORMAT.md`
 > **项目代号**（暂定，可改）：**Triomi**（Triple + Anime/Manga/Novel 的组合，亦可沿用用户自有项目 mixn 的名字）
 
 ---
@@ -345,8 +345,8 @@ Mixn v1.17.0 阅读器已验证的功能清单，全部作为本项目小说阅�
 
 ```
 sources      (id, name, type, lang, kind, version, enabled, rule_text, repo_url, updated_at)
-media_items  (source_id, remote_id, type, title, cover_url, author, desc, tags, rating, status, detail_json, cached_at)
-chapters     (source_id, remote_id, item_source_id, item_remote_id, title, number, sort_index, volume_title, release_date, locked, content_json)
+media_items  (source_id, remote_id, type, title, url, cover_url, author, desc, tags, rating, status, detail_json, cached_at)
+chapters     (source_id, remote_id, item_source_id, item_remote_id, title, url, number, sort_index, volume_title, release_date, locked, content_json)
 library      (item_id PK, type, progress, score, watch_status, pinned, added_at, updated_at)
 categories   (id, name, sort)
 library_category (item_id, category_id)

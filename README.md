@@ -11,7 +11,7 @@
 |---|---|---|
 | **M0 脚手架** | 工程骨架、设计令牌与主题、自适应外壳、drift 表结构、Hive 设置 | ✅ 已完成（[复查记录](docs/M0_REVIEW.md)） |
 | **M1 规则引擎** | 声明式规则（HTML + JSON、CSS/XPath）、来源管理、发现 / 聚合搜索 / 详情 | ✅ 声明式部分完成（[复查记录](docs/M1_REVIEW.md)）｜JS 沙箱待设备验证 |
-| M2 漫画闭环 | 阅读器（四模式）、书架、进度、历史 | ⏳ |
+| **M2 漫画闭环** | 阅读器四模式、书架、进度、历史 | ✅ 已完成（[复查记录](docs/M2_REVIEW.md)） |
 | M3 追番闭环 | media_kit 播放器、弹幕、时间表 | ⏳ |
 | M4 小说闭环 | LK / LNS 适配器移植 + 阅读器（Mixn 功能全量对齐） | ⏳ |
 | M5 增强 | 下载、追踪服务、WebDAV 同步、备份导入导出 | ⏳ |
@@ -42,10 +42,12 @@ lib/
 │  └─ widgets/                   通用组件：AppCard / SettingsGroup / EmptyStateView / PageScaffold
 ├─ features/
 │  ├─ shell/adaptive_shell.dart  三档自适应导航壳
-│  ├─ library/                   书架
+│  ├─ library/                   书架（页面 + 数据层：仓储、provider）
+│  ├─ history/                   阅读历史
 │  ├─ discover/                  分站榜单 + 作品卡片组件
 │  ├─ search/                    聚合搜索（逐来源成败）
 │  ├─ detail/                    详情 + 目录
+│  ├─ reader/                    漫画阅读器（四模式）与阅读设置
 │  ├─ sources/                   来源与规则管理
 │  ├─ schedule/                  追番
 │  ├─ profile/                   我的

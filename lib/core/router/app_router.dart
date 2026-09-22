@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/detail/detail_page.dart';
 import '../../features/discover/discover_page.dart';
+import '../../features/history/history_page.dart';
 import '../../features/library/library_page.dart';
 import '../../features/profile/profile_page.dart';
+import '../../features/reader/manga_reader_page.dart';
 import '../../features/schedule/schedule_page.dart';
 import '../../features/search/search_page.dart';
 import '../../features/settings/settings_page.dart';
@@ -25,6 +27,8 @@ abstract final class AppRoutes {
   static const String sources = '/sources';
   static const String search = '/search';
   static const String detail = '/detail';
+  static const String history = '/history';
+  static const String reader = '/reader';
 }
 
 abstract final class AppRouter {
@@ -103,6 +107,27 @@ abstract final class AppRouter {
               icon: Icons.link_off,
               title: '缺少作品信息',
               message: '请从书架、发现或搜索结果进入详情页。',
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.history,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const HistoryPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.reader,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is MangaReaderArgs) return MangaReaderPage(args: extra);
+          return const PageScaffold(
+            title: '阅读',
+            child: EmptyStateView(
+              icon: Icons.link_off,
+              title: '缺少章节信息',
+              message: '请从作品详情页的目录进入阅读器。',
             ),
           );
         },

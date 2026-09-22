@@ -5,11 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:triomi/app.dart';
+import 'package:triomi/core/db/app_database.dart';
+import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/theme/app_theme.dart';
 import 'package:triomi/core/theme/app_tokens.dart';
+
+import 'fixtures/test_database.dart';
 
 /// 外壳测试只关心布局，用空来源快照替代真实注册表，
 /// 避免测试去碰数据库与内置规则资产。
@@ -24,14 +28,17 @@ class _EmptySourceRegistry extends SourceRegistryController {
 void main() {
   late Preferences preferences;
   late Directory tempDir;
+  late AppDatabase database;
 
   setUpAll(() async {
     tempDir = await Directory.systemTemp.createTemp('triomi_test');
     Hive.init(tempDir.path);
     preferences = await Preferences.open();
+    database = openTestDatabase();
   });
 
   tearDownAll(() async {
+    await database.close();
     await Hive.close();
     await tempDir.delete(recursive: true);
   });
@@ -64,6 +71,7 @@ void main() {
         ProviderScope(
           overrides: [
             preferencesProvider.overrideWithValue(preferences),
+            databaseProvider.overrideWithValue(database),
             sourcesProvider.overrideWith(_EmptySourceRegistry.new),
           ],
           child: const TriomiApp(),

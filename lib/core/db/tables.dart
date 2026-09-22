@@ -54,6 +54,11 @@ class MediaItems extends Table {
 
   TextColumn get title => text()();
 
+  /// 详情页地址（相对地址在入库前已补全为绝对地址）。
+  ///
+  /// 必须持久化：从书架点进详情要靠它，丢了就得重新搜一次。
+  TextColumn get url => text().nullable()();
+
   TextColumn get coverUrl => text().nullable()();
 
   TextColumn get author => text().nullable()();
@@ -93,6 +98,9 @@ class Chapters extends Table {
   TextColumn get itemRemoteId => text()();
 
   TextColumn get title => text()();
+
+  /// 章节页地址（取正文要用）。
+  TextColumn get url => text().nullable()();
 
   /// 章节号，支持 4.5 / 4.a 这类小数与字母后缀（参考 Mihon 的章节号识别）。
   RealColumn get number => real().nullable()();
