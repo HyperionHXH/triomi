@@ -1,0 +1,35 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
+  errors:
+    # 未使用的 import / 变量按错误处理，避免骨架期堆积死代码。
+    unused_import: error
+    unused_local_variable: error
+    dead_code: error
+
+linter:
+  rules:
+    always_declare_return_types: true
+    avoid_print: true
+    prefer_single_quotes: true
+    prefer_final_locals: true
+    require_trailing_commas: true
+    sort_child_properties_last: true
+    unawaited_futures: true
+    use_super_parameters: true
+    unnecessary_lambdas: true
+    directives_ordering: true
