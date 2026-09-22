@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/detail/detail_page.dart';
 import '../../features/discover/discover_page.dart';
 import '../../features/library/library_page.dart';
 import '../../features/profile/profile_page.dart';
 import '../../features/schedule/schedule_page.dart';
+import '../../features/search/search_page.dart';
 import '../../features/settings/settings_page.dart';
 import '../../features/shell/adaptive_shell.dart';
+import '../../features/sources/sources_page.dart';
+import '../models/media_item.dart';
+import '../widgets/page_scaffold.dart';
 
 /// 全应用路由表。
 abstract final class AppRoutes {
@@ -15,7 +20,11 @@ abstract final class AppRoutes {
   static const String discover = '/discover';
   static const String schedule = '/schedule';
   static const String profile = '/profile';
+
   static const String settings = '/settings';
+  static const String sources = '/sources';
+  static const String search = '/search';
+  static const String detail = '/detail';
 }
 
 abstract final class AppRouter {
@@ -69,6 +78,34 @@ abstract final class AppRouter {
         path: AppRoutes.settings,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const SettingsPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.sources,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const SourcesPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.search,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const SearchPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.detail,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          // 详情页依赖列表页带来的作品对象；直接访问地址时给出可理解的提示，
+          // 而不是白屏或崩溃。
+          final extra = state.extra;
+          if (extra is MediaItem) return DetailPage(item: extra);
+          return const PageScaffold(
+            title: '详情',
+            child: EmptyStateView(
+              icon: Icons.link_off,
+              title: '缺少作品信息',
+              message: '请从书架、发现或搜索结果进入详情页。',
+            ),
+          );
+        },
       ),
     ],
   );

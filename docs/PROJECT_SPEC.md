@@ -2,7 +2,10 @@
 
 > **文档用途**：本文件是完整的需求 + 调研 + 方案 + 任务拆解，交给下一个 AI 模型（或人类开发者）直接动工。读完后应能不依赖任何外部上下文开始写代码。
 >
-> **文档版本**：v1.2（2026-09-22，明确独立重写 + Mixn 功能全量保留，新增 2.4 验收清单）
+> **文档版本**：v1.3（2026-09-22，补记 M1 实施结论：声明式规则先行、JS 沙箱延后）
+>
+> **实施进度**：M0（脚手架）✅ ｜ M1（规则引擎）✅ 声明式部分 ｜ 项目位于 `D:\noval_and_manga\triomi`
+> 复查记录见 `triomi/docs/M0_REVIEW.md`、`triomi/docs/M1_REVIEW.md`；规则写法见 `triomi/docs/RULE_FORMAT.md`
 > **项目代号**（暂定，可改）：**Triomi**（Triple + Anime/Manga/Novel 的组合，亦可沿用用户自有项目 mixn 的名字）
 
 ---
@@ -240,6 +243,12 @@ class TrackEntry {         // 书库条目（用户收藏 + 进度）
 
 **双轨来源体系**（吸收 Mixn 设计后的修订）：
 
+> **实施结论（M1 已落地）**：规则层最终实现为**两种格式**——① 声明式 JSON 规则
+> （`response: html | json`，选择器支持 CSS 与 XPath，覆盖绝大多数站点与开放接口，**跨平台含 Web 可用**）；
+> ② JS 扩展源（表达力更强，但需要原生引擎，因当时无可用设备验证而延后为独立任务 T2b）。
+> 声明式部分不需要 JS 引擎即可运行，因此优先落地；JS 沙箱接在同一个能力接口之下，
+> 后续增加不会影响已上线的规则。规则格式详见 `triomi/docs/RULE_FORMAT.md`。
+
 - **内置适配器（built-in）**：需要登录态/付费/特殊协议的源，用 Dart 直接实现能力接口，随 App 编译——LK、LNS 两个小说源走这条路（SignalR、专用字体、付费解锁不适合塞进 JS 沙箱）。
 - **JS 扩展源（plugin）**：普通公开站点，JS 文件动态加载，走沙箱。
 
@@ -335,9 +344,9 @@ Mixn v1.17.0 阅读器已验证的功能清单，全部作为本项目小说阅�
 ## 5. 数据模型（drift / SQLite 表）
 
 ```
-sources      (id, name, type, lang, version, enabled, js_code, repo_url, updated_at)
-media_items  (id, source_id, type, title, cover_url, author, desc, tags, status, detail_json, cached_at)
-chapters     (id, item_id, title, number, release_date, content_json)
+sources      (id, name, type, lang, kind, version, enabled, rule_text, repo_url, updated_at)
+media_items  (source_id, remote_id, type, title, cover_url, author, desc, tags, rating, status, detail_json, cached_at)
+chapters     (source_id, remote_id, item_source_id, item_remote_id, title, number, sort_index, volume_title, release_date, locked, content_json)
 library      (item_id PK, type, progress, score, watch_status, pinned, added_at, updated_at)
 categories   (id, name, sort)
 library_category (item_id, category_id)

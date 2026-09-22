@@ -24,6 +24,9 @@ dependencies:
   path_provider: ^2.1.6
 
   cupertino_icons: ^1.0.8
+  xpath_selector: ^3.0.2
+  dio: ^5.11.1
+  html: ^0.15.7
 
 dev_dependencies:
   flutter_test:
@@ -34,3 +37,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/rules/

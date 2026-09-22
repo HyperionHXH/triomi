@@ -1,0 +1,69 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../db/database_provider.dart';
+import '../storage/preferences.dart';
+import 'http_client.dart';
+import 'source_registry.dart';
+import 'source_repository.dart';
+
+/// 来源网络层（全应用共用一个连接池）。
+final sourceHttpClientProvider = Provider<SourceHttpClient>((ref) {
+  final client = DioSourceHttpClient();
+  ref.onDispose(client.close);
+  return client;
+});
+
+final sourceRepositoryProvider = Provider<SourceRepository>(
+  (ref) => SourceRepository(ref.watch(databaseProvider)),
+);
+
+final sourceRegistryProvider = Provider<SourceRegistry>(
+  (ref) => SourceRegistry(
+    repository: ref.watch(sourceRepositoryProvider),
+    http: ref.watch(sourceHttpClientProvider),
+  ),
+);
+
+/// 来源注册表快照：内置示例规则只在首次启动时写入一次。
+class SourceRegistryController extends AsyncNotifier<SourceRegistrySnapshot> {
+  static const String _seededKey = 'sources.seededBuiltins';
+
+  @override
+  Future<SourceRegistrySnapshot> build() async {
+    final registry = ref.watch(sourceRegistryProvider);
+    final preferences = ref.watch(preferencesProvider);
+
+    final seeded = <String>{
+      for (final id
+          in (preferences.get<List<Object?>>(_seededKey) ?? const <Object?>[]))
+        id.toString(),
+    };
+    if (seeded.isEmpty) {
+      await registry.seedBuiltins(alreadySeeded: seeded);
+      await preferences.set(_seededKey, SourceRegistry.builtinRuleAssets);
+    }
+
+    return registry.load();
+  }
+
+  /// 变更后重新加载（导入 / 启停 / 删除都走这里）。
+  Future<void> refresh() async {
+    state = const AsyncValue<SourceRegistrySnapshot>.loading();
+    state = await AsyncValue.guard(build);
+  }
+
+  Future<void> setEnabled(String id, {required bool enabled}) async {
+    await ref.read(sourceRegistryProvider).setEnabled(id, enabled: enabled);
+    await refresh();
+  }
+
+  Future<void> remove(String id) async {
+    await ref.read(sourceRegistryProvider).remove(id);
+    await refresh();
+  }
+}
+
+final sourcesProvider =
+    AsyncNotifierProvider<SourceRegistryController, SourceRegistrySnapshot>(
+      SourceRegistryController.new,
+    );

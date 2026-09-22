@@ -5,9 +5,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:triomi/app.dart';
+import 'package:triomi/core/source/source_providers.dart';
+import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/theme/app_theme.dart';
 import 'package:triomi/core/theme/app_tokens.dart';
+
+/// 外壳测试只关心布局，用空来源快照替代真实注册表，
+/// 避免测试去碰数据库与内置规则资产。
+class _EmptySourceRegistry extends SourceRegistryController {
+  @override
+  Future<SourceRegistrySnapshot> build() async => const SourceRegistrySnapshot(
+    entries: <SourceEntry>[],
+    failures: <SourceFailure>[],
+  );
+}
 
 void main() {
   late Preferences preferences;
@@ -50,7 +62,10 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [preferencesProvider.overrideWithValue(preferences)],
+          overrides: [
+            preferencesProvider.overrideWithValue(preferences),
+            sourcesProvider.overrideWith(_EmptySourceRegistry.new),
+          ],
           child: const TriomiApp(),
         ),
       );
@@ -66,7 +81,9 @@ void main() {
       await tester.tap(find.text('发现'));
       await tester.pumpAndSettle();
 
-      expect(find.text('搜索番剧 / 漫画 / 小说'), findsOneWidget);
+      // 发现页在「没有任何来源」时应给出空状态与去管理来源的入口
+      expect(find.text('还没有可用的来源'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, '管理来源'), findsOneWidget);
     });
 
     testWidgets('宽屏使用侧边栏，且不再出现底部导航', (tester) async {

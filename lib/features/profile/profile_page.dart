@@ -84,9 +84,9 @@ class ProfilePage extends StatelessWidget {
                   ListTile(
                     leading: const Icon(Icons.extension_outlined),
                     title: const Text('来源与规则管理'),
-                    subtitle: const Text('添加扩展源、导入规则仓库'),
+                    subtitle: const Text('导入规则、启用或移除来源'),
                     trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => _comingSoon(context, '来源与规则管理', 'M1'),
+                    onTap: () => context.push(AppRoutes.sources),
                   ),
                   ListTile(
                     leading: const Icon(Icons.sync_outlined),

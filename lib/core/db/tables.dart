@@ -11,6 +11,7 @@ import '../models/media_type.dart';
 /// 在章节、历史、下载等表里复用同一对列名，保持可读性与一致性。
 
 /// 内容来源（内置适配器 + JS 扩展源）。
+@DataClassName('SourceRow')
 class Sources extends Table {
   /// 稳定本地标识，非站点数字 ID。
   TextColumn get id => text()();
@@ -30,8 +31,8 @@ class Sources extends Table {
 
   BoolColumn get enabled => boolean().withDefault(const Constant(true))();
 
-  /// 扩展源 JS 代码（内置源为 null）。
-  TextColumn get jsCode => text().nullable()();
+  /// 规则正文：声明式规则存 JSON，JS 扩展源存脚本源码（内置源为 null）。
+  TextColumn get ruleText => text().nullable()();
 
   /// 扩展源所属仓库地址。
   TextColumn get repoUrl => text().nullable()();
@@ -43,6 +44,7 @@ class Sources extends Table {
 }
 
 /// 作品（一部番剧 / 一部漫画 / 一本小说）。
+@DataClassName('MediaItemRow')
 class MediaItems extends Table {
   TextColumn get sourceId => text()();
 
@@ -79,6 +81,7 @@ class MediaItems extends Table {
 ///
 /// 小说沿用 Mixn 的「卷 → 章」两级结构：卷名存在 [volumeTitle]，
 /// 番剧与漫画该列为 null。
+@DataClassName('ChapterRow')
 class Chapters extends Table {
   TextColumn get sourceId => text()();
 
@@ -112,6 +115,7 @@ class Chapters extends Table {
 }
 
 /// 书架条目（用户已收藏的内容 + 进度）。
+@DataClassName('LibraryEntryRow')
 class LibraryEntries extends Table {
   TextColumn get sourceId => text()();
 
@@ -142,6 +146,7 @@ class LibraryEntries extends Table {
 }
 
 /// 书架分类。
+@DataClassName('CategoryRow')
 class Categories extends Table {
   IntColumn get id => integer().autoIncrement()();
 
@@ -151,6 +156,7 @@ class Categories extends Table {
 }
 
 /// 书架条目 ↔ 分类 多对多。
+@DataClassName('LibraryCategoryLinkRow')
 class LibraryCategoryLinks extends Table {
   TextColumn get sourceId => text()();
 
@@ -167,6 +173,7 @@ class LibraryCategoryLinks extends Table {
 }
 
 /// 阅读历史。
+@DataClassName('HistoryRow')
 class Histories extends Table {
   IntColumn get id => integer().autoIncrement()();
 
@@ -191,6 +198,7 @@ class Histories extends Table {
 }
 
 /// 下载任务与已下载内容。
+@DataClassName('DownloadRow')
 class Downloads extends Table {
   IntColumn get id => integer().autoIncrement()();
 
@@ -216,6 +224,7 @@ class Downloads extends Table {
 }
 
 /// 追踪服务绑定（Bangumi / AniList / MyAnimeList）。
+@DataClassName('TrackBindRow')
 class TrackBinds extends Table {
   TextColumn get sourceId => text()();
 

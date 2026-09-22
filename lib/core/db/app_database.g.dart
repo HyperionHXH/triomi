@@ -3,7 +3,7 @@
 part of 'app_database.dart';
 
 // ignore_for_file: type=lint
-class $SourcesTable extends Sources with TableInfo<$SourcesTable, Source> {
+class $SourcesTable extends Sources with TableInfo<$SourcesTable, SourceRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -80,10 +80,12 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, Source> {
     ),
     defaultValue: const Constant(true),
   );
-  static const VerificationMeta _jsCodeMeta = const VerificationMeta('jsCode');
+  static const VerificationMeta _ruleTextMeta = const VerificationMeta(
+    'ruleText',
+  );
   @override
-  late final GeneratedColumn<String> jsCode = GeneratedColumn<String>(
-    'js_code',
+  late final GeneratedColumn<String> ruleText = GeneratedColumn<String>(
+    'rule_text',
     aliasedName,
     true,
     type: DriftSqlType.string,
@@ -120,7 +122,7 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, Source> {
     kind,
     version,
     enabled,
-    jsCode,
+    ruleText,
     repoUrl,
     updatedAt,
   ];
@@ -131,7 +133,7 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, Source> {
   static const String $name = 'sources';
   @override
   VerificationContext validateIntegrity(
-    Insertable<Source> instance, {
+    Insertable<SourceRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -167,10 +169,10 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, Source> {
         enabled.isAcceptableOrUnknown(data['enabled']!, _enabledMeta),
       );
     }
-    if (data.containsKey('js_code')) {
+    if (data.containsKey('rule_text')) {
       context.handle(
-        _jsCodeMeta,
-        jsCode.isAcceptableOrUnknown(data['js_code']!, _jsCodeMeta),
+        _ruleTextMeta,
+        ruleText.isAcceptableOrUnknown(data['rule_text']!, _ruleTextMeta),
       );
     }
     if (data.containsKey('repo_url')) {
@@ -191,9 +193,9 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, Source> {
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  Source map(Map<String, dynamic> data, {String? tablePrefix}) {
+  SourceRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Source(
+    return SourceRow(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -226,9 +228,9 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, Source> {
         DriftSqlType.bool,
         data['${effectivePrefix}enabled'],
       )!,
-      jsCode: attachedDatabase.typeMapping.read(
+      ruleText: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}js_code'],
+        data['${effectivePrefix}rule_text'],
       ),
       repoUrl: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -252,7 +254,7 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, Source> {
       const EnumNameConverter<SourceKind>(SourceKind.values);
 }
 
-class Source extends DataClass implements Insertable<Source> {
+class SourceRow extends DataClass implements Insertable<SourceRow> {
   /// 稳定本地标识，非站点数字 ID。
   final String id;
   final String name;
@@ -268,13 +270,13 @@ class Source extends DataClass implements Insertable<Source> {
   final String? version;
   final bool enabled;
 
-  /// 扩展源 JS 代码（内置源为 null）。
-  final String? jsCode;
+  /// 规则正文：声明式规则存 JSON，JS 扩展源存脚本源码（内置源为 null）。
+  final String? ruleText;
 
   /// 扩展源所属仓库地址。
   final String? repoUrl;
   final DateTime? updatedAt;
-  const Source({
+  const SourceRow({
     required this.id,
     required this.name,
     required this.type,
@@ -282,7 +284,7 @@ class Source extends DataClass implements Insertable<Source> {
     required this.kind,
     this.version,
     required this.enabled,
-    this.jsCode,
+    this.ruleText,
     this.repoUrl,
     this.updatedAt,
   });
@@ -302,8 +304,8 @@ class Source extends DataClass implements Insertable<Source> {
       map['version'] = Variable<String>(version);
     }
     map['enabled'] = Variable<bool>(enabled);
-    if (!nullToAbsent || jsCode != null) {
-      map['js_code'] = Variable<String>(jsCode);
+    if (!nullToAbsent || ruleText != null) {
+      map['rule_text'] = Variable<String>(ruleText);
     }
     if (!nullToAbsent || repoUrl != null) {
       map['repo_url'] = Variable<String>(repoUrl);
@@ -325,9 +327,9 @@ class Source extends DataClass implements Insertable<Source> {
           ? const Value.absent()
           : Value(version),
       enabled: Value(enabled),
-      jsCode: jsCode == null && nullToAbsent
+      ruleText: ruleText == null && nullToAbsent
           ? const Value.absent()
-          : Value(jsCode),
+          : Value(ruleText),
       repoUrl: repoUrl == null && nullToAbsent
           ? const Value.absent()
           : Value(repoUrl),
@@ -337,12 +339,12 @@ class Source extends DataClass implements Insertable<Source> {
     );
   }
 
-  factory Source.fromJson(
+  factory SourceRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Source(
+    return SourceRow(
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       type: $SourcesTable.$convertertype.fromJson(
@@ -354,7 +356,7 @@ class Source extends DataClass implements Insertable<Source> {
       ),
       version: serializer.fromJson<String?>(json['version']),
       enabled: serializer.fromJson<bool>(json['enabled']),
-      jsCode: serializer.fromJson<String?>(json['jsCode']),
+      ruleText: serializer.fromJson<String?>(json['ruleText']),
       repoUrl: serializer.fromJson<String?>(json['repoUrl']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
     );
@@ -374,13 +376,13 @@ class Source extends DataClass implements Insertable<Source> {
       ),
       'version': serializer.toJson<String?>(version),
       'enabled': serializer.toJson<bool>(enabled),
-      'jsCode': serializer.toJson<String?>(jsCode),
+      'ruleText': serializer.toJson<String?>(ruleText),
       'repoUrl': serializer.toJson<String?>(repoUrl),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
     };
   }
 
-  Source copyWith({
+  SourceRow copyWith({
     String? id,
     String? name,
     MediaType? type,
@@ -388,10 +390,10 @@ class Source extends DataClass implements Insertable<Source> {
     SourceKind? kind,
     Value<String?> version = const Value.absent(),
     bool? enabled,
-    Value<String?> jsCode = const Value.absent(),
+    Value<String?> ruleText = const Value.absent(),
     Value<String?> repoUrl = const Value.absent(),
     Value<DateTime?> updatedAt = const Value.absent(),
-  }) => Source(
+  }) => SourceRow(
     id: id ?? this.id,
     name: name ?? this.name,
     type: type ?? this.type,
@@ -399,12 +401,12 @@ class Source extends DataClass implements Insertable<Source> {
     kind: kind ?? this.kind,
     version: version.present ? version.value : this.version,
     enabled: enabled ?? this.enabled,
-    jsCode: jsCode.present ? jsCode.value : this.jsCode,
+    ruleText: ruleText.present ? ruleText.value : this.ruleText,
     repoUrl: repoUrl.present ? repoUrl.value : this.repoUrl,
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
   );
-  Source copyWithCompanion(SourcesCompanion data) {
-    return Source(
+  SourceRow copyWithCompanion(SourcesCompanion data) {
+    return SourceRow(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       type: data.type.present ? data.type.value : this.type,
@@ -412,7 +414,7 @@ class Source extends DataClass implements Insertable<Source> {
       kind: data.kind.present ? data.kind.value : this.kind,
       version: data.version.present ? data.version.value : this.version,
       enabled: data.enabled.present ? data.enabled.value : this.enabled,
-      jsCode: data.jsCode.present ? data.jsCode.value : this.jsCode,
+      ruleText: data.ruleText.present ? data.ruleText.value : this.ruleText,
       repoUrl: data.repoUrl.present ? data.repoUrl.value : this.repoUrl,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -420,7 +422,7 @@ class Source extends DataClass implements Insertable<Source> {
 
   @override
   String toString() {
-    return (StringBuffer('Source(')
+    return (StringBuffer('SourceRow(')
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('type: $type, ')
@@ -428,7 +430,7 @@ class Source extends DataClass implements Insertable<Source> {
           ..write('kind: $kind, ')
           ..write('version: $version, ')
           ..write('enabled: $enabled, ')
-          ..write('jsCode: $jsCode, ')
+          ..write('ruleText: $ruleText, ')
           ..write('repoUrl: $repoUrl, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -444,14 +446,14 @@ class Source extends DataClass implements Insertable<Source> {
     kind,
     version,
     enabled,
-    jsCode,
+    ruleText,
     repoUrl,
     updatedAt,
   );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is Source &&
+      (other is SourceRow &&
           other.id == this.id &&
           other.name == this.name &&
           other.type == this.type &&
@@ -459,12 +461,12 @@ class Source extends DataClass implements Insertable<Source> {
           other.kind == this.kind &&
           other.version == this.version &&
           other.enabled == this.enabled &&
-          other.jsCode == this.jsCode &&
+          other.ruleText == this.ruleText &&
           other.repoUrl == this.repoUrl &&
           other.updatedAt == this.updatedAt);
 }
 
-class SourcesCompanion extends UpdateCompanion<Source> {
+class SourcesCompanion extends UpdateCompanion<SourceRow> {
   final Value<String> id;
   final Value<String> name;
   final Value<MediaType> type;
@@ -472,7 +474,7 @@ class SourcesCompanion extends UpdateCompanion<Source> {
   final Value<SourceKind> kind;
   final Value<String?> version;
   final Value<bool> enabled;
-  final Value<String?> jsCode;
+  final Value<String?> ruleText;
   final Value<String?> repoUrl;
   final Value<DateTime?> updatedAt;
   final Value<int> rowid;
@@ -484,7 +486,7 @@ class SourcesCompanion extends UpdateCompanion<Source> {
     this.kind = const Value.absent(),
     this.version = const Value.absent(),
     this.enabled = const Value.absent(),
-    this.jsCode = const Value.absent(),
+    this.ruleText = const Value.absent(),
     this.repoUrl = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -497,7 +499,7 @@ class SourcesCompanion extends UpdateCompanion<Source> {
     required SourceKind kind,
     this.version = const Value.absent(),
     this.enabled = const Value.absent(),
-    this.jsCode = const Value.absent(),
+    this.ruleText = const Value.absent(),
     this.repoUrl = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -505,7 +507,7 @@ class SourcesCompanion extends UpdateCompanion<Source> {
        name = Value(name),
        type = Value(type),
        kind = Value(kind);
-  static Insertable<Source> custom({
+  static Insertable<SourceRow> custom({
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? type,
@@ -513,7 +515,7 @@ class SourcesCompanion extends UpdateCompanion<Source> {
     Expression<String>? kind,
     Expression<String>? version,
     Expression<bool>? enabled,
-    Expression<String>? jsCode,
+    Expression<String>? ruleText,
     Expression<String>? repoUrl,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -526,7 +528,7 @@ class SourcesCompanion extends UpdateCompanion<Source> {
       if (kind != null) 'kind': kind,
       if (version != null) 'version': version,
       if (enabled != null) 'enabled': enabled,
-      if (jsCode != null) 'js_code': jsCode,
+      if (ruleText != null) 'rule_text': ruleText,
       if (repoUrl != null) 'repo_url': repoUrl,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -541,7 +543,7 @@ class SourcesCompanion extends UpdateCompanion<Source> {
     Value<SourceKind>? kind,
     Value<String?>? version,
     Value<bool>? enabled,
-    Value<String?>? jsCode,
+    Value<String?>? ruleText,
     Value<String?>? repoUrl,
     Value<DateTime?>? updatedAt,
     Value<int>? rowid,
@@ -554,7 +556,7 @@ class SourcesCompanion extends UpdateCompanion<Source> {
       kind: kind ?? this.kind,
       version: version ?? this.version,
       enabled: enabled ?? this.enabled,
-      jsCode: jsCode ?? this.jsCode,
+      ruleText: ruleText ?? this.ruleText,
       repoUrl: repoUrl ?? this.repoUrl,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -589,8 +591,8 @@ class SourcesCompanion extends UpdateCompanion<Source> {
     if (enabled.present) {
       map['enabled'] = Variable<bool>(enabled.value);
     }
-    if (jsCode.present) {
-      map['js_code'] = Variable<String>(jsCode.value);
+    if (ruleText.present) {
+      map['rule_text'] = Variable<String>(ruleText.value);
     }
     if (repoUrl.present) {
       map['repo_url'] = Variable<String>(repoUrl.value);
@@ -614,7 +616,7 @@ class SourcesCompanion extends UpdateCompanion<Source> {
           ..write('kind: $kind, ')
           ..write('version: $version, ')
           ..write('enabled: $enabled, ')
-          ..write('jsCode: $jsCode, ')
+          ..write('ruleText: $ruleText, ')
           ..write('repoUrl: $repoUrl, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -624,7 +626,7 @@ class SourcesCompanion extends UpdateCompanion<Source> {
 }
 
 class $MediaItemsTable extends MediaItems
-    with TableInfo<$MediaItemsTable, MediaItem> {
+    with TableInfo<$MediaItemsTable, MediaItemRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -773,7 +775,7 @@ class $MediaItemsTable extends MediaItems
   static const String $name = 'media_items';
   @override
   VerificationContext validateIntegrity(
-    Insertable<MediaItem> instance, {
+    Insertable<MediaItemRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -859,9 +861,9 @@ class $MediaItemsTable extends MediaItems
   @override
   Set<GeneratedColumn> get $primaryKey => {sourceId, remoteId};
   @override
-  MediaItem map(Map<String, dynamic> data, {String? tablePrefix}) {
+  MediaItemRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return MediaItem(
+    return MediaItemRow(
       sourceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}source_id'],
@@ -924,7 +926,7 @@ class $MediaItemsTable extends MediaItems
       const EnumNameConverter<MediaType>(MediaType.values);
 }
 
-class MediaItem extends DataClass implements Insertable<MediaItem> {
+class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
   final String sourceId;
   final String remoteId;
   final MediaType type;
@@ -943,7 +945,7 @@ class MediaItem extends DataClass implements Insertable<MediaItem> {
   /// 详情页扩展字段（同书版本、关联推荐等），JSON。
   final String? detailJson;
   final DateTime? cachedAt;
-  const MediaItem({
+  const MediaItemRow({
     required this.sourceId,
     required this.remoteId,
     required this.type,
@@ -1028,12 +1030,12 @@ class MediaItem extends DataClass implements Insertable<MediaItem> {
     );
   }
 
-  factory MediaItem.fromJson(
+  factory MediaItemRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return MediaItem(
+    return MediaItemRow(
       sourceId: serializer.fromJson<String>(json['sourceId']),
       remoteId: serializer.fromJson<String>(json['remoteId']),
       type: $MediaItemsTable.$convertertype.fromJson(
@@ -1071,7 +1073,7 @@ class MediaItem extends DataClass implements Insertable<MediaItem> {
     };
   }
 
-  MediaItem copyWith({
+  MediaItemRow copyWith({
     String? sourceId,
     String? remoteId,
     MediaType? type,
@@ -1084,7 +1086,7 @@ class MediaItem extends DataClass implements Insertable<MediaItem> {
     Value<String?> status = const Value.absent(),
     Value<String?> detailJson = const Value.absent(),
     Value<DateTime?> cachedAt = const Value.absent(),
-  }) => MediaItem(
+  }) => MediaItemRow(
     sourceId: sourceId ?? this.sourceId,
     remoteId: remoteId ?? this.remoteId,
     type: type ?? this.type,
@@ -1098,8 +1100,8 @@ class MediaItem extends DataClass implements Insertable<MediaItem> {
     detailJson: detailJson.present ? detailJson.value : this.detailJson,
     cachedAt: cachedAt.present ? cachedAt.value : this.cachedAt,
   );
-  MediaItem copyWithCompanion(MediaItemsCompanion data) {
-    return MediaItem(
+  MediaItemRow copyWithCompanion(MediaItemsCompanion data) {
+    return MediaItemRow(
       sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
       remoteId: data.remoteId.present ? data.remoteId.value : this.remoteId,
       type: data.type.present ? data.type.value : this.type,
@@ -1121,7 +1123,7 @@ class MediaItem extends DataClass implements Insertable<MediaItem> {
 
   @override
   String toString() {
-    return (StringBuffer('MediaItem(')
+    return (StringBuffer('MediaItemRow(')
           ..write('sourceId: $sourceId, ')
           ..write('remoteId: $remoteId, ')
           ..write('type: $type, ')
@@ -1156,7 +1158,7 @@ class MediaItem extends DataClass implements Insertable<MediaItem> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is MediaItem &&
+      (other is MediaItemRow &&
           other.sourceId == this.sourceId &&
           other.remoteId == this.remoteId &&
           other.type == this.type &&
@@ -1171,7 +1173,7 @@ class MediaItem extends DataClass implements Insertable<MediaItem> {
           other.cachedAt == this.cachedAt);
 }
 
-class MediaItemsCompanion extends UpdateCompanion<MediaItem> {
+class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
   final Value<String> sourceId;
   final Value<String> remoteId;
   final Value<MediaType> type;
@@ -1218,7 +1220,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItem> {
        remoteId = Value(remoteId),
        type = Value(type),
        title = Value(title);
-  static Insertable<MediaItem> custom({
+  static Insertable<MediaItemRow> custom({
     Expression<String>? sourceId,
     Expression<String>? remoteId,
     Expression<String>? type,
@@ -1350,7 +1352,8 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItem> {
   }
 }
 
-class $ChaptersTable extends Chapters with TableInfo<$ChaptersTable, Chapter> {
+class $ChaptersTable extends Chapters
+    with TableInfo<$ChaptersTable, ChapterRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -1496,7 +1499,7 @@ class $ChaptersTable extends Chapters with TableInfo<$ChaptersTable, Chapter> {
   static const String $name = 'chapters';
   @override
   VerificationContext validateIntegrity(
-    Insertable<Chapter> instance, {
+    Insertable<ChapterRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -1598,9 +1601,9 @@ class $ChaptersTable extends Chapters with TableInfo<$ChaptersTable, Chapter> {
   @override
   Set<GeneratedColumn> get $primaryKey => {sourceId, remoteId};
   @override
-  Chapter map(Map<String, dynamic> data, {String? tablePrefix}) {
+  ChapterRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Chapter(
+    return ChapterRow(
       sourceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}source_id'],
@@ -1654,7 +1657,7 @@ class $ChaptersTable extends Chapters with TableInfo<$ChaptersTable, Chapter> {
   }
 }
 
-class Chapter extends DataClass implements Insertable<Chapter> {
+class ChapterRow extends DataClass implements Insertable<ChapterRow> {
   final String sourceId;
   final String remoteId;
 
@@ -1676,7 +1679,7 @@ class Chapter extends DataClass implements Insertable<Chapter> {
 
   /// 正文 / 图片列表 / 播放线路，JSON。
   final String? contentJson;
-  const Chapter({
+  const ChapterRow({
     required this.sourceId,
     required this.remoteId,
     required this.itemSourceId,
@@ -1738,12 +1741,12 @@ class Chapter extends DataClass implements Insertable<Chapter> {
     );
   }
 
-  factory Chapter.fromJson(
+  factory ChapterRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Chapter(
+    return ChapterRow(
       sourceId: serializer.fromJson<String>(json['sourceId']),
       remoteId: serializer.fromJson<String>(json['remoteId']),
       itemSourceId: serializer.fromJson<String>(json['itemSourceId']),
@@ -1775,7 +1778,7 @@ class Chapter extends DataClass implements Insertable<Chapter> {
     };
   }
 
-  Chapter copyWith({
+  ChapterRow copyWith({
     String? sourceId,
     String? remoteId,
     String? itemSourceId,
@@ -1787,7 +1790,7 @@ class Chapter extends DataClass implements Insertable<Chapter> {
     Value<DateTime?> releaseDate = const Value.absent(),
     bool? locked,
     Value<String?> contentJson = const Value.absent(),
-  }) => Chapter(
+  }) => ChapterRow(
     sourceId: sourceId ?? this.sourceId,
     remoteId: remoteId ?? this.remoteId,
     itemSourceId: itemSourceId ?? this.itemSourceId,
@@ -1800,8 +1803,8 @@ class Chapter extends DataClass implements Insertable<Chapter> {
     locked: locked ?? this.locked,
     contentJson: contentJson.present ? contentJson.value : this.contentJson,
   );
-  Chapter copyWithCompanion(ChaptersCompanion data) {
-    return Chapter(
+  ChapterRow copyWithCompanion(ChaptersCompanion data) {
+    return ChapterRow(
       sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
       remoteId: data.remoteId.present ? data.remoteId.value : this.remoteId,
       itemSourceId: data.itemSourceId.present
@@ -1828,7 +1831,7 @@ class Chapter extends DataClass implements Insertable<Chapter> {
 
   @override
   String toString() {
-    return (StringBuffer('Chapter(')
+    return (StringBuffer('ChapterRow(')
           ..write('sourceId: $sourceId, ')
           ..write('remoteId: $remoteId, ')
           ..write('itemSourceId: $itemSourceId, ')
@@ -1861,7 +1864,7 @@ class Chapter extends DataClass implements Insertable<Chapter> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is Chapter &&
+      (other is ChapterRow &&
           other.sourceId == this.sourceId &&
           other.remoteId == this.remoteId &&
           other.itemSourceId == this.itemSourceId &&
@@ -1875,7 +1878,7 @@ class Chapter extends DataClass implements Insertable<Chapter> {
           other.contentJson == this.contentJson);
 }
 
-class ChaptersCompanion extends UpdateCompanion<Chapter> {
+class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
   final Value<String> sourceId;
   final Value<String> remoteId;
   final Value<String> itemSourceId;
@@ -1920,7 +1923,7 @@ class ChaptersCompanion extends UpdateCompanion<Chapter> {
        itemSourceId = Value(itemSourceId),
        itemRemoteId = Value(itemRemoteId),
        title = Value(title);
-  static Insertable<Chapter> custom({
+  static Insertable<ChapterRow> custom({
     Expression<String>? sourceId,
     Expression<String>? remoteId,
     Expression<String>? itemSourceId,
@@ -2043,7 +2046,7 @@ class ChaptersCompanion extends UpdateCompanion<Chapter> {
 }
 
 class $LibraryEntriesTable extends LibraryEntries
-    with TableInfo<$LibraryEntriesTable, LibraryEntry> {
+    with TableInfo<$LibraryEntriesTable, LibraryEntryRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -2177,7 +2180,7 @@ class $LibraryEntriesTable extends LibraryEntries
   static const String $name = 'library_entries';
   @override
   VerificationContext validateIntegrity(
-    Insertable<LibraryEntry> instance, {
+    Insertable<LibraryEntryRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -2253,9 +2256,9 @@ class $LibraryEntriesTable extends LibraryEntries
   @override
   Set<GeneratedColumn> get $primaryKey => {sourceId, remoteId};
   @override
-  LibraryEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+  LibraryEntryRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return LibraryEntry(
+    return LibraryEntryRow(
       sourceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}source_id'],
@@ -2310,7 +2313,7 @@ class $LibraryEntriesTable extends LibraryEntries
       const EnumNameConverter<MediaType>(MediaType.values);
 }
 
-class LibraryEntry extends DataClass implements Insertable<LibraryEntry> {
+class LibraryEntryRow extends DataClass implements Insertable<LibraryEntryRow> {
   final String sourceId;
   final String remoteId;
   final MediaType type;
@@ -2329,7 +2332,7 @@ class LibraryEntry extends DataClass implements Insertable<LibraryEntry> {
   final int unreadCount;
   final DateTime addedAt;
   final DateTime updatedAt;
-  const LibraryEntry({
+  const LibraryEntryRow({
     required this.sourceId,
     required this.remoteId,
     required this.type,
@@ -2380,12 +2383,12 @@ class LibraryEntry extends DataClass implements Insertable<LibraryEntry> {
     );
   }
 
-  factory LibraryEntry.fromJson(
+  factory LibraryEntryRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return LibraryEntry(
+    return LibraryEntryRow(
       sourceId: serializer.fromJson<String>(json['sourceId']),
       remoteId: serializer.fromJson<String>(json['remoteId']),
       type: $LibraryEntriesTable.$convertertype.fromJson(
@@ -2419,7 +2422,7 @@ class LibraryEntry extends DataClass implements Insertable<LibraryEntry> {
     };
   }
 
-  LibraryEntry copyWith({
+  LibraryEntryRow copyWith({
     String? sourceId,
     String? remoteId,
     MediaType? type,
@@ -2430,7 +2433,7 @@ class LibraryEntry extends DataClass implements Insertable<LibraryEntry> {
     int? unreadCount,
     DateTime? addedAt,
     DateTime? updatedAt,
-  }) => LibraryEntry(
+  }) => LibraryEntryRow(
     sourceId: sourceId ?? this.sourceId,
     remoteId: remoteId ?? this.remoteId,
     type: type ?? this.type,
@@ -2442,8 +2445,8 @@ class LibraryEntry extends DataClass implements Insertable<LibraryEntry> {
     addedAt: addedAt ?? this.addedAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  LibraryEntry copyWithCompanion(LibraryEntriesCompanion data) {
-    return LibraryEntry(
+  LibraryEntryRow copyWithCompanion(LibraryEntriesCompanion data) {
+    return LibraryEntryRow(
       sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
       remoteId: data.remoteId.present ? data.remoteId.value : this.remoteId,
       type: data.type.present ? data.type.value : this.type,
@@ -2461,7 +2464,7 @@ class LibraryEntry extends DataClass implements Insertable<LibraryEntry> {
 
   @override
   String toString() {
-    return (StringBuffer('LibraryEntry(')
+    return (StringBuffer('LibraryEntryRow(')
           ..write('sourceId: $sourceId, ')
           ..write('remoteId: $remoteId, ')
           ..write('type: $type, ')
@@ -2492,7 +2495,7 @@ class LibraryEntry extends DataClass implements Insertable<LibraryEntry> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is LibraryEntry &&
+      (other is LibraryEntryRow &&
           other.sourceId == this.sourceId &&
           other.remoteId == this.remoteId &&
           other.type == this.type &&
@@ -2505,7 +2508,7 @@ class LibraryEntry extends DataClass implements Insertable<LibraryEntry> {
           other.updatedAt == this.updatedAt);
 }
 
-class LibraryEntriesCompanion extends UpdateCompanion<LibraryEntry> {
+class LibraryEntriesCompanion extends UpdateCompanion<LibraryEntryRow> {
   final Value<String> sourceId;
   final Value<String> remoteId;
   final Value<MediaType> type;
@@ -2547,7 +2550,7 @@ class LibraryEntriesCompanion extends UpdateCompanion<LibraryEntry> {
        type = Value(type),
        addedAt = Value(addedAt),
        updatedAt = Value(updatedAt);
-  static Insertable<LibraryEntry> custom({
+  static Insertable<LibraryEntryRow> custom({
     Expression<String>? sourceId,
     Expression<String>? remoteId,
     Expression<String>? type,
@@ -2664,7 +2667,7 @@ class LibraryEntriesCompanion extends UpdateCompanion<LibraryEntry> {
 }
 
 class $CategoriesTable extends Categories
-    with TableInfo<$CategoriesTable, Category> {
+    with TableInfo<$CategoriesTable, CategoryRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -2712,7 +2715,7 @@ class $CategoriesTable extends Categories
   static const String $name = 'categories';
   @override
   VerificationContext validateIntegrity(
-    Insertable<Category> instance, {
+    Insertable<CategoryRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -2740,9 +2743,9 @@ class $CategoriesTable extends Categories
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  Category map(Map<String, dynamic> data, {String? tablePrefix}) {
+  CategoryRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Category(
+    return CategoryRow(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}id'],
@@ -2764,11 +2767,11 @@ class $CategoriesTable extends Categories
   }
 }
 
-class Category extends DataClass implements Insertable<Category> {
+class CategoryRow extends DataClass implements Insertable<CategoryRow> {
   final int id;
   final String name;
   final int sortIndex;
-  const Category({
+  const CategoryRow({
     required this.id,
     required this.name,
     required this.sortIndex,
@@ -2790,12 +2793,12 @@ class Category extends DataClass implements Insertable<Category> {
     );
   }
 
-  factory Category.fromJson(
+  factory CategoryRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Category(
+    return CategoryRow(
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       sortIndex: serializer.fromJson<int>(json['sortIndex']),
@@ -2811,13 +2814,13 @@ class Category extends DataClass implements Insertable<Category> {
     };
   }
 
-  Category copyWith({int? id, String? name, int? sortIndex}) => Category(
+  CategoryRow copyWith({int? id, String? name, int? sortIndex}) => CategoryRow(
     id: id ?? this.id,
     name: name ?? this.name,
     sortIndex: sortIndex ?? this.sortIndex,
   );
-  Category copyWithCompanion(CategoriesCompanion data) {
-    return Category(
+  CategoryRow copyWithCompanion(CategoriesCompanion data) {
+    return CategoryRow(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       sortIndex: data.sortIndex.present ? data.sortIndex.value : this.sortIndex,
@@ -2826,7 +2829,7 @@ class Category extends DataClass implements Insertable<Category> {
 
   @override
   String toString() {
-    return (StringBuffer('Category(')
+    return (StringBuffer('CategoryRow(')
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('sortIndex: $sortIndex')
@@ -2839,13 +2842,13 @@ class Category extends DataClass implements Insertable<Category> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is Category &&
+      (other is CategoryRow &&
           other.id == this.id &&
           other.name == this.name &&
           other.sortIndex == this.sortIndex);
 }
 
-class CategoriesCompanion extends UpdateCompanion<Category> {
+class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
   final Value<int> id;
   final Value<String> name;
   final Value<int> sortIndex;
@@ -2859,7 +2862,7 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
     required String name,
     this.sortIndex = const Value.absent(),
   }) : name = Value(name);
-  static Insertable<Category> custom({
+  static Insertable<CategoryRow> custom({
     Expression<int>? id,
     Expression<String>? name,
     Expression<int>? sortIndex,
@@ -2910,7 +2913,7 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
 }
 
 class $LibraryCategoryLinksTable extends LibraryCategoryLinks
-    with TableInfo<$LibraryCategoryLinksTable, LibraryCategoryLink> {
+    with TableInfo<$LibraryCategoryLinksTable, LibraryCategoryLinkRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -2957,7 +2960,7 @@ class $LibraryCategoryLinksTable extends LibraryCategoryLinks
   static const String $name = 'library_category_links';
   @override
   VerificationContext validateIntegrity(
-    Insertable<LibraryCategoryLink> instance, {
+    Insertable<LibraryCategoryLinkRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -2992,9 +2995,9 @@ class $LibraryCategoryLinksTable extends LibraryCategoryLinks
   @override
   Set<GeneratedColumn> get $primaryKey => {sourceId, remoteId, categoryId};
   @override
-  LibraryCategoryLink map(Map<String, dynamic> data, {String? tablePrefix}) {
+  LibraryCategoryLinkRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return LibraryCategoryLink(
+    return LibraryCategoryLinkRow(
       sourceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}source_id'],
@@ -3016,12 +3019,12 @@ class $LibraryCategoryLinksTable extends LibraryCategoryLinks
   }
 }
 
-class LibraryCategoryLink extends DataClass
-    implements Insertable<LibraryCategoryLink> {
+class LibraryCategoryLinkRow extends DataClass
+    implements Insertable<LibraryCategoryLinkRow> {
   final String sourceId;
   final String remoteId;
   final int categoryId;
-  const LibraryCategoryLink({
+  const LibraryCategoryLinkRow({
     required this.sourceId,
     required this.remoteId,
     required this.categoryId,
@@ -3043,12 +3046,12 @@ class LibraryCategoryLink extends DataClass
     );
   }
 
-  factory LibraryCategoryLink.fromJson(
+  factory LibraryCategoryLinkRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return LibraryCategoryLink(
+    return LibraryCategoryLinkRow(
       sourceId: serializer.fromJson<String>(json['sourceId']),
       remoteId: serializer.fromJson<String>(json['remoteId']),
       categoryId: serializer.fromJson<int>(json['categoryId']),
@@ -3064,17 +3067,17 @@ class LibraryCategoryLink extends DataClass
     };
   }
 
-  LibraryCategoryLink copyWith({
+  LibraryCategoryLinkRow copyWith({
     String? sourceId,
     String? remoteId,
     int? categoryId,
-  }) => LibraryCategoryLink(
+  }) => LibraryCategoryLinkRow(
     sourceId: sourceId ?? this.sourceId,
     remoteId: remoteId ?? this.remoteId,
     categoryId: categoryId ?? this.categoryId,
   );
-  LibraryCategoryLink copyWithCompanion(LibraryCategoryLinksCompanion data) {
-    return LibraryCategoryLink(
+  LibraryCategoryLinkRow copyWithCompanion(LibraryCategoryLinksCompanion data) {
+    return LibraryCategoryLinkRow(
       sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
       remoteId: data.remoteId.present ? data.remoteId.value : this.remoteId,
       categoryId: data.categoryId.present
@@ -3085,7 +3088,7 @@ class LibraryCategoryLink extends DataClass
 
   @override
   String toString() {
-    return (StringBuffer('LibraryCategoryLink(')
+    return (StringBuffer('LibraryCategoryLinkRow(')
           ..write('sourceId: $sourceId, ')
           ..write('remoteId: $remoteId, ')
           ..write('categoryId: $categoryId')
@@ -3098,14 +3101,14 @@ class LibraryCategoryLink extends DataClass
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is LibraryCategoryLink &&
+      (other is LibraryCategoryLinkRow &&
           other.sourceId == this.sourceId &&
           other.remoteId == this.remoteId &&
           other.categoryId == this.categoryId);
 }
 
 class LibraryCategoryLinksCompanion
-    extends UpdateCompanion<LibraryCategoryLink> {
+    extends UpdateCompanion<LibraryCategoryLinkRow> {
   final Value<String> sourceId;
   final Value<String> remoteId;
   final Value<int> categoryId;
@@ -3124,7 +3127,7 @@ class LibraryCategoryLinksCompanion
   }) : sourceId = Value(sourceId),
        remoteId = Value(remoteId),
        categoryId = Value(categoryId);
-  static Insertable<LibraryCategoryLink> custom({
+  static Insertable<LibraryCategoryLinkRow> custom({
     Expression<String>? sourceId,
     Expression<String>? remoteId,
     Expression<int>? categoryId,
@@ -3183,7 +3186,7 @@ class LibraryCategoryLinksCompanion
 }
 
 class $HistoriesTable extends Histories
-    with TableInfo<$HistoriesTable, History> {
+    with TableInfo<$HistoriesTable, HistoryRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -3311,7 +3314,7 @@ class $HistoriesTable extends Histories
   static const String $name = 'histories';
   @override
   VerificationContext validateIntegrity(
-    Insertable<History> instance, {
+    Insertable<HistoryRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -3389,9 +3392,9 @@ class $HistoriesTable extends Histories
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  History map(Map<String, dynamic> data, {String? tablePrefix}) {
+  HistoryRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return History(
+    return HistoryRow(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}id'],
@@ -3437,7 +3440,7 @@ class $HistoriesTable extends Histories
   }
 }
 
-class History extends DataClass implements Insertable<History> {
+class HistoryRow extends DataClass implements Insertable<HistoryRow> {
   final int id;
   final String sourceId;
   final String remoteId;
@@ -3453,7 +3456,7 @@ class History extends DataClass implements Insertable<History> {
 
   /// 无痕模式产生的记录不参与同步。
   final bool incognito;
-  const History({
+  const HistoryRow({
     required this.id,
     required this.sourceId,
     required this.remoteId,
@@ -3497,12 +3500,12 @@ class History extends DataClass implements Insertable<History> {
     );
   }
 
-  factory History.fromJson(
+  factory HistoryRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return History(
+    return HistoryRow(
       id: serializer.fromJson<int>(json['id']),
       sourceId: serializer.fromJson<String>(json['sourceId']),
       remoteId: serializer.fromJson<String>(json['remoteId']),
@@ -3530,7 +3533,7 @@ class History extends DataClass implements Insertable<History> {
     };
   }
 
-  History copyWith({
+  HistoryRow copyWith({
     int? id,
     String? sourceId,
     String? remoteId,
@@ -3540,7 +3543,7 @@ class History extends DataClass implements Insertable<History> {
     Value<String?> device = const Value.absent(),
     DateTime? visitedAt,
     bool? incognito,
-  }) => History(
+  }) => HistoryRow(
     id: id ?? this.id,
     sourceId: sourceId ?? this.sourceId,
     remoteId: remoteId ?? this.remoteId,
@@ -3551,8 +3554,8 @@ class History extends DataClass implements Insertable<History> {
     visitedAt: visitedAt ?? this.visitedAt,
     incognito: incognito ?? this.incognito,
   );
-  History copyWithCompanion(HistoriesCompanion data) {
-    return History(
+  HistoryRow copyWithCompanion(HistoriesCompanion data) {
+    return HistoryRow(
       id: data.id.present ? data.id.value : this.id,
       sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
       remoteId: data.remoteId.present ? data.remoteId.value : this.remoteId,
@@ -3571,7 +3574,7 @@ class History extends DataClass implements Insertable<History> {
 
   @override
   String toString() {
-    return (StringBuffer('History(')
+    return (StringBuffer('HistoryRow(')
           ..write('id: $id, ')
           ..write('sourceId: $sourceId, ')
           ..write('remoteId: $remoteId, ')
@@ -3600,7 +3603,7 @@ class History extends DataClass implements Insertable<History> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is History &&
+      (other is HistoryRow &&
           other.id == this.id &&
           other.sourceId == this.sourceId &&
           other.remoteId == this.remoteId &&
@@ -3612,7 +3615,7 @@ class History extends DataClass implements Insertable<History> {
           other.incognito == this.incognito);
 }
 
-class HistoriesCompanion extends UpdateCompanion<History> {
+class HistoriesCompanion extends UpdateCompanion<HistoryRow> {
   final Value<int> id;
   final Value<String> sourceId;
   final Value<String> remoteId;
@@ -3648,7 +3651,7 @@ class HistoriesCompanion extends UpdateCompanion<History> {
        chapterSourceId = Value(chapterSourceId),
        chapterRemoteId = Value(chapterRemoteId),
        visitedAt = Value(visitedAt);
-  static Insertable<History> custom({
+  static Insertable<HistoryRow> custom({
     Expression<int>? id,
     Expression<String>? sourceId,
     Expression<String>? remoteId,
@@ -3747,7 +3750,7 @@ class HistoriesCompanion extends UpdateCompanion<History> {
 }
 
 class $DownloadsTable extends Downloads
-    with TableInfo<$DownloadsTable, Download> {
+    with TableInfo<$DownloadsTable, DownloadRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -3893,7 +3896,7 @@ class $DownloadsTable extends Downloads
   static const String $name = 'downloads';
   @override
   VerificationContext validateIntegrity(
-    Insertable<Download> instance, {
+    Insertable<DownloadRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -3988,9 +3991,9 @@ class $DownloadsTable extends Downloads
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  Download map(Map<String, dynamic> data, {String? tablePrefix}) {
+  DownloadRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Download(
+    return DownloadRow(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}id'],
@@ -4044,7 +4047,7 @@ class $DownloadsTable extends Downloads
   }
 }
 
-class Download extends DataClass implements Insertable<Download> {
+class DownloadRow extends DataClass implements Insertable<DownloadRow> {
   final int id;
   final String sourceId;
   final String remoteId;
@@ -4058,7 +4061,7 @@ class Download extends DataClass implements Insertable<Download> {
   final String? errorMessage;
   final DateTime createdAt;
   final DateTime? finishedAt;
-  const Download({
+  const DownloadRow({
     required this.id,
     required this.sourceId,
     required this.remoteId,
@@ -4114,12 +4117,12 @@ class Download extends DataClass implements Insertable<Download> {
     );
   }
 
-  factory Download.fromJson(
+  factory DownloadRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Download(
+    return DownloadRow(
       id: serializer.fromJson<int>(json['id']),
       sourceId: serializer.fromJson<String>(json['sourceId']),
       remoteId: serializer.fromJson<String>(json['remoteId']),
@@ -4151,7 +4154,7 @@ class Download extends DataClass implements Insertable<Download> {
     };
   }
 
-  Download copyWith({
+  DownloadRow copyWith({
     int? id,
     String? sourceId,
     String? remoteId,
@@ -4163,7 +4166,7 @@ class Download extends DataClass implements Insertable<Download> {
     Value<String?> errorMessage = const Value.absent(),
     DateTime? createdAt,
     Value<DateTime?> finishedAt = const Value.absent(),
-  }) => Download(
+  }) => DownloadRow(
     id: id ?? this.id,
     sourceId: sourceId ?? this.sourceId,
     remoteId: remoteId ?? this.remoteId,
@@ -4176,8 +4179,8 @@ class Download extends DataClass implements Insertable<Download> {
     createdAt: createdAt ?? this.createdAt,
     finishedAt: finishedAt.present ? finishedAt.value : this.finishedAt,
   );
-  Download copyWithCompanion(DownloadsCompanion data) {
-    return Download(
+  DownloadRow copyWithCompanion(DownloadsCompanion data) {
+    return DownloadRow(
       id: data.id.present ? data.id.value : this.id,
       sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
       remoteId: data.remoteId.present ? data.remoteId.value : this.remoteId,
@@ -4202,7 +4205,7 @@ class Download extends DataClass implements Insertable<Download> {
 
   @override
   String toString() {
-    return (StringBuffer('Download(')
+    return (StringBuffer('DownloadRow(')
           ..write('id: $id, ')
           ..write('sourceId: $sourceId, ')
           ..write('remoteId: $remoteId, ')
@@ -4235,7 +4238,7 @@ class Download extends DataClass implements Insertable<Download> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is Download &&
+      (other is DownloadRow &&
           other.id == this.id &&
           other.sourceId == this.sourceId &&
           other.remoteId == this.remoteId &&
@@ -4249,7 +4252,7 @@ class Download extends DataClass implements Insertable<Download> {
           other.finishedAt == this.finishedAt);
 }
 
-class DownloadsCompanion extends UpdateCompanion<Download> {
+class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
   final Value<int> id;
   final Value<String> sourceId;
   final Value<String> remoteId;
@@ -4292,7 +4295,7 @@ class DownloadsCompanion extends UpdateCompanion<Download> {
        chapterRemoteId = Value(chapterRemoteId),
        status = Value(status),
        createdAt = Value(createdAt);
-  static Insertable<Download> custom({
+  static Insertable<DownloadRow> custom({
     Expression<int>? id,
     Expression<String>? sourceId,
     Expression<String>? remoteId,
@@ -4407,7 +4410,7 @@ class DownloadsCompanion extends UpdateCompanion<Download> {
 }
 
 class $TrackBindsTable extends TrackBinds
-    with TableInfo<$TrackBindsTable, TrackBind> {
+    with TableInfo<$TrackBindsTable, TrackBindRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -4482,7 +4485,7 @@ class $TrackBindsTable extends TrackBinds
   static const String $name = 'track_binds';
   @override
   VerificationContext validateIntegrity(
-    Insertable<TrackBind> instance, {
+    Insertable<TrackBindRow> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -4534,9 +4537,9 @@ class $TrackBindsTable extends TrackBinds
   @override
   Set<GeneratedColumn> get $primaryKey => {sourceId, remoteId, service};
   @override
-  TrackBind map(Map<String, dynamic> data, {String? tablePrefix}) {
+  TrackBindRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return TrackBind(
+    return TrackBindRow(
       sourceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}source_id'],
@@ -4566,7 +4569,7 @@ class $TrackBindsTable extends TrackBinds
   }
 }
 
-class TrackBind extends DataClass implements Insertable<TrackBind> {
+class TrackBindRow extends DataClass implements Insertable<TrackBindRow> {
   final String sourceId;
   final String remoteId;
 
@@ -4576,7 +4579,7 @@ class TrackBind extends DataClass implements Insertable<TrackBind> {
   /// 远端条目 ID。
   final String remoteTrackId;
   final DateTime? syncedAt;
-  const TrackBind({
+  const TrackBindRow({
     required this.sourceId,
     required this.remoteId,
     required this.service,
@@ -4608,12 +4611,12 @@ class TrackBind extends DataClass implements Insertable<TrackBind> {
     );
   }
 
-  factory TrackBind.fromJson(
+  factory TrackBindRow.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return TrackBind(
+    return TrackBindRow(
       sourceId: serializer.fromJson<String>(json['sourceId']),
       remoteId: serializer.fromJson<String>(json['remoteId']),
       service: serializer.fromJson<String>(json['service']),
@@ -4633,21 +4636,21 @@ class TrackBind extends DataClass implements Insertable<TrackBind> {
     };
   }
 
-  TrackBind copyWith({
+  TrackBindRow copyWith({
     String? sourceId,
     String? remoteId,
     String? service,
     String? remoteTrackId,
     Value<DateTime?> syncedAt = const Value.absent(),
-  }) => TrackBind(
+  }) => TrackBindRow(
     sourceId: sourceId ?? this.sourceId,
     remoteId: remoteId ?? this.remoteId,
     service: service ?? this.service,
     remoteTrackId: remoteTrackId ?? this.remoteTrackId,
     syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
   );
-  TrackBind copyWithCompanion(TrackBindsCompanion data) {
-    return TrackBind(
+  TrackBindRow copyWithCompanion(TrackBindsCompanion data) {
+    return TrackBindRow(
       sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
       remoteId: data.remoteId.present ? data.remoteId.value : this.remoteId,
       service: data.service.present ? data.service.value : this.service,
@@ -4660,7 +4663,7 @@ class TrackBind extends DataClass implements Insertable<TrackBind> {
 
   @override
   String toString() {
-    return (StringBuffer('TrackBind(')
+    return (StringBuffer('TrackBindRow(')
           ..write('sourceId: $sourceId, ')
           ..write('remoteId: $remoteId, ')
           ..write('service: $service, ')
@@ -4676,7 +4679,7 @@ class TrackBind extends DataClass implements Insertable<TrackBind> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is TrackBind &&
+      (other is TrackBindRow &&
           other.sourceId == this.sourceId &&
           other.remoteId == this.remoteId &&
           other.service == this.service &&
@@ -4684,7 +4687,7 @@ class TrackBind extends DataClass implements Insertable<TrackBind> {
           other.syncedAt == this.syncedAt);
 }
 
-class TrackBindsCompanion extends UpdateCompanion<TrackBind> {
+class TrackBindsCompanion extends UpdateCompanion<TrackBindRow> {
   final Value<String> sourceId;
   final Value<String> remoteId;
   final Value<String> service;
@@ -4710,7 +4713,7 @@ class TrackBindsCompanion extends UpdateCompanion<TrackBind> {
        remoteId = Value(remoteId),
        service = Value(service),
        remoteTrackId = Value(remoteTrackId);
-  static Insertable<TrackBind> custom({
+  static Insertable<TrackBindRow> custom({
     Expression<String>? sourceId,
     Expression<String>? remoteId,
     Expression<String>? service,
@@ -4822,7 +4825,7 @@ typedef $$SourcesTableCreateCompanionBuilder = SourcesCompanion Function({
   required SourceKind kind,
   Value<String?> version,
   Value<bool> enabled,
-  Value<String?> jsCode,
+  Value<String?> ruleText,
   Value<String?> repoUrl,
   Value<DateTime?> updatedAt,
   Value<int> rowid,
@@ -4835,7 +4838,7 @@ typedef $$SourcesTableUpdateCompanionBuilder = SourcesCompanion Function({
   Value<SourceKind> kind,
   Value<String?> version,
   Value<bool> enabled,
-  Value<String?> jsCode,
+  Value<String?> ruleText,
   Value<String?> repoUrl,
   Value<DateTime?> updatedAt,
   Value<int> rowid,
@@ -4887,8 +4890,8 @@ class $$SourcesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get jsCode => $composableBuilder(
-    column: $table.jsCode,
+  ColumnFilters<String> get ruleText => $composableBuilder(
+    column: $table.ruleText,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4947,8 +4950,8 @@ class $$SourcesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get jsCode => $composableBuilder(
-    column: $table.jsCode,
+  ColumnOrderings<String> get ruleText => $composableBuilder(
+    column: $table.ruleText,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -4993,8 +4996,8 @@ class $$SourcesTableAnnotationComposer
   GeneratedColumn<bool> get enabled =>
       $composableBuilder(column: $table.enabled, builder: (column) => column);
 
-  GeneratedColumn<String> get jsCode =>
-      $composableBuilder(column: $table.jsCode, builder: (column) => column);
+  GeneratedColumn<String> get ruleText =>
+      $composableBuilder(column: $table.ruleText, builder: (column) => column);
 
   GeneratedColumn<String> get repoUrl =>
       $composableBuilder(column: $table.repoUrl, builder: (column) => column);
@@ -5008,14 +5011,14 @@ class $$SourcesTableTableManager
         RootTableManager<
           _$AppDatabase,
           $SourcesTable,
-          Source,
+          SourceRow,
           $$SourcesTableFilterComposer,
           $$SourcesTableOrderingComposer,
           $$SourcesTableAnnotationComposer,
           $$SourcesTableCreateCompanionBuilder,
           $$SourcesTableUpdateCompanionBuilder,
-          (Source, BaseReferences<_$AppDatabase, $SourcesTable, Source>),
-          Source,
+          (SourceRow, BaseReferences<_$AppDatabase, $SourcesTable, SourceRow>),
+          SourceRow,
           PrefetchHooks Function()
         > {
   $$SourcesTableTableManager(_$AppDatabase db, $SourcesTable table)
@@ -5038,7 +5041,7 @@ class $$SourcesTableTableManager
                 Value<SourceKind> kind = const Value.absent(),
                 Value<String?> version = const Value.absent(),
                 Value<bool> enabled = const Value.absent(),
-                Value<String?> jsCode = const Value.absent(),
+                Value<String?> ruleText = const Value.absent(),
                 Value<String?> repoUrl = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -5050,7 +5053,7 @@ class $$SourcesTableTableManager
                 kind: kind,
                 version: version,
                 enabled: enabled,
-                jsCode: jsCode,
+                ruleText: ruleText,
                 repoUrl: repoUrl,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -5064,7 +5067,7 @@ class $$SourcesTableTableManager
                 required SourceKind kind,
                 Value<String?> version = const Value.absent(),
                 Value<bool> enabled = const Value.absent(),
-                Value<String?> jsCode = const Value.absent(),
+                Value<String?> ruleText = const Value.absent(),
                 Value<String?> repoUrl = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -5076,7 +5079,7 @@ class $$SourcesTableTableManager
                 kind: kind,
                 version: version,
                 enabled: enabled,
-                jsCode: jsCode,
+                ruleText: ruleText,
                 repoUrl: repoUrl,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -5084,8 +5087,8 @@ class $$SourcesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$SourcesTable, Source>(table),
-                  BaseReferences<_$AppDatabase, $SourcesTable, Source>(
+                  e.readTable<$SourcesTable, SourceRow>(table),
+                  BaseReferences<_$AppDatabase, $SourcesTable, SourceRow>(
                     db,
                     table,
                     e,
@@ -5102,14 +5105,14 @@ typedef $$SourcesTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $SourcesTable,
-      Source,
+      SourceRow,
       $$SourcesTableFilterComposer,
       $$SourcesTableOrderingComposer,
       $$SourcesTableAnnotationComposer,
       $$SourcesTableCreateCompanionBuilder,
       $$SourcesTableUpdateCompanionBuilder,
-      (Source, BaseReferences<_$AppDatabase, $SourcesTable, Source>),
-      Source,
+      (SourceRow, BaseReferences<_$AppDatabase, $SourcesTable, SourceRow>),
+      SourceRow,
       PrefetchHooks Function()
     >;
 typedef $$MediaItemsTableCreateCompanionBuilder = MediaItemsCompanion Function({
@@ -5339,17 +5342,17 @@ class $$MediaItemsTableTableManager
         RootTableManager<
           _$AppDatabase,
           $MediaItemsTable,
-          MediaItem,
+          MediaItemRow,
           $$MediaItemsTableFilterComposer,
           $$MediaItemsTableOrderingComposer,
           $$MediaItemsTableAnnotationComposer,
           $$MediaItemsTableCreateCompanionBuilder,
           $$MediaItemsTableUpdateCompanionBuilder,
           (
-            MediaItem,
-            BaseReferences<_$AppDatabase, $MediaItemsTable, MediaItem>,
+            MediaItemRow,
+            BaseReferences<_$AppDatabase, $MediaItemsTable, MediaItemRow>,
           ),
-          MediaItem,
+          MediaItemRow,
           PrefetchHooks Function()
         > {
   $$MediaItemsTableTableManager(_$AppDatabase db, $MediaItemsTable table)
@@ -5426,8 +5429,8 @@ class $$MediaItemsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$MediaItemsTable, MediaItem>(table),
-                  BaseReferences<_$AppDatabase, $MediaItemsTable, MediaItem>(
+                  e.readTable<$MediaItemsTable, MediaItemRow>(table),
+                  BaseReferences<_$AppDatabase, $MediaItemsTable, MediaItemRow>(
                     db,
                     table,
                     e,
@@ -5444,14 +5447,17 @@ typedef $$MediaItemsTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $MediaItemsTable,
-      MediaItem,
+      MediaItemRow,
       $$MediaItemsTableFilterComposer,
       $$MediaItemsTableOrderingComposer,
       $$MediaItemsTableAnnotationComposer,
       $$MediaItemsTableCreateCompanionBuilder,
       $$MediaItemsTableUpdateCompanionBuilder,
-      (MediaItem, BaseReferences<_$AppDatabase, $MediaItemsTable, MediaItem>),
-      MediaItem,
+      (
+        MediaItemRow,
+        BaseReferences<_$AppDatabase, $MediaItemsTable, MediaItemRow>,
+      ),
+      MediaItemRow,
       PrefetchHooks Function()
     >;
 typedef $$ChaptersTableCreateCompanionBuilder = ChaptersCompanion Function({
@@ -5671,14 +5677,17 @@ class $$ChaptersTableTableManager
         RootTableManager<
           _$AppDatabase,
           $ChaptersTable,
-          Chapter,
+          ChapterRow,
           $$ChaptersTableFilterComposer,
           $$ChaptersTableOrderingComposer,
           $$ChaptersTableAnnotationComposer,
           $$ChaptersTableCreateCompanionBuilder,
           $$ChaptersTableUpdateCompanionBuilder,
-          (Chapter, BaseReferences<_$AppDatabase, $ChaptersTable, Chapter>),
-          Chapter,
+          (
+            ChapterRow,
+            BaseReferences<_$AppDatabase, $ChaptersTable, ChapterRow>,
+          ),
+          ChapterRow,
           PrefetchHooks Function()
         > {
   $$ChaptersTableTableManager(_$AppDatabase db, $ChaptersTable table)
@@ -5751,8 +5760,8 @@ class $$ChaptersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$ChaptersTable, Chapter>(table),
-                  BaseReferences<_$AppDatabase, $ChaptersTable, Chapter>(
+                  e.readTable<$ChaptersTable, ChapterRow>(table),
+                  BaseReferences<_$AppDatabase, $ChaptersTable, ChapterRow>(
                     db,
                     table,
                     e,
@@ -5769,14 +5778,14 @@ typedef $$ChaptersTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $ChaptersTable,
-      Chapter,
+      ChapterRow,
       $$ChaptersTableFilterComposer,
       $$ChaptersTableOrderingComposer,
       $$ChaptersTableAnnotationComposer,
       $$ChaptersTableCreateCompanionBuilder,
       $$ChaptersTableUpdateCompanionBuilder,
-      (Chapter, BaseReferences<_$AppDatabase, $ChaptersTable, Chapter>),
-      Chapter,
+      (ChapterRow, BaseReferences<_$AppDatabase, $ChaptersTable, ChapterRow>),
+      ChapterRow,
       PrefetchHooks Function()
     >;
 typedef $$LibraryEntriesTableCreateCompanionBuilder =
@@ -5976,17 +5985,21 @@ class $$LibraryEntriesTableTableManager
         RootTableManager<
           _$AppDatabase,
           $LibraryEntriesTable,
-          LibraryEntry,
+          LibraryEntryRow,
           $$LibraryEntriesTableFilterComposer,
           $$LibraryEntriesTableOrderingComposer,
           $$LibraryEntriesTableAnnotationComposer,
           $$LibraryEntriesTableCreateCompanionBuilder,
           $$LibraryEntriesTableUpdateCompanionBuilder,
           (
-            LibraryEntry,
-            BaseReferences<_$AppDatabase, $LibraryEntriesTable, LibraryEntry>,
+            LibraryEntryRow,
+            BaseReferences<
+              _$AppDatabase,
+              $LibraryEntriesTable,
+              LibraryEntryRow
+            >,
           ),
-          LibraryEntry,
+          LibraryEntryRow,
           PrefetchHooks Function()
         > {
   $$LibraryEntriesTableTableManager(
@@ -6057,11 +6070,11 @@ class $$LibraryEntriesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$LibraryEntriesTable, LibraryEntry>(table),
+                  e.readTable<$LibraryEntriesTable, LibraryEntryRow>(table),
                   BaseReferences<
                     _$AppDatabase,
                     $LibraryEntriesTable,
-                    LibraryEntry
+                    LibraryEntryRow
                   >(db, table, e),
                 ),
               )
@@ -6075,17 +6088,17 @@ typedef $$LibraryEntriesTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $LibraryEntriesTable,
-      LibraryEntry,
+      LibraryEntryRow,
       $$LibraryEntriesTableFilterComposer,
       $$LibraryEntriesTableOrderingComposer,
       $$LibraryEntriesTableAnnotationComposer,
       $$LibraryEntriesTableCreateCompanionBuilder,
       $$LibraryEntriesTableUpdateCompanionBuilder,
       (
-        LibraryEntry,
-        BaseReferences<_$AppDatabase, $LibraryEntriesTable, LibraryEntry>,
+        LibraryEntryRow,
+        BaseReferences<_$AppDatabase, $LibraryEntriesTable, LibraryEntryRow>,
       ),
-      LibraryEntry,
+      LibraryEntryRow,
       PrefetchHooks Function()
     >;
 typedef $$CategoriesTableCreateCompanionBuilder = CategoriesCompanion Function({
@@ -6173,14 +6186,17 @@ class $$CategoriesTableTableManager
         RootTableManager<
           _$AppDatabase,
           $CategoriesTable,
-          Category,
+          CategoryRow,
           $$CategoriesTableFilterComposer,
           $$CategoriesTableOrderingComposer,
           $$CategoriesTableAnnotationComposer,
           $$CategoriesTableCreateCompanionBuilder,
           $$CategoriesTableUpdateCompanionBuilder,
-          (Category, BaseReferences<_$AppDatabase, $CategoriesTable, Category>),
-          Category,
+          (
+            CategoryRow,
+            BaseReferences<_$AppDatabase, $CategoriesTable, CategoryRow>,
+          ),
+          CategoryRow,
           PrefetchHooks Function()
         > {
   $$CategoriesTableTableManager(_$AppDatabase db, $CategoriesTable table)
@@ -6212,8 +6228,8 @@ class $$CategoriesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$CategoriesTable, Category>(table),
-                  BaseReferences<_$AppDatabase, $CategoriesTable, Category>(
+                  e.readTable<$CategoriesTable, CategoryRow>(table),
+                  BaseReferences<_$AppDatabase, $CategoriesTable, CategoryRow>(
                     db,
                     table,
                     e,
@@ -6230,14 +6246,17 @@ typedef $$CategoriesTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $CategoriesTable,
-      Category,
+      CategoryRow,
       $$CategoriesTableFilterComposer,
       $$CategoriesTableOrderingComposer,
       $$CategoriesTableAnnotationComposer,
       $$CategoriesTableCreateCompanionBuilder,
       $$CategoriesTableUpdateCompanionBuilder,
-      (Category, BaseReferences<_$AppDatabase, $CategoriesTable, Category>),
-      Category,
+      (
+        CategoryRow,
+        BaseReferences<_$AppDatabase, $CategoriesTable, CategoryRow>,
+      ),
+      CategoryRow,
       PrefetchHooks Function()
     >;
 typedef $$LibraryCategoryLinksTableCreateCompanionBuilder =
@@ -6331,21 +6350,21 @@ class $$LibraryCategoryLinksTableTableManager
         RootTableManager<
           _$AppDatabase,
           $LibraryCategoryLinksTable,
-          LibraryCategoryLink,
+          LibraryCategoryLinkRow,
           $$LibraryCategoryLinksTableFilterComposer,
           $$LibraryCategoryLinksTableOrderingComposer,
           $$LibraryCategoryLinksTableAnnotationComposer,
           $$LibraryCategoryLinksTableCreateCompanionBuilder,
           $$LibraryCategoryLinksTableUpdateCompanionBuilder,
           (
-            LibraryCategoryLink,
+            LibraryCategoryLinkRow,
             BaseReferences<
               _$AppDatabase,
               $LibraryCategoryLinksTable,
-              LibraryCategoryLink
+              LibraryCategoryLinkRow
             >,
           ),
-          LibraryCategoryLink,
+          LibraryCategoryLinkRow,
           PrefetchHooks Function()
         > {
   $$LibraryCategoryLinksTableTableManager(
@@ -6394,13 +6413,14 @@ class $$LibraryCategoryLinksTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$LibraryCategoryLinksTable, LibraryCategoryLink>(
-                    table,
-                  ),
+                  e.readTable<
+                    $LibraryCategoryLinksTable,
+                    LibraryCategoryLinkRow
+                  >(table),
                   BaseReferences<
                     _$AppDatabase,
                     $LibraryCategoryLinksTable,
-                    LibraryCategoryLink
+                    LibraryCategoryLinkRow
                   >(db, table, e),
                 ),
               )
@@ -6414,21 +6434,21 @@ typedef $$LibraryCategoryLinksTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $LibraryCategoryLinksTable,
-      LibraryCategoryLink,
+      LibraryCategoryLinkRow,
       $$LibraryCategoryLinksTableFilterComposer,
       $$LibraryCategoryLinksTableOrderingComposer,
       $$LibraryCategoryLinksTableAnnotationComposer,
       $$LibraryCategoryLinksTableCreateCompanionBuilder,
       $$LibraryCategoryLinksTableUpdateCompanionBuilder,
       (
-        LibraryCategoryLink,
+        LibraryCategoryLinkRow,
         BaseReferences<
           _$AppDatabase,
           $LibraryCategoryLinksTable,
-          LibraryCategoryLink
+          LibraryCategoryLinkRow
         >,
       ),
-      LibraryCategoryLink,
+      LibraryCategoryLinkRow,
       PrefetchHooks Function()
     >;
 typedef $$HistoriesTableCreateCompanionBuilder = HistoriesCompanion Function({
@@ -6610,14 +6630,17 @@ class $$HistoriesTableTableManager
         RootTableManager<
           _$AppDatabase,
           $HistoriesTable,
-          History,
+          HistoryRow,
           $$HistoriesTableFilterComposer,
           $$HistoriesTableOrderingComposer,
           $$HistoriesTableAnnotationComposer,
           $$HistoriesTableCreateCompanionBuilder,
           $$HistoriesTableUpdateCompanionBuilder,
-          (History, BaseReferences<_$AppDatabase, $HistoriesTable, History>),
-          History,
+          (
+            HistoryRow,
+            BaseReferences<_$AppDatabase, $HistoriesTable, HistoryRow>,
+          ),
+          HistoryRow,
           PrefetchHooks Function()
         > {
   $$HistoriesTableTableManager(_$AppDatabase db, $HistoriesTable table)
@@ -6678,8 +6701,8 @@ class $$HistoriesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$HistoriesTable, History>(table),
-                  BaseReferences<_$AppDatabase, $HistoriesTable, History>(
+                  e.readTable<$HistoriesTable, HistoryRow>(table),
+                  BaseReferences<_$AppDatabase, $HistoriesTable, HistoryRow>(
                     db,
                     table,
                     e,
@@ -6696,14 +6719,14 @@ typedef $$HistoriesTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $HistoriesTable,
-      History,
+      HistoryRow,
       $$HistoriesTableFilterComposer,
       $$HistoriesTableOrderingComposer,
       $$HistoriesTableAnnotationComposer,
       $$HistoriesTableCreateCompanionBuilder,
       $$HistoriesTableUpdateCompanionBuilder,
-      (History, BaseReferences<_$AppDatabase, $HistoriesTable, History>),
-      History,
+      (HistoryRow, BaseReferences<_$AppDatabase, $HistoriesTable, HistoryRow>),
+      HistoryRow,
       PrefetchHooks Function()
     >;
 typedef $$DownloadsTableCreateCompanionBuilder = DownloadsCompanion Function({
@@ -6919,14 +6942,17 @@ class $$DownloadsTableTableManager
         RootTableManager<
           _$AppDatabase,
           $DownloadsTable,
-          Download,
+          DownloadRow,
           $$DownloadsTableFilterComposer,
           $$DownloadsTableOrderingComposer,
           $$DownloadsTableAnnotationComposer,
           $$DownloadsTableCreateCompanionBuilder,
           $$DownloadsTableUpdateCompanionBuilder,
-          (Download, BaseReferences<_$AppDatabase, $DownloadsTable, Download>),
-          Download,
+          (
+            DownloadRow,
+            BaseReferences<_$AppDatabase, $DownloadsTable, DownloadRow>,
+          ),
+          DownloadRow,
           PrefetchHooks Function()
         > {
   $$DownloadsTableTableManager(_$AppDatabase db, $DownloadsTable table)
@@ -6995,8 +7021,8 @@ class $$DownloadsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$DownloadsTable, Download>(table),
-                  BaseReferences<_$AppDatabase, $DownloadsTable, Download>(
+                  e.readTable<$DownloadsTable, DownloadRow>(table),
+                  BaseReferences<_$AppDatabase, $DownloadsTable, DownloadRow>(
                     db,
                     table,
                     e,
@@ -7013,14 +7039,17 @@ typedef $$DownloadsTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $DownloadsTable,
-      Download,
+      DownloadRow,
       $$DownloadsTableFilterComposer,
       $$DownloadsTableOrderingComposer,
       $$DownloadsTableAnnotationComposer,
       $$DownloadsTableCreateCompanionBuilder,
       $$DownloadsTableUpdateCompanionBuilder,
-      (Download, BaseReferences<_$AppDatabase, $DownloadsTable, Download>),
-      Download,
+      (
+        DownloadRow,
+        BaseReferences<_$AppDatabase, $DownloadsTable, DownloadRow>,
+      ),
+      DownloadRow,
       PrefetchHooks Function()
     >;
 typedef $$TrackBindsTableCreateCompanionBuilder = TrackBindsCompanion Function({
@@ -7142,17 +7171,17 @@ class $$TrackBindsTableTableManager
         RootTableManager<
           _$AppDatabase,
           $TrackBindsTable,
-          TrackBind,
+          TrackBindRow,
           $$TrackBindsTableFilterComposer,
           $$TrackBindsTableOrderingComposer,
           $$TrackBindsTableAnnotationComposer,
           $$TrackBindsTableCreateCompanionBuilder,
           $$TrackBindsTableUpdateCompanionBuilder,
           (
-            TrackBind,
-            BaseReferences<_$AppDatabase, $TrackBindsTable, TrackBind>,
+            TrackBindRow,
+            BaseReferences<_$AppDatabase, $TrackBindsTable, TrackBindRow>,
           ),
-          TrackBind,
+          TrackBindRow,
           PrefetchHooks Function()
         > {
   $$TrackBindsTableTableManager(_$AppDatabase db, $TrackBindsTable table)
@@ -7201,8 +7230,8 @@ class $$TrackBindsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$TrackBindsTable, TrackBind>(table),
-                  BaseReferences<_$AppDatabase, $TrackBindsTable, TrackBind>(
+                  e.readTable<$TrackBindsTable, TrackBindRow>(table),
+                  BaseReferences<_$AppDatabase, $TrackBindsTable, TrackBindRow>(
                     db,
                     table,
                     e,
@@ -7219,14 +7248,17 @@ typedef $$TrackBindsTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $TrackBindsTable,
-      TrackBind,
+      TrackBindRow,
       $$TrackBindsTableFilterComposer,
       $$TrackBindsTableOrderingComposer,
       $$TrackBindsTableAnnotationComposer,
       $$TrackBindsTableCreateCompanionBuilder,
       $$TrackBindsTableUpdateCompanionBuilder,
-      (TrackBind, BaseReferences<_$AppDatabase, $TrackBindsTable, TrackBind>),
-      TrackBind,
+      (
+        TrackBindRow,
+        BaseReferences<_$AppDatabase, $TrackBindsTable, TrackBindRow>,
+      ),
+      TrackBindRow,
       PrefetchHooks Function()
     >;
 

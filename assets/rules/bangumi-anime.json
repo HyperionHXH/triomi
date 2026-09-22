@@ -1,0 +1,52 @@
+{
+  "id": "bangumi-anime",
+  "name": "Bangumi 番剧资料",
+  "type": "anime",
+  "lang": "zh",
+  "version": "1.0.0",
+  "baseUrl": "https://api.bgm.tv",
+  "response": "json",
+  "requireLogin": false,
+  "headers": {
+    "User-Agent": "Triomi/0.1.0 (https://github.com/HyperionHXH/triomi)"
+  },
+  "capabilities": ["search", "detail"],
+  "search": {
+    "url": "/v0/search/subjects?limit=20&offset={offset}",
+    "method": "POST",
+    "bodyType": "json",
+    "body": "{\"keyword\":\"{keyword}\",\"filter\":{\"type\":[2]}}",
+    "list": "data",
+    "fields": {
+      "remoteId": "id",
+      "title": "name_cn",
+      "name": "name",
+      "coverUrl": "images.large",
+      "description": "summary",
+      "rating": "rating.score",
+      "status": "platform"
+    }
+  },
+  "detail": {
+    "url": "/v0/subjects/{id}",
+    "fields": {
+      "title": "name_cn",
+      "name": "name",
+      "coverUrl": "images.large",
+      "description": "summary",
+      "rating": "rating.score",
+      "status": "platform"
+    },
+    "chapters": {
+      "url": "/v0/episodes?subject_id={id}&limit=100",
+      "list": "data",
+      "fields": {
+        "remoteId": "id",
+        "title": "name_cn",
+        "name": "name",
+        "number": "sort",
+        "releaseDate": "airdate"
+      }
+    }
+  }
+}
