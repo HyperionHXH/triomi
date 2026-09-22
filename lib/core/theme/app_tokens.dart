@@ -14,6 +14,12 @@ abstract final class AppSpacing {
   static const double lg = 24;
   static const double xl = 32;
 
+  /// 桌面端 Sidebar 宽度。
+  static const double sidebarWidth = 232;
+
+  /// 底部导航栏高度。
+  static const double navigationBarHeight = 64;
+
   /// 页面统一外边距。
   static const EdgeInsets page = EdgeInsets.symmetric(
     horizontal: lg,

@@ -9,7 +9,7 @@
 
 | 里程碑 | 内容 | 状态 |
 |---|---|---|
-| **M0 脚手架** | 工程骨架、设计令牌与主题、自适应外壳、drift 表结构、Hive 设置 | ✅ 进行中 |
+| **M0 脚手架** | 工程骨架、设计令牌与主题、自适应外壳、drift 表结构、Hive 设置 | ✅ 已完成（见 [复查记录](docs/M0_REVIEW.md)） |
 | M1 规则引擎 | JS 沙箱 + XPath 简式层、来源管理、发现 / 搜索 / 详情 | ⏳ |
 | M2 漫画闭环 | 阅读器（四模式）、书架、进度、历史 | ⏳ |
 | M3 追番闭环 | media_kit 播放器、弹幕、时间表 | ⏳ |
@@ -57,18 +57,26 @@ lib/
 
 ## 环境与构建
 
-- Flutter stable（Dart 3.x）
+- Flutter stable（当前验证版本 3.47.5 / Dart 3.13.4）
 - JDK 17、Android SDK 35（构建 Android 端时需要）
 - Visual Studio 2022「使用 C++ 的桌面开发」工作负载（构建 Windows 端时需要）
 
 ```powershell
 cd triomi
 flutter pub get
-dart run build_runner build --delete-conflicting-outputs   # 生成 drift 代码
-flutter run -d windows        # 或 -d android
+dart run build_runner build      # 生成 drift 代码
+flutter run -d windows           # 或 -d android
 flutter analyze
 dart format .
 ```
+
+> **注意**：本机若设置了 `HTTP_PROXY` / `HTTPS_PROXY` 等代理环境变量，`flutter test`
+> 会因 flutter_tester 的 WebSocket 握手失败而报
+> `Invalid WebSocket upgrade request`。跑测试前先清除：
+> `$env:HTTP_PROXY=''; $env:HTTPS_PROXY=''; $env:ALL_PROXY=''`
+
+当前开发机的验证能力与限制（无 Visual Studio / Android SDK，只能跑 analyze + test）见
+[`docs/M0_REVIEW.md`](docs/M0_REVIEW.md)。
 
 ## 许可证
 

@@ -32,7 +32,10 @@ class AppearanceSettings {
 
   static const List<double> fontScaleOptions = <double>[0.9, 1.0, 1.1, 1.25];
 
-  String get fontScaleLabel => switch (uiFontScale) {
+  String get fontScaleLabel => labelForScale(uiFontScale);
+
+  /// 字号档位的中文标签（界面用）。
+  static String labelForScale(double scale) => switch (scale) {
     <= 0.9 => '小',
     <= 1.0 => '标准',
     <= 1.1 => '大',

@@ -71,7 +71,9 @@ class SettingsPage extends ConsumerWidget {
                               in AppearanceSettings.fontScaleOptions)
                             ButtonSegment<double>(
                               value: scale,
-                              label: Text(_fontScaleLabel(scale)),
+                              label: Text(
+                                AppearanceSettings.labelForScale(scale),
+                              ),
                             ),
                         ],
                         selected: <double>{settings.uiFontScale},
@@ -151,13 +153,6 @@ class SettingsPage extends ConsumerWidget {
       ),
     );
   }
-
-  static String _fontScaleLabel(double scale) => switch (scale) {
-    <= 0.9 => '小',
-    <= 1.0 => '标准',
-    <= 1.1 => '大',
-    _ => '特大',
-  };
 }
 
 class _ThemeModeTile extends StatelessWidget {

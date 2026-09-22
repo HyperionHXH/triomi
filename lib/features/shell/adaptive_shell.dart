@@ -120,7 +120,7 @@ class _DesktopSidebar extends StatelessWidget {
     final palette = context.palette;
 
     return Container(
-      width: 232,
+      width: AppSpacing.sidebarWidth,
       color: palette.sidebar,
       child: SafeArea(
         child: Column(

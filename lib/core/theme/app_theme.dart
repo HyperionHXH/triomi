@@ -187,7 +187,7 @@ abstract final class AppTheme {
         backgroundColor: colorScheme.surface,
         indicatorColor: colorScheme.primary.withValues(alpha: 0.14),
         elevation: 0,
-        height: 64,
+        height: AppSpacing.navigationBarHeight,
         labelTextStyle: WidgetStatePropertyAll(textTheme.bodySmall),
       ),
 
