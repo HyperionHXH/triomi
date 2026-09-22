@@ -6,6 +6,7 @@ import '../../features/detail/detail_page.dart';
 import '../../features/discover/discover_page.dart';
 import '../../features/history/history_page.dart';
 import '../../features/library/library_page.dart';
+import '../../features/player/player_page.dart';
 import '../../features/profile/profile_page.dart';
 import '../../features/reader/manga_reader_page.dart';
 import '../../features/schedule/schedule_page.dart';
@@ -29,6 +30,7 @@ abstract final class AppRoutes {
   static const String detail = '/detail';
   static const String history = '/history';
   static const String reader = '/reader';
+  static const String player = '/player';
 }
 
 abstract final class AppRouter {
@@ -128,6 +130,22 @@ abstract final class AppRouter {
               icon: Icons.link_off,
               title: '缺少章节信息',
               message: '请从作品详情页的目录进入阅读器。',
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.player,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is PlayerArgs) return PlayerPage(args: extra);
+          return const PageScaffold(
+            title: '播放',
+            child: EmptyStateView(
+              icon: Icons.link_off,
+              title: '缺少剧集信息',
+              message: '请从作品详情页的目录进入播放器。',
             ),
           );
         },

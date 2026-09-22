@@ -1,0 +1,54 @@
+{
+  "id": "local-fixture",
+  "name": "本地夹具源（仅调试）",
+  "type": "manga",
+  "lang": "zh",
+  "version": "1.0.0",
+  "baseUrl": "http://10.0.2.2:8123",
+  "response": "html",
+  "requireLogin": false,
+  "capabilities": ["discover", "search", "detail", "content"],
+  "discover": {
+    "feeds": [
+      { "id": "hot", "name": "热门漫画", "url": "/list?page={page}" }
+    ],
+    "url": "/list?page={page}",
+    "list": ".list .item",
+    "fields": {
+      "remoteId": { "selector": "a.title", "attr": "href", "regex": "/manga/(\\d+)" },
+      "title": "a.title",
+      "url": { "selector": "a.title", "attr": "href", "absolute": true },
+      "coverUrl": { "selector": "img.cover", "attr": "data-src", "absolute": true },
+      "author": ".author"
+    }
+  },
+  "search": {
+    "url": "/search?q={keywordEncoded}&page={page}",
+    "list": ".list .item",
+    "fields": {
+      "remoteId": { "selector": "a.title", "attr": "href", "regex": "/manga/(\\d+)" },
+      "title": "a.title",
+      "url": { "selector": "a.title", "attr": "href", "absolute": true },
+      "coverUrl": { "selector": "img.cover", "attr": "data-src", "absolute": true },
+      "author": ".author"
+    }
+  },
+  "detail": {
+    "url": "{urlRaw}",
+    "fields": {
+      "title": "h1",
+      "description": ".summary"
+    },
+    "chapters": {
+      "list": ".chapters li",
+      "fields": {
+        "remoteId": { "selector": "a", "attr": "href", "regex": "/chapter/([\\w-]+)" },
+        "title": "a",
+        "url": { "selector": "a", "attr": "href", "absolute": true }
+      }
+    }
+  },
+  "content": {
+    "images": ["#reader img@data-original", "#reader img@src"]
+  }
+}

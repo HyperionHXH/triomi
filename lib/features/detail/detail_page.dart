@@ -15,6 +15,7 @@ import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../library/data/library_providers.dart';
+import '../player/player_page.dart';
 import '../reader/manga_reader_page.dart';
 
 /// 详情页：作品信息 + 章节目录。
@@ -426,9 +427,21 @@ class _ChapterSection extends StatelessWidget {
       return;
     }
 
+    if (target.type == MediaType.anime) {
+      context.push(
+        AppRoutes.player,
+        extra: PlayerArgs(
+          item: target,
+          chapters: chapters,
+          initialIndex: index,
+        ),
+      );
+      return;
+    }
+
     final hint = switch (target.type) {
-      MediaType.anime => '视频播放器将在 M3 提供',
       MediaType.novel => '小说阅读器将在 M4 提供',
+      MediaType.anime => '',
       MediaType.manga => '',
     };
     ScaffoldMessenger.of(context).showSnackBar(

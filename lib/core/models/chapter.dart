@@ -12,6 +12,7 @@ class ChapterContent {
     this.images = const <String>[],
     this.text,
     this.playSources = const <PlaySource>[],
+    this.danmakuUrl,
   });
 
   /// 漫画：图片地址列表。
@@ -23,8 +24,14 @@ class ChapterContent {
   /// 番剧：播放线路列表。
   final List<PlaySource> playSources;
 
+  /// 番剧：弹幕数据地址（返回弹弹play 格式的 JSON）。
+  final String? danmakuUrl;
+
   bool get isEmpty =>
-      images.isEmpty && (text == null || text!.isEmpty) && playSources.isEmpty;
+      images.isEmpty &&
+      (text == null || text!.isEmpty) &&
+      playSources.isEmpty &&
+      danmakuUrl == null;
 }
 
 /// 章节 / 剧集。

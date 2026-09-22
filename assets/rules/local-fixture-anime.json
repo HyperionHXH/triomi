@@ -1,0 +1,61 @@
+{
+  "id": "local-fixture-anime",
+  "name": "本地夹具番剧源（仅调试）",
+  "type": "anime",
+  "lang": "zh",
+  "version": "1.0.0",
+  "baseUrl": "http://10.0.2.2:8123",
+  "response": "html",
+  "requireLogin": false,
+  "capabilities": ["discover", "search", "detail", "content"],
+  "discover": {
+    "feeds": [
+      { "id": "onair", "name": "连载中的番剧", "url": "/anime/list?page={page}" }
+    ],
+    "url": "/anime/list?page={page}",
+    "list": ".list .item",
+    "fields": {
+      "remoteId": { "selector": "a.title", "attr": "href", "regex": "/anime/(\\d+)" },
+      "title": "a.title",
+      "url": { "selector": "a.title", "attr": "href", "absolute": true },
+      "coverUrl": { "selector": "img.cover", "attr": "data-src", "absolute": true },
+      "author": ".author"
+    }
+  },
+  "search": {
+    "url": "/anime/search?q={keywordEncoded}",
+    "list": ".list .item",
+    "fields": {
+      "remoteId": { "selector": "a.title", "attr": "href", "regex": "/anime/(\\d+)" },
+      "title": "a.title",
+      "url": { "selector": "a.title", "attr": "href", "absolute": true },
+      "coverUrl": { "selector": "img.cover", "attr": "data-src", "absolute": true },
+      "author": ".author"
+    }
+  },
+  "detail": {
+    "url": "{urlRaw}",
+    "fields": {
+      "title": "h1",
+      "description": ".summary"
+    },
+    "chapters": {
+      "list": ".episodes li",
+      "fields": {
+        "remoteId": { "selector": "a", "attr": "href", "regex": "/play/([\\w-]+)" },
+        "title": "a",
+        "url": { "selector": "a", "attr": "href", "absolute": true }
+      }
+    }
+  },
+  "content": {
+    "playSources": {
+      "list": ".lines .line",
+      "fields": {
+        "name": ".line-name",
+        "url": { "selector": "a.line-url", "attr": "href", "absolute": true }
+      }
+    },
+    "danmaku": "/danmaku/{id}.json"
+  }
+}

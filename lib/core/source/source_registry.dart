@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../models/media_type.dart';
@@ -82,8 +83,15 @@ class SourceRegistry {
   final AssetBundle _bundle;
 
   /// 随包分发的示例规则。用户删掉后不会自动复活（[seedBuiltins] 只补没记录过的）。
-  static const List<String> builtinRuleAssets = <String>[
+  ///
+  /// 调试构建额外带一份**本地夹具源**：模拟器/测试环境常常没有外网，
+  /// 用它指向宿主上的 `tools/dev_fixture_server.py` 就能验证规则引擎全链路。
+  static List<String> get builtinRuleAssets => <String>[
     'assets/rules/bangumi-anime.json',
+    if (kDebugMode) ...<String>[
+      'assets/rules/local-fixture.json',
+      'assets/rules/local-fixture-anime.json',
+    ],
   ];
 
   Future<SourceRegistrySnapshot> load() async {
@@ -128,13 +136,18 @@ class SourceRegistry {
     return SourceRegistrySnapshot(entries: entries, failures: failures);
   }
 
-  /// 首次启动时把内置示例规则写进数据库（用户之后可以停用或删除）。
-  Future<void> seedBuiltins({required Set<String> alreadySeeded}) async {
+  /// 把内置示例规则写进数据库（用户之后可以停用或删除）。
+  ///
+  /// [alreadySeeded] 记录的是**资产路径**（与 [builtinRuleAssets] 同一口径）：
+  /// 不在集合里的路径会被尝试播种。返回**本次实际播种成功**的路径集合——
+  /// 调用方只应记录成功的（播种失败的规则下次启动还要重试，否则会永远消失）。
+  Future<Set<String>> seedBuiltins({required Set<String> alreadySeeded}) async {
+    final seededNow = <String>{};
     for (final asset in builtinRuleAssets) {
+      if (alreadySeeded.contains(asset)) continue;
       try {
         final text = await _bundle.loadString(asset);
         final rule = SourceRule.parseJson(text);
-        if (alreadySeeded.contains(rule.descriptor.id)) continue;
         await repository.upsert(
           id: rule.descriptor.id,
           name: rule.descriptor.name,
@@ -144,11 +157,14 @@ class SourceRegistry {
           lang: rule.descriptor.lang,
           version: rule.descriptor.version,
         );
+        seededNow.add(asset);
       } on RuleFormatException {
-        // 随包的规则写错了属于开发期问题，不应阻塞启动。
+        // 随包的规则写错了属于开发期问题，不应阻塞启动；
+        // 不记录该路径，下次启动还会重试（修好后自动出现）。
         continue;
       }
     }
+    return seededNow;
   }
 
   /// 从文本导入规则；校验通过后落库并返回解析结果。

@@ -156,7 +156,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
       return '这一章是文字内容，小说阅读器将在 M4 提供。';
     }
     if (content.playSources.isNotEmpty) {
-      return '这一集是视频内容，播放器将在 M3 提供。';
+      return '这一集是视频内容：请用番剧源打开它的详情页播放。';
     }
     return '这一章没有取到图片：请检查规则的 content.images 选择器是否匹配该站的懒加载属性。';
   }

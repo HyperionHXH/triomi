@@ -1,8 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 来源规则、封面与漫画图片全部走网络；缺了这条 release 包会"什么都加载不出来"
+         （debug 包因为调试清单自带 INTERNET 而看不出问题）。 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
-        android:label="triomi"
+        android:label="Triomi"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -194,7 +194,25 @@ class DeclarativeSource
       ];
     }
 
-    return ChapterContent(images: images, text: text, playSources: playSources);
+    // 弹幕地址：模板里的 {id} 用章节 remoteId 渲染。
+    final danmakuTemplate = contentRule.danmaku;
+    final danmakuUrl = (danmakuTemplate == null || danmakuTemplate.isEmpty)
+        ? null
+        : resolveUrl(
+            response.url,
+            renderTemplate(danmakuTemplate, <String, String>{
+              'id': chapter.remoteId,
+              'urlRaw': chapterUrl,
+              'url': Uri.encodeComponent(chapterUrl),
+            }),
+          );
+
+    return ChapterContent(
+      images: images,
+      text: text,
+      playSources: playSources,
+      danmakuUrl: danmakuUrl,
+    );
   }
 
   // ---------------------------------------------------------------- 内部实现

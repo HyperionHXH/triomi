@@ -148,6 +148,7 @@ class RuleContent {
     this.imageSelectors = const <String>[],
     this.textSelector,
     this.playSources,
+    this.danmaku,
   });
 
   /// 依次尝试的图片选择器（很多站点会把地址放在 data-src / data-original 上）。
@@ -156,6 +157,10 @@ class RuleContent {
 
   /// 番剧播放线路列表（同一元素上取 name + url）。
   final RuleList? playSources;
+
+  /// 番剧弹幕数据地址模板（返回弹弹play 格式 JSON）。
+  /// 可用 `{id}`（章节 remoteId）与 `{urlRaw}` 等占位符。
+  final String? danmaku;
 
   static RuleContent? parse(Object? value) {
     if (value is! Map) return null;
@@ -168,6 +173,7 @@ class RuleContent {
       ],
       textSelector: value['text']?.toString(),
       playSources: RuleList.parse(value['playSources']),
+      danmaku: value['danmaku']?.toString(),
     );
   }
 }

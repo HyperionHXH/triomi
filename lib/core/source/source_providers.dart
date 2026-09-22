@@ -38,9 +38,15 @@ class SourceRegistryController extends AsyncNotifier<SourceRegistrySnapshot> {
           in (preferences.get<List<Object?>>(_seededKey) ?? const <Object?>[]))
         id.toString(),
     };
-    if (seeded.isEmpty) {
-      await registry.seedBuiltins(alreadySeeded: seeded);
-      await preferences.set(_seededKey, SourceRegistry.builtinRuleAssets);
+
+    // 每次启动都尝试补种：只把**实际播种成功**的路径记进已播种集合。
+    // 记失败的那次规则（如随包规则写错）不会占坑，修好后下次启动自动出现。
+    final newlySeeded = await registry.seedBuiltins(alreadySeeded: seeded);
+    if (newlySeeded.isNotEmpty) {
+      await preferences.set(
+        _seededKey,
+        <String>{...seeded, ...newlySeeded}.toList(),
+      );
     }
 
     return registry.load();

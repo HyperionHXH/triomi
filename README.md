@@ -12,9 +12,9 @@
 | **M0 脚手架** | 工程骨架、设计令牌与主题、自适应外壳、drift 表结构、Hive 设置 | ✅ 已完成（[复查记录](docs/M0_REVIEW.md)） |
 | **M1 规则引擎** | 声明式规则（HTML + JSON、CSS/XPath）、来源管理、发现 / 聚合搜索 / 详情 | ✅ 声明式部分完成（[复查记录](docs/M1_REVIEW.md)）｜JS 沙箱待设备验证 |
 | **M2 漫画闭环** | 阅读器四模式、书架、进度、历史 | ✅ 已完成（[复查记录](docs/M2_REVIEW.md)） |
-| M3 追番闭环 | media_kit 播放器、弹幕、时间表 | ⏳ |
+| **M3 追番闭环** | media_kit 播放器、弹幕层、Bangumi 放送表、模拟器端到端验证 | ✅ 已完成（[复查记录](docs/M3_REVIEW.md)） |
 | M4 小说闭环 | LK / LNS 适配器移植 + 阅读器（Mixn 功能全量对齐） | ⏳ |
-| M5 增强 | 下载、追踪服务、WebDAV 同步、备份导入导出 | ⏳ |
+| M5 增强 | 下载、追踪服务、WebDAV 同步、备份导入导出、弹幕增强 | ⏳ |
 
 完整需求、方案与任务拆解见 [`docs/PROJECT_SPEC.md`](docs/PROJECT_SPEC.md)；
 写来源规则看 [`docs/RULE_FORMAT.md`](docs/RULE_FORMAT.md)。
