@@ -49,3 +49,6 @@ app.*.map.json
 
 # Gradle 会把插件构建产物放在 android/build 下
 android/build/
+
+# 夹具服务的 WebDAV 存储（运行时数据）
+tools/_dav/

@@ -9,6 +9,23 @@ class FakeHttpClient implements SourceHttpClient {
 
   final List<SourceRequest> requests = <SourceRequest>[];
 
+  /// 二进制资源响应（未设置时读取会抛错）。
+  List<int>? Function(String url)? bytesHandler;
+
+  /// 已上传的二进制内容（WebDAV PUT 断言用）。
+  final List<
+    ({String url, List<int> bytes, String method, Map<String, String> headers})
+  >
+  uploads =
+      <
+        ({
+          String url,
+          List<int> bytes,
+          String method,
+          Map<String, String> headers,
+        })
+      >[];
+
   SourceRequest get lastRequest => requests.last;
 
   @override
@@ -21,11 +38,43 @@ class FakeHttpClient implements SourceHttpClient {
   }
 
   @override
-  Future<List<int>> fetchBytes(String url, {required String sourceId}) async {
+  Future<List<int>> fetchBytes(
+    String url, {
+    required String sourceId,
+    Map<String, String> headers = const <String, String>{},
+    String method = 'GET',
+  }) async {
     requests.add(
-      SourceRequest(url: url, method: 'GET', bodyType: RequestBodyType.none),
+      SourceRequest(
+        url: url,
+        method: method,
+        headers: headers,
+        bodyType: RequestBodyType.none,
+      ),
     );
+    final bytes = bytesHandler?.call(url);
+    if (bytes != null) return bytes;
     throw StateError('测试替身不支持二进制资源：$url');
+  }
+
+  @override
+  Future<SourceResponse> uploadBytes(
+    String url, {
+    required String sourceId,
+    required List<int> bytes,
+    Map<String, String> headers = const <String, String>{},
+    String method = 'PUT',
+  }) async {
+    uploads.add((url: url, bytes: bytes, method: method, headers: headers));
+    requests.add(
+      SourceRequest(
+        url: url,
+        method: method,
+        headers: headers,
+        bodyType: RequestBodyType.none,
+      ),
+    );
+    return SourceResponse(statusCode: 201, body: '', url: url);
   }
 
   @override

@@ -13,6 +13,7 @@ Android 模拟器内访问宿主用 http://10.0.2.2:8123 。
 
 import io
 import json
+import time
 import os
 import struct
 import zlib
@@ -20,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 PORT = 8123
+DAV_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_dav')
 MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fixture_media')
 
 
@@ -226,6 +228,95 @@ class Handler(BaseHTTPRequestHandler):
         # 开发期保留请求日志，便于排查"请求到底发没发出来"。
         print(f'[fixture] {self.address_string()} {fmt % args}', flush=True)
 
+    # ---------------------------------------------------------- WebDAV 夹具
+    # 只实现同步需要的最小集合：MKCOL / PUT / GET / PROPFIND（Basic 认证忽略）。
+    def _dav_path(self, path: str) -> str:
+        rel = path[len('/dav'):].strip('/')
+        target = os.path.join(DAV_DIR, rel)
+        # 防目录穿越
+        root = os.path.abspath(DAV_DIR)
+        target = os.path.abspath(target)
+        if not target.startswith(root):
+            target = root
+        return target
+
+    def _dav_get(self, path: str) -> bool:
+        target = self._dav_path(path)
+        if not os.path.isfile(target):
+            self.send_response(404)
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+            return True
+        with open(target, 'rb') as handle:
+            data = handle.read()
+        stat = os.stat(target)
+        modified = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime(stat.st_mtime))
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/octet-stream')
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('Last-Modified', modified)
+        self.end_headers()
+        self.wfile.write(data)
+        return True
+
+    def _dav_put(self, path: str) -> bool:
+        target = self._dav_path(path)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        length = int(self.headers.get('Content-Length') or 0)
+        body = self.rfile.read(length) if length else b''
+        with open(target, 'wb') as handle:
+            handle.write(body)
+        self.send_response(201)
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+        return True
+
+    def _dav_mkcol(self, path: str) -> bool:
+        target = self._dav_path(path)
+        if os.path.isdir(target):
+            self.send_response(405)
+        else:
+            os.makedirs(target, exist_ok=True)
+            self.send_response(201)
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+        return True
+
+    def _dav_propfind(self, path: str) -> bool:
+        target = self._dav_path(path)
+        if not os.path.exists(target):
+            self.send_response(404)
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+            return True
+        if os.path.isfile(target):
+            stat = os.stat(target)
+            modified = time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime(stat.st_mtime))
+            xml = (
+                '<?xml version="1.0" encoding="utf-8"?>'
+                '<D:multistatus xmlns:D="DAV:"><D:response><D:href>'
+                f'{path}</D:href><D:propstat><D:status>HTTP/1.1 200 OK</D:status>'
+                '<D:prop><D:getcontentlength>'
+                f'{stat.st_size}</D:getcontentlength>'
+                f'<D:getlastmodified>{modified}</D:getlastmodified>'
+                '</D:prop></D:propstat></D:response></D:multistatus>'
+            )
+        else:
+            xml = (
+                '<?xml version="1.0" encoding="utf-8"?>'
+                '<D:multistatus xmlns:D="DAV:"><D:response><D:href>'
+                f'{path}/</D:href><D:propstat><D:status>HTTP/1.1 200 OK</D:status>'
+                '<D:prop><D:resourcetype><D:collection/></D:resourcetype>'
+                '</D:prop></D:propstat></D:response></D:multistatus>'
+            )
+        body = xml.encode('utf-8')
+        self.send_response(207)
+        self.send_header('Content-Type', 'application/xml; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
     def _send(self, body: bytes, content_type: str) -> None:
         self.send_response(200)
         self.send_header('Content-Type', content_type)
@@ -233,10 +324,41 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_PUT(self):  # noqa: N802
+        path = urlparse(self.path).path
+        if path.startswith('/dav'):
+            self._dav_put(path)
+            return
+        self.send_response(404)
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+
+    def do_MKCOL(self):  # noqa: N802
+        path = urlparse(self.path).path
+        if path.startswith('/dav'):
+            self._dav_mkcol(path)
+            return
+        self.send_response(404)
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+
+    def do_PROPFIND(self):  # noqa: N802
+        path = urlparse(self.path).path
+        if path.startswith('/dav'):
+            self._dav_propfind(path)
+            return
+        self.send_response(404)
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+
     def do_GET(self):  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
         query = parse_qs(parsed.query)
+
+        if path.startswith('/dav'):
+            self._dav_get(path)
+            return
 
         if path == '/list':
             page = int(query.get('page', ['1'])[0])
@@ -305,6 +427,13 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
 
+        if path.startswith('/anime/'):
+            self._send(
+                anime_detail_page(path.rsplit('/', 1)[-1]).encode('utf-8'),
+                'text/html; charset=utf-8',
+            )
+            return
+
         if path == '/novel/list':
             page = int(query.get('page', ['1'])[0])
             self._send(
@@ -365,11 +494,28 @@ class Handler(BaseHTTPRequestHandler):
                 # mpv/播放器会先发 Range 请求；不支持的话部分内核会一直缓冲。
                 spec = range_header.split('=', 1)[1].split(',')[0]
                 start_s, _, end_s = spec.partition('-')
-                start = int(start_s) if start_s else 0
-                end = int(end_s) if end_s else size - 1
-                end = min(end, size - 1)
+                if not start_s and end_s:
+                    # 后缀区间 `bytes=-N`：取最后 N 字节。
+                    length_suffix = int(end_s)
+                    start = max(size - length_suffix, 0)
+                    end = size - 1
+                else:
+                    start = int(start_s) if start_s else 0
+                    end = int(end_s) if end_s else size - 1
+                if start >= size:
+                    # 越界区间必须回 416，否则 Content-Length 会是负数。
+                    self.send_response(416)
+                    self.send_header('Content-Range', f'bytes */{size}')
+                    self.send_header('Content-Length', '0')
+                    self.end_headers()
+                    return
+                end = min(max(end, start), size - 1)
                 partial = True
             length = end - start + 1
+            print(
+                f'[fixture] video {name} range={range_header} -> {start}-{end} ({length}B)',
+                flush=True,
+            )
             self.send_response(206 if partial else 200)
             self.send_header('Content-Type', 'video/mp4')
             self.send_header('Content-Length', str(length))

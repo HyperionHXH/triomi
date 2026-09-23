@@ -37,6 +37,41 @@ class ChapterContent {
       (html == null || html!.isEmpty) &&
       playSources.isEmpty &&
       danmakuUrl == null;
+
+  /// 序列化为 JSON（离线缓存与备份共用）。
+  Map<String, Object?> toJson() => <String, Object?>{
+    'images': images,
+    'text': text,
+    'html': html,
+    'play': <Object?>[
+      for (final source in playSources)
+        <String, Object?>{'name': source.name, 'url': source.url},
+    ],
+    'danmaku': danmakuUrl,
+  };
+
+  /// 反序列化；内容为空或格式不对时返回 null。
+  static ChapterContent? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final content = ChapterContent(
+      images: <String>[
+        for (final url in (raw['images'] as List?) ?? const <Object?>[])
+          if (url != null) url.toString(),
+      ],
+      text: raw['text'] as String?,
+      html: raw['html'] as String?,
+      playSources: <PlaySource>[
+        for (final source in (raw['play'] as List?) ?? const <Object?>[])
+          if (source is Map)
+            PlaySource(
+              name: '${source['name'] ?? '线路'}',
+              url: '${source['url'] ?? ''}',
+            ),
+      ],
+      danmakuUrl: raw['danmaku'] as String?,
+    );
+    return content.isEmpty ? null : content;
+  }
 }
 
 /// 章节 / 剧集。

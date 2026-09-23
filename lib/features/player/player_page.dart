@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -10,15 +11,18 @@ import '../../core/models/chapter.dart';
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/models/source_exception.dart';
+import '../../core/router/app_router.dart';
 import '../../core/source/http_client.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
+import '../../core/storage/preferences.dart';
 import '../../core/theme/app_tokens.dart';
 import '../library/data/library_providers.dart';
 import '../library/data/library_repository.dart';
 import 'data/dandanplay_client.dart';
 import 'data/danmaku_overlay.dart';
+import 'data/danmaku_settings.dart';
 
 /// 播放器入参：作品 + 目录 + 从第几集开始。
 class PlayerArgs {
@@ -50,7 +54,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
   /// initState 里从 ref 取出保存；dispose 里写最后一次进度时用。
   LibraryRepository? _libraryRepository;
 
-  late final DanmakuController _danmaku = DanmakuController();
+  late final Preferences _preferences;
+  late final DanmakuController _danmaku;
+  late DanmakuSettings _danmakuSettings;
 
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration>? _durationSub;
@@ -69,6 +75,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
   bool _danmakuOn = true;
   bool _fullscreen = false;
 
+  /// 播放倍速（0.5~3.0）。
+  double _speed = 1.0;
+
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   bool _playing = false;
@@ -84,6 +93,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     // dispose() 里不能用 ref（Riverpod 3 会在卸载时封禁），
     // 退出播放器时还要写最后一次进度，所以提前把仓储握在手里。
     _libraryRepository = ref.read(libraryRepositoryProvider);
+    _preferences = ref.read(preferencesProvider);
+    _danmakuSettings = DanmakuSettings.load(_preferences);
+    _danmaku = DanmakuController(settings: _danmakuSettings);
+    _danmakuOn = _danmakuSettings.enabled;
 
     _player = Player();
     // 模拟器上 media_kit 会自动降级到 S/W 渲染，其外部纹理在部分
@@ -410,6 +423,21 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
                       color: Colors.white,
                     ),
                   ),
+                  IconButton(
+                    tooltip: '弹幕设置',
+                    onPressed: _showDanmakuSettings,
+                    icon: const Icon(Icons.tune_rounded, color: Colors.white),
+                  ),
+                  IconButton(
+                    tooltip: '搜索弹幕',
+                    onPressed: _searchDanmaku,
+                    icon: const Icon(Icons.search_rounded, color: Colors.white),
+                  ),
+                  IconButton(
+                    tooltip: '发送弹幕',
+                    onPressed: _sendDanmaku,
+                    icon: const Icon(Icons.send_rounded, color: Colors.white),
+                  ),
                 ],
               ),
             ),
@@ -465,6 +493,13 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
                           child: const Text(
                             '剧集',
                             style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _pickSpeed,
+                          child: Text(
+                            '${_speed}x',
+                            style: const TextStyle(color: Colors.white),
                           ),
                         ),
                         IconButton(
@@ -597,6 +632,266 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     await _load();
   }
 
+  /// 当前弹幕对应的弹弹play 剧集（手动搜索匹配后才有，用于发送弹幕）。
+  int? _danmakuEpisodeId;
+
+  // ---------------------------------------------------------------- 倍速
+
+  static const List<double> _speedOptions = <double>[
+    0.5,
+    0.75,
+    1.0,
+    1.25,
+    1.5,
+    2.0,
+    3.0,
+  ];
+
+  Future<void> _pickSpeed() async {
+    final selected = await showModalBottomSheet<double>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Text(
+                '播放倍速',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            Wrap(
+              spacing: AppSpacing.xs,
+              children: <Widget>[
+                for (final option in _speedOptions)
+                  ChoiceChip(
+                    label: Text('${option}x'),
+                    selected: _speed == option,
+                    onSelected: (_) => Navigator.of(context).pop(option),
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
+        ),
+      ),
+    );
+    if (selected == null) return;
+    await _player.setRate(selected);
+    if (mounted) setState(() => _speed = selected);
+  }
+
+  // ---------------------------------------------------------------- 弹幕设置
+
+  /// 手动搜索弹幕（弹弹play）：按番剧名匹配，选中剧集后载入并记住 episodeId。
+  Future<void> _searchDanmaku() async {
+    final credentials = DandanplayCredentials.load(_preferences);
+    if (!credentials.isConfigured) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('需要弹弹play 凭据'),
+          content: const Text('弹幕搜索与发送需要在「我的 → 弹幕设置」填写你自己的 AppId 与 AppSecret。'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('知道了'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('去设置'),
+            ),
+          ],
+        ),
+      );
+      if (go == true && mounted) {
+        await context.push(AppRoutes.danmakuSettings);
+      }
+      return;
+    }
+
+    final keyword = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('搜索弹幕'),
+        content: TextField(
+          autofocus: true,
+          controller: TextEditingController(text: _item.title),
+          decoration: const InputDecoration(hintText: '番剧名称'),
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(_item.title),
+            child: const Text('搜索'),
+          ),
+        ],
+      ),
+    );
+    if (keyword == null || keyword.trim().isEmpty) return;
+
+    final client = DandanplayClient(
+      http: ref.read(sourceHttpClientProvider),
+      appId: credentials.appId,
+      appSecret: credentials.appSecret,
+    );
+    try {
+      final matches = await client.search(knowledgeKeyword(keyword));
+      if (!mounted) return;
+      if (matches.isEmpty) {
+        _toast('没有匹配到弹幕，换个关键词试试');
+        return;
+      }
+      // 把所有剧集摊平成一列，用户直接选集。
+      final options = <({int episodeId, String label})>[
+        for (final match in matches)
+          for (final episode in match.episodes)
+            (
+              episodeId: episode.episodeId,
+              label: '${match.title} · ${episode.title}',
+            ),
+      ];
+      if (options.isEmpty) {
+        _toast('匹配结果里没有剧集');
+        return;
+      }
+      final selected = await showModalBottomSheet<int>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: options.length,
+            itemBuilder: (context, index) => ListTile(
+              leading: const Icon(Icons.comment_outlined),
+              title: Text(options[index].label),
+              onTap: () => Navigator.of(context).pop(options[index].episodeId),
+            ),
+          ),
+        ),
+      );
+      if (selected == null) return;
+      final comments = await client.comments(selected);
+      if (!mounted) return;
+      _danmakuEpisodeId = selected;
+      _danmaku.load(comments);
+      _danmaku.seek(_position);
+      _toast('已载入 ${comments.length} 条弹幕');
+    } catch (error) {
+      _toast('弹幕搜索失败：$error');
+    }
+  }
+
+  /// 关键词清洗：去掉季/集等后缀，提升匹配率。
+  static String knowledgeKeyword(String raw) => raw
+      .replaceAll(RegExp(r'第\s*\d+\s*[集话話]'), '')
+      .replaceAll(RegExp(r'[【\[（(].*?[】\]）)]'), '')
+      .trim();
+
+  Future<void> _showDanmakuSettings() async {
+    final updated = await showModalBottomSheet<DanmakuSettings>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => _DanmakuSettingsSheet(settings: _danmakuSettings),
+    );
+    if (updated == null) return;
+    setState(() {
+      _danmakuSettings = updated;
+      _danmakuOn = updated.enabled;
+    });
+    _danmaku.applySettings(updated);
+    await updated.save(_preferences);
+  }
+
+  /// 发送弹幕（需要弹弹play 凭据；未配置时给出明确指引）。
+  Future<void> _sendDanmaku() async {
+    final credentials = DandanplayCredentials.load(_preferences);
+    if (!credentials.canSend) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('发送弹幕需要账号'),
+          content: const Text(
+            '弹弹play 要求用你自己的 AppId / AppSecret 与账号 token 发送弹幕。'
+            '到「我的 → 弹幕设置」填写后即可发送。',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('知道了'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('去设置'),
+            ),
+          ],
+        ),
+      );
+      if (go == true && mounted) {
+        await context.push(AppRoutes.danmakuSettings);
+      }
+      return;
+    }
+
+    final episodeId = _danmakuEpisodeId;
+    if (episodeId == null) {
+      _toast('当前剧集没有匹配到弹弹play 剧集，无法发送');
+      return;
+    }
+
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('发送弹幕'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 100,
+          decoration: const InputDecoration(
+            hintText: '在此输入弹幕内容',
+            counterText: '',
+          ),
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('发送'),
+          ),
+        ],
+      ),
+    );
+    if (text == null || text.trim().isEmpty) return;
+
+    try {
+      await DandanplayClient(
+        http: ref.read(sourceHttpClientProvider),
+        appId: credentials.appId,
+        appSecret: credentials.appSecret,
+      ).sendComment(
+        episodeId: episodeId,
+        text: text.trim(),
+        timeSeconds: _position.inMilliseconds / 1000,
+        token: credentials.token,
+      );
+      _toast('弹幕已发送');
+    } catch (error) {
+      _toast('发送失败：$error');
+    }
+  }
+
   static String _format(Duration duration) {
     final total = duration.inSeconds;
     final minutes = total ~/ 60;
@@ -684,6 +979,164 @@ class _VideoArea extends StatelessWidget {
           const Center(child: CircularProgressIndicator(color: Colors.white)),
         Video(controller: controller),
       ],
+    );
+  }
+}
+
+/// 弹幕设置抽屉：开关 / 不透明度 / 字号 / 速度 / 显示类型 / 屏蔽词。
+class _DanmakuSettingsSheet extends StatefulWidget {
+  const _DanmakuSettingsSheet({required this.settings});
+
+  final DanmakuSettings settings;
+
+  @override
+  State<_DanmakuSettingsSheet> createState() => _DanmakuSettingsSheetState();
+}
+
+class _DanmakuSettingsSheetState extends State<_DanmakuSettingsSheet> {
+  late DanmakuSettings _draft = widget.settings;
+  late final TextEditingController _wordController = TextEditingController();
+
+  @override
+  void dispose() {
+    _wordController.dispose();
+    super.dispose();
+  }
+
+  void _addWord() {
+    final word = _wordController.text.trim();
+    if (word.isEmpty) return;
+    if (_draft.blockedWords.contains(word)) {
+      _wordController.clear();
+      return;
+    }
+    setState(() {
+      _draft = _draft.copyWith(
+        blockedWords: <String>[..._draft.blockedWords, word],
+      );
+    });
+    _wordController.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          0,
+          AppSpacing.lg,
+          AppSpacing.lg,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text('弹幕设置', style: theme.textTheme.titleSmall),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(_draft),
+                  child: const Text('应用'),
+                ),
+              ],
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _draft.enabled,
+              title: const Text('显示弹幕'),
+              onChanged: (value) =>
+                  setState(() => _draft = _draft.copyWith(enabled: value)),
+            ),
+            Text('不透明度 ${(_draft.opacity * 100).round()}%'),
+            Slider(
+              value: _draft.opacity,
+              min: 0.2,
+              max: 1.0,
+              divisions: 8,
+              onChanged: (value) =>
+                  setState(() => _draft = _draft.copyWith(opacity: value)),
+            ),
+            Text('字号 ${_draft.fontScale.toStringAsFixed(1)}x'),
+            Slider(
+              value: _draft.fontScale,
+              min: 0.6,
+              max: 1.6,
+              divisions: 10,
+              onChanged: (value) =>
+                  setState(() => _draft = _draft.copyWith(fontScale: value)),
+            ),
+            Text('速度 ${_draft.speedScale.toStringAsFixed(1)}x'),
+            Slider(
+              value: _draft.speedScale,
+              min: 0.5,
+              max: 2.0,
+              divisions: 15,
+              onChanged: (value) =>
+                  setState(() => _draft = _draft.copyWith(speedScale: value)),
+            ),
+            Wrap(
+              spacing: AppSpacing.xs,
+              children: <Widget>[
+                FilterChip(
+                  label: const Text('滚动'),
+                  selected: _draft.showScroll,
+                  onSelected: (value) => setState(
+                    () => _draft = _draft.copyWith(showScroll: value),
+                  ),
+                ),
+                FilterChip(
+                  label: const Text('顶部'),
+                  selected: _draft.showTop,
+                  onSelected: (value) =>
+                      setState(() => _draft = _draft.copyWith(showTop: value)),
+                ),
+                FilterChip(
+                  label: const Text('底部'),
+                  selected: _draft.showBottom,
+                  onSelected: (value) => setState(
+                    () => _draft = _draft.copyWith(showBottom: value),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text('屏蔽词（弹幕包含即隐藏）', style: theme.textTheme.bodySmall),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: TextField(
+                    controller: _wordController,
+                    decoration: const InputDecoration(hintText: '输入屏蔽词'),
+                    onSubmitted: (_) => _addWord(),
+                  ),
+                ),
+                IconButton(onPressed: _addWord, icon: const Icon(Icons.add)),
+              ],
+            ),
+            Wrap(
+              spacing: AppSpacing.xs,
+              children: <Widget>[
+                for (final word in _draft.blockedWords)
+                  InputChip(
+                    label: Text(word),
+                    onDeleted: () => setState(
+                      () => _draft = _draft.copyWith(
+                        blockedWords: <String>[
+                          for (final item in _draft.blockedWords)
+                            if (item != word) item,
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -23,6 +23,22 @@ class Preferences {
   Future<void> remove(String key) => _box.delete(key);
 
   Future<void> clear() => _box.clear();
+
+  /// 导出全部设置（备份用）。只包含可 JSON 化的值。
+  Map<String, Object?> exportAll() => <String, Object?>{
+    for (final key in _box.keys)
+      if (key is String) key: _box.get(key),
+  };
+
+  /// 导入设置：写入给定键值，返回写入条数。
+  Future<int> importAll(Map<String, Object?> values) async {
+    var count = 0;
+    for (final entry in values.entries) {
+      await _box.put(entry.key, entry.value);
+      count += 1;
+    }
+    return count;
+  }
 }
 
 /// 在 `main()` 中通过 override 注入，保证页面读取设置时不会拿到未初始化的实例。

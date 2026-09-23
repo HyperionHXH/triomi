@@ -167,6 +167,19 @@ class LibraryRepository {
     required List<Chapter> chapters,
   }) async {
     await _db.transaction(() async {
+      // 目录刷新**不能抹掉已下载的正文**：先把已有的 content_json 读出来，
+      // 重建目录行时原样带回（下载过的章节断网仍要能读）。
+      final existing =
+          await (_db.select(_db.chapters)..where(
+                (table) =>
+                    table.itemSourceId.equals(itemSourceId) &
+                    table.itemRemoteId.equals(itemRemoteId),
+              ))
+              .get();
+      final offlineContent = <String, String?>{
+        for (final row in existing) row.remoteId: row.contentJson,
+      };
+
       final deleteStatement = _db.delete(_db.chapters)
         ..where(
           (table) =>
@@ -191,6 +204,7 @@ class LibraryRepository {
                 volumeTitle: Value(chapter.volumeTitle),
                 releaseDate: Value(chapter.releaseDate),
                 locked: Value(chapter.locked),
+                contentJson: Value(offlineContent[chapter.remoteId]),
               ),
             );
       }
@@ -353,7 +367,18 @@ class LibraryRepository {
     volumeTitle: row.volumeTitle,
     releaseDate: row.releaseDate,
     locked: row.locked,
+    content: _decodeContent(row.contentJson),
   );
+
+  /// 离线缓存的正文（下载后写入，未下载为 null）。
+  ChapterContent? _decodeContent(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return ChapterContent.fromJson(jsonDecode(raw));
+    } on FormatException {
+      return null;
+    }
+  }
 
   List<String> _decodeTags(String? raw) {
     if (raw == null || raw.isEmpty) return const <String>[];

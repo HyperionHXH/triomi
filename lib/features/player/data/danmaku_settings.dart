@@ -1,0 +1,190 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/storage/preferences.dart';
+
+/// 弹幕显示与过滤设置（对齐 Kazumi 的弹幕设置项，逐项持久化）。
+class DanmakuSettings {
+  const DanmakuSettings({
+    this.enabled = true,
+    this.opacity = 0.9,
+    this.fontScale = 1.0,
+    this.speedScale = 1.0,
+    this.showScroll = true,
+    this.showTop = true,
+    this.showBottom = true,
+    this.blockedWords = const <String>[],
+    this.blockedUsers = const <String>[],
+  });
+
+  final bool enabled;
+
+  /// 不透明度（0.2~1.0）。
+  final double opacity;
+
+  /// 字号缩放（0.6~1.6）。
+  final double fontScale;
+
+  /// 速度倍率（0.5~2.0，越大滚动越快、停留越短）。
+  final double speedScale;
+
+  final bool showScroll;
+  final bool showTop;
+  final bool showBottom;
+
+  /// 屏蔽词：弹幕文本包含任一即过滤。
+  final List<String> blockedWords;
+
+  /// 按用户 ID 屏蔽（弹弹play 的 p 字段第 4 段）。
+  final List<String> blockedUsers;
+
+  /// 滚动弹幕停留时长（基础 9 秒，除以速度倍率）。
+  int get scrollDurationMs => (9000 / speedScale).round();
+
+  /// 顶部/底部弹幕停留时长。
+  int get staticDurationMs => (4200 / speedScale).round();
+
+  DanmakuSettings copyWith({
+    bool? enabled,
+    double? opacity,
+    double? fontScale,
+    double? speedScale,
+    bool? showScroll,
+    bool? showTop,
+    bool? showBottom,
+    List<String>? blockedWords,
+    List<String>? blockedUsers,
+  }) => DanmakuSettings(
+    enabled: enabled ?? this.enabled,
+    opacity: opacity ?? this.opacity,
+    fontScale: fontScale ?? this.fontScale,
+    speedScale: speedScale ?? this.speedScale,
+    showScroll: showScroll ?? this.showScroll,
+    showTop: showTop ?? this.showTop,
+    showBottom: showBottom ?? this.showBottom,
+    blockedWords: blockedWords ?? this.blockedWords,
+    blockedUsers: blockedUsers ?? this.blockedUsers,
+  );
+
+  /// 一条弹幕是否被设置过滤掉。
+  bool filters(String text, {String? user}) {
+    if (blockedWords.any(text.contains)) return true;
+    if (user != null && user.isNotEmpty && blockedUsers.contains(user)) {
+      return true;
+    }
+    return false;
+  }
+
+  // ---------------------------------------------------------------- 持久化
+
+  static const String _enabledKey = 'danmaku.enabled';
+  static const String _opacityKey = 'danmaku.opacity';
+  static const String _fontScaleKey = 'danmaku.fontScale';
+  static const String _speedScaleKey = 'danmaku.speedScale';
+  static const String _showScrollKey = 'danmaku.showScroll';
+  static const String _showTopKey = 'danmaku.showTop';
+  static const String _showBottomKey = 'danmaku.showBottom';
+  static const String _blockedWordsKey = 'danmaku.blockedWords';
+  static const String _blockedUsersKey = 'danmaku.blockedUsers';
+
+  static DanmakuSettings load(Preferences preferences) => DanmakuSettings(
+    enabled: preferences.get<bool>(_enabledKey) ?? true,
+    opacity: (preferences.get<double>(_opacityKey) ?? 0.9).clamp(0.2, 1.0),
+    fontScale: (preferences.get<double>(_fontScaleKey) ?? 1.0).clamp(0.6, 1.6),
+    speedScale: (preferences.get<double>(_speedScaleKey) ?? 1.0).clamp(
+      0.5,
+      2.0,
+    ),
+    showScroll: preferences.get<bool>(_showScrollKey) ?? true,
+    showTop: preferences.get<bool>(_showTopKey) ?? true,
+    showBottom: preferences.get<bool>(_showBottomKey) ?? true,
+    blockedWords: _stringList(preferences.get<List<Object?>>(_blockedWordsKey)),
+    blockedUsers: _stringList(preferences.get<List<Object?>>(_blockedUsersKey)),
+  );
+
+  Future<void> save(Preferences preferences) async {
+    await preferences.set(_enabledKey, enabled);
+    await preferences.set(_opacityKey, opacity);
+    await preferences.set(_fontScaleKey, fontScale);
+    await preferences.set(_speedScaleKey, speedScale);
+    await preferences.set(_showScrollKey, showScroll);
+    await preferences.set(_showTopKey, showTop);
+    await preferences.set(_showBottomKey, showBottom);
+    await preferences.set(_blockedWordsKey, blockedWords);
+    await preferences.set(_blockedUsersKey, blockedUsers);
+  }
+
+  static List<String> _stringList(List<Object?>? raw) => <String>[
+    for (final item in raw ?? const <Object?>[])
+      if (item != null && item.toString().trim().isNotEmpty)
+        item.toString().trim(),
+  ];
+}
+
+/// 弹幕设置（跨页面共享的可变状态）。
+class DanmakuSettingsController extends Notifier<DanmakuSettings> {
+  @override
+  DanmakuSettings build() =>
+      DanmakuSettings.load(ref.watch(preferencesProvider));
+
+  Future<void> update(DanmakuSettings next) async {
+    state = next;
+    await next.save(ref.read(preferencesProvider));
+  }
+}
+
+final danmakuSettingsProvider =
+    NotifierProvider<DanmakuSettingsController, DanmakuSettings>(
+      DanmakuSettingsController.new,
+    );
+
+/// 弹弹play 凭据（AppId / AppSecret，用于弹幕匹配与发送；不落日志）。
+class DandanplayCredentials {
+  const DandanplayCredentials({
+    this.appId = '',
+    this.appSecret = '',
+    this.token = '',
+  });
+
+  final String appId;
+  final String appSecret;
+
+  /// 发送弹幕需要用户 token（弹弹play 的账号授权码）。
+  final String token;
+
+  bool get isConfigured => appId.isNotEmpty && appSecret.isNotEmpty;
+
+  bool get canSend => isConfigured && token.isNotEmpty;
+
+  static const String appIdKey = 'danmaku.dandanplay.appId';
+  static const String appSecretKey = 'danmaku.dandanplay.appSecret';
+  static const String tokenKey = 'danmaku.dandanplay.token';
+
+  static DandanplayCredentials load(Preferences preferences) =>
+      DandanplayCredentials(
+        appId: preferences.get<String>(appIdKey) ?? '',
+        appSecret: preferences.get<String>(appSecretKey) ?? '',
+        token: preferences.get<String>(tokenKey) ?? '',
+      );
+
+  Future<void> save(Preferences preferences) async {
+    await preferences.set(appIdKey, appId);
+    await preferences.set(appSecretKey, appSecret);
+    await preferences.set(tokenKey, token);
+  }
+}
+
+class DandanplayCredentialsController extends Notifier<DandanplayCredentials> {
+  @override
+  DandanplayCredentials build() =>
+      DandanplayCredentials.load(ref.watch(preferencesProvider));
+
+  Future<void> update(DandanplayCredentials next) async {
+    state = next;
+    await next.save(ref.read(preferencesProvider));
+  }
+}
+
+final dandanplayCredentialsProvider =
+    NotifierProvider<DandanplayCredentialsController, DandanplayCredentials>(
+      DandanplayCredentialsController.new,
+    );

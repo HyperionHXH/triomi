@@ -13,6 +13,7 @@ class DanmakuComment {
     required this.text,
     this.mode = 1,
     this.color = 0xFFFFFF,
+    this.user = '',
   });
 
   /// 出现时间（秒）。
@@ -22,6 +23,9 @@ class DanmakuComment {
   /// 1 滚动 / 4 底部 / 5 顶部（弹弹play 约定）。
   final int mode;
   final int color;
+
+  /// 发送者 ID（弹弹play 的 p 字段第 4 段，用于按用户屏蔽）。
+  final String user;
 }
 
 /// 匹配到的剧集。
@@ -134,6 +138,7 @@ class DandanplayClient {
           text: text,
           mode: parsed.mode,
           color: parsed.color,
+          user: parsed.user,
         ),
       );
     }
@@ -160,6 +165,58 @@ class DandanplayClient {
       time: time,
       mode: int.tryParse(parts[1]) ?? 1,
       color: int.tryParse(parts[2]) ?? 0xFFFFFF,
+      user: parts.length > 3 ? parts[3] : '',
+    );
+  }
+
+  /// 发送一条弹幕（需要 AppId/AppSecret + 用户 token）。
+  ///
+  /// 弹弹play 的发送接口要账号授权：未配置 token 时抛出可读的鉴权错误，
+  /// 由界面引导去设置页填写，而不是静默失败。
+  Future<void> sendComment({
+    required int episodeId,
+    required String text,
+    required double timeSeconds,
+    required String token,
+    int mode = 1,
+    int color = 0xFFFFFF,
+  }) async {
+    _requireConfigured();
+    if (token.isEmpty) {
+      throw const SourceException(
+        sourceId: _sourceId,
+        type: SourceErrorType.auth,
+        message: '发送弹幕需要在设置里填写弹弹play 账号 token',
+      );
+    }
+    final path = '/api/v2/comment/$episodeId';
+    final timestamp = _timestamp();
+    await http.send(
+      SourceRequest(
+        url: '$baseUrl$path',
+        method: 'POST',
+        headers: <String, String>{
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-AppId': appId!,
+          'X-Timestamp': timestamp,
+          'X-Signature': sign(
+            path,
+            appId: appId!,
+            appSecret: appSecret!,
+            timestamp: timestamp,
+          ),
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(<String, Object?>{
+          'time': timeSeconds,
+          'mode': mode,
+          'color': color,
+          'text': text,
+        }),
+        bodyType: RequestBodyType.json,
+      ),
+      sourceId: _sourceId,
     );
   }
 
@@ -229,9 +286,11 @@ class _DanmakuParameter {
     required this.time,
     required this.mode,
     required this.color,
+    this.user = '',
   });
 
   final double time;
   final int mode;
   final int color;
+  final String user;
 }

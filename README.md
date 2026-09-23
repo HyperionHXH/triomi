@@ -14,7 +14,7 @@
 | **M2 漫画闭环** | 阅读器四模式、书架、进度、历史 | ✅ 已完成（[复查记录](docs/M2_REVIEW.md)） |
 | **M3 追番闭环** | media_kit 播放器、弹幕层、Bangumi 放送表、模拟器端到端验证 | ✅ 已完成（[复查记录](docs/M3_REVIEW.md)） |
 | **M4 小说闭环** | 小说阅读器（分页/滚动）、轻之国度内置适配器、付费章节解锁、EPUB/TXT 导出、字体管理、繁简转换、远端书架 | 🟡 第一、二批完成（[复查记录](docs/M4_REVIEW.md)）｜LNS/评论页需账号，单独立项 |
-| M5 增强 | 下载、追踪服务、WebDAV 同步、备份导入导出、弹幕增强 | ⏳ |
+| **M5 增强** | 下载管理（小说/漫画，离线可读）、备份导出导入、WebDAV 同步、弹幕增强（倍速/屏蔽词/凭据） | ✅ 已完成（[复查记录](docs/M5_REVIEW.md)）｜追踪服务与弹幕发送待账号联调 |
 
 完整需求、方案与任务拆解见 [`docs/PROJECT_SPEC.md`](docs/PROJECT_SPEC.md)；
 写来源规则看 [`docs/RULE_FORMAT.md`](docs/RULE_FORMAT.md)。
@@ -50,7 +50,10 @@ lib/
 │  ├─ reader/                    漫画阅读器（四模式）与阅读设置
 │  ├─ sources/                   来源与规则管理
 │  ├─ schedule/                  追番
-│  ├─ profile/                   我的
+│  ├─ downloads/                 下载管理（队列、离线内容、仅 WiFi）
+│  ├─ player/                    media_kit 播放器、弹幕层与弹幕设置
+│  ├─ novel/                     小说（阅读器 / LK 适配器 / 导出 / 字体）
+│  ├─ profile/                   我的（备份与恢复、云同步、下载管理入口）
 │  └─ settings/                  设置（外观分组已可用）
 └─ assets/rules/                 随包分发的示例规则
 ```

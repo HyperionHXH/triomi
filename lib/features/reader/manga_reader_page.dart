@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,8 @@ import '../../core/models/source_exception.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/theme/app_tokens.dart';
+import '../downloads/data/download_providers.dart';
+import '../downloads/data/download_repository.dart';
 import '../library/data/library_providers.dart';
 import 'reader_settings.dart';
 
@@ -91,6 +94,20 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
     });
 
     try {
+      final chapter = _chapter;
+      // 离线优先：下载过的章节直接读本地图片目录。
+      final localImages = await _localImagesOf(chapter);
+      if (seq != _requestSeq) return;
+      if (localImages.isNotEmpty) {
+        setState(() {
+          _images = localImages;
+          _loading = false;
+        });
+        unawaited(_cacheChapters());
+        unawaited(_persistProgress());
+        return;
+      }
+
       final snapshot = await ref.read(sourcesProvider.future);
       final entry = snapshot.entries
           .where((candidate) => candidate.descriptor.id == _item.sourceId)
@@ -112,7 +129,6 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
         );
       }
 
-      final chapter = _chapter;
       if (chapter.url == null || chapter.url!.isEmpty) {
         throw SourceException(
           sourceId: _item.sourceId,
@@ -148,6 +164,20 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
         _error = message;
       });
     }
+  }
+
+  /// 已下载章节的本地图片路径（file:// 形式）；没下载过返回空列表。
+  Future<List<String>> _localImagesOf(Chapter chapter) async {
+    final directory = await ref
+        .read(downloadRepositoryProvider)
+        .localImageDir(chapter.sourceId, chapter.remoteId);
+    if (directory == null || directory.isEmpty) return const <String>[];
+    final manifest = await DownloadManifest.read(directory);
+    if (manifest == null || manifest.files.isEmpty) return const <String>[];
+    return <String>[
+      for (final name in manifest.files)
+        Uri.file('$directory${Platform.pathSeparator}$name').toString(),
+    ];
   }
 
   /// 内容形态不对时给出可执行的下一步，而不是一句"加载失败"。
@@ -705,44 +735,60 @@ class _ImagePage extends StatelessWidget {
   final BoxFit fit;
   final VoidCallback onRetry;
 
+  /// 本地文件（下载后的离线图片）走 file:// 或绝对路径。
+  bool get _isLocal =>
+      url.startsWith('file://') || (!url.contains('://') && url.length > 1);
+
   @override
   Widget build(BuildContext context) {
     return InteractiveViewer(
       minScale: 1,
       maxScale: 4,
       child: Center(
-        child: Image.network(
-          url,
-          fit: fit,
-          width: double.infinity,
-          loadingBuilder: (context, child, progress) {
-            if (progress == null) return child;
-            final expected = progress.expectedTotalBytes;
-            return Center(
-              child: SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  value: expected == null
-                      ? null
-                      : progress.cumulativeBytesLoaded / expected,
-                ),
+        child: _isLocal
+            ? Image.file(
+                File(Uri.parse(url).toFilePath()),
+                fit: fit,
+                width: double.infinity,
+                errorBuilder: _errorBuilder(context),
+              )
+            : Image.network(
+                url,
+                fit: fit,
+                width: double.infinity,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  final expected = progress.expectedTotalBytes;
+                  return Center(
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        value: expected == null
+                            ? null
+                            : progress.cumulativeBytesLoaded / expected,
+                      ),
+                    ),
+                  );
+                },
+                errorBuilder: _errorBuilder(context),
               ),
-            );
-          },
-          errorBuilder: (context, error, stack) => Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                const Icon(Icons.broken_image_outlined, color: Colors.white54),
-                const SizedBox(height: AppSpacing.xs),
-                TextButton(onPressed: onRetry, child: const Text('重新加载')),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
+
+  Widget Function(BuildContext, Object, StackTrace?) _errorBuilder(
+    BuildContext context,
+  ) =>
+      (context, error, stack) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Icon(Icons.broken_image_outlined, color: Colors.white54),
+            const SizedBox(height: AppSpacing.xs),
+            TextButton(onPressed: onRetry, child: const Text('重新加载')),
+          ],
+        ),
+      );
 }

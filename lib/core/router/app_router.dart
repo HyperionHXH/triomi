@@ -4,13 +4,17 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/detail/detail_page.dart';
 import '../../features/discover/discover_page.dart';
+import '../../features/downloads/downloads_page.dart';
 import '../../features/history/history_page.dart';
 import '../../features/library/library_page.dart';
 import '../../features/novel/reader/fonts_page.dart';
 import '../../features/novel/reader/novel_reader_page.dart';
 import '../../features/novel/remote_shelf_page.dart';
+import '../../features/player/danmaku_settings_page.dart';
 import '../../features/player/player_page.dart';
+import '../../features/profile/backup_page.dart';
 import '../../features/profile/profile_page.dart';
+import '../../features/profile/webdav_page.dart';
 import '../../features/reader/manga_reader_page.dart';
 import '../../features/schedule/schedule_page.dart';
 import '../../features/search/search_page.dart';
@@ -37,6 +41,10 @@ abstract final class AppRoutes {
   static const String novelReader = '/novel-reader';
   static const String fonts = '/fonts';
   static const String remoteShelf = '/remote-shelf';
+  static const String downloads = '/downloads';
+  static const String backup = '/backup';
+  static const String webdav = '/webdav';
+  static const String danmakuSettings = '/danmaku-settings';
 }
 
 abstract final class AppRouter {
@@ -181,6 +189,26 @@ abstract final class AppRouter {
         path: AppRoutes.remoteShelf,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const RemoteShelfPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.downloads,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const DownloadsPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.backup,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const BackupPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.webdav,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const WebDavSyncPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.danmakuSettings,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const DanmakuSettingsPage(),
       ),
     ],
   );

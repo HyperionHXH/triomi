@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'dandanplay_client.dart';
+import 'danmaku_settings.dart';
 
 /// 弹幕控制器：接收播放位置，维护屏幕上的弹幕集合。
 ///
@@ -11,22 +12,61 @@ import 'dandanplay_client.dart';
 /// 「(视频时间, 挂钟时间)」锚点，绘制层据此推算当前的虚拟视频时间——
 /// 播放时弹幕匀速前进，暂停时整层冻结，拖动进度后由 [seek] 清屏重来。
 class DanmakuController extends ChangeNotifier {
-  DanmakuController({
-    this.scrollDurationMs = 9000,
-    this.staticDurationMs = 4200,
-    this.maxLaneCount = 8,
-  });
+  DanmakuController({this.maxLaneCount = 8, DanmakuSettings? settings})
+    : _settings = settings ?? const DanmakuSettings();
 
-  /// 滚动弹幕横穿屏幕的时长。
-  final int scrollDurationMs;
+  /// 滚动弹幕横穿屏幕的时长（随速度倍率变化）。
+  int get scrollDurationMs => _settings.scrollDurationMs;
 
   /// 顶部 / 底部弹幕的驻留时长。
-  final int staticDurationMs;
+  int get staticDurationMs => _settings.staticDurationMs;
 
   /// 航道数上限（实际按层高换算，取两者较小值）。
   final int maxLaneCount;
 
+  DanmakuSettings _settings;
+  DanmakuSettings get settings => _settings;
+
+  /// 应用新设置：过滤屏蔽词、重建列表、必要时清屏。
+  void applySettings(DanmakuSettings next) {
+    _settings = next;
+    _enabled = next.enabled;
+    // 字号变了要重新量文本宽度（绘制层下一次 configure 会覆盖）。
+    _style = _style.copyWith(fontSize: 16 * next.fontScale);
+    if (!_enabled) {
+      _active.clear();
+    } else {
+      _rebuildFiltered();
+    }
+    notifyListeners();
+  }
+
+  /// 原始弹幕（未过滤）。
+  List<DanmakuComment> _raw = const <DanmakuComment>[];
   List<DanmakuComment> _comments = const <DanmakuComment>[];
+
+  void _rebuildFiltered() {
+    _comments = <DanmakuComment>[
+      for (final comment in _raw)
+        if (_allows(comment)) comment,
+    ];
+    _cursor = 0;
+    _active.clear();
+    _resyncCursor(_anchorVideoMs);
+  }
+
+  /// 按显示设置与屏蔽词判断一条弹幕是否上屏。
+  bool _allows(DanmakuComment comment) {
+    switch (comment.mode) {
+      case 5:
+        if (!_settings.showTop) return false;
+      case 4:
+        if (!_settings.showBottom) return false;
+      default:
+        if (!_settings.showScroll) return false;
+    }
+    return !_settings.filters(comment.text, user: comment.user);
+  }
 
   /// 下一条待入场的弹幕下标（[comments] 已按时间排序）。
   int _cursor = 0;
@@ -73,10 +113,14 @@ class DanmakuController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 装载一集的弹幕（内部按时间排序）。
+  /// 装载一集的弹幕（内部按时间排序，并按设置过滤）。
   void load(List<DanmakuComment> comments) {
-    _comments = <DanmakuComment>[...comments]
+    _raw = <DanmakuComment>[...comments]
       ..sort((a, b) => a.time.compareTo(b.time));
+    _comments = <DanmakuComment>[
+      for (final comment in _raw)
+        if (_allows(comment)) comment,
+    ];
     _cursor = 0;
     _active.clear();
     _resyncCursor(_anchorVideoMs);
@@ -84,6 +128,7 @@ class DanmakuController extends ChangeNotifier {
   }
 
   void clear() {
+    _raw = const <DanmakuComment>[];
     _comments = const <DanmakuComment>[];
     _cursor = 0;
     _active.clear();
@@ -236,8 +281,12 @@ class DanmakuOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final style = DefaultTextStyle.of(context).style
-            .copyWith(fontSize: 16, color: Colors.white);
+        // 字号与不透明度来自弹幕设置（监听控制器，改设置立即生效）。
+        final settings = controller.settings;
+        final style = DefaultTextStyle.of(context).style.copyWith(
+          fontSize: 16 * settings.fontScale,
+          color: Colors.white.withValues(alpha: settings.opacity),
+        );
         return DanmakuCanvas(
           controller: controller,
           width: constraints.maxWidth,
@@ -335,8 +384,9 @@ class _DanmakuPainter extends CustomPainter {
       if (nowMs - item.startMs > lifetime) continue;
 
       final style = TextStyle(
-        fontSize: 16,
-        color: Color(0xFF000000 | item.comment.color).withValues(alpha: 0.92),
+        fontSize: 16 * controller.settings.fontScale,
+        color: Color(0xFF000000 | item.comment.color)
+            .withValues(alpha: controller.settings.opacity),
         shadows: const <Shadow>[
           Shadow(offset: Offset(1, 1), blurRadius: 2, color: Colors.black54),
         ],

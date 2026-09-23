@@ -16,6 +16,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../downloads/data/download_providers.dart';
 import '../library/data/library_providers.dart';
 import '../novel/export/novel_export_service.dart';
 import '../novel/reader/novel_reader_page.dart';
@@ -46,7 +47,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           .where((candidate) => candidate.descriptor.id == item.sourceId)
           .firstOrNull;
       if (entry == null) {
-        return const _DetailData(error: '该来源已被移除，无法加载详情');
+        return await _loadFromCache() ??
+            const _DetailData(error: '该来源已被移除，无法加载详情');
       }
 
       final provider = entry.source;
@@ -62,24 +64,32 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       try {
         detail = await provider.detail(item);
       } catch (error) {
-        // 详情补全失败不算致命：章节列表可能仍然可用。
-        return _DetailData(
-          item: item,
-          sourceName: entry.descriptor.name,
-          error: _describe(error, entry),
-        );
+        // 详情补全失败（含断网）：下载过的作品退到本地缓存继续可读。
+        return await _loadFromCache(
+              sourceName: entry.descriptor.name,
+              fallbackItem: item,
+            ) ??
+            _DetailData(
+              item: item,
+              sourceName: entry.descriptor.name,
+              error: _describe(error, entry),
+            );
       }
 
       var chapters = const <Chapter>[];
       try {
         chapters = await provider.chapters(detail);
       } catch (error) {
-        return _DetailData(
-          item: detail,
-          sourceName: entry.descriptor.name,
-          chapters: chapters,
-          error: _describe(error, entry),
-        );
+        return await _loadFromCache(
+              sourceName: entry.descriptor.name,
+              fallbackItem: detail,
+            ) ??
+            _DetailData(
+              item: detail,
+              sourceName: entry.descriptor.name,
+              chapters: chapters,
+              error: _describe(error, entry),
+            );
       }
 
       return _DetailData(
@@ -88,7 +98,32 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         chapters: chapters,
       );
     } catch (error) {
-      return _DetailData(error: '$error');
+      return await _loadFromCache() ?? _DetailData(error: '$error');
+    }
+  }
+
+  /// 本地缓存回退：作品快照与目录都来自下载/收藏时写入的表。
+  ///
+  /// 只在目录非空时返回——空目录进详情页没有意义，不如把真实错误抛给用户。
+  Future<_DetailData?> _loadFromCache({
+    String sourceName = '',
+    MediaItem? fallbackItem,
+  }) async {
+    final item = widget.item;
+    try {
+      final library = ref.read(libraryRepositoryProvider);
+      final cachedItem =
+          await library.itemByKey(item.sourceId, item.remoteId) ?? fallbackItem;
+      final chapters = await library.loadChapters(item.sourceId, item.remoteId);
+      if (chapters.isEmpty) return null;
+      return _DetailData(
+        item: cachedItem,
+        sourceName: sourceName,
+        chapters: chapters,
+        offline: true,
+      );
+    } catch (_) {
+      return null;
     }
   }
 
@@ -97,6 +132,53 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       : '${entry.descriptor.name}：$error';
 
   // ---------------------------------------------------------------- 整书导出
+
+  /// 下载整本可读章节（漫画存图片、小说存正文；锁定章节自动跳过）。
+  Future<void> _downloadOffline() async {
+    final data = await (_future ?? _load());
+    if (!mounted) return;
+    final item = data.item;
+    if (item == null || data.chapters.isEmpty) {
+      _toast('还没有拿到章节目录，无法下载');
+      return;
+    }
+    final downloadable = data.chapters
+        .where((chapter) => !chapter.locked)
+        .toList();
+    if (downloadable.isEmpty) {
+      _toast('目录里没有可下载的章节（全部为锁定章节）');
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('下载到本地'),
+        content: Text(
+          '将下载 ${downloadable.length} 章'
+          '${data.chapters.length == downloadable.length ? '' : '（跳过 ${data.chapters.length - downloadable.length} 个锁定章节）'}。\n'
+          '${item.type == MediaType.novel ? '小说正文会存进本地数据库。' : '漫画图片会存到应用目录。'}\n'
+          '下载在后台进行，可在「我的 → 下载管理」查看进度。',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('开始下载'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final queued = await ref
+        .read(downloadsProvider.notifier)
+        .enqueue(item: item, chapters: data.chapters);
+    _toast('已加入下载队列：$queued 章');
+  }
 
   Future<void> _export({required bool epub}) async {
     final data = await (_future ?? _load());
@@ -191,6 +273,11 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     return PageScaffold(
       title: item.title,
       actions: <Widget>[
+        IconButton(
+          tooltip: '下载全部章节',
+          onPressed: () => unawaited(_downloadOffline()),
+          icon: const Icon(Icons.download_outlined),
+        ),
         PopupMenuButton<String>(
           tooltip: '导出',
           icon: const Icon(Icons.ios_share),
@@ -240,6 +327,33 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             padding: const EdgeInsets.only(bottom: AppSpacing.xl),
             children: <Widget>[
               _Header(data: data),
+              if (data.offline)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.md,
+                    AppSpacing.lg,
+                    0,
+                  ),
+                  child: AppCard(
+                    child: Row(
+                      children: <Widget>[
+                        Icon(
+                          Icons.cloud_off_outlined,
+                          size: 18,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Expanded(
+                          child: Text(
+                            '离线模式：来源暂时取不到数据，正在显示本地缓存（已下载的章节可以直接阅读）。',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               if (data.error != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
@@ -307,12 +421,16 @@ class _DetailData {
     this.sourceName = '',
     this.chapters = const <Chapter>[],
     this.error,
+    this.offline = false,
   });
 
   final MediaItem? item;
   final String sourceName;
   final List<Chapter> chapters;
   final String? error;
+
+  /// 来源取数失败、改用本地缓存渲染（下载过的作品断网仍可进入阅读）。
+  final bool offline;
 }
 
 class _Header extends ConsumerWidget {

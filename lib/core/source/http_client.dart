@@ -64,8 +64,22 @@ abstract class SourceHttpClient {
     required String sourceId,
   });
 
-  /// 取二进制资源（封面 / 插图）。失败抛 [SourceException]。
-  Future<List<int>> fetchBytes(String url, {required String sourceId});
+  /// 取二进制资源（封面 / 插图 / 备份包下载）。失败抛 [SourceException]。
+  Future<List<int>> fetchBytes(
+    String url, {
+    required String sourceId,
+    Map<String, String> headers,
+    String method,
+  });
+
+  /// 上传二进制内容（WebDAV PUT / 备份上传）。失败抛 [SourceException]。
+  Future<SourceResponse> uploadBytes(
+    String url, {
+    required String sourceId,
+    required List<int> bytes,
+    Map<String, String> headers,
+    String method,
+  });
 
   void close();
 }
@@ -111,6 +125,7 @@ class DioSourceHttpClient implements SourceHttpClient {
             RequestBodyType.form => Headers.formUrlEncodedContentType,
             RequestBodyType.none => null,
           },
+          connectTimeout: timeout,
           sendTimeout: timeout,
           receiveTimeout: timeout,
           responseType: ResponseType.plain,
@@ -143,13 +158,20 @@ class DioSourceHttpClient implements SourceHttpClient {
   }
 
   @override
-  Future<List<int>> fetchBytes(String url, {required String sourceId}) async {
+  Future<List<int>> fetchBytes(
+    String url, {
+    required String sourceId,
+    Map<String, String> headers = const <String, String>{},
+    String method = 'GET',
+  }) async {
     try {
       final response = await _dio.request<List<int>>(
         url,
         options: Options(
-          headers: <String, String>{'User-Agent': defaultUserAgent},
+          method: method,
+          headers: <String, String>{'User-Agent': defaultUserAgent, ...headers},
           responseType: ResponseType.bytes,
+          connectTimeout: timeout,
           sendTimeout: timeout,
           receiveTimeout: timeout,
         ),
@@ -163,6 +185,51 @@ class DioSourceHttpClient implements SourceHttpClient {
         );
       }
       return response.data ?? const <int>[];
+    } on SourceException {
+      rethrow;
+    } catch (error) {
+      throw SourceException.wrap(error, sourceId: sourceId, url: url);
+    }
+  }
+
+  @override
+  Future<SourceResponse> uploadBytes(
+    String url, {
+    required String sourceId,
+    required List<int> bytes,
+    Map<String, String> headers = const <String, String>{},
+    String method = 'PUT',
+  }) async {
+    try {
+      final response = await _dio.request<String>(
+        url,
+        data: Stream.fromIterable(<List<int>>[bytes]),
+        options: Options(
+          method: method,
+          headers: <String, String>{
+            'User-Agent': defaultUserAgent,
+            'Content-Length': '${bytes.length}',
+            ...headers,
+          },
+          responseType: ResponseType.plain,
+          connectTimeout: timeout,
+          sendTimeout: timeout,
+          receiveTimeout: timeout,
+        ),
+      );
+      final result = SourceResponse(
+        statusCode: response.statusCode ?? 0,
+        body: response.data ?? '',
+        url: response.realUri.toString(),
+      );
+      if (!result.isSuccess) {
+        throw SourceException(
+          sourceId: sourceId,
+          type: _classifyStatus(result.statusCode),
+          message: 'HTTP ${result.statusCode}',
+        );
+      }
+      return result;
     } on SourceException {
       rethrow;
     } catch (error) {

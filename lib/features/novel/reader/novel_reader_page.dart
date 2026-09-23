@@ -11,6 +11,7 @@ import '../../../core/source/source_providers.dart';
 import '../../../core/storage/preferences.dart';
 import '../../../core/text/zh_converter.dart';
 import '../../../core/theme/app_tokens.dart';
+import '../../downloads/data/download_providers.dart';
 import '../../library/data/library_providers.dart';
 import '../../library/data/library_repository.dart';
 import '../data/lk/lk_source.dart';
@@ -132,16 +133,26 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     }
 
     try {
-      final snapshot = await ref.read(sourcesProvider.future);
-      final entry = snapshot.entries
-          .where((candidate) => candidate.descriptor.id == _item.sourceId)
-          .firstOrNull;
-      final provider = entry?.source;
-      if (provider is! ContentProvider) {
-        throw StateError('来源没有提供正文能力');
+      // 离线优先：下载过的章节直接读本地正文（不依赖来源可用）。
+      final downloadRepository = ref.read(downloadRepositoryProvider);
+      final local = await downloadRepository.localChapterContent(
+        _chapter.sourceId,
+        _chapter.remoteId,
+      );
+      final ChapterContent content;
+      if (local != null && !local.isEmpty) {
+        content = local;
+      } else {
+        final snapshot = await ref.read(sourcesProvider.future);
+        final entry = snapshot.entries
+            .where((candidate) => candidate.descriptor.id == _item.sourceId)
+            .firstOrNull;
+        final provider = entry?.source;
+        if (provider is! ContentProvider) {
+          throw StateError('来源没有提供正文能力');
+        }
+        content = await provider.content(_chapter);
       }
-
-      final content = await provider.content(_chapter);
       final raw = (html: content.html ?? '', text: content.text ?? '');
       _rawContent = raw;
       _zh ??= await ZhConverter.instance();
