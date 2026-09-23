@@ -78,7 +78,7 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
 
 | # | 任务 | 文档 | 依赖 |
 |---|---|---|---|
-| T1 | 追踪服务（Bangumi / AniList 进度上报） | [T1-tracking-service.md](T1-tracking-service.md) | 无 |
+| T1 | 追踪服务（Bangumi / AniList 进度上报） | ✅ **已完成**（[T1-tracking-service.md](T1-tracking-service.md)） | — |
 | T2 | JS 规则沙箱 | [T2-js-sandbox.md](T2-js-sandbox.md) | 无 |
 | T3 | 弹幕发送（弹弹play 登录补全） | [T3-danmaku-send.md](T3-danmaku-send.md) | 无 |
 | T4 | LNS SignalR 适配器协议层 | [T4-lns-signalr.md](T4-lns-signalr.md) | 可先做协议层，联调需账号 |

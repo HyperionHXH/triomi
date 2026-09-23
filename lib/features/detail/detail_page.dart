@@ -22,6 +22,7 @@ import '../novel/export/novel_export_service.dart';
 import '../novel/reader/novel_reader_page.dart';
 import '../player/player_page.dart';
 import '../reader/manga_reader_page.dart';
+import '../tracking/bind_sheet.dart';
 
 /// 详情页：作品信息 + 章节目录。
 ///
@@ -277,6 +278,12 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           tooltip: '下载全部章节',
           onPressed: () => unawaited(_downloadOffline()),
           icon: const Icon(Icons.download_outlined),
+        ),
+        IconButton(
+          tooltip: '追踪',
+          onPressed: () =>
+              unawaited(showTrackingBindSheet(context, item)),
+          icon: const Icon(Icons.sync_alt),
         ),
         PopupMenuButton<String>(
           tooltip: '导出',

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/chapter.dart';
 import '../../../core/models/media_item.dart';
+import '../../../core/models/media_type.dart';
 import '../../../core/source/source_api.dart';
 import '../../../core/source/source_providers.dart';
 import '../../../core/storage/preferences.dart';
@@ -14,6 +15,7 @@ import '../../../core/theme/app_tokens.dart';
 import '../../downloads/data/download_providers.dart';
 import '../../library/data/library_providers.dart';
 import '../../library/data/library_repository.dart';
+import '../../tracking/data/tracking_providers.dart';
 import '../data/lk/lk_source.dart';
 import 'novel_blocks.dart';
 import 'novel_reader_settings.dart';
@@ -44,6 +46,9 @@ class NovelReaderPage extends ConsumerStatefulWidget {
 
 class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   late final LibraryRepository _libraryRepository;
+
+  /// dispose 里不能用 ref：进度上报器同样提前取出。
+  ProgressReporter? _trackingReporter;
   late NovelReaderSettings _settings;
   late int _chapterIndex;
 
@@ -72,6 +77,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   void initState() {
     super.initState();
     _libraryRepository = ref.read(libraryRepositoryProvider);
+    _trackingReporter = ref.read(progressReporterProvider);
     _chapterIndex = widget.args.initialIndex.clamp(
       0,
       widget.args.chapters.length - 1,
@@ -222,6 +228,17 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         remoteId: _item.remoteId,
         chapter: _chapter,
         position: _progressParagraph.toDouble(),
+      );
+      // 进度上报（追踪服务）：尽力而为，失败不影响阅读。
+      unawaited(
+        _trackingReporter?.report(
+              sourceId: _item.sourceId,
+              remoteId: _item.remoteId,
+              chapterNumber:
+                  _chapter.number ?? (_chapter.sortIndex + 1).toDouble(),
+              type: MediaType.novel,
+            ) ??
+            Future<void>.value(),
       );
       if (mounted) {
         ref.invalidate(libraryProvider);

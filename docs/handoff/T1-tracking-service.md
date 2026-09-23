@@ -1,8 +1,29 @@
 # T1 · 追踪服务（Bangumi / AniList 进度上报）
 
+> **状态：✅ 已完成（2026-09-23，实现中修正了本文档的 4 处接口错误，见下）**
 > 对应规格：PROJECT_SPEC 3.2（元数据/追踪）、路线图 M5（「进度上报 Bangumi」）。
-> 这是 M5 验收**唯一未达标**的硬指标，优先级最高。
-> 目标产出：`lib/features/tracking/` 数据层 + 单测，UI 接线由本机接手。
+> 这是 M5 验收**唯一未达标**的硬指标。
+
+## ⚠️ 实现时查证纠正（以官方 open-api/v0.yaml 为准）
+
+写这份文档时凭印象写的字段名是**旧版 API** 的，实现时查了官方 v0 规范，纠正如下：
+
+1. **进度字段是 `ep_status` / `vol_status`，不是 `watched_eps` / `watched_vols`**；
+   且这两个字段**只对书籍类条目有效**——番剧进度必须走**逐集收藏**：
+   `PATCH /v0/users/-/collections/{subject_id}/episodes`，
+   body `{"episode_id": [全局剧集 id...], "type": 2}`（type: 0 未收藏/1 想看/2 看过/3 抛弃）。
+   全局剧集 id 由 `GET /v0/episodes?subject_id=&type=0&limit=` 取（**不是集号**）。
+2. **收藏端点用 `-` 代表当前用户**：`/v0/users/-/collections/{subject_id}`，
+   不需要先查 username（`/v0/me` 只用于展示与校验）。
+3. **搜索是 `POST /v0/search/subjects`**，body `{keyword, sort, filter:{type:[2]}}`，
+   不是 `GET /v0/search/subjects/{keyword}`。
+4. **User-Agent 有强制格式**：`{developer_id}/{app}/{version} (平台) (项目地址)`，
+   裸 `Triomi/0.1.0` 这类会被服务端直接拒绝。
+
+另外两条实现红线（已写进代码注释）：
+- **不要依赖 `SourceHttpClient` 抛错**：真实 dio 实现非 2xx 会抛，但测试替身只回响应，
+  所以客户端要**自行判状态码**，否则测试与生产走两条路。
+- 状态与进度**一次 POST 写完**（Bangumi 有限流），别分两次请求。
 
 ## 现状（已就位，不要重做）
 

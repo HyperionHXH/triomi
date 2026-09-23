@@ -107,7 +107,7 @@ class ProfilePage extends StatelessWidget {
                     title: const Text('追踪账号'),
                     subtitle: const Text('Bangumi / AniList / MyAnimeList'),
                     trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => _comingSoon(context, '追踪账号', 'M5'),
+                    onTap: () => context.push(AppRoutes.tracking),
                   ),
                 ],
               ),

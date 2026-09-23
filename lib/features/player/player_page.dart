@@ -20,6 +20,7 @@ import '../../core/storage/preferences.dart';
 import '../../core/theme/app_tokens.dart';
 import '../library/data/library_providers.dart';
 import '../library/data/library_repository.dart';
+import '../tracking/data/tracking_providers.dart';
 import 'data/dandanplay_client.dart';
 import 'data/danmaku_overlay.dart';
 import 'data/danmaku_settings.dart';
@@ -53,6 +54,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
 
   /// initState 里从 ref 取出保存；dispose 里写最后一次进度时用。
   LibraryRepository? _libraryRepository;
+
+  /// 同上：dispose 里不能用 ref，进度上报器也提前握住。
+  ProgressReporter? _trackingReporter;
 
   late final Preferences _preferences;
   late final DanmakuController _danmaku;
@@ -94,6 +98,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     // 退出播放器时还要写最后一次进度，所以提前把仓储握在手里。
     _libraryRepository = ref.read(libraryRepositoryProvider);
     _preferences = ref.read(preferencesProvider);
+    _trackingReporter = ref.read(progressReporterProvider);
     _danmakuSettings = DanmakuSettings.load(_preferences);
     _danmaku = DanmakuController(settings: _danmakuSettings);
     _danmakuOn = _danmakuSettings.enabled;
@@ -232,6 +237,17 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
         remoteId: _item.remoteId,
         chapter: _chapter,
         position: _position.inSeconds.toDouble(),
+      );
+      // 进度上报（追踪服务）：尽力而为，失败不影响播放。
+      unawaited(
+        _trackingReporter?.report(
+              sourceId: _item.sourceId,
+              remoteId: _item.remoteId,
+              chapterNumber:
+                  _chapter.number ?? (_chapter.sortIndex + 1).toDouble(),
+              type: MediaType.anime,
+            ) ??
+            Future<void>.value(),
       );
       // dispose 时 mounted 已为 false，ref 不可用；书架与历史页
       // 会在下次进入时自动取最新数据。

@@ -21,6 +21,7 @@ import '../../features/search/search_page.dart';
 import '../../features/settings/settings_page.dart';
 import '../../features/shell/adaptive_shell.dart';
 import '../../features/sources/sources_page.dart';
+import '../../features/tracking/tracking_page.dart';
 import '../models/media_item.dart';
 import '../widgets/page_scaffold.dart';
 
@@ -44,6 +45,7 @@ abstract final class AppRoutes {
   static const String downloads = '/downloads';
   static const String backup = '/backup';
   static const String webdav = '/webdav';
+  static const String tracking = '/tracking';
   static const String danmakuSettings = '/danmaku-settings';
 }
 
@@ -189,6 +191,11 @@ abstract final class AppRouter {
         path: AppRoutes.remoteShelf,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const RemoteShelfPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.tracking,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const TrackingPage(),
       ),
       GoRoute(
         path: AppRoutes.downloads,

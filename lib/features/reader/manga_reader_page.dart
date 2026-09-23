@@ -16,6 +16,8 @@ import '../../core/theme/app_tokens.dart';
 import '../downloads/data/download_providers.dart';
 import '../downloads/data/download_repository.dart';
 import '../library/data/library_providers.dart';
+import '../library/data/library_repository.dart';
+import '../tracking/data/tracking_providers.dart';
 import 'reader_settings.dart';
 
 /// 打开阅读器所需的上下文。
@@ -63,9 +65,17 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
   Chapter get _chapter => _chapters[_chapterIndex];
   MediaItem get _item => widget.args.item;
 
+  /// dispose 里不能用 ref（Riverpod 3 会在卸载时封禁）：
+  /// 仓储与追踪上报器提前握在手里，退出时才补得进最后一次进度。
+  late final LibraryRepository _libraryRepository;
+
+  ProgressReporter? _trackingReporter;
+
   @override
   void initState() {
     super.initState();
+    _libraryRepository = ref.read(libraryRepositoryProvider);
+    _trackingReporter = ref.read(progressReporterProvider);
     _scrollController.addListener(_onScroll);
     unawaited(_setImmersive(immersive: true));
     unawaited(_load());
@@ -205,7 +215,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
   }
 
   Future<void> _persistProgress() async {
-    final repository = ref.read(libraryRepositoryProvider);
+    final repository = _libraryRepository;
     final chapter = _chapter;
     try {
       await repository.updateProgress(
@@ -219,9 +229,22 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
         chapter: chapter,
         position: _page.toDouble(),
       );
-      // 书架与历史页要立刻反映进度
-      ref.invalidate(libraryProvider);
-      ref.invalidate(historyProvider);
+      // 进度上报（追踪服务）：尽力而为，失败不影响阅读。
+      unawaited(
+        _trackingReporter?.report(
+              sourceId: _item.sourceId,
+              remoteId: _item.remoteId,
+              chapterNumber:
+                  chapter.number ?? (chapter.sortIndex + 1).toDouble(),
+              type: MediaType.manga,
+            ) ??
+            Future<void>.value(),
+      );
+      // 书架与历史页要立刻反映进度；dispose 时 mounted 已为 false。
+      if (mounted) {
+        ref.invalidate(libraryProvider);
+        ref.invalidate(historyProvider);
+      }
     } catch (_) {
       // 进度写失败不应该打断阅读
     }
