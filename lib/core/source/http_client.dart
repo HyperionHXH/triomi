@@ -64,6 +64,9 @@ abstract class SourceHttpClient {
     required String sourceId,
   });
 
+  /// 取二进制资源（封面 / 插图）。失败抛 [SourceException]。
+  Future<List<int>> fetchBytes(String url, {required String sourceId});
+
   void close();
 }
 
@@ -136,6 +139,34 @@ class DioSourceHttpClient implements SourceHttpClient {
       rethrow;
     } catch (error) {
       throw SourceException.wrap(error, sourceId: sourceId, url: request.url);
+    }
+  }
+
+  @override
+  Future<List<int>> fetchBytes(String url, {required String sourceId}) async {
+    try {
+      final response = await _dio.request<List<int>>(
+        url,
+        options: Options(
+          headers: <String, String>{'User-Agent': defaultUserAgent},
+          responseType: ResponseType.bytes,
+          sendTimeout: timeout,
+          receiveTimeout: timeout,
+        ),
+      );
+      final status = response.statusCode ?? 0;
+      if (status < 200 || status >= 400) {
+        throw SourceException(
+          sourceId: sourceId,
+          type: _classifyStatus(status),
+          message: 'HTTP $status',
+        );
+      }
+      return response.data ?? const <int>[];
+    } on SourceException {
+      rethrow;
+    } catch (error) {
+      throw SourceException.wrap(error, sourceId: sourceId, url: url);
     }
   }
 

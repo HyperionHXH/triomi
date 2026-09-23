@@ -87,8 +87,26 @@ abstract final class ReaderContentParser {
   static List<ReaderBlock> _parseHtml(String html) {
     if (html.trim().isEmpty) return const <ReaderBlock>[];
     final blocks = <ReaderBlock>[];
-    for (final match in _paragraphRegex.allMatches(html)) {
-      final tag = (match.group(1) ?? 'p').toLowerCase();
+
+    // 按文档顺序合并两类事件：p/h1-h6 段落块，以及不在任何段落里的独立 img。
+    final paragraphMatches = _paragraphRegex.allMatches(html).toList();
+    final events = <(int, RegExpMatch, bool)>[
+      for (final match in paragraphMatches) (match.start, match, true),
+      for (final match in _imageRegex.allMatches(html))
+        if (!paragraphMatches.any(
+          (paragraph) =>
+              match.start >= paragraph.start && match.end <= paragraph.end,
+        ))
+          (match.start, match, false),
+    ]..sort((a, b) => a.$1.compareTo(b.$1));
+
+    for (final (_, match, isParagraph) in events) {
+      final tag = (match.group(1) ?? 'img').toLowerCase();
+      if (!isParagraph) {
+        final illustration = _toIllustration(match);
+        if (illustration != null) blocks.add(illustration);
+        continue;
+      }
       final attributes = match.group(2) ?? '';
       final content = match.group(3) ?? '';
       if (tag != 'p') {

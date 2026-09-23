@@ -21,6 +21,14 @@ class FakeHttpClient implements SourceHttpClient {
   }
 
   @override
+  Future<List<int>> fetchBytes(String url, {required String sourceId}) async {
+    requests.add(
+      SourceRequest(url: url, method: 'GET', bodyType: RequestBodyType.none),
+    );
+    throw StateError('测试替身不支持二进制资源：$url');
+  }
+
+  @override
   void close() {}
 }
 

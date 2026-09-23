@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/storage/preferences.dart';
+import '../../../core/text/zh_converter.dart';
 
 /// 小说阅读模式。
 enum NovelReadingMode { paged, scroll }
@@ -26,6 +27,8 @@ class NovelReaderSettings {
     this.fontSize = 18,
     this.lineHeight = 1.7,
     this.pageMargin = 20,
+    this.fontFamily,
+    this.zhMode = ZhConversionMode.off,
   });
 
   final NovelReadingMode mode;
@@ -40,6 +43,12 @@ class NovelReaderSettings {
   /// 页边距（逻辑像素）。
   final double pageMargin;
 
+  /// 自定义正文字体（用户导入；null 用系统默认）。
+  final String? fontFamily;
+
+  /// 繁简转换方向（正文渲染前应用）。
+  final ZhConversionMode zhMode;
+
   static const double defaultFontSize = 18;
   static const double defaultLineHeight = 1.7;
   static const double defaultPageMargin = 20;
@@ -50,12 +59,17 @@ class NovelReaderSettings {
     double? fontSize,
     double? lineHeight,
     double? pageMargin,
+    String? fontFamily,
+    bool clearFontFamily = false,
+    ZhConversionMode? zhMode,
   }) => NovelReaderSettings(
     mode: mode ?? this.mode,
     theme: theme ?? this.theme,
     fontSize: fontSize ?? this.fontSize,
     lineHeight: lineHeight ?? this.lineHeight,
     pageMargin: pageMargin ?? this.pageMargin,
+    fontFamily: clearFontFamily ? null : (fontFamily ?? this.fontFamily),
+    zhMode: zhMode ?? this.zhMode,
   );
 
   /// 段落/标题正文样式（按主题着色）。
@@ -63,6 +77,7 @@ class NovelReaderSettings {
     fontSize: fontSize,
     height: lineHeight,
     color: theme.foreground,
+    fontFamily: fontFamily,
   );
 
   TextStyle headingStyle(BuildContext context) => TextStyle(
@@ -70,6 +85,7 @@ class NovelReaderSettings {
     height: lineHeight,
     fontWeight: FontWeight.w600,
     color: theme.foreground,
+    fontFamily: fontFamily,
   );
 
   // ---------------------------------------------------------------- 持久化
@@ -79,6 +95,8 @@ class NovelReaderSettings {
   static const String _fontSizeKey = 'novelReader.fontSize';
   static const String _lineHeightKey = 'novelReader.lineHeight';
   static const String _pageMarginKey = 'novelReader.pageMargin';
+  static const String _fontFamilyKey = 'novelReader.fontFamily';
+  static const String _zhModeKey = 'novelReader.zhMode';
 
   static NovelReaderSettings load(Preferences preferences) {
     final mode = preferences.get<String>(_modeKey);
@@ -96,6 +114,12 @@ class NovelReaderSettings {
           .clamp(1.2, 2.4),
       pageMargin: (preferences.get<double>(_pageMarginKey) ?? defaultPageMargin)
           .clamp(8, 48),
+      fontFamily: preferences.get<String>(_fontFamilyKey),
+      zhMode: switch (preferences.get<String>(_zhModeKey)) {
+        's2t' => ZhConversionMode.s2t,
+        't2s' => ZhConversionMode.t2s,
+        _ => ZhConversionMode.off,
+      },
     );
   }
 
@@ -112,6 +136,16 @@ class NovelReaderSettings {
     await preferences.set(_fontSizeKey, fontSize);
     await preferences.set(_lineHeightKey, lineHeight);
     await preferences.set(_pageMarginKey, pageMargin);
+    if (fontFamily == null) {
+      await preferences.remove(_fontFamilyKey);
+    } else {
+      await preferences.set(_fontFamilyKey, fontFamily);
+    }
+    await preferences.set(_zhModeKey, switch (zhMode) {
+      ZhConversionMode.off => 'off',
+      ZhConversionMode.s2t => 's2t',
+      ZhConversionMode.t2s => 't2s',
+    });
   }
 
   /// 分组恢复默认（对齐 Mixn 的「恢复默认」分组开关）。

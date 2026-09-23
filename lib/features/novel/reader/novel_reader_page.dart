@@ -9,12 +9,14 @@ import '../../../core/models/media_item.dart';
 import '../../../core/source/source_api.dart';
 import '../../../core/source/source_providers.dart';
 import '../../../core/storage/preferences.dart';
+import '../../../core/text/zh_converter.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../library/data/library_providers.dart';
 import '../../library/data/library_repository.dart';
 import '../data/lk/lk_source.dart';
 import 'novel_blocks.dart';
 import 'novel_reader_settings.dart';
+import 'user_font_store.dart';
 
 /// 小说阅读器入参：作品 + 目录 + 从第几章开始。
 class NovelReaderArgs {
@@ -52,6 +54,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   List<ReaderPage> _pages = const <ReaderPage>[];
   String? _layoutKey;
 
+  /// 本章原始正文（繁简切换时重转换用，不重新请求网络）。
+  ({String html, String text})? _rawContent;
+
   int _pageIndex = 0;
   final ScrollController _scrollController = ScrollController();
 
@@ -71,6 +76,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
       widget.args.chapters.length - 1,
     );
     _settings = NovelReaderSettings.load(ref.read(preferencesProvider));
+    // 自定义字体先进引擎（幂等），正文样式才能立刻生效。
+    unawaited(UserFontStore.instance.ensureLoaded());
     unawaited(_load());
   }
 
@@ -85,6 +92,28 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
 
   // ---------------------------------------------------------------- 加载
 
+  /// 繁简转换器（首次加载章节时初始化）。
+  ZhConverter? _zh;
+
+  /// 按当前繁简设置转换文本；转换器未就绪时原样返回。
+  String _localized(String text) {
+    final zh = _zh;
+    if (zh == null) return text;
+    return zh.convert(text, _settings.zhMode);
+  }
+
+  /// 繁简设置变化后用缓存的原始正文重转换（不重新请求网络）。
+  Future<void> _reconvert() async {
+    final raw = _rawContent;
+    if (raw == null) return;
+    _zh ??= await ZhConverter.instance();
+    final blocks = ReaderContentParser.parse(
+      bodyHtml: _localized(raw.html),
+      bodyText: _localized(raw.text),
+    );
+    if (mounted) setState(() => _blocks = blocks);
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -93,6 +122,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
       _blocks = const <ReaderBlock>[];
       _pages = const <ReaderPage>[];
       _layoutKey = null;
+      _rawContent = null;
       _pageIndex = 0;
     });
 
@@ -112,9 +142,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
       }
 
       final content = await provider.content(_chapter);
+      final raw = (html: content.html ?? '', text: content.text ?? '');
+      _rawContent = raw;
+      _zh ??= await ZhConverter.instance();
       final blocks = ReaderContentParser.parse(
-        bodyHtml: content.html ?? '',
-        bodyText: content.text ?? '',
+        bodyHtml: _localized(raw.html),
+        bodyText: _localized(raw.text),
       );
       if (mounted) {
         setState(() {
@@ -293,8 +326,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
       builder: (context) => _SettingsSheet(settings: _settings),
     );
     if (updated == null || updated == _settings) return;
+    final zhChanged = updated.zhMode != _settings.zhMode;
     setState(() => _settings = updated);
-    await updated.save(ref.read(preferencesProvider));
+    // 先重转换再落盘：设置变更立即生效，持久化是尽力而为的收尾。
+    if (zhChanged) await _reconvert();
+    unawaited(updated.save(ref.read(preferencesProvider)));
     // 分页结果随样式变化重建；滚动模式无需处理。
     setState(() {});
   }
@@ -355,6 +391,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         final layoutKey =
             '$_chapterIndex|${_settings.mode}|'
             '${_settings.fontSize}|${_settings.lineHeight}|${_settings.pageMargin}|'
+            '${_settings.zhMode.name}|${_settings.fontFamily ?? 'default'}|'
             '${contentWidth.round()}x${contentHeight.round()}';
         if (_layoutKey != layoutKey) {
           _layoutKey = layoutKey;
@@ -759,25 +796,54 @@ class _ErrorView extends StatelessWidget {
   }
 }
 
-/// 阅读设置抽屉：模式 / 主题 / 字号 / 行距 / 边距。
-class _SettingsSheet extends StatelessWidget {
+/// 阅读设置抽屉：模式 / 主题 / 字号 / 行距 / 边距 / 繁简 / 字体。
+class _SettingsSheet extends StatefulWidget {
   const _SettingsSheet({required this.settings});
 
   final NovelReaderSettings settings;
 
   @override
+  State<_SettingsSheet> createState() => _SettingsSheetState();
+}
+
+class _SettingsSheetState extends State<_SettingsSheet> {
+  late NovelReaderSettings _draft = widget.settings;
+
+  NovelReaderSettings get value => _draft;
+
+  List<UserFont> _fonts = const <UserFont>[];
+
+  /// 拖动过程只改草稿（视觉即时反馈），松手才提交生效。
+  void commit(NovelReaderSettings next) => Navigator.of(context).pop(next);
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadFonts());
+  }
+
+  Future<void> _loadFonts() async {
+    await UserFontStore.instance.ensureLoaded();
+    final fonts = await UserFontStore.instance.list();
+    if (!mounted) return;
+    setState(() => _fonts = fonts);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    NovelReaderSettings value = settings;
 
     Widget title(String text) => Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, 0, 0),
       child: Text(text, style: theme.textTheme.titleSmall),
     );
 
-    return StatefulBuilder(
-      builder: (context, setState) => Padding(
-        padding: const EdgeInsets.fromLTRB(0, 0, 0, AppSpacing.lg),
+    void commitDraft(NovelReaderSettings next) {
+      setState(() => _draft = next);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, AppSpacing.lg),
+      child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -799,10 +865,8 @@ class _SettingsSheet extends StatelessWidget {
                   ),
                 ],
                 selected: {value.mode},
-                onSelectionChanged: (selection) {
-                  setState(() => value = value.copyWith(mode: selection.first));
-                  Navigator.of(context).pop(value);
-                },
+                onSelectionChanged: (selection) =>
+                    commit(value.copyWith(mode: selection.first)),
               ),
             ),
             title('主题'),
@@ -815,12 +879,8 @@ class _SettingsSheet extends StatelessWidget {
                     ChoiceChip(
                       label: Text(candidate.label),
                       selected: value.theme == candidate,
-                      onSelected: (_) {
-                        setState(
-                          () => value = value.copyWith(theme: candidate),
-                        );
-                        Navigator.of(context).pop(value);
-                      },
+                      onSelected: (_) =>
+                          commit(value.copyWith(theme: candidate)),
                     ),
                 ],
               ),
@@ -832,11 +892,8 @@ class _SettingsSheet extends StatelessWidget {
               max: 32,
               divisions: 20,
               label: value.fontSize.round().toString(),
-              onChanged: (next) =>
-                  setState(() => value = value.copyWith(fontSize: next)),
-              onChangeEnd: (next) {
-                Navigator.of(context).pop(value.copyWith(fontSize: next));
-              },
+              onChanged: (next) => commitDraft(value.copyWith(fontSize: next)),
+              onChangeEnd: (next) => commit(value.copyWith(fontSize: next)),
             ),
             title('行距 ${value.lineHeight.toStringAsFixed(1)}'),
             Slider(
@@ -846,10 +903,8 @@ class _SettingsSheet extends StatelessWidget {
               divisions: 12,
               label: value.lineHeight.toStringAsFixed(1),
               onChanged: (next) =>
-                  setState(() => value = value.copyWith(lineHeight: next)),
-              onChangeEnd: (next) {
-                Navigator.of(context).pop(value.copyWith(lineHeight: next));
-              },
+                  commitDraft(value.copyWith(lineHeight: next)),
+              onChangeEnd: (next) => commit(value.copyWith(lineHeight: next)),
             ),
             title('页边距 ${value.pageMargin.round()}'),
             Slider(
@@ -859,10 +914,65 @@ class _SettingsSheet extends StatelessWidget {
               divisions: 10,
               label: value.pageMargin.round().toString(),
               onChanged: (next) =>
-                  setState(() => value = value.copyWith(pageMargin: next)),
-              onChangeEnd: (next) {
-                Navigator.of(context).pop(value.copyWith(pageMargin: next));
-              },
+                  commitDraft(value.copyWith(pageMargin: next)),
+              onChangeEnd: (next) => commit(value.copyWith(pageMargin: next)),
+            ),
+            title('繁简转换'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: SegmentedButton<ZhConversionMode>(
+                segments: const <ButtonSegment<ZhConversionMode>>[
+                  ButtonSegment(value: ZhConversionMode.off, label: Text('原文')),
+                  ButtonSegment(
+                    value: ZhConversionMode.s2t,
+                    label: Text('简→繁'),
+                  ),
+                  ButtonSegment(
+                    value: ZhConversionMode.t2s,
+                    label: Text('繁→简'),
+                  ),
+                ],
+                selected: {value.zhMode},
+                onSelectionChanged: (selection) =>
+                    commit(value.copyWith(zhMode: selection.first)),
+              ),
+            ),
+            title('正文字体'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Wrap(
+                spacing: AppSpacing.xs,
+                children: <Widget>[
+                  ChoiceChip(
+                    label: const Text('系统默认'),
+                    selected: value.fontFamily == null,
+                    onSelected: (_) =>
+                        commit(value.copyWith(clearFontFamily: true)),
+                  ),
+                  for (final font in _fonts)
+                    ChoiceChip(
+                      label: Text(font.displayName),
+                      selected: value.fontFamily == font.familyName,
+                      onSelected: (_) =>
+                          commit(value.copyWith(fontFamily: font.familyName)),
+                    ),
+                  ActionChip(
+                    avatar: const Icon(Icons.add, size: 18),
+                    label: const Text('导入'),
+                    onPressed: () async {
+                      final sheetMessenger = ScaffoldMessenger.of(context);
+                      try {
+                        await UserFontStore.instance.pickAndImport();
+                        await _loadFonts();
+                      } catch (error) {
+                        sheetMessenger.showSnackBar(
+                          SnackBar(content: Text('导入失败：$error')),
+                        );
+                      }
+                    },
+                  ),
+                ],
+              ),
             ),
           ],
         ),

@@ -3,8 +3,9 @@
 **日期**：2026-09-23 ｜ **提交**：feat(M4)
 
 > M4 按 Mixn 功能全量对齐的验收清单（PROJECT_SPEC 2.4 A~G）体量很大，
-> 本阶段先落**核心阅读闭环 + LK 适配器主干**；LNS（SignalR）、评论/私信/福利中心、
-> EPUB/TXT 导出、字体管理归 M4b（见文末清单）。
+> 分两批落地：本阶段为**核心阅读闭环 + LK 适配器主干**；M4b 批次见文末
+> 「M4b 复查记录」（EPUB/TXT 导出、字体管理、繁简转换、远端书架已完成；
+> LNS SignalR 与评论/私信/福利页因需要站点账号单独立项）。
 
 ## 交付内容
 
@@ -83,3 +84,66 @@
 - **字体外观**：可下载字体、阅读字体选择（参照 Mixn `core/reader/`）。
 - **远端书架 UI**：聚合书架显示远端收藏与未读数（接口已就绪）。
 - 繁简转换、后台更新提醒、书架迁移导入器。
+
+
+---
+
+# M4b 复查记录（导出 / 字体 / 繁简 / 远端书架）
+
+**日期**：2026-09-23 ｜ **提交**：feat(M4b)
+
+## 交付内容
+
+### EPUB 3 / TXT 整书导出
+- `EpubExporter`：纯 Dart（archive 包）打包 EPUB 3——mimetype 条目按规范
+  STORED 不压缩、container.xml / nav.xhtml / content.opf / 章节 xhtml 齐全；
+  正文经 `ReaderContentParser` 复用解析为规范 XHTML（段落/标题/插图）；
+  封面与插图经 `SourceHttpClient.fetchBytes` 抓取入包并重写地址（失败降级外链）。
+- `TxtExporter`：UTF-8 纯文本整书（卷名/章名/书名/作者），格式对齐 Mixn。
+- **锁定章节一律跳过**（红线：不导出付费内容），计入 skipped 并在提示中展示。
+- 入口：小说详情页 AppBar 导出菜单，逐章取数带进度对话框。
+- 产物写入应用文档目录 exports/ 下，同名自动加 (n) 序号。
+
+### 字体管理
+- `UserFontStore`：导入（拷贝进应用文档目录 fonts/ 下）、列表、删除、
+  FontLoader 运行时注册（family 前缀 triomi-user-，幂等，损坏文件跳过）。
+- 导入通道：MainActivity 内 MethodChannel（triomi/platform.pickFontFile）+
+  SAF ACTION_OPEN_DOCUMENT，**不引入任何新插件**（绕开 Windows 插件
+  符号链接需要开发者模式的限制）。
+- 管理页（我的 → 阅读字体）：空态引导、导入 FAB、删除确认。
+- 阅读器设置面板新增「正文字体」组：系统默认 / 已导入字体 / 导入；
+  字体参与 TextPainter 分页测量（layoutKey 含 fontFamily）。
+
+### 繁简转换
+- `ZhConverter`：OpenCC 官方字表（TSCharacters 5062 条 / STCharacters 4029 条，
+  Apache-2.0）打包为 assets，字符级映射、进程内单例、测试可注入。
+- 阅读设置新增「繁简转换」：原文 / 简转繁 / 繁转简；转换在排版前应用，
+  参与分页测量；切换时用缓存的原始正文**就地重转换**（不重新请求网络）。
+- 设置持久化：save 改为 unawaited 收尾（重转换先行走，落盘尽力而为）。
+
+### LK 远端书架（聚合 UI）
+- 远端书架页（我的 → 轻之国度 · 远端书架）：登录用户的站点收藏网格，
+  下拉刷新、点击跳详情；未登录给引导文案。
+- `LkSource.remoteShelf()` 已有接口，本批次补 UI 与路由接线。
+
+## E2E 发现并修复的问题
+1. **TXT 导出中文乱码**：落盘用 codeUnits（UTF-16 码元当字节写）——
+   与 EPUB 的 utf8Bytes 同款错误，改为 utf8.encode。
+2. **EPUB 资源条目路径错误**：字符串插值少了花括号（'$entry.key' 产出
+   MapEntry(...).key），改为 '${entry.key}'。
+3. **EPUB 章节编号 0 基**：对齐 Mixn 改为 1 基（chapter-0001.xhtml）。
+4. **段落外独立 img 被解析器丢弃**：ReaderContentParser 只按 p/h 匹配，
+   段落之间的插图（LK 正文布局）整段丢失——按文档顺序合并段落与独立
+   img 事件后重排，阅读器与导出同时受益。
+5. **切繁简正文不变**：转换只在章节加载时应用；settings 变更后需用缓存的
+   原始正文重转换（_reconvert），并保证 save 不阻塞重转换。
+
+## 验收
+- analyze 零问题；**69 个测试全通过**（M4b 新增 10：字表解析/繁简转换 3、
+  TXT 3、EPUB 结构与插图 3、阅读器当场重转换 widget test 1）。
+- APK 构建成功；模拟器端到端：TXT/EPUB 导出（解包校验结构）、
+  繁简当场切换与重启恢复、字体 SAF 导入全链路、远端书架未登录态。
+
+## 遗留（需站点账号，单独立项）
+- LNS（SignalR 协议）适配器；LK 评论/消息/福利中心页（账号域功能，
+  界面骨架已在 Mixn 源码中定位，待联调账号）。

@@ -89,6 +89,20 @@ class ProfilePage extends StatelessWidget {
                     onTap: () => context.push(AppRoutes.sources),
                   ),
                   ListTile(
+                    leading: const Icon(Icons.bookmarks_outlined),
+                    title: const Text('轻之国度 · 远端书架'),
+                    subtitle: const Text('登录后同步站点收藏'),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => context.push(AppRoutes.remoteShelf),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.font_download_outlined),
+                    title: const Text('阅读字体'),
+                    subtitle: const Text('导入 TTF / OTF 供小说阅读器使用'),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => context.push(AppRoutes.fonts),
+                  ),
+                  ListTile(
                     leading: const Icon(Icons.sync_outlined),
                     title: const Text('追踪账号'),
                     subtitle: const Text('Bangumi / AniList / MyAnimeList'),

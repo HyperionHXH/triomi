@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,6 +17,7 @@ import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../library/data/library_providers.dart';
+import '../novel/export/novel_export_service.dart';
 import '../novel/reader/novel_reader_page.dart';
 import '../player/player_page.dart';
 import '../reader/manga_reader_page.dart';
@@ -93,6 +96,93 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       ? SourceRegistry.describeError(error, entry.descriptor.name)
       : '${entry.descriptor.name}：$error';
 
+  // ---------------------------------------------------------------- 整书导出
+
+  Future<void> _export({required bool epub}) async {
+    final data = await (_future ?? _load());
+    if (!mounted) return;
+    final item = data.item;
+    if (item == null || data.chapters.isEmpty) {
+      _toast('还没有拿到章节目录，无法导出');
+      return;
+    }
+    if (item.type != MediaType.novel) {
+      _toast('整书导出目前只支持小说');
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => PopScope(
+          canPop: false,
+          child: StatefulBuilder(
+            builder: (context, setDialogState) => AlertDialog(
+              title: Text(epub ? '正在导出 EPUB' : '正在导出 TXT'),
+              content: const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  CircularProgressIndicator(),
+                  SizedBox(height: 12),
+                  Text('逐章取回正文中，锁定章节会自动跳过…'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    try {
+      final snapshot = await ref.read(sourcesProvider.future);
+      final entry = snapshot.entries
+          .where((candidate) => candidate.descriptor.id == item.sourceId)
+          .firstOrNull;
+      final provider = entry?.source;
+      if (provider is! ContentProvider) {
+        throw StateError('来源没有正文能力');
+      }
+      final result = epub
+          ? await NovelExportService.exportEpub(
+              item: item,
+              chapters: data.chapters,
+              source: provider,
+              http: ref.read(sourceHttpClientProvider),
+              onProgress: (completed, total) {},
+            )
+          : await NovelExportService.exportTxt(
+              item: item,
+              chapters: data.chapters,
+              source: provider,
+              onProgress: (completed, total) {},
+            );
+      if (!mounted) return;
+      navigator.pop();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '导出完成：${result.exportedChapters} 章'
+            '（跳过 ${result.skippedChapters}，含锁定章节）\n${result.path}',
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      navigator.pop();
+      messenger.showSnackBar(SnackBar(content: Text('导出失败：$error')));
+    }
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -101,6 +191,36 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     return PageScaffold(
       title: item.title,
       actions: <Widget>[
+        PopupMenuButton<String>(
+          tooltip: '导出',
+          icon: const Icon(Icons.ios_share),
+          onSelected: (value) {
+            if (value == 'epub') unawaited(_export(epub: true));
+            if (value == 'txt') unawaited(_export(epub: false));
+          },
+          itemBuilder: (context) => const <PopupMenuEntry<String>>[
+            PopupMenuItem(
+              value: 'epub',
+              child: ListTile(
+                leading: Icon(Icons.import_contacts_outlined, size: 20),
+                title: Text('导出 EPUB'),
+                subtitle: Text('含目录与插图，跳过锁定章节'),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+              ),
+            ),
+            PopupMenuItem(
+              value: 'txt',
+              child: ListTile(
+                leading: Icon(Icons.article_outlined, size: 20),
+                title: Text('导出 TXT'),
+                subtitle: Text('UTF-8 纯文本整书'),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+              ),
+            ),
+          ],
+        ),
         IconButton(
           tooltip: '重新加载',
           onPressed: () => setState(() => _future = _load()),
