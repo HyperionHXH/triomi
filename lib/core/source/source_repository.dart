@@ -31,7 +31,7 @@ class SourceRepository {
     required String name,
     required MediaType type,
     required SourceKind kind,
-    required String ruleText,
+    String? ruleText,
     String lang = 'zh',
     String? version,
     String? repoUrl,

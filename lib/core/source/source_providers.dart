@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/novel/data/lk/lk_client.dart';
+import '../../features/novel/data/lk/lk_source.dart';
 import '../db/database_provider.dart';
 import '../storage/preferences.dart';
 import 'http_client.dart';
+import 'source_api.dart';
 import 'source_registry.dart';
 import 'source_repository.dart';
 
@@ -17,12 +20,21 @@ final sourceRepositoryProvider = Provider<SourceRepository>(
   (ref) => SourceRepository(ref.watch(databaseProvider)),
 );
 
-final sourceRegistryProvider = Provider<SourceRegistry>(
-  (ref) => SourceRegistry(
+final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
+  final preferences = ref.watch(preferencesProvider);
+  return SourceRegistry(
     repository: ref.watch(sourceRepositoryProvider),
     http: ref.watch(sourceHttpClientProvider),
-  ),
-);
+    builtinAdapters: <String, ContentSource>{
+      LkSource.id: LkSource(
+        client: LkClient(
+          http: ref.watch(sourceHttpClientProvider),
+          preferences: preferences,
+        ),
+      ),
+    },
+  );
+});
 
 /// 来源注册表快照：内置示例规则只在首次启动时写入一次。
 class SourceRegistryController extends AsyncNotifier<SourceRegistrySnapshot> {

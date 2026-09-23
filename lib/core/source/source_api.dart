@@ -60,3 +60,9 @@ abstract class AccountProvider implements ContentSource {
 
   Future<void> logout();
 }
+
+/// 付费章节解锁能力：只负责把已购状态同步到站点，不绕过任何付费校验
+/// （对齐 Mixn 的红线：解锁失败要给可读的错误，而不是本地伪造已解锁）。
+abstract class ChapterUnlockProvider implements ContentSource {
+  Future<void> unlockChapter(Chapter chapter);
+}

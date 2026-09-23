@@ -1,0 +1,55 @@
+{
+  "id": "local-fixture-novel",
+  "name": "本地夹具小说源（仅调试）",
+  "type": "novel",
+  "lang": "zh",
+  "version": "1.0.0",
+  "baseUrl": "http://10.0.2.2:8123",
+  "response": "html",
+  "requireLogin": false,
+  "capabilities": ["discover", "search", "detail", "content"],
+  "discover": {
+    "feeds": [
+      { "id": "all", "name": "全部小说", "url": "/novel/list?page={page}" }
+    ],
+    "url": "/novel/list?page={page}",
+    "list": ".list .item",
+    "fields": {
+      "remoteId": { "selector": "a.title", "attr": "href", "regex": "/novel/(\\d+)" },
+      "title": "a.title",
+      "url": { "selector": "a.title", "attr": "href", "absolute": true },
+      "coverUrl": { "selector": "img.cover", "attr": "data-src", "absolute": true },
+      "author": ".author"
+    }
+  },
+  "search": {
+    "url": "/novel/list?page={page}",
+    "list": ".list .item",
+    "fields": {
+      "remoteId": { "selector": "a.title", "attr": "href", "regex": "/novel/(\\d+)" },
+      "title": "a.title",
+      "url": { "selector": "a.title", "attr": "href", "absolute": true },
+      "coverUrl": { "selector": "img.cover", "attr": "data-src", "absolute": true },
+      "author": ".author"
+    }
+  },
+  "detail": {
+    "url": "{urlRaw}",
+    "fields": {
+      "title": "h1",
+      "description": ".summary"
+    },
+    "chapters": {
+      "url": "/novelchapters/{id}-1",
+      "list": ".chapters li",
+      "fields": {
+        "remoteId": { "selector": "a", "attr": "href", "regex": "/novelread/([\\w-]+)" },
+        "title": "a",
+        "url": { "selector": "a", "attr": "href", "absolute": true }
+      }
+    }
+  },
+  "content": {
+    "text": "#content"
+  }
+}

@@ -11,6 +11,7 @@ class ChapterContent {
   const ChapterContent({
     this.images = const <String>[],
     this.text,
+    this.html,
     this.playSources = const <PlaySource>[],
     this.danmakuUrl,
   });
@@ -18,8 +19,11 @@ class ChapterContent {
   /// 漫画：图片地址列表。
   final List<String> images;
 
-  /// 小说：正文文本。
+  /// 小说：纯文本正文（与 [html] 二选一，html 优先）。
   final String? text;
+
+  /// 小说：HTML 正文（含插图段落，如轻之国度的 body_html）。
+  final String? html;
 
   /// 番剧：播放线路列表。
   final List<PlaySource> playSources;
@@ -30,6 +34,7 @@ class ChapterContent {
   bool get isEmpty =>
       images.isEmpty &&
       (text == null || text!.isEmpty) &&
+      (html == null || html!.isEmpty) &&
       playSources.isEmpty &&
       danmakuUrl == null;
 }

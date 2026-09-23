@@ -75,11 +75,17 @@ class SourceRegistry {
   SourceRegistry({
     required this.repository,
     required this.http,
+    this.builtinAdapters = const <String, ContentSource>{},
     AssetBundle? assetBundle,
   }) : _bundle = assetBundle ?? rootBundle;
 
   final SourceRepository repository;
   final SourceHttpClient http;
+
+  /// 内置适配器（如轻之国度）：随包编译，不走规则文件。
+  /// 键为来源 id；对应数据库行的 ruleText 为空。
+  final Map<String, ContentSource> builtinAdapters;
+
   final AssetBundle _bundle;
 
   /// 随包分发的示例规则。用户删掉后不会自动复活（[seedBuiltins] 只补没记录过的）。
@@ -91,6 +97,7 @@ class SourceRegistry {
     if (kDebugMode) ...<String>[
       'assets/rules/local-fixture.json',
       'assets/rules/local-fixture-anime.json',
+      'assets/rules/local-fixture-novel.json',
     ],
   ];
 
@@ -102,6 +109,17 @@ class SourceRegistry {
     for (final row in rows) {
       final text = row.ruleText;
       if (text == null || text.trim().isEmpty) {
+        final adapter = builtinAdapters[row.id];
+        if (adapter != null) {
+          entries.add(
+            SourceEntry(
+              descriptor: adapter.descriptor.copyWith(kind: row.kind),
+              source: adapter,
+              enabled: row.enabled,
+            ),
+          );
+          continue;
+        }
         failures.add(
           SourceFailure(
             id: row.id,
@@ -143,6 +161,22 @@ class SourceRegistry {
   /// 调用方只应记录成功的（播种失败的规则下次启动还要重试，否则会永远消失）。
   Future<Set<String>> seedBuiltins({required Set<String> alreadySeeded}) async {
     final seededNow = <String>{};
+
+    // 内置适配器：只补没播种过的行（ruleText 为空，实现在代码里）。
+    for (final adapter in builtinAdapters.values) {
+      final marker = 'builtin:${adapter.descriptor.id}';
+      if (alreadySeeded.contains(marker)) continue;
+      await repository.upsert(
+        id: adapter.descriptor.id,
+        name: adapter.descriptor.name,
+        type: adapter.descriptor.type,
+        kind: SourceKind.builtin,
+        lang: adapter.descriptor.lang,
+        version: adapter.descriptor.version,
+      );
+      seededNow.add(marker);
+    }
+
     for (final asset in builtinRuleAssets) {
       if (alreadySeeded.contains(asset)) continue;
       try {

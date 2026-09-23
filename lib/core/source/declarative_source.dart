@@ -214,7 +214,6 @@ class DeclarativeSource
       danmakuUrl: danmakuUrl,
     );
   }
-
   // ---------------------------------------------------------------- 内部实现
 
   /// 组装请求：规则级 headers 先铺底，请求级 headers 覆盖。

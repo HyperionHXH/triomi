@@ -6,6 +6,7 @@ import '../../features/detail/detail_page.dart';
 import '../../features/discover/discover_page.dart';
 import '../../features/history/history_page.dart';
 import '../../features/library/library_page.dart';
+import '../../features/novel/reader/novel_reader_page.dart';
 import '../../features/player/player_page.dart';
 import '../../features/profile/profile_page.dart';
 import '../../features/reader/manga_reader_page.dart';
@@ -31,6 +32,7 @@ abstract final class AppRoutes {
   static const String history = '/history';
   static const String reader = '/reader';
   static const String player = '/player';
+  static const String novelReader = '/novel-reader';
 }
 
 abstract final class AppRouter {
@@ -146,6 +148,22 @@ abstract final class AppRouter {
               icon: Icons.link_off,
               title: '缺少剧集信息',
               message: '请从作品详情页的目录进入播放器。',
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.novelReader,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is NovelReaderArgs) return NovelReaderPage(args: extra);
+          return const PageScaffold(
+            title: '阅读',
+            child: EmptyStateView(
+              icon: Icons.link_off,
+              title: '缺少章节信息',
+              message: '请从作品详情页的目录进入小说阅读器。',
             ),
           );
         },

@@ -153,7 +153,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
   /// 内容形态不对时给出可执行的下一步，而不是一句"加载失败"。
   String _unsupportedMessage(ChapterContent content) {
     if (content.text != null && content.text!.isNotEmpty) {
-      return '这一章是文字内容，小说阅读器将在 M4 提供。';
+      return '这一章是文字内容：请用小说源打开它的详情页阅读。';
     }
     if (content.playSources.isNotEmpty) {
       return '这一集是视频内容：请用番剧源打开它的详情页播放。';

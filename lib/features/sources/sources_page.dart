@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/source/http_client.dart';
 import '../../core/source/rule_schema.dart';
+import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
 import '../../core/theme/app_theme.dart';
@@ -134,12 +135,144 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                       .read(sourcesProvider.notifier)
                       .setEnabled(entry.descriptor.id, enabled: value),
                   onDelete: () => _confirmDelete(entry),
+                  onAccount: entry.source is AccountProvider
+                      ? () => _showAccountSheet(entry)
+                      : null,
                 ),
               for (final failure in snapshot.failures)
                 _FailureTile(failure: failure),
             ],
           );
         },
+      ),
+    );
+  }
+
+  /// 账号管理：显示登录状态，支持登录 / 登出（凭据不落日志，只进安全存储）。
+  Future<void> _showAccountSheet(SourceEntry entry) async {
+    final provider = entry.source as AccountProvider;
+    final accountController = TextEditingController();
+    final passwordController = TextEditingController();
+    var busy = false;
+    String? message;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) => AlertDialog(
+          title: Text('${entry.descriptor.name} · 账号'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Icon(
+                    provider.isLoggedIn
+                        ? Icons.verified_user_outlined
+                        : Icons.person_off_outlined,
+                    size: 18,
+                    color: provider.isLoggedIn
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Text(
+                    provider.isLoggedIn ? '已登录' : '未登录',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+              if (message != null) ...<Widget>[
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  message!,
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.sm),
+              TextField(
+                controller: accountController,
+                enabled: !busy,
+                decoration: const InputDecoration(
+                  labelText: '用户名或邮箱',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextField(
+                controller: passwordController,
+                enabled: !busy,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: '密码',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            if (provider.isLoggedIn)
+              TextButton(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        setState(() => busy = true);
+                        try {
+                          await provider.logout();
+                          if (dialogContext.mounted) {
+                            Navigator.of(dialogContext).pop();
+                          }
+                          _toast('已退出登录');
+                        } catch (error) {
+                          setState(() {
+                            message = '退出失败：$error';
+                            busy = false;
+                          });
+                        }
+                      },
+                child: const Text('退出登录'),
+              ),
+            FilledButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      final account = accountController.text.trim();
+                      final password = passwordController.text;
+                      if (account.isEmpty || password.isEmpty) {
+                        setState(() => message = '请填写账号与密码');
+                        return;
+                      }
+                      setState(() {
+                        busy = true;
+                        message = null;
+                      });
+                      try {
+                        await provider.login(account, password);
+                        if (dialogContext.mounted) {
+                          Navigator.of(dialogContext).pop();
+                        }
+                        _toast('登录成功');
+                      } catch (error) {
+                        setState(() {
+                          message = '$error';
+                          busy = false;
+                        });
+                      }
+                    },
+              child: busy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('登录'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -265,11 +398,15 @@ class _SourceTile extends StatelessWidget {
     required this.entry,
     required this.onToggle,
     required this.onDelete,
+    this.onAccount,
   });
 
   final SourceEntry entry;
   final ValueChanged<bool> onToggle;
   final VoidCallback onDelete;
+
+  /// 有账号能力的来源显示「账号」入口（登录 / 登出）。
+  final VoidCallback? onAccount;
 
   @override
   Widget build(BuildContext context) {
@@ -305,6 +442,12 @@ class _SourceTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
+          if (onAccount != null)
+            IconButton(
+              tooltip: '账号',
+              onPressed: onAccount,
+              icon: const Icon(Icons.person_outline, size: 20),
+            ),
           Switch(value: entry.enabled, onChanged: onToggle),
           IconButton(
             tooltip: '移除',

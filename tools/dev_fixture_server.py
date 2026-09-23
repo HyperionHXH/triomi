@@ -149,6 +149,49 @@ def danmaku_json(ep: str) -> str:
     return json.dumps({'code': 0, 'comments': comments}, ensure_ascii=False)
 
 
+# ---------------------------------------------------------------- 小说站 ----
+
+def novel_list_page(page: int) -> str:
+    items = ''.join(
+        f'''<div class="item">
+  <a class="title" href="/novel/{page * 30 + i}">夹具小说 {page * 30 + i}</a>
+  <img class="cover" data-src="/img/cover/n{page * 30 + i}.png" />
+  <span class="author">小说作者 {i}</span>
+</div>'''
+        for i in range(1, 5)
+    )
+    return f'<html><body><div class="list">{items}</div></body></html>'
+
+
+def novel_detail_page(rid: str) -> str:
+    volumes = ''.join(
+        f'<li><a href="/novelchapters/{rid}-{n}">第 {n} 卷</a></li>' for n in range(1, 3)
+    )
+    return f'''<html><body>
+<h1>夹具小说 {rid}</h1>
+<div class="summary">这是本地夹具小说的简介，用于验证小说阅读器链路。</div>
+<ul class="volumes">{volumes}</ul>
+</body></html>'''
+
+
+def novel_volume_page(key: str) -> str:
+    chapters = ''.join(
+        f'<li><a href="/novelread/{key}-{n}">第 {n} 章</a></li>' for n in range(1, 7)
+    )
+    return f'<html><body><ul class="chapters">{chapters}</ul></body></html>'
+
+
+def novel_read_page(key: str) -> str:
+    paragraphs = ''.join(
+        f'<p>这是夹具小说《{key}》的第 {n} 个段落。小说阅读器需要把长段落按页面高度切分，'
+        f'并保持首行缩进与段距一致；这一句是凑长度的补充说明，用来让段落足够长，'
+        f'以便在模拟器的窄屏上至少占满三行。</p>'
+        for n in range(1, 25)
+    )
+    illustration = '<p class="ln-paragraph--indent"><img src="/img/cover/illu.png" width="400" height="300" /></p>'
+    return f'<html><body><div id="content">{paragraphs}{illustration}</div></body></html>'
+
+
 def calendar_json() -> str:
     """Bangumi /calendar 格式的精简版。"""
     def item(rid: str, name: str, score: float) -> dict:
@@ -262,9 +305,31 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
 
-        if path.startswith('/anime/'):
+        if path == '/novel/list':
+            page = int(query.get('page', ['1'])[0])
             self._send(
-                anime_detail_page(path.rsplit('/', 1)[-1]).encode('utf-8'),
+                novel_list_page(page).encode('utf-8'),
+                'text/html; charset=utf-8',
+            )
+            return
+
+        if path.startswith('/novelchapters/'):
+            self._send(
+                novel_volume_page(path.rsplit('/', 1)[-1]).encode('utf-8'),
+                'text/html; charset=utf-8',
+            )
+            return
+
+        if path.startswith('/novelread/'):
+            self._send(
+                novel_read_page(path.rsplit('/', 1)[-1]).encode('utf-8'),
+                'text/html; charset=utf-8',
+            )
+            return
+
+        if path.startswith('/novel/'):
+            self._send(
+                novel_detail_page(path.rsplit('/', 1)[-1]).encode('utf-8'),
                 'text/html; charset=utf-8',
             )
             return

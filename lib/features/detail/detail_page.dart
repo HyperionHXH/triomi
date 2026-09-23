@@ -15,6 +15,7 @@ import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../library/data/library_providers.dart';
+import '../novel/reader/novel_reader_page.dart';
 import '../player/player_page.dart';
 import '../reader/manga_reader_page.dart';
 
@@ -439,8 +440,20 @@ class _ChapterSection extends StatelessWidget {
       return;
     }
 
+    if (target.type == MediaType.novel) {
+      context.push(
+        AppRoutes.novelReader,
+        extra: NovelReaderArgs(
+          item: target,
+          chapters: chapters,
+          initialIndex: index,
+        ),
+      );
+      return;
+    }
+
     final hint = switch (target.type) {
-      MediaType.novel => '小说阅读器将在 M4 提供',
+      MediaType.novel => '',
       MediaType.anime => '',
       MediaType.manga => '',
     };
