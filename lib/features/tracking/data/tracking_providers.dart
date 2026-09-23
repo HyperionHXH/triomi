@@ -29,9 +29,20 @@ final trackingServiceProvider = Provider<TrackingService>((ref) {
 });
 
 /// base 覆盖（默认不覆盖，走真实站点）。
-final trackingBaseUrlOverridesProvider = Provider<TrackingBaseUrlOverrides>(
-  (ref) => const TrackingBaseUrlOverrides(),
-);
+///
+/// 调试用：`--dart-define=TRIOMI_TRACKING_BASE=http://10.0.2.2:8123/tracking`
+/// （模拟器无外网时指向夹具服务；Bangumi 与 AniList 用子路径区分）。
+final trackingBaseUrlOverridesProvider = Provider<TrackingBaseUrlOverrides>((
+  ref,
+) {
+  if (_trackingBase.isEmpty) return const TrackingBaseUrlOverrides();
+  return TrackingBaseUrlOverrides(
+    bangumi: '$_trackingBase/bangumi',
+    anilist: '$_trackingBase/anilist',
+  );
+});
+
+const String _trackingBase = String.fromEnvironment('TRIOMI_TRACKING_BASE');
 
 class TrackingBaseUrlOverrides {
   const TrackingBaseUrlOverrides({this.bangumi, this.anilist});

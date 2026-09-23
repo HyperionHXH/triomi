@@ -67,10 +67,7 @@ class _TrackingPageState extends ConsumerState<TrackingPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(
-                  '进度上报',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
+                Text('进度上报', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   '绑定作品后，阅读/播放进度会自动上报到所选服务。'
@@ -101,8 +98,7 @@ class _TrackingPageState extends ConsumerState<TrackingPage> {
                         )
                       : Column(
                           children: <Widget>[
-                            for (final row in rows)
-                              _bindingTile(context, row),
+                            for (final row in rows) _bindingTile(context, row),
                           ],
                         ),
                 ),
@@ -185,10 +181,7 @@ class _TrackingPageState extends ConsumerState<TrackingPage> {
           ),
           if (_status[kind] != null) ...<Widget>[
             const SizedBox(height: AppSpacing.xs),
-            Text(
-              _status[kind]!,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            Text(_status[kind]!, style: Theme.of(context).textTheme.bodySmall),
           ],
         ],
       ),

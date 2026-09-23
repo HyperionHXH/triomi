@@ -50,8 +50,7 @@ class _TrackingBindSheetState extends ConsumerState<_TrackingBindSheet> {
   @override
   Widget build(BuildContext context) {
     final service = ref.watch(trackingServiceProvider);
-    final bindingsKey =
-        '${widget.item.sourceId}\u0000${widget.item.remoteId}';
+    final bindingsKey = '${widget.item.sourceId}\u0000${widget.item.remoteId}';
 
     return SafeArea(
       child: Padding(

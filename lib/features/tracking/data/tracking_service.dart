@@ -76,10 +76,13 @@ class TrackingService {
   Future<List<TrackCandidate>> search(
     TrackingServiceKind kind,
     String keyword,
-  ) => switch (kind) {
-    TrackingServiceKind.bangumi => _bangumi.search(keyword),
-    TrackingServiceKind.anilist => _anilist.search(keyword),
-  };
+  ) {
+    final token = tokenOf(kind);
+    return switch (kind) {
+      TrackingServiceKind.bangumi => _bangumi.search(keyword, token: token),
+      TrackingServiceKind.anilist => _anilist.search(keyword),
+    };
+  }
 
   /// 绑定并立刻推一次状态（失败只记录，不抛）。
   Future<TrackSyncResult> bind({

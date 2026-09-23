@@ -79,11 +79,19 @@ class BangumiClient {
   }
 
   /// 条目搜索（`POST /v0/search/subjects`，实验性接口）。
-  Future<List<TrackCandidate>> search(String keyword, {int limit = 10}) async {
+  ///
+  /// 官方对搜索是「可选鉴权」，但**有 token 就带上**：认证请求的限流更宽，
+  /// 也避免部署方收紧匿名访问时直接 401。
+  Future<List<TrackCandidate>> search(
+    String keyword, {
+    int limit = 10,
+    String? token,
+  }) async {
     if (keyword.trim().isEmpty) return const <TrackCandidate>[];
     final data = await _json(
       '/v0/search/subjects?limit=$limit&offset=0',
       method: 'POST',
+      token: token,
       body: <String, Object?>{
         'keyword': keyword.trim(),
         'sort': 'match',
@@ -165,9 +173,10 @@ class BangumiClient {
   );
 
   /// 条目的剧集列表（含全局 id；番剧进度映射要用）。
-  Future<List<BangumiEpisode>> episodes(int subjectId) async {
+  Future<List<BangumiEpisode>> episodes(int subjectId, {String? token}) async {
     final data = await _json(
       '/v0/episodes?subject_id=$subjectId&type=0&limit=200',
+      token: token,
     );
     final list = _asList(_asMap(data)['data']);
     final result = <BangumiEpisode>[];
@@ -211,7 +220,7 @@ class BangumiClient {
     required int watchedEpisodes,
   }) async {
     if (watchedEpisodes <= 0) return;
-    final catalog = await episodes(subjectId);
+    final catalog = await episodes(subjectId, token: token);
     final ids = <int>[
       for (final episode in catalog)
         if (episode.number <= watchedEpisodes) episode.id,

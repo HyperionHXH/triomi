@@ -13,12 +13,17 @@ Android 模拟器内访问宿主用 http://10.0.2.2:8123 。
 
 import io
 import json
-import time
 import os
 import struct
+import sys
+import time
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
+
+# 追踪服务夹具与本文件同目录（直接运行时脚本搜索路径包含本目录）。
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import tracking_fixture  # noqa: E402
 
 PORT = 8123
 DAV_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_dav')
@@ -351,10 +356,62 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', '0')
         self.end_headers()
 
+    # ---------------------------------------------------------- 追踪服务夹具
+    def _tracking(self, method: str) -> None:
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path == '/tracking/state':
+            self._send(tracking_fixture.state().encode('utf-8'),
+                       'application/json; charset=utf-8')
+            return
+        if path == '/tracking/reset':
+            tracking_fixture.reset()
+            self._send(b'{"ok": true}', 'application/json; charset=utf-8')
+            return
+
+        length = int(self.headers.get('Content-Length') or 0)
+        raw = self.rfile.read(length).decode('utf-8') if length else ''
+        status, body, content_type = tracking_fixture.handle(
+            method, path, raw, self.headers.get('Authorization') or '')
+
+        self.send_response(status)
+        if body:
+            data = body.encode('utf-8')
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        else:
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+
+    def do_POST(self):  # noqa: N802
+        path = urlparse(self.path).path
+        if path.startswith('/tracking'):
+            self._tracking('POST')
+            return
+        self.send_response(404)
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+
+    def do_PATCH(self):  # noqa: N802
+        path = urlparse(self.path).path
+        if path.startswith('/tracking'):
+            self._tracking('PATCH')
+            return
+        self.send_response(404)
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+
     def do_GET(self):  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
         query = parse_qs(parsed.query)
+
+        if path.startswith('/tracking'):
+            self._tracking('GET')
+            return
 
         if path.startswith('/dav'):
             self._dav_get(path)
