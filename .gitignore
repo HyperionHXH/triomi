@@ -52,3 +52,7 @@ android/build/
 
 # 夹具服务的 WebDAV 存储（运行时数据）
 tools/_dav/
+
+# flutter_js 的 Windows 原生库（宿主测试用）：
+# 从 pub cache 复制，见 tools/setup_quickjs_dll.py
+quickjs_c_bridge.dll

@@ -238,11 +238,27 @@ class SourceRule {
       if (parsed != null) capabilities.add(parsed);
     }
 
+    // 引擎：声明式（默认）或 JS。JS 规则用内嵌 `script` 承载源码——
+    // 数据库只存一列 rule_text，内嵌可避免额外的资产加载路径。
+    final engine = map['engine']?.toString().trim().toLowerCase() ?? '';
+    final script = map['script']?.toString();
+    final hasScript = script != null && script.trim().isNotEmpty;
+    if (engine == 'js' && !hasScript) {
+      throw const RuleFormatException('engine 为 js 时必须提供 script');
+    }
+    if (engine.isNotEmpty && engine != 'js' && engine != 'declarative') {
+      throw RuleFormatException('不支持的 engine：$engine');
+    }
+    // 写 `script` 就按 JS 规则处理，`engine` 可省（少一处写错的地方）。
+    final isScript = engine == 'js' || hasScript;
+
     final feeds = <DiscoverFeed>[];
     final discoverMap = map['discover'];
-    if (discoverMap is Map) {
-      for (final feed
-          in (discoverMap['feeds'] as List<Object?>? ?? const <Object?>[])) {
+    // JS 规则把榜单写在顶层 `feeds` 更自然（它没有 discover.list）。
+    final rawFeeds =
+        (discoverMap is Map ? discoverMap['feeds'] : null) ?? map['feeds'];
+    if (rawFeeds is List) {
+      for (final feed in rawFeeds) {
         if (feed is! Map) continue;
         final feedId = feed['id']?.toString() ?? '';
         final feedUrl = feed['url']?.toString() ?? '';
@@ -272,13 +288,15 @@ class SourceRule {
       response: ResponseFormat.parse(map['response']?.toString()),
       headers: _stringMap(map['headers']),
       feeds: feeds,
-      discover: RuleList.parse(discoverMap),
-      search: RuleList.parse(map['search']),
-      detail: RuleDetail.parse(map['detail']),
-      content: RuleContent.parse(map['content']),
+      discover: isScript ? null : RuleList.parse(discoverMap),
+      search: isScript ? null : RuleList.parse(map['search']),
+      detail: isScript ? null : RuleDetail.parse(map['detail']),
+      content: isScript ? null : RuleContent.parse(map['content']),
+      jsCode: isScript ? script : null,
     );
 
-    rule.validate();
+    // JS 规则的能力由运行时探测导出函数决定，不做声明式自检。
+    if (!isScript) rule.validate();
     return rule;
   }
 

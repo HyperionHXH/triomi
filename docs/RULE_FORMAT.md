@@ -152,7 +152,92 @@ Triomi 的来源规则是一份 JSON 文件，描述「怎么请求、怎么取�
 - 应用运行时的解析失败会带上来源名与错误类别（需要登录 / 限流 / 超时 / 解析失败 / 权限 / 不存在），
   聚合搜索时**单个来源失败不影响其它来源**。
 
-## 7. 免责提示
+## 7. JS 规则（engine: js）
+
+声明式规则覆盖不了的场景（多步请求、条件分支、地址拼接、正则加工），可以用
+JS 规则。JS 规则与声明式规则**同一份 JSON**，用 `engine: "js"` 标识，脚本
+**内嵌在 `script` 字段**（数据库只存一列，无需额外的资产文件）：
+
+```json
+{
+  "id": "example-js",
+  "name": "示例 JS 源",
+  "type": "manga",
+  "engine": "js",
+  "baseUrl": "https://example.com",
+  "feeds": [ { "id": "hot", "name": "热门", "url": "/list?page={page}" } ],
+  "script": "async function discover(url, page) { ... }"
+}
+```
+
+只写 `script` 不写 `engine` 也按 JS 规则处理；`feeds` 写在顶层（与声明式的
+`discover.feeds` 等价，但 JS 规则没有 `discover.list`）。能力（榜单/搜索/
+详情/正文）由**运行时探测**决定：脚本导出了哪个函数，来源就具备哪个能力，
+`capabilities` 字段对 JS 规则不参与判定。
+
+### 7.1 导出函数（缺省即该能力不可用）
+
+```js
+async function discover(url, page)   // → MediaItem[]；url 已由宿主渲染 {page} 并补全为绝对地址
+async function search(keyword, page) // → MediaItem[]
+async function detail(url, item)     // → { item: {...}, chapters: [...] }（两次调用按地址缓存，只发一次请求）
+async function content(url, chapter) // → { images? / text? / html? / playSources? / danmakuUrl? }
+```
+
+- `MediaItem` 字段与声明式字段同名：`remoteId / title / url / coverUrl /
+  author / description / tags / rating / status`。`url / coverUrl` 返回相对
+  地址即可，宿主会按 `baseUrl` 补全（与声明式行为一致）。
+- `chapters` 元素：`remoteId / title / url / number / volumeTitle /
+  releaseDate / locked`；标题缺省时按顺序兜底为「第 N 话」。
+- `content(url, chapter)` 的 `chapter` 是章节 JSON（`remoteId / title /
+  url / number / volumeTitle`），拼弹幕地址之类会用到。
+
+### 7.2 宿主函数 `triomi.*`
+
+解析**不交给 JS**——选择器复用声明式引擎（CSS + XPath 双语法、同款字段
+表），JS 只负责流程编排：
+
+| 函数 | 说明 |
+|---|---|
+| `triomi.fetch(url, options?)` | 走统一网络层（UA/超时/错误分类）。`options: {method, headers, body, bodyType}`；返回 `{status, body, url}`。规则级 `headers` 自动带上。非 2xx **抛错**（错误分类原样保留，见下） |
+| `triomi.select(html, selector, fields?, baseUrl?)` | 列表解析：命中多个节点，按字段表返回对象数组；`fields` 缺省时返回 `[{text}]` |
+| `triomi.value(html, selector, attr?, baseUrl?)` | 取第一个命中值（`attr` 缺省 `text`，可传 `html` / 属性名） |
+| `triomi.values(html, selector, attr?, baseUrl?)` | 取全部命中值（图片列表等） |
+| `triomi.baseUrl` | 规则的 `baseUrl`（拼地址用） |
+| `triomi.log(...)` | 调试输出 |
+
+字段表与声明式 `fields` 同格式：
+
+```js
+async function discover(url, page) {
+  var res = await triomi.fetch(url);
+  return await triomi.select(res.body, '.list .item', {
+    title: 'a.title',
+    url: { selector: 'a.title', attr: 'href', absolute: true },
+    coverUrl: { selector: 'img.cover', attr: 'data-src', absolute: true }
+  });
+}
+```
+
+完整示例见 `assets/rules/local-fixture-js.json`（调试构建随包，与声明式
+`local-fixture.json` 解析同一站点，方便对照两种写法）。
+
+### 7.3 错误处理
+
+- 脚本**语法错 / 顶层异常**：规则加载失败，来源管理页显示为可见失败项。
+- `triomi.fetch` 的网络错误（401 / 429 / 超时…）：异常**穿透**到导出函数，
+  分类原样带回应用（auth 不会被降级成 parse）。JS 里可以 `try/catch`
+  自行处理（例如多线路轮询）。
+- 其它 JS 异常：解析失败（parse），错误消息里带导出函数名。
+
+### 7.4 引擎与平台
+
+- 引擎为 flutter_js：Android/iOS/Windows/Linux/macOS 原生可用；**Web 上
+  不可用**（JS 规则会成为失败项，声明式规则不受影响）。
+- 每个 JS 来源一个独立引擎实例，规则间互不干扰；引擎不可用时规则在
+  来源管理页显示「引擎不可用」而不是静默消失。
+
+## 8. 免责提示
 
 规则只描述如何解析站点结构。请遵守目标站点的服务条款与内容版权要求，
 不要批量抓取、分发或商业使用站点内容。

@@ -24,6 +24,9 @@ dependencies:
   path_provider: ^2.1.6
 
   cupertino_icons: ^1.0.8
+
+  # JS 规则沙箱（Android 用 quickjs / iOS 用 JavaScriptCore，均为 dart-ffi）
+  flutter_js: ^0.8.7
   xpath_selector: ^3.0.2
   dio: ^5.11.1
   html: ^0.15.7

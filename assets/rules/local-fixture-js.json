@@ -1,0 +1,18 @@
+{
+  "id": "local-fixture-js",
+  "name": "本地夹具 JS 源（仅调试）",
+  "type": "manga",
+  "engine": "js",
+  "lang": "zh",
+  "version": "1.0.0",
+  "baseUrl": "http://10.0.2.2:8123",
+  "requireLogin": false,
+  "feeds": [
+    {
+      "id": "hot",
+      "name": "热门漫画（JS）",
+      "url": "/list?page={page}"
+    }
+  ],
+  "script": "// 本地夹具 JS 规则示例：演示 triomi.* 宿主函数与流程编排。\n// 它解析出的数据与声明式规则 local-fixture.json 一致，方便对照两种写法。\n\nasync function parseList(html) {\n  var rows = await triomi.select(html, '.list .item', {\n    title: 'a.title',\n    url: { selector: 'a.title', attr: 'href', absolute: true },\n    coverUrl: { selector: 'img.cover', attr: 'data-src', absolute: true },\n    author: '.author'\n  });\n  var items = [];\n  for (var i = 0; i < rows.length; i++) {\n    var row = rows[i];\n    var match = /\\/manga\\/(\\d+)/.exec(row.url || '');\n    if (!match) continue;\n    items.push({\n      remoteId: match[1],\n      title: row.title,\n      url: row.url,\n      coverUrl: row.coverUrl,\n      author: row.author\n    });\n  }\n  return items;\n}\n\nasync function discover(url, page) {\n  var res = await triomi.fetch(url);\n  return await parseList(res.body);\n}\n\nasync function search(keyword, page) {\n  var url = triomi.baseUrl + '/search?q=' + encodeURIComponent(keyword) + '&page=' + page;\n  var res = await triomi.fetch(url);\n  return await parseList(res.body);\n}\n\nasync function detail(url, item) {\n  var res = await triomi.fetch(url);\n  var chapters = await triomi.select(res.body, '.chapters li', {\n    title: 'a',\n    url: { selector: 'a', attr: 'href', absolute: true }\n  });\n  for (var i = 0; i < chapters.length; i++) {\n    var match = /\\/chapter\\/([\\w-]+)/.exec(chapters[i].url || '');\n    chapters[i].remoteId = match ? match[1] : chapters[i].url;\n  }\n  return {\n    item: {\n      title: await triomi.value(res.body, 'h1'),\n      description: await triomi.value(res.body, '.summary')\n    },\n    chapters: chapters\n  };\n}\n\nasync function content(url, chapter) {\n  var res = await triomi.fetch(url);\n  var images = await triomi.values(res.body, '#reader img', 'data-original');\n  if (images.length === 0) {\n    images = await triomi.values(res.body, '#reader img', 'src');\n  }\n  return { images: images };\n}\n"
+}

@@ -1,5 +1,13 @@
 # T2 · JS 规则沙箱（T2b）
 
+> **状态：✅ 已完成（2026-09-23）。** 宿主探测结果（本机关键信息）：
+> **Windows 宿主可用真实 quickjs**——flutter_js 0.8.7 随包自带
+> `windows/shared/quickjs_c_bridge.dll`，复制到项目根（DLL 搜索路径包含
+> cwd）即可，无需 Visual Studio 构建 Windows runner
+> （一键脚本：`python tools/setup_quickjs_dll.py`）。
+> 必须用 `getJavascriptRuntime(xhr: false)` 构造——flutter_js 自带的
+> fetch polyfill 依赖 rootBundle（测试环境没有），且网络统一走宿主桥。
+> 真实引擎全流程测试 `test/t2_js_engine_test.dart` 全绿，未启用 skip 分支。
 > 对应规格：PROJECT_SPEC 3.2（`flutter_js` 已在依赖表）、路线图 M1 验收、
 > 原任务单「T2b JS 规则沙箱（需设备验证）」。
 > 现状：声明式规则引擎已完成（HTML/JSON + CSS/XPath）；M1 时 flutter_js

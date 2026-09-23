@@ -6,6 +6,9 @@ import '../models/source_descriptor.dart';
 import '../models/source_exception.dart';
 import 'declarative_source.dart';
 import 'http_client.dart';
+import 'js/js_runtime.dart';
+import 'js/js_source.dart';
+import 'js/runtime/js_runtime_factory.dart';
 import 'rule_schema.dart';
 import 'source_api.dart';
 import 'source_repository.dart';
@@ -70,12 +73,13 @@ class SourceRegistrySnapshot {
 ///
 /// 双轨来源体系（见 PROJECT_SPEC 4.3）：
 /// - 内置适配器（LK / LNS，M4 落地）——随包编译，走原生实现；
-/// - 规则来源——声明式 JSON 规则，本里程碑的支持范围。
+/// - 规则来源——声明式 JSON 规则，或 JS 规则（同一份规则文件里的 `script`）。
 class SourceRegistry {
   SourceRegistry({
     required this.repository,
     required this.http,
     this.builtinAdapters = const <String, ContentSource>{},
+    this.jsRuntimeFactory,
     AssetBundle? assetBundle,
   }) : _bundle = assetBundle ?? rootBundle;
 
@@ -85,6 +89,10 @@ class SourceRegistry {
   /// 内置适配器（如轻之国度）：随包编译，不走规则文件。
   /// 键为来源 id；对应数据库行的 ruleText 为空。
   final Map<String, ContentSource> builtinAdapters;
+
+  /// JS 规则用的引擎工厂；为 null 时用 flutter_js（Web 上不可用）。
+  /// 测试注入替身走这里。
+  final JsRuntime Function()? jsRuntimeFactory;
 
   final AssetBundle _bundle;
 
@@ -98,6 +106,8 @@ class SourceRegistry {
       'assets/rules/local-fixture.json',
       'assets/rules/local-fixture-anime.json',
       'assets/rules/local-fixture-novel.json',
+      // JS 规则示例：与 local-fixture.json 解析同一站点，用于对照两种写法。
+      'assets/rules/local-fixture-js.json',
     ],
   ];
 
@@ -131,6 +141,25 @@ class SourceRegistry {
       }
       try {
         final rule = SourceRule.parseJson(text);
+        if (rule.isScript) {
+          // JS 规则：加载脚本 + 探测能力，任一步失败都记成可见的失败项。
+          final source = JsSource(
+            rule: rule,
+            runtime: (jsRuntimeFactory ?? createFlutterJsRuntime)(),
+            http: http,
+          );
+          await source.initialize();
+          entries.add(
+            SourceEntry(
+              descriptor: source.descriptor.copyWith(kind: row.kind),
+              source: source,
+              enabled: row.enabled,
+              ruleText: text,
+              repoUrl: row.repoUrl,
+            ),
+          );
+          continue;
+        }
         entries.add(
           SourceEntry(
             descriptor: rule.descriptor.copyWith(kind: row.kind),
@@ -143,6 +172,10 @@ class SourceRegistry {
       } on RuleFormatException catch (error) {
         failures.add(
           SourceFailure(id: row.id, name: row.name, message: error.message),
+        );
+      } on SourceException catch (error) {
+        failures.add(
+          SourceFailure(id: row.id, name: row.name, message: error.userMessage),
         );
       } catch (error) {
         failures.add(
