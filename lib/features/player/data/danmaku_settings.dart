@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/source/source_providers.dart';
 import '../../../core/storage/preferences.dart';
+import 'dandanplay_client.dart';
 
 /// 弹幕显示与过滤设置（对齐 Kazumi 的弹幕设置项，逐项持久化）。
 class DanmakuSettings {
@@ -155,6 +157,16 @@ class DandanplayCredentials {
 
   bool get canSend => isConfigured && token.isNotEmpty;
 
+  DandanplayCredentials copyWith({
+    String? appId,
+    String? appSecret,
+    String? token,
+  }) => DandanplayCredentials(
+    appId: appId ?? this.appId,
+    appSecret: appSecret ?? this.appSecret,
+    token: token ?? this.token,
+  );
+
   static const String appIdKey = 'danmaku.dandanplay.appId';
   static const String appSecretKey = 'danmaku.dandanplay.appSecret';
   static const String tokenKey = 'danmaku.dandanplay.token';
@@ -182,9 +194,51 @@ class DandanplayCredentialsController extends Notifier<DandanplayCredentials> {
     state = next;
     await next.save(ref.read(preferencesProvider));
   }
+
+  /// 用账号密码登录弹弹play，成功后把 token 写回凭据并持久化。
+  ///
+  /// 失败抛 [SourceException]（由界面提示），token 保持原值。
+  /// 密码**不落盘、不落日志**——只作为本次请求参数传给客户端，
+  /// 持久化内容里只有 appId / appSecret / token。
+  Future<String?> login(String userName, String password) async {
+    // 不走 dandanplayClientProvider：本控制器属于 credentials provider，
+    // 而 client provider watch 凭据，read 会构成循环依赖（见其文档）。
+    final client = DandanplayClient(
+      http: ref.read(sourceHttpClientProvider),
+      appId: state.appId,
+      appSecret: state.appSecret,
+      baseUrl: dandanplayBaseUrl,
+    );
+    final token = await client.login(userName: userName, password: password);
+    await update(state.copyWith(token: token));
+    return token;
+  }
 }
 
 final dandanplayCredentialsProvider =
     NotifierProvider<DandanplayCredentialsController, DandanplayCredentials>(
       DandanplayCredentialsController.new,
     );
+
+/// 弹弹play 的服务地址；可被 `--dart-define=TRIOMI_DANDANPLAY_BASE` 覆盖
+/// （模拟器没有外网时指向夹具服务，验证登录与发送全链路）。
+const String dandanplayBaseUrl = String.fromEnvironment(
+  'TRIOMI_DANDANPLAY_BASE',
+  defaultValue: 'https://api.dandanplay.net',
+);
+
+/// 弹弹play 客户端（凭据变化时重建）。
+///
+/// 注意：凭据控制器**不能** read 本 provider——它自身就在 credentials
+/// provider 里，而本 provider watch 凭据，会构成循环依赖
+/// （Riverpod 3 的 debug assert 会直接抛 CircularDependencyError）。
+/// 控制器里需要 client 时自行用 [dandanplayBaseUrl] 构造。
+final dandanplayClientProvider = Provider<DandanplayClient>((ref) {
+  final credentials = ref.watch(dandanplayCredentialsProvider);
+  return DandanplayClient(
+    http: ref.watch(sourceHttpClientProvider),
+    appId: credentials.appId,
+    appSecret: credentials.appSecret,
+    baseUrl: dandanplayBaseUrl,
+  );
+});

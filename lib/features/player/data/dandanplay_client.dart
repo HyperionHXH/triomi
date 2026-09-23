@@ -169,6 +169,93 @@ class DandanplayClient {
     );
   }
 
+  /// 账号密码登录换取用户 token（发送弹幕的授权凭据）。
+  ///
+  /// 请求体 hash = md5(appId + userName + password + unixTimestamp + appSecret)。
+  /// 密码只用于本次 hash 计算，不保存到任何成员变量；调用方也不得记录。
+  /// 服务端拒绝（`success: false`）时抛 [SourceErrorType.auth] 并透出
+  /// errorMessage；HTTP 层错误沿用 [SourceHttpClient] 的分类。
+  Future<String> login({
+    required String userName,
+    required String password,
+  }) async {
+    _requireConfigured();
+    if (userName.trim().isEmpty || password.isEmpty) {
+      throw const SourceException(
+        sourceId: _sourceId,
+        type: SourceErrorType.auth,
+        message: '登录需要填写账号与密码',
+      );
+    }
+    final path = '/api/v2/login';
+    final timestamp = _timestamp();
+    final hash = md5
+        .convert(utf8.encode('$appId$userName$password$timestamp${appSecret!}'))
+        .toString();
+    final response = await http.send(
+      SourceRequest(
+        url: '$baseUrl$path',
+        method: 'POST',
+        headers: <String, String>{
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-AppId': appId!,
+          'X-Timestamp': timestamp,
+          'X-Signature': sign(
+            path,
+            appId: appId!,
+            appSecret: appSecret!,
+            timestamp: timestamp,
+          ),
+        },
+        body: jsonEncode(<String, Object?>{
+          'userName': userName,
+          'password': password,
+          'appId': appId,
+          'unixTimestamp': int.tryParse(timestamp) ?? 0,
+          'hash': hash,
+        }),
+        bodyType: RequestBodyType.json,
+      ),
+      sourceId: _sourceId,
+    );
+
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } catch (error) {
+      throw SourceException(
+        sourceId: _sourceId,
+        type: SourceErrorType.parse,
+        message: '登录接口返回的不是合法 JSON：$error',
+      );
+    }
+    if (decoded is! Map) {
+      throw const SourceException(
+        sourceId: _sourceId,
+        type: SourceErrorType.parse,
+        message: '登录接口返回了非预期内容',
+      );
+    }
+    if (decoded['success'] == false) {
+      final message = decoded['errorMessage']?.toString();
+      throw SourceException(
+        sourceId: _sourceId,
+        type: SourceErrorType.auth,
+        message: message == null || message.isEmpty ? '登录失败' : message,
+      );
+    }
+    final token = decoded['token']?.toString() ?? '';
+    if (token.isEmpty) {
+      throw const SourceException(
+        sourceId: _sourceId,
+        type: SourceErrorType.auth,
+        message: '登录成功但没有返回 token',
+      );
+    }
+    return token;
+  }
+
   /// 发送一条弹幕（需要 AppId/AppSecret + 用户 token）。
   ///
   /// 弹弹play 的发送接口要账号授权：未配置 token 时抛出可读的鉴权错误，

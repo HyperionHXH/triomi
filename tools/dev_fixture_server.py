@@ -391,6 +391,44 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith('/tracking'):
             self._tracking('POST')
             return
+
+        if path == '/api/v2/login':
+            # 弹弹play 登录夹具：body 里带 hash 即视为登录成功，返回固定
+            # token。E2E 时用 --dart-define=TRIOMI_DANDANPLAY_BASE 指向本服务。
+            length = int(self.headers.get('Content-Length') or 0)
+            raw = self.rfile.read(length).decode('utf-8') if length else ''
+            try:
+                payload = json.loads(raw) if raw else {}
+            except ValueError:
+                payload = {}
+            if isinstance(payload, dict) and payload.get('hash'):
+                self._send(
+                    json.dumps({
+                        'success': True,
+                        'token': 'fixture-dandanplay-token',
+                        'userId': 1,
+                    }).encode('utf-8'),
+                    'application/json; charset=utf-8',
+                )
+            else:
+                self._send(
+                    json.dumps({
+                        'success': False,
+                        'errorMessage': '缺少 hash',
+                    }).encode('utf-8'),
+                    'application/json; charset=utf-8',
+                )
+            return
+
+        if path.startswith('/api/v2/comment/'):
+            episode_id = path.rsplit('/', 1)[-1]
+            print(f'[dandanplay] comment sent to episode {episode_id}')
+            self._send(
+                json.dumps({'success': True, 'commentId': 9}).encode('utf-8'),
+                'application/json; charset=utf-8',
+            )
+            return
+
         self.send_response(404)
         self.send_header('Content-Length', '0')
         self.end_headers()

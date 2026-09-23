@@ -1,5 +1,10 @@
 # T3 · 弹幕发送（弹弹play）——账号登录补全
 
+> **状态：✅ 已完成（2026-09-23）。** client.login + 控制器 login + 设置页登录入口（账号/密码 + 登录获取 token 按钮，密码不落盘）都已完成；
+> 夹具服务补了 /api/v2/login 与 /api/v2/comment/<id> 回执端点，
+> dandanplay baseUrl 支持 `--dart-define=TRIOMI_DANDANPLAY_BASE` 覆盖做 E2E。
+> 注意：dandanplayClientProvider watch 凭据，**凭据控制器里不能 read 它**
+> （Riverpod 3 会抛 CircularDependencyError），控制器内自行构造 client。
 > 对应规格：4.6 弹幕增强。现状比预期更完整：**发送客户端与播放器发送流程
 > 都已实现**，缺的只有「账号密码 → token」的登录链路（现在 token 只能
 > 手动粘贴）。这是一个小任务。

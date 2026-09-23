@@ -22,8 +22,11 @@ class _DanmakuSettingsPageState extends ConsumerState<DanmakuSettingsPage> {
   final TextEditingController _appIdController = TextEditingController();
   final TextEditingController _appSecretController = TextEditingController();
   final TextEditingController _tokenController = TextEditingController();
+  final TextEditingController _userNameController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
   bool _credentialsLoaded = false;
+  bool _loggingIn = false;
 
   @override
   void initState() {
@@ -41,6 +44,8 @@ class _DanmakuSettingsPageState extends ConsumerState<DanmakuSettingsPage> {
     _appIdController.dispose();
     _appSecretController.dispose();
     _tokenController.dispose();
+    _userNameController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -217,6 +222,45 @@ class _DanmakuSettingsPageState extends ConsumerState<DanmakuSettingsPage> {
                   ),
                 ],
               ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                '没有现成 token？填 AppId / AppSecret 后用账号密码登录自动获取'
+                '（密码只用于本次登录请求，不保存）。',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextField(
+                      controller: _userNameController,
+                      decoration: const InputDecoration(labelText: '账号'),
+                      autocorrect: false,
+                      enableSuggestions: false,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: TextField(
+                      controller: _passwordController,
+                      decoration: const InputDecoration(labelText: '密码'),
+                      obscureText: true,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      onSubmitted: (_) => unawaited(_loginForToken()),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                children: <Widget>[
+                  OutlinedButton(
+                    onPressed: _loggingIn ? null : _loginForToken,
+                    child: Text(_loggingIn ? '登录中…' : '登录获取 token'),
+                  ),
+                ],
+              ),
             ],
           ),
         ],
@@ -263,6 +307,42 @@ class _DanmakuSettingsPageState extends ConsumerState<DanmakuSettingsPage> {
           ),
     );
     _wordController.clear();
+  }
+
+  /// 账号密码登录拿 token：成功后写回凭据并清空密码框。
+  ///
+  /// 密码只在请求里用一次，不落盘、不进任何回调日志。
+  Future<void> _loginForToken() async {
+    if (_loggingIn) return;
+    final userName = _userNameController.text.trim();
+    final password = _passwordController.text;
+    if (userName.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('先填账号与密码')));
+      return;
+    }
+    // 先保存当前凭据输入（登录要用 AppId / AppSecret 签名）。
+    await _saveCredentials();
+    setState(() => _loggingIn = true);
+    try {
+      final token = await ref
+          .read(dandanplayCredentialsProvider.notifier)
+          .login(userName, password);
+      if (!mounted) return;
+      _tokenController.text = token ?? '';
+      _passwordController.clear();
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('登录成功，token 已写入')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('登录失败：$error')));
+    } finally {
+      if (mounted) setState(() => _loggingIn = false);
+    }
   }
 
   Future<void> _saveCredentials() async {

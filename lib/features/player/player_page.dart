@@ -752,11 +752,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     );
     if (keyword == null || keyword.trim().isEmpty) return;
 
-    final client = DandanplayClient(
-      http: ref.read(sourceHttpClientProvider),
-      appId: credentials.appId,
-      appSecret: credentials.appSecret,
-    );
+    final client = ref.read(dandanplayClientProvider);
     try {
       final matches = await client.search(knowledgeKeyword(keyword));
       if (!mounted) return;
@@ -892,16 +888,14 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     if (text == null || text.trim().isEmpty) return;
 
     try {
-      await DandanplayClient(
-        http: ref.read(sourceHttpClientProvider),
-        appId: credentials.appId,
-        appSecret: credentials.appSecret,
-      ).sendComment(
-        episodeId: episodeId,
-        text: text.trim(),
-        timeSeconds: _position.inMilliseconds / 1000,
-        token: credentials.token,
-      );
+      await ref
+          .read(dandanplayClientProvider)
+          .sendComment(
+            episodeId: episodeId,
+            text: text.trim(),
+            timeSeconds: _position.inMilliseconds / 1000,
+            token: credentials.token,
+          );
       _toast('弹幕已发送');
     } catch (error) {
       _toast('发送失败：$error');
