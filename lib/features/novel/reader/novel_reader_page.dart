@@ -7,11 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/chapter.dart';
 import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
+import '../../../core/platform/platform_channel.dart';
 import '../../../core/source/source_api.dart';
 import '../../../core/source/source_providers.dart';
 import '../../../core/storage/preferences.dart';
 import '../../../core/text/zh_converter.dart';
 import '../../../core/theme/app_tokens.dart';
+import '../../../core/widgets/image_viewer.dart';
 import '../../downloads/data/download_providers.dart';
 import '../../library/data/library_providers.dart';
 import '../../library/data/library_repository.dart';
@@ -68,6 +70,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
 
   bool _chromeVisible = true;
   Timer? _saveDebounce;
+  bool _keepScreenOn = false;
 
   MediaItem get _item => widget.args.item;
   List<Chapter> get _chapters => widget.args.chapters;
@@ -83,6 +86,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
       widget.args.chapters.length - 1,
     );
     _settings = NovelReaderSettings.load(ref.read(preferencesProvider));
+    // 屏幕常亮（阅读期间），退出时关闭。
+    _keepScreenOn = _settings.keepScreenOn;
+    if (_keepScreenOn) {
+      unawaited(platformChannel.setKeepScreenOn(true));
+    }
     // 自定义字体先进引擎（幂等），正文样式才能立刻生效。
     unawaited(UserFontStore.instance.ensureLoaded());
     unawaited(_load());
@@ -93,6 +101,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     _saveDebounce?.cancel();
     // dispose 里不能用 ref；仓储已在 initState 里取出。
     unawaited(_persistProgress(commit: true));
+    if (_keepScreenOn) {
+      unawaited(platformChannel.setKeepScreenOn(false));
+    }
     _scrollController.dispose();
     super.dispose();
   }
@@ -334,6 +345,17 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
       return KeyEventResult.ignored;
     }
     if (_settings.mode != NovelReadingMode.paged) return KeyEventResult.ignored;
+    // 音量键翻页：默认关（防误触），开启后接管系统音量键。
+    if (_settings.volumeKeyTurn) {
+      switch (event.logicalKey) {
+        case LogicalKeyboardKey.audioVolumeDown:
+          _turnPage(1);
+          return KeyEventResult.handled;
+        case LogicalKeyboardKey.audioVolumeUp:
+          _turnPage(-1);
+          return KeyEventResult.handled;
+      }
+    }
     switch (event.logicalKey) {
       case LogicalKeyboardKey.arrowRight || LogicalKeyboardKey.pageDown:
         _turnPage(1);
@@ -455,6 +477,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
                   child: _PageContent(
                     page: _pages[current],
                     settings: _settings,
+                    sourceId: _item.sourceId,
                   ),
                 ),
                 SizedBox(
@@ -505,8 +528,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
             itemCount: _blocks.length,
             separatorBuilder: (context, index) =>
                 SizedBox(height: _settings.fontSize * 0.5),
-            itemBuilder: (context, index) =>
-                _BlockView(block: _blocks[index], settings: _settings),
+            itemBuilder: (context, index) => _BlockView(
+              block: _blocks[index],
+              settings: _settings,
+              sourceId: _item.sourceId,
+            ),
           ),
         ),
         Positioned(
@@ -620,9 +646,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
 
 /// 一页内容：文本片段与插图的纵向排布。
 class _PageContent extends StatelessWidget {
-  const _PageContent({required this.page, required this.settings});
+  const _PageContent({
+    required this.page,
+    required this.settings,
+    required this.sourceId,
+  });
   final ReaderPage page;
   final NovelReaderSettings settings;
+  final String sourceId;
 
   @override
   Widget build(BuildContext context) {
@@ -647,34 +678,46 @@ class _PageContent extends StatelessWidget {
           children.add(
             ClipRRect(
               borderRadius: const BorderRadius.all(Radius.circular(8)),
-              child: SizedBox(
-                width: double.infinity,
-                height: heightPx,
-                child: Image.network(
-                  block.url,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stack) => Container(
-                    color: settings.theme.background.withValues(alpha: 0.5),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '插图加载失败',
-                      style: TextStyle(
-                        color: settings.theme.foreground.withValues(alpha: 0.5),
-                        fontSize: 13,
+              child: GestureDetector(
+                onTap: () => unawaited(
+                  showImageViewer(
+                    context,
+                    imageUrl: block.url,
+                    sourceId: sourceId,
+                  ),
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: heightPx,
+                  child: Image.network(
+                    block.url,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stack) => Container(
+                      color: settings.theme.background.withValues(alpha: 0.5),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '插图加载失败',
+                        style: TextStyle(
+                          color: settings.theme.foreground.withValues(
+                            alpha: 0.5,
+                          ),
+                          fontSize: 13,
+                        ),
                       ),
                     ),
-                  ),
-                  loadingBuilder: (context, child, progress) => progress == null
-                      ? child
-                      : Container(
-                          alignment: Alignment.center,
-                          height: heightPx,
-                          child: const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                    loadingBuilder: (context, child, progress) =>
+                        progress == null
+                        ? child
+                        : Container(
+                            alignment: Alignment.center,
+                            height: heightPx,
+                            child: const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
                           ),
-                        ),
+                  ),
                 ),
               ),
             ),
@@ -693,10 +736,15 @@ class _PageContent extends StatelessWidget {
 
 /// 滚动模式的一个排版块。
 class _BlockView extends StatelessWidget {
-  const _BlockView({required this.block, required this.settings});
+  const _BlockView({
+    required this.block,
+    required this.settings,
+    required this.sourceId,
+  });
 
   final ReaderBlock block;
   final NovelReaderSettings settings;
+  final String sourceId;
 
   @override
   Widget build(BuildContext context) {
@@ -711,19 +759,24 @@ class _BlockView extends StatelessWidget {
       ),
       IllustrationBlock(:final url, :final aspectRatio) => ClipRRect(
         borderRadius: const BorderRadius.all(Radius.circular(8)),
-        child: AspectRatio(
-          aspectRatio: aspectRatio,
-          child: Image.network(
-            url,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stack) => Container(
-              color: settings.theme.background.withValues(alpha: 0.5),
-              alignment: Alignment.center,
-              child: Text(
-                '插图加载失败',
-                style: TextStyle(
-                  color: settings.theme.foreground.withValues(alpha: 0.5),
-                  fontSize: 13,
+        child: GestureDetector(
+          onTap: () => unawaited(
+            showImageViewer(context, imageUrl: url, sourceId: sourceId),
+          ),
+          child: AspectRatio(
+            aspectRatio: aspectRatio,
+            child: Image.network(
+              url,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stack) => Container(
+                color: settings.theme.background.withValues(alpha: 0.5),
+                alignment: Alignment.center,
+                child: Text(
+                  '插图加载失败',
+                  style: TextStyle(
+                    color: settings.theme.foreground.withValues(alpha: 0.5),
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ),
@@ -963,6 +1016,31 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 selected: {value.zhMode},
                 onSelectionChanged: (selection) =>
                     commit(value.copyWith(zhMode: selection.first)),
+              ),
+            ),
+            title('阅读操作'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Column(
+                children: <Widget>[
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('音量键翻页'),
+                    subtitle: const Text('开启后音量键不再调节音量'),
+                    value: value.volumeKeyTurn,
+                    onChanged: (next) =>
+                        commit(value.copyWith(volumeKeyTurn: next)),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('屏幕常亮'),
+                    value: value.keepScreenOn,
+                    onChanged: (next) =>
+                        commit(value.copyWith(keepScreenOn: next)),
+                  ),
+                ],
               ),
             ),
             title('正文字体'),

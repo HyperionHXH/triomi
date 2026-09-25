@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'app.dart';
 import 'core/storage/preferences.dart';
+import 'core/storage/secure_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,9 +17,21 @@ Future<void> main() async {
   await Hive.initFlutter();
   final preferences = await Preferences.open();
 
+  // 凭据安全存储：预载后立刻做一次性迁移（幂等），
+  // 必须在任何客户端读会话 / token 之前完成。
+  final secureStore = FlutterSecureStore();
+  await secureStore.init();
+  await migrateCredentialsToSecureStore(
+    preferences: preferences,
+    secureStore: secureStore,
+  );
+
   runApp(
     ProviderScope(
-      overrides: [preferencesProvider.overrideWithValue(preferences)],
+      overrides: [
+        preferencesProvider.overrideWithValue(preferences),
+        secureStoreProvider.overrideWithValue(secureStore),
+      ],
       child: const TriomiApp(),
     ),
   );

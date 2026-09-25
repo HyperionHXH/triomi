@@ -6,6 +6,7 @@ import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
+import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/tracking/data/anilist_client.dart';
 import 'package:triomi/features/tracking/data/bangumi_client.dart';
 import 'package:triomi/features/tracking/data/tracking_models.dart';
@@ -432,6 +433,7 @@ void main() {
     TrackingService serviceOf(FakeHttpClient http) => TrackingService(
       http: http,
       preferences: memoryPreferences(),
+      secureStore: MemorySecureStore(),
       repository: repository,
       bangumiBaseUrl: 'https://bgm.test',
       anilistBaseUrl: 'https://anilist.test',

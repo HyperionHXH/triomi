@@ -5,6 +5,7 @@ import '../../../core/db/database_provider.dart';
 import '../../../core/models/media_type.dart';
 import '../../../core/source/source_providers.dart';
 import '../../../core/storage/preferences.dart';
+import '../../../core/storage/secure_store.dart';
 import 'tracking_models.dart';
 import 'tracking_repository.dart';
 import 'tracking_service.dart';
@@ -22,6 +23,7 @@ final trackingServiceProvider = Provider<TrackingService>((ref) {
   return TrackingService(
     http: ref.watch(sourceHttpClientProvider),
     preferences: ref.watch(preferencesProvider),
+    secureStore: ref.watch(secureStoreProvider),
     repository: ref.watch(trackingRepositoryProvider),
     bangumiBaseUrl: overrides.bangumi,
     anilistBaseUrl: overrides.anilist,

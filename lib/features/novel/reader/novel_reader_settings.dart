@@ -29,6 +29,8 @@ class NovelReaderSettings {
     this.pageMargin = 20,
     this.fontFamily,
     this.zhMode = ZhConversionMode.off,
+    this.volumeKeyTurn = false,
+    this.keepScreenOn = true,
   });
 
   final NovelReadingMode mode;
@@ -49,6 +51,12 @@ class NovelReaderSettings {
   /// 繁简转换方向（正文渲染前应用）。
   final ZhConversionMode zhMode;
 
+  /// 音量键翻页（默认关，防误触；小说与漫画阅读器共用此设置）。
+  final bool volumeKeyTurn;
+
+  /// 屏幕常亮（默认开；小说与漫画阅读器共用此设置）。
+  final bool keepScreenOn;
+
   static const double defaultFontSize = 18;
   static const double defaultLineHeight = 1.7;
   static const double defaultPageMargin = 20;
@@ -62,6 +70,8 @@ class NovelReaderSettings {
     String? fontFamily,
     bool clearFontFamily = false,
     ZhConversionMode? zhMode,
+    bool? volumeKeyTurn,
+    bool? keepScreenOn,
   }) => NovelReaderSettings(
     mode: mode ?? this.mode,
     theme: theme ?? this.theme,
@@ -70,6 +80,8 @@ class NovelReaderSettings {
     pageMargin: pageMargin ?? this.pageMargin,
     fontFamily: clearFontFamily ? null : (fontFamily ?? this.fontFamily),
     zhMode: zhMode ?? this.zhMode,
+    volumeKeyTurn: volumeKeyTurn ?? this.volumeKeyTurn,
+    keepScreenOn: keepScreenOn ?? this.keepScreenOn,
   );
 
   /// 段落/标题正文样式（按主题着色）。
@@ -97,6 +109,8 @@ class NovelReaderSettings {
   static const String _pageMarginKey = 'novelReader.pageMargin';
   static const String _fontFamilyKey = 'novelReader.fontFamily';
   static const String _zhModeKey = 'novelReader.zhMode';
+  static const String _volumeKeyTurnKey = 'novelReader.volumeKeyTurn';
+  static const String _keepScreenOnKey = 'novelReader.keepScreenOn';
 
   static NovelReaderSettings load(Preferences preferences) {
     final mode = preferences.get<String>(_modeKey);
@@ -120,6 +134,8 @@ class NovelReaderSettings {
         't2s' => ZhConversionMode.t2s,
         _ => ZhConversionMode.off,
       },
+      volumeKeyTurn: preferences.get<bool>(_volumeKeyTurnKey) ?? false,
+      keepScreenOn: preferences.get<bool>(_keepScreenOnKey) ?? true,
     );
   }
 
@@ -146,6 +162,8 @@ class NovelReaderSettings {
       ZhConversionMode.s2t => 's2t',
       ZhConversionMode.t2s => 't2s',
     });
+    await preferences.set(_volumeKeyTurnKey, volumeKeyTurn);
+    await preferences.set(_keepScreenOnKey, keepScreenOn);
   }
 
   /// 分组恢复默认（对齐 Mixn 的「恢复默认」分组开关）。

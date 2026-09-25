@@ -8,6 +8,7 @@ import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/player/data/dandanplay_client.dart';
 import 'package:triomi/features/player/data/danmaku_settings.dart';
 
@@ -135,10 +136,12 @@ void main() {
   group('凭据控制器登录', () {
     late ProviderContainer container;
     late MemBox box;
+    late MemorySecureStore secureStore;
     late FakeHttpClient http;
 
     setUp(() {
       box = MemBox();
+      secureStore = MemorySecureStore();
       http = FakeHttpClient(
         (request) async => jsonBody(<String, Object?>{
           'success': true,
@@ -148,6 +151,7 @@ void main() {
       container = ProviderContainer(
         overrides: [
           preferencesProvider.overrideWithValue(Preferences(box)),
+          secureStoreProvider.overrideWithValue(secureStore),
           sourceHttpClientProvider.overrideWithValue(http),
         ],
       );
@@ -164,8 +168,9 @@ void main() {
 
       expect(token, 'login-token');
       expect(container.read(dandanplayCredentialsProvider).canSend, isTrue);
-      // 持久化里有 token。
-      expect(box.get(DandanplayCredentials.tokenKey), 'login-token');
+      // T6 后 token 进 SecureStore，Hive 里不再有明文 token。
+      expect(secureStore.get(DandanplayCredentials.tokenKey), 'login-token');
+      expect(box.get(DandanplayCredentials.tokenKey), isNull);
     });
 
     test('密码不出现在任何持久化内容里', () async {
@@ -198,6 +203,7 @@ void main() {
       final controller = ProviderContainer(
         overrides: [
           preferencesProvider.overrideWithValue(Preferences(box2)),
+          secureStoreProvider.overrideWithValue(MemorySecureStore()),
           sourceHttpClientProvider.overrideWithValue(failing),
         ],
       ).read(dandanplayCredentialsProvider.notifier);
@@ -211,7 +217,8 @@ void main() {
           isA<SourceException>().having((e) => e.message, 'message', '账号不存在'),
         ),
       );
-      expect(box2.get(DandanplayCredentials.tokenKey), '');
+      // T6 后 Hive 里不应写入 token（SecureStore 才是正身）。
+      expect(box2.get(DandanplayCredentials.tokenKey), isNull);
     });
   });
 }

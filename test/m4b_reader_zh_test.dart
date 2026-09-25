@@ -13,6 +13,7 @@ import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/core/text/zh_converter.dart';
 import 'package:triomi/features/novel/reader/novel_reader_page.dart';
 
@@ -128,6 +129,7 @@ void main() {
       ProviderScope(
         overrides: [
           preferencesProvider.overrideWithValue(preferences),
+          secureStoreProvider.overrideWithValue(MemorySecureStore()),
           databaseProvider.overrideWithValue(db),
           sourcesProvider.overrideWith(
             () => _StubSourcesController(_StubNovelSource()),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/db/database_provider.dart';
 import '../../core/source/http_client.dart';
 import '../../core/source/rule_schema.dart';
 import '../../core/source/source_api.dart';
@@ -10,6 +11,7 @@ import '../../core/source/source_registry.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../downloads/data/download_repository.dart';
 
 /// 来源与规则管理。
 ///
@@ -220,13 +222,44 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                 onPressed: busy
                     ? null
                     : () async {
+                        // F1：登出清理。缓存正文可能含付费解锁内容，
+                        // 必须清；离线文件由用户选择。
+                        final deleteFiles = await showDialog<bool>(
+                          context: dialogContext,
+                          builder: (confirmContext) => AlertDialog(
+                            title: const Text('退出登录'),
+                            content: const Text(
+                              '退出会清除本站的登录凭据、章节缓存的正文与离线索引。\n是否同时删除已下载的离线文件？',
+                            ),
+                            actions: <Widget>[
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(confirmContext).pop(false),
+                                child: const Text('保留文件'),
+                              ),
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(confirmContext).pop(true),
+                                child: const Text('一并删除'),
+                              ),
+                            ],
+                          ),
+                        );
+                        // 用户取消了清理对话框：不登出。
+                        if (deleteFiles == null) return;
                         setState(() => busy = true);
                         try {
                           await provider.logout();
+                          await purgeSourceOfflineData(
+                            ref.read(databaseProvider),
+                            provider.descriptor.id,
+                            deleteFiles: deleteFiles,
+                          );
+                          ref.invalidate(sourcesProvider);
                           if (dialogContext.mounted) {
                             Navigator.of(dialogContext).pop();
                           }
-                          _toast('已退出登录');
+                          _toast('已退出登录并清理本地数据');
                         } catch (error) {
                           setState(() {
                             message = '退出失败：$error';

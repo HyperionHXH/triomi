@@ -10,6 +10,7 @@ import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/novel/data/lk/lk_client.dart';
 import 'package:triomi/features/novel/data/lk/lk_source.dart';
 import 'package:triomi/features/novel/reader/novel_blocks.dart';
@@ -137,7 +138,7 @@ void main() {
 
   group('轻之国度客户端', () {
     LkClient clientOf(FakeHttpClient http) =>
-        LkClient(http: http, preferences: preferences);
+        LkClient(http: http, preferences: preferences, secureStore: MemorySecureStore());
 
     test('信封解析：code != 0 抛出可读错误', () async {
       final http = routingHttpClient({
@@ -320,7 +321,7 @@ void main() {
         }),
       });
       final source = LkSource(
-        client: LkClient(http: http, preferences: preferences),
+        client: LkClient(http: http, preferences: preferences, secureStore: MemorySecureStore()),
       );
 
       const item = MediaItem(
@@ -353,7 +354,7 @@ void main() {
         }),
       });
       final source = LkSource(
-        client: LkClient(http: http, preferences: preferences),
+        client: LkClient(http: http, preferences: preferences, secureStore: MemorySecureStore()),
       );
 
       const chapter = Chapter(

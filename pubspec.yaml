@@ -27,6 +27,9 @@ dependencies:
 
   # JS 规则沙箱（Android 用 quickjs / iOS 用 JavaScriptCore，均为 dart-ffi）
   flutter_js: ^0.8.7
+
+  # 凭据安全存储（Android Keystore / Windows DPAPI）；T6 唯一新增插件
+  flutter_secure_storage: ^9.2.4
   xpath_selector: ^3.0.2
   dio: ^5.11.1
   html: ^0.15.7

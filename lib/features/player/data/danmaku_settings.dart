@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/source/source_providers.dart';
 import '../../../core/storage/preferences.dart';
+import '../../../core/storage/secure_store.dart';
 import 'dandanplay_client.dart';
 
 /// 弹幕显示与过滤设置（对齐 Kazumi 的弹幕设置项，逐项持久化）。
@@ -171,28 +172,40 @@ class DandanplayCredentials {
   static const String appSecretKey = 'danmaku.dandanplay.appSecret';
   static const String tokenKey = 'danmaku.dandanplay.token';
 
-  static DandanplayCredentials load(Preferences preferences) =>
-      DandanplayCredentials(
-        appId: preferences.get<String>(appIdKey) ?? '',
-        appSecret: preferences.get<String>(appSecretKey) ?? '',
-        token: preferences.get<String>(tokenKey) ?? '',
-      );
+  /// 机密字段（appSecret / token）从安全存储读，Hive 里的旧值（迁移前
+  /// 备份）作回退；appId 非机密，留在 Hive。
+  static DandanplayCredentials load(
+    Preferences preferences,
+    SecureStore secureStore,
+  ) => DandanplayCredentials(
+    appId: preferences.get<String>(appIdKey) ?? '',
+    appSecret:
+        secureStore.get(appSecretKey) ??
+        preferences.get<String>(appSecretKey) ??
+        '',
+    token: secureStore.get(tokenKey) ?? preferences.get<String>(tokenKey) ?? '',
+  );
 
-  Future<void> save(Preferences preferences) async {
+  Future<void> save(Preferences preferences, SecureStore secureStore) async {
     await preferences.set(appIdKey, appId);
-    await preferences.set(appSecretKey, appSecret);
-    await preferences.set(tokenKey, token);
+    await secureStore.set(appSecretKey, appSecret);
+    await secureStore.set(tokenKey, token);
   }
 }
 
 class DandanplayCredentialsController extends Notifier<DandanplayCredentials> {
   @override
-  DandanplayCredentials build() =>
-      DandanplayCredentials.load(ref.watch(preferencesProvider));
+  DandanplayCredentials build() => DandanplayCredentials.load(
+    ref.watch(preferencesProvider),
+    ref.watch(secureStoreProvider),
+  );
 
   Future<void> update(DandanplayCredentials next) async {
     state = next;
-    await next.save(ref.read(preferencesProvider));
+    await next.save(
+      ref.read(preferencesProvider),
+      ref.read(secureStoreProvider),
+    );
   }
 
   /// 用账号密码登录弹弹play，成功后把 token 写回凭据并持久化。

@@ -10,13 +10,17 @@ import '../../core/models/chapter.dart';
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/models/source_exception.dart';
+import '../../core/platform/platform_channel.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
+import '../../core/storage/preferences.dart';
 import '../../core/theme/app_tokens.dart';
+import '../../core/widgets/image_viewer.dart';
 import '../downloads/data/download_providers.dart';
 import '../downloads/data/download_repository.dart';
 import '../library/data/library_providers.dart';
 import '../library/data/library_repository.dart';
+import '../novel/reader/novel_reader_settings.dart';
 import '../tracking/data/tracking_providers.dart';
 import 'reader_settings.dart';
 
@@ -70,6 +74,8 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
   late final LibraryRepository _libraryRepository;
 
   ProgressReporter? _trackingReporter;
+  bool _keepScreenOn = false;
+  bool _volumeKeyTurn = false;
 
   @override
   void initState() {
@@ -78,6 +84,14 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
     _trackingReporter = ref.read(progressReporterProvider);
     _scrollController.addListener(_onScroll);
     unawaited(_setImmersive(immersive: true));
+    // 屏幕常亮（阅读期间），退出时关闭。
+    _keepScreenOn = NovelReaderSettings.load(ref.read(preferencesProvider))
+        .keepScreenOn;
+    _volumeKeyTurn = NovelReaderSettings.load(ref.read(preferencesProvider))
+        .volumeKeyTurn;
+    if (_keepScreenOn) {
+      unawaited(platformChannel.setKeepScreenOn(true));
+    }
     unawaited(_load());
   }
 
@@ -89,6 +103,9 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
     _focusNode.dispose();
     unawaited(_persistProgress());
     unawaited(_setImmersive(immersive: false));
+    if (_keepScreenOn) {
+      unawaited(platformChannel.setKeepScreenOn(false));
+    }
     super.dispose();
   }
 
@@ -391,6 +408,18 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
     final key = event.logicalKey;
     final rtl = _mode == ReadingMode.rtl;
 
+    // 音量键翻页（默认关，防误触；设置与小说阅读器共用）。
+    if (_volumeKeyTurn) {
+      if (key == LogicalKeyboardKey.audioVolumeDown) {
+        _nextPage();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.audioVolumeUp) {
+        _previousPage();
+        return KeyEventResult.handled;
+      }
+    }
+
     if (key == LogicalKeyboardKey.arrowRight) {
       if (rtl) {
         _previousPage();
@@ -501,6 +530,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
           url: _images[index],
           fit: BoxFit.fitWidth,
           onRetry: () => _retryImage(_images[index]),
+          sourceId: _item.sourceId,
         ),
       );
     }
@@ -518,6 +548,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
         url: _images[index],
         fit: settings.fit.boxFit,
         onRetry: () => _retryImage(_images[index]),
+        sourceId: _item.sourceId,
       ),
     );
   }
@@ -746,17 +777,19 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
   }
 }
 
-/// 单页图片：加载中显示进度、失败可点击重试。
+/// 单页图片：加载中显示进度、失败可点击重试、长按保存到相册。
 class _ImagePage extends StatelessWidget {
   const _ImagePage({
     required this.url,
     required this.fit,
     required this.onRetry,
+    required this.sourceId,
   });
 
   final String url;
   final BoxFit fit;
   final VoidCallback onRetry;
+  final String sourceId;
 
   /// 本地文件（下载后的离线图片）走 file:// 或绝对路径。
   bool get _isLocal =>
@@ -767,36 +800,42 @@ class _ImagePage extends StatelessWidget {
     return InteractiveViewer(
       minScale: 1,
       maxScale: 4,
-      child: Center(
-        child: _isLocal
-            ? Image.file(
-                File(Uri.parse(url).toFilePath()),
-                fit: fit,
-                width: double.infinity,
-                errorBuilder: _errorBuilder(context),
-              )
-            : Image.network(
-                url,
-                fit: fit,
-                width: double.infinity,
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  final expected = progress.expectedTotalBytes;
-                  return Center(
-                    child: SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        value: expected == null
-                            ? null
-                            : progress.cumulativeBytesLoaded / expected,
+      child: GestureDetector(
+        // 缩放手势由 InteractiveViewer 接管，这里只挂长按保存。
+        onLongPress: () => unawaited(
+          saveImageWithFeedback(context, imageUrl: url, sourceId: sourceId),
+        ),
+        child: Center(
+          child: _isLocal
+              ? Image.file(
+                  File(Uri.parse(url).toFilePath()),
+                  fit: fit,
+                  width: double.infinity,
+                  errorBuilder: _errorBuilder(context),
+                )
+              : Image.network(
+                  url,
+                  fit: fit,
+                  width: double.infinity,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    final expected = progress.expectedTotalBytes;
+                    return Center(
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          value: expected == null
+                              ? null
+                              : progress.cumulativeBytesLoaded / expected,
+                        ),
                       ),
-                    ),
-                  );
-                },
-                errorBuilder: _errorBuilder(context),
-              ),
+                    );
+                  },
+                  errorBuilder: _errorBuilder(context),
+                ),
+        ),
       ),
     );
   }

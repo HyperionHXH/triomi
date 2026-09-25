@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -27,6 +29,25 @@ class LibraryPage extends ConsumerWidget {
     return PageScaffold(
       title: '书架',
       actions: <Widget>[
+        PopupMenuButton<String>(
+          tooltip: '更多操作',
+          icon: const Icon(Icons.more_vert),
+          onSelected: (value) {
+            if (value == 'markAllRead') {
+              unawaited(_confirmMarkAllRead(context, ref));
+            }
+          },
+          itemBuilder: (context) => const <PopupMenuEntry<String>>[
+            PopupMenuItem<String>(
+              value: 'markAllRead',
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.done_all),
+                title: Text('全部标为已读'),
+              ),
+            ),
+          ],
+        ),
         IconButton(
           tooltip: '阅读历史',
           onPressed: () => context.push(AppRoutes.history),
@@ -98,6 +119,35 @@ class LibraryPage extends ConsumerWidget {
       return '第 $value 话';
     }
     return null;
+  }
+
+  /// 全部标为已读：确认后只清本地未读提示，不触远端（G2 红线）。
+  Future<void> _confirmMarkAllRead(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('全部标为已读'),
+        content: const Text('清空所有作品的本地未读提示？\n只影响本机提示，不会同步到任何站点。'),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final count = await ref.read(libraryRepositoryProvider).markAllRead();
+    // 书架状态（未读角标）依赖数据库，触发刷新。
+    ref.invalidate(libraryProvider);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(count > 0 ? '已清空 $count 条未读提示' : '没有未读提示')),
+    );
   }
 
   Future<void> _confirmRemove(

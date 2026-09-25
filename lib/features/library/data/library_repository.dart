@@ -247,6 +247,23 @@ class LibraryRepository {
     );
   }
 
+  /// 全部标为已读（G2）：只清本地未读提示，**不触远端**。
+  ///
+  /// 返回清掉的条数；[sourceId] 限定来源时只清该来源。
+  Future<int> markAllRead({String? sourceId}) async {
+    final statement = _db.update(_db.libraryEntries)
+      ..where((table) {
+        final unread = table.unreadCount.isBiggerThanValue(0);
+        return sourceId == null
+            ? unread
+            : unread & table.sourceId.equals(sourceId);
+      });
+    final updated = await statement.write(
+      LibraryEntriesCompanion(unreadCount: const Value(0)),
+    );
+    return updated;
+  }
+
   /// 记录一次阅读（同一章节重复阅读只保留最新一条）。
   Future<void> recordHistory({
     required String sourceId,

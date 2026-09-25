@@ -390,3 +390,40 @@ class DownloadManifest {
     );
   }
 }
+
+
+/// 登出 / 移除来源后的本地数据清理（F1 红线）：
+///
+/// 章节缓存里的 `content_json` **可能含付费解锁正文**，登出必须清空；
+/// `downloads` 表是该来源的离线索引，一并删除。离线文件（图片 / 正文
+/// 文件）是否删除由调用方确认后传入 [deleteFiles]——文件本身不属于
+/// 「凭据」，默认保留。
+Future<void> purgeSourceOfflineData(
+  AppDatabase db,
+  String sourceId, {
+  bool deleteFiles = false,
+}) async {
+  if (deleteFiles) {
+    final rows = await (db.select(
+      db.downloads,
+    )..where((table) => table.sourceId.equals(sourceId))).get();
+    for (final row in rows) {
+      final path = row.path;
+      if (path == null || path.isEmpty) continue;
+      try {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      } catch (_) {
+        // 单个文件删除失败不阻塞登出。
+      }
+    }
+  }
+  await (db.update(
+    db.chapters,
+  )..where((table) => table.sourceId.equals(sourceId))).write(
+    const ChaptersCompanion(contentJson: Value(null)),
+  );
+  await (db.delete(
+    db.downloads,
+  )..where((table) => table.sourceId.equals(sourceId))).go();
+}

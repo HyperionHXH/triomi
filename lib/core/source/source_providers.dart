@@ -4,6 +4,7 @@ import '../../features/novel/data/lk/lk_client.dart';
 import '../../features/novel/data/lk/lk_source.dart';
 import '../db/database_provider.dart';
 import '../storage/preferences.dart';
+import '../storage/secure_store.dart';
 import 'http_client.dart';
 import 'source_api.dart';
 import 'source_registry.dart';
@@ -30,6 +31,7 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
         client: LkClient(
           http: ref.watch(sourceHttpClientProvider),
           preferences: preferences,
+          secureStore: ref.watch(secureStoreProvider),
         ),
       ),
     },

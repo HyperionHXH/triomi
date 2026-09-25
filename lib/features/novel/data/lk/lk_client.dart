@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
 import '../../../../core/models/media_type.dart';
 import '../../../../core/models/source_exception.dart';
 import '../../../../core/source/http_client.dart';
 import '../../../../core/storage/preferences.dart';
+import '../../../../core/storage/secure_store.dart';
 
 /// 轻之国度（LK）的 HTTP 客户端：信封解析 + 会话管理 + 数据模型。
 ///
@@ -11,13 +13,18 @@ import '../../../../core/storage/preferences.dart';
 /// （MIT，用户自有代码）。接口字段带多个候选拼写，是因为 LK 不同版本的
 /// 返回结构不一致——保留宽松解析，站点改版时优先在这里兼容。
 class LkClient {
-  LkClient({required this.http, required this.preferences});
+  LkClient({
+    required this.http,
+    required this.preferences,
+    required this.secureStore,
+  });
 
   static const String sourceId = 'light-novel-kingdom';
   static const String _webBff = 'https://www.lightnovel.fun/api/pc-proxy/';
 
   final SourceHttpClient http;
   final Preferences preferences;
+  final SecureStore secureStore;
 
   static const String _sessionKey = 'lk.securityKey';
   static const String _unlockedKey = 'lk.unlockedChapters';
@@ -25,7 +32,9 @@ class LkClient {
   // ------------------------------------------------------------ 会话
 
   String? get securityKey {
-    final value = preferences.get<String>(_sessionKey);
+    // 安全存储优先；Hive 里留旧值（迁移前备份）作回退。
+    final value =
+        secureStore.get(_sessionKey) ?? preferences.get<String>(_sessionKey);
     return (value == null || value.isEmpty) ? null : value;
   }
 
@@ -60,6 +69,8 @@ class LkClient {
   Future<void> logout() => _clearSession();
 
   Future<void> _clearSession() async {
+    // 会话密钥只在安全存储里；Hive 的旧值（迁移前）也一并清掉。
+    await secureStore.remove(_sessionKey);
     await preferences.set(_sessionKey, '');
     await preferences.set(_unlockedKey, <String>[]);
   }
@@ -83,7 +94,7 @@ class LkClient {
         : (_int(data, 'uid') > 0
               ? _int(data, 'uid')
               : _int(user ?? {}, 'uid', 'id'));
-    preferences.set(_sessionKey, key);
+    unawaited(secureStore.set(_sessionKey, key));
     return LkSession(
       loggedIn: true,
       securityKey: key,

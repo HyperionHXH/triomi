@@ -1,8 +1,12 @@
 package io.github.hyperionhxh.triomi
 
+import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -20,9 +24,63 @@ class MainActivity : FlutterActivity() {
                         pendingFontResult = result
                         launchFontPicker()
                     }
+                    "keepScreenOn" -> {
+                        // 屏幕常亮：阅读器进页面时开、退出时关。
+                        if (call.arguments == true) {
+                            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        } else {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                        result.success(true)
+                    }
+                    "saveImageToGallery" -> {
+                        saveImageToGallery(call, result)
+                    }
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /** 保存图片到相册（MediaStore，Pictures/Triomi；Android 10+ 免存储权限）。 */
+    private fun saveImageToGallery(call: MethodChannel.Call, result: MethodChannel.Result) {
+        val bytes = call.argument<ByteArray>("bytes")
+        val fileName = call.argument<String>("fileName") ?: "image.png"
+        if (bytes == null) {
+            result.error("invalid_args", "bytes is required", null)
+            return
+        }
+        try {
+            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            } else {
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            }
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Triomi")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+            }
+            val uri = contentResolver.insert(collection, values)
+            if (uri == null) {
+                result.error("insert_failed", "MediaStore insert returned null", null)
+                return
+            }
+            contentResolver.openOutputStream(uri)?.use { output ->
+                output.write(bytes)
+                output.flush()
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.clear()
+                values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                contentResolver.update(uri, values, null, null)
+            }
+            result.success(uri.toString())
+        } catch (error: Exception) {
+            result.error("save_failed", error.message, null)
+        }
     }
 
     /** SAF 选择字体文件（ttf/otf）。 */

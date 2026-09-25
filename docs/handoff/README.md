@@ -83,7 +83,7 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
 | T3 | 弹幕发送（弹弹play 登录补全） | ✅ **已完成**（[T3-danmaku-send.md](T3-danmaku-send.md)） | — |
 | T4 | LNS SignalR 适配器协议层 | [T4-lns-signalr.md](T4-lns-signalr.md) | 可先做协议层，联调需账号 |
 | T5 | LK 账号域接口层 | [T5-lk-account.md](T5-lk-account.md) | 可先做接口层，联调需账号 |
-| T6 | 阅读器增强 + 凭据安全迁移 | [T6-reader-security.md](T6-reader-security.md) | 无 |
+| T6 | 阅读器增强逻辑 + 凭据安全迁移 | ✅ **已完成**（[T6-reader-security.md](T6-reader-security.md)） | — |
 | T7 | 杂项收口（追番订阅/到底提示/同书版本/SAF 导出/在线字体/备份开关/后台提醒桩） | [T7-misc-cleanup.md](T7-misc-cleanup.md) | 无 |
 
 建议顺序：**T1 → T2 → T3 → T6 → T7 → T4 → T5**（T1/T2 是验收硬缺口；

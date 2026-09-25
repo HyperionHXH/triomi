@@ -4,6 +4,7 @@ import '../../../core/models/media_type.dart';
 import '../../../core/models/source_exception.dart';
 import '../../../core/source/http_client.dart';
 import '../../../core/storage/preferences.dart';
+import '../../../core/storage/secure_store.dart';
 import 'anilist_client.dart';
 import 'bangumi_client.dart';
 import 'tracking_models.dart';
@@ -19,6 +20,7 @@ class TrackingService {
   TrackingService({
     required this.http,
     required this.preferences,
+    required this.secureStore,
     required this.repository,
     this.bangumiBaseUrl,
     this.anilistBaseUrl,
@@ -26,6 +28,7 @@ class TrackingService {
 
   final SourceHttpClient http;
   final Preferences preferences;
+  final SecureStore secureStore;
   final TrackingRepository repository;
   final String? bangumiBaseUrl;
   final String? anilistBaseUrl;
@@ -43,17 +46,26 @@ class TrackingService {
   // ---------------------------------------------------------------- 凭据
 
   String? tokenOf(TrackingServiceKind kind) {
-    final value = preferences.get<String>(kind.tokenKey);
+    // 安全存储优先；Hive 里的旧值（迁移前备份）作回退。
+    final value =
+        secureStore.get(kind.tokenKey) ??
+        preferences.get<String>(kind.tokenKey);
     return value == null || value.isEmpty ? null : value;
   }
 
   bool hasToken(TrackingServiceKind kind) => tokenOf(kind) != null;
 
-  Future<void> setToken(TrackingServiceKind kind, String token) =>
-      preferences.set(kind.tokenKey, token.trim());
+  Future<void> setToken(TrackingServiceKind kind, String token) async {
+    final trimmed = token.trim();
+    await secureStore.set(kind.tokenKey, trimmed);
+    await preferences.set(kind.tokenKey, trimmed);
+  }
 
-  Future<void> clearToken(TrackingServiceKind kind) =>
-      preferences.remove(kind.tokenKey);
+  Future<void> clearToken(TrackingServiceKind kind) async {
+    // 两处都清：SecureStore 是正身，Hive 的旧值（迁移前）也一并删。
+    await secureStore.remove(kind.tokenKey);
+    await preferences.remove(kind.tokenKey);
+  }
 
   /// 校验 token 是否可用（追踪账号页「测试连接」）。
   Future<String> verify(TrackingServiceKind kind) async {

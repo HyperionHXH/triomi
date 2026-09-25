@@ -1,5 +1,17 @@
 # T6 · 阅读器增强 + 凭据安全迁移
 
+> **状态：✅ 已完成（2026-09-25）。**
+> - 阅读器增强：音量键翻页（novelReader.volumeKeyTurn，默认关）、屏幕常亮
+>   （MethodChannel keepScreenOn，novelReader.keepScreenOn 默认开，双阅读器共用）、
+>   插图点击全屏查看 + 长按保存相册（saveImageToGallery，MediaStore Pictures/Triomi）、
+>   全部标为已读（书架溢出菜单 + 确认框，markAllRead 支持按来源过滤）。
+>   **界面字号（E3）无需实现**：appearance.uiFontScale 早已存在并接入 MaterialApp builder。
+> - 凭据迁移：SecureStore 预载内存（同步 get）+ FlutterSecureStore/MemorySecureStore 双实现、
+>   启动一次性幂等迁移（secure.migrated 标记）、LkClient / TrackingService / DandanplayCredentials
+>   均「SecureStore 优先 + Hive 回退」，登出清 SecureStore 与 Hive 旧值。
+> - 登出清理（F1）：purgeSourceOfflineData 清 content_json + downloads 行，
+>   离线文件删除走确认对话框；远端书架本无内存缓存（每次请求），无需清理。
+> - 坑：dandanplayClientProvider watch 凭据，凭据控制器 read 它会循环依赖（T3 已记）。
 > 对应规格：2.4 B4/B5（阅读器）、E3（界面字号）、G2（全标已读）、
 > C1（安全存储）/ F1（登出清理）。全部可离线完成，无需账号。
 > 原则：**能不加插件就不加插件**（本机 Windows 无开发者模式，含 Windows
