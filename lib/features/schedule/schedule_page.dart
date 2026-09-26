@@ -1,10 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../core/models/media_item.dart';
+import '../../core/models/media_type.dart';
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
+import 'data/bangumi_schedule_client.dart';
 import 'data/schedule_providers.dart';
+
+/// 追番条目 → 内置 `bangumi-anime` 规则来源的作品。
+///
+/// 追番（收藏）动作复用详情页已有的追番按钮：这里只负责把放送表条目
+/// 映射成导航参数——remoteId 是 Bangumi 条目 id，url 对齐规则 detail
+/// 的 `{urlRaw}` 约定（`/v0/subjects/{id}`）。
+@visibleForTesting
+MediaItem scheduleEntryToItem(ScheduleEntry entry) => MediaItem(
+  sourceId: 'bangumi-anime',
+  remoteId: entry.id,
+  type: MediaType.anime,
+  title: entry.title,
+  url: entry.url ?? 'https://api.bgm.tv/v0/subjects/${entry.id}',
+  coverUrl: resolveScheduleCover(entry.coverUrl),
+);
 
 /// 追番页：Bangumi 每日放送时间表。
 ///
@@ -164,73 +184,78 @@ class _ScheduleTile extends StatelessWidget {
       elevation: 0,
       color: palette.card,
       shape: RoundedRectangleBorder(borderRadius: AppRadius.cardRadius),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.sm),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            ClipRRect(
-              borderRadius: const BorderRadius.all(Radius.circular(8)),
-              child: SizedBox(
-                width: 56,
-                height: 80,
-                child: _Cover(url: resolveScheduleCover(entry.coverUrl)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () =>
+            context.push(AppRoutes.detail, extra: scheduleEntryToItem(entry)),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.sm),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              ClipRRect(
+                borderRadius: const BorderRadius.all(Radius.circular(8)),
+                child: SizedBox(
+                  width: 56,
+                  height: 80,
+                  child: _Cover(url: resolveScheduleCover(entry.coverUrl)),
+                ),
               ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    entry.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: AppTypography.medium,
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      entry.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: AppTypography.medium,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.xxs),
-                  Wrap(
-                    spacing: AppSpacing.xs,
-                    runSpacing: AppSpacing.xxs,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: <Widget>[
-                      if (entry.rating != null)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            Icon(
-                              Icons.star_rounded,
-                              size: 16,
-                              color: palette.updateBadge,
+                    const SizedBox(height: AppSpacing.xxs),
+                    Wrap(
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xxs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: <Widget>[
+                        if (entry.rating != null)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Icon(
+                                Icons.star_rounded,
+                                size: 16,
+                                color: palette.updateBadge,
+                              ),
+                              Text(
+                                entry.rating!.toStringAsFixed(1),
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        if (entry.airDate != null)
+                          Text(
+                            entry.airDate!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: palette.mutedForeground,
                             ),
-                            Text(
-                              entry.rating!.toStringAsFixed(1),
-                              style: theme.textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      if (entry.airDate != null)
+                          ),
                         Text(
-                          entry.airDate!,
+                          '#${entry.id}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: palette.mutedForeground,
+                            fontSize: 11,
                           ),
                         ),
-                      Text(
-                        '#${entry.id}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: palette.mutedForeground,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
