@@ -215,10 +215,23 @@ class LkSource
     String bookRemoteId, {
     required String text,
     List<int> mentionUids = const <int>[],
+    List<LkCommentMedia> media = const <LkCommentMedia>[],
   }) => client.publishComment(
     _bookIdOf(bookRemoteId),
     text: text,
     mentionUids: mentionUids,
+    media: media,
+  );
+
+  @override
+  Future<LkCommentMedia> uploadCommentImage({
+    required List<int> bytes,
+    required String fileName,
+    required String mimeType,
+  }) => client.uploadCommentImage(
+    bytes: bytes,
+    fileName: fileName,
+    mimeType: mimeType,
   );
 
   /// 点赞 / 取消；[bookId] 站点接口需要，评论页面拿得到作品时一并传入。

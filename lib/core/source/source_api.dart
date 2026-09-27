@@ -119,11 +119,19 @@ abstract class AccountProfileProvider implements AccountProvider {
     required int page,
   });
 
-  /// 发表评论（本期只发纯文本）。
+  /// 发表评论（[media] 是已上传到站点的配图引用，见 [uploadCommentImage]）。
   Future<void> publishComment(
     String bookRemoteId, {
     required String text,
     List<int> mentionUids = const <int>[],
+    List<LkCommentMedia> media = const <LkCommentMedia>[],
+  });
+
+  /// 上传一张评论配图，返回站点侧引用（发布评论时回传）。
+  Future<LkCommentMedia> uploadCommentImage({
+    required List<int> bytes,
+    required String fileName,
+    required String mimeType,
   });
 
   /// 点赞 / 取消点赞；站点接口需要作品编号时一并传入。

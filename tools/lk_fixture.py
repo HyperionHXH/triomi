@@ -12,6 +12,7 @@
 """
 
 import json
+import re
 import threading
 
 _lock = threading.Lock()
@@ -188,6 +189,8 @@ _messages: dict[str, list[dict]] = _seed_messages()
 _dm: dict = _seed_dm()
 _unread: dict[str, int] = _unread_seed()
 _mark_read_requests: list[dict] = []
+# 评论配图上传记录（验证「先上传再引用」这条链路）。
+_uploads: list[dict] = []
 _liked: set[int] = set()
 _signed_days: list[int] = [1, 2]
 _streak = 2
@@ -201,7 +204,7 @@ _next_comment_id = 9001
 def reset() -> None:
     global _comments, _liked, _signed_days, _streak, _coin
     global _published, _like_requests, _chapter_requests, _next_comment_id
-    global _messages, _dm, _unread, _mark_read_requests
+    global _messages, _dm, _unread, _mark_read_requests, _uploads
     with _lock:
         _comments = _seed_comments()
         _liked = set()
@@ -216,6 +219,7 @@ def reset() -> None:
         _dm = _seed_dm()
         _unread = _unread_seed()
         _mark_read_requests = []
+        _uploads = []
 
 
 def state() -> str:
@@ -232,6 +236,7 @@ def state() -> str:
                 "commentCount": sum(len(items) for items in _comments.values()),
                 "unread": dict(_unread),
                 "markReadRequests": _mark_read_requests,
+                "uploads": _uploads,
             },
             ensure_ascii=False,
         )
@@ -286,9 +291,34 @@ def handle(method: str, path: str, body: str) -> tuple[int, str, str]:
     """path 形如 /lk/pc-proxy/api/bff/my-home-v1。"""
     global _coin, _streak, _next_comment_id
     global _unread, _messages, _dm, _mark_read_requests
+    global _uploads
 
     parts = path.strip("/").split("/")
     endpoint = "/".join(parts[2:]) if len(parts) > 2 else ""
+
+    # 评论配图：multipart 体（不是 JSON），单独处理，别走下面的 json.loads。
+    if endpoint == "api/dynamic/upload-image-v1":
+        name = re.search(r'name="file"; filename="([^"]*)"', body)
+        scene = re.search(r'name="scene"\r?\n\r?\n([^\r\n]+)', body)
+        with _lock:
+            _uploads.append(
+                {
+                    "fileName": name.group(1) if name else "",
+                    "scene": scene.group(1) if scene else "",
+                    "bodyLength": len(body),
+                }
+            )
+            index = len(_uploads)
+        return _ok(
+            {
+                "image": {
+                    "url": f"http://10.0.2.2:8123/img/cover/n5{index % 9}.png",
+                    "width": 640,
+                    "height": 480,
+                    "res_id": f"res-{index}",
+                }
+            }
+        )
 
     try:
         payload = json.loads(body) if body else {}
@@ -570,6 +600,8 @@ def handle(method: str, path: str, body: str) -> tuple[int, str, str]:
             "publish_time": "2026-09-27 12:00",
             "user": {"uid": 42, "nickname": "夹具书友"},
             "mention_uids": mentions if isinstance(mentions, list) else [],
+            # 原样留证：评论配图靠 media_json 回传（站点不接受外链）。
+            "media_json": str(payload.get("media_json") or ""),
         }
         with _lock:
             _comments.setdefault(book_id, []).insert(0, entry)

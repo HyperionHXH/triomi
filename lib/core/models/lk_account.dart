@@ -334,3 +334,29 @@ class LkCommentPage {
   final int total;
   final bool hasMore;
 }
+
+/// 已上传到站点的评论配图（发布评论时按 `media_json` 回传）。
+///
+/// 站点只认上传接口返回的引用，不允许直接塞外链，所以发布前必须先
+/// `uploadCommentImage` 拿到它。
+class LkCommentMedia {
+  const LkCommentMedia({
+    required this.url,
+    this.width,
+    this.height,
+    this.resourceId,
+  });
+
+  final String url;
+  final int? width;
+  final int? height;
+  final String? resourceId;
+
+  /// 站点 `media_json` 数组里的一项（字段名与站点一致，缺的项不写）。
+  Map<String, Object?> toJson() => <String, Object?>{
+    'url': url,
+    if (width != null && width! > 0) 'width': width,
+    if (height != null && height! > 0) 'height': height,
+    if (resourceId != null && resourceId!.isNotEmpty) 'res_id': resourceId,
+  };
+}

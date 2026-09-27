@@ -45,6 +45,10 @@ class MainActivity : FlutterActivity() {
                     "writeToTree" -> {
                         writeToTree(call, result)
                     }
+                    "pickImage" -> {
+                        pendingFontResult = result
+                        launchImagePicker()
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -137,6 +141,22 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /** SAF 选择一张图片（评论配图）：把字节直接回给 Dart（站点要求先上传再引用）。 */
+    private fun launchImagePicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*"))
+        }
+        try {
+            startActivityForResult(intent, REQUEST_PICK_IMAGE)
+        } catch (error: Exception) {
+            val pending = pendingFontResult
+            pendingFontResult = null
+            pending?.error("picker_failed", error.message, null)
+        }
+    }
+
     /** SAF 选择字体文件（ttf/otf）。 */
     private fun launchFontPicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -186,6 +206,34 @@ class MainActivity : FlutterActivity() {
             pending.success(uri.toString())
             return
         }
+        if (requestCode == REQUEST_PICK_IMAGE) {
+            val pending = pendingFontResult
+            pendingFontResult = null
+            if (pending == null) return
+            val uri: Uri? = data?.data
+            if (resultCode != RESULT_OK || uri == null) {
+                // 用户取消：返回 null，调用方静默处理。
+                pending.success(null)
+                return
+            }
+            try {
+                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (bytes == null || bytes.isEmpty()) {
+                    pending.success(null)
+                    return
+                }
+                pending.success(
+                    mapOf(
+                        "bytes" to bytes,
+                        "name" to (queryDisplayName(uri) ?: "comment.jpg"),
+                        "mime" to (contentResolver.getType(uri) ?: "image/jpeg"),
+                    )
+                )
+            } catch (error: Exception) {
+                pending.error("read_failed", error.message, null)
+            }
+            return
+        }
         if (requestCode != REQUEST_PICK_FONT) return
         val pending = pendingFontResult
         pendingFontResult = null
@@ -222,5 +270,6 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val REQUEST_PICK_FONT = 4101
         private const val REQUEST_PICK_DIRECTORY = 4102
+        private const val REQUEST_PICK_IMAGE = 4103
     }
 }

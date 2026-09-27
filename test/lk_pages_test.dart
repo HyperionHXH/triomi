@@ -51,6 +51,9 @@ class FakeAccountSource implements AccountProfileProvider {
   final List<({String sort, int page})> commentCalls =
       <({String sort, int page})>[];
   final List<String> published = <String>[];
+  final List<List<LkCommentMedia>> publishedMedia = <List<LkCommentMedia>>[];
+  final List<({String fileName, String mimeType, int bytes})> uploadCalls =
+      <({String fileName, String mimeType, int bytes})>[];
   final List<({String commentId, bool like, int bookId})> likes =
       <({String commentId, bool like, int bookId})>[];
 
@@ -159,9 +162,31 @@ class FakeAccountSource implements AccountProfileProvider {
     String bookRemoteId, {
     required String text,
     List<int> mentionUids = const <int>[],
+    List<LkCommentMedia> media = const <LkCommentMedia>[],
   }) async {
     if (failWith != null) throw failWith!;
     published.add(text);
+    publishedMedia.add(media);
+  }
+
+  @override
+  Future<LkCommentMedia> uploadCommentImage({
+    required List<int> bytes,
+    required String fileName,
+    required String mimeType,
+  }) async {
+    if (failWith != null) throw failWith!;
+    uploadCalls.add((
+      fileName: fileName,
+      mimeType: mimeType,
+      bytes: bytes.length,
+    ));
+    return LkCommentMedia(
+      url: 'https://res.lightnovel.fun/comment/$fileName',
+      width: 800,
+      height: 600,
+      resourceId: 'res-1',
+    );
   }
 
   @override

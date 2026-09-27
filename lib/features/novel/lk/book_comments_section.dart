@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/lk_account.dart';
 import '../../../core/models/media_item.dart';
+import '../../../core/platform/platform_channel.dart';
 import '../../../core/source/source_api.dart';
 import '../../../core/source/source_providers.dart';
 import '../../../core/theme/app_theme.dart';
@@ -40,6 +41,11 @@ class _BookCommentsSectionState extends ConsumerState<BookCommentsSection> {
   bool _canPublish = false;
   bool _unsupported = false;
   String? _error;
+
+  /// 待发表的配图：选中的原图 + 上传成功后站点回的引用。
+  PickedImage? _pickedImage;
+  LkCommentMedia? _uploadedMedia;
+  bool _uploadingImage = false;
 
   @override
   void initState() {
@@ -145,20 +151,75 @@ class _BookCommentsSectionState extends ConsumerState<BookCommentsSection> {
     }
   }
 
+  /// 选图并上传：站点不接受外链，必须先把图传到站点拿引用。
+  Future<void> _pickImage() async {
+    final source = _source;
+    if (source == null || _uploadingImage) return;
+    final PickedImage? picked;
+    try {
+      picked = await platformChannel.pickImage();
+    } catch (error) {
+      _toast('选择图片失败：$error');
+      return;
+    }
+    if (picked == null) return;
+    setState(() {
+      _pickedImage = picked;
+      _uploadedMedia = null;
+      _uploadingImage = true;
+    });
+    try {
+      final media = await source.uploadCommentImage(
+        bytes: picked.bytes,
+        fileName: picked.fileName,
+        mimeType: picked.mimeType,
+      );
+      if (!mounted) return;
+      setState(() => _uploadedMedia = media);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _pickedImage = null;
+        _uploadedMedia = null;
+      });
+      _toast('图片上传失败：${describeSourceError(error)}');
+    } finally {
+      if (mounted) setState(() => _uploadingImage = false);
+    }
+  }
+
+  void _clearImage() {
+    setState(() {
+      _pickedImage = null;
+      _uploadedMedia = null;
+    });
+  }
+
   Future<void> _publish() async {
     final source = _source;
     if (source == null) return;
     final text = _controller.text.trim();
-    if (text.isEmpty) {
-      _toast('请输入评论内容');
+    final media = _uploadedMedia;
+    if (text.isEmpty && media == null) {
+      _toast('说点什么或加一张图');
+      return;
+    }
+    if (_uploadingImage) {
+      _toast('图片还在上传，稍等一下');
       return;
     }
     // 先取好焦点作用域：await 之后再用 context 会触发 use_build_context_synchronously。
     final focus = FocusScope.of(context);
     setState(() => _publishing = true);
     try {
-      await source.publishComment(widget.item.remoteId, text: text);
+      await source.publishComment(
+        widget.item.remoteId,
+        text: text,
+        media: <LkCommentMedia>[?media],
+      );
       _controller.clear();
+      _pickedImage = null;
+      _uploadedMedia = null;
       focus.unfocus();
       await _loadPage(1);
       _toast('评论已发表');
@@ -167,6 +228,64 @@ class _BookCommentsSectionState extends ConsumerState<BookCommentsSection> {
     } finally {
       if (mounted) setState(() => _publishing = false);
     }
+  }
+
+  /// 待发表配图的预览条：缩略图 + 状态 + 移除。
+  Widget _imagePreview() {
+    final picked = _pickedImage;
+    if (picked == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final palette = context.palette;
+    final failed = !_uploadingImage && _uploadedMedia == null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Row(
+        children: <Widget>[
+          ClipRRect(
+            borderRadius: AppRadius.controlRadius,
+            child: Image.memory(
+              picked.bytes,
+              width: 56,
+              height: 56,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stack) => Container(
+                width: 56,
+                height: 56,
+                color: palette.coverPlaceholder,
+                child: const Icon(Icons.broken_image_outlined, size: 20),
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(
+              _uploadingImage
+                  ? '图片上传中…'
+                  : failed
+                  ? '图片未上传成功，请重选'
+                  : '图片已上传，发表后一起展示',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: failed
+                    ? theme.colorScheme.error
+                    : palette.mutedForeground,
+              ),
+            ),
+          ),
+          if (_uploadingImage)
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            IconButton(
+              tooltip: '移除图片',
+              onPressed: _publishing ? null : _clearImage,
+              icon: const Icon(Icons.close, size: 18),
+            ),
+        ],
+      ),
+    );
   }
 
   void _toast(String message) {
@@ -211,10 +330,18 @@ class _BookCommentsSectionState extends ConsumerState<BookCommentsSection> {
             const SizedBox(height: AppSpacing.xs),
             _commentsBody(),
             const SizedBox(height: AppSpacing.sm),
-            if (_canPublish)
+            if (_canPublish) ...<Widget>[
+              _imagePreview(),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: <Widget>[
+                  IconButton(
+                    tooltip: '添加图片',
+                    onPressed: (_publishing || _uploadingImage)
+                        ? null
+                        : () => unawaited(_pickImage()),
+                    icon: const Icon(Icons.image_outlined),
+                  ),
                   Expanded(
                     child: TextField(
                       controller: _controller,
@@ -235,8 +362,8 @@ class _BookCommentsSectionState extends ConsumerState<BookCommentsSection> {
                     child: Text(_publishing ? '发送中' : '发表'),
                   ),
                 ],
-              )
-            else
+              ),
+            ] else
               Text(
                 '登录轻之国度后可以发表评论与点赞。',
                 style: theme.textTheme.bodySmall?.copyWith(

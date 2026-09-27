@@ -99,7 +99,9 @@ class FakeHttpClient implements SourceHttpClient {
     String method = 'PUT',
   }) async {
     uploads.add((url: url, bytes: bytes, method: method, headers: headers));
-    requests.add(
+    // 请求体是二进制，只把「地址/方法/头」交给 handler，由它决定响应
+    // （上传响应的解析也要能被测到，所以不再固定回 201）。
+    return handler(
       SourceRequest(
         url: url,
         method: method,
@@ -107,7 +109,6 @@ class FakeHttpClient implements SourceHttpClient {
         bodyType: RequestBodyType.none,
       ),
     );
-    return SourceResponse(statusCode: 201, body: '', url: url);
   }
 
   @override

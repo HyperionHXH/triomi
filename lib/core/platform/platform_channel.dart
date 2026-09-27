@@ -63,6 +63,42 @@ class PlatformChannel {
       'mime': 'application/zip',
     });
   }
+
+  /// 选一张图片（评论配图用，SAF `ACTION_OPEN_DOCUMENT` + `image/*`）。
+  ///
+  /// 用户取消 / 平台不支持时返回 null；失败抛 [PlatformException]，
+  /// 由调用方决定怎么提示（选图失败与上传失败要给不同的话术）。
+  Future<PickedImage?> pickImage() async {
+    try {
+      final raw = await _channel.invokeMethod<Object?>('pickImage');
+      if (raw is! Map) return null;
+      final bytes = raw['bytes'];
+      if (bytes is! Uint8List || bytes.isEmpty) return null;
+      return PickedImage(
+        bytes: bytes,
+        fileName: '${raw['name'] ?? 'comment.jpg'}',
+        mimeType: '${raw['mime'] ?? 'image/jpeg'}',
+      );
+    } on MissingPluginException {
+      // 非 Android 平台：没有系统选择器。
+      return null;
+    }
+  }
+}
+
+/// 用户选中的图片（字节 + 原始文件名 + MIME）。
+class PickedImage {
+  const PickedImage({
+    required this.bytes,
+    required this.fileName,
+    required this.mimeType,
+  });
+
+  final Uint8List bytes;
+  final String fileName;
+  final String mimeType;
+
+  int get sizeInBytes => bytes.length;
 }
 
 /// 全局单例（无状态，直接用）。

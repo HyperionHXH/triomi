@@ -413,7 +413,13 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         length = int(self.headers.get('Content-Length') or 0)
-        raw = self.rfile.read(length).decode('utf-8') if length else ''
+        # 评论配图是 multipart：体里含二进制，不能按 utf-8 严格解码（会直接抛
+        # UnicodeDecodeError 让请求 500）；用 replace 保留长度并容错。
+        raw = (
+            self.rfile.read(length).decode('utf-8', errors='replace')
+            if length
+            else ''
+        )
         status, body, content_type = lk_fixture.handle(method, path, raw)
 
         self.send_response(status)

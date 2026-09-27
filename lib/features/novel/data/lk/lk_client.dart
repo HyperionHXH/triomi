@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import '../../../../core/models/lk_account.dart';
 import '../../../../core/models/media_type.dart';
@@ -547,20 +548,20 @@ class LkClient {
     return parseCommentPage(data, page);
   }
 
-  /// 发表评论（需要登录）。
-  ///
-  /// 本期只发纯文本；评论图片上传（`api/dynamic/upload-image-v1`）留 TODO。
+  /// 发表评论（需要登录）。[media] 是**已上传**的配图引用（见 [uploadCommentImage]）。
   Future<void> publishComment(
     int bookId, {
     required String text,
     List<int> mentionUids = const <int>[],
+    List<LkCommentMedia> media = const <LkCommentMedia>[],
     int ratingStars = 0,
     int rootCommentId = 0,
     int replyCommentId = 0,
   }) async {
     final key = _requireSession();
     final normalized = text.trim();
-    if (normalized.isEmpty) {
+    // 只有图片、没有文字也是合法评论（对齐站点与 Mixn 的校验）。
+    if (normalized.isEmpty && media.isEmpty) {
       throw const SourceException(
         sourceId: sourceId,
         type: SourceErrorType.parse,
@@ -578,10 +579,109 @@ class LkClient {
       'content': normalized,
       // 站点要求是数组：曾误传字符串导致 comment payload invalid。
       'mention_uids': mentionUids,
-      'media_json': '[]',
+      // 配图必须是「先上传再回传引用」的 JSON 数组字符串。
+      'media_json': jsonEncode(<Object?>[
+        for (final item in media) item.toJson(),
+      ]),
       'rating_stars': ratingStars.clamp(0, 5),
       'read_duration_seconds': 0,
     });
+  }
+
+  /// 上传一张评论配图，返回站点侧的引用（发布评论时回传）。
+  ///
+  /// 站点走 `api/dynamic/upload-image-v1` 的 multipart（字段 `security_key` /
+  /// `scene` / `file`），实测不接受外链，只能先传再引用。
+  Future<LkCommentMedia> uploadCommentImage({
+    required List<int> bytes,
+    required String fileName,
+    required String mimeType,
+  }) async {
+    if (bytes.isEmpty) {
+      throw const SourceException(
+        sourceId: sourceId,
+        type: SourceErrorType.parse,
+        message: '图片内容为空',
+      );
+    }
+    final key = _requireSession();
+    final boundary =
+        '----TriomiComment-${DateTime.now().microsecondsSinceEpoch.toRadixString(16)}';
+    final body = _multipartBody(
+      boundary: boundary,
+      fields: <String, String>{'security_key': key, 'scene': 'book_comment'},
+      fileField: 'file',
+      fileName: fileName,
+      mimeType: mimeType,
+      fileBytes: bytes,
+    );
+    final response = await http.uploadBytes(
+      '${mainBase}api/dynamic/upload-image-v1',
+      sourceId: sourceId,
+      bytes: body,
+      headers: <String, String>{
+        'Content-Type': 'multipart/form-data; boundary=$boundary',
+      },
+      method: 'POST',
+    );
+    final data = _unwrapResponse(response);
+    final source = _obj(data, 'image', 'media', 'resource') ?? data;
+    final url = _string(
+      source,
+      'url',
+      'res_url',
+      'stored_url',
+      'source_url',
+      'src',
+      'image',
+    );
+    if (url.isEmpty) {
+      throw const SourceException(
+        sourceId: sourceId,
+        type: SourceErrorType.parse,
+        message: '图片上传成功，但服务器未返回图片地址',
+      );
+    }
+    final width = _int(source, 'width', 'w');
+    final height = _int(source, 'height', 'h');
+    return LkCommentMedia(
+      url: url,
+      width: width > 0 ? width : null,
+      height: height > 0 ? height : null,
+      resourceId: _string(source, 'res_id', 'resId', 'resource_id'),
+    );
+  }
+
+  /// 组 multipart 请求体（与站点/ Mixn 的字段顺序一致）。
+  static List<int> _multipartBody({
+    required String boundary,
+    required Map<String, String> fields,
+    required String fileField,
+    required String fileName,
+    required String mimeType,
+    required List<int> fileBytes,
+  }) {
+    const line = '\r\n';
+    final builder = BytesBuilder(copy: false);
+    void writeText(String value) => builder.add(utf8.encode(value));
+    for (final entry in fields.entries) {
+      writeText('--$boundary$line');
+      writeText(
+        'Content-Disposition: form-data; name="${entry.key}"$line$line',
+      );
+      writeText(entry.value);
+      writeText(line);
+    }
+    writeText('--$boundary$line');
+    writeText(
+      'Content-Disposition: form-data; name="$fileField"; '
+      'filename="$fileName"$line',
+    );
+    writeText('Content-Type: $mimeType$line$line');
+    builder.add(fileBytes);
+    writeText(line);
+    writeText('--$boundary--$line');
+    return builder.takeBytes();
   }
 
   /// 点赞 / 取消点赞（需要登录）。
@@ -1239,6 +1339,11 @@ class LkClient {
       ),
       sourceId: sourceId,
     );
+    return _unwrapResponse(response);
+  }
+
+  /// 拆 `{code, message, data}` 信封；非 2xx 与 `code != 0` 都转成来源异常。
+  Map<Object?, Object?> _unwrapResponse(SourceResponse response) {
     if (response.statusCode < 200 || response.statusCode > 299) {
       throw SourceException(
         sourceId: sourceId,
