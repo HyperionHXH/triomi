@@ -67,6 +67,8 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
           http: ref.watch(sourceHttpClientProvider),
           preferences: preferences,
           secureStore: ref.watch(secureStoreProvider),
+          mainBase: _lkMainBase,
+          commentBase: _lkCommentBase,
         ),
       ),
       LnsSource.id: ref.watch(lnsSourceProvider),
@@ -75,6 +77,18 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
     defaultDisabledBuiltins: const <String>{LnsSource.id},
   );
 });
+
+/// LK 的 base 覆盖（调试用）：
+/// `--dart-define=TRIOMI_LK_BASE=http://10.0.2.2:8123/lk`
+/// （模拟器无外网时指向夹具服务；pc-proxy 与 pc-comment-proxy 用子路径区分）。
+const String _lkBase = String.fromEnvironment('TRIOMI_LK_BASE');
+
+String get _lkMainBase =>
+    _lkBase.isEmpty ? LkClient.defaultMainBase : '$_lkBase/pc-proxy/';
+
+String get _lkCommentBase => _lkBase.isEmpty
+    ? LkClient.defaultCommentBase
+    : '$_lkBase/pc-comment-proxy/';
 
 /// 来源注册表快照：内置示例规则只在首次启动时写入一次。
 class SourceRegistryController extends AsyncNotifier<SourceRegistrySnapshot> {

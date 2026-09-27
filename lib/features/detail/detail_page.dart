@@ -19,6 +19,7 @@ import '../../core/widgets/page_scaffold.dart';
 import '../downloads/data/download_providers.dart';
 import '../library/data/library_providers.dart';
 import '../novel/export/novel_export_service.dart';
+import '../novel/lk/book_comments_section.dart';
 import '../novel/reader/novel_reader_page.dart';
 import '../player/player_page.dart';
 import '../reader/manga_reader_page.dart';
@@ -413,6 +414,9 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                   ),
                 ),
               _ChapterSection(item: data.item, chapters: data.chapters),
+              // 评论区：只有实现账号域能力的来源（轻之国度）才渲染。
+              if (data.item case final detailItem?)
+                BookCommentsSection(item: detailItem),
             ],
           );
         },

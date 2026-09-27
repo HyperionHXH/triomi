@@ -14,11 +14,6 @@ import '../../core/widgets/page_scaffold.dart';
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
 
-  void _comingSoon(BuildContext context, String label, String milestone) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('$label 将在 $milestone 开放')));
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -61,7 +56,7 @@ class ProfilePage extends StatelessWidget {
                       ),
                     ),
                     TextButton(
-                      onPressed: () => _comingSoon(context, '来源账号管理', 'M4'),
+                      onPressed: () => context.push(AppRoutes.sources),
                       child: const Text('管理'),
                     ),
                   ],
@@ -89,13 +84,6 @@ class ProfilePage extends StatelessWidget {
                     onTap: () => context.push(AppRoutes.sources),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.bookmarks_outlined),
-                    title: const Text('轻之国度 · 远端书架'),
-                    subtitle: const Text('登录后同步站点收藏'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.remoteShelf),
-                  ),
-                  ListTile(
                     leading: const Icon(Icons.font_download_outlined),
                     title: const Text('阅读字体'),
                     subtitle: const Text('导入 TTF / OTF 供小说阅读器使用'),
@@ -108,6 +96,35 @@ class ProfilePage extends StatelessWidget {
                     subtitle: const Text('Bangumi / AniList / MyAnimeList'),
                     trailing: const Icon(Icons.chevron_right, size: 20),
                     onTap: () => context.push(AppRoutes.tracking),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: SettingsGroup(
+                title: '轻之国度',
+                children: <Widget>[
+                  ListTile(
+                    leading: const Icon(Icons.account_circle_outlined),
+                    title: const Text('账号与签到'),
+                    subtitle: const Text('轻币余额、关注粉丝、七日签到'),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => context.push(AppRoutes.lkAccount),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.mark_email_unread_outlined),
+                    title: const Text('消息中心'),
+                    subtitle: const Text('回复、点赞、私信等未读角标'),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => context.push(AppRoutes.lkMessages),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.bookmarks_outlined),
+                    title: const Text('轻之国度 · 远端书架'),
+                    subtitle: const Text('登录后同步站点收藏'),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => context.push(AppRoutes.remoteShelf),
                   ),
                 ],
               ),

@@ -99,6 +99,10 @@ abstract class AccountProfileProvider implements AccountProvider {
     List<int> mentionUids = const <int>[],
   });
 
-  /// 点赞 / 取消点赞。
-  Future<void> likeComment(String commentId, {required bool like});
+  /// 点赞 / 取消点赞；站点接口需要作品编号时一并传入。
+  Future<void> likeComment(
+    String commentId, {
+    required bool like,
+    int bookId = 0,
+  });
 }

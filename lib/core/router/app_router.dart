@@ -7,6 +7,8 @@ import '../../features/discover/discover_page.dart';
 import '../../features/downloads/downloads_page.dart';
 import '../../features/history/history_page.dart';
 import '../../features/library/library_page.dart';
+import '../../features/novel/lk/lk_account_page.dart';
+import '../../features/novel/lk/lk_messages_page.dart';
 import '../../features/novel/reader/fonts_page.dart';
 import '../../features/novel/reader/novel_reader_page.dart';
 import '../../features/novel/remote_shelf_page.dart';
@@ -42,6 +44,8 @@ abstract final class AppRoutes {
   static const String novelReader = '/novel-reader';
   static const String fonts = '/fonts';
   static const String remoteShelf = '/remote-shelf';
+  static const String lkAccount = '/lk-account';
+  static const String lkMessages = '/lk-messages';
   static const String downloads = '/downloads';
   static const String backup = '/backup';
   static const String webdav = '/webdav';
@@ -191,6 +195,16 @@ abstract final class AppRouter {
         path: AppRoutes.remoteShelf,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const RemoteShelfPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.lkAccount,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const LkAccountPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.lkMessages,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const LkMessagesPage(),
       ),
       GoRoute(
         path: AppRoutes.tracking,

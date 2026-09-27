@@ -23,6 +23,7 @@ from urllib.parse import urlparse, parse_qs
 
 # 追踪服务夹具与本文件同目录（直接运行时脚本搜索路径包含本目录）。
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import lk_fixture  # noqa: E402
 import tracking_fixture  # noqa: E402
 
 PORT = 8123
@@ -386,8 +387,42 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Content-Length', '0')
             self.end_headers()
 
+    # ---------------------------------------------------------- 轻之国度夹具
+    def _lk(self, method: str) -> None:
+        """LK 的 pc-proxy / pc-comment-proxy 接口（`--dart-define=TRIOMI_LK_BASE`）。"""
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path == '/lk/state':
+            self._send(lk_fixture.state().encode('utf-8'),
+                       'application/json; charset=utf-8')
+            return
+        if path == '/lk/reset':
+            lk_fixture.reset()
+            self._send(b'{"ok": true}', 'application/json; charset=utf-8')
+            return
+
+        length = int(self.headers.get('Content-Length') or 0)
+        raw = self.rfile.read(length).decode('utf-8') if length else ''
+        status, body, content_type = lk_fixture.handle(method, path, raw)
+
+        self.send_response(status)
+        if body:
+            data = body.encode('utf-8')
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        else:
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+
     def do_POST(self):  # noqa: N802
         path = urlparse(self.path).path
+        if path.startswith('/lk/'):
+            self._lk('POST')
+            return
+
         if path.startswith('/tracking'):
             self._tracking('POST')
             return
@@ -449,6 +484,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith('/tracking'):
             self._tracking('GET')
+            return
+
+        if path.startswith('/lk/'):
+            self._lk('GET')
             return
 
         if path.startswith('/dav'):
