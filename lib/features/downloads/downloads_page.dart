@@ -193,6 +193,14 @@ class _DownloadGroupCard extends StatelessWidget {
         .where((entry) => entry.status == DownloadStatus.running)
         .firstOrNull;
 
+    // 失败必须说得清原因：取第一条失败任务的错误说明展示（重试后会被清空）。
+    final failedReason = group.entries
+        .where((entry) => entry.status == DownloadStatus.failed)
+        .map((entry) => entry.row.errorMessage?.trim())
+        .whereType<String>()
+        .where((message) => message.isNotEmpty)
+        .firstOrNull;
+
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,7 +264,18 @@ class _DownloadGroupCard extends StatelessWidget {
               minHeight: 6,
             ),
           ),
-          if (failed > 0)
+          if (failed > 0) ...<Widget>[
+            if (failedReason != null)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xxs),
+                child: Text(
+                  failedReason,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
@@ -265,6 +284,7 @@ class _DownloadGroupCard extends StatelessWidget {
                 label: const Text('重试失败章节'),
               ),
             ),
+          ],
           if (group.hasActive)
             Align(
               alignment: Alignment.centerLeft,
@@ -297,7 +317,7 @@ class _EmptyDownloads extends StatelessWidget {
             Text('还没有下载内容', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.xxs),
             Text(
-              '在作品详情页点「下载」，漫画图片与小说正文会存到本地，离线也能读。',
+              '在作品详情页点「下载」，小说正文、漫画图片与番剧视频会存到本地，离线也能读。',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall,
             ),

@@ -159,7 +159,11 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         content: Text(
           '将下载 ${downloadable.length} 章'
           '${data.chapters.length == downloadable.length ? '' : '（跳过 ${data.chapters.length - downloadable.length} 个锁定章节）'}。\n'
-          '${item.type == MediaType.novel ? '小说正文会存进本地数据库。' : '漫画图片会存到应用目录。'}\n'
+          '${switch (item.type) {
+            MediaType.novel => '小说正文会存进本地数据库。',
+            MediaType.anime => '剧集视频会存到应用目录（只下明文线路）。',
+            MediaType.manga => '漫画图片会存到应用目录。',
+          }}\n'
           '下载在后台进行，可在「我的 → 下载管理」查看进度。',
         ),
         actions: <Widget>[
