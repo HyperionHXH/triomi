@@ -100,8 +100,7 @@ Future<void> runBackgroundUpdateCheckEntrypoint() async {
   ProviderContainer? container;
   try {
     WidgetsFlutterBinding.ensureInitialized();
-    // 引擎会为每个 isolate 自动执行 Dart 侧插件注册；原生插件实现由
-    // JobService 侧的 GeneratedPluginRegistrant 登记（见 Kotlin）。
+    // 插件（path_provider 等）由原生侧建引擎时自动登记，这里只需起最小容器。
     container = ProviderContainer();
 
     final result = await runBackgroundUpdateCheck(container);
