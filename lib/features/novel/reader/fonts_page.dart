@@ -49,6 +49,9 @@ class _FontsPageState extends ConsumerState<FontsPage> {
   }
 
   /// 下载在线字体 → 走既有导入流程 → 注册进引擎。
+  ///
+  /// 字体有十几 MB，慢网下可能要几分钟；这里不做总时长限制（黑洞连接由
+  /// HTTP 层的空闲超时兜底），只保证出错时把原因说出来。
   Future<void> _download(FontCatalogEntry entry) async {
     if (_downloading != null) return;
     setState(() => _downloading = entry.fileName);
