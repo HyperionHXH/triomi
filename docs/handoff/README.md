@@ -93,8 +93,9 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
 - LNS：登录/发现/详情/正文/远端书架/签到 **全部联调完成**，页面入口已补齐
   （通用远端书架页 + 轻书架账号页），来源已默认启用；正文分页溢出 10px 也已修复
   （见「分页正文底部溢出 10px（已修复）」）。
-- LK：资料页、消息中心、详情页评论 Tab 与真实账号端到端已完成；仅
-  「真实账号发表公开评论」需用户逐条授权后再跑。
+- LK：资料页、消息中心、详情页评论 Tab（含**评论配图**：选图 → 上传 →
+  `media_json` 回传）与真实账号端到端已完成；仅「真实账号发表公开评论（含配图）」
+  这一步需用户逐条授权后再跑（夹具已覆盖写入链路）。
 - 番剧（视频）下载：**代码 + 夹具设备验证已完成**（见「番剧视频离线下载」）。
 - 真机项目（视频画面合成 / 性能 / 权限通知 / WebDAV 双设备）未做。
 - T7：SAF 目录选择/写入与在线字体下载的模拟器 E2E 已完成。
@@ -131,6 +132,8 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
   LNS 默认启用；设备验证见下文「LNS 页面入口 + 默认启用」。
 - **W9 番剧视频离线下载**（commit `52c7466` 起）：流式下载 + 明文 HLS 拼接 +
   播放器离线优先；设备验证见下文「番剧视频离线下载」。
+- **W10 LK 评论配图**（commit `32ba17f`）：选图（SAF）→ 上传拿引用 →
+  发表时按 `media_json` 回传；设备验证见下文「LK 评论配图」。
 - **模拟器端到端已验证**：登录 → 资料/签到（夹具侧余额 138、streak 3 落库）
   → 消息中心未读 → 远端书架进详情（同书版本/标签）→ 评论区渲染 → 发表评论
   （夹具记录到内容）→ 点赞 501 → 打开章节（正文接口参数正确）。
@@ -192,6 +195,36 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
 
 附注：从详情页返回远端书架时页面不会自动刷新（`_future` 缓存），下拉刷新或
 切换来源可重新加载——这是刻意的（避免每次 pop 都打站点），不是缺陷。
+
+### LK 评论配图（commit `32ba17f`）
+
+站点**不接受外链配图**，必须先上传拿引用再发表；契约照 Mixn 的
+`LightNovelRepository.uploadCommentImage / publishComment` 移植。
+
+- `LkClient.uploadCommentImage`：手工组 multipart（`security_key` /
+  `scene=book_comment` / `file`）POST 到 `api/dynamic/upload-image-v1`，解析
+  `url / width / height / res_id`（多候选键）；响应信封拆解抽成 `_unwrapResponse`
+  与 `_post` 共用。
+- `publishComment(media: …)`：`media_json` 按站点要求是**数组字符串**；
+  **只有图片没有文字也是合法评论**（原实现直接报「内容不能为空」）。
+- 平台层 `triomi/platform` 新增 `pickImage`（SAF `ACTION_OPEN_DOCUMENT` +
+  `image/*`，读字节回 Dart）；用户取消 / 非 Android 都返回 null。
+- 评论区 UI：输入框左侧「添加图片」→ 选图后立刻上传（缩略图 + 「上传中 /
+  已上传 / 未上传成功」+ 移除）；上传中禁止发表；只有图片时也能发表。
+- 夹具：`lk_fixture` 增 `api/dynamic/upload-image-v1` 并把上传记录写进 state；
+  发表记录保留 `media_json`；`dev_fixture_server` 读 body 改 `errors='replace'`
+  （multipart 含二进制，严格 utf-8 解码会直接把请求打成 500）。
+- 测试：新增 `lk_comment_image_test.dart`（multipart 形状、响应解析、未登录、
+  空图、`media_json` 序列化、纯图评论）；测试替身 `uploadBytes` 现在把响应交给
+  handler（原先固定 201 空体，上传响应解析测不到）。全套 **282 例全绿**。
+
+设备验证（模拟器 + LK 夹具，夹具包）：
+
+| 项 | 结果 |
+|---|---|
+| 选图上传 | 夹具记录 `{fileName: triomi_comment.png, scene: book_comment}`（multipart 字段正确） |
+| 纯图评论 | 点「发表」（不输文字）→ 夹具记录 `content: ""`、`media_json: [{"url":…,"width":640,"height":480,"res_id":"res-1"}]` |
+| 真实站点 | **未跑**：公开发言需用户逐条授权（与纯文字评论同一红线） |
 
 ### 番剧视频离线下载（规格 4.8 二期，commit `52c7466` / `ae9444a` / `2627ad6`）
 
