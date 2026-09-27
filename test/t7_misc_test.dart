@@ -10,7 +10,12 @@ import 'package:triomi/core/backup/backup_service.dart';
 import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
+import 'package:triomi/core/models/source_descriptor.dart';
+import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
+import 'package:triomi/core/source/source_api.dart';
+import 'package:triomi/core/source/source_providers.dart';
+import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/discover/discover_page.dart';
 import 'package:triomi/features/discover/widgets/media_item_card.dart';
@@ -30,6 +35,72 @@ MediaItem _item(String id) => MediaItem(
   type: MediaType.manga,
   title: '作品$id',
 );
+
+/// 只实现内容契约的来源（没有账号 / 远端书架能力）。
+class PlainSource implements ContentSource {
+  @override
+  SourceDescriptor get descriptor => const SourceDescriptor(
+    id: 'plain',
+    name: '普通来源',
+    type: MediaType.manga,
+    kind: SourceKind.plugin,
+  );
+
+  @override
+  bool get isReady => true;
+}
+
+/// 远端书架替身：记录站点写入，可注入失败与能力开关。
+class FakeRemoteShelf implements RemoteShelfProvider {
+  FakeRemoteShelf({
+    this.loggedIn = true,
+    this.failure,
+    this.withCapability = true,
+  });
+
+  bool loggedIn;
+  Object? failure;
+  bool withCapability;
+
+  final List<({String remoteId, bool add})> writes =
+      <({String remoteId, bool add})>[];
+
+  @override
+  SourceDescriptor get descriptor => SourceDescriptor(
+    id: 'fake-lk',
+    name: '替身站点',
+    type: MediaType.novel,
+    kind: SourceKind.builtin,
+    capabilities: <SourceCapability>{
+      SourceCapability.account,
+      if (withCapability) SourceCapability.remoteShelf,
+    },
+  );
+
+  @override
+  bool get isReady => true;
+
+  @override
+  bool get isLoggedIn => loggedIn;
+
+  @override
+  Future<void> restoreSession() async {}
+
+  @override
+  Future<void> login(String account, String password) async {}
+
+  @override
+  Future<void> logout() async {}
+
+  @override
+  Future<List<MediaItem>> remoteShelf() async => const <MediaItem>[];
+
+  @override
+  Future<void> setInRemoteShelf(MediaItem item, bool add) async {
+    if (failure != null) throw failure!;
+    writes.add((remoteId: item.remoteId, add: add));
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -67,6 +138,121 @@ void main() {
 
       // resolveScheduleCover 对相对路径补全；这里只保证链路不断。
       expect(item.coverUrl, isNotNull);
+    });
+  });
+
+  group('T7-1 本地书架变更同步站点收藏', () {
+    SourceRegistrySnapshot snapshotWith(ContentSource source) =>
+        SourceRegistrySnapshot(
+          entries: <SourceEntry>[
+            SourceEntry(
+              descriptor: source.descriptor,
+              source: source,
+              enabled: true,
+            ),
+          ],
+          failures: const <SourceFailure>[],
+        );
+
+    /// 业务键必须和来源对得上，否则同步会被当成「来源没注册」跳过。
+    MediaItem itemFor(ContentSource source) => MediaItem(
+      sourceId: source.descriptor.id,
+      remoteId: '1001',
+      type: MediaType.novel,
+      title: '替身作品',
+    );
+
+    test('来源支持远端书架且已登录：写入站点并返回 null', () async {
+      final source = FakeRemoteShelf();
+      final failure = await syncShelfToSource(
+        snapshotWith(source),
+        item: itemFor(source),
+        add: true,
+      );
+
+      expect(failure, isNull);
+      expect(source.writes, <({String remoteId, bool add})>[
+        (remoteId: '1001', add: true),
+      ]);
+    });
+
+    test('移出书架同样写站点', () async {
+      final source = FakeRemoteShelf();
+      final failure = await syncShelfToSource(
+        snapshotWith(source),
+        item: itemFor(source),
+        add: false,
+      );
+
+      expect(failure, isNull);
+      expect(source.writes.single.add, isFalse);
+    });
+
+    test('未登录：跳过同步，不触碰站点', () async {
+      final source = FakeRemoteShelf(loggedIn: false);
+      final failure = await syncShelfToSource(
+        snapshotWith(source),
+        item: itemFor(source),
+        add: true,
+      );
+
+      expect(failure, isNull);
+      expect(source.writes, isEmpty);
+    });
+
+    test('没声明远端书架能力：跳过同步', () async {
+      final source = FakeRemoteShelf(withCapability: false);
+      final failure = await syncShelfToSource(
+        snapshotWith(source),
+        item: itemFor(source),
+        add: false,
+      );
+
+      expect(failure, isNull);
+      expect(source.writes, isEmpty);
+    });
+
+    test('来源不支持远端书架（普通来源）：跳过同步', () async {
+      final source = PlainSource();
+      final failure = await syncShelfToSource(
+        snapshotWith(source),
+        item: itemFor(source),
+        add: true,
+      );
+
+      expect(failure, isNull);
+    });
+
+    test('站点未注册该来源（被移除/停用）：跳过同步', () async {
+      final failure = await syncShelfToSource(
+        snapshotWith(FakeRemoteShelf()),
+        item: const MediaItem(
+          sourceId: 'gone',
+          remoteId: '1',
+          type: MediaType.novel,
+          title: '别的来源',
+        ),
+        add: true,
+      );
+
+      expect(failure, isNull);
+    });
+
+    test('站点写入失败：返回面向用户的原因，本地书架不受影响', () async {
+      final source = FakeRemoteShelf(
+        failure: const SourceException(
+          sourceId: 'fake-lk',
+          type: SourceErrorType.auth,
+          message: '请先登录轻之国度账号',
+        ),
+      );
+      final failure = await syncShelfToSource(
+        snapshotWith(source),
+        item: itemFor(source),
+        add: true,
+      );
+
+      expect(failure, contains('登录'));
     });
   });
 

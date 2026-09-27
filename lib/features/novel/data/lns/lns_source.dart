@@ -24,7 +24,7 @@ class LnsSource
         SearchProvider,
         DetailProvider,
         ContentProvider,
-        AccountProvider {
+        RemoteShelfProvider {
   LnsSource({required this.gateway, required this.auth, this.fontChannel});
 
   static const String id = lnsSourceId;
@@ -204,6 +204,7 @@ class LnsSource
   // ---------------------------------------------------------------- 远端书架 / 签到
 
   /// 远端书架（登录后可用）：保持站点顺序。
+  @override
   Future<List<MediaItem>> remoteShelf() async {
     final snapshot = await gateway.getShelf();
     final orderedIds = <int>[];
@@ -232,6 +233,7 @@ class LnsSource
   }
 
   /// 站点收藏状态切换：读快照 → 增删 → 归一化顺序后整体保存。
+  @override
   Future<void> setInRemoteShelf(MediaItem item, bool add) async {
     final bookId = _idOf(item);
     final shelf = await gateway.getShelf();

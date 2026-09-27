@@ -757,10 +757,19 @@ class _FollowButton extends ConsumerWidget {
     } else {
       await repository.removeFromLibrary(item.sourceId, item.remoteId);
     }
+    // 站点收藏尽力而为：来源支持远端书架且已登录时才写，失败只提示不回滚本地。
+    final snapshot = await ref.read(sourcesProvider.future);
+    final syncFailure = await syncShelfToSource(snapshot, item: item, add: add);
     ref.invalidate(inLibraryProvider);
     ref.invalidate(libraryProvider);
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(add ? '已加入书架' : '已移出书架')));
+    final action = add ? '已加入书架' : '已移出书架';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          syncFailure == null ? action : '$action（站点同步失败：$syncFailure）',
+        ),
+      ),
+    );
   }
 }

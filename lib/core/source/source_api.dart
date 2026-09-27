@@ -62,6 +62,18 @@ abstract class AccountProvider implements ContentSource {
   Future<void> logout();
 }
 
+/// 远端书架能力：站点收藏可以读出来，也可以把本应用的收藏写回站点。
+///
+/// 只有声明了 [SourceCapability.remoteShelf] 且已登录的来源才会被
+/// 「加入 / 移出书架」同步（见 `syncShelfToSource`）。
+abstract class RemoteShelfProvider implements AccountProvider {
+  /// 站点收藏列表。
+  Future<List<MediaItem>> remoteShelf();
+
+  /// 加入 / 移出站点收藏。
+  Future<void> setInRemoteShelf(MediaItem item, bool add);
+}
+
 /// 付费章节解锁能力：只负责把已购状态同步到站点，不绕过任何付费校验
 /// （对齐 Mixn 的红线：解锁失败要给可读的错误，而不是本地伪造已解锁）。
 abstract class ChapterUnlockProvider implements ContentSource {

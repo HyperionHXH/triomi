@@ -20,6 +20,7 @@ class LkSource
         DetailProvider,
         ContentProvider,
         AccountProfileProvider,
+        RemoteShelfProvider,
         ChapterUnlockProvider {
   LkSource({required this.client});
 
@@ -42,6 +43,7 @@ class LkSource
       SourceCapability.detail,
       SourceCapability.content,
       SourceCapability.account,
+      SourceCapability.remoteShelf,
       SourceCapability.comment,
       SourceCapability.reward,
     },
@@ -242,11 +244,13 @@ class LkSource
       client.setUserFollow(uid, follow: follow);
 
   /// 远端书架（登录后可用）；失败时给出可理解的错误而不是静默空列表。
+  @override
   Future<List<MediaItem>> remoteShelf() async {
     final books = await client.bookshelf();
     return <MediaItem>[for (final book in books) _toItem(book)];
   }
 
+  @override
   Future<void> setInRemoteShelf(MediaItem item, bool add) =>
       client.setBookshelf(_idOf(item), add);
 

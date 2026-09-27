@@ -7,6 +7,9 @@ import '../../features/novel/data/lns/lns_gateway.dart';
 import '../../features/novel/data/lns/lns_hub_connection.dart';
 import '../../features/novel/data/lns/lns_source.dart';
 import '../db/database_provider.dart';
+import '../models/media_item.dart';
+import '../models/source_descriptor.dart';
+import '../models/source_exception.dart';
 import '../storage/preferences.dart';
 import '../storage/secure_store.dart';
 import 'http_client.dart';
@@ -139,3 +142,32 @@ final sourcesProvider =
     AsyncNotifierProvider<SourceRegistryController, SourceRegistrySnapshot>(
       SourceRegistryController.new,
     );
+
+/// 本地书架变更后尽力同步来源站点的收藏。
+///
+/// 只对「声明了远端书架能力 + 已登录 + 实现了 [RemoteShelfProvider]」的来源生效，
+/// 其余（番剧规则源、未登录、不支持站点收藏）直接跳过。
+///
+/// 返回 [null] 表示无需同步或同步成功；返回字符串是给用户看的原因——
+/// 调用方只提示、不回滚本地书架（本地收藏是用户意图，不该被网络问题抹掉）。
+Future<String?> syncShelfToSource(
+  SourceRegistrySnapshot snapshot, {
+  required MediaItem item,
+  required bool add,
+}) async {
+  final entry = snapshot.entries
+      .where((candidate) => candidate.descriptor.id == item.sourceId)
+      .firstOrNull;
+  final source = entry?.source;
+  if (source is! RemoteShelfProvider) return null;
+  if (!source.isLoggedIn) return null;
+  if (!source.descriptor.capabilities.contains(SourceCapability.remoteShelf)) {
+    return null;
+  }
+  try {
+    await source.setInRemoteShelf(item, add);
+    return null;
+  } catch (error) {
+    return error is SourceException ? error.userMessage : '$error';
+  }
+}
