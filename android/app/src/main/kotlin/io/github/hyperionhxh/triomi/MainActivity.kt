@@ -10,6 +10,7 @@ import android.provider.OpenableColumns
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
@@ -62,7 +63,7 @@ class MainActivity : FlutterActivity() {
     }
 
     /** 向授权目录写文件：DocumentsContract.createDocument + 输出流。 */
-    private fun writeToTree(call: MethodChannel.Call, result: MethodChannel.Result) {
+    private fun writeToTree(call: MethodCall, result: MethodChannel.Result) {
         val treeUri = call.argument<String>("treeUri")
         val fileName = call.argument<String>("fileName") ?: "export.zip"
         val bytes = call.argument<ByteArray>("bytes")
@@ -95,7 +96,7 @@ class MainActivity : FlutterActivity() {
     }
 
     /** 保存图片到相册（MediaStore，Pictures/Triomi；Android 10+ 免存储权限）。 */
-    private fun saveImageToGallery(call: MethodChannel.Call, result: MethodChannel.Result) {
+    private fun saveImageToGallery(call: MethodCall, result: MethodChannel.Result) {
         val bytes = call.argument<ByteArray>("bytes")
         val fileName = call.argument<String>("fileName") ?: "image.png"
         if (bytes == null) {
