@@ -103,28 +103,28 @@ class ProfilePage extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: SettingsGroup(
-                title: '轻之国度',
+                title: '站点账号',
                 children: <Widget>[
                   ListTile(
                     leading: const Icon(Icons.account_circle_outlined),
-                    title: const Text('账号与签到'),
+                    title: const Text('轻之国度 · 账号与签到'),
                     subtitle: const Text('轻币余额、关注粉丝、七日签到'),
                     trailing: const Icon(Icons.chevron_right, size: 20),
                     onTap: () => context.push(AppRoutes.lkAccount),
                   ),
                   ListTile(
                     leading: const Icon(Icons.mark_email_unread_outlined),
-                    title: const Text('消息中心'),
+                    title: const Text('轻之国度 · 消息中心'),
                     subtitle: const Text('回复、点赞、私信等未读角标'),
                     trailing: const Icon(Icons.chevron_right, size: 20),
                     onTap: () => context.push(AppRoutes.lkMessages),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.bookmarks_outlined),
-                    title: const Text('轻之国度 · 远端书架'),
-                    subtitle: const Text('登录后同步站点收藏'),
+                    leading: const Icon(Icons.account_circle_outlined),
+                    title: const Text('轻书架 · 账号与签到'),
+                    subtitle: const Text('轻币余额、连续签到'),
                     trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.remoteShelf),
+                    onTap: () => context.push(AppRoutes.lnsAccount),
                   ),
                 ],
               ),
@@ -134,6 +134,13 @@ class ProfilePage extends StatelessWidget {
               child: SettingsGroup(
                 title: '数据',
                 children: <Widget>[
+                  ListTile(
+                    leading: const Icon(Icons.bookmarks_outlined),
+                    title: const Text('远端书架'),
+                    subtitle: const Text('同步已登录站点的收藏（轻之国度 / 轻书架）'),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => context.push(AppRoutes.remoteShelf),
+                  ),
                   ListTile(
                     leading: const Icon(Icons.cloud_outlined),
                     title: const Text('云同步'),

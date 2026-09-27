@@ -16,8 +16,8 @@ import 'lns_hub_connection.dart';
 /// 能力范围（对齐 Mixn 的 `LightNovelShelfSource`）：发现 / 搜索 / 详情 /
 /// 目录（单层正文）/ 正文（HTML + 服务端专用字体）/ 账号 / 远端书架 / 签到。
 ///
-/// **未联调前默认停用**（`SourceRegistry.defaultDisabledBuiltins`）：
-/// 具备真实账号并通过端到端验证后，由注册表默认启用列表翻转。
+/// 已用真实账号端到端联调通过（发现 / 详情 / 正文 / 远端书架 / 签到），
+/// 因此随包默认启用。
 class LnsSource
     implements
         DiscoverProvider,

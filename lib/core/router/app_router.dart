@@ -11,6 +11,7 @@ import '../../features/novel/lk/lk_account_page.dart';
 import '../../features/novel/lk/lk_dm_page.dart';
 import '../../features/novel/lk/lk_message_list_page.dart';
 import '../../features/novel/lk/lk_messages_page.dart';
+import '../../features/novel/lns/lns_account_page.dart';
 import '../../features/novel/reader/fonts_page.dart';
 import '../../features/novel/reader/novel_reader_page.dart';
 import '../../features/novel/remote_shelf_page.dart';
@@ -51,6 +52,7 @@ abstract final class AppRoutes {
   static const String lkMessageCategory = '/lk-message-category';
   static const String lkDm = '/lk-dm';
   static const String lkDmThread = '/lk-dm-thread';
+  static const String lnsAccount = '/lns-account';
   static const String downloads = '/downloads';
   static const String backup = '/backup';
   static const String webdav = '/webdav';
@@ -229,6 +231,11 @@ abstract final class AppRouter {
           peerUid: int.tryParse(state.pathParameters['peerUid'] ?? '') ?? 0,
           peerName: state.extra is String ? state.extra! as String : null,
         ),
+      ),
+      GoRoute(
+        path: AppRoutes.lnsAccount,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const LnsAccountPage(),
       ),
       GoRoute(
         path: AppRoutes.tracking,

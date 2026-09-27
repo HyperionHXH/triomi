@@ -76,8 +76,7 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
       ),
       LnsSource.id: ref.watch(lnsSourceProvider),
     },
-    // 轻书架需真实账号联调，联调通过前默认停用（可在来源管理页手动启用）。
-    defaultDisabledBuiltins: const <String>{LnsSource.id},
+    // 轻书架已用真实账号端到端联调通过（发现/详情/正文/远端书架/签到），默认启用。
   );
 });
 
