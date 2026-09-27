@@ -664,6 +664,18 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   }
 }
 
+/// 正文渲染样式：来源字体（轻书架 B7）优先，且**不与环境的 DefaultTextStyle 合并**
+/// （`inherit: false`）。
+///
+/// 分页是把同一份样式直接交给 `TextPainter` 量高度的，而 `Text` 默认会再把环境
+/// DefaultTextStyle 合并进来——Material 的 `bodyMedium` 带 `letterSpacing: 0.3` 与
+/// `leadingDistribution: even`，于是同一个片段渲染时换行更多、整页比模型高，
+/// 表现为「这页正好填满时」正文底部溢出（实测 10px）。渲染与测量必须是同一份样式。
+@visibleForTesting
+TextStyle readerTextStyle(TextStyle base, String? sourceFont) =>
+    (sourceFont == null ? base : base.copyWith(fontFamily: sourceFont))
+        .copyWith(inherit: false);
+
 /// 一页内容：文本片段与插图的纵向排布。
 class _PageContent extends StatelessWidget {
   const _PageContent({
@@ -679,10 +691,7 @@ class _PageContent extends StatelessWidget {
   /// 来源要求的正文字体（轻书架 B7），有值时优先于用户设置。
   final String? sourceFont;
 
-  TextStyle _style(TextStyle base) {
-    final font = sourceFont;
-    return font == null ? base : base.copyWith(fontFamily: font);
-  }
+  TextStyle _style(TextStyle base) => readerTextStyle(base, sourceFont);
 
   @override
   Widget build(BuildContext context) {
@@ -692,6 +701,7 @@ class _PageContent extends StatelessWidget {
       switch (element) {
         case TextElement(:final text, :final heading):
           if (index > 0 && !heading) {
+            // 段间距取 0.7×字号，分页模型按 0.8×字号预留（略多留一点当余量）。
             children.add(SizedBox(height: settings.fontSize * 0.7));
           }
           children.add(
@@ -781,10 +791,7 @@ class _BlockView extends StatelessWidget {
   /// 来源要求的正文字体（轻书架 B7），有值时优先于用户设置。
   final String? sourceFont;
 
-  TextStyle _style(TextStyle base) {
-    final font = sourceFont;
-    return font == null ? base : base.copyWith(fontFamily: font);
-  }
+  TextStyle _style(TextStyle base) => readerTextStyle(base, sourceFont);
 
   @override
   Widget build(BuildContext context) {
