@@ -9,9 +9,11 @@
 
 - **Triomi**：「追番 + 漫画 + 小说」聚合客户端，Flutter（go_router + Riverpod 3 +
   drift + Hive），GPL-3.0。规格书：`docs/PROJECT_SPEC.md`（验收标准的最终依据）。
-- 代码：`lib/`（70 文件 / 24.5k 行）；测试：`test/`（13 文件 / 80 用例全绿）；
+- 代码：`lib/`（78 文件）；测试：`test/`（15 文件 / 199 用例全绿）；
   参考实现（Mixn，Kotlin）：`D:\noval_and_manga\_refs\mixn`。
-- 当前 HEAD：`933242e`（docs: 执行评估与下一步规划）。
+- 当前 HEAD：`1e4a67d`（feat(T5): 轻之国度账号域接口层）。
+- **交接单 T1–T7 已全部完成**（T4/T5 的协议层与接口层已交付，剩余的是需要
+  真实账号/设备的联调与页面接线，见各自文档的「后续集成点」）。
 
 ## 分工边界（重要）
 
@@ -81,10 +83,14 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
 | T1 | 追踪服务（Bangumi / AniList 进度上报） | ✅ **已完成**（[T1-tracking-service.md](T1-tracking-service.md)） | — |
 | T2 | JS 规则沙箱 | ✅ **已完成**（[T2-js-sandbox.md](T2-js-sandbox.md)） | — |
 | T3 | 弹幕发送（弹弹play 登录补全） | ✅ **已完成**（[T3-danmaku-send.md](T3-danmaku-send.md)） | — |
-| T4 | LNS SignalR 适配器协议层 | [T4-lns-signalr.md](T4-lns-signalr.md) | 可先做协议层，联调需账号 |
-| T5 | LK 账号域接口层 | [T5-lk-account.md](T5-lk-account.md) | 可先做接口层，联调需账号 |
+| T4 | LNS SignalR 适配器协议层 | ✅ **已完成**（[T4-lns-signalr.md](T4-lns-signalr.md)） | 联调需 LNS 账号 |
+| T5 | LK 账号域接口层 | ✅ **已完成**（[T5-lk-account.md](T5-lk-account.md)） | 联调需 LK 账号 |
 | T6 | 阅读器增强逻辑 + 凭据安全迁移 | ✅ **已完成**（[T6-reader-security.md](T6-reader-security.md)） | — |
-| T7 | 杂项收口（追番订阅/到底提示/同书版本/SAF 导出/在线字体/备份开关/后台提醒桩） | [T7-misc-cleanup.md](T7-misc-cleanup.md) | 无 |
+| T7 | 杂项收口（追番订阅/到底提示/同书版本/SAF 导出/在线字体/备份开关/后台提醒桩） | ✅ **已完成**（[T7-misc-cleanup.md](T7-misc-cleanup.md)） | 无 |
 
-建议顺序：**T1 → T2 → T3 → T6 → T7 → T4 → T5**（T1/T2 是验收硬缺口；
-T7 各项可穿插；T4/T5 的联调部分等账号）。
+**全部任务已完成。** 剩余工作都需要真实账号或设备，由本机环境接手：
+
+- LNS：登录/发现/详情/正文/书架/签到联调；fontUrl 接入阅读器渲染；
+  `defaultDisabledBuiltins` 翻转；页面入口。
+- LK：资料页、消息中心、详情页评论 Tab（接口已在 `LkSource` 就位）。
+- T7：SAF 目录选择/写入与在线字体下载的模拟器 E2E。
