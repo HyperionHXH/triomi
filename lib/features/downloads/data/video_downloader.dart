@@ -50,13 +50,19 @@ class VideoDownloader {
     final file = File(
       _join(directory.path, '$fileNameStem${_extensionOf(url)}'),
     );
-    final received = await _writeFrom(
-      file: file,
-      url: url,
-      progressOfChunk: (received, total) =>
-          onProgress?.call(total <= 0 ? 0 : (received / total).clamp(0, 1)),
-    );
-    if (received == 0) throw _empty(sourceId);
+    try {
+      final received = await _writeFrom(
+        file: file,
+        url: url,
+        progressOfChunk: (received, total) =>
+            onProgress?.call(total <= 0 ? 0 : (received / total).clamp(0, 1)),
+      );
+      if (received == 0) throw _empty(sourceId);
+    } catch (_) {
+      // 失败（含半截文件）不留垃圾：残缺视频播不了，重试会重新下。
+      await _deleteQuietly(file);
+      rethrow;
+    }
     onProgress?.call(1);
     return file.path;
   }
@@ -77,27 +83,30 @@ class VideoDownloader {
     );
     final parts = <Uri>[?playlist.initSegment, ...playlist.segments];
 
-    final sink = file.openWrite();
     var written = 0;
     try {
-      for (var index = 0; index < parts.length; index++) {
-        final stream = await http.downloadBytes(
-          parts[index].toString(),
-          sourceId: sourceId,
-        );
-        await for (final chunk in stream.stream) {
-          sink.add(chunk);
-          written += chunk.length;
+      final sink = file.openWrite();
+      try {
+        for (var index = 0; index < parts.length; index++) {
+          final stream = await http.downloadBytes(
+            parts[index].toString(),
+            sourceId: sourceId,
+          );
+          await for (final chunk in stream.stream) {
+            sink.add(chunk);
+            written += chunk.length;
+          }
+          onProgress?.call((index + 1) / parts.length);
         }
-        onProgress?.call((index + 1) / parts.length);
+        await sink.flush();
+      } finally {
+        await sink.close();
       }
-      await sink.flush();
-    } finally {
-      await sink.close();
-    }
-    if (written == 0) {
+      if (written == 0) throw _empty(sourceId);
+    } catch (_) {
+      // 任一分段失败都不留半截文件，重试会整条重下。
       await _deleteQuietly(file);
-      throw _empty(sourceId);
+      rethrow;
     }
     onProgress?.call(1);
     return file.path;
@@ -122,6 +131,9 @@ class VideoDownloader {
   // ---------------------------------------------------------------- 工具
 
   /// 流式写盘；返回写入的字节数。
+  ///
+  /// 响应头给了长度就必须一字不差：少字节说明连接被提前掐断，
+  /// 这时要报错（并让调用方删掉半截文件），绝不能当成功。
   Future<int> _writeFrom({
     required File file,
     required String url,
@@ -140,6 +152,13 @@ class VideoDownloader {
       await sink.flush();
     } finally {
       await sink.close();
+    }
+    if (total > 0 && received != total) {
+      throw SourceException(
+        sourceId: sourceId,
+        type: SourceErrorType.network,
+        message: '下载不完整（收到 $received / $total 字节）',
+      );
     }
     return received;
   }

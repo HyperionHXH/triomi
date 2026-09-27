@@ -60,6 +60,29 @@ FakeHttpClient byteHttp(Map<String, List<int>> files) {
   return client;
 }
 
+/// 响应头声称的长度比实际字节多：模拟连接被提前掐断。
+class TruncatingHttpClient extends FakeHttpClient {
+  TruncatingHttpClient(super.handler);
+
+  @override
+  Future<SourceByteStream> downloadBytes(
+    String url, {
+    required String sourceId,
+    Map<String, String> headers = const <String, String>{},
+  }) async {
+    final stream = await super.downloadBytes(
+      url,
+      sourceId: sourceId,
+      headers: headers,
+    );
+    return SourceByteStream(
+      stream: stream.stream,
+      url: stream.url,
+      contentLength: (stream.contentLength ?? 0) + 4,
+    );
+  }
+}
+
 /// 测试里没有 path_provider 插件：把「应用文档目录」指到临时目录。
 void mockDocumentsDirectory(Directory directory) {
   const channel = MethodChannel('plugins.flutter.io/path_provider');
@@ -140,6 +163,26 @@ void main() {
       );
 
       expect(path, endsWith('video.mp4'));
+    });
+
+    test('连接被掐断（字节数不足）：报错且不留半截文件', () async {
+      final http = TruncatingHttpClient(
+        (request) async =>
+            SourceResponse(statusCode: 200, body: '', url: request.url),
+      )..bytesHandler = (url) => List<int>.filled(2048, 1);
+
+      await expectLater(
+        VideoDownloader(http: http, sourceId: 's').download(
+          url: 'https://cdn.example.com/video/ep1.mp4',
+          directory: tempDir.path,
+        ),
+        throwsA(
+          isA<SourceException>()
+              .having((error) => error.type, 'type', SourceErrorType.network)
+              .having((error) => error.message, 'message', contains('下载不完整')),
+        ),
+      );
+      expect(tempDir.listSync(), isEmpty);
     });
   });
 
@@ -250,6 +293,23 @@ seg-1.ts
     test('地址不是 m3u8：走渐进式路径（不误判成 HLS）', () {
       expect(VideoDownloader.isHlsUrl('https://x/y.m3u8?t=1'), isTrue);
       expect(VideoDownloader.isHlsUrl('https://x/y.mp4'), isFalse);
+    });
+
+    test('分段下载失败：报错且不留半截文件', () async {
+      final http = byteHttp(<String, List<int>>{
+        playlistUrl: utf8.encode(media),
+        'https://cdn.example.com/hls/seg-1.ts': utf8.encode('AAA'),
+        // seg-2 故意不登记 → 404 → 整条失败。
+      });
+
+      await expectLater(
+        VideoDownloader(
+          http: http,
+          sourceId: 's',
+        ).download(url: playlistUrl, directory: tempDir.path),
+        throwsA(isA<Object>()),
+      );
+      expect(tempDir.listSync(), isEmpty);
     });
   });
 
