@@ -79,6 +79,7 @@ class SourceRegistry {
     required this.repository,
     required this.http,
     this.builtinAdapters = const <String, ContentSource>{},
+    this.defaultDisabledBuiltins = const <String>{},
     this.jsRuntimeFactory,
     AssetBundle? assetBundle,
   }) : _bundle = assetBundle ?? rootBundle;
@@ -89,6 +90,12 @@ class SourceRegistry {
   /// 内置适配器（如轻之国度）：随包编译，不走规则文件。
   /// 键为来源 id；对应数据库行的 ruleText 为空。
   final Map<String, ContentSource> builtinAdapters;
+
+  /// 首次播种时**默认停用**的内置来源 id。
+  ///
+  /// 用于「实现已就位但尚未端到端联调」的来源（如需要账号的轻书架）：
+  /// 用户可在来源管理页手动启用，联调通过后从该集合移除。
+  final Set<String> defaultDisabledBuiltins;
 
   /// JS 规则用的引擎工厂；为 null 时用 flutter_js（Web 上不可用）。
   /// 测试注入替身走这里。
@@ -206,6 +213,7 @@ class SourceRegistry {
         kind: SourceKind.builtin,
         lang: adapter.descriptor.lang,
         version: adapter.descriptor.version,
+        enabled: !defaultDisabledBuiltins.contains(adapter.descriptor.id),
       );
       seededNow.add(marker);
     }

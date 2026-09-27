@@ -2,6 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/novel/data/lk/lk_client.dart';
 import '../../features/novel/data/lk/lk_source.dart';
+import '../../features/novel/data/lns/lns_auth.dart';
+import '../../features/novel/data/lns/lns_gateway.dart';
+import '../../features/novel/data/lns/lns_hub_connection.dart';
+import '../../features/novel/data/lns/lns_source.dart';
 import '../db/database_provider.dart';
 import '../storage/preferences.dart';
 import '../storage/secure_store.dart';
@@ -21,6 +25,37 @@ final sourceRepositoryProvider = Provider<SourceRepository>(
   (ref) => SourceRepository(ref.watch(databaseProvider)),
 );
 
+/// 轻书架（LNS）：Hub 连接 + 账号 + 网关（SignalR 协议层见 lns_hub_connection）。
+final lnsSourceProvider = Provider<LnsSource>((ref) {
+  final http = ref.watch(sourceHttpClientProvider);
+  final limiter = ShelfRateLimiter();
+  final auth = LnsAuth(
+    http: http,
+    limiter: limiter,
+    store: SecureLnsTokenStore(ref.watch(secureStoreProvider)),
+  );
+  final connection = FallbackLnsHubConnection(
+    primary: SignalRLnsHubConnection(
+      hubUrl: lnsHubUrl,
+      accessToken: auth.accessToken,
+    ),
+    fallback: SignalRLnsHubConnection(
+      hubUrl: lnsFallbackHubUrl,
+      accessToken: auth.accessToken,
+    ),
+  );
+  ref.onDispose(connection.reset);
+  return LnsSource(
+    gateway: LnsGateway(
+      connection: connection,
+      limiter: limiter,
+      refreshSession: auth.refresh,
+    ),
+    auth: auth,
+    fontChannel: LnsFontChannel(http: http),
+  );
+});
+
 final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
   final preferences = ref.watch(preferencesProvider);
   return SourceRegistry(
@@ -34,7 +69,10 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
           secureStore: ref.watch(secureStoreProvider),
         ),
       ),
+      LnsSource.id: ref.watch(lnsSourceProvider),
     },
+    // 轻书架需真实账号联调，联调通过前默认停用（可在来源管理页手动启用）。
+    defaultDisabledBuiltins: const <String>{LnsSource.id},
   );
 });
 
