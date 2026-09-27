@@ -133,12 +133,22 @@ def anime_detail_page(rid: str) -> str:
 
 
 def anime_play_page(ep: str) -> str:
+    # 第 3 话把 HLS（m3u8）放在第一条线路，用来验证视频下载的 HLS 分支；
+    # 其余话第一条是渐进式 mp4（真实可播，保持播放链路验证不变）。
+    lines = [
+        ('线路A', '/video/sample.m3u8'),
+        ('线路B', '/video/sample.mp4'),
+    ]
+    if not ep.endswith('-3'):
+        lines.reverse()
+    rows = ''.join(
+        f'<div class="line"><span class="line-name">{name}</span>'
+        f'<a class="line-url" href="{url}">{name} 源</a></div>'
+        for name, url in lines
+    )
     return f'''<html><body>
 <h1>夹具番剧 {ep}</h1>
-<div class="lines">
-  <div class="line"><span class="line-name">线路A</span><a class="line-url" href="/video/sample.mp4">A 源</a></div>
-  <div class="line"><span class="line-name">线路B</span><a class="line-url" href="/video/sample.mp4">B 源</a></div>
-</div>
+<div class="lines">{rows}</div>
 </body></html>'''
 
 

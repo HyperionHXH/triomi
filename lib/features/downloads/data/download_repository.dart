@@ -349,6 +349,18 @@ class DownloadRepository {
     final row = await query.getSingleOrNull();
     return row?.path;
   }
+
+  /// 番剧：离线视频文件（completed 任务的 path 指向文件，不是目录）。
+  ///
+  /// 文件被外部删掉时返回 null（不把一个不存在的路径交给播放器）。
+  Future<String?> localVideoPath(
+    String sourceId,
+    String chapterRemoteId,
+  ) async {
+    final path = await localImageDir(sourceId, chapterRemoteId);
+    if (path == null || path.isEmpty) return null;
+    return File(path).existsSync() ? path : null;
+  }
 }
 
 /// 离线图片目录的清单文件（记录有序文件名）。

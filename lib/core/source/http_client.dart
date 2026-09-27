@@ -54,6 +54,23 @@ class SourceResponse {
   bool get isSuccess => statusCode >= 200 && statusCode < 400;
 }
 
+/// 流式二进制响应（大文件下载用）：逐块读、边下边写，不整块进内存。
+class SourceByteStream {
+  const SourceByteStream({
+    required this.stream,
+    required this.url,
+    this.contentLength,
+  });
+
+  final Stream<List<int>> stream;
+
+  /// 响应头里的总长度；服务端没给（如分块传输）时为 null。
+  final int? contentLength;
+
+  /// 真实请求地址（跟随重定向后）。
+  final String url;
+}
+
 /// 来源网络层抽象。
 ///
 /// 抽出来的两个理由：一是所有来源请求共用超时、UA、重试与错误分类；
@@ -70,6 +87,13 @@ abstract class SourceHttpClient {
     required String sourceId,
     Map<String, String> headers,
     String method,
+  });
+
+  /// 流式取二进制资源（视频等大文件）。失败抛 [SourceException]。
+  Future<SourceByteStream> downloadBytes(
+    String url, {
+    required String sourceId,
+    Map<String, String> headers,
   });
 
   /// 上传二进制内容（WebDAV PUT / 备份上传）。失败抛 [SourceException]。
@@ -185,6 +209,52 @@ class DioSourceHttpClient implements SourceHttpClient {
         );
       }
       return response.data ?? const <int>[];
+    } on SourceException {
+      rethrow;
+    } catch (error) {
+      throw SourceException.wrap(error, sourceId: sourceId, url: url);
+    }
+  }
+
+  @override
+  Future<SourceByteStream> downloadBytes(
+    String url, {
+    required String sourceId,
+    Map<String, String> headers = const <String, String>{},
+  }) async {
+    try {
+      final response = await _dio.get<ResponseBody>(
+        url,
+        options: Options(
+          headers: <String, String>{'User-Agent': defaultUserAgent, ...headers},
+          responseType: ResponseType.stream,
+          connectTimeout: timeout,
+          sendTimeout: timeout,
+          receiveTimeout: timeout,
+        ),
+      );
+      final status = response.statusCode ?? 0;
+      if (status < 200 || status >= 400) {
+        throw SourceException(
+          sourceId: sourceId,
+          type: _classifyStatus(status),
+          message: 'HTTP $status',
+        );
+      }
+      final body = response.data;
+      if (body == null) {
+        throw SourceException(
+          sourceId: sourceId,
+          type: SourceErrorType.parse,
+          message: '响应没有内容',
+        );
+      }
+      final length = response.headers.value(Headers.contentLengthHeader);
+      return SourceByteStream(
+        stream: body.stream.map((chunk) => chunk.toList(growable: false)),
+        contentLength: length == null ? null : int.tryParse(length),
+        url: response.realUri.toString(),
+      );
     } on SourceException {
       rethrow;
     } catch (error) {

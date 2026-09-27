@@ -19,6 +19,7 @@ import '../../core/source/source_registry.dart';
 import '../../core/storage/preferences.dart';
 import '../../core/storage/secure_store.dart';
 import '../../core/theme/app_tokens.dart';
+import '../downloads/data/download_providers.dart';
 import '../library/data/library_providers.dart';
 import '../library/data/library_repository.dart';
 import '../tracking/data/tracking_providers.dart';
@@ -152,6 +153,22 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     });
 
     try {
+      // 离线优先：已下载到本地就直接播文件，不依赖来源与网络。
+      final localPath = await ref
+          .read(downloadRepositoryProvider)
+          .localVideoPath(_item.sourceId, _chapter.remoteId);
+      if (localPath != null) {
+        _lines = const <PlaySource>[];
+        await _openLine(Uri.file(localPath).toString());
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _chromeVisible = true;
+          });
+        }
+        return;
+      }
+
       final snapshot = await ref.read(sourcesProvider.future);
       final entry = snapshot.entries
           .where((candidate) => candidate.descriptor.id == _item.sourceId)

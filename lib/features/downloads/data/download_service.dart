@@ -9,6 +9,7 @@ import '../../../core/source/http_client.dart';
 import '../../../core/source/source_api.dart';
 import '../../../core/storage/preferences.dart';
 import 'download_repository.dart';
+import 'video_downloader.dart';
 
 /// 单个章节的下载执行：取数 → 落盘 → 更新任务状态。
 ///
@@ -87,6 +88,18 @@ class DownloadService {
         throw StateError('正文为空（可能是锁定章节或选择器失配）');
       }
 
+      if (content.playSources.isNotEmpty) {
+        // 番剧：把视频落到磁盘（渐进式或明文 HLS），`downloads.path` 存文件路径。
+        final file = await VideoDownloader(http: http, sourceId: row.sourceId)
+            .download(
+              url: content.playSources.first.url,
+              directory: await _videoDirectory(row),
+              onProgress: (value) => repository.markProgress(row.id, value),
+            );
+        await repository.markDone(row.id, path: file);
+        return;
+      }
+
       if (content.images.isNotEmpty) {
         final directory = await _imageDirectory(row);
         final files = <String>[];
@@ -151,18 +164,25 @@ class DownloadService {
     return dir.path;
   }
 
-  /// 删除一本作品的离线文件（图片目录）。
+  /// 番剧：视频文件放 `downloads/<sourceId>/<item>/<chapter>/`，文件名由下载器决定。
+  Future<String> _videoDirectory(DownloadRow row) => _imageDirectory(row);
+
+  /// 删除一本作品的离线文件（漫画图片目录 / 番剧视频文件）。
   static Future<void> removeFiles(Iterable<DownloadRow> rows) async {
     for (final row in rows) {
       final path = row.path;
       if (path == null || path.isEmpty) continue;
-      final dir = Directory(path);
-      if (dir.existsSync()) {
-        try {
-          await dir.delete(recursive: true);
-        } catch (_) {
-          // 文件被占用时忽略：记录已删，残留目录不影响使用。
+      try {
+        switch (FileSystemEntity.typeSync(path)) {
+          case FileSystemEntityType.directory:
+            await Directory(path).delete(recursive: true);
+          case FileSystemEntityType.file:
+            await File(path).delete();
+          default:
+            break;
         }
+      } catch (_) {
+        // 文件被占用时忽略：记录已删，残留文件不影响使用。
       }
     }
   }
