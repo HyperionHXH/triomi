@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -32,19 +34,35 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage> {
   Future<_DiscoverResult>? _future;
   int _requestSeq = 0;
 
-  Future<_DiscoverResult> _load(SourceEntry entry, DiscoverFeed feed) async {
+  // 触底分页（T7-2）：第一页由 [_future] 加载，后续页追加到 [_nextPages]。
+  final List<MediaItem> _nextPages = <MediaItem>[];
+  int _page = 1;
+  bool _hasMore = true;
+  bool _loadingMore = false;
+
+  static const int _pageSize = 20;
+
+  Future<_DiscoverResult> _load(
+    SourceEntry entry,
+    DiscoverFeed feed, {
+    int page = 1,
+  }) async {
     final seq = ++_requestSeq;
     try {
       final provider = entry.source;
       if (provider is! DiscoverProvider) {
         return const _DiscoverResult(error: '该来源没有声明 discover 能力');
       }
-      final items = await provider.discover(feed);
+      final items = await provider.discover(feed, page: page);
       // 结果已过期（用户切了来源/榜单），丢弃这次响应
       if (seq != _requestSeq) {
-        return const _DiscoverResult(items: <MediaItem>[]);
+        return const _DiscoverResult(items: <MediaItem>[], hasMore: false);
       }
-      return _DiscoverResult(items: items);
+      // 空页或长度不满一页 → 到底。
+      return _DiscoverResult(
+        items: items,
+        hasMore: discoverHasMore(items.length, pageSize: _pageSize),
+      );
     } catch (error) {
       final message = error is SourceException
           ? SourceRegistry.describeError(error, entry.descriptor.name)
@@ -53,10 +71,36 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage> {
     }
   }
 
+  void _resetPaging() {
+    _nextPages.clear();
+    _page = 1;
+    _hasMore = true;
+    _loadingMore = false;
+  }
+
   void _refresh() {
     setState(() {
       _future = null;
       _activeKey = null;
+      _resetPaging();
+    });
+  }
+
+  Future<void> _loadMore(SourceEntry entry, DiscoverFeed feed) async {
+    if (_loadingMore || !_hasMore) return;
+    _loadingMore = true;
+    final result = await _load(entry, feed, page: _page + 1);
+    if (!mounted) return;
+    setState(() {
+      _loadingMore = false;
+      if (result.error != null) {
+        // 追加页失败不打断已有内容，只是停止追加。
+        _hasMore = false;
+        return;
+      }
+      _page += 1;
+      _nextPages.addAll(result.items);
+      _hasMore = result.hasMore && result.items.isNotEmpty;
     });
   }
 
@@ -120,6 +164,7 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage> {
       _feedId = null;
       _activeKey = null;
       _future = null;
+      _resetPaging();
     }
 
     final provider = entry.source;
@@ -136,6 +181,7 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage> {
       _feedId = feed.id;
       _activeKey = null;
       _future = null;
+      _resetPaging();
     }
 
     final key = '${entry.descriptor.id}/${feed?.id ?? '-'}';
@@ -180,7 +226,7 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage> {
                 if (error != null) {
                   return _ErrorView(message: error, onRetry: _refresh);
                 }
-                final items = result?.items ?? const <MediaItem>[];
+                final items = <MediaItem>[...?result?.items, ..._nextPages];
                 if (items.isEmpty) {
                   return const EmptyStateView(
                     icon: Icons.inbox_outlined,
@@ -188,14 +234,47 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage> {
                     message: '换个榜单或来源试试。',
                   );
                 }
-                return MediaItemCollection(
-                  items: items,
-                  sourceName: entry.descriptor.name,
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    AppSpacing.xs,
-                    AppSpacing.lg,
-                    AppSpacing.lg,
+                final noMore =
+                    result != null && result.items.isNotEmpty && !_hasMore;
+                return NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if (notification.depth != 0 ||
+                        notification is! ScrollEndNotification ||
+                        !_hasMore ||
+                        _loadingMore) {
+                      return false;
+                    }
+                    final metrics = notification.metrics;
+                    if (metrics.pixels >= metrics.maxScrollExtent - 240) {
+                      unawaited(_loadMore(entry, feed!));
+                    }
+                    return false;
+                  },
+                  child: MediaItemCollection(
+                    items: items,
+                    sourceName: entry.descriptor.name,
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg,
+                      AppSpacing.xs,
+                      AppSpacing.lg,
+                      AppSpacing.lg,
+                    ),
+                    footer: _loadingMore
+                        ? const Padding(
+                            padding: EdgeInsets.all(AppSpacing.md),
+                            child: Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            ),
+                          )
+                        : noMore
+                        ? const _EndDivider(label: '已经到底了')
+                        : null,
                   ),
                 );
               },
@@ -207,11 +286,52 @@ class _DiscoverPageState extends ConsumerState<DiscoverPage> {
   }
 }
 
+/// 触底分页判定（T7-2）：空页或长度不满一页 → 到底。
+@visibleForTesting
+bool discoverHasMore(int itemCount, {int pageSize = 20}) =>
+    itemCount >= pageSize;
+
 class _DiscoverResult {
-  const _DiscoverResult({this.items = const <MediaItem>[], this.error});
+  const _DiscoverResult({
+    this.items = const <MediaItem>[],
+    this.error,
+    this.hasMore = false,
+  });
 
   final List<MediaItem> items;
   final String? error;
+
+  /// 还有下一页（空页或长度不满一页时为 false）。
+  final bool hasMore;
+}
+
+/// 「已经到底了」分隔条：左右细线 + 居中小字，只渲染一次。
+class _EndDivider extends StatelessWidget {
+  const _EndDivider({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      child: Row(
+        children: <Widget>[
+          const Expanded(child: Divider()),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: palette.mutedForeground),
+            ),
+          ),
+          const Expanded(child: Divider()),
+        ],
+      ),
+    );
+  }
 }
 
 /// 横向可滚动的筛选 chip 行。

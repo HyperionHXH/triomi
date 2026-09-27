@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/backup/backup_service.dart';
+import '../../core/platform/platform_channel.dart';
+import '../../core/storage/preferences.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
@@ -24,9 +26,31 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   String? _status;
   List<File> _local = const <File>[];
 
+  /// 用户授权的导出目录（T7-4）；为空时走应用私有目录。
+  String? _exportDirectory;
+
+  /// 后台更新检查（T7-7）：仅设置位，真实排程见 TODO。
+  bool _backgroundCheck = false;
+
+  static const String backgroundCheckKey = 'updates.backgroundCheck';
+
+  // TODO(T7-7): 后台更新的真实排程方案——
+  // 方案 A：workmanager 插件（后台隔离回调 + Android WorkManager/iOS BGTask），
+  //   代价：新增插件与初始化侵入。
+  // 方案 B：MethodChannel + Android JobScheduler（Worker），仅 Android 原生实现，
+  //   通过 triomi/platform 通道 scheduleBackgroundCheck(bool) 注册周期任务，
+  //   由原生侧触发一次 dart 入口（需 headless engine）。
+  // 排程内容：调用各追踪/放送表的轻量查询 → 本地通知（需通知权限申请流程）。
+  // 规格默认关闭，以上方案在开启设置时由引导流程申请权限后启用。
+
   @override
   void initState() {
     super.initState();
+    _exportDirectory = ref
+        .read(preferencesProvider)
+        .get<String>(BackupService.exportDirectoryKey);
+    _backgroundCheck =
+        ref.read(preferencesProvider).get<bool>(backgroundCheckKey) ?? false;
     unawaited(_refreshLocal());
   }
 
@@ -65,6 +89,57 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                   onPressed: _busy ? null : () => _export(includeCovers: false),
                   icon: const Icon(Icons.archive_outlined, size: 18),
                   label: const Text('导出精简备份（不含封面）'),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                OutlinedButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () => _export(
+                          includeCovers: false,
+                          includeOfflineContent: false,
+                        ),
+                  icon: const Icon(Icons.archive_outlined, size: 18),
+                  label: const Text('导出精简备份（不含封面与离线内容）'),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('后台检查更新'),
+                  subtitle: const Text(
+                    '联网检查追番与来源更新并通知；默认关闭。'
+                    '开启后需要通知权限。当前版本仅保存偏好，'
+                    '实际排程在后续版本提供。',
+                  ),
+                  value: _backgroundCheck,
+                  onChanged: (value) async {
+                    await ref
+                        .read(preferencesProvider)
+                        .set(backgroundCheckKey, value);
+                    setState(() => _backgroundCheck = value);
+                  },
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: const Icon(Icons.folder_outlined),
+                  title: Text(
+                    _exportDirectory == null ? '导出到应用私有目录' : '导出到授权目录',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: _exportDirectory == null
+                      ? const Text('选择后备份包会写入该目录')
+                      : Text(
+                          _exportDirectory!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                  trailing: _exportDirectory == null
+                      ? const TextButton(onPressed: null, child: Text(''))
+                      : null,
+                  onTap: _busy ? null : _pickExportDirectory,
                 ),
               ],
             ),
@@ -129,15 +204,42 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     child: AppCard(child: child),
   );
 
-  Future<void> _export({required bool includeCovers}) async {
+  Future<void> _export({
+    required bool includeCovers,
+    bool includeOfflineContent = true,
+  }) async {
     setState(() {
       _busy = true;
       _status = null;
     });
     try {
+      final directory = _exportDirectory;
       final result = await ref
           .read(backupServiceProvider)
-          .exportToFile(includeCovers: includeCovers);
+          .exportToFile(
+            includeCovers: includeCovers,
+            includeOfflineContent: includeOfflineContent,
+            directoryUri: directory,
+            writeToTree: (uri, fileName, bytes) async {
+              await platformChannel.writeToTree(
+                uri,
+                fileName,
+                Uint8List.fromList(bytes),
+              );
+            },
+          );
+      await _refreshLocal();
+      if (!mounted) return;
+      final note = directory != null && result.path.startsWith(directory)
+          ? ''
+          : '\n（授权目录写入失败，已回退应用私有目录）';
+      setState(() {
+        _status =
+            '已导出：${result.summary.libraryEntries} 条书架、'
+            '${result.summary.historyEntries} 条历史、'
+            '${result.summary.cachedChapters} 条目录缓存、'
+            '${result.summary.covers} 张封面\n${result.path}$note';
+      });
       await _refreshLocal();
       if (!mounted) return;
       setState(() {
@@ -152,6 +254,16 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// 选择导出目录（SAF），持久化到设置；再次选择后可在系统选择器里改选。
+  Future<void> _pickExportDirectory() async {
+    final uri = await platformChannel.pickDirectory();
+    if (!mounted) return;
+    final preferences = ref.read(preferencesProvider);
+    if (uri == null) return;
+    await preferences.set(BackupService.exportDirectoryKey, uri);
+    setState(() => _exportDirectory = uri);
   }
 
   Future<void> _import(String path) async {

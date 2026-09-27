@@ -54,3 +54,4 @@ flutter:
   assets:
     - assets/rules/
     - assets/opencc/
+    - assets/fonts/catalog.json

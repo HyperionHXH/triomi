@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.view.WindowManager
@@ -36,9 +37,61 @@ class MainActivity : FlutterActivity() {
                     "saveImageToGallery" -> {
                         saveImageToGallery(call, result)
                     }
+                    "pickDirectory" -> {
+                        pendingFontResult = result
+                        launchDirectoryPicker()
+                    }
+                    "writeToTree" -> {
+                        writeToTree(call, result)
+                    }
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /** SAF 目录选择（导出目录）。 */
+    private fun launchDirectoryPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+        try {
+            startActivityForResult(intent, REQUEST_PICK_DIRECTORY)
+        } catch (error: Exception) {
+            val pending = pendingFontResult
+            pendingFontResult = null
+            pending?.error("picker_failed", error.message, null)
+        }
+    }
+
+    /** 向授权目录写文件：DocumentsContract.createDocument + 输出流。 */
+    private fun writeToTree(call: MethodChannel.Call, result: MethodChannel.Result) {
+        val treeUri = call.argument<String>("treeUri")
+        val fileName = call.argument<String>("fileName") ?: "export.zip"
+        val bytes = call.argument<ByteArray>("bytes")
+        val mime = call.argument<String>("mime") ?: "application/zip"
+        if (treeUri == null || bytes == null) {
+            result.error("invalid_args", "treeUri and bytes are required", null)
+            return
+        }
+        try {
+            val root = Uri.parse(treeUri)
+            val docUri = DocumentsContract.buildDocumentUriUsingTree(
+                root,
+                DocumentsContract.getTreeDocumentId(root),
+            )
+            val newUri = DocumentsContract.createDocument(
+                contentResolver, docUri, mime, fileName,
+            )
+            if (newUri == null) {
+                result.error("create_failed", "createDocument returned null", null)
+                return
+            }
+            contentResolver.openOutputStream(newUri)?.use { output ->
+                output.write(bytes)
+                output.flush()
+            }
+            result.success(newUri.toString())
+        } catch (error: Exception) {
+            result.error("write_failed", error.message, null)
+        }
     }
 
     /** 保存图片到相册（MediaStore，Pictures/Triomi；Android 10+ 免存储权限）。 */
@@ -111,6 +164,27 @@ class MainActivity : FlutterActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_PICK_DIRECTORY) {
+            val pending = pendingFontResult
+            pendingFontResult = null
+            if (pending == null) return
+            val uri: Uri? = data?.data
+            if (resultCode != RESULT_OK || uri == null) {
+                pending.success(null)
+                return
+            }
+            // 持久授权：跨进程重启后仍可写入。
+            try {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            } catch (_: Exception) {
+            }
+            pending.success(uri.toString())
+            return
+        }
         if (requestCode != REQUEST_PICK_FONT) return
         val pending = pendingFontResult
         pendingFontResult = null
@@ -146,5 +220,6 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val REQUEST_PICK_FONT = 4101
+        private const val REQUEST_PICK_DIRECTORY = 4102
     }
 }

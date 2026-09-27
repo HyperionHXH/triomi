@@ -704,7 +704,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
 
   /// 手动搜索弹幕（弹弹play）：按番剧名匹配，选中剧集后载入并记住 episodeId。
   Future<void> _searchDanmaku() async {
-    final credentials = DandanplayCredentials.load(_preferences, ref.read(secureStoreProvider));
+    final credentials = DandanplayCredentials.load(
+      _preferences,
+      ref.read(secureStoreProvider),
+    );
     if (!credentials.isConfigured) {
       final go = await showDialog<bool>(
         context: context,
@@ -825,7 +828,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
 
   /// 发送弹幕（需要弹弹play 凭据；未配置时给出明确指引）。
   Future<void> _sendDanmaku() async {
-    final credentials = DandanplayCredentials.load(_preferences, ref.read(secureStoreProvider));
+    final credentials = DandanplayCredentials.load(
+      _preferences,
+      ref.read(secureStoreProvider),
+    );
     if (!credentials.canSend) {
       final go = await showDialog<bool>(
         context: context,

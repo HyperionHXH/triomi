@@ -73,14 +73,26 @@ class BackupService {
 
   // ---------------------------------------------------------------- 导出
 
+  /// 用户授权导出目录的设置键（T7-4）。
+  static const String exportDirectoryKey = 'export.directoryUri';
+
   /// 导出到应用文档目录 `backups/`，返回包路径与摘要。
+  ///
+  /// [includeOfflineContent] 为 false 时章节缓存的正文（contentJson）不进包
+  /// （T7-6：下载多时体积膨胀明显）；[directoryUri] 非空时写入用户授权的
+  /// SAF 目录（T7-4），失败回退应用私有目录。
   Future<({String path, BackupSummary summary})> exportToFile({
     bool includeCovers = true,
+    bool includeOfflineContent = true,
+    String? directoryUri,
+    Future<void> Function(String uri, String fileName, List<int> bytes)?
+    writeToTree,
     void Function(int completed, int total)? onProgress,
   }) async {
     final archive = Archive();
     final payload = await _collect(
       includeCovers: includeCovers,
+      includeOfflineContent: includeOfflineContent,
       archive: archive,
       onProgress: onProgress,
     );
@@ -91,22 +103,38 @@ class BackupService {
       ),
     );
 
-    final docs = await getApplicationDocumentsDirectory();
-    final dir = Directory('${docs.path}${Platform.pathSeparator}backups');
-    if (!dir.existsSync()) dir.createSync(recursive: true);
     final stamp = DateTime.now()
         .toIso8601String()
         .replaceAll(':', '-')
         .split('.')
         .first;
-    final file = File('${dir.path}${Platform.pathSeparator}triomi-$stamp.zip');
-    await file.writeAsBytes(
-      Uint8List.fromList(ZipEncoder().encode(archive)),
-      flush: true,
-    );
+    final fileName = 'triomi-$stamp.zip';
+    final bytes = Uint8List.fromList(ZipEncoder().encode(archive));
+
+    // 用户授权目录优先（SAF）；失败回退应用私有目录。
+    var savedPath = '$directoryUri/$fileName';
+    var wroteToTree = false;
+    if (directoryUri != null &&
+        directoryUri.isNotEmpty &&
+        writeToTree != null) {
+      try {
+        await writeToTree(directoryUri, fileName, bytes);
+        wroteToTree = true;
+      } catch (_) {
+        wroteToTree = false; // 回退到本地文件。
+      }
+    }
+    if (!wroteToTree) {
+      final docs = await getApplicationDocumentsDirectory();
+      final dir = Directory('${docs.path}${Platform.pathSeparator}backups');
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+      final file = File('${dir.path}${Platform.pathSeparator}$fileName');
+      await file.writeAsBytes(bytes, flush: true);
+      savedPath = file.path;
+    }
 
     return (
-      path: file.path,
+      path: savedPath,
       summary: BackupSummary(
         items: payload['items'] as int? ?? 0,
         libraryEntries: payload['library'] as int? ?? 0,
@@ -123,10 +151,12 @@ class BackupService {
   /// 打包成字节（WebDAV 上传用）。
   Future<({Uint8List bytes, BackupSummary summary})> exportToBytes({
     bool includeCovers = true,
+    bool includeOfflineContent = true,
   }) async {
     final archive = Archive();
     final payload = await _collect(
       includeCovers: includeCovers,
+      includeOfflineContent: includeOfflineContent,
       archive: archive,
     );
     archive.addFile(
@@ -152,6 +182,7 @@ class BackupService {
   Future<Map<String, Object?>> _collect({
     required bool includeCovers,
     required Archive archive,
+    bool includeOfflineContent = true,
     void Function(int completed, int total)? onProgress,
   }) async {
     final items = await database.select(database.mediaItems).get();
@@ -261,7 +292,8 @@ class BackupService {
             'volumeTitle': row.volumeTitle,
             'releaseDate': row.releaseDate?.toIso8601String(),
             'locked': row.locked,
-            if (row.contentJson != null) 'contentJson': row.contentJson,
+            if (includeOfflineContent && row.contentJson != null)
+              'contentJson': row.contentJson,
           },
       ],
       'settingsValues': settings,

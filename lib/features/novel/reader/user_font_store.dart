@@ -72,6 +72,27 @@ class UserFontStore {
     return importFrom(pickedPath);
   }
 
+  /// 从字节导入（在线下载的字体走这里）。
+  ///
+  /// [fileName] 必须带 ttf/otf 扩展名，作为落盘文件名与显示名来源。
+  Future<UserFont> importBytes(String fileName, List<int> bytes) async {
+    final lower = fileName.toLowerCase();
+    if (!lower.endsWith('.ttf') && !lower.endsWith('.otf')) {
+      throw StateError('只支持 TTF / OTF 字体文件');
+    }
+    if (bytes.isEmpty) {
+      throw StateError('字体内容为空');
+    }
+    final dir = await _directory();
+    final target = File('${dir.path}${Platform.pathSeparator}$fileName');
+    await target.writeAsBytes(bytes, flush: true);
+    return UserFont(
+      fileName: fileName,
+      filePath: target.path,
+      sizeBytes: bytes.length,
+    );
+  }
+
   /// 从本地路径导入（拷贝进应用目录，保证不被系统清理）。
   Future<UserFont> importFrom(String sourcePath) async {
     final source = File(sourcePath);

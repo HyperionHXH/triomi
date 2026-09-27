@@ -79,6 +79,13 @@ class LkSource
   Future<MediaItem> detail(MediaItem item) async {
     final book = await client.bookDetail(_idOf(item));
     final fresh = _toItem(book);
+    // 同书版本（B1）：详情页没有来源特判的 UI 通道，
+    // 并进简介尾部展示（每行一个版本）。
+    final alternates = book.alternateVersions;
+    final versionNote = alternates.isEmpty
+        ? ''
+        : '${fresh.description ?? item.description ?? ''}\n\n同书版本：'
+              '${alternates.map((version) => version.title).join('、')}';
     // 列表页带来的旧字段保留：详情接口缺的字段不从 item 上抹掉。
     return MediaItem(
       sourceId: item.sourceId,
@@ -88,7 +95,7 @@ class LkSource
       url: item.url,
       coverUrl: fresh.coverUrl ?? item.coverUrl,
       author: fresh.author ?? item.author,
-      description: fresh.description ?? item.description,
+      description: versionNote.isNotEmpty ? versionNote : item.description,
       tags: fresh.tags.isNotEmpty ? fresh.tags : item.tags,
       rating: fresh.rating ?? item.rating,
       status: item.status,

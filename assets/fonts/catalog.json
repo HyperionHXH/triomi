@@ -1,0 +1,23 @@
+[
+  {
+    "name": "霞鹜文楷",
+    "fileName": "LXGWWenKai-Regular.ttf",
+    "url": "https://github.com/lxgw/LxgwWenKai/releases/download/v1.510/LXGWWenKai-Regular.ttf",
+    "license": "OFL-1.1",
+    "note": "手写风格楷体，正文阅读舒适"
+  },
+  {
+    "name": "思源黑体",
+    "fileName": "SourceHanSansSC-Regular.otf",
+    "url": "https://github.com/adobe-fonts/source-han-sans/raw/release/SubsetOTF/SC/SourceHanSansSC-Regular.otf",
+    "license": "OFL-1.1",
+    "note": "现代黑体，屏幕显示清晰"
+  },
+  {
+    "name": "思源宋体",
+    "fileName": "SourceHanSerifSC-Regular.otf",
+    "url": "https://github.com/adobe-fonts/source-han-serif/raw/release/SubsetOTF/SC/SourceHanSerifSC-Regular.otf",
+    "license": "OFL-1.1",
+    "note": "传统宋体，印刷质感"
+  }
+]

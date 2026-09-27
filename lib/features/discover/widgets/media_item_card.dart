@@ -18,11 +18,15 @@ class MediaItemCollection extends StatelessWidget {
     this.onTapItem,
     this.onLongPressItem,
     this.badgeOf,
+    this.footer,
   });
 
   final List<MediaItem> items;
   final String sourceName;
   final EdgeInsets padding;
+
+  /// 列表尾部的附加内容（如「已经到底了」提示、加载指示器）。
+  final Widget? footer;
 
   /// 自定义点击行为；不传时默认进入详情页。
   final void Function(MediaItem item)? onTapItem;
@@ -48,19 +52,25 @@ class MediaItemCollection extends StatelessWidget {
       context.push(AppRoutes.detail, extra: item);
     }
 
+    final extra = footer == null ? 0 : 1;
+
     if (isCompact) {
       return ListView.builder(
         padding: padding,
-        itemCount: items.length,
-        itemBuilder: (context, index) => MediaItemRow(
-          item: items[index],
-          sourceName: sourceName,
-          badge: badgeOf?.call(items[index]),
-          onTap: () => open(items[index]),
-          onLongPress: onLongPressItem == null
-              ? null
-              : () => onLongPressItem!(items[index]),
-        ),
+        itemCount: items.length + extra,
+        itemBuilder: (context, index) {
+          if (footer != null && index == items.length) return footer!;
+          final item = items[index];
+          return MediaItemRow(
+            item: item,
+            sourceName: sourceName,
+            badge: badgeOf?.call(item),
+            onTap: () => open(item),
+            onLongPress: onLongPressItem == null
+                ? null
+                : () => onLongPressItem!(item),
+          );
+        },
       );
     }
 
@@ -72,16 +82,20 @@ class MediaItemCollection extends StatelessWidget {
         crossAxisSpacing: AppSpacing.md,
         childAspectRatio: 0.52,
       ),
-      itemCount: items.length,
-      itemBuilder: (context, index) => MediaItemCard(
-        item: items[index],
-        sourceName: sourceName,
-        badge: badgeOf?.call(items[index]),
-        onTap: () => open(items[index]),
-        onLongPress: onLongPressItem == null
-            ? null
-            : () => onLongPressItem!(items[index]),
-      ),
+      itemCount: items.length + extra,
+      itemBuilder: (context, index) {
+        if (footer != null && index == items.length) return footer!;
+        final item = items[index];
+        return MediaItemCard(
+          item: item,
+          sourceName: sourceName,
+          badge: badgeOf?.call(item),
+          onTap: () => open(item),
+          onLongPress: onLongPressItem == null
+              ? null
+              : () => onLongPressItem!(item),
+        );
+      },
     );
   }
 }

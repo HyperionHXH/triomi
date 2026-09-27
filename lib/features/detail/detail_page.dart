@@ -281,8 +281,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         ),
         IconButton(
           tooltip: '追踪',
-          onPressed: () =>
-              unawaited(showTrackingBindSheet(context, item)),
+          onPressed: () => unawaited(showTrackingBindSheet(context, item)),
           icon: const Icon(Icons.sync_alt),
         ),
         PopupMenuButton<String>(

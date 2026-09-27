@@ -391,7 +391,6 @@ class DownloadManifest {
   }
 }
 
-
 /// 登出 / 移除来源后的本地数据清理（F1 红线）：
 ///
 /// 章节缓存里的 `content_json` **可能含付费解锁正文**，登出必须清空；
@@ -418,11 +417,9 @@ Future<void> purgeSourceOfflineData(
       }
     }
   }
-  await (db.update(
-    db.chapters,
-  )..where((table) => table.sourceId.equals(sourceId))).write(
-    const ChaptersCompanion(contentJson: Value(null)),
-  );
+  await (db.update(db.chapters)
+        ..where((table) => table.sourceId.equals(sourceId)))
+      .write(const ChaptersCompanion(contentJson: Value(null)));
   await (db.delete(
     db.downloads,
   )..where((table) => table.sourceId.equals(sourceId))).go();

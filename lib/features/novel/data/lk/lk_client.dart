@@ -202,7 +202,34 @@ class LkClient {
       'api/new-content-read/get-book-detail',
       _withOptionalSession({'book_id': bookId, 'with_volumes': 0}),
     );
-    return parseBook(data);
+    final book = parseBook(data);
+    // 同书版本（B1）：alternate_versions / alternateVersions，每项是 book 对象。
+    final alternates = <LkAlternateBook>[
+      for (final node in _listOf(
+        data,
+        'alternate_versions',
+        'alternateVersions',
+      ))
+        if (_int(node, 'book_id', 'id') > 0)
+          LkAlternateBook(
+            id: _int(node, 'book_id', 'id'),
+            title: _fallback(
+              _string(node, 'title', 'book_title', 'name'),
+              '未命名版本',
+            ),
+            coverUrl: _nullable(_string(node, 'cover', 'cover_url')),
+          ),
+    ];
+    return LkBook(
+      id: book.id,
+      title: book.title,
+      author: book.author,
+      summary: book.summary,
+      coverUrl: book.coverUrl,
+      tags: book.tags,
+      score: book.score,
+      alternateVersions: alternates,
+    );
   }
 
   Future<List<LkVolume>> volumes(int bookId, {int pageSize = 50}) async {
@@ -631,6 +658,7 @@ class LkBook {
     this.coverUrl,
     this.tags = const <String>[],
     this.score,
+    this.alternateVersions = const <LkAlternateBook>[],
   });
 
   final int id;
@@ -640,6 +668,18 @@ class LkBook {
   final String? coverUrl;
   final List<String> tags;
   final double? score;
+
+  /// 同书的不同版本（B1，get-book-detail 的 alternate_versions）。
+  final List<LkAlternateBook> alternateVersions;
+}
+
+/// 同书版本的精简信息（标题 + bookId）。
+class LkAlternateBook {
+  const LkAlternateBook({required this.id, required this.title, this.coverUrl});
+
+  final int id;
+  final String title;
+  final String? coverUrl;
 }
 
 class LkVolume {
