@@ -125,7 +125,9 @@ class LkSource
         chapters.add(
           Chapter(
             sourceId: id,
-            remoteId: '${chapter.id}',
+            // 章节键必须带作品号：正文接口要 (book_id, chapter_id) 两个参数，
+            // 而 Chapter 只带一个 remoteId。只存章节号会把章节号当作品号发出去。
+            remoteId: '$bookId:${chapter.id}',
             title: chapter.title,
             number: chapter.order > 0 ? chapter.order.toDouble() : null,
             sortIndex: sortIndex,
@@ -141,8 +143,8 @@ class LkSource
 
   @override
   Future<ChapterContent> content(Chapter chapter) async {
-    final bookId = _intIdOf(chapter);
-    final detail = await client.chapter(bookId, int.parse(chapter.remoteId));
+    final (bookId, chapterId) = _chapterKeyOf(chapter);
+    final detail = await client.chapter(bookId, chapterId);
     return ChapterContent(
       // 正文优先 HTML（保留插图），纯文本作为兜底。
       html: detail.bodyHtml.isNotEmpty ? detail.bodyHtml : null,
@@ -240,7 +242,7 @@ class LkSource
   }) => client.saveReadingProgress(
     bookId: _idOf(item),
     volumeId: 0,
-    chapterId: _intIdOf(chapter),
+    chapterId: _chapterKeyOf(chapter).$2,
     paragraphIndex: paragraphIndex,
     percent: percent,
   );
@@ -249,7 +251,7 @@ class LkSource
 
   @override
   Future<void> unlockChapter(Chapter chapter) =>
-      client.unlockChapter(int.parse(chapter.remoteId));
+      client.unlockChapter(_chapterKeyOf(chapter).$2);
 
   // ---------------------------------------------------------------- 内部
 
@@ -289,15 +291,18 @@ class LkSource
     return value;
   }
 
-  int _intIdOf(Chapter chapter) {
-    final value = int.tryParse(chapter.remoteId);
-    if (value == null) {
+  /// 解析章节键 `作品号:章节号`（正文 / 解锁 / 进度回传都要两个编号）。
+  (int, int) _chapterKeyOf(Chapter chapter) {
+    final parts = chapter.remoteId.split(':');
+    final bookId = parts.length == 2 ? int.tryParse(parts[0]) : null;
+    final chapterId = parts.length == 2 ? int.tryParse(parts[1]) : null;
+    if (bookId == null || chapterId == null) {
       throw SourceException(
         sourceId: id,
         type: SourceErrorType.parse,
         message: '无效的轻之国度章节编号：${chapter.remoteId}',
       );
     }
-    return value;
+    return (bookId, chapterId);
   }
 }

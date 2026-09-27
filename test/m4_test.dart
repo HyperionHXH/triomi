@@ -346,7 +346,8 @@ void main() {
       expect(chapters.map((chapter) => chapter.sortIndex), [0, 1, 2, 3]);
       // 付费章节只标注，不绕过。
       expect(chapters[1].locked, isTrue);
-      expect(chapters[1].remoteId, '12');
+      // 章节键带作品号：正文接口要 (book_id, chapter_id) 两个参数。
+      expect(chapters[1].remoteId, '1001:12');
     });
 
     test('正文映射：HTML 优先，纯文本兜底', () async {
@@ -370,12 +371,17 @@ void main() {
 
       const chapter = Chapter(
         sourceId: LkSource.id,
-        remoteId: '11',
+        remoteId: '1001:11',
         title: '第 1 章',
       );
       final content = await source.content(chapter);
       expect(content.html, '<p>HTML 正文</p>');
       expect(content.text, isNull);
+      // 回归：正文请求必须带真实作品号，不能把章节号当作品号发出去
+      // （端到端验证时曾实测到 book_id=chapter_id）。
+      final body = jsonDecode(http.lastRequest.body!) as Map<String, dynamic>;
+      expect(body['book_id'], 1001);
+      expect(body['chapter_id'], 11);
     });
   });
 }

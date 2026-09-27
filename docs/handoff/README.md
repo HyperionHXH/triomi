@@ -94,3 +94,23 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
   `defaultDisabledBuiltins` 翻转；页面入口。
 - LK：资料页、消息中心、详情页评论 Tab（接口已在 `LkSource` 就位）。
 - T7：SAF 目录选择/写入与在线字体下载的模拟器 E2E。
+
+## 本机（设备环境）已完成的部分
+
+- **W6 轻之国度账号域页面**（commit `1788b31`）：资料页（余额/关注/粉丝 +
+  七日签到 + 领取）、消息中心（分类未读角标）、详情页评论区（最热/最新、
+  分页、星级、发表、点赞）；我的页新增「轻之国度」分组。
+- **Android 构建修复**（commit `fccb595`）：`MainActivity` 的
+  `MethodChannel.Call` 类型写错导致 T6/T7 的 Kotlin 从未编译过；`flutter_js`
+  0.8.7 的 Java 11 / Kotlin 1.8 target 冲突用
+  `kotlin.jvm.target.validation.mode=warning` 解除。**T2 之后 Android 构建
+  一直是坏的**，本次才恢复。
+- **LK 正文参数缺陷修复**：`content()` 曾把章节号同时当作品号发给
+  `get-chapter-detail`（实测请求为 `book_id=3001&chapter_id=3001`），现章节键
+  带作品号（`作品号:章节号`），实测变为 `book_id=1001&chapter_id=3001`。
+- **夹具**：新增 `tools/lk_fixture.py`（LK pc-proxy / pc-comment-proxy 全端点）
+  与 `tools/lk_fixture_selftest.py`；LK base 支持
+  `--dart-define=TRIOMI_LK_BASE=http://10.0.2.2:8123/lk`。
+- **模拟器端到端已验证**：登录 → 资料/签到（夹具侧余额 138、streak 3 落库）
+  → 消息中心未读 → 远端书架进详情（同书版本/标签）→ 评论区渲染 → 发表评论
+  （夹具记录到内容）→ 点赞 501 → 打开章节（正文接口参数正确）。
