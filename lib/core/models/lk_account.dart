@@ -131,6 +131,134 @@ class LkUnreadSummary {
       fanCount == 0;
 }
 
+/// 站点消息分类。
+///
+/// 私信（[dm]）不在分类消息接口里，走独立的会话 / 线程接口；
+/// [code] 是站点 `category` 参数的值。
+enum LkMessageCategory {
+  reply('reply', '回复我的'),
+  mention('mention', '提到我的'),
+  like('like', '收到的赞'),
+  fan('fan', '新粉丝'),
+  system('system', '系统通知'),
+  dm('dm', '私信');
+
+  const LkMessageCategory(this.code, this.label);
+
+  final String code;
+  final String label;
+
+  /// 私信走会话接口，不使用分类消息接口。
+  bool get isDirect => this == LkMessageCategory.dm;
+
+  /// 按站点 code 反查；未知 code 返回 null（站点新增分类时不崩）。
+  static LkMessageCategory? fromCode(String code) {
+    for (final category in values) {
+      if (category.code == code) return category;
+    }
+    return null;
+  }
+}
+
+/// 一条分类消息 / 通知。
+///
+/// 站点通知里只有能识别的目标才允许跳转：识别不了目标的（动态、评论定位等）
+/// 只展示内容，不构造猜测路由（对齐 Mixn 的做法）。
+class LkNotification {
+  const LkNotification({
+    required this.id,
+    required this.category,
+    required this.title,
+    this.content = '',
+    this.sender,
+    this.quoteText = '',
+    this.relatedTitle = '',
+    this.createdAt = '',
+    this.unread = false,
+    this.targetBookId,
+    this.targetChapterId,
+    this.targetUrl = '',
+  });
+
+  final String id;
+  final LkMessageCategory category;
+
+  /// 通知标题（站点未给时用分类名）。
+  final String title;
+  final String content;
+
+  /// 发送者；系统通知可能没有。
+  final LkCommentAuthor? sender;
+
+  /// 被引用的评论 / 正文片段。
+  final String quoteText;
+
+  /// 关联作品标题。
+  final String relatedTitle;
+  final String createdAt;
+  final bool unread;
+
+  /// 可跳转的作品 / 章节编号；为 null 表示站点没给可识别的目标。
+  final int? targetBookId;
+  final int? targetChapterId;
+  final String targetUrl;
+}
+
+/// 分类消息分页。
+class LkNotificationPage {
+  const LkNotificationPage({
+    required this.items,
+    required this.page,
+    required this.total,
+    required this.hasMore,
+  });
+
+  final List<LkNotification> items;
+  final int page;
+  final int total;
+  final bool hasMore;
+}
+
+/// 私信会话。
+class LkDmConversation {
+  const LkDmConversation({
+    required this.id,
+    required this.peerUid,
+    required this.peer,
+    this.lastMessage = '',
+    this.unreadCount = 0,
+    this.updatedAt = '',
+  });
+
+  final String id;
+  final int peerUid;
+  final LkCommentAuthor peer;
+
+  /// 站点可能不返回最后一条摘要，为空时界面给中性提示。
+  final String lastMessage;
+  final int unreadCount;
+  final String updatedAt;
+}
+
+/// 私信线程里的一条消息（本轮只读）。
+class LkDmMessage {
+  const LkDmMessage({
+    required this.id,
+    required this.sender,
+    required this.content,
+    this.createdAt = '',
+    this.mine = false,
+  });
+
+  final String id;
+  final LkCommentAuthor sender;
+  final String content;
+  final String createdAt;
+
+  /// 是否是自己发出的（决定气泡方向）。
+  final bool mine;
+}
+
 /// 评论作者（精简用户信息）。
 class LkCommentAuthor {
   const LkCommentAuthor({

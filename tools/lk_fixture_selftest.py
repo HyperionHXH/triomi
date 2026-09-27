@@ -50,8 +50,53 @@ def main():
     print('claim ok:', claim)
 
     status, body = post('/lk/pc-proxy/api/bff/message-unread-v1', key)
-    assert body['data']['summary']['unread_count'] == 7, body
-    print('unread ok:', body['data']['summary'])
+    summary = body['data']['summary']
+    assert summary['unread_count'] == 8 and summary['dm_count'] == 1, body
+    print('unread ok:', summary)
+
+    status, body = post('/lk/pc-proxy/api/bff/message-replies-v1', dict(key, page=0, page_size=20))
+    replies = body['data']['list']
+    assert [item['message_id'] for item in replies] == ['r1', 'r2'], body
+    assert body['data']['pagination']['total'] == 2, body
+    print('messages(reply) ok:', [item['message_id'] for item in replies])
+
+    status, body = post('/lk/pc-proxy/api/bff/message-replies-v1', dict(key, filter='mention', page=0, page_size=20))
+    assert [item['message_id'] for item in body['data']['list']] == ['m1'], body
+    print('messages(mention) ok (filter=mention)')
+
+    status, body = post('/lk/pc-proxy/api/bff/message-likes-v1', dict(key, page=0, page_size=1))
+    assert len(body['data']['list']) == 1 and body['data']['pagination']['has_more'] is True, body
+    print('messages(like, page size 1) ok: has_more=', body['data']['pagination']['has_more'])
+
+    status, body = post('/lk/pc-proxy/api/bff/message-fans-v1', dict(key, page=0, page_size=20))
+    assert body['data']['list'] == [], body
+    print('messages(fan) ok: empty list')
+
+    status, body = post('/lk/pc-proxy/api/bff/dm-conversations-v1', dict(key, page=1, page_size=20))
+    conversations = body['data']['list']
+    assert conversations[0]['peer_uid'] == 66, body
+    print('dm conversations ok:', conversations[0]['user']['nickname'])
+
+    status, body = post('/lk/pc-proxy/api/bff/dm-messages-v1', dict(key, peer_uid=66, page=1, page_size=20))
+    assert [item['message_id'] for item in body['data']['list']] == ['d1', 'd2'], body
+    print('dm messages ok:', [item['content'] for item in body['data']['list']])
+
+    status, body = post('/lk/pc-proxy/api/bff/message-mark-read-v1', dict(key, scope='category', category='like', ts=1, nonce='abc'))
+    assert body['code'] == 0, body
+    status, body = post('/lk/pc-proxy/api/bff/message-unread-v1', key)
+    after = body['data']['summary']
+    assert after['like_count'] == 0 and after['unread_count'] == 5, body
+    print('mark read ok: like_count ->', after['like_count'], 'unread ->', after['unread_count'])
+
+    status, body = post('/lk/pc-proxy/api/bff/dm-mark-read-v1', dict(key, ts=1, nonce='abc'))
+    assert body['code'] == 0, body
+    status, body = post('/lk/pc-proxy/api/bff/dm-conversations-v1', dict(key, page=1, page_size=20))
+    assert body['data']['list'][0]['unread_count'] == 0, body
+    print('dm mark read ok: unread_count -> 0')
+
+    status, body = post('/lk/pc-proxy/api/bff/message-likes-v1', {})
+    assert body['code'] == 401, body
+    print('messages unauthenticated ok: 401')
 
     status, body = post('/lk/pc-proxy/api/bff/home-feed-v1', {})
     assert body['data']['list'][0]['book_id'] == 1001, body

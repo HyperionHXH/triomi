@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import '../../../../core/models/lk_account.dart';
 import '../../../../core/models/media_type.dart';
@@ -418,6 +419,94 @@ class LkClient {
     return parseUnreadSummary(data);
   }
 
+  /// 分类消息路径（私信走 [dmConversations]，不在这里）。
+  static const Map<LkMessageCategory, String> messagePaths =
+      <LkMessageCategory, String>{
+        LkMessageCategory.reply: 'api/bff/message-replies-v1',
+        LkMessageCategory.mention: 'api/bff/message-replies-v1',
+        LkMessageCategory.like: 'api/bff/message-likes-v1',
+        LkMessageCategory.fan: 'api/bff/message-fans-v1',
+        LkMessageCategory.system: 'api/bff/message-system-v1',
+      };
+
+  /// 分类消息分页（需要登录）。
+  ///
+  /// 站点的 `page` 从 0 起算，这里对外仍用 1 起的页码（与评论接口一致）。
+  Future<LkNotificationPage> messages(
+    LkMessageCategory category, {
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    if (category.isDirect) {
+      throw const SourceException(
+        sourceId: sourceId,
+        type: SourceErrorType.parse,
+        message: '私信请走会话接口',
+      );
+    }
+    final key = _requireSession();
+    final data = await _post(messagePaths[category]!, <String, Object?>{
+      'security_key': key,
+      // 「提到我的」与「回复我的」是同一接口，用 filter 区分。
+      if (category == LkMessageCategory.mention) 'filter': 'mention',
+      'page': page - 1 < 0 ? 0 : page - 1,
+      'page_size': pageSize,
+    });
+    return parseNotificationPage(data, category, page, pageSize);
+  }
+
+  /// 私信会话列表（需要登录）。
+  Future<List<LkDmConversation>> dmConversations({
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final key = _requireSession();
+    final data = await _post('api/bff/dm-conversations-v1', <String, Object?>{
+      'security_key': key,
+      'page': page,
+      'page_size': pageSize,
+    });
+    return parseDmConversations(data);
+  }
+
+  /// 私信线程（需要登录，本轮只读）。
+  Future<List<LkDmMessage>> dmMessages(
+    int peerUid, {
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final key = _requireSession();
+    final data = await _post('api/bff/dm-messages-v1', <String, Object?>{
+      'security_key': key,
+      'peer_uid': peerUid,
+      'page': page,
+      'page_size': pageSize,
+    });
+    return parseDmMessages(data);
+  }
+
+  /// 把某分类标为已读（需要登录）。
+  ///
+  /// 只在用户显式点击时调用：浏览页面不应该改变站点状态。
+  Future<void> markCategoryRead(LkMessageCategory category) async {
+    final key = _requireSession();
+    // 站点用时间戳 + 随机串防重复提交（对齐 Mixn）。
+    final common = <String, Object?>{
+      'security_key': key,
+      'ts': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      'nonce': _nonce(),
+    };
+    if (category.isDirect) {
+      await _post('api/bff/dm-mark-read-v1', common);
+      return;
+    }
+    await _post('api/bff/message-mark-read-v1', <String, Object?>{
+      ...common,
+      'scope': 'category',
+      'category': category.code,
+    });
+  }
+
   /// 关注 / 取关用户（需要登录）。
   Future<void> setUserFollow(int uid, {required bool follow}) async {
     final key = _requireSession();
@@ -691,6 +780,187 @@ class LkClient {
       dmCount: _int(summary, 'dm_count', 'dm_unread'),
       fanCount: _int(summary, 'fan_count', 'fans'),
     );
+  }
+
+  /// 分类消息分页。
+  ///
+  /// 站点把不同分类放在不同接口，但列表结构一致，所以共用一个解析器
+  /// （对齐 Mixn 的 `messagesPage`）。
+  static LkNotificationPage parseNotificationPage(
+    Map<Object?, Object?> data,
+    LkMessageCategory category,
+    int requestedPage,
+    int pageSize,
+  ) {
+    final items = <LkNotification>[];
+    for (final node in _listOf(
+      data,
+      'list,items,messages',
+      'conversations,cards',
+    )) {
+      final id = _string(node, 'message_id', 'id');
+      if (id.isEmpty) continue;
+      final sender = _parseCommentAuthor(_obj(node, 'user', 'sender'));
+      final title = _string2(
+        _string(node, 'title', 'category_text'),
+        category.label,
+      );
+      items.add(
+        LkNotification(
+          id: id,
+          category: category,
+          title: title,
+          // 站点有时只给标题不给正文，此时正文回退成标题（列表不至于空一块）。
+          content: _string2(
+            _string(node, 'content', 'content_text', 'message'),
+            title,
+          ),
+          sender: sender,
+          quoteText: _string(node, 'quote_text'),
+          relatedTitle: _string(node, 'related_title'),
+          createdAt: _string(node, 'created_at', 'time'),
+          unread: _bool(node, 'unread') ?? false,
+          targetBookId: _pickPositive(node, const <String>['target_book_id']),
+          targetChapterId: _pickPositive(node, const <String>[
+            'target_chapter_id',
+          ]),
+          targetUrl: _string(
+            node,
+            'target_url',
+            'content_target_url',
+            'quote_target_url',
+            'related_target_url',
+          ),
+        ),
+      );
+    }
+    final page = _pageInfoOf(data, items.length, requestedPage, pageSize);
+    return LkNotificationPage(
+      items: items,
+      page: requestedPage,
+      total: page.total,
+      hasMore: page.hasMore,
+    );
+  }
+
+  /// 私信会话列表。
+  static List<LkDmConversation> parseDmConversations(
+    Map<Object?, Object?> data,
+  ) {
+    final result = <LkDmConversation>[];
+    for (final node in _listOf(data, 'list,items,conversations', 'messages')) {
+      final peer = _parseCommentAuthor(
+        _obj(node, 'user', 'peer', 'peer_user', 'user_info', 'sender'),
+      );
+      final peerUid =
+          _pickPositive(node, const <String>['peer_uid']) ?? (peer?.uid ?? 0);
+      if (peerUid <= 0) continue;
+      final last = _obj(
+        node,
+        'last_message',
+        'latest_message',
+        'lastMessage',
+        'last_message_info',
+      );
+      final lastText = _text(
+        node,
+        'last_message',
+        'last_message_text',
+        'lastMessage',
+        'summary',
+        'content',
+        'content_text',
+      );
+      result.add(
+        LkDmConversation(
+          id: _string2(
+            _string(node, 'conversation_id', 'thread_id', 'id'),
+            'peer-$peerUid',
+          ),
+          peerUid: peerUid,
+          peer: peer ?? LkCommentAuthor(uid: peerUid, nickname: '用户$peerUid'),
+          lastMessage: lastText.isNotEmpty
+              ? lastText
+              : (last == null
+                    ? ''
+                    : _string(last, 'content', 'content_text', 'body', 'text')),
+          unreadCount: _int(node, 'unread_count', 'unreadCount', 'unread'),
+          updatedAt: _string2(
+            _text(node, 'updated_at', 'updatedAt', 'last_message_at', 'time'),
+            last == null
+                ? ''
+                : _string(last, 'created_at', 'createdAt', 'sent_at', 'time'),
+          ),
+        ),
+      );
+    }
+    return result;
+  }
+
+  /// 私信线程（只读）。
+  static List<LkDmMessage> parseDmMessages(Map<Object?, Object?> data) {
+    final result = <LkDmMessage>[];
+    for (final node in _listOf(data, 'list,items,messages', 'conversations')) {
+      final id = _string(node, 'message_id', 'id');
+      final content = _string(node, 'content', 'content_text', 'body', 'text');
+      if (id.isEmpty || content.isEmpty) continue;
+      result.add(
+        LkDmMessage(
+          id: id,
+          sender:
+              _parseCommentAuthor(_obj(node, 'sender', 'user', 'author')) ??
+              const LkCommentAuthor(uid: 0, nickname: '对方'),
+          content: content,
+          createdAt: _string(
+            node,
+            'created_at',
+            'createdAt',
+            'sent_at',
+            'time',
+          ),
+          mine: _bool(node, 'mine', 'is_mine', 'from_me') ?? false,
+        ),
+      );
+    }
+    return result;
+  }
+
+  /// 分页信息：站点用 `pagination` / `page_info` 两种容器。
+  ///
+  /// 有 `has_more` 以它为准；否则按「还有下一页 / 本页已满」判断。
+  static ({int total, bool hasMore}) _pageInfoOf(
+    Map<Object?, Object?> data,
+    int itemCount,
+    int requestedPage,
+    int pageSize,
+  ) {
+    final info = _obj(data, 'pagination', 'page_info', 'pageInfo');
+    if (info == null) {
+      return (total: itemCount, hasMore: itemCount >= pageSize);
+    }
+    final serverPage =
+        _pickNonNegative(info, const <String>['page', 'cur', 'current_page']) ??
+        requestedPage;
+    final total =
+        _pickNonNegative(info, const <String>['total', 'count']) ?? itemCount;
+    final actualSize =
+        _pickPositive(info, const <String>['page_size', 'pageSize', 'size']) ??
+        pageSize;
+    final next = _pickInt(info, const <String>['next']) ?? 0;
+    final explicit = _bool(info, 'has_more', 'hasMore', 'has_next');
+    return (
+      total: total,
+      hasMore: explicit ?? (next > 0 || serverPage * actualSize < total),
+    );
+  }
+
+  /// 16 位随机串：站点标读接口的防重复字段。
+  static String _nonce() {
+    final random = Random();
+    return List<String>.generate(
+      16,
+      (_) => random.nextInt(16).toRadixString(16),
+    ).join();
   }
 
   /// 评论分页：图片评论（无文字）也要保留。
@@ -1079,6 +1349,27 @@ String _string(
 ]) {
   final value = _pick(map, <String>[k1, ?k2, ?k3, ?k4, ?k5, ?k6, ?k7]);
   return value?.toString().trim() ?? '';
+}
+
+/// 只接受标量的取值。
+///
+/// `last_message` 这类字段既可能是字符串也可能是对象；对象必须走嵌套解析，
+/// 不能被 `toString()` 变成 `"{content: ...}"` 这种串。
+String _text(
+  Map<Object?, Object?> map,
+  String k1, [
+  String? k2,
+  String? k3,
+  String? k4,
+  String? k5,
+  String? k6,
+]) {
+  for (final key in <String>[k1, ?k2, ?k3, ?k4, ?k5, ?k6]) {
+    final value = map[key];
+    if (value is String) return value.trim();
+    if (value is num) return value.toString();
+  }
+  return '';
 }
 
 int _int(

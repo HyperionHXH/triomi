@@ -13,6 +13,8 @@ import 'package:triomi/core/theme/app_theme.dart';
 import 'package:triomi/features/novel/data/lk/lk_source.dart';
 import 'package:triomi/features/novel/lk/book_comments_section.dart';
 import 'package:triomi/features/novel/lk/lk_account_page.dart';
+import 'package:triomi/features/novel/lk/lk_dm_page.dart';
+import 'package:triomi/features/novel/lk/lk_message_list_page.dart';
 import 'package:triomi/features/novel/lk/lk_messages_page.dart';
 
 /// 账号域替换件：不联网，记录调用供断言。
@@ -33,9 +35,19 @@ class FakeAccountSource implements AccountProfileProvider {
   List<LkComment> commentsResult;
   Object? failWith;
 
+  /// 分类消息（按 category 过滤后返回）。
+  List<LkNotification> notifications = const <LkNotification>[];
+  List<LkDmConversation> dmConversationsResult = const <LkDmConversation>[];
+  List<LkDmMessage> dmMessagesResult = const <LkDmMessage>[];
+
   int profileCalls = 0;
   int claimCalls = 0;
   int unreadCalls = 0;
+  int dmConversationCalls = 0;
+  final List<({LkMessageCategory category, int page})> messageCalls =
+      <({LkMessageCategory category, int page})>[];
+  final List<int> dmMessageCalls = <int>[];
+  final List<LkMessageCategory> markedRead = <LkMessageCategory>[];
   final List<({String sort, int page})> commentCalls =
       <({String sort, int page})>[];
   final List<String> published = <String>[];
@@ -89,6 +101,41 @@ class FakeAccountSource implements AccountProfileProvider {
     unreadCalls += 1;
     if (failWith != null) throw failWith!;
     return unreadResult ?? const LkUnreadSummary(unreadCount: 7);
+  }
+
+  @override
+  Future<LkNotificationPage> messages(
+    LkMessageCategory category, {
+    required int page,
+  }) async {
+    messageCalls.add((category: category, page: page));
+    if (failWith != null) throw failWith!;
+    return LkNotificationPage(
+      items: notifications.where((item) => item.category == category).toList(),
+      page: page,
+      total: notifications.length,
+      hasMore: false,
+    );
+  }
+
+  @override
+  Future<List<LkDmConversation>> dmConversations() async {
+    dmConversationCalls += 1;
+    if (failWith != null) throw failWith!;
+    return dmConversationsResult;
+  }
+
+  @override
+  Future<List<LkDmMessage>> dmMessages(int peerUid) async {
+    dmMessageCalls.add(peerUid);
+    if (failWith != null) throw failWith!;
+    return dmMessagesResult;
+  }
+
+  @override
+  Future<void> markCategoryRead(LkMessageCategory category) async {
+    markedRead.add(category);
+    if (failWith != null) throw failWith!;
   }
 
   @override
@@ -302,6 +349,192 @@ void main() {
 
       expect(find.text('还没有登录轻之国度'), findsOneWidget);
       expect(source.unreadCalls, 0);
+    });
+
+    testWidgets('分类页：渲染发送者 / 内容 / 引用，只有可跳转目标才有箭头', (tester) async {
+      final source = FakeAccountSource()
+        ..notifications = <LkNotification>[
+          const LkNotification(
+            id: 'r1',
+            category: LkMessageCategory.reply,
+            title: '回复了我的评论',
+            content: '同感，这段我也很喜欢。',
+            sender: LkCommentAuthor(uid: 5, nickname: '书友甲'),
+            quoteText: '这本真的很上头',
+            relatedTitle: '夹具轻小说',
+            createdAt: '2026-09-20 10:00',
+            targetBookId: 1001,
+          ),
+          const LkNotification(
+            id: 'r2',
+            category: LkMessageCategory.reply,
+            title: '回复了我的评论',
+            content: '第三卷确实有点拖。',
+            sender: LkCommentAuthor(uid: 6, nickname: '书友乙'),
+            createdAt: '2026-09-19 10:00',
+          ),
+        ];
+      await tester.pumpWidget(
+        harness(
+          source: source,
+          child: const LkMessageListPage(categoryCode: 'reply'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(source.messageCalls.single.category, LkMessageCategory.reply);
+      expect(source.messageCalls.single.page, 1);
+      expect(find.text('书友甲'), findsOneWidget);
+      expect(find.text('同感，这段我也很喜欢。'), findsOneWidget);
+      expect(find.text('这本真的很上头'), findsOneWidget);
+      expect(find.text('关联作品：夹具轻小说'), findsOneWidget);
+      // 第二条没有可识别目标：只展示内容，不给跳转箭头。
+      expect(find.text('书友乙'), findsOneWidget);
+      expect(find.textContaining('来自：'), findsNothing);
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+    });
+
+    testWidgets('分类页：全部标为已读要先确认，确认后调用站点并重拉', (tester) async {
+      final source = FakeAccountSource()
+        ..notifications = <LkNotification>[
+          const LkNotification(
+            id: 'm1',
+            category: LkMessageCategory.mention,
+            title: '在评论里提到了我',
+            content: '@夹具书友 一起看吗？',
+          ),
+        ];
+      await tester.pumpWidget(
+        harness(
+          source: source,
+          child: const LkMessageListPage(categoryCode: 'mention'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(source.markedRead, isEmpty);
+
+      await tester.tap(find.text('全部标为已读'));
+      await tester.pumpAndSettle();
+      // 先弹确认，取消不写站点。
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(source.markedRead, isEmpty);
+
+      await tester.tap(find.text('全部标为已读'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, '标为已读'));
+      await tester.pumpAndSettle();
+
+      expect(source.markedRead, <LkMessageCategory>[LkMessageCategory.mention]);
+      expect(source.messageCalls.length, 2);
+      expect(find.text('已标为已读'), findsOneWidget);
+    });
+
+    testWidgets('分类页：空分类显示空态而不是假数据', (tester) async {
+      final source = FakeAccountSource();
+      await tester.pumpWidget(
+        harness(
+          source: source,
+          child: const LkMessageListPage(categoryCode: 'fan'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('这个分类还没有消息'), findsOneWidget);
+    });
+
+    testWidgets('分类页：未知 / 私信 code 走不支持提示', (tester) async {
+      final source = FakeAccountSource();
+      await tester.pumpWidget(
+        harness(
+          source: source,
+          child: const LkMessageListPage(categoryCode: 'dm'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('不支持的消息分类'), findsOneWidget);
+      expect(source.messageCalls, isEmpty);
+    });
+  });
+
+  group('W6 轻之国度私信', () {
+    testWidgets('会话列表：昵称 / 摘要 / 未读角标', (tester) async {
+      final source = FakeAccountSource()
+        ..dmConversationsResult = <LkDmConversation>[
+          const LkDmConversation(
+            id: 'c1',
+            peerUid: 66,
+            peer: LkCommentAuthor(uid: 66, nickname: '私信书友'),
+            lastMessage: '方便交流一下第三章吗？',
+            unreadCount: 1,
+            updatedAt: '2026-09-22 10:00',
+          ),
+          const LkDmConversation(
+            id: 'peer-77',
+            peerUid: 77,
+            peer: LkCommentAuthor(uid: 77, nickname: '书友己'),
+          ),
+        ];
+      await tester.pumpWidget(
+        harness(source: source, child: const LkDmConversationsPage()),
+      );
+      await tester.pumpAndSettle();
+
+      expect(source.dmConversationCalls, 1);
+      expect(find.text('私信书友'), findsOneWidget);
+      expect(find.text('方便交流一下第三章吗？'), findsOneWidget);
+      expect(find.text('1'), findsOneWidget);
+      // 站点没给摘要时不显示空白，也不要假内容。
+      expect(find.text('站点未提供消息摘要'), findsOneWidget);
+    });
+
+    testWidgets('私信标为已读：确认后调用 dm 分类', (tester) async {
+      final source = FakeAccountSource();
+      await tester.pumpWidget(
+        harness(source: source, child: const LkDmConversationsPage()),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('全部标为已读'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, '标为已读'));
+      await tester.pumpAndSettle();
+
+      expect(source.markedRead, <LkMessageCategory>[LkMessageCategory.dm]);
+      expect(source.dmConversationCalls, 2);
+    });
+
+    testWidgets('私信线程：只读渲染双方消息，并说明不支持发送', (tester) async {
+      final source = FakeAccountSource()
+        ..dmMessagesResult = <LkDmMessage>[
+          const LkDmMessage(
+            id: 'd1',
+            sender: LkCommentAuthor(uid: 42, nickname: '我'),
+            content: '你好，有什么想聊的？',
+            createdAt: '2026-09-22 09:58',
+            mine: true,
+          ),
+          const LkDmMessage(
+            id: 'd2',
+            sender: LkCommentAuthor(uid: 66, nickname: '私信书友'),
+            content: '方便交流一下第三章吗？',
+            createdAt: '2026-09-22 10:00',
+          ),
+        ];
+      await tester.pumpWidget(
+        harness(
+          source: source,
+          child: const LkDmThreadPage(peerUid: 66, peerName: '私信书友'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(source.dmMessageCalls, <int>[66]);
+      expect(find.text('私信书友'), findsOneWidget);
+      expect(find.text('你好，有什么想聊的？'), findsOneWidget);
+      expect(find.text('方便交流一下第三章吗？'), findsOneWidget);
+      expect(find.text('本轮为只读：暂不支持发送私信。'), findsOneWidget);
     });
   });
 

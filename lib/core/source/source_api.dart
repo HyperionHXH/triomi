@@ -85,6 +85,21 @@ abstract class AccountProfileProvider implements AccountProvider {
   /// 各分类未读数（消息中心角标）。
   Future<LkUnreadSummary> unreadMessages();
 
+  /// 分类消息分页；[category] 为私信时抛错（私信走会话接口）。
+  Future<LkNotificationPage> messages(
+    LkMessageCategory category, {
+    required int page,
+  });
+
+  /// 私信会话列表。
+  Future<List<LkDmConversation>> dmConversations();
+
+  /// 私信线程（本轮只读）。
+  Future<List<LkDmMessage>> dmMessages(int peerUid);
+
+  /// 把某分类标为已读（站点侧写操作）：只在用户显式点击时调用。
+  Future<void> markCategoryRead(LkMessageCategory category);
+
   /// 作品评论分页；[sort] 取 `hot` / `latest`。
   Future<LkCommentPage> comments(
     String bookRemoteId, {

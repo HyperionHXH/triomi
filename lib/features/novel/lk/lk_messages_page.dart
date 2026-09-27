@@ -10,12 +10,20 @@ import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/page_scaffold.dart';
 import 'lk_access.dart';
 
-/// 轻之国度消息中心：各分类未读角标。
-///
-/// 分类消息列表与标读接口尚未接入（见 T5 交付说明），此处只做未读汇总，
-/// 与站点保持一致：拿不到未读时不显示假数据。
+/// 轻之国度消息中心：各分类未读角标，点进去看该分类的消息列表。
 class LkMessagesPage extends ConsumerStatefulWidget {
   const LkMessagesPage({super.key});
+
+  /// 分类图标（与站点分类一一对应）。
+  static const Map<LkMessageCategory, IconData> categoryIcons =
+      <LkMessageCategory, IconData>{
+        LkMessageCategory.reply: Icons.reply_outlined,
+        LkMessageCategory.mention: Icons.alternate_email_outlined,
+        LkMessageCategory.like: Icons.thumb_up_outlined,
+        LkMessageCategory.fan: Icons.person_add_alt_outlined,
+        LkMessageCategory.system: Icons.campaign_outlined,
+        LkMessageCategory.dm: Icons.forum_outlined,
+      };
 
   @override
   ConsumerState<LkMessagesPage> createState() => _LkMessagesPageState();
@@ -64,6 +72,26 @@ class _LkMessagesPageState extends ConsumerState<LkMessagesPage> {
     }
   }
 
+  /// 进分类列表；回来时刷新角标（用户可能在里面标了已读）。
+  Future<void> _open(LkMessageCategory category) async {
+    final route = category.isDirect
+        ? AppRoutes.lkDm
+        : '${AppRoutes.lkMessageCategory}/${category.code}';
+    await context.push(route);
+    if (!mounted) return;
+    await _load();
+  }
+
+  static int countOf(LkUnreadSummary summary, LkMessageCategory category) =>
+      switch (category) {
+        LkMessageCategory.reply => summary.replyCount,
+        LkMessageCategory.mention => summary.mentionCount,
+        LkMessageCategory.like => summary.likeCount,
+        LkMessageCategory.fan => summary.fanCount,
+        LkMessageCategory.system => summary.systemCount,
+        LkMessageCategory.dm => summary.dmCount,
+      };
+
   @override
   Widget build(BuildContext context) {
     return PageScaffold(
@@ -108,24 +136,6 @@ class _LkMessagesPageState extends ConsumerState<LkMessagesPage> {
     final summary = _summary;
     if (summary == null) return const SizedBox.shrink();
 
-    final categories = <_MessageCategory>[
-      _MessageCategory(
-        '全部未读',
-        Icons.mark_email_unread_outlined,
-        summary.unreadCount,
-      ),
-      _MessageCategory('回复我的', Icons.reply_outlined, summary.replyCount),
-      _MessageCategory(
-        '提到我的',
-        Icons.alternate_email_outlined,
-        summary.mentionCount,
-      ),
-      _MessageCategory('收到的赞', Icons.thumb_up_outlined, summary.likeCount),
-      _MessageCategory('系统通知', Icons.campaign_outlined, summary.systemCount),
-      _MessageCategory('私信', Icons.forum_outlined, summary.dmCount),
-      _MessageCategory('新粉丝', Icons.person_add_alt_outlined, summary.fanCount),
-    ];
-
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
@@ -150,15 +160,16 @@ class _LkMessagesPageState extends ConsumerState<LkMessagesPage> {
                   ),
                   const SizedBox(height: AppSpacing.xxs),
                   Text(
-                    '分类消息列表与标读接口尚未接入，这里先展示未读角标。',
+                    '点开分类查看消息；标为已读只在分类页里显式操作。',
                     style: Theme.of(context).textTheme.bodySmall
                         ?.copyWith(color: context.palette.mutedForeground),
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  for (final category in categories)
+                  for (final category in LkMessageCategory.values)
                     _categoryTile(
                       category,
-                      first: category == categories.first,
+                      countOf(summary, category),
+                      first: category == LkMessageCategory.values.first,
                     ),
                 ],
               ),
@@ -169,7 +180,11 @@ class _LkMessagesPageState extends ConsumerState<LkMessagesPage> {
     );
   }
 
-  Widget _categoryTile(_MessageCategory category, {required bool first}) {
+  Widget _categoryTile(
+    LkMessageCategory category,
+    int count, {
+    required bool first,
+  }) {
     final theme = Theme.of(context);
     return Column(
       children: <Widget>[
@@ -178,9 +193,16 @@ class _LkMessagesPageState extends ConsumerState<LkMessagesPage> {
         ListTile(
           contentPadding: EdgeInsets.zero,
           dense: true,
-          leading: Icon(category.icon, size: 20),
+          leading: Icon(LkMessagesPage.categoryIcons[category], size: 20),
           title: Text(category.label, style: theme.textTheme.bodyMedium),
-          trailing: _countBadge(category.count),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              _countBadge(count),
+              const Icon(Icons.chevron_right, size: 20),
+            ],
+          ),
+          onTap: () => _open(category),
         ),
       ],
     );
@@ -216,12 +238,4 @@ class _LkMessagesPageState extends ConsumerState<LkMessagesPage> {
       ),
     );
   }
-}
-
-class _MessageCategory {
-  const _MessageCategory(this.label, this.icon, this.count);
-
-  final String label;
-  final IconData icon;
-  final int count;
 }

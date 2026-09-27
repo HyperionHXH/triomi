@@ -185,6 +185,23 @@ class LkSource
   Future<LkUnreadSummary> unreadMessages() => client.unreadMessages();
 
   @override
+  Future<LkNotificationPage> messages(
+    LkMessageCategory category, {
+    required int page,
+  }) => client.messages(category, page: page);
+
+  @override
+  Future<List<LkDmConversation>> dmConversations() => client.dmConversations();
+
+  @override
+  Future<List<LkDmMessage>> dmMessages(int peerUid) =>
+      client.dmMessages(peerUid);
+
+  @override
+  Future<void> markCategoryRead(LkMessageCategory category) =>
+      client.markCategoryRead(category);
+
+  @override
   Future<LkCommentPage> comments(
     String bookRemoteId, {
     required String sort,

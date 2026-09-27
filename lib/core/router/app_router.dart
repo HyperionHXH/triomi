@@ -8,6 +8,8 @@ import '../../features/downloads/downloads_page.dart';
 import '../../features/history/history_page.dart';
 import '../../features/library/library_page.dart';
 import '../../features/novel/lk/lk_account_page.dart';
+import '../../features/novel/lk/lk_dm_page.dart';
+import '../../features/novel/lk/lk_message_list_page.dart';
 import '../../features/novel/lk/lk_messages_page.dart';
 import '../../features/novel/reader/fonts_page.dart';
 import '../../features/novel/reader/novel_reader_page.dart';
@@ -46,6 +48,9 @@ abstract final class AppRoutes {
   static const String remoteShelf = '/remote-shelf';
   static const String lkAccount = '/lk-account';
   static const String lkMessages = '/lk-messages';
+  static const String lkMessageCategory = '/lk-message-category';
+  static const String lkDm = '/lk-dm';
+  static const String lkDmThread = '/lk-dm-thread';
   static const String downloads = '/downloads';
   static const String backup = '/backup';
   static const String webdav = '/webdav';
@@ -205,6 +210,25 @@ abstract final class AppRouter {
         path: AppRoutes.lkMessages,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const LkMessagesPage(),
+      ),
+      GoRoute(
+        path: '${AppRoutes.lkMessageCategory}/:code',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            LkMessageListPage(categoryCode: state.pathParameters['code']!),
+      ),
+      GoRoute(
+        path: AppRoutes.lkDm,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const LkDmConversationsPage(),
+      ),
+      GoRoute(
+        path: '${AppRoutes.lkDmThread}/:peerUid',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => LkDmThreadPage(
+          peerUid: int.tryParse(state.pathParameters['peerUid'] ?? '') ?? 0,
+          peerName: state.extra is String ? state.extra! as String : null,
+        ),
       ),
       GoRoute(
         path: AppRoutes.tracking,

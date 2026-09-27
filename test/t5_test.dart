@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:triomi/core/models/lk_account.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/storage/preferences.dart';
@@ -363,6 +364,316 @@ void main() {
           ),
         ),
       );
+    });
+  });
+
+  group('T5 分类消息', () {
+    String pagePayload(List<Object?> items, {bool? hasMore, int page = 0}) =>
+        jsonEncode(<String, Object?>{
+          'code': 0,
+          'data': <String, Object?>{
+            'list': items,
+            'pagination': <String, Object?>{
+              'page': page,
+              'page_size': 20,
+              'total': items.length,
+              'has_more': ?hasMore,
+            },
+          },
+        });
+
+    Map<String, Object?> messageNode({
+      String id = 'r1',
+      Map<String, Object?>? user,
+      String? title,
+      String? content,
+      bool unread = true,
+    }) => <String, Object?>{
+      'message_id': id,
+      'user': ?user,
+      'title': ?title,
+      'content': ?content,
+      'quote_text': '被引用的评论',
+      'related_title': '夹具轻小说',
+      'created_at': '2026-09-20 10:00',
+      'unread': unread,
+      'target_book_id': 1001,
+      'target_chapter_id': 3001,
+      'target_url': 'https://www.lightnovel.fun/book/1001',
+    };
+
+    test('回复分类：page 从 0 起，不带 filter', () async {
+      await secureStore.set('lk.securityKey', 'k-test');
+      final http = routingHttpClient(<String, String>{
+        '/message-replies-v1': pagePayload(<Object?>[messageNode()]),
+      });
+
+      final page = await clientOf(http).messages(LkMessageCategory.reply);
+      expect(http.lastRequest.url, contains('/api/bff/message-replies-v1'));
+      final body = bodyOf(http);
+      expect(body['page'], 0);
+      expect(body['page_size'], 20);
+      expect(body.containsKey('filter'), isFalse);
+      expect(body['security_key'], 'k-test');
+      expect(page.items.single.category, LkMessageCategory.reply);
+    });
+
+    test('@我的：与回复同接口但带 filter=mention，第二页页码为 1', () async {
+      await secureStore.set('lk.securityKey', 'k-test');
+      final http = routingHttpClient(<String, String>{
+        '/message-replies-v1': pagePayload(<Object?>[], page: 1),
+      });
+
+      await clientOf(http).messages(LkMessageCategory.mention, page: 2);
+      final body = bodyOf(http);
+      expect(body['filter'], 'mention');
+      expect(body['page'], 1);
+    });
+
+    test('点赞分类：走 message-likes-v1', () async {
+      await secureStore.set('lk.securityKey', 'k-test');
+      final http = routingHttpClient(<String, String>{
+        '/message-likes-v1': pagePayload(<Object?>[messageNode(id: 'l1')]),
+      });
+
+      await clientOf(http).messages(LkMessageCategory.like);
+      expect(http.lastRequest.url, contains('/api/bff/message-likes-v1'));
+    });
+
+    test('列表解析：发送者 / 引用 / 目标保留，缺 title 与 content 时降级', () async {
+      await secureStore.set('lk.securityKey', 'k-test');
+      final http = routingHttpClient(<String, String>{
+        '/message-system-v1': pagePayload(<Object?>[
+          messageNode(id: 's1', title: '系统通知', content: '你的作品已通过审核。'),
+          messageNode(id: 's2'),
+          messageNode(id: ''),
+          <String, Object?>{'message_id': 's3', 'user': <String, Object?>{}},
+        ]),
+      });
+
+      final page = await clientOf(http).messages(LkMessageCategory.system);
+      // 没有 message_id 的条目被丢弃。
+      expect(page.items.map((item) => item.id), <String>['s1', 's2', 's3']);
+
+      final withSender = page.items.first;
+      expect(withSender.sender, isNull);
+      expect(withSender.title, '系统通知');
+      expect(withSender.content, '你的作品已通过审核。');
+      expect(withSender.quoteText, '被引用的评论');
+      expect(withSender.relatedTitle, '夹具轻小说');
+      expect(withSender.createdAt, '2026-09-20 10:00');
+      expect(withSender.unread, isTrue);
+      expect(withSender.targetBookId, 1001);
+      expect(withSender.targetChapterId, 3001);
+      expect(withSender.targetUrl, 'https://www.lightnovel.fun/book/1001');
+
+      // 站点没给 title / content 时用分类名兜底，不让列表出现空白行。
+      final bare = page.items[1];
+      expect(bare.title, '系统通知');
+      expect(bare.content, '系统通知');
+    });
+
+    test('分页：has_more 为准；无分页信息时按本页是否满页判断', () async {
+      await secureStore.set('lk.securityKey', 'k-test');
+      final http = routingHttpClient(<String, String>{
+        '/message-likes-v1': pagePayload(<Object?>[
+          messageNode(id: 'l1'),
+        ], hasMore: false),
+      });
+      final page = await clientOf(http).messages(LkMessageCategory.like);
+      expect(page.page, 1);
+      expect(page.total, 1);
+      expect(page.hasMore, isFalse);
+
+      final noPagination = routingHttpClient(<String, String>{
+        '/message-fans-v1': jsonEncode(<String, Object?>{
+          'code': 0,
+          'data': <String, Object?>{
+            'list': <Object?>[messageNode(id: 'f1')],
+          },
+        }),
+      });
+      final full = await clientOf(noPagination)
+          .messages(LkMessageCategory.fan, pageSize: 1);
+      // 满页且站点没给分页信息：保守认为还有下一页。
+      expect(full.hasMore, isTrue);
+    });
+
+    test('私信走会话接口：messages 直接拒绝', () async {
+      await secureStore.set('lk.securityKey', 'k-test');
+      final http = routingHttpClient(const <String, String>{});
+
+      await expectLater(
+        clientOf(http).messages(LkMessageCategory.dm),
+        throwsA(
+          isA<SourceException>().having(
+            (error) => error.type,
+            'type',
+            SourceErrorType.parse,
+          ),
+        ),
+      );
+      expect(http.requests, isEmpty);
+    });
+
+    test('未登录调用分类消息：auth 错误且不发请求', () async {
+      final http = routingHttpClient(const <String, String>{});
+      await expectLater(
+        clientOf(http).messages(LkMessageCategory.reply),
+        throwsA(
+          isA<SourceException>().having(
+            (error) => error.type,
+            'type',
+            SourceErrorType.auth,
+          ),
+        ),
+      );
+      expect(http.requests, isEmpty);
+    });
+  });
+
+  group('T5 私信', () {
+    test('会话列表：peer_uid 缺失时回退 user.uid，全缺时丢弃', () async {
+      await secureStore.set('lk.securityKey', 'k-test');
+      final http = routingHttpClient(<String, String>{
+        '/dm-conversations-v1': jsonEncode(<String, Object?>{
+          'code': 0,
+          'data': <String, Object?>{
+            'list': <Object?>[
+              <String, Object?>{
+                'conversation_id': 'c1',
+                'peer_uid': 66,
+                'user': <String, Object?>{'uid': 66, 'nickname': '私信书友'},
+                'last_message': '方便交流一下第三章吗？',
+                'unread_count': 1,
+                'updated_at': '2026-09-22 10:00',
+              },
+              <String, Object?>{
+                'user': <String, Object?>{'uid': 77, 'nickname': '书友己'},
+                'last_message': <String, Object?>{
+                  'content': '嵌套的最后一条',
+                  'created_at': '2026-09-23 10:00',
+                },
+              },
+              <String, Object?>{
+                'user': <String, Object?>{'nickname': '无编号'},
+              },
+            ],
+          },
+        }),
+      });
+
+      final items = await clientOf(http).dmConversations();
+      expect(items.length, 2);
+      expect(items.first.peerUid, 66);
+      expect(items.first.peer.nickname, '私信书友');
+      expect(items.first.lastMessage, '方便交流一下第三章吗？');
+      expect(items.first.unreadCount, 1);
+
+      // peer_uid 缺失时用 user.uid；最后一条摘要可以嵌在 last_message 里。
+      final fallback = items[1];
+      expect(fallback.peerUid, 77);
+      expect(fallback.id, 'peer-77');
+      expect(fallback.lastMessage, '嵌套的最后一条');
+      expect(fallback.updatedAt, '2026-09-23 10:00');
+    });
+
+    test('私信线程：mine 决定方向，缺内容的消息丢弃', () async {
+      await secureStore.set('lk.securityKey', 'k-test');
+      final http = routingHttpClient(<String, String>{
+        '/dm-messages-v1': jsonEncode(<String, Object?>{
+          'code': 0,
+          'data': <String, Object?>{
+            'list': <Object?>[
+              <String, Object?>{
+                'message_id': 'd1',
+                'sender': <String, Object?>{'uid': 42, 'nickname': '我'},
+                'content': '你好',
+                'created_at': '2026-09-22 09:58',
+                'mine': true,
+              },
+              <String, Object?>{
+                'message_id': 'd2',
+                'sender': <String, Object?>{'uid': 66, 'nickname': '私信书友'},
+                'content_text': '方便交流一下第三章吗？',
+                'is_mine': 0,
+              },
+              <String, Object?>{'message_id': 'd3'},
+            ],
+          },
+        }),
+      });
+
+      final items = await clientOf(http).dmMessages(66);
+      expect(bodyOf(http)['peer_uid'], 66);
+      expect(items.length, 2);
+      expect(items.first.mine, isTrue);
+      expect(items.first.content, '你好');
+      expect(items[1].mine, isFalse);
+      expect(items[1].content, '方便交流一下第三章吗？');
+      expect(items[1].sender.nickname, '私信书友');
+    });
+  });
+
+  group('T5 消息标读', () {
+    test('分类标读：message-mark-read-v1 带 scope/category/ts/nonce', () async {
+      await secureStore.set('lk.securityKey', 'k-test');
+      final http = routingHttpClient(<String, String>{
+        '/message-mark-read-v1': jsonEncode(<String, Object?>{'code': 0}),
+      });
+
+      await clientOf(http).markCategoryRead(LkMessageCategory.like);
+      expect(http.lastRequest.url, contains('/api/bff/message-mark-read-v1'));
+      final body = bodyOf(http);
+      expect(body['scope'], 'category');
+      expect(body['category'], 'like');
+      expect(body['security_key'], 'k-test');
+      expect(body['ts'], isA<int>());
+      expect((body['nonce'] as String).length, 16);
+    });
+
+    test('私信标读：走 dm-mark-read-v1 且不带 scope', () async {
+      await secureStore.set('lk.securityKey', 'k-test');
+      final http = routingHttpClient(<String, String>{
+        '/dm-mark-read-v1': jsonEncode(<String, Object?>{'code': 0}),
+      });
+
+      await clientOf(http).markCategoryRead(LkMessageCategory.dm);
+      expect(http.lastRequest.url, contains('/api/bff/dm-mark-read-v1'));
+      final body = bodyOf(http);
+      expect(body.containsKey('scope'), isFalse);
+      expect(body.containsKey('category'), isFalse);
+    });
+  });
+
+  group('T5 LkSource 消息转发', () {
+    test('分类消息按 code 转发并带页码', () async {
+      await secureStore.set('lk.securityKey', 'k-test');
+      final http = routingHttpClient(<String, String>{
+        '/message-likes-v1': jsonEncode(<String, Object?>{
+          'code': 0,
+          'data': <String, Object?>{'list': <Object?>[]},
+        }),
+      });
+      final source = LkSource(client: clientOf(http));
+
+      await source.messages(LkMessageCategory.like, page: 2);
+      expect(http.lastRequest.url, contains('/api/bff/message-likes-v1'));
+      expect(bodyOf(http)['page'], 1);
+    });
+
+    test('私信会话列表转发到 dm-conversations-v1', () async {
+      await secureStore.set('lk.securityKey', 'k-test');
+      final http = routingHttpClient(<String, String>{
+        '/dm-conversations-v1': jsonEncode(<String, Object?>{
+          'code': 0,
+          'data': <String, Object?>{'list': <Object?>[]},
+        }),
+      });
+      final source = LkSource(client: clientOf(http));
+
+      await source.dmConversations();
+      expect(http.lastRequest.url, contains('/api/bff/dm-conversations-v1'));
     });
   });
 }

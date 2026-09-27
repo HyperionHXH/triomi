@@ -65,6 +65,129 @@ def _seed_comments() -> dict[int, list[dict]]:
 
 
 _comments: dict[int, list[dict]] = _seed_comments()
+
+
+def _seed_messages() -> dict[str, list[dict]]:
+    """分类消息：回复 / @ / 点赞 / 新粉丝 / 系统通知。
+
+    「提到我的」与「回复我的」共用 `message-replies-v1`，用 filter 区分。
+    """
+    return {
+        "reply": [
+            {
+                "message_id": "r1",
+                "user": {"uid": 5, "nickname": "书友甲"},
+                "title": "回复了我的评论",
+                "content": "同感，这段我也很喜欢。",
+                "quote_text": "这本真的很上头",
+                "related_title": "夹具轻小说",
+                "created_at": "2026-09-20 10:00",
+                "unread": True,
+                "target_book_id": BOOK_ID,
+            },
+            {
+                "message_id": "r2",
+                "user": {"uid": 6, "nickname": "书友乙"},
+                "title": "回复了我的评论",
+                "content": "第三卷确实有点拖。",
+                "created_at": "2026-09-19 10:00",
+                "unread": False,
+            },
+        ],
+        "mention": [
+            {
+                "message_id": "m1",
+                "user": {"uid": 7, "nickname": "书友丙"},
+                "title": "在评论里提到了我",
+                "content": "@夹具书友 一起看吗？",
+                "created_at": "2026-09-21 10:00",
+                "unread": True,
+            }
+        ],
+        "like": [
+            {
+                "message_id": "l1",
+                "user": {"uid": 8, "nickname": "书友丁"},
+                "title": "赞了我的评论",
+                "content": "赞了你的评论",
+                "created_at": "2026-09-18 10:00",
+                "unread": True,
+            },
+            {
+                "message_id": "l2",
+                "user": {"uid": 9, "nickname": "书友戊"},
+                "title": "赞了我的评论",
+                "content": "赞了你的评论",
+                "created_at": "2026-09-17 10:00",
+                "unread": False,
+            },
+        ],
+        "fan": [],
+        "system": [
+            {
+                "message_id": "s1",
+                "title": "系统通知",
+                "content": "你的作品已通过审核。",
+                "created_at": "2026-09-15 10:00",
+                "unread": True,
+                "target_book_id": BOOK_ID,
+                "related_title": "夹具轻小说",
+            }
+        ],
+    }
+
+
+def _seed_dm() -> dict:
+    return {
+        "conversations": [
+            {
+                "conversation_id": "c1",
+                "peer_uid": 66,
+                "user": {"uid": 66, "nickname": "私信书友"},
+                "last_message": "方便交流一下第三章吗？",
+                "unread_count": 1,
+                "updated_at": "2026-09-22 10:00",
+            }
+        ],
+        "messages": [
+            {
+                "message_id": "d1",
+                "conversation_id": "c1",
+                "peer_uid": 66,
+                "sender": {"uid": 42, "nickname": "夹具书友"},
+                "content": "你好，有什么想聊的？",
+                "created_at": "2026-09-22 09:58",
+                "mine": True,
+            },
+            {
+                "message_id": "d2",
+                "conversation_id": "c1",
+                "peer_uid": 66,
+                "sender": {"uid": 66, "nickname": "私信书友"},
+                "content": "方便交流一下第三章吗？",
+                "created_at": "2026-09-22 10:00",
+                "mine": False,
+            },
+        ],
+    }
+
+
+def _unread_seed() -> dict[str, int]:
+    return {
+        "unread_count": 8,
+        "reply_count": 2,
+        "mention_count": 1,
+        "like_count": 3,
+        "system_count": 1,
+        "dm_count": 1,
+        "fan_count": 0,
+    }
+
+
+_messages: dict[str, list[dict]] = _seed_messages()
+_dm: dict = _seed_dm()
+_unread: dict[str, int] = _unread_seed()
+_mark_read_requests: list[dict] = []
 _liked: set[int] = set()
 _signed_days: list[int] = [1, 2]
 _streak = 2
@@ -78,6 +201,7 @@ _next_comment_id = 9001
 def reset() -> None:
     global _comments, _liked, _signed_days, _streak, _coin
     global _published, _like_requests, _chapter_requests, _next_comment_id
+    global _messages, _dm, _unread, _mark_read_requests
     with _lock:
         _comments = _seed_comments()
         _liked = set()
@@ -88,6 +212,10 @@ def reset() -> None:
         _like_requests = []
         _chapter_requests = []
         _next_comment_id = 9001
+        _messages = _seed_messages()
+        _dm = _seed_dm()
+        _unread = _unread_seed()
+        _mark_read_requests = []
 
 
 def state() -> str:
@@ -102,6 +230,8 @@ def state() -> str:
                 "likeRequests": _like_requests,
                 "chapterRequests": _chapter_requests,
                 "commentCount": sum(len(items) for items in _comments.values()),
+                "unread": dict(_unread),
+                "markReadRequests": _mark_read_requests,
             },
             ensure_ascii=False,
         )
@@ -155,6 +285,7 @@ def _sign_detail() -> dict:
 def handle(method: str, path: str, body: str) -> tuple[int, str, str]:
     """path 形如 /lk/pc-proxy/api/bff/my-home-v1。"""
     global _coin, _streak, _next_comment_id
+    global _unread, _messages, _dm, _mark_read_requests
 
     parts = path.strip("/").split("/")
     endpoint = "/".join(parts[2:]) if len(parts) > 2 else ""
@@ -186,6 +317,14 @@ def handle(method: str, path: str, body: str) -> tuple[int, str, str]:
         "api/bff/welfare-sign-detail-v1",
         "api/bff/claim-welfare-sign-v1",
         "api/bff/message-unread-v1",
+        "api/bff/message-replies-v1",
+        "api/bff/message-likes-v1",
+        "api/bff/message-fans-v1",
+        "api/bff/message-system-v1",
+        "api/bff/message-mark-read-v1",
+        "api/bff/dm-conversations-v1",
+        "api/bff/dm-messages-v1",
+        "api/bff/dm-mark-read-v1",
         "api/bff/bookshelf-v1",
         "api/new-content-read/toggle-book-shelf",
         "api/discuss/publish-book-comment",
@@ -226,19 +365,102 @@ def handle(method: str, path: str, body: str) -> tuple[int, str, str]:
             )
 
     if endpoint == "api/bff/message-unread-v1":
+        with _lock:
+            return _ok({"summary": dict(_unread)})
+
+    # ------------------------------------------------------------ 消息中心
+    if endpoint in {
+        "api/bff/message-replies-v1",
+        "api/bff/message-likes-v1",
+        "api/bff/message-fans-v1",
+        "api/bff/message-system-v1",
+    }:
+        category = {
+            "api/bff/message-replies-v1": (
+                "mention" if payload.get("filter") == "mention" else "reply"
+            ),
+            "api/bff/message-likes-v1": "like",
+            "api/bff/message-fans-v1": "fan",
+            "api/bff/message-system-v1": "system",
+        }[endpoint]
+        page = int(payload.get("page") or 0)
+        page_size = int(payload.get("page_size") or 20)
+        with _lock:
+            items = list(_messages.get(category, []))
+        start = max(0, page * page_size)
+        window = items[start : start + page_size]
+        total = len(items)
+        has_more = start + page_size < total
         return _ok(
             {
-                "summary": {
-                    "unread_count": 7,
-                    "reply_count": 2,
-                    "mention_count": 1,
-                    "like_count": 3,
-                    "system_count": 1,
-                    "dm_count": 0,
-                    "fan_count": 0,
-                }
+                "list": window,
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total": total,
+                    "has_more": has_more,
+                },
             }
         )
+
+    if endpoint == "api/bff/dm-conversations-v1":
+        with _lock:
+            items = list(_dm["conversations"])
+        return _ok({"list": items, "pagination": {"total": len(items)}})
+
+    if endpoint == "api/bff/dm-messages-v1":
+        peer_uid = int(payload.get("peer_uid") or 0)
+        with _lock:
+            items = [
+                item for item in _dm["messages"] if item["peer_uid"] == peer_uid
+            ]
+        return _ok({"list": items, "pagination": {"total": len(items)}})
+
+    if endpoint == "api/bff/message-mark-read-v1":
+        category = str(payload.get("category") or "")
+        with _lock:
+            _mark_read_requests.append(
+                {
+                    "endpoint": endpoint,
+                    "category": category,
+                    "scope": str(payload.get("scope") or ""),
+                    "hasNonce": bool(payload.get("nonce")),
+                    "hasTs": bool(payload.get("ts")),
+                }
+            )
+            key = {
+                "reply": "reply_count",
+                "mention": "mention_count",
+                "like": "like_count",
+                "fan": "fan_count",
+                "system": "system_count",
+            }.get(category)
+            if key:
+                _unread["unread_count"] = max(
+                    0, _unread["unread_count"] - int(_unread.get(key) or 0)
+                )
+                _unread[key] = 0
+            for item in _messages.get(category, []):
+                item["unread"] = False
+        return _ok({})
+
+    if endpoint == "api/bff/dm-mark-read-v1":
+        with _lock:
+            _mark_read_requests.append(
+                {
+                    "endpoint": endpoint,
+                    "category": "dm",
+                    "hasNonce": bool(payload.get("nonce")),
+                    "hasTs": bool(payload.get("ts")),
+                }
+            )
+            _unread["unread_count"] = max(
+                0, _unread["unread_count"] - int(_unread.get("dm_count") or 0)
+            )
+            _unread["dm_count"] = 0
+            for item in _dm["conversations"]:
+                item["unread_count"] = 0
+        return _ok({})
 
     # ------------------------------------------------------------ 作品 / 目录 / 正文
     if endpoint == "api/bff/home-feed-v1":

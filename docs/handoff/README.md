@@ -111,6 +111,37 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
 - **夹具**：新增 `tools/lk_fixture.py`（LK pc-proxy / pc-comment-proxy 全端点）
   与 `tools/lk_fixture_selftest.py`；LK base 支持
   `--dart-define=TRIOMI_LK_BASE=http://10.0.2.2:8123/lk`。
+- **W7 消息中心补全**：T5 遗留的「分类消息列表 + 标读」接口层与页面已接上——
+  `LkClient.messages/dmConversations/dmMessages/markCategoryRead`
+  （分类消息走 `message-replies-v1` / `message-likes-v1` / `message-fans-v1` /
+  `message-system-v1`，@ 用 `filter=mention` 区分；标读带 `ts` + `nonce`）；
+  页面为消息中心 → 分类列表（分页、加载更多、显式「全部标为已读」）与
+  私信会话 → 只读线程；通知里只有 `target_book_id` 才跳作品详情，
+  章节 / 动态这类定位不构造猜测路由。私信发送按 Mixn 的边界明确不做。
 - **模拟器端到端已验证**：登录 → 资料/签到（夹具侧余额 138、streak 3 落库）
   → 消息中心未读 → 远端书架进详情（同书版本/标签）→ 评论区渲染 → 发表评论
   （夹具记录到内容）→ 点赞 501 → 打开章节（正文接口参数正确）。
+
+### 真实账号联调结果（LK，2026-09-27）
+
+在真实站点（`www.lightnovel.fun`）用真实账号跑通：
+
+| 路径 | 结果 |
+|---|---|
+| 资料页 | 昵称/UID/等级/轻币正常；关注·粉丝·发布显示「—」（站点未返回或为 0，与 Mixn 同策略） |
+| 七日签到 | 领取成功，轻币 1668 → 1806（+138），第 1 天转「已领」，按钮转「今日已签到」 |
+| 消息中心 | 未读汇总解析正常（该账号当前全 0，逐类显示「无未读」） |
+| 远端书架 | 拉到站点收藏 2 本，封面/作者正常 |
+| 详情页 | 封面/标签/简介正常；同书版本（B1）在真实站点有数据；目录 58 章 |
+| 评论区 | 最热/最新标签、真实评论（含时间与点赞数）正常渲染 |
+| 点赞 | 真实写入生效：点赞 0 → 1，取消 → 0 |
+| 正文 | 章节 8 页完整渲染；`book_id`/`chapter_id` 修复在真实站点生效 |
+| 发现页 | LK 榜单（热门/日榜/周榜/新人新作/最近更新）与封面全部正常 |
+
+未做：**发表评论**（真实账号的公开发言，属外部可见写入）与**加入书架**
+（站点侧写入）未在自动验证中执行，待用户确认后单独跑。
+
+环境注意：`api.bgm.tv` 在本机网络下首个 A 记录
+（`98.159.108.71`）不可达，模拟器直连会一直停在加载态（Dart 的
+connectTimeout 覆盖不到 DNS 阶段的黑洞地址），「追番」页因此无法在本机
+直接做 E2E；需要时用 `--dart-define=TRIOMI_SCHEDULE_BASE` 指到本机中继。
