@@ -3,6 +3,13 @@
          （debug 包因为调试清单自带 INTERNET 而看不出问题）。 -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- 后台更新提醒（D5，默认关闭）：Android 13+ 通知需运行时权限；
+         JobScheduler 周期任务跨重启保留需 RECEIVE_BOOT_COMPLETED，
+         带网络约束的任务需要 ACCESS_NETWORK_STATE。 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
     <application
         android:label="Triomi"
         android:name="${applicationName}"
@@ -30,6 +37,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- 后台更新检查作业（JobScheduler 周期拉起 headless 引擎，见 T7-7）。 -->
+        <service
+            android:name=".BackgroundUpdateCheckJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

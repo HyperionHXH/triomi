@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/backup/backup_service.dart';
 import 'package:triomi/core/db/app_database.dart';
@@ -19,10 +20,14 @@ import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/discover/discover_page.dart';
 import 'package:triomi/features/discover/widgets/media_item_card.dart';
+import 'package:triomi/features/library/data/library_providers.dart';
+import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/novel/data/lk/lk_client.dart';
 import 'package:triomi/features/novel/reader/font_catalog.dart';
 import 'package:triomi/features/novel/reader/user_font_store.dart';
+import 'package:triomi/features/schedule/data/background_update_check.dart';
 import 'package:triomi/features/schedule/data/bangumi_schedule_client.dart';
+import 'package:triomi/features/schedule/data/schedule_providers.dart';
 import 'package:triomi/features/schedule/schedule_page.dart';
 
 import 'fixtures/fake_http_client.dart';
@@ -465,6 +470,136 @@ void main() {
       final slimJson = utf8.decode(decode(slim.bytes));
       expect(fullJson, contains('contentJson'));
       expect(slimJson, isNot(contains('contentJson')));
+    });
+  });
+
+  group('T7-7 后台更新提醒', () {
+    const String followedId = '9001';
+
+    ScheduleDay dayWith(int weekday, List<ScheduleEntry> items) =>
+        ScheduleDay(weekday: weekday, label: '周$weekday', items: items);
+
+    test('追番命中今日放送：给出数量与文案', () {
+      final result = buildBackgroundUpdateResult(
+        days: <ScheduleDay>[
+          dayWith(3, const <ScheduleEntry>[
+            ScheduleEntry(id: followedId, title: '在追的番'),
+            ScheduleEntry(id: '9002', title: '没在追的'),
+          ]),
+        ],
+        followedIds: const <String>{followedId},
+        weekday: 3,
+      );
+
+      expect(result, isNotNull);
+      expect(result!.count, 1);
+      expect(result.notificationTitle, '追番更新提醒');
+      expect(result.notificationBody, '今天有 1 部追番更新：《在追的番》');
+    });
+
+    test('没有追番 / 当天无数据 / 当天没命中：都不产生通知', () {
+      expect(
+        buildBackgroundUpdateResult(
+          days: <ScheduleDay>[],
+          followedIds: const <String>{},
+          weekday: 1,
+        ),
+        isNull,
+      );
+      expect(
+        buildBackgroundUpdateResult(
+          days: <ScheduleDay>[],
+          followedIds: const <String>{'1'},
+          weekday: 1,
+        ),
+        isNull,
+      );
+      expect(
+        buildBackgroundUpdateResult(
+          days: <ScheduleDay>[
+            dayWith(1, const <ScheduleEntry>[
+              ScheduleEntry(id: '2', title: '别的番'),
+            ]),
+          ],
+          followedIds: const <String>{'1'},
+          weekday: 1,
+        ),
+        isNull,
+      );
+    });
+
+    test('命中超过上限：只列前三，末尾用「等」省略', () {
+      final result = buildBackgroundUpdateResult(
+        days: <ScheduleDay>[
+          dayWith(2, const <ScheduleEntry>[
+            ScheduleEntry(id: '1', title: 'A'),
+            ScheduleEntry(id: '2', title: 'B'),
+            ScheduleEntry(id: '3', title: 'C'),
+            ScheduleEntry(id: '4', title: 'D'),
+          ]),
+        ],
+        followedIds: const <String>{'1', '2', '3', '4'},
+        weekday: 2,
+      );
+
+      expect(result!.count, 4);
+      expect(result.notificationBody, '今天有 4 部追番更新：《A》《B》《C》 等');
+    });
+
+    test('运行器：只统计 bangumi-anime 来源的追番，有命中才出结论', () async {
+      final db = openTestDatabase();
+      addTearDown(db.close);
+      final repository = LibraryRepository(db);
+      // 追番（内置放送表来源）
+      await repository.addToLibrary(
+        const MediaItem(
+          sourceId: 'bangumi-anime',
+          remoteId: '1',
+          type: MediaType.anime,
+          title: '追的番',
+        ),
+      );
+      // 书架里的其它番剧：不属于放送表来源，不该被算进「追番」。
+      await repository.addToLibrary(
+        const MediaItem(
+          sourceId: 'other-source',
+          remoteId: '1',
+          type: MediaType.anime,
+          title: '别的番',
+        ),
+      );
+
+      // 夹具覆盖一周，保证「今天」无论星期几都能命中。
+      final days = <Map<String, Object?>>[
+        for (var weekday = 1; weekday <= 7; weekday++)
+          <String, Object?>{
+            'weekday': <String, Object?>{'id': weekday, 'cn': '周$weekday'},
+            'items': <Object?>[
+              <String, Object?>{'id': 1, 'name_cn': '追的番'},
+            ],
+          },
+      ];
+      final container = ProviderContainer(
+        overrides: [
+          libraryRepositoryProvider.overrideWithValue(repository),
+          scheduleClientProvider.overrideWithValue(
+            BangumiScheduleClient(
+              http: FakeHttpClient(
+                (request) async =>
+                    SourceResponse(statusCode: 200, body: jsonEncode(days)),
+              ),
+              baseUrl: 'https://example.com/calendar',
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final result = await runBackgroundUpdateCheck(container);
+
+      expect(result, isNotNull);
+      expect(result!.count, 1);
+      expect(result.titles, <String>['追的番']);
     });
   });
 }

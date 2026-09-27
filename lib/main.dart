@@ -6,6 +6,14 @@ import 'package:media_kit/media_kit.dart';
 import 'app.dart';
 import 'core/storage/preferences.dart';
 import 'core/storage/secure_store.dart';
+import 'features/schedule/data/background_update_check.dart';
+
+/// 后台更新检查的引擎入口（T7-7）。
+///
+/// 必须声明在应用入口库里：原生侧（JobScheduler）按名字解析入口时只在
+/// 入口库中查找。实现见 [runBackgroundUpdateCheckEntrypoint]。
+@pragma('vm:entry-point')
+Future<void> backgroundUpdateCheck() => runBackgroundUpdateCheckEntrypoint();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

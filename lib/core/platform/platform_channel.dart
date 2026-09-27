@@ -64,6 +64,51 @@ class PlatformChannel {
     });
   }
 
+  /// 注册 / 取消后台更新提醒（Android JobScheduler 周期任务）。
+  ///
+  /// 返回是否登记成功；平台未实现（桌面端 / 测试）时返回 false。
+  Future<bool> scheduleBackgroundCheck(bool enabled) async {
+    try {
+      final ok = await _channel.invokeMethod<bool>(
+        'scheduleBackgroundCheck',
+        enabled,
+      );
+      return ok ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// 后台更新提醒当前是否已在系统里排程。
+  Future<bool> backgroundCheckScheduled() async {
+    try {
+      final ok = await _channel.invokeMethod<bool>('backgroundCheckScheduled');
+      return ok ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// 申请通知权限（Android 13+ 是运行时权限）。
+  ///
+  /// 低版本或已授权时直接返回 true；用户拒绝返回 false。
+  Future<bool> requestNotificationPermission() async {
+    try {
+      final granted = await _channel.invokeMethod<bool>(
+        'requestNotificationPermission',
+      );
+      return granted ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   /// 选一张图片（评论配图用，SAF `ACTION_OPEN_DOCUMENT` + `image/*`）。
   ///
   /// 用户取消 / 平台不支持时返回 null；失败抛 [PlatformException]，

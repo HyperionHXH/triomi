@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -30,19 +32,17 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   /// 用户授权的导出目录（T7-4）；为空时走应用私有目录。
   String? _exportDirectory;
 
-  /// 后台更新检查（T7-7）：仅设置位，真实排程见 TODO。
+  /// 后台更新检查（T7-7）：设置位 + Android 原生周期任务（JobScheduler）。
   bool _backgroundCheck = false;
 
   static const String backgroundCheckKey = 'updates.backgroundCheck';
 
-  // TODO(T7-7): 后台更新的真实排程方案——
-  // 方案 A：workmanager 插件（后台隔离回调 + Android WorkManager/iOS BGTask），
-  //   代价：新增插件与初始化侵入。
-  // 方案 B：MethodChannel + Android JobScheduler（Worker），仅 Android 原生实现，
-  //   通过 triomi/platform 通道 scheduleBackgroundCheck(bool) 注册周期任务，
-  //   由原生侧触发一次 dart 入口（需 headless engine）。
-  // 排程内容：调用各追踪/放送表的轻量查询 → 本地通知（需通知权限申请流程）。
-  // 规格默认关闭，以上方案在开启设置时由引导流程申请权限后启用。
+  // T7-7 实现：不引入 workmanager 插件，走 MethodChannel + Android JobScheduler。
+  // 排程（12 小时 / 仅 WiFi）由原生侧注册周期任务；任务触发时拉起 headless
+  // FlutterEngine 执行 Dart 入口 `backgroundUpdateCheck`（见
+  // features/schedule/data/background_update_check.dart）：读本地追番 → 拉
+  // Bangumi 今日放送 → 有命中才发本地通知（无命中不打扰）。默认关闭，
+  // 开启前申请通知权限（Android 13+），被拒则保持关闭。
 
   @override
   void initState() {
@@ -108,17 +108,11 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                   dense: true,
                   title: const Text('后台检查更新'),
                   subtitle: const Text(
-                    '联网检查追番与来源更新并通知；默认关闭。'
-                    '开启后需要通知权限。当前版本仅保存偏好，'
-                    '实际排程在后续版本提供。',
+                    '联网检查追番更新并通知；默认关闭，开启后需要通知权限，'
+                    '仅在 WiFi 下检查。',
                   ),
                   value: _backgroundCheck,
-                  onChanged: (value) async {
-                    await ref
-                        .read(preferencesProvider)
-                        .set(backgroundCheckKey, value);
-                    setState(() => _backgroundCheck = value);
-                  },
+                  onChanged: _busy ? null : _toggleBackgroundCheck,
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 ListTile(
@@ -255,6 +249,49 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// 后台更新提醒开关：开启前先要通知权限，Android 上登记 JobScheduler
+  /// 周期任务；被拒或排程失败时保持关闭并说明原因。
+  Future<void> _toggleBackgroundCheck(bool value) async {
+    final preferences = ref.read(preferencesProvider);
+    if (!value) {
+      await preferences.set(backgroundCheckKey, false);
+      await platformChannel.scheduleBackgroundCheck(false);
+      if (!mounted) return;
+      setState(() => _backgroundCheck = false);
+      return;
+    }
+
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      // 排程是 Android 专属能力；其它平台只保存偏好。
+      await preferences.set(backgroundCheckKey, true);
+      if (!mounted) return;
+      setState(() {
+        _backgroundCheck = true;
+        _status = '当前平台仅保存偏好，后台排程为 Android 专属';
+      });
+      return;
+    }
+
+    final granted = await platformChannel.requestNotificationPermission();
+    if (!granted) {
+      if (!mounted) return;
+      setState(() => _status = '没有通知权限，无法开启后台更新提醒');
+      return;
+    }
+    final scheduled = await platformChannel.scheduleBackgroundCheck(true);
+    if (!scheduled) {
+      if (!mounted) return;
+      setState(() => _status = '后台检查排程失败，请稍后重试');
+      return;
+    }
+    await preferences.set(backgroundCheckKey, true);
+    if (!mounted) return;
+    setState(() {
+      _backgroundCheck = true;
+      _status = '已开启：约每 12 小时检查一次追番更新（仅 WiFi）';
+    });
   }
 
   /// 选择导出目录（SAF），持久化到设置；再次选择后可在系统选择器里改选。

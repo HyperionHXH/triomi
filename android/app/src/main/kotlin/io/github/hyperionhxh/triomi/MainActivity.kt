@@ -2,6 +2,7 @@ package io.github.hyperionhxh.triomi
 
 import android.content.ContentValues
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
@@ -16,6 +17,7 @@ import java.io.File
 
 class MainActivity : FlutterActivity() {
     private var pendingFontResult: MethodChannel.Result? = null
+    private var pendingNotificationResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -48,6 +50,21 @@ class MainActivity : FlutterActivity() {
                     "pickImage" -> {
                         pendingFontResult = result
                         launchImagePicker()
+                    }
+                    "scheduleBackgroundCheck" -> {
+                        // 后台更新提醒（T7-7）：开启时注册周期任务，关闭时取消。
+                        if (call.arguments == true) {
+                            result.success(BackgroundUpdate.schedule(this))
+                        } else {
+                            BackgroundUpdate.cancel(this)
+                            result.success(true)
+                        }
+                    }
+                    "backgroundCheckScheduled" -> {
+                        result.success(BackgroundUpdate.isScheduled(this))
+                    }
+                    "requestNotificationPermission" -> {
+                        requestNotificationPermission(result)
                     }
                     else -> result.notImplemented()
                 }
@@ -182,6 +199,41 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /**
+     * 申请通知权限（Android 13+）。低版本或已授权直接回 true；
+     * 首次申请由系统弹窗，结果在 onRequestPermissionsResult 里回给 Dart。
+     */
+    private fun requestNotificationPermission(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            result.success(true)
+            return
+        }
+        if (BackgroundUpdate.hasNotificationPermission(this)) {
+            result.success(true)
+            return
+        }
+        pendingNotificationResult = result
+        requestPermissions(
+            arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+            REQUEST_NOTIFICATION,
+        )
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_NOTIFICATION) return
+        val pending = pendingNotificationResult
+        pendingNotificationResult = null
+        val granted = grantResults.isNotEmpty() &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED
+        pending?.success(granted)
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -271,5 +323,6 @@ class MainActivity : FlutterActivity() {
         private const val REQUEST_PICK_FONT = 4101
         private const val REQUEST_PICK_DIRECTORY = 4102
         private const val REQUEST_PICK_IMAGE = 4103
+        private const val REQUEST_NOTIFICATION = 4104
     }
 }
