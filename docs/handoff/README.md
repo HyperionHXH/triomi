@@ -86,7 +86,7 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
 | T4 | LNS SignalR 适配器协议层 | ✅ **已完成**（[T4-lns-signalr.md](T4-lns-signalr.md)） | 联调需 LNS 账号 |
 | T5 | LK 账号域接口层 | ✅ **已完成**（[T5-lk-account.md](T5-lk-account.md)） | 联调需 LK 账号 |
 | T6 | 阅读器增强逻辑 + 凭据安全迁移 | ✅ **已完成**（[T6-reader-security.md](T6-reader-security.md)） | — |
-| T7 | 杂项收口（追番订阅/到底提示/同书版本/SAF 导出/在线字体/备份开关/后台提醒桩） | ✅ **已完成**（[T7-misc-cleanup.md](T7-misc-cleanup.md)） | 无 |
+| T7 | 杂项收口（追番订阅/到底提示/同书版本/SAF 导出/在线字体/备份开关/后台提醒） | ✅ **已完成**（[T7-misc-cleanup.md](T7-misc-cleanup.md)） | 无 |
 
 **全部任务已完成。** 剩余工作都需要真实账号或设备，由本机环境接手：
 
@@ -97,7 +97,11 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
   `media_json` 回传）与真实账号端到端已完成；仅「真实账号发表公开评论（含配图）」
   这一步需用户逐条授权后再跑（夹具已覆盖写入链路）。
 - 番剧（视频）下载：**代码 + 夹具设备验证已完成**（见「番剧视频离线下载」）。
-- 真机项目（视频画面合成 / 性能 / 权限通知 / WebDAV 双设备）未做。
+- 后台更新提醒（D5/T7-7）：**代码 + 夹具设备验证已完成**（见「后台更新提醒」），
+  Android 侧已无待做代码项。
+- 真机项目（视频画面合成 / 性能 / 权限通知 / WebDAV 双设备）未做；
+  **Android 10+ 机型复验按用户决定不做**（模拟器已覆盖）。
+- Anime4K 番剧超分：用户明确不做，项关闭。
 - T7：SAF 目录选择/写入与在线字体下载的模拟器 E2E 已完成。
 
 ## 本机（设备环境）已完成的部分
@@ -150,6 +154,48 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
 界面在这期间只有按钮上的转圈、没有进度指示。曾试过加「总时长上限」，
 但实测会把这种「慢但正常」的下载掐断（20 MB 级别的字体在慢网下必然超时），
 因此**没有加**——真正的黑洞连接由 HTTP 层已有的空闲超时兜底，只是缺少进度反馈。
+
+### 后台更新提醒（D5/T7-7，commit `50b3ed8`）
+
+规格原文只有一句「后台更新提醒（默认关闭，Android WorkManager 等价物，
+需通知权限）」。T7 设计约束写明**不引入 workmanager 插件**，因此实现如下：
+
+- **排程**（`BackgroundUpdate.kt`）：原生 `JobScheduler` 周期任务，作业 id `7301`，
+  12 小时一次、`NETWORK_TYPE_UNMETERED`（仅 WiFi）、`setPersisted(true)`。
+  带网络约束必须声明 `ACCESS_NETWORK_STATE`，否则系统抛
+  `SecurityException`；缺该权限时设置页开关会回滚并提示（已实测到这一路径）。
+- **执行**（`BackgroundUpdateCheckJobService.kt`）：作业触发时建一个
+  headless `FlutterEngine`（构造时已自动登记插件，**不要**再手动调
+  `GeneratedPluginRegistrant`，否则每个插件都会打一条「already registered」）
+  → 按名字执行 Dart 入口 `backgroundUpdateCheck`。Dart 判定有更新就调
+  `triomi/background` 的 `notify` 回传标题/正文，最后必须调 `done`；
+  原生侧在 `done`（或 60s 超时兜底）后 `jobFinished` + 销毁引擎。
+- **入口位置**（踩坑）：入口函数**必须声明在应用入口库**（`lib/main.dart`），
+  函数体可以转发到别处（`runBackgroundUpdateCheckEntrypoint`）——放在
+  feature 目录里会报 `Could not resolve main entrypoint function`，
+  引擎起不来且日志只在 `flutter :` tag 下。
+- **检查内容**（`features/schedule/data/background_update_check.dart`）：
+  最小 `ProviderContainer`（drift/path_provider 在后台 isolate 里可用）→
+  读本地书架中 `bangumi-anime` 来源的追番 → 拉 Bangumi 当日放送 →
+  交集非空才产生通知（`今天有 N 部追番更新：《…》`，最多列 3 部）。
+  **没有追番 / 当天没数据 / 当天没命中都不打扰**。
+- **设置**：`我的 → 备份与恢复 → 后台检查更新`，默认关；开启先申请
+  `POST_NOTIFICATIONS`（Android 13+），被拒或排程失败则保持关闭并说明；
+  关闭即取消排程。非 Android 平台只保存偏好。
+
+设备验证（模拟器 + 夹具放送表 `--dart-define=TRIOMI_SCHEDULE_BASE=…`）：
+
+| 步骤 | 结果 |
+|---|---|
+| 开关开启 | 弹出系统通知权限对话框 → 允许后提示「已开启：约每 12 小时检查一次追番更新（仅 WiFi）」 |
+| 作业登记 | `dumpsys jobscheduler` 出现 `JOB #…/7301 …BackgroundUpdateCheckJobService`，PERIODIC +12h、PERSISTED、Network NOT_METERED |
+| 强制触发 | `adb shell cmd jobscheduler run -f io.github.hyperionhxh.triomi 7301` → 通知 `channel=triomi.updates`，标题「追番更新提醒」、正文「今天有 1 部追番更新：《夹具新番甲（夹具）》」 |
+| 任务收尾 | 作业历史出现 `STOP-P … app called jobFinished`（Dart 的 `done` 回调生效，引擎正常销毁） |
+| 开关关闭 | 开关置为关闭后 `dumpsys` 中待执行作业归零（排程已取消） |
+| 排程失败回滚 | 缺 `ACCESS_NETWORK_STATE` 时开关保持关闭并提示「后台检查排程失败，请稍后重试」（修复前实测） |
+
+**本机可做的验证到此为止**：真机后台调度策略（Doze / 厂商省电）与
+「通知权限被拒后的引导」需真机，按用户决定不做 Android 10+ 机型复验。
 
 ### 真实账号联调结果（LNS 轻书架，2026-09-27）
 
