@@ -1,4 +1,5 @@
 import '../models/chapter.dart';
+import '../models/lk_account.dart';
 import '../models/media_item.dart';
 import '../models/source_descriptor.dart';
 
@@ -65,4 +66,39 @@ abstract class AccountProvider implements ContentSource {
 /// （对齐 Mixn 的红线：解锁失败要给可读的错误，而不是本地伪造已解锁）。
 abstract class ChapterUnlockProvider implements ContentSource {
   Future<void> unlockChapter(Chapter chapter);
+}
+
+/// 账号域扩展能力（LK 这类带站点功能的来源）。
+///
+/// 实现类由 UI 按站点能力显隐：站点没有的入口就不显示（对齐 Mixn 的
+/// 能力显隐原则）。评论列表允许匿名读，其余方法未登录时抛 auth 错误。
+abstract class AccountProfileProvider implements AccountProvider {
+  /// 个人资料（含轻币余额与关注/粉丝数）。
+  Future<LkProfile> profile();
+
+  /// 七日签到状态。
+  Future<LkSignDetail> signDetail();
+
+  /// 领取当日签到。
+  Future<void> claimSign();
+
+  /// 各分类未读数（消息中心角标）。
+  Future<LkUnreadSummary> unreadMessages();
+
+  /// 作品评论分页；[sort] 取 `hot` / `latest`。
+  Future<LkCommentPage> comments(
+    String bookRemoteId, {
+    required String sort,
+    required int page,
+  });
+
+  /// 发表评论（本期只发纯文本）。
+  Future<void> publishComment(
+    String bookRemoteId, {
+    required String text,
+    List<int> mentionUids = const <int>[],
+  });
+
+  /// 点赞 / 取消点赞。
+  Future<void> likeComment(String commentId, {required bool like});
 }

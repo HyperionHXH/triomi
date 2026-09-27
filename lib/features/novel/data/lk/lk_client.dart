@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import '../../../../core/models/lk_account.dart';
 import '../../../../core/models/media_type.dart';
 import '../../../../core/models/source_exception.dart';
 import '../../../../core/source/http_client.dart';
@@ -17,14 +18,29 @@ class LkClient {
     required this.http,
     required this.preferences,
     required this.secureStore,
+    this.mainBase = defaultMainBase,
+    this.commentBase = defaultCommentBase,
   });
 
   static const String sourceId = 'light-novel-kingdom';
-  static const String _webBff = 'https://www.lightnovel.fun/api/pc-proxy/';
+
+  /// 主接口（pc-proxy 信封）。
+  static const String defaultMainBase =
+      'https://www.lightnovel.fun/api/pc-proxy/';
+
+  /// 评论接口走另一个 base（pc-comment-proxy）。
+  static const String defaultCommentBase =
+      'https://api.lightnovel.fun/pc-comment-proxy/';
 
   final SourceHttpClient http;
   final Preferences preferences;
   final SecureStore secureStore;
+
+  /// 主接口地址；测试注入夹具地址。
+  final String mainBase;
+
+  /// 评论接口地址。
+  final String commentBase;
 
   static const String _sessionKey = 'lk.securityKey';
   static const String _unlockedKey = 'lk.unlockedChapters';
@@ -363,6 +379,465 @@ class LkClient {
     await preferences.set(_unlockedKey, unlocked.toList());
   }
 
+  // ------------------------------------------------------------ 账号域
+
+  /// 个人资料 / 轻币余额 / 关注粉丝（需要登录）。
+  Future<LkProfile> myProfile() async {
+    final key = _requireSession();
+    final data = await _post('api/bff/my-home-v1', <String, Object?>{
+      'security_key': key,
+    });
+    return parseAccountProfile(data);
+  }
+
+  /// 七日签到状态（需要登录）。
+  Future<LkSignDetail> signDetail() async {
+    final key = _requireSession();
+    final data = await _post(
+      'api/bff/welfare-sign-detail-v1',
+      <String, Object?>{'security_key': key},
+    );
+    return parseSignDetail(data);
+  }
+
+  /// 领取当日签到（需要登录）。
+  Future<LkSignResult> claimSign() async {
+    final key = _requireSession();
+    final data = await _post('api/bff/claim-welfare-sign-v1', <String, Object?>{
+      'security_key': key,
+    });
+    return parseSignResult(data);
+  }
+
+  /// 各分类未读数（需要登录）。
+  Future<LkUnreadSummary> unreadMessages() async {
+    final key = _requireSession();
+    final data = await _post('api/bff/message-unread-v1', <String, Object?>{
+      'security_key': key,
+    });
+    return parseUnreadSummary(data);
+  }
+
+  /// 关注 / 取关用户（需要登录）。
+  Future<void> setUserFollow(int uid, {required bool follow}) async {
+    final key = _requireSession();
+    await _post('api/bff/toggle-user-follow-v1', <String, Object?>{
+      'security_key': key,
+      'uid': uid,
+      'act': follow ? 'follow' : 'unfollow',
+    });
+  }
+
+  /// 作品评论列表（最热 / 最新、分页）。
+  ///
+  /// 站点允许匿名读评论：有会话就带上 security_key，没有也照常请求
+  /// （对齐 Mixn 与官方网页端的行为）。
+  Future<LkCommentPage> comments(
+    int bookId, {
+    required String sort,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final data = await _post(
+      'api/new-content-read/get-book-comments',
+      <String, Object?>{
+        'security_key': securityKey,
+        'book_id': bookId,
+        'volume_id': 0,
+        'chapter_id': 0,
+        'view': '',
+        'comment_id': 0,
+        'page': page,
+        'pageSize': pageSize,
+        'comment_sort': sort,
+        'rating_filter': 'all',
+        'include_user_interactions': 1,
+      },
+      commentApi: true,
+    );
+    return parseCommentPage(data, page);
+  }
+
+  /// 发表评论（需要登录）。
+  ///
+  /// 本期只发纯文本；评论图片上传（`api/dynamic/upload-image-v1`）留 TODO。
+  Future<void> publishComment(
+    int bookId, {
+    required String text,
+    List<int> mentionUids = const <int>[],
+    int ratingStars = 0,
+    int rootCommentId = 0,
+    int replyCommentId = 0,
+  }) async {
+    final key = _requireSession();
+    final normalized = text.trim();
+    if (normalized.isEmpty) {
+      throw const SourceException(
+        sourceId: sourceId,
+        type: SourceErrorType.parse,
+        message: '评论内容不能为空',
+      );
+    }
+    await _post('api/discuss/publish-book-comment', <String, Object?>{
+      'security_key': key,
+      'book_id': bookId,
+      'volume_id': 0,
+      'chapter_id': 0,
+      'view': '',
+      'root_comment_id': rootCommentId,
+      'reply_comment_id': replyCommentId,
+      'content': normalized,
+      // 站点要求是数组：曾误传字符串导致 comment payload invalid。
+      'mention_uids': mentionUids,
+      'media_json': '[]',
+      'rating_stars': ratingStars.clamp(0, 5),
+      'read_duration_seconds': 0,
+    });
+  }
+
+  /// 点赞 / 取消点赞（需要登录）。
+  Future<void> likeComment({
+    required int commentId,
+    required bool like,
+    int bookId = 0,
+  }) async {
+    final key = _requireSession();
+    await _post('api/discuss/like-book-comment', <String, Object?>{
+      'security_key': key,
+      'book_id': bookId,
+      'volume_id': 0,
+      'chapter_id': 0,
+      'view': '',
+      'comment_id': commentId,
+      'root_comment_id': 0,
+      'act': like ? 'like' : 'unlike',
+    });
+  }
+
+  // ------------------------------------------------------------ 账号域解析
+
+  /// 个人资料：profile/user 容器 + stats 计数，缺字段降级。
+  static LkProfile parseAccountProfile(Map<Object?, Object?> data) {
+    final profile = _obj(data, 'profile', 'user') ?? data;
+    final stats = _obj(data, 'stats') ?? _obj(profile, 'stats') ?? data;
+    final balance = _obj(profile, 'balance');
+    final levelNode = _obj(profile, 'level');
+    final group = _obj(profile, 'user_group', 'group', 'rank');
+    final coin =
+        _pickPositive(profile, const <String>[
+          'coin',
+          'light_coin',
+          'lightCoin',
+          'balance',
+        ]) ??
+        (balance == null
+            ? null
+            : _pickNonNegative(balance, const <String>[
+                'coin',
+                'light_coin',
+                'lightCoin',
+              ])) ??
+        0;
+    return LkProfile(
+      uid: _int(profile, 'uid', 'user_id', 'id'),
+      nickname: _string2(
+        _string(profile, 'nickname', 'username', 'name'),
+        '已登录用户',
+      ),
+      avatarUrl: _nullable(
+        _string(profile, 'avatar', 'avatar_url', 'avatarUrl'),
+      ),
+      signature: _string(profile, 'sign', 'signature'),
+      levelName: _string2(
+        _string(
+          profile,
+          'level_name',
+          'levelName',
+          'level_title',
+          'group_name',
+          'user_group_name',
+          'rank_name',
+          'role_name',
+        ),
+        group == null ? '' : _string(group, 'name', 'title'),
+      ),
+      level:
+          _pickPositive(profile, const <String>['level']) ??
+          (levelNode == null
+              ? null
+              : _pickPositive(levelNode, const <String>['level'])),
+      coin: coin,
+      fansCount:
+          _pickPositive(stats, const <String>[
+            'followers',
+            'fans',
+            'fans_count',
+          ]) ??
+          _pickPositive(profile, const <String>[
+            'followers',
+            'fans',
+            'fans_count',
+            'fansCount',
+          ]),
+      followingCount:
+          _pickPositive(stats, const <String>[
+            'following',
+            'following_count',
+          ]) ??
+          _pickPositive(profile, const <String>[
+            'following',
+            'following_count',
+            'followingCount',
+          ]),
+      postCount:
+          _pickPositive(stats, const <String>[
+            'publish_articles',
+            'post_count',
+            'posts',
+          ]) ??
+          _pickPositive(profile, const <String>[
+            'publish_articles',
+            'post_count',
+            'posts',
+            'postCount',
+          ]),
+    );
+  }
+
+  /// 七日签到状态（含每日格子）。
+  static LkSignDetail parseSignDetail(Map<Object?, Object?> data) {
+    final days = <LkSignDay>[];
+    for (final node in _listOf(data, 'rewards,days,list', 'sign_days')) {
+      days.add(
+        LkSignDay(
+          day: _int(node, 'day', 'index'),
+          rewardAmount: _int(node, 'reward_amount', 'amount', 'coin'),
+          claimed: _bool(node, 'claimed') == true,
+          claimable: _bool(node, 'claimable') == true,
+        ),
+      );
+    }
+    final currentDay = _int(data, 'current_day');
+    return LkSignDetail(
+      title: _string2(_string(data, 'title'), '每日签到'),
+      subtitle: _string(data, 'sub_title', 'subtitle'),
+      currentDay: currentDay < 1 ? 1 : currentDay,
+      progress: _int(data, 'progress'),
+      totalProgress: _int(data, 'total_progress'),
+      claimed: _bool(data, 'claimed') == true,
+      claimable: _bool(data, 'claimable') == true,
+      days: days,
+    );
+  }
+
+  /// 签到领取结果（reward / result 两种容器都要吃）。
+  static LkSignResult parseSignResult(Map<Object?, Object?> data) {
+    final reward = _obj(data, 'reward', 'result');
+    final amount =
+        _pickPositive(data, const <String>[
+          'reward_amount',
+          'amount',
+          'coin',
+        ]) ??
+        (reward == null
+            ? null
+            : _pickPositive(reward, const <String>[
+                'reward_amount',
+                'amount',
+                'coin',
+              ]));
+    final balance =
+        _pickNonNegative(data, const <String>[
+          'balance',
+          'total_coin',
+          'light_coin',
+        ]) ??
+        (reward == null
+            ? null
+            : _pickNonNegative(reward, const <String>[
+                'balance',
+                'total_coin',
+                'light_coin',
+              ]));
+    final streak =
+        _pickNonNegative(data, const <String>[
+          'streak_days',
+          'continue_days',
+          'progress',
+        ]) ??
+        (reward == null
+            ? null
+            : _pickNonNegative(reward, const <String>[
+                'streak_days',
+                'continue_days',
+                'progress',
+              ]));
+    return LkSignResult(
+      rewardAmount: amount ?? 0,
+      balance: balance,
+      streakDays: streak,
+    );
+  }
+
+  /// 各分类未读数（summary / unread 容器）。
+  static LkUnreadSummary parseUnreadSummary(Map<Object?, Object?> data) {
+    final summary = _obj(data, 'summary', 'unread') ?? data;
+    return LkUnreadSummary(
+      unreadCount: _int(summary, 'unread_count', 'unreadCount', 'total_unread'),
+      replyCount: _int(summary, 'reply_count', 'replies'),
+      mentionCount: _int(summary, 'mention_count', 'mentions'),
+      likeCount: _int(summary, 'like_count', 'likes'),
+      systemCount: _int(summary, 'system_count', 'notifications'),
+      dmCount: _int(summary, 'dm_count', 'dm_unread'),
+      fanCount: _int(summary, 'fan_count', 'fans'),
+    );
+  }
+
+  /// 评论分页：图片评论（无文字）也要保留。
+  static LkCommentPage parseCommentPage(
+    Map<Object?, Object?> data,
+    int requestedPage,
+  ) {
+    final items = <LkComment>[];
+    for (final node in _listOf(data, 'list,root_comment,items', 'comments')) {
+      final comment = parseComment(node);
+      if (comment.content.isNotEmpty || comment.imageUrls.isNotEmpty) {
+        items.add(comment);
+      }
+    }
+    final pageInfo = _obj(data, 'page_info', 'pagination');
+    final total = pageInfo == null
+        ? items.length
+        : (_pickInt(pageInfo, const <String>['count', 'total']) ??
+              items.length);
+    final next = pageInfo == null
+        ? 0
+        : (_pickInt(pageInfo, const <String>['next']) ?? 0);
+    final hasNext =
+        pageInfo != null && (_bool(pageInfo, 'has_next', 'hasNext') ?? false);
+    return LkCommentPage(
+      items: items,
+      page: requestedPage,
+      total: total,
+      hasMore: next > 0 || hasNext,
+    );
+  }
+
+  /// 单条评论（含楼中楼预览与附图）。
+  static LkComment parseComment(Map<Object?, Object?> source) {
+    final stats = _obj(source, 'stats');
+    final interaction = _obj(source, 'interaction_state', 'interactionState');
+    final replies = <LkComment>[
+      for (final node in _listOf(
+        source,
+        'reply_preview,reply_list,replies',
+        'children',
+      ))
+        parseComment(node),
+    ];
+    final replyToList = _listOf(
+      source,
+      'reply_to_user,replyToUser',
+      'target_user',
+    );
+    final replyToNode =
+        _obj(
+          source,
+          'reply_to_user',
+          'replyToUser',
+          'to_user',
+          'target_user',
+        ) ??
+        (replyToList.isEmpty ? null : replyToList.first);
+
+    final imageUrls = <String>[];
+    for (final node in _listOf(
+      source,
+      'resources,media,images',
+      'image_list',
+    )) {
+      final url = _string(
+        node,
+        'url',
+        'res_url',
+        'stored_url',
+        'source_url',
+        'src',
+        'image',
+      );
+      if (url.isNotEmpty && !imageUrls.contains(url)) imageUrls.add(url);
+    }
+    for (final raw in _rawList(source, 'imageUrls', 'image_urls')) {
+      final url = raw?.toString().trim() ?? '';
+      if (url.isNotEmpty && !imageUrls.contains(url)) imageUrls.add(url);
+    }
+
+    final directLikes = _int(source, 'like_count', 'likeCount', 'likes');
+    final likeCount = directLikes != 0
+        ? directLikes
+        : (stats == null ? 0 : _int(stats, 'like_count', 'likes'));
+    final directReplies = _int(
+      source,
+      'reply_count',
+      'replyCount',
+      'replies_count',
+    );
+    final replyCount = directReplies != 0
+        ? directReplies
+        : (stats == null
+              ? replies.length
+              : _int(stats, 'conversation_count', 'replies'));
+    final stars = _int(source, 'rating_stars', 'rating', 'stars', 'star');
+    final rootId = _int(source, 'root_comment_id', 'rootCommentId');
+    final liked =
+        (interaction == null
+            ? null
+            : _bool(interaction, 'liked', 'is_liked')) ??
+        _bool(source, 'liked', 'is_liked') ??
+        false;
+
+    return LkComment(
+      id: _int(source, 'comment_id', 'commentId', 'id'),
+      author:
+          _parseCommentAuthor(
+            _obj(source, 'user', 'author', 'sender', 'poster_user'),
+          ) ??
+          const LkCommentAuthor(uid: 0, nickname: '匿名用户'),
+      content: _string(source, 'content', 'content_text', 'body', 'text'),
+      createdAt: _string(
+        source,
+        'publish_time',
+        'created_at',
+        'createdAt',
+        'date_text',
+        'dateText',
+        'time',
+      ),
+      likeCount: likeCount,
+      replyCount: replyCount,
+      ratingStars: (stars >= 1 && stars <= 5) ? stars : null,
+      rootCommentId: rootId > 0 ? rootId : null,
+      liked: liked,
+      imageUrls: imageUrls,
+      replyTo: _parseCommentAuthor(replyToNode),
+      replies: replies,
+    );
+  }
+
+  static LkCommentAuthor? _parseCommentAuthor(Map<Object?, Object?>? source) {
+    if (source == null) return null;
+    final uid = _int(source, 'uid', 'id', 'user_id');
+    final nickname = _string(source, 'nickname', 'name', 'username');
+    if (uid == 0 && nickname.isEmpty) return null;
+    return LkCommentAuthor(
+      uid: uid,
+      nickname: nickname.isEmpty ? '用户$uid' : nickname,
+      avatarUrl: _nullable(
+        _string(source, 'avatar_url', 'avatar', 'avatarUrl'),
+      ),
+    );
+  }
+
   // ------------------------------------------------------------ 解析
 
   List<LkBook> booksPage(Map<Object?, Object?> data) => <LkBook>[
@@ -482,11 +957,12 @@ class LkClient {
 
   Future<Map<Object?, Object?>> _post(
     String path,
-    Map<String, Object?> body,
-  ) async {
+    Map<String, Object?> body, {
+    bool commentApi = false,
+  }) async {
     final response = await http.send(
       SourceRequest(
-        url: '$_webBff$path',
+        url: '${commentApi ? commentBase : mainBase}$path',
         method: 'POST',
         body: jsonEncode(body),
         bodyType: RequestBodyType.json,
@@ -561,9 +1037,17 @@ Map<Object?, Object?>? _obj(
   String k1, [
   String? k2,
   String? k3,
+  String? k4,
+  String? k5,
 ]) {
-  final value = _pick(map, <String>[k1, ?k2, ?k3]);
+  final value = _pick(map, <String>[k1, ?k2, ?k3, ?k4, ?k5]);
   return value is Map<Object?, Object?> ? value : null;
+}
+
+/// 取原始数组（元素可能是标量），用于 `imageUrls` 这类字符串数组。
+List<Object?> _rawList(Map<Object?, Object?> map, String k1, [String? k2]) {
+  final value = _pick(map, <String>[k1, ?k2]);
+  return value is List ? value : const <Object?>[];
 }
 
 List<Map<Object?, Object?>> _listOf(
@@ -597,11 +1081,39 @@ String _string(
   return value?.toString().trim() ?? '';
 }
 
-int _int(Map<Object?, Object?> map, String k1, [String? k2, String? k3]) {
-  final value = _pick(map, <String>[k1, ?k2, ?k3]);
+int _int(
+  Map<Object?, Object?> map,
+  String k1, [
+  String? k2,
+  String? k3,
+  String? k4,
+  String? k5,
+]) {
+  final value = _pick(map, <String>[k1, ?k2, ?k3, ?k4, ?k5]);
   if (value is int) return value;
   if (value is num) return value.toInt();
   return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+/// 可空整数：字段缺失时返回 null（区分「没有」和「是 0」）。
+int? _pickInt(Map<Object?, Object?> map, List<String> keys) {
+  final value = _pick(map, keys);
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value.toString());
+}
+
+/// 正数才有意义（余额 / 计数），否则视为缺失。
+int? _pickPositive(Map<Object?, Object?> map, List<String> keys) {
+  final value = _pickInt(map, keys);
+  return (value != null && value > 0) ? value : null;
+}
+
+/// 非负数（0 是合法值），缺失或非法时返回 null。
+int? _pickNonNegative(Map<Object?, Object?> map, List<String> keys) {
+  final value = _pickInt(map, keys);
+  return (value != null && value >= 0) ? value : null;
 }
 
 double? _double(Map<Object?, Object?> map, String k1, [String? k2]) {

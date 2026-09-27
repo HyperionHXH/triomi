@@ -1,4 +1,5 @@
 import '../../../../core/models/chapter.dart';
+import '../../../../core/models/lk_account.dart';
 import '../../../../core/models/media_item.dart';
 import '../../../../core/models/media_type.dart';
 import '../../../../core/models/source_descriptor.dart';
@@ -8,17 +9,17 @@ import 'lk_client.dart';
 
 /// 轻之国度来源：把 LK 的 HTTP 接口映射到 Triomi 的来源能力契约。
 ///
-/// 能力范围（对齐 Mixn 的 LightNovelKingdomSource，本里程碑先落核心链路）：
+/// 能力范围（对齐 Mixn 的 LightNovelKingdomSource）：
 /// 发现 / 搜索 / 详情 / 目录（卷→章两级）/ 正文（HTML 含插图）/ 账号（登录登出）/
-/// 书架同步 / 进度回传 / 付费章节解锁（只解锁不绕过）。
-/// 评论、私信、福利中心等站点功能页归 M4b。
+/// 书架同步 / 进度回传 / 付费章节解锁（只解锁不绕过）/ 账号域（资料、轻币、
+/// 七日签到、消息未读、作品评论——接口层见 T5，页面由本机接手）。
 class LkSource
     implements
         DiscoverProvider,
         SearchProvider,
         DetailProvider,
         ContentProvider,
-        AccountProvider,
+        AccountProfileProvider,
         ChapterUnlockProvider {
   LkSource({required this.client});
 
@@ -35,12 +36,14 @@ class LkSource
     lang: 'zh',
     baseUrl: 'https://www.lightnovel.fun/',
     requireLogin: false,
-    capabilities: {
+    capabilities: <SourceCapability>{
       SourceCapability.discover,
       SourceCapability.search,
       SourceCapability.detail,
       SourceCapability.content,
       SourceCapability.account,
+      SourceCapability.comment,
+      SourceCapability.reward,
     },
   );
 
@@ -165,6 +168,60 @@ class LkSource
   @override
   Future<void> logout() => client.logout();
 
+  // ---------------------------------------------------------------- 账号域（T5）
+
+  @override
+  Future<LkProfile> profile() => client.myProfile();
+
+  @override
+  Future<LkSignDetail> signDetail() => client.signDetail();
+
+  @override
+  Future<void> claimSign() => client.claimSign();
+
+  @override
+  Future<LkUnreadSummary> unreadMessages() => client.unreadMessages();
+
+  @override
+  Future<LkCommentPage> comments(
+    String bookRemoteId, {
+    required String sort,
+    required int page,
+  }) => client.comments(_bookIdOf(bookRemoteId), sort: sort, page: page);
+
+  @override
+  Future<void> publishComment(
+    String bookRemoteId, {
+    required String text,
+    List<int> mentionUids = const <int>[],
+  }) => client.publishComment(
+    _bookIdOf(bookRemoteId),
+    text: text,
+    mentionUids: mentionUids,
+  );
+
+  /// 点赞 / 取消；[bookId] 站点接口需要，评论页面拿得到作品时一并传入。
+  @override
+  Future<void> likeComment(
+    String commentId, {
+    required bool like,
+    int bookId = 0,
+  }) async {
+    final value = int.tryParse(commentId);
+    if (value == null || value <= 0) {
+      throw SourceException(
+        sourceId: id,
+        type: SourceErrorType.parse,
+        message: '无效的评论编号：$commentId',
+      );
+    }
+    await client.likeComment(commentId: value, like: like, bookId: bookId);
+  }
+
+  /// 关注 / 取关用户。
+  Future<void> setUserFollow(int uid, {required bool follow}) =>
+      client.setUserFollow(uid, follow: follow);
+
   /// 远端书架（登录后可用）；失败时给出可理解的错误而不是静默空列表。
   Future<List<MediaItem>> remoteShelf() async {
     final books = await client.bookshelf();
@@ -216,12 +273,17 @@ class LkSource
         message: '作品属于 ${item.sourceId}，不是轻之国度的资源',
       );
     }
-    final value = int.tryParse(item.remoteId);
-    if (value == null) {
+    return _bookIdOf(item.remoteId);
+  }
+
+  /// 作品编号（评论 / 关注等账号域接口按编号调用）。
+  int _bookIdOf(String remoteId) {
+    final value = int.tryParse(remoteId);
+    if (value == null || value <= 0) {
       throw SourceException(
         sourceId: id,
         type: SourceErrorType.parse,
-        message: '无效的轻之国度作品编号：${item.remoteId}',
+        message: '无效的轻之国度作品编号：$remoteId',
       );
     }
     return value;
