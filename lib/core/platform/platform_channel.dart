@@ -35,6 +35,34 @@ class PlatformChannel {
       return null;
     }
   }
+
+  /// SAF 目录选择器（ACTION_OPEN_DOCUMENT_TREE），返回 tree URI。
+  /// 用户取消或平台不支持时返回 null。
+  Future<String?> pickDirectory() async {
+    try {
+      return await _channel.invokeMethod<String>('pickDirectory');
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  /// 向授权目录写文件（DocumentsContract.createDocument）。
+  ///
+  /// 失败抛 [PlatformException]——调用方（备份导出）据此回退应用私有目录。
+  Future<String?> writeToTree(
+    String treeUri,
+    String fileName,
+    Uint8List bytes,
+  ) {
+    return _channel.invokeMethod<String>('writeToTree', <String, Object?>{
+      'treeUri': treeUri,
+      'fileName': fileName,
+      'bytes': bytes,
+      'mime': 'application/zip',
+    });
+  }
 }
 
 /// 全局单例（无状态，直接用）。

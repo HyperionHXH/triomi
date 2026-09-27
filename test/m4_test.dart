@@ -137,8 +137,11 @@ void main() {
   });
 
   group('轻之国度客户端', () {
-    LkClient clientOf(FakeHttpClient http) =>
-        LkClient(http: http, preferences: preferences, secureStore: MemorySecureStore());
+    LkClient clientOf(FakeHttpClient http) => LkClient(
+      http: http,
+      preferences: preferences,
+      secureStore: MemorySecureStore(),
+    );
 
     test('信封解析：code != 0 抛出可读错误', () async {
       final http = routingHttpClient({
@@ -321,7 +324,11 @@ void main() {
         }),
       });
       final source = LkSource(
-        client: LkClient(http: http, preferences: preferences, secureStore: MemorySecureStore()),
+        client: LkClient(
+          http: http,
+          preferences: preferences,
+          secureStore: MemorySecureStore(),
+        ),
       );
 
       const item = MediaItem(
@@ -354,7 +361,11 @@ void main() {
         }),
       });
       final source = LkSource(
-        client: LkClient(http: http, preferences: preferences, secureStore: MemorySecureStore()),
+        client: LkClient(
+          http: http,
+          preferences: preferences,
+          secureStore: MemorySecureStore(),
+        ),
       );
 
       const chapter = Chapter(

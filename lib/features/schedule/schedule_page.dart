@@ -8,7 +8,6 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
-import 'data/bangumi_schedule_client.dart';
 import 'data/schedule_providers.dart';
 
 /// 追番条目 → 内置 `bangumi-anime` 规则来源的作品。

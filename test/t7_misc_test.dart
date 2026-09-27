@@ -1,19 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/backup/backup_service.dart';
 import 'package:triomi/core/db/app_database.dart';
-import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
+import 'package:triomi/core/source/http_client.dart';
+import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/discover/discover_page.dart';
 import 'package:triomi/features/discover/widgets/media_item_card.dart';
-import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/features/novel/data/lk/lk_client.dart';
 import 'package:triomi/features/novel/reader/font_catalog.dart';
 import 'package:triomi/features/novel/reader/user_font_store.dart';
@@ -32,6 +32,8 @@ MediaItem _item(String id) => MediaItem(
 );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('T7-1 追番条目 → 订阅导航参数', () {
     test('映射 sourceId / remoteId / url（对齐 bangumi-anime 规则 detail）', () {
       final item = scheduleEntryToItem(
@@ -166,6 +168,21 @@ void main() {
         ),
       );
 
+      // 单测里没有 path_provider 插件，用假通道提供文档目录。
+      final docsDir = Directory.systemTemp.createTempSync('triomi_backup_');
+      const channel = MethodChannel('plugins.flutter.io/path_provider');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            return call.method == 'getApplicationDocumentsDirectory'
+                ? docsDir.path
+                : null;
+          });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+        if (docsDir.existsSync()) docsDir.deleteSync(recursive: true);
+      });
+
       final result = await service.exportToFile(
         directoryUri: 'content://broken/tree',
         writeToTree: (uri, fileName, bytes) async {
@@ -176,7 +193,6 @@ void main() {
       expect(result.path, isNot(startsWith('content://')));
       expect(result.path, contains('backups'));
       expect(File(result.path).existsSync(), isTrue);
-      addTearDown(() => File(result.path).deleteSync());
     });
   });
 
@@ -256,7 +272,7 @@ void main() {
       Uint8List decode(Uint8List bytes) {
         final archive = ZipDecoder().decodeBytes(bytes);
         final file = archive.findFile('data.json');
-        return file != null ? file.content as Uint8List : Uint8List(0);
+        return file != null ? file.content : Uint8List(0);
       }
 
       final fullJson = utf8.decode(decode(full.bytes));

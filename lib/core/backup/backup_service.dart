@@ -143,7 +143,7 @@ class BackupService {
         covers: payload['covers'] as int? ?? 0,
         settings: payload['settings'] as int? ?? 0,
         exportedAt: DateTime.now(),
-        path: file.path,
+        path: savedPath,
       ),
     );
   }
