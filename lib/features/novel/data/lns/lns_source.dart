@@ -172,10 +172,17 @@ class LnsSource
     // B7：服务端专用字体必须先拿到；拿不到宁可报来源错误，
     // 也绝不把混淆正文当成正常内容渲染。
     final fontUrl = detail.fontUrl;
+    String? fontFamily;
     if (fontUrl != null && fontUrl.isNotEmpty && fontChannel != null) {
       await fontChannel!.ensure(fontUrl);
+      // 字体注册好后把 family 交给阅读器：站点替换过字形，
+      // 不用这个字体渲染出来就是乱码。
+      fontFamily = fontChannel!.familyFor(fontUrl);
     }
-    return ChapterContent(html: detail.html.isNotEmpty ? detail.html : null);
+    return ChapterContent(
+      html: detail.html.isNotEmpty ? detail.html : null,
+      fontFamily: fontFamily,
+    );
   }
 
   // ---------------------------------------------------------------- 账号
@@ -362,21 +369,49 @@ class LnsSource
 /// 轻书架正文依赖站点下发的字体，不加载会显示乱码。这里只做**数据通道**：
 /// 下载并注册进引擎（进程内缓存）；渲染侧的字体接入由阅读器落地时对接。
 class LnsFontChannel {
-  LnsFontChannel({required this.http, this.sourceId = lnsSourceId});
+  LnsFontChannel({
+    required this.http,
+    this.sourceId = lnsSourceId,
+    this.apiOrigin = lnsApiOrigin,
+  });
 
   final SourceHttpClient http;
   final String sourceId;
+
+  /// 站点下发的地址可能是相对路径，用它补成绝对地址。
+  final String apiOrigin;
 
   /// fontUrl → 已注册的 fontFamily。
   final Map<String, String> _registered = <String, String>{};
 
   String? familyFor(String fontUrl) => _registered[fontUrl];
 
+  /// 站点给的 `fontUrl` 形如 `/font/xxx.woff2`（相对路径），
+  /// 直接丢给 HTTP 层会报 URI 错误——按 API 源站补全。
+  String absoluteUrl(String fontUrl) {
+    final uri = Uri.tryParse(fontUrl);
+    if (uri == null || uri.hasScheme) return fontUrl;
+    return Uri.parse(apiOrigin).resolveUri(uri).toString();
+  }
+
+  /// 换成本引擎能用的字体地址。
+  ///
+  /// 站点默认下发 WOFF2，而 Flutter/Skia 只支持 TTF/OTF；实测同路径的
+  /// `.ttf` 可以直接拿到（同一个 hash，服务端两种都存着），所以换后缀即可，
+  /// 不需要自己实现 WOFF2 解码。
+  String engineFontUrl(String fontUrl) {
+    const suffix = '.woff2';
+    final uri = Uri.tryParse(fontUrl);
+    if (uri == null || !uri.path.toLowerCase().endsWith(suffix)) return fontUrl;
+    final path = uri.path.substring(0, uri.path.length - suffix.length);
+    return uri.replace(path: '$path.ttf').toString();
+  }
+
   /// 确保字体已下载并注册；失败抛来源错误（调用方不得回退到混淆正文）。
   Future<void> ensure(String fontUrl) async {
     if (_registered.containsKey(fontUrl)) return;
     final bytes = await http.fetchBytes(
-      fontUrl,
+      absoluteUrl(engineFontUrl(fontUrl)),
       sourceId: sourceId,
       headers: const <String, String>{'Accept': '*/*'},
       method: 'GET',
@@ -388,13 +423,39 @@ class LnsFontChannel {
         message: '轻书架专用字体内容为空',
       );
     }
+    // 引擎只吃 TTF/OTF：拿到别的东西（HTML 错误页、未转换的 WOFF2）
+    // 必须报错，不能把混淆正文当正常内容渲染。
+    if (!_isEngineFont(bytes)) {
+      throw SourceException(
+        sourceId: sourceId,
+        type: SourceErrorType.parse,
+        message: '轻书架专用字体格式不受支持（需要 TTF/OTF）',
+      );
+    }
     final family =
         'triomi-lns-${fontUrl.hashCode.toUnsigned(32).toRadixString(16)}';
     final loader = FontLoader(family)
       ..addFont(
         Future<ByteData>.value(ByteData.sublistView(Uint8List.fromList(bytes))),
       );
-    await loader.load();
+    try {
+      await loader.load();
+    } catch (error) {
+      throw SourceException(
+        sourceId: sourceId,
+        type: SourceErrorType.parse,
+        message: '轻书架专用字体无法加载',
+        cause: error,
+      );
+    }
     _registered[fontUrl] = family;
+  }
+
+  /// TTF / TrueType / OTF 的 magic（与 Mixn 的判断一致）。
+  static bool _isEngineFont(List<int> bytes) {
+    if (bytes.length < 4) return false;
+    final magic =
+        (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+    return magic == 0x00010000 || magic == 0x74727565 || magic == 0x4F54544F;
   }
 }

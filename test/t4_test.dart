@@ -257,6 +257,62 @@ void main() {
     });
   });
 
+  group('T4 Hub 地址', () {
+    test('生产 hub 常量映射成 wss/ws（WebSocket.connect 不接受 https）', () {
+      // 真机踩过：直接把配置里的 https 地址交给 WebSocket.connect 会立刻抛
+      // Unsupported URL scheme 'https'，表现为「连接轻书架失败」。
+      expect(webSocketUrl(Uri.parse(lnsHubUrl)).scheme, 'wss');
+      expect(webSocketUrl(Uri.parse(lnsFallbackHubUrl)).scheme, 'wss');
+    });
+
+    test('scheme 映射：https/http 换掉，ws/wss 与 token 参数保持不变', () {
+      expect(
+        webSocketUrl(
+          Uri.parse('https://api.lightnovel.life/hub/api?access_token=t'),
+        ).toString(),
+        'wss://api.lightnovel.life/hub/api?access_token=t',
+      );
+      expect(
+        webSocketUrl(Uri.parse('http://10.0.2.2:8123/hub/api')).toString(),
+        'ws://10.0.2.2:8123/hub/api',
+      );
+      expect(
+        webSocketUrl(Uri.parse('wss://example.test/hub/api')).toString(),
+        'wss://example.test/hub/api',
+      );
+    });
+
+    test('建连时连接器拿到的是 wss 地址', () async {
+      final sockets = <FakeLnsSocket>[];
+      final uris = <Uri>[];
+      final connection = SignalRLnsHubConnection(
+        hubUrl: lnsHubUrl,
+        accessToken: () => 'token-abc',
+        connector: (uri, headers) async {
+          uris.add(uri);
+          final socket = FakeLnsSocket();
+          sockets.add(socket);
+          scheduleMicrotask(() => socket.emit('{}\u001e'));
+          return socket;
+        },
+        handshakeTimeout: const Duration(seconds: 5),
+        invocationTimeout: const Duration(seconds: 5),
+      );
+
+      // 这个用例只关心建连地址；调用结果不等（服务端不回），把错误吃掉。
+      unawaited(
+        connection
+            .invoke('GetRank', <String, Object?>{'Days': 1})
+            .then<void>((Object? _) {}, onError: (Object _) {}),
+      );
+      await pumpEventQueue();
+
+      expect(uris.single.scheme, 'wss');
+      expect(uris.single.query, contains('access_token=token-abc'));
+      connection.reset();
+    });
+  });
+
   group('T4 响应解包', () {
     const decoder = LnsResponseDecoder();
 
@@ -595,6 +651,79 @@ void main() {
 
       final content = await source.content(chapters.single);
       expect(content.html, '<p>正文段落</p>');
+    });
+
+    test('专用字体地址是相对路径时按 API 源站补全', () {
+      // 真机踩过：站点下发的是 `/font/xxx.woff2`，直接丢给 HTTP 层会报 URI 错误，
+      // 表现为「章节加载失败」。
+      final channel = LnsFontChannel(
+        http: FakeHttpClient(
+          (request) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
+      );
+
+      expect(
+        channel.absoluteUrl('/font/1b7f2b19dc62014c.woff2'),
+        'https://api.lightnovel.life/font/1b7f2b19dc62014c.woff2',
+      );
+      // 已是绝对地址的原样返回（备用 CDN 等情况）。
+      expect(
+        channel.absoluteUrl('https://cdn.example.com/font.ttf'),
+        'https://cdn.example.com/font.ttf',
+      );
+    });
+
+    test('正文内容序列化带上专用字体族（离线缓存要走同一套）', () {
+      const content = ChapterContent(
+        html: '<p>正文</p>',
+        fontFamily: 'triomi-lns-abc',
+      );
+
+      final restored = ChapterContent.fromJson(content.toJson());
+      expect(restored?.html, '<p>正文</p>');
+      expect(restored?.fontFamily, 'triomi-lns-abc');
+    });
+
+    test('字体地址换成引擎能用的 .ttf（站点默认给 WOFF2）', () {
+      final channel = LnsFontChannel(
+        http: FakeHttpClient(
+          (request) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
+      );
+
+      // 相对路径 + woff2 → 绝对路径 + ttf。
+      expect(
+        channel.absoluteUrl(channel.engineFontUrl('/font/1b7f2b19.woff2')),
+        'https://api.lightnovel.life/font/1b7f2b19.ttf',
+      );
+      // 本来就是 ttf/otf 的原样不动。
+      expect(
+        channel.engineFontUrl('https://x/font/a.ttf'),
+        'https://x/font/a.ttf',
+      );
+      expect(channel.engineFontUrl('/font/a.otf'), '/font/a.otf');
+    });
+
+    test('拿到 WOFF2 时抛来源错误：引擎渲染不了，不能当正文用', () async {
+      final http = FakeHttpClient(
+        (request) async => const SourceResponse(statusCode: 200, body: ''),
+      );
+      // 'wOF2' magic：站点没给 TTF 变体的情况。
+      http.bytesHandler = (url) => <int>[0x77, 0x4F, 0x46, 0x32, 0, 0, 0, 0];
+      final channel = LnsFontChannel(http: http);
+
+      await expectLater(
+        channel.ensure('/font/x.woff2'),
+        throwsA(
+          isA<SourceException>().having(
+            (error) => error.userMessage,
+            'userMessage',
+            contains('格式'),
+          ),
+        ),
+      );
+      // 请求确实换成了 .ttf（拿不到才是格式问题）。
+      expect(http.requests.last.url, 'https://api.lightnovel.life/font/x.ttf');
     });
 
     test('专用字体获取失败：抛来源错误，不返回正文（B7）', () async {

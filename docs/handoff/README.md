@@ -139,6 +139,22 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
 但实测会把这种「慢但正常」的下载掐断（20 MB 级别的字体在慢网下必然超时），
 因此**没有加**——真正的黑洞连接由 HTTP 层已有的空闲超时兜底，只是缺少进度反馈。
 
+### 真实账号联调结果（LNS 轻书架，2026-09-27）
+
+用户自己登录后开始联调，**连着修掉三个此前从未在真机跑通过的问题**：
+
+| 问题 | 现象 | 修复 |
+|---|---|---|
+| hub 地址 scheme | `WebSocket.connect` 只接受 `ws`/`wss`，配置里是 `https://`，直接抛 `Unsupported URL scheme 'https'` → 界面「连接轻书架失败」。**LNS 在设备上从来没有连上过** | 建连前把 scheme 映射成 `wss`（`webSocketUrl`，单测覆盖生产常量） |
+| 章节字体地址 | 站点下发的是相对路径 `/font/xxx.woff2`，直接丢给 HTTP 层 → `DioException` → 「章节加载失败」 | 按 API 源站补全为绝对地址（`absoluteUrl`） |
+| 章节字体格式 | 引擎（Flutter/Skia）不支持 WOFF2，字体「加载成功」但被忽略 → 正文全是乱码 | 同路径换 `.ttf` 后缀可直接拿到 TrueType（实测两者都在）；加 TTF/OTF magic 校验，拿到 WOFF2 就报错；新增 `ChapterContent.fontFamily` 并由阅读器应用（`fontUrl` 至此才真正接进渲染） |
+
+修完后的真实账号验证：发现榜单（热门/最近更新/最新上架/日榜/周榜）→ 详情
+（作者/简介/目录 169 章）→ 正文（1/20 页，字体生效，正文完全可读）。
+
+仍未接：LNS 的**远端书架**与**签到**还没有页面入口（`RemoteShelfPage` 目前
+是 LK 专用），`defaultDisabledBuiltins` 也还没翻转——等这两个入口补上再翻。
+
 ### 真实账号联调结果（LK，2026-09-27）
 
 在真实站点（`www.lightnovel.fun`）用真实账号跑通：

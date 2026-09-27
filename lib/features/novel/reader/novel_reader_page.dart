@@ -59,6 +59,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   bool _locked = false;
 
   List<ReaderBlock> _blocks = const <ReaderBlock>[];
+
+  /// 来源下发的正文必需字体（轻书架 B7）：有它就必须用它渲染，否则字形是错的。
+  String? _sourceFont;
   List<ReaderPage> _pages = const <ReaderPage>[];
   String? _layoutKey;
 
@@ -172,6 +175,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
       }
       final raw = (html: content.html ?? '', text: content.text ?? '');
       _rawContent = raw;
+      _sourceFont = content.fontFamily;
       _zh ??= await ZhConverter.instance();
       final blocks = ReaderContentParser.parse(
         bodyHtml: _localized(raw.html),
@@ -193,6 +197,19 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
         });
       }
     }
+  }
+
+  /// 正文样式：来源要求专用字体时（轻书架 B7）覆盖用户选的字体——
+  /// 站点替换过字形，用别的字体渲染出来是乱码。
+  TextStyle _paragraphStyle(BuildContext context) =>
+      _withSourceFont(_settings.paragraphStyle(context));
+
+  TextStyle _headingStyle(BuildContext context) =>
+      _withSourceFont(_settings.headingStyle(context));
+
+  TextStyle _withSourceFont(TextStyle style) {
+    final font = _sourceFont;
+    return font == null ? style : style.copyWith(fontFamily: font);
   }
 
   Future<void> _unlock() async {
@@ -442,14 +459,15 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
             '$_chapterIndex|${_settings.mode}|'
             '${_settings.fontSize}|${_settings.lineHeight}|${_settings.pageMargin}|'
             '${_settings.zhMode.name}|${_settings.fontFamily ?? 'default'}|'
+            '${_sourceFont ?? 'default'}|'
             '${contentWidth.round()}x${contentHeight.round()}';
         if (_layoutKey != layoutKey) {
           _layoutKey = layoutKey;
           _pages = paginateReaderBlocks(
             _blocks,
             PaginationStyle(
-              paragraphStyle: _settings.paragraphStyle(context),
-              headingStyle: _settings.headingStyle(context),
+              paragraphStyle: _paragraphStyle(context),
+              headingStyle: _headingStyle(context),
               pageWidth: contentWidth,
               pageHeight: contentHeight,
               spacing: _settings.fontSize * 0.8,
@@ -478,6 +496,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
                     page: _pages[current],
                     settings: _settings,
                     sourceId: _item.sourceId,
+                    sourceFont: _sourceFont,
                   ),
                 ),
                 SizedBox(
@@ -532,6 +551,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
               block: _blocks[index],
               settings: _settings,
               sourceId: _item.sourceId,
+              sourceFont: _sourceFont,
             ),
           ),
         ),
@@ -650,10 +670,19 @@ class _PageContent extends StatelessWidget {
     required this.page,
     required this.settings,
     required this.sourceId,
+    this.sourceFont,
   });
   final ReaderPage page;
   final NovelReaderSettings settings;
   final String sourceId;
+
+  /// 来源要求的正文字体（轻书架 B7），有值时优先于用户设置。
+  final String? sourceFont;
+
+  TextStyle _style(TextStyle base) {
+    final font = sourceFont;
+    return font == null ? base : base.copyWith(fontFamily: font);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -668,9 +697,11 @@ class _PageContent extends StatelessWidget {
           children.add(
             Text(
               text,
-              style: heading
-                  ? settings.headingStyle(context)
-                  : settings.paragraphStyle(context),
+              style: _style(
+                heading
+                    ? settings.headingStyle(context)
+                    : settings.paragraphStyle(context),
+              ),
             ),
           );
         case IllustrationElement(:final block, :final heightPx):
@@ -725,7 +756,7 @@ class _PageContent extends StatelessWidget {
       }
     }
     if (children.isEmpty) {
-      return Text('本章没有内容', style: settings.paragraphStyle(context));
+      return Text('本章没有内容', style: _style(settings.paragraphStyle(context)));
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -740,22 +771,31 @@ class _BlockView extends StatelessWidget {
     required this.block,
     required this.settings,
     required this.sourceId,
+    this.sourceFont,
   });
 
   final ReaderBlock block;
   final NovelReaderSettings settings;
   final String sourceId;
 
+  /// 来源要求的正文字体（轻书架 B7），有值时优先于用户设置。
+  final String? sourceFont;
+
+  TextStyle _style(TextStyle base) {
+    final font = sourceFont;
+    return font == null ? base : base.copyWith(fontFamily: font);
+  }
+
   @override
   Widget build(BuildContext context) {
     return switch (block) {
       HeadingBlock(:final text) => Text(
         text,
-        style: settings.headingStyle(context),
+        style: _style(settings.headingStyle(context)),
       ),
       ParagraphBlock(:final text, :final firstLineIndent) => Text(
         firstLineIndent ? '　　$text' : text,
-        style: settings.paragraphStyle(context),
+        style: _style(settings.paragraphStyle(context)),
       ),
       IllustrationBlock(:final url, :final aspectRatio) => ClipRRect(
         borderRadius: const BorderRadius.all(Radius.circular(8)),

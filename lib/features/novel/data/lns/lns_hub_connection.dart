@@ -45,6 +45,17 @@ Future<LnsSocket> connectLnsWebSocket(
   return _IoWebSocketSocket(socket);
 }
 
+/// 把 hub 地址映射成 `WebSocket.connect` 能吃的 scheme。
+///
+/// 配置里 hub 地址是 `https://…`（http 语义），而 `WebSocket.connect` 只接受
+/// `ws` / `wss`——直接传 https 会立刻抛 `Unsupported URL scheme 'https'`。
+/// 放在建连这一层做，自定义连接器（桌面 / 测试替身）拿到的就都是可用地址。
+Uri webSocketUrl(Uri uri) => switch (uri.scheme) {
+  'https' => uri.replace(scheme: 'wss'),
+  'http' => uri.replace(scheme: 'ws'),
+  _ => uri,
+};
+
 class _IoWebSocketSocket implements LnsSocket {
   _IoWebSocketSocket(this._socket);
 
@@ -167,10 +178,12 @@ class SignalRLnsHubConnection implements LnsHubConnection {
   Future<void> _connect() async {
     final ready = Completer<void>();
     final token = accessToken() ?? '';
-    final uri = Uri.parse(hubUrl).replace(
-      queryParameters: token.isEmpty
-          ? null
-          : <String, String>{'access_token': token},
+    final uri = webSocketUrl(
+      Uri.parse(hubUrl).replace(
+        queryParameters: token.isEmpty
+            ? null
+            : <String, String>{'access_token': token},
+      ),
     );
     final headers = <String, String>{
       if (token.isNotEmpty) 'Authorization': 'Bearer $token',

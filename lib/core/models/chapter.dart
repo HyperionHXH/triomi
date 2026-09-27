@@ -14,6 +14,7 @@ class ChapterContent {
     this.html,
     this.playSources = const <PlaySource>[],
     this.danmakuUrl,
+    this.fontFamily,
   });
 
   /// 漫画：图片地址列表。
@@ -30,6 +31,11 @@ class ChapterContent {
 
   /// 番剧：弹幕数据地址（返回弹弹play 格式的 JSON）。
   final String? danmakuUrl;
+
+  /// 小说：正文需要的专用字体族（来源下发，如轻书架 B7）。
+  ///
+  /// 有值时阅读器必须用它渲染——站点把字形做了替换，用系统字体会显示乱码。
+  final String? fontFamily;
 
   bool get isEmpty =>
       images.isEmpty &&
@@ -48,6 +54,7 @@ class ChapterContent {
         <String, Object?>{'name': source.name, 'url': source.url},
     ],
     'danmaku': danmakuUrl,
+    'font': fontFamily,
   };
 
   /// 反序列化；内容为空或格式不对时返回 null。
@@ -69,6 +76,7 @@ class ChapterContent {
             ),
       ],
       danmakuUrl: raw['danmaku'] as String?,
+      fontFamily: raw['font'] as String?,
     );
     return content.isEmpty ? null : content;
   }
