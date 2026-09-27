@@ -91,8 +91,8 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
 **全部任务已完成。** 剩余工作都需要真实账号或设备，由本机环境接手：
 
 - LNS：登录/发现/详情/正文/远端书架/签到 **全部联调完成**，页面入口已补齐
-  （通用远端书架页 + 轻书架账号页），来源已默认启用。另有一个分页阅读器的
-  通用小缺陷（内容正好填满一页时底部溢出 10px，见「已知问题」）。
+  （通用远端书架页 + 轻书架账号页），来源已默认启用；正文分页溢出 10px 也已修复
+  （见「分页正文底部溢出 10px（已修复）」）。
 - LK：资料页、消息中心、详情页评论 Tab 与真实账号端到端已完成；仅
   「真实账号发表公开评论」需用户逐条授权后再跑。
 - 番剧下载（规格 4.8 二期）与真机项目（视频画面合成 / 性能 / WebDAV 双设备）未做。
@@ -190,23 +190,28 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
 附注：从详情页返回远端书架时页面不会自动刷新（`_future` 缓存），下拉刷新或
 切换来源可重新加载——这是刻意的（避免每次 pop 都打站点），不是缺陷。
 
-### 已知问题
+### 分页正文底部溢出 10px（已修复，commit `059e4ee`）
 
-- **分页阅读器在「这页正好填满」时底部溢出约 10px**（调试构建可见
-  `BOTTOM OVERFLOWED BY 10 PIXELS` 黄黑条，release 下会把最后一行裁掉一点）。
+**现象**：分页模式在「这一页正好填满」时内容比可用高度多 10px——debug 构建显示
+`BOTTOM OVERFLOWED BY 10 PIXELS` 黄黑条，release 下最后一行会被裁掉一点。
 
-  实测（同一次构建、模拟器）：LNS 章节 1/9 页稳定复现；LK 章节当时那几页没跑到。
-  已排除「站点字体刚注册、首帧分页没吃到」这一猜测——同一章**第二次打开**
-  （字体早已注册）仍然溢出 10px；把字号 18 调到 19 后同一章不再溢出。
-  所以更像是**分页高度模型与实际渲染高度之间有约 0.5% 的系统性小偏差，只在
-  该页内容恰好填满时暴露**（LK 同样可能中，只是没踩到），与来源/字体无必然关系。
+**根因**（与来源/站点字体无关，LK 同样会中）：渲染走 `Text`，它会**把环境的
+`DefaultTextStyle` 合并进来**（Material 的 `bodyMedium` 带 `letterSpacing: 0.3`、
+`leadingDistribution: even`），而分页是把裸样式直接交给 `TextPainter` 量高度。
+两边字距不同 → 同一个文本片段的换行数不同 → 整页实际高度超过模型；模型里段间距
+按 `0.8×字号` 预留、渲染只有 `0.7×字号`，这点余量刚好抵消掉大部分差异，所以只在
+内容正好填满时溢出 10px（一个换行约 30.6px 减去余量）。
 
-  线索：分页模型给段间留的是 `spacing = fontSize * 0.8`
-  （`novel_reader_page.dart` 调用 `paginateReaderBlocks` 处），而渲染侧
-  `_PageContent` 插的是 `SizedBox(height: fontSize * 0.7)`——两个常量不统一，
-  且 `paginateReaderBlocks` 内部对文本高度用的是 `TextPainter.height`。
-  待办：给分页做一次「模型 vs 渲染」对拍（按页把元素高度相加与
-  `_PageContent` 实高比对），或直接让两处段间距共用同一常量。
+排查中被否掉的假设：**不是**「站点字体刚注册、首帧分页按回退字体度量」——加了
+`await WidgetsBinding.instance.endOfFrame` 再发布内容后实测无效（同一章第二次
+打开、字体早已注册，仍然溢出），该改动已回退。
+
+**修法**：新增 `readerTextStyle(base, sourceFont)`（`inherit: false`，来源字体仍
+优先），分页测量与分页/滚动两种渲染共用同一份样式——`TextStyle.merge` 对
+`inherit: false` 直接返回入参，环境字段不再渗入。
+
+**测试**：`test/reader_pagination_test.dart` 断言「`Text` 的实际渲染高度 == 分页
+`TextPainter` 量出的高度」，并额外断言「环境字距确实会改变高度」，避免断言空转。
 
 ### 真实账号联调结果（LK，2026-09-27）
 
