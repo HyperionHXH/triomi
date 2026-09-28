@@ -10,7 +10,7 @@ import '../../core/widgets/page_scaffold.dart';
 /// 我的：账号入口 + 通用设置。
 ///
 /// 账号严格按来源隔离（Mixn 不变量）：LK、LNS 各自登录，
-/// 后续还会加上 Bangumi / AniList 追踪账号，彼此不共享凭据。
+/// Bangumi / AniList 追踪账号也各自持有 token，彼此不共享凭据。
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
 

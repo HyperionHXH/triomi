@@ -7,7 +7,7 @@ import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import 'settings_controller.dart';
 
-/// 设置页：外观分组（M0 已完成）+ 后续里程碑的占位分组。
+/// 设置页：外观 / 内容与来源 / 关于三个分组。
 ///
 /// 对齐 Mixn 原则：界面外观设置与阅读设置分开保存，各分组可单独恢复默认值。
 class SettingsPage extends ConsumerWidget {

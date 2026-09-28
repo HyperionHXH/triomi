@@ -141,7 +141,10 @@ class SourceRegistry {
           SourceFailure(
             id: row.id,
             name: row.name,
-            message: '内置适配器尚未实现（M4 落地 LK / LNS）',
+            // 这句话会显示在来源管理页（前缀「规则无法加载：」）。旧文案是
+            // 「内置适配器尚未实现（M4 落地 LK / LNS）」——M4 早已落地，留着只会
+            // 误导用户，这里改说真实原因：这行记录既没有规则文本，也不是内置来源。
+            message: '这条记录没有规则文本，也不属于内置来源（多为旧版本残留），删除后重新添加即可',
           ),
         );
         continue;

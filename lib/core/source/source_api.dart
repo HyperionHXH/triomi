@@ -51,7 +51,7 @@ abstract class ContentProvider implements ContentSource {
   Future<ChapterContent> content(Chapter chapter);
 }
 
-/// 需要登录的来源（LK / LNS 这类站点）在后续里程碑实现此能力。
+/// 需要登录的来源（LK / LNS 这类站点）实现此能力。
 abstract class AccountProvider implements ContentSource {
   bool get isLoggedIn;
 
