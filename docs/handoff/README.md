@@ -107,8 +107,9 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
   见「模拟器实测补齐」）。
 - Bangumi 公开数据（追番放送表）：**已加镜像回退**并在模拟器上实测可用
   （见「Bangumi 不可达 → 镜像回退」）。
-- 追踪（Bangumi / AniList）真实联调**仍需 token**：AniList 要用户自己的 token；
-  Bangumi 要 token，且「带 token 的请求是否走镜像」需用户点头才做。
+- 追踪（Bangumi / AniList）真实联调**仍需 token**（用户给到即可跑）：AniList 要用户
+  自己的 token；Bangumi 要 token，且带 token 的请求已接入镜像回退（用户已点头，
+  见「Bangumi 不可达 → 镜像回退」）。
 - 弹幕：**内置凭据槽位已就位**——用户注册弹弹play 应用后，用 `--dart-define`
   注入即可开箱拿弹幕；发弹幕仍需用户自己的账号 token（见「弹幕：Kazumi 为什么
   不用登录」）。
@@ -487,8 +488,31 @@ GDI 截模拟器窗口，画面区同样是黑的。所以结论保持原样—�
 设备验证：模拟器上打开「追番」→ 先出连接提示 → 约 20 秒（官方 connect
 timeout）→ 自动切镜像并渲染出真实放送表（今日条目：评分 / 首播日 / 条目号）。
 
-**追踪（Bangumi/AniList）刻意没做镜像回退**：那是带用户 access token 的请求，
-把 token 发给第三方镜像要用户明确同意才做，不能默认。
+**追踪的 token 请求：2026-09-28 起也回退，但换源可见**（用户明确同意，commit `8a738c3`）。
+
+原先是「刻意没做」（带 access token 的请求把 token 发给第三方镜像要用户同意）。
+先核实了镜像能否承担这件事：带**伪造** Bearer token 请求
+`/v0/me`、`/v0/users/-/collections/{id}`、
+`/v0/users/-/collections/{id}/episodes`、`/v0/search/subjects`
+全部返回 **401 而不是 404**——说明 `api.bgmapi.com` 把 v0 的鉴权端点也一并代理了，
+带 token 的请求能走。代价是**用户的 token 会发给第三方镜像**，所以做了三件事：
+
+| 约束 | 实现 |
+|---|---|
+| 只在官方不可达时被动触发 | `BangumiClient.fallbackBaseUrl`：官方连不上（含超时）或 5xx 才回退；**401/403 不回退**——换地址也一样，没必要为此把 token 转手给第三方 |
+| 不能偷偷换源 | 「追踪账号」页配置说明里写明会走镜像、token 会发给它；「测试连接」结果后追加「（官方 api.bgm.tv 不可达，本次请求走了镜像 api.bgmapi.com）」 |
+| 夹具模式仍是权威 | dart-define 指到夹具时不回退（与放送表同一条规矩） |
+
+一个容易踩的实现细节：网络层对**非 2xx 是抛异常**而不是返回响应（`DioSourceHttpClient.send`），
+所以「实际发往哪个地址」必须在**请求前**记录，等拿到响应再记就记不上——镜像回 401 时正好
+是这种情况，而那正是最需要提示「token 发出去了」的场景（已补测试盯住）。
+
+设备验证（emulator-5554，**不带 dart-define 的真实站点包**）：`api.bgm.tv` 在模拟器里
+解析到污染地址 `168.143.171.189`（ping 100% 丢包）→ 「追踪账号」贴一个假 token →
+点「保存并测试连接」→ 约 30 秒后显示
+「连接失败：SourceException(bangumi, auth): HTTP 401（官方 api.bgm.tv 不可达，
+本次请求走了镜像 api.bgmapi.com）」——401 来自镜像，回退链路真实跑通。
+AniList（`graphql.anilist.co`）本机可直连（伪造 token 返回 401），**不需要镜像**。
 
 ### 弹幕：Kazumi 为什么「不用登录」
 
