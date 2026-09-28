@@ -105,9 +105,13 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
   真机数字仍需真机。
 - **仍缺真机**：视频画面合成（模拟器试了 4 种渲染配置都是黑屏，已排除截屏因素，
   见「模拟器实测补齐」）。
-- 追踪（Bangumi / AniList）与弹幕发送的真实 token 联调**仍需账号**：
-  Bangumi 在本机网络下是黑洞（`api.bgm.tv` 两个 A 记录都不可达），AniList 需要
-  用户自己的 token，弹弹play 发送需要 AppId/AppSecret + 账号。
+- Bangumi 公开数据（追番放送表）：**已加镜像回退**并在模拟器上实测可用
+  （见「Bangumi 不可达 → 镜像回退」）。
+- 追踪（Bangumi / AniList）真实联调**仍需 token**：AniList 要用户自己的 token；
+  Bangumi 要 token，且「带 token 的请求是否走镜像」需用户点头才做。
+- 弹幕：**内置凭据槽位已就位**——用户注册弹弹play 应用后，用 `--dart-define`
+  注入即可开箱拿弹幕；发弹幕仍需用户自己的账号 token（见「弹幕：Kazumi 为什么
+  不用登录」）。
 - **Android 10+ 机型复验按用户决定不做**（模拟器已覆盖）。
 - Anime4K 番剧超分：用户明确不做，项关闭。
 - T7：SAF 目录选择/写入与在线字体下载的模拟器 E2E 已完成。
@@ -459,3 +463,52 @@ GDI 截模拟器窗口，画面区同样是黑的。所以结论保持原样—�
 「562 KB 大响应偶发被掐断」是同一个模拟器网络层问题，不是应用缺陷——
 应用侧表现是明确报错、可重试、且不会破坏本机数据（书架内容保持完好）。
 反过来，真实站点的大文件（18.4 MB 字体）在同一台模拟器上是可以正常下载的。
+
+### Bangumi 不可达 → 镜像回退（commit `1ad83dd`）
+
+`api.bgm.tv` 在本机网络下是 DNS 污染 + IP 黑洞：实测 `api.bgm.tv` /
+`bgm.tv` / `www.bgm.tv` / `next.bgm.tv` 四个域名全部解析到不可达地址，
+「追番」页会一直转圈且不给任何提示。
+
+**Kazumi 为什么能用**（读它的 `lib/request/config/api_endpoints.dart`）：
+它走镜像——`bangumiMirrorDomain = https://api.kazumi.fyi`（榜单/放送表缓存）、
+`bangumiAuthAPIMirrorDomain = https://api.bgmapi.com`（鉴权）、
+`bangumiAPINextDomain = https://next.bgm.tv`。
+
+本项目的处理（只覆盖**公开数据**）：
+
+| 接口 | 处理 |
+|---|---|
+| `/calendar`（追番页放送表） | 默认官方；失败回退 `api.bgmapi.com/calendar`（同格式，实测 200/88 KB，且 v0 详情/剧集/搜索也一并代理） |
+| 加载中 | 有备用地址时提示「正在连接官方接口；不通会自动改用镜像」 |
+| 回退后 | 页面顶部注明「官方接口不可达，本次放送表来自镜像 api.bgmapi.com」，不偷偷换源 |
+| 夹具模式（`--dart-define=TRIOMI_SCHEDULE_BASE`） | **不回退**，夹具是权威来源 |
+
+设备验证：模拟器上打开「追番」→ 先出连接提示 → 约 20 秒（官方 connect
+timeout）→ 自动切镜像并渲染出真实放送表（今日条目：评分 / 首播日 / 条目号）。
+
+**追踪（Bangumi/AniList）刻意没做镜像回退**：那是带用户 access token 的请求，
+把 token 发给第三方镜像要用户明确同意才做，不能默认。
+
+### 弹幕：Kazumi 为什么「不用登录」
+
+弹弹play 的开放接口**无凭据直接 403**（实测：不带 `X-AppId` 403，伪造 appId
+也 403），所以「不登录就能拿弹幕」不是接口开放，而是**客户端内置了自己注册的
+AppId/AppSecret**——Kazumi 的 `lib/utils/dandan_credentials.dart` 就是干这个的。
+本项目原先刻意不内置他人凭据（见 `dandanplay_client.dart` 的注释），所以要求
+用户自己填。
+
+现在改成一个**槽位**（commit `1ad83dd`）：`DandanplayCredentials.builtInAppId /
+builtInAppSecret`——用户没填时用应用自己注册的那对，「拿弹幕」开箱可用；
+**发弹幕仍然需要用户自己的账号 token**。值可以从构建时注入：
+
+```
+flutter build apk --dart-define=TRIOMI_DANDANPLAY_APP_ID=xxx \
+                  --dart-define=TRIOMI_DANDANPLAY_APP_SECRET=yyy
+```
+
+未注入时行为与之前完全一致（要求用户自填）。用户已答应去
+<https://dev.dandanplay.com> 注册应用并提供这对凭据，拿到后即可内置/联调。
+
+（另注：规则自带弹幕源时**本来就不需要任何凭据**——播放器直接 GET 规则里
+声明的 `danmaku` 地址，见 `player_page.dart` 的 `_loadDanmaku`。）
