@@ -174,3 +174,19 @@ class TrackingService {
   由 provider 层触发（三个调用点：player_page / novel_reader_page /
   manga_reader_page，通过 Riverpod 而非侵入仓储）。
 - 追踪账号页：绑定/解绑/搜索选择条目。
+
+## 设备端验证（2026-09-28 补齐）
+
+本机之前只有单测 + 夹具端点，**没在设备上跑过整条写链路**。本轮在第二台模拟器
+（emulator-5556，包内 `--dart-define=TRIOMI_TRACKING_BASE=http://10.0.2.2:8123/tracking`）
+上跑通，宿主侧断言夹具内存态 `GET /tracking/state`：
+
+| 时点 | 夹具状态 |
+|---|---|
+| 绑 Bangumi（《夹具番剧 51》→ 远端条目 51） | `collections {51: {type: 3}}`（在看） |
+| 面板内切 AniList 再绑 | `anilist {51: {status: CURRENT, progress: 0}}` |
+| 播第 1 话约 5 秒 | `watchedEpisodes {51: [101]}` + `anilist[51].progress = 1` |
+
+即「绑定 → 状态上报 → 逐集收藏 PATCH → AniList 进度」都在设备上生效。详见 README
+「追踪链路设备验证」。**真实站点联调仍需 token**；Bangumi 带 token 的请求已接入
+镜像回退（用户已同意，见 README「Bangumi 不可达 → 镜像回退」）。
