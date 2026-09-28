@@ -107,12 +107,14 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
   见「模拟器实测补齐」）。
 - Bangumi 公开数据（追番放送表）：**已加镜像回退**并在模拟器上实测可用
   （见「Bangumi 不可达 → 镜像回退」）。
-- 追踪（Bangumi / AniList）真实联调**仍需 token**（用户给到即可跑）：AniList 要用户
-  自己的 token；Bangumi 要 token，且带 token 的请求已接入镜像回退（用户已点头，
-  见「Bangumi 不可达 → 镜像回退」）。
-- 弹幕：**内置凭据槽位已就位**——用户注册弹弹play 应用后，用 `--dart-define`
-  注入即可开箱拿弹幕；发弹幕仍需用户自己的账号 token（见「弹幕：Kazumi 为什么
-  不用登录」）。
+- 追踪（Bangumi / AniList）：**夹具链路的设备端到端已验证**（绑定 → 状态上报 →
+  逐集进度上报 → 宿主回读夹具状态，见「追踪链路设备验证」）；真实站点联调**仍需
+  token**（用户给到即可跑），带 token 的请求已接入镜像回退（见「Bangumi 不可达 →
+  镜像回退」）。
+- 弹幕：规则自带弹幕源（`content.danmaku`）的**渲染链路已在设备上验证**（见「追踪
+  链路设备验证」末段），这条不需要凭据；按条目匹配弹幕需要**内置凭据槽位已就位**——
+  用户注册弹弹play 应用后，用 `--dart-define` 注入即可开箱拿弹幕；发弹幕仍需用户
+  自己的账号 token（见「弹幕：Kazumi 为什么不用登录」）。
 - **Android 10+ 机型复验按用户决定不做**（模拟器已覆盖）。
 - Anime4K 番剧超分：用户明确不做，项关闭。
 - T7：SAF 目录选择/写入与在线字体下载的模拟器 E2E 已完成。
@@ -442,6 +444,38 @@ media_kit 用的是 `SurfaceView` 图层；② **绕过 screencap**，直接在�
 GDI 截模拟器窗口，画面区同样是黑的。所以结论保持原样——**画面合成仍需真机**；
 `enableHardwareAcceleration: true` 这条既有注释与实际观察不一致，
 但真机默认路径没问题（media_kit 是 Kazumi 同款成熟路径），本轮不再改。
+
+### 追踪链路设备验证（夹具，emulator-5556）
+
+第二台模拟器装的是带 `--dart-define=TRIOMI_TRACKING_BASE=http://10.0.2.2:8123/tracking`
+的包，夹具在宿主 8123（`tools/tracking_fixture.py`），全程不碰真实站点。
+
+| 步骤 | 结果 |
+|---|---|
+| 「追踪账号」填 `fixture-token` → 保存并测试连接 | Bangumi 显示「连接正常：**triomi-fixture**」；AniList 同样（夹具只要求 token 非空） |
+| 发现 → 本地夹具番剧源 → 《夹具番剧 51》→ 加入书架 → 详情页「追踪」 | 面板自动搜索（夹具返回两条），绑定「夹具番剧 51（中文名）」→ `当前绑定 Bangumi · 51` |
+| 面板内切到 AniList 再绑 | 绑定「Fixture Anime 51」→ `当前绑定 AniList · 51`（两条并存） |
+| 播第 1 话约 5 秒 | 宿主 `/tracking/state` 出现 `watchedEpisodes['51'] = [101]`（逐集收藏 PATCH）与 `anilist['51'].progress = 1` |
+
+宿主侧断言（夹具内存态，`GET /tracking/state`）：
+
+| 时点 | collections | watchedEpisodes | anilist |
+|---|---|---|---|
+| 绑定 Bangumi 后 | `{51: {type: 3}}` | `{}` | `{}` |
+| 再绑 AniList 后 | 同上 | `{}` | `{51: {status: CURRENT, progress: 0}}` |
+| 播放 10 秒后 | 同上 | `{51: [101]}` | `{51: {status: CURRENT, progress: 1}}` |
+
+结论：**「绑定 → 状态上报 → 逐集进度上报」整条写链路在设备上是通的**；
+剩下的只有真实站点的 token 联调（等用户提供）。
+
+**顺带把弹幕链路也验了**：夹具番剧源的规则里写了
+`content.danmaku = /danmaku/{id}.json`，夹具返回 40 条滚动 + 1 条顶部 + 1 条底部；
+播放器自绘弹幕层在设备上正常滚动（截图可见白/橙/绿三色弹幕），时间轴走到 `0:29 / 0:30`。
+也就是说**规则自带弹幕源时不需要任何凭据**，这条链路是通的——之前只差「弹弹play 凭据」
+那一半（用于按条目匹配弹幕）。
+
+同一张播放截图再次确认：视频**画面区仍是黑的**（上面那 4 组渲染配置的老结论，
+仍需真机），但时间轴推进、弹幕层、线路/剧集/倍速/全屏这些控制都正常。
 
 ### 性能数字（模拟器 / debug 包，仅作量级参考）
 
