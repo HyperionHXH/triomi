@@ -512,3 +512,17 @@ flutter build apk --dart-define=TRIOMI_DANDANPLAY_APP_ID=xxx \
 
 （另注：规则自带弹幕源时**本来就不需要任何凭据**——播放器直接 GET 规则里
 声明的 `danmaku` 地址，见 `player_page.dart` 的 `_loadDanmaku`。）
+
+### 收尾：把实测结论写回注释与文案（commit `da12277`）
+
+三处**只动注释/文案，不动行为**：
+
+| 位置 | 改动 |
+|---|---|
+| `danmaku_settings_page.dart` | 说清 AppId/AppSecret 只管**拉取**弹幕，发弹幕另需账号 token；**规则自带弹幕源时无需任何凭据**；已内置凭据时提示「可被自己的值覆盖」。状态文案由「已配置（仅可拉取）」改为「仅可拉取（未配置账号 token）」，可发送时写「可拉取、可发送」——`isConfigured` 在注入内置值后本就可能为真，旧文案会让人误以为是自己填的 |
+| `player_page.dart` | 原注释声称「显式开硬件加速以保证模拟器调试时画面可见」，与上面那 4 组实测不符；改为「真机默认路径可用，模拟器黑屏已排除截屏因素，判定为模拟器外部纹理合成问题，与本开关无关」，`enableHardwareAcceleration: true` 保持不变 |
+| `schedule_providers.dart` | `resolveScheduleCover` 的注释点明官方与镜像**都**返回绝对地址，相对地址补全只对夹具生效，避免后人以为镜像也走这条逻辑 |
+
+自查：`dart format`（无改动）+ `flutter analyze`（零问题）+ `flutter test`（291 例全绿）。
+另 grep 了 `TODO|FIXME|后续版本|暂不`，剩下的两处（`detail_page.dart` 的章节入口说明、
+`lk_dm_page.dart` 的「本轮为只读：暂不支持发送私信」）都是**准确**的现状描述，不改。
