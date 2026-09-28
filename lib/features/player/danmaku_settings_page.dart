@@ -187,8 +187,13 @@ class _DanmakuSettingsPageState extends ConsumerState<DanmakuSettingsPage> {
             title: '弹弹play 凭据',
             children: <Widget>[
               Text(
-                '弹幕匹配与发送使用你自己的凭据：到弹弹play 开放平台申请 AppId / AppSecret，'
-                '发送弹幕还需要账号 token。凭据只保存在本机设置里，不写日志、不随备份导出。',
+                DandanplayCredentials.hasBuiltIn
+                    ? '应用已内置弹幕凭据，拉取弹幕开箱可用；填自己的 AppId / AppSecret 可覆盖。'
+                          '发送弹幕还需要账号 token。来源规则自带弹幕源时无需任何凭据。'
+                          '凭据只保存在本机设置里，不写日志、不随备份导出。'
+                    : '弹幕匹配（拉取弹幕）用 AppId / AppSecret，到弹弹play 开放平台申请后填入；'
+                          '发送弹幕还需要账号 token。来源规则自带弹幕源时无需任何凭据。'
+                          '凭据只保存在本机设置里，不写日志、不随备份导出。',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -215,9 +220,11 @@ class _DanmakuSettingsPageState extends ConsumerState<DanmakuSettingsPage> {
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   Text(
-                    credentials.isConfigured
-                        ? (credentials.canSend ? '已配置（可发送）' : '已配置（仅可拉取）')
-                        : '未配置',
+                    credentials.canSend
+                        ? '可拉取、可发送'
+                        : (credentials.isConfigured
+                              ? '仅可拉取（未配置账号 token）'
+                              : '未配置'),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],

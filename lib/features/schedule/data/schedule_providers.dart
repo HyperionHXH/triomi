@@ -30,7 +30,8 @@ final weeklyScheduleProvider = FutureProvider<List<ScheduleDay>>((ref) async {
   return ref.watch(scheduleClientProvider).fetchWeekly();
 });
 
-/// 夹具服务的封面是相对地址，这里统一补全（Bangumi 返回的是绝对地址，原样通过）。
+/// 夹具服务的封面是相对地址，这里统一补全；官方接口与镜像返回的都是绝对
+/// 地址，直接走上面的原样通过分支（因此回退镜像时不会用到补全逻辑）。
 String? resolveScheduleCover(String? url) {
   if (url == null || url.isEmpty) return null;
   if (Uri.tryParse(url)?.hasScheme ?? false) return url;

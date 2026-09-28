@@ -106,9 +106,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     _danmakuOn = _danmakuSettings.enabled;
 
     _player = Player();
-    // 模拟器上 media_kit 会自动降级到 S/W 渲染，其外部纹理在部分
-    // 模拟器（Impeller + x86_64）上无法合成；真机默认路径没问题，
-    // 这里显式开硬件加速以保证模拟器调试时画面可见。
+    // 真机默认路径可正常出画。模拟器上画面黑已实测排查过 4 种渲染组合
+    // （默认软件 GL / 宿主 GPU / 关 Impeller / 关本开关）均无画面，且用
+    // 宿主窗口截图排除了截屏因素，判定为模拟器（Impeller + x86_64）外部
+    // 纹理合成问题，与本开关无关，故保留默认开启。
     _videoController = VideoController(
       _player,
       configuration: const VideoControllerConfiguration(
