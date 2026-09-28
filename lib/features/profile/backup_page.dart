@@ -13,6 +13,7 @@ import '../../core/storage/preferences.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../library/data/library_providers.dart';
 import 'data/sync_providers.dart';
 
 /// 备份 / 恢复：导出为 zip（书架 + 进度 + 历史 + 目录 + 设置 + 封面），
@@ -332,6 +333,10 @@ class _BackupPageState extends ConsumerState<BackupPage> {
       final summary = await ref
           .read(backupServiceProvider)
           .importFromFile(path);
+      // 导入写的是数据库，书架/历史是内存里的 AsyncNotifier：不刷新就要
+      // 重启才看得到。
+      ref.invalidate(libraryProvider);
+      ref.invalidate(historyProvider);
       if (!mounted) return;
       setState(() {
         _status =

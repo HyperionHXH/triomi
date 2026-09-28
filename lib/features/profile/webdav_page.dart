@@ -8,6 +8,7 @@ import '../../core/backup/webdav_client.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../library/data/library_providers.dart';
 import 'data/sync_providers.dart';
 
 /// WebDAV 同步：上传本机备份、拉取远端备份并合并（多设备零服务器方案）。
@@ -269,6 +270,10 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
           .importFromBytes(
             bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
           );
+      // 合并写的是数据库，书架/历史是内存里的 AsyncNotifier：不刷新就要
+      // 重启才看得到（双设备验证时实测到）。
+      ref.invalidate(libraryProvider);
+      ref.invalidate(historyProvider);
       if (!mounted) return;
       setState(() {
         _status =
