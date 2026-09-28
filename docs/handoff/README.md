@@ -93,14 +93,22 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
 - LNS：登录/发现/详情/正文/远端书架/签到 **全部联调完成**，页面入口已补齐
   （通用远端书架页 + 轻书架账号页），来源已默认启用；正文分页溢出 10px 也已修复
   （见「分页正文底部溢出 10px（已修复）」）。
-- LK：资料页、消息中心、详情页评论 Tab（含**评论配图**：选图 → 上传 →
-  `media_json` 回传）与真实账号端到端已完成；仅「真实账号发表公开评论（含配图）」
-  这一步需用户逐条授权后再跑（夹具已覆盖写入链路）。
+- LK：资料页、消息中心、详情页评论 Tab（含**评论配图**）与真实账号端到端已完成；
+  「真实账号发表公开评论（含配图）」**2026-09-28 已补跑并在服务端核验**
+  （见「模拟器实测补齐」）。
 - 番剧（视频）下载：**代码 + 夹具设备验证已完成**（见「番剧视频离线下载」）。
 - 后台更新提醒（D5/T7-7）：**代码 + 夹具设备验证已完成**（见「后台更新提醒」），
   Android 侧已无待做代码项。
-- 真机项目（视频画面合成 / 性能 / 权限通知 / WebDAV 双设备）未做；
-  **Android 10+ 机型复验按用户决定不做**（模拟器已覆盖）。
+- WebDAV 双设备同步：**两台模拟器 + 夹具 WebDAV 已验证**（见「模拟器实测补齐」），
+  并顺手修掉了「合并后书架不刷新」的缺陷（commit `c9f8fa2`）。
+- 性能：模拟器上取到了冷启动 / 内存 / 帧间隔的参考数字（见「模拟器实测补齐」），
+  真机数字仍需真机。
+- **仍缺真机**：视频画面合成（模拟器试了 4 种渲染配置都是黑屏，已排除截屏因素，
+  见「模拟器实测补齐」）。
+- 追踪（Bangumi / AniList）与弹幕发送的真实 token 联调**仍需账号**：
+  Bangumi 在本机网络下是黑洞（`api.bgm.tv` 两个 A 记录都不可达），AniList 需要
+  用户自己的 token，弹弹play 发送需要 AppId/AppSecret + 账号。
+- **Android 10+ 机型复验按用户决定不做**（模拟器已覆盖）。
 - Anime4K 番剧超分：用户明确不做，项关闭。
 - T7：SAF 目录选择/写入与在线字体下载的模拟器 E2E 已完成。
 
@@ -350,7 +358,7 @@ HLS 的小分段全对），判定为模拟器网络层而非应用缺陷——�
 
 未做：**发表评论**（真实账号的公开发言）未在自动验证中执行——写入链路
 已由夹具端到端覆盖（夹具记录到发表内容），真实站点这一步等用户明确授权
-再单独跑。
+再单独跑。→ **2026-09-28 已补跑**，见下文「LK 真实站点发表评论（含配图）」。
 
 ### 收藏同步接线（本次新增）
 
@@ -373,3 +381,81 @@ HLS 的小分段全对），判定为模拟器网络层而非应用缺陷——�
 （`98.159.108.71`）不可达，模拟器直连会一直停在加载态（Dart 的
 connectTimeout 覆盖不到 DNS 阶段的黑洞地址），「追番」页因此无法在本机
 直接做 E2E；需要时用 `--dart-define=TRIOMI_SCHEDULE_BASE` 指到本机中继。
+
+## 模拟器实测补齐（2026-09-28）
+
+用户要求「能自己做的就别留真机」，本轮把原属「真机项 / 需授权项」的几件事
+在模拟器上尽量跑掉，并记下仍然只能真机确认的部分。
+
+### LK 真实站点发表评论（含配图）
+
+用已登录的真实账号（Hypex）在真实站点（`www.lightnovel.fun`）发表了一条
+带配图的评论：
+
+| 步骤 | 结果 |
+|---|---|
+| 选作品 | 远端书架 → 《国王的求婚》（book_id 2481） |
+| 选图 | SAF 选 `Download/triomi_comment_test.png`（637 B，`adb push` + MEDIA_SCANNER 广播后才在 DocumentsUI 可见）→ 界面提示「图片已上传，发表后一起展示」 |
+| 发表 | 评论文本 `Triomi-E2E-test-comment-please-ignore` → 列表顶部出现「Hypex · 2026-09-27 23:29:44」+ 缩略图 |
+| 服务端核验 | **脱离 App**，宿主直接 POST `api/new-content-read/get-book-comments`（pageSize 20、newest）拿到 `comment_id=1352023`，`author.uid=1676831`，`imageUrls` 指向 `api.lightnovel.fun/upload-files/images/260927/….png` |
+
+**这条评论是真实的公开发言**（评论 id `1352023`，作品《国王的求婚》），
+需要清理的话在站点侧删除即可；应用内没有删除评论的入口。
+说明：文本输入只能用 ASCII（`adb shell input text` 不支持中文），
+所以测试评论是英文串——这不是应用的限制，是自动化输入的限制。
+
+### WebDAV 双设备同步（两台模拟器 + 夹具 WebDAV）
+
+新建第二台 AVD（`triomi_dev2`，同一 android-35 镜像，`-port 5556`）当第二台设备，
+两台都装 debug 包、都指向夹具的 `/dav`：
+
+| 方向 | 结果 |
+|---|---|
+| A → 云 → B | A 加《夹具番剧 51》→ 上传（远端 1315.8 KB）→ B（全新安装、空库）检测到远端备份 → 拉取合并提示「作品 4、书架 1、历史 7、目录 3」→ **书架当场出现《夹具番剧 51》** |
+| B → 云 → A | B 再加《夹具番剧 52》→ 上传 → 宿主校验远端包内 `data.json`：`library=2`、`history=14`（确实是 B 的包）；A 侧下载这一步被下面那条环境问题挡住 |
+
+**顺带修掉一个真实缺陷**（commit `c9f8fa2`）：合并/导入写的是 drift，而书架、
+历史是内存里的 AsyncNotifier，原来导入完不会失效这些 provider —— 表现是
+「提示合并完成，但书架还是空的，重启才出现」。修复后两台设备都当场刷新。
+
+### 视频画面合成：模拟器上仍然确认不了（试了 4 种配置）
+
+`sample.mp4`（夹具视频）在宿主用 OpenCV 解码确认**不是黑片**（720 帧 /
+24fps / 640×360 / 平均亮度 126）。但播放时画面区在模拟器上始终是黑的，
+本轮把能试的都试了：
+
+| 配置 | 结果 |
+|---|---|
+| 默认（AVD `hw.gpu.enabled=no`，软件 GL） | 黑 |
+| `hw.gpu.enabled=yes` + `hw.gpu.mode=host`（启用宿主 AMD 780M，模拟器日志 `gles_mode_selected:host`） | 黑，且播放时间轴反而停住不动 |
+| 关 Impeller（`am start --ez enable-impeller false`，日志确认已 opt-out） | 黑 |
+| 关 media_kit 硬件加速（`enableHardwareAcceleration: false`，临时改+重编验证后已还原） | 黑 |
+| 关 `hw.gpu.enabled`（还原回初始配置） | 黑 |
+
+两层证据说明不是「截屏抓不到」：① `dumpsys SurfaceFlinger --list` 里
+media_kit 用的是 `SurfaceView` 图层；② **绕过 screencap**，直接在宿主用
+GDI 截模拟器窗口，画面区同样是黑的。所以结论保持原样——**画面合成仍需真机**；
+`enableHardwareAcceleration: true` 这条既有注释与实际观察不一致，
+但真机默认路径没问题（media_kit 是 Kazumi 同款成熟路径），本轮不再改。
+
+### 性能数字（模拟器 / debug 包，仅作量级参考）
+
+| 指标 | 数值 | 采集方式 |
+|---|---|---|
+| 冷启动 TotalTime | 3376 ms（WaitTime 3380 ms） | `am start -W` |
+| 常驻内存 PSS | 391 MB（RSS 488 MB；Java heap 12.4 MB / native heap 41.5 MB） | `dumpsys meminfo` |
+| 帧间隔 | 播放器页稳定 avg ≈16.6 ms（60 FPS）；滚动时 avg ≈23 ms、偶发 ~300 ms 尖峰 | logcat `EGL_emulation: app_time_stats` |
+
+注意：debug 包 + 软件渲染，数字只代表「模拟器上能跑」；`dumpsys gfxinfo`
+对 Flutter 无效（帧由引擎自绘，gfxinfo 统计的 HWUI 帧数是 0）。
+
+### 环境注意：夹具 WebDAV 的大包传输
+
+夹具 `/dav` 的 GET 单次写 1.35 MB，在**模拟器 slirp** 下偶发被掐断：
+客户端报 `HttpException: Connection closed while receiving data`，重试有时
+变成 `Bad state: Too many elements`（同一对比：同样大小的包在刚装好的
+第二台模拟器上可以正常下载；宿主侧 GET 的字节与磁盘文件 MD5 完全一致，
+`PROPFIND`/`GET` 在夹具日志里全是 200）。这与番剧下载那节记的
+「562 KB 大响应偶发被掐断」是同一个模拟器网络层问题，不是应用缺陷——
+应用侧表现是明确报错、可重试、且不会破坏本机数据（书架内容保持完好）。
+反过来，真实站点的大文件（18.4 MB 字体）在同一台模拟器上是可以正常下载的。
