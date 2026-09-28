@@ -6,6 +6,7 @@ import '../../../core/models/media_type.dart';
 import '../../../core/source/source_providers.dart';
 import '../../../core/storage/preferences.dart';
 import '../../../core/storage/secure_store.dart';
+import 'bangumi_client.dart';
 import 'tracking_models.dart';
 import 'tracking_repository.dart';
 import 'tracking_service.dart';
@@ -18,6 +19,10 @@ final trackingRepositoryProvider = Provider<TrackingRepository>(
 ///
 /// 允许通过 [trackingBaseUrlOverridesProvider] 覆盖两个服务的 base，
 /// 便于用夹具服务做端到端验证（模拟器无外网）。
+///
+/// Bangumi 官方接口（`api.bgm.tv`）在部分网络下不可达，带 token 的请求也会
+/// 回退到镜像 [BangumiClient.mirrorBaseUrl]（用户已同意；界面会明示 token 被
+/// 发给了镜像）。用 dart-define 指到夹具时不回退——夹具才是权威来源。
 final trackingServiceProvider = Provider<TrackingService>((ref) {
   final overrides = ref.watch(trackingBaseUrlOverridesProvider);
   return TrackingService(
@@ -26,6 +31,9 @@ final trackingServiceProvider = Provider<TrackingService>((ref) {
     secureStore: ref.watch(secureStoreProvider),
     repository: ref.watch(trackingRepositoryProvider),
     bangumiBaseUrl: overrides.bangumi,
+    bangumiFallbackBaseUrl: overrides.bangumi == null
+        ? BangumiClient.mirrorBaseUrl
+        : null,
     anilistBaseUrl: overrides.anilist,
   );
 });

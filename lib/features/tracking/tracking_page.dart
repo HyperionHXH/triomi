@@ -9,6 +9,7 @@ import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import 'data/tracking_models.dart';
 import 'data/tracking_providers.dart';
+import 'data/tracking_service.dart';
 
 /// 追踪账号：配置 Bangumi / AniList 的 access token，查看已绑定作品。
 ///
@@ -151,6 +152,8 @@ class _TrackingPageState extends ConsumerState<TrackingPage> {
           Text(
             kind == TrackingServiceKind.bangumi
                 ? '到 bgm.tv 的「开放接口」页生成 Access Token（需要 write:collection 权限）。'
+                      '官方 api.bgm.tv 连不上时会自动改走镜像 api.bgmapi.com，'
+                      '此时 token 也会发给该镜像（仅作确认用，不写日志）。'
                 : '到 anilist.co 设置里创建 Token（授权时勾选编辑列表）。',
             style: Theme.of(context).textTheme.bodySmall,
           ),
@@ -214,15 +217,25 @@ class _TrackingPageState extends ConsumerState<TrackingPage> {
       await service.setToken(kind, token);
       final name = await service.verify(kind);
       if (!mounted) return;
-      setState(() => _status[kind] = '连接正常：$name');
+      setState(() => _status[kind] = '连接正常：$name${_mirrorNote(service, kind)}');
       ref.invalidate(allTrackingBindingsProvider);
     } catch (error) {
       if (!mounted) return;
-      setState(() => _status[kind] = '连接失败：$error');
+      setState(
+        () => _status[kind] = '连接失败：$error${_mirrorNote(service, kind)}',
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  /// 官方不可达而走了镜像时的补充说明：token 被发给了第三方，必须讲清。
+  static String _mirrorNote(
+    TrackingService service,
+    TrackingServiceKind kind,
+  ) => kind == TrackingServiceKind.bangumi && service.bangumiUsedFallback
+      ? '（官方 api.bgm.tv 不可达，本次请求走了镜像 api.bgmapi.com）'
+      : '';
 
   Future<void> _clear(TrackingServiceKind kind) async {
     await ref.read(trackingServiceProvider).clearToken(kind);

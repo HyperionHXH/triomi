@@ -53,11 +53,26 @@ class BangumiEpisode {
 class BangumiClient {
   BangumiClient({
     required this.http,
-    this.baseUrl = 'https://api.bgm.tv',
+    this.baseUrl = defaultBaseUrl,
+    this.fallbackBaseUrl,
     this.userAgent = defaultUserAgent,
   });
 
   static const String sourceId = 'bangumi';
+
+  /// 官方接口地址。
+  static const String defaultBaseUrl = 'https://api.bgm.tv';
+
+  /// 官方接口不可达时用的镜像（Kazumi 同款做法，见其 `api_endpoints.dart`）。
+  ///
+  /// 它把 v0 的**鉴权端点也一并代理**（2026-09-28 实测：带伪造 Bearer token 请求
+  /// `/v0/me`、`/v0/users/-/collections/{id}`、
+  /// `/v0/users/-/collections/{id}/episodes`、`/v0/search/subjects` 全部返回 401
+  /// 而不是 404），所以带 token 的请求也能回退。
+  ///
+  /// **代价是用户的 access token 会发给第三方**：只在官方连不上/5xx 时被动触发，
+  /// 并且界面用 [usedFallback] 明示（不能偷偷换源）。用户已明确同意这个取舍。
+  static const String mirrorBaseUrl = 'https://api.bgmapi.com';
 
   /// Bangumi 要求的 UA 格式（developer_id/app/version (平台) (项目地址)）。
   static const String defaultUserAgent =
@@ -65,7 +80,18 @@ class BangumiClient {
 
   final SourceHttpClient http;
   final String baseUrl;
+
+  /// 备用地址：官方取不到时再试一次；为空表示不回退。
+  final String? fallbackBaseUrl;
   final String userAgent;
+
+  /// 最近一次请求实际发往的地址（界面据此提示「已切到镜像」）。
+  String? _usedBaseUrl;
+
+  String? get usedBaseUrl => _usedBaseUrl;
+
+  /// 是否走了镜像（主地址之外的备用地址）。
+  bool get usedFallback => _usedBaseUrl != null && _usedBaseUrl != baseUrl;
 
   /// 当前 token 对应的用户（`GET /v0/me`）。
   Future<({int id, String username, String nickname})> me(String token) async {
@@ -245,22 +271,21 @@ class BangumiClient {
     bool allowMissing = false,
     bool expectNoContent = false,
   }) async {
-    final response = await http.send(
-      SourceRequest(
-        url: '$baseUrl$path',
-        method: method,
-        headers: <String, String>{
-          'User-Agent': userAgent,
-          'Accept': 'application/json',
-          if (token != null && token.isNotEmpty)
-            'Authorization': 'Bearer $token',
-          if (body != null) 'Content-Type': 'application/json',
-        },
-        body: body == null ? null : jsonEncode(body),
-        bodyType: body == null ? RequestBodyType.none : RequestBodyType.json,
-      ),
-      sourceId: sourceId,
-    );
+    // 官方不可达时用备用地址重试一次；403/401 之类的凭据错误不重试。
+    SourceResponse response;
+    try {
+      _usedBaseUrl = baseUrl;
+      response = await _send(baseUrl, path, method, token, body);
+    } on SourceException catch (error) {
+      final fallback = fallbackBaseUrl;
+      if (fallback == null || fallback == baseUrl || !_unreachable(error)) {
+        rethrow;
+      }
+      // 先记地址再发请求：`http.send` 对非 2xx 也会抛，等它返回才记就记不上
+      // （镜像回 401 时正好是这种情况，而这时最需要告诉用户「token 发出去了」）。
+      _usedBaseUrl = fallback;
+      response = await _send(fallback, path, method, token, body);
+    }
 
     if (response.statusCode == 404 && allowMissing) return null;
     _ensureSuccess(response, path);
@@ -277,6 +302,36 @@ class BangumiClient {
       );
     }
   }
+
+  Future<SourceResponse> _send(
+    String base,
+    String path,
+    String method,
+    String? token,
+    Object? body,
+  ) => http.send(
+    SourceRequest(
+      url: '$base$path',
+      method: method,
+      headers: <String, String>{
+        'User-Agent': userAgent,
+        'Accept': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        if (body != null) 'Content-Type': 'application/json',
+      },
+      body: body == null ? null : jsonEncode(body),
+      bodyType: body == null ? RequestBodyType.none : RequestBodyType.json,
+    ),
+    sourceId: sourceId,
+  );
+
+  /// 值不值得换地址：网络层直接失败（连不上 / 超时）与 5xx 算「不可达」。
+  ///
+  /// 注意网络层把 5xx 也归到 [SourceErrorType.network]，所以 5xx 也会回退——
+  /// 镜像就是同一套 API 的另一个实例，换个入口再试是合理的。
+  static bool _unreachable(SourceException error) =>
+      error.type == SourceErrorType.network ||
+      error.type == SourceErrorType.timeout;
 
   /// 自行判状态码：真实网络层会抛错，测试替身只回响应，两条路必须一致。
   void _ensureSuccess(SourceResponse response, String path) {

@@ -23,6 +23,7 @@ class TrackingService {
     required this.secureStore,
     required this.repository,
     this.bangumiBaseUrl,
+    this.bangumiFallbackBaseUrl,
     this.anilistBaseUrl,
   });
 
@@ -31,17 +32,27 @@ class TrackingService {
   final SecureStore secureStore;
   final TrackingRepository repository;
   final String? bangumiBaseUrl;
+
+  /// Bangumi 官方不可达时的备用地址（镜像）。为空表示不回退（夹具模式）。
+  final String? bangumiFallbackBaseUrl;
   final String? anilistBaseUrl;
 
-  BangumiClient get _bangumi => BangumiClient(
+  /// 客户端随服务创建一次即可（[bangumiUsedFallback] 要读它最近一次的请求结果，
+  /// 所以不能每次现造一个）。
+  late final BangumiClient _bangumi = BangumiClient(
     http: http,
-    baseUrl: bangumiBaseUrl ?? 'https://api.bgm.tv',
+    baseUrl: bangumiBaseUrl ?? BangumiClient.defaultBaseUrl,
+    fallbackBaseUrl: bangumiFallbackBaseUrl,
   );
 
-  AniListClient get _anilist => AniListClient(
+  late final AniListClient _anilist = AniListClient(
     http: http,
     baseUrl: anilistBaseUrl ?? 'https://graphql.anilist.co',
   );
+
+  /// Bangumi 最近一次请求是否走了镜像（官方连不上时）。界面据此提示用户
+  /// 「token 也发给了镜像」，不偷偷换源。
+  bool get bangumiUsedFallback => _bangumi.usedFallback;
 
   // ---------------------------------------------------------------- 凭据
 

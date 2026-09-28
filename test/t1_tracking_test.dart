@@ -262,6 +262,124 @@ void main() {
           .watchedEpisodeCount(12, token: 't');
       expect(watched, 2);
     });
+
+    test('官方连不上：带 token 的请求回退镜像，且 token 原样带上', () async {
+      final http = FakeHttpClient((request) async {
+        if (request.url.startsWith('https://api.bgm.tv')) {
+          throw const SourceException(
+            sourceId: 'bangumi',
+            type: SourceErrorType.network,
+            message: '连接被拒绝',
+          );
+        }
+        return SourceResponse(
+          statusCode: 200,
+          url: request.url,
+          body: jsonEncode(<String, Object?>{'id': 1, 'username': 'hypex'}),
+        );
+      });
+      final bangumi = BangumiClient(
+        http: http,
+        fallbackBaseUrl: BangumiClient.mirrorBaseUrl,
+      );
+
+      final me = await bangumi.me('secret-token');
+
+      expect(me.username, 'hypex');
+      expect(bangumi.usedFallback, isTrue);
+      expect(bangumi.usedBaseUrl, BangumiClient.mirrorBaseUrl);
+      expect(http.requests.length, 2);
+      expect(http.requests.last.url, '${BangumiClient.mirrorBaseUrl}/v0/me');
+      // 回退不改变请求内容：token 仍然通过 Authorization 发送。
+      expect(
+        http.requests.last.headers['Authorization'],
+        'Bearer secret-token',
+      );
+      expect(
+        http.requests.last.headers['User-Agent'],
+        BangumiClient.defaultUserAgent,
+      );
+    });
+
+    test('镜像回 401（token 无效）：仍要记为「走了镜像」，界面才能提示 token 已发出', () async {
+      // 网络层对非 2xx 是「抛异常」而不是返回响应，所以镜像 401 这条路最容易被记漏。
+      final http = FakeHttpClient((request) async {
+        if (request.url.startsWith('https://api.bgm.tv')) {
+          throw const SourceException(
+            sourceId: 'bangumi',
+            type: SourceErrorType.network,
+            message: '连接被拒绝',
+          );
+        }
+        throw const SourceException(
+          sourceId: 'bangumi',
+          type: SourceErrorType.auth,
+          message: 'HTTP 401',
+        );
+      });
+      final bangumi = BangumiClient(
+        http: http,
+        fallbackBaseUrl: BangumiClient.mirrorBaseUrl,
+      );
+
+      await expectLater(bangumi.me('bad'), throwsA(isA<SourceException>()));
+      expect(bangumi.usedFallback, isTrue);
+      expect(http.requests.length, 2);
+      expect(http.requests.last.url, '${BangumiClient.mirrorBaseUrl}/v0/me');
+    });
+
+    test('凭据错误（401）不触发回退：换地址也一样，没必要转手 token', () async {
+      final http = client(statuses: <String, int>{'/v0/me': 401});
+      final bangumi = BangumiClient(
+        http: http,
+        fallbackBaseUrl: BangumiClient.mirrorBaseUrl,
+      );
+
+      await expectLater(
+        bangumi.me('bad'),
+        throwsA(
+          isA<SourceException>().having(
+            (error) => error.type,
+            'type',
+            SourceErrorType.auth,
+          ),
+        ),
+      );
+      expect(http.requests.length, 1);
+      expect(bangumi.usedFallback, isFalse);
+    });
+
+    test('没有备用地址 / 备用地址与主地址相同：都不回退', () async {
+      final noFallback = FakeHttpClient((request) async {
+        throw const SourceException(
+          sourceId: 'bangumi',
+          type: SourceErrorType.network,
+          message: '连接被拒绝',
+        );
+      });
+      await expectLater(
+        BangumiClient(http: noFallback).me('t'),
+        throwsA(isA<SourceException>()),
+      );
+      expect(noFallback.requests.length, 1);
+
+      final sameBase = FakeHttpClient((request) async {
+        throw const SourceException(
+          sourceId: 'bangumi',
+          type: SourceErrorType.network,
+          message: '连接被拒绝',
+        );
+      });
+      await expectLater(
+        BangumiClient(
+          http: sameBase,
+          baseUrl: 'https://api.bgm.tv',
+          fallbackBaseUrl: 'https://api.bgm.tv',
+        ).me('t'),
+        throwsA(isA<SourceException>()),
+      );
+      expect(sameBase.requests.length, 1);
+    });
   });
 
   group('AniListClient', () {

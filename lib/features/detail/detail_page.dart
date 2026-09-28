@@ -662,8 +662,7 @@ class _ChapterSection extends StatelessWidget {
     );
   }
 
-  /// 打开章节：漫画进阅读器；番剧与小说在对应里程碑落地前给出明确说明，
-  /// 而不是弹一句"暂不支持"。
+  /// 打开章节：漫画 → 漫画阅读器、番剧 → 播放器、小说 → 正文阅读器。
   void _openChapter(BuildContext context, int index) {
     final target = item;
     if (target == null || index < 0 || index >= chapters.length) return;
@@ -692,25 +691,13 @@ class _ChapterSection extends StatelessWidget {
       return;
     }
 
-    if (target.type == MediaType.novel) {
-      context.push(
-        AppRoutes.novelReader,
-        extra: NovelReaderArgs(
-          item: target,
-          chapters: chapters,
-          initialIndex: index,
-        ),
-      );
-      return;
-    }
-
-    final hint = switch (target.type) {
-      MediaType.novel => '',
-      MediaType.anime => '',
-      MediaType.manga => '',
-    };
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$hint（章节：${chapters[index].title}）')),
+    context.push(
+      AppRoutes.novelReader,
+      extra: NovelReaderArgs(
+        item: target,
+        chapters: chapters,
+        initialIndex: index,
+      ),
     );
   }
 }
