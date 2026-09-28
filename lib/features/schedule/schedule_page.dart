@@ -8,6 +8,7 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
+import 'data/bangumi_schedule_client.dart';
 import 'data/schedule_providers.dart';
 
 /// 追番条目 → 内置 `bangumi-anime` 规则来源的作品。
@@ -34,25 +35,47 @@ class SchedulePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final weekly = ref.watch(weeklyScheduleProvider);
+    // 数据实际来源：官方取不到时会回退到镜像，页面上要说清楚。
+    final client = ref.watch(scheduleClientProvider);
+    final mirrorUsed = client.usedFallback;
 
     return PageScaffold(
       title: '追番',
       child: weekly.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        // 有备用地址时说明会等待/回退，避免「一直转圈不知道在干嘛」。
+        loading: () => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              const CircularProgressIndicator(),
+              if (client.fallbackBaseUrl != null) ...<Widget>[
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  '正在连接官方接口；不通会自动改用镜像',
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: context.palette.mutedForeground),
+                ),
+              ],
+            ],
+          ),
+        ),
         error: (error, _) => _ErrorView(
           message: '$error',
           onRetry: () => ref.invalidate(weeklyScheduleProvider),
         ),
-        data: (days) => _ScheduleBody(days: days),
+        data: (days) => _ScheduleBody(days: days, mirrorUsed: mirrorUsed),
       ),
     );
   }
 }
 
 class _ScheduleBody extends StatefulWidget {
-  const _ScheduleBody({required this.days});
+  const _ScheduleBody({required this.days, this.mirrorUsed = false});
 
   final List<ScheduleDay> days;
+
+  /// 本次数据来自备用镜像（官方接口不可达）。
+  final bool mirrorUsed;
 
   @override
   State<_ScheduleBody> createState() => _ScheduleBodyState();
@@ -89,6 +112,21 @@ class _ScheduleBodyState extends State<_ScheduleBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
+        if (widget.mirrorUsed)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.sm,
+              AppSpacing.lg,
+              0,
+            ),
+            child: Text(
+              '官方接口不可达，本次放送表来自镜像 '
+              '${Uri.parse(BangumiScheduleClient.mirrorUrl).host}',
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: context.palette.mutedForeground),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.lg,

@@ -49,21 +49,52 @@ class BangumiScheduleClient {
   BangumiScheduleClient({
     required this.http,
     this.baseUrl = calendarUrl,
+    this.fallbackBaseUrl,
     this.userAgent = 'Triomi/0.1.0 (https://github.com/HyperionHXH/triomi)',
   });
 
   static const String calendarUrl = 'https://api.bgm.tv/calendar';
 
+  /// 官方接口不可达时用的镜像（Kazumi 同款做法，见其 `api_endpoints.dart`；
+  /// 只代理公开的 v0/legacy 读接口，不携带任何第三方凭据）。
+  static const String mirrorUrl = 'https://api.bgmapi.com/calendar';
+
   final SourceHttpClient http;
 
   /// 调试时可指向本地夹具服务（见 schedule_providers.dart）。
   final String baseUrl;
+
+  /// 备用地址：`baseUrl` 取不到时再试一次；为空表示不回退。
+  final String? fallbackBaseUrl;
   final String userAgent;
 
+  /// 最近一次成功取数用的地址（界面据此提示「已切到镜像」）。
+  String? _usedBaseUrl;
+
+  String? get usedBaseUrl => _usedBaseUrl;
+
+  /// 是否走了镜像（官方 base 之外的备用地址）。
+  bool get usedFallback => _usedBaseUrl != null && _usedBaseUrl != baseUrl;
+
   Future<List<ScheduleDay>> fetchWeekly() async {
+    try {
+      final days = await _fetch(baseUrl);
+      _usedBaseUrl = baseUrl;
+      return days;
+    } on SourceException {
+      final fallback = fallbackBaseUrl;
+      // 备用地址与主地址相同时没有意义（也可能造成重复请求）。
+      if (fallback == null || fallback == baseUrl) rethrow;
+      final days = await _fetch(fallback);
+      _usedBaseUrl = fallback;
+      return days;
+    }
+  }
+
+  Future<List<ScheduleDay>> _fetch(String base) async {
     final response = await http.send(
       SourceRequest(
-        url: baseUrl,
+        url: base,
         headers: <String, String>{'User-Agent': userAgent},
       ),
       sourceId: 'bangumi-schedule',

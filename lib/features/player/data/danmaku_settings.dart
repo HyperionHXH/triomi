@@ -158,6 +158,25 @@ class DandanplayCredentials {
 
   bool get canSend => isConfigured && token.isNotEmpty;
 
+  /// 应用自己的弹弹play 凭据（Triomi 注册的应用）。
+  ///
+  /// 用户没填自己的凭据时用它，这样**「拿弹幕」开箱可用**（与 Kazumi 的做法
+  /// 一致：Kazumi 也是内置了自己注册的那对凭据）；**发弹幕仍然需要用户自己的
+  /// 账号 token**。留空则维持旧行为（要求用户自填）。
+  ///
+  /// 可以在构建时注入，避免把值写进仓库：
+  /// `--dart-define=TRIOMI_DANDANPLAY_APP_ID=xxx --dart-define=TRIOMI_DANDANPLAY_APP_SECRET=yyy`
+  static const String builtInAppId = String.fromEnvironment(
+    'TRIOMI_DANDANPLAY_APP_ID',
+  );
+  static const String builtInAppSecret = String.fromEnvironment(
+    'TRIOMI_DANDANPLAY_APP_SECRET',
+  );
+
+  /// 内置凭据是否可用（未注入时 false，界面仍走「请先配置」的老路）。
+  static bool get hasBuiltIn =>
+      builtInAppId.isNotEmpty && builtInAppSecret.isNotEmpty;
+
   DandanplayCredentials copyWith({
     String? appId,
     String? appSecret,
@@ -174,17 +193,24 @@ class DandanplayCredentials {
 
   /// 机密字段（appSecret / token）从安全存储读，Hive 里的旧值（迁移前
   /// 备份）作回退；appId 非机密，留在 Hive。
+  ///
+  /// 用户没填 AppId/AppSecret 时回退到应用内置的那对（[hasBuiltIn]）。
   static DandanplayCredentials load(
     Preferences preferences,
     SecureStore secureStore,
-  ) => DandanplayCredentials(
-    appId: preferences.get<String>(appIdKey) ?? '',
-    appSecret:
+  ) {
+    final userAppId = preferences.get<String>(appIdKey) ?? '';
+    final userAppSecret =
         secureStore.get(appSecretKey) ??
         preferences.get<String>(appSecretKey) ??
-        '',
-    token: secureStore.get(tokenKey) ?? preferences.get<String>(tokenKey) ?? '',
-  );
+        '';
+    return DandanplayCredentials(
+      appId: userAppId.isNotEmpty ? userAppId : builtInAppId,
+      appSecret: userAppSecret.isNotEmpty ? userAppSecret : builtInAppSecret,
+      token:
+          secureStore.get(tokenKey) ?? preferences.get<String>(tokenKey) ?? '',
+    );
+  }
 
   Future<void> save(Preferences preferences, SecureStore secureStore) async {
     await preferences.set(appIdKey, appId);

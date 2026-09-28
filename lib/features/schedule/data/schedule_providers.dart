@@ -12,10 +12,16 @@ const String _scheduleBase = String.fromEnvironment(
 );
 
 /// 每日放送数据源。
+///
+/// 官方接口（`api.bgm.tv`）在部分网络下被 DNS 污染 / IP 黑洞，整页会一直转圈；
+/// 默认地址取不到时回退到公开镜像（Kazumi 同款做法）。用 dart-define 指到
+/// 夹具时不回退——夹具才是权威来源。
 final scheduleClientProvider = Provider<BangumiScheduleClient>((ref) {
+  final isDefaultBase = _scheduleBase == BangumiScheduleClient.calendarUrl;
   return BangumiScheduleClient(
     http: ref.watch(sourceHttpClientProvider),
     baseUrl: _scheduleBase,
+    fallbackBaseUrl: isDefaultBase ? BangumiScheduleClient.mirrorUrl : null,
   );
 });
 

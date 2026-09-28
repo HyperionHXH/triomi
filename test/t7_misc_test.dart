@@ -25,6 +25,7 @@ import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/novel/data/lk/lk_client.dart';
 import 'package:triomi/features/novel/reader/font_catalog.dart';
 import 'package:triomi/features/novel/reader/user_font_store.dart';
+import 'package:triomi/features/player/data/danmaku_settings.dart';
 import 'package:triomi/features/schedule/data/background_update_check.dart';
 import 'package:triomi/features/schedule/data/bangumi_schedule_client.dart';
 import 'package:triomi/features/schedule/data/schedule_providers.dart';
@@ -600,6 +601,104 @@ void main() {
       expect(result, isNotNull);
       expect(result!.count, 1);
       expect(result.titles, <String>['追的番']);
+    });
+  });
+
+  group('追番放送表镜像回退', () {
+    final fixtureDays = jsonEncode(<Object?>[
+      <String, Object?>{
+        'weekday': <String, Object?>{'id': 1, 'cn': '周一'},
+        'items': <Object?>[
+          <String, Object?>{'id': 42, 'name_cn': '镜像番'},
+        ],
+      },
+    ]);
+
+    /// 官方地址一律失败，镜像返回夹具放送表。
+    FakeHttpClient httpWithDeadOfficial() => FakeHttpClient((request) async {
+      if (request.url.contains('api.bgm.tv')) {
+        throw const SourceException(
+          sourceId: 'bangumi-schedule',
+          type: SourceErrorType.network,
+          message: 'connection timeout',
+        );
+      }
+      return SourceResponse(
+        statusCode: 200,
+        body: fixtureDays,
+        url: request.url,
+      );
+    });
+
+    test('官方取不到时回退镜像，并标记 usedFallback', () async {
+      final client = BangumiScheduleClient(
+        http: httpWithDeadOfficial(),
+        fallbackBaseUrl: BangumiScheduleClient.mirrorUrl,
+      );
+
+      final days = await client.fetchWeekly();
+
+      expect(days.single.items.single.title, '镜像番');
+      expect(client.usedFallback, isTrue);
+      expect(client.usedBaseUrl, BangumiScheduleClient.mirrorUrl);
+    });
+
+    test('没有备用地址（夹具模式）时不回退，直接抛错', () async {
+      final client = BangumiScheduleClient(
+        http: FakeHttpClient(
+          (request) async => throw const SourceException(
+            sourceId: 'bangumi-schedule',
+            type: SourceErrorType.network,
+            message: 'connection refused',
+          ),
+        ),
+        baseUrl: 'http://10.0.2.2:8123/calendar',
+      );
+
+      await expectLater(client.fetchWeekly(), throwsA(isA<SourceException>()));
+      expect(client.usedFallback, isFalse);
+    });
+
+    test('官方可用时用官方，不触发回退', () async {
+      final client = BangumiScheduleClient(
+        http: FakeHttpClient(
+          (request) async => SourceResponse(
+            statusCode: 200,
+            body: fixtureDays,
+            url: request.url,
+          ),
+        ),
+        fallbackBaseUrl: BangumiScheduleClient.mirrorUrl,
+      );
+
+      await client.fetchWeekly();
+
+      expect(client.usedFallback, isFalse);
+      expect(client.usedBaseUrl, BangumiScheduleClient.calendarUrl);
+    });
+  });
+
+  group('弹幕凭据：内置槽位', () {
+    test('用户没填时用内置（本仓库未注入则为空，维持旧行为）', () {
+      final credentials = DandanplayCredentials.load(
+        memoryPreferences(),
+        MemorySecureStore(),
+      );
+
+      expect(credentials.appId, DandanplayCredentials.builtInAppId);
+      expect(credentials.isConfigured, DandanplayCredentials.hasBuiltIn);
+    });
+
+    test('用户填了自己的凭据时优先用用户的', () async {
+      final preferences = memoryPreferences();
+      await preferences.set(DandanplayCredentials.appIdKey, 'user-app');
+      final secureStore = MemorySecureStore();
+      await secureStore.set(DandanplayCredentials.appSecretKey, 'user-secret');
+
+      final credentials = DandanplayCredentials.load(preferences, secureStore);
+
+      expect(credentials.appId, 'user-app');
+      expect(credentials.appSecret, 'user-secret');
     });
   });
 }
