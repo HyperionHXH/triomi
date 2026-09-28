@@ -112,9 +112,10 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
   token**（用户给到即可跑），带 token 的请求已接入镜像回退（见「Bangumi 不可达 →
   镜像回退」）。
 - 弹幕：规则自带弹幕源（`content.danmaku`）的**渲染链路已在设备上验证**（见「追踪
-  链路设备验证」末段），这条不需要凭据；按条目匹配弹幕需要**内置凭据槽位已就位**——
-  用户注册弹弹play 应用后，用 `--dart-define` 注入即可开箱拿弹幕；发弹幕仍需用户
-  自己的账号 token（见「弹幕：Kazumi 为什么不用登录」）。
+  链路设备验证」末段）；**发送链路也已在设备上验通**（登录拿 token → 手动匹配 →
+  发送，见「弹幕发送链路设备验证」），这条不需要凭据。按条目匹配弹幕需要**内置
+  凭据槽位已就位**——用户注册弹弹play 应用后，用 `--dart-define` 注入即可开箱拿弹幕；
+  发弹幕仍需用户自己的账号 token（见「弹幕：Kazumi 为什么不用登录」）。
 - **Android 10+ 机型复验按用户决定不做**（模拟器已覆盖）。
 - Anime4K 番剧超分：用户明确不做，项关闭。
 - T7：SAF 目录选择/写入与在线字体下载的模拟器 E2E 已完成。
@@ -476,6 +477,23 @@ GDI 截模拟器窗口，画面区同样是黑的。所以结论保持原样—�
 
 同一张播放截图再次确认：视频**画面区仍是黑的**（上面那 4 组渲染配置的老结论，
 仍需真机），但时间轴推进、弹幕层、线路/剧集/倍速/全屏这些控制都正常。
+
+### 弹幕发送链路设备验证（夹具，emulator-5556）
+
+T3 当初只做了单测 + 夹具端点，**从没在设备上跑过完整发送链路**。本轮补齐
+（夹具先补了 `GET /api/v2/search/episodes` 与 `GET /api/v2/comment/{id}`，
+原来只有 login 与 POST comment 两个端点）：
+
+| 步骤 | 结果 |
+|---|---|
+| 「我的 → 弹幕设置」填 AppId / AppSecret + 账号 / 密码 → 点「登录获取 token」 | 夹具 `/api/v2/login` 返回 `fixture-dandanplay-token`，token 自动写进输入框；状态从「未配置」变成**「可拉取、可发送」**（密码只在请求里用一次，不落盘） |
+| 播放器 → 「搜索弹幕」→ 搜索 | 夹具 `/api/v2/search/episodes?anime=…` 返回一部剧两集，底部面板列出「夹具番剧（夹具番剧 51） · 第 1 话 / 第 2 话」 |
+| 选第 1 话 | `GET /api/v2/comment/9001` 载入弹幕，`_danmakuEpisodeId = 9001` |
+| 「发送弹幕」→ 输入 → 发送 | 夹具进程日志出现 `[dandanplay] comment sent to episode 9001: 'triomi-e2e-danmaku' @ 29.75s` |
+
+也就是说 **AppId/AppSecret + 账号密码 → token → 手动匹配 → 发送** 整条链路在设备上
+是通的（签名头 X-AppId / X-Timestamp / X-Signature 与 Bearer token 都按预期带上）。
+剩下的只有真实弹弹play 凭据（等用户注册应用）。
 
 ### 性能数字（模拟器 / debug 包，仅作量级参考）
 

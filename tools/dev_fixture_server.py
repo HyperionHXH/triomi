@@ -473,7 +473,17 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith('/api/v2/comment/'):
             episode_id = path.rsplit('/', 1)[-1]
-            print(f'[dandanplay] comment sent to episode {episode_id}')
+            length = int(self.headers.get('Content-Length') or 0)
+            raw = self.rfile.read(length).decode('utf-8') if length else ''
+            try:
+                payload = json.loads(raw) if raw else {}
+            except ValueError:
+                payload = {}
+            # 把内容也打出来：设备端 E2E 就是靠这行日志断言「弹幕真的发出去了」。
+            print(
+                f'[dandanplay] comment sent to episode {episode_id}: '
+                f'{payload.get("text")!r} @ {payload.get("time")}s'
+            )
             self._send(
                 json.dumps({'success': True, 'commentId': 9}).encode('utf-8'),
                 'application/json; charset=utf-8',
@@ -624,6 +634,41 @@ class Handler(BaseHTTPRequestHandler):
             ep = path.rsplit('/', 1)[-1].removesuffix('.json')
             self._send(
                 danmaku_json(ep).encode('utf-8'),
+                'application/json; charset=utf-8',
+            )
+            return
+
+        if path == '/api/v2/search/episodes':
+            # 弹幕搜索夹具：固定返回一部剧两集，供「手动匹配 → 发送弹幕」E2E
+            # （真实接口按 anime 关键词匹配，这里把关键词回显出来便于确认请求）。
+            query = parse_qs(urlparse(self.path).query)
+            keyword = (query.get('anime') or ['?'])[0]
+            self._send(
+                json.dumps(
+                    {
+                        'success': True,
+                        'animes': [
+                            {
+                                'animeId': 9001,
+                                'animeTitle': f'夹具番剧（{keyword}）',
+                                'episodes': [
+                                    {'episodeId': 9001, 'episodeTitle': '第 1 话'},
+                                    {'episodeId': 9002, 'episodeTitle': '第 2 话'},
+                                ],
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ).encode('utf-8'),
+                'application/json; charset=utf-8',
+            )
+            return
+
+        if path.startswith('/api/v2/comment/'):
+            # `comments()` 走 GET（query 里的 withRelated 已被剥离），返回弹幕列表。
+            episode_id = path.rsplit('/', 1)[-1]
+            self._send(
+                danmaku_json(f'ep{episode_id}').encode('utf-8'),
                 'application/json; charset=utf-8',
             )
             return

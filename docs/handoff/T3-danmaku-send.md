@@ -64,3 +64,37 @@
 
 - 本机：弹幕设置页加登录入口（账号/密码两个输入框 + 登录按钮）；夹具
   服务补 `/api/v2/login` 与 `/api/v2/comment/<id>` 的回执端点做 E2E。
+
+## 设备端验证（2026-09-28 补齐）
+
+上面那句「夹具补端点做 E2E」当时只做到了端点，**发送链路一直没在设备上跑过**。
+本轮补跑，并给夹具再补两个读端点（原来只有 login 与 POST comment）：
+
+- `GET /api/v2/search/episodes?anime=…`：固定回一部剧两集（episodeId 9001/9002）。
+- `GET /api/v2/comment/{id}`：复用 `danmaku_json()` 回 40 条弹幕。
+- `POST /api/v2/comment/{id}` 的日志**带上文本与时间点**，设备端 E2E 就是靠这行
+  断言「真的发出去了」。
+
+设备（emulator-5556，`--dart-define=TRIOMI_DANDANPLAY_BASE=http://10.0.2.2:8123`）
+上的完整链路：
+
+1. 弹幕设置填 AppId/AppSecret + 账号/密码 → 「登录获取 token」→ 夹具登录返回
+   `fixture-dandanplay-token`，token 自动填入；状态由「未配置」变为**「可拉取、可发送」**
+   （密码只用于本次请求，不落盘）。
+2. 播放器 → 「搜索弹幕」→ 夹具搜索返回剧集列表 → 选「第 1 话」→
+   `GET /api/v2/comment/9001` 载入弹幕，`_danmakuEpisodeId = 9001`。
+3. 「发送弹幕」输入文本 → 发送 → 夹具进程日志：
+   `[dandanplay] comment sent to episode 9001: 'triomi-e2e-danmaku' @ 29.75s`。
+
+结论：签名头（X-AppId / X-Timestamp / X-Signature）与 Bearer token 都按预期带上，
+链路通；**剩下的只有真实弹弹play 凭据**（等用户注册应用后 `--dart-define` 注入）。
+
+### UI 驱动注意（这页很容易点歪）
+
+- 弹幕设置页要滚到底再取输入框坐标，否则 `edit_boxes()` 给的下标对不上：
+  0=屏蔽词 1=AppId 2=AppSecret 3=账号 token 4=账号 5=密码。
+- **每填一个字段就收一次键盘**：键盘弹出会把下半页顶走，继续用旧坐标会点到键盘上
+  （表现为「文本被追加到上一个字段」）。`dumpsys input_method` 里的
+  `mInputShown=true` 可用来判断该不该按返回。
+- 播放器顶栏按钮（搜索弹幕 / 发送弹幕）是带 tooltip 的 IconButton，dump 里以
+  content-desc 出现，可以直接按文本点。
