@@ -6,6 +6,9 @@ import '../../../core/text/zh_converter.dart';
 /// 小说阅读模式。
 enum NovelReadingMode { paged, scroll }
 
+/// 阅读器屏幕方向（B4）。
+enum ReaderOrientation { system, portrait, landscape }
+
 /// 阅读主题（背景 + 前景）。
 enum NovelTheme {
   light('洁白', Color(0xFFFFFFFF), Color(0xFF1A1A1A)),
@@ -31,6 +34,7 @@ class NovelReaderSettings {
     this.zhMode = ZhConversionMode.off,
     this.volumeKeyTurn = false,
     this.keepScreenOn = true,
+    this.orientation = ReaderOrientation.system,
   });
 
   final NovelReadingMode mode;
@@ -57,6 +61,9 @@ class NovelReaderSettings {
   /// 屏幕常亮（默认开；小说与漫画阅读器共用此设置）。
   final bool keepScreenOn;
 
+  /// 屏幕方向（默认跟随系统；小说与漫画阅读器共用此设置）。
+  final ReaderOrientation orientation;
+
   static const double defaultFontSize = 18;
   static const double defaultLineHeight = 1.7;
   static const double defaultPageMargin = 20;
@@ -72,6 +79,7 @@ class NovelReaderSettings {
     ZhConversionMode? zhMode,
     bool? volumeKeyTurn,
     bool? keepScreenOn,
+    ReaderOrientation? orientation,
   }) => NovelReaderSettings(
     mode: mode ?? this.mode,
     theme: theme ?? this.theme,
@@ -82,6 +90,7 @@ class NovelReaderSettings {
     zhMode: zhMode ?? this.zhMode,
     volumeKeyTurn: volumeKeyTurn ?? this.volumeKeyTurn,
     keepScreenOn: keepScreenOn ?? this.keepScreenOn,
+    orientation: orientation ?? this.orientation,
   );
 
   /// 段落/标题正文样式（按主题着色）。
@@ -111,6 +120,7 @@ class NovelReaderSettings {
   static const String _zhModeKey = 'novelReader.zhMode';
   static const String _volumeKeyTurnKey = 'novelReader.volumeKeyTurn';
   static const String _keepScreenOnKey = 'novelReader.keepScreenOn';
+  static const String _orientationKey = 'novelReader.orientation';
 
   static NovelReaderSettings load(Preferences preferences) {
     final mode = preferences.get<String>(_modeKey);
@@ -136,6 +146,11 @@ class NovelReaderSettings {
       },
       volumeKeyTurn: preferences.get<bool>(_volumeKeyTurnKey) ?? false,
       keepScreenOn: preferences.get<bool>(_keepScreenOnKey) ?? true,
+      orientation: switch (preferences.get<String>(_orientationKey)) {
+        'portrait' => ReaderOrientation.portrait,
+        'landscape' => ReaderOrientation.landscape,
+        _ => ReaderOrientation.system,
+      },
     );
   }
 
@@ -164,6 +179,11 @@ class NovelReaderSettings {
     });
     await preferences.set(_volumeKeyTurnKey, volumeKeyTurn);
     await preferences.set(_keepScreenOnKey, keepScreenOn);
+    await preferences.set(_orientationKey, switch (orientation) {
+      ReaderOrientation.system => 'system',
+      ReaderOrientation.portrait => 'portrait',
+      ReaderOrientation.landscape => 'landscape',
+    });
   }
 
   /// 分组恢复默认（对齐 Mixn 的「恢复默认」分组开关）。

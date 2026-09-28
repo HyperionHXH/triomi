@@ -94,6 +94,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     if (_keepScreenOn) {
       unawaited(platformChannel.setKeepScreenOn(true));
     }
+    // 屏幕方向（B4）：进入锁定，退出恢复跟随系统。
+    unawaited(_applyOrientation(_settings.orientation));
     // 自定义字体先进引擎（幂等），正文样式才能立刻生效。
     unawaited(UserFontStore.instance.ensureLoaded());
     unawaited(_load());
@@ -107,8 +109,24 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     if (_keepScreenOn) {
       unawaited(platformChannel.setKeepScreenOn(false));
     }
+    unawaited(SystemChrome.setPreferredOrientations(<DeviceOrientation>[]));
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// 应用屏幕方向（B4）；空列表 = 跟随系统。
+  Future<void> _applyOrientation(ReaderOrientation orientation) async {
+    await SystemChrome.setPreferredOrientations(switch (orientation) {
+      ReaderOrientation.system => <DeviceOrientation>[],
+      ReaderOrientation.portrait => <DeviceOrientation>[
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ],
+      ReaderOrientation.landscape => <DeviceOrientation>[
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ],
+    });
   }
 
   // ---------------------------------------------------------------- 加载
@@ -394,6 +412,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     );
     if (updated == null || updated == _settings) return;
     final zhChanged = updated.zhMode != _settings.zhMode;
+    if (updated.orientation != _settings.orientation) {
+      unawaited(_applyOrientation(updated.orientation));
+    }
     setState(() => _settings = updated);
     // 先重转换再落盘：设置变更立即生效，持久化是尽力而为的收尾。
     if (zhChanged) await _reconvert();
@@ -1086,6 +1107,28 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                     value: value.keepScreenOn,
                     onChanged: (next) =>
                         commit(value.copyWith(keepScreenOn: next)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.xs),
+                    child: SegmentedButton<ReaderOrientation>(
+                      segments: const <ButtonSegment<ReaderOrientation>>[
+                        ButtonSegment(
+                          value: ReaderOrientation.system,
+                          label: Text('跟随系统'),
+                        ),
+                        ButtonSegment(
+                          value: ReaderOrientation.portrait,
+                          label: Text('竖屏'),
+                        ),
+                        ButtonSegment(
+                          value: ReaderOrientation.landscape,
+                          label: Text('横屏'),
+                        ),
+                      ],
+                      selected: {value.orientation},
+                      onSelectionChanged: (selection) =>
+                          commit(value.copyWith(orientation: selection.first)),
+                    ),
                   ),
                 ],
               ),

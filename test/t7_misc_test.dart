@@ -24,6 +24,7 @@ import 'package:triomi/features/library/data/library_providers.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/novel/data/lk/lk_client.dart';
 import 'package:triomi/features/novel/reader/font_catalog.dart';
+import 'package:triomi/features/novel/reader/novel_reader_settings.dart';
 import 'package:triomi/features/novel/reader/user_font_store.dart';
 import 'package:triomi/features/player/data/danmaku_settings.dart';
 import 'package:triomi/features/schedule/data/background_update_check.dart';
@@ -699,6 +700,31 @@ void main() {
 
       expect(credentials.appId, 'user-app');
       expect(credentials.appSecret, 'user-secret');
+    });
+  });
+
+  group('T7-8 屏幕方向设置（B4）', () {
+    test('load/save 往返映射', () async {
+      final preferences = memoryPreferences();
+
+      final defaults = NovelReaderSettings.load(preferences);
+      expect(defaults.orientation, ReaderOrientation.system);
+
+      await defaults
+          .copyWith(orientation: ReaderOrientation.landscape)
+          .save(preferences);
+      expect(
+        NovelReaderSettings.load(preferences).orientation,
+        ReaderOrientation.landscape,
+      );
+
+      await defaults
+          .copyWith(orientation: ReaderOrientation.portrait)
+          .save(preferences);
+      expect(
+        NovelReaderSettings.load(preferences).orientation,
+        ReaderOrientation.portrait,
+      );
     });
   });
 }

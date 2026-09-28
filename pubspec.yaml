@@ -48,6 +48,8 @@ dev_dependencies:
   build_runner: ^2.16.1
   drift_dev: ^2.35.0
   sqlite3: ^3.6.0
+  # tools/static_check.dart（宿主管道故障时的同进程静态检查）用
+  analyzer: any
 
 flutter:
   uses-material-design: true

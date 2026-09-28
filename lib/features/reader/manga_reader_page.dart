@@ -84,15 +84,30 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
     _trackingReporter = ref.read(progressReporterProvider);
     _scrollController.addListener(_onScroll);
     unawaited(_setImmersive(immersive: true));
-    // 屏幕常亮（阅读期间），退出时关闭。
-    _keepScreenOn = NovelReaderSettings.load(ref.read(preferencesProvider))
-        .keepScreenOn;
-    _volumeKeyTurn = NovelReaderSettings.load(ref.read(preferencesProvider))
-        .volumeKeyTurn;
+    // 屏幕常亮与屏幕方向（B4），退出时恢复。
+    final readerPrefs = NovelReaderSettings.load(ref.read(preferencesProvider));
+    _keepScreenOn = readerPrefs.keepScreenOn;
+    _volumeKeyTurn = readerPrefs.volumeKeyTurn;
     if (_keepScreenOn) {
       unawaited(platformChannel.setKeepScreenOn(true));
     }
+    unawaited(_applyOrientation(readerPrefs.orientation));
     unawaited(_load());
+  }
+
+  /// 应用屏幕方向（B4）；空列表 = 跟随系统。
+  Future<void> _applyOrientation(ReaderOrientation orientation) async {
+    await SystemChrome.setPreferredOrientations(switch (orientation) {
+      ReaderOrientation.system => <DeviceOrientation>[],
+      ReaderOrientation.portrait => <DeviceOrientation>[
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ],
+      ReaderOrientation.landscape => <DeviceOrientation>[
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ],
+    });
   }
 
   @override
@@ -106,6 +121,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage> {
     if (_keepScreenOn) {
       unawaited(platformChannel.setKeepScreenOn(false));
     }
+    unawaited(SystemChrome.setPreferredOrientations(<DeviceOrientation>[]));
     super.dispose();
   }
 
