@@ -528,6 +528,18 @@ T3 当初只做了单测 + 夹具端点，**从没在设备上跑过完整发送
 `bangumiAuthAPIMirrorDomain = https://api.bgmapi.com`（鉴权）、
 `bangumiAPINextDomain = https://next.bgm.tv`。
 
+**Kazumi 的那对镜像凭据在仓库里也是空的**（2026-09-29 核实）——
+`lib/utils/bangumi_mirror_credentials.dart` 只是
+`String.fromEnvironment('KAZUMI_APPID')` / `('KAZUMI_KEY')`，
+值由它自己的 CI 用 `--dart-define` 注入（与我们的
+`TRIOMI_DANDANPLAY_APP_ID/SECRET` 做法完全一样）。
+它给这个签名加在**镜像的受保护端点**上：`POST /v0/search/subjects` 与
+`/p1/{subjects,episodes,characters}/{id}/comments`（其 `bangumi_client.dart`
+的 `_shouldSignProtectedMirrorRequest`）。**本项目用不到这对值**：实测
+`api.bgmapi.com` 的 `/v0/subjects/{id}`、`/v0/episodes`、`POST /v0/search/subjects`
+**匿名就能 200**，`/v0/me` 无 token 401、伪造 token 也 401（就是把 Authorization
+透传给上游后的判定），所以带用户 token 的回退是有效的。
+
 本项目的处理（只覆盖**公开数据**）：
 
 | 接口 | 处理 |
@@ -571,6 +583,10 @@ AniList（`graphql.anilist.co`）本机可直连（伪造 token 返回 401），
 弹弹play 的开放接口**无凭据直接 403**（实测：不带 `X-AppId` 403，伪造 appId
 也 403），所以「不登录就能拿弹幕」不是接口开放，而是**客户端内置了自己注册的
 AppId/AppSecret**——Kazumi 的 `lib/utils/dandan_credentials.dart` 就是干这个的。
+但注意（2026-09-29 核实）：**那个文件里只有
+`String.fromEnvironment('DANDANAPI_APPID' / 'DANDANAPI_KEY')` 占位**，
+真值在它自己的发布/CI 构建里用 `--dart-define` 注入，**仓库里拿不到**；
+就算去扒它的 APK 也是别人的生产凭据（会随时被停用，也不该搬）。
 本项目原先刻意不内置他人凭据（见 `dandanplay_client.dart` 的注释），所以要求
 用户自己填。
 
