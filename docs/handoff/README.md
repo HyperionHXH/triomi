@@ -605,6 +605,26 @@ flutter build apk --dart-define=TRIOMI_DANDANPLAY_APP_ID=xxx \
 （另注：规则自带弹幕源时**本来就不需要任何凭据**——播放器直接 GET 规则里
 声明的 `danmaku` 地址，见 `player_page.dart` 的 `_loadDanmaku`。）
 
+### 凭据怎么拿（三条线，2026-09-29 核实）
+
+| 用途 | 需要什么 | 获取方式 | 审核 |
+|---|---|---|---|
+| Bangumi 追踪 | 个人 access token | <https://next.bgm.tv/demo/access-token> 登录 → 「创建个人令牌」→ 填名称与有效期 → 复制 | **不需要**（不用建应用） |
+| AniList 追踪 | 个人 access token | anilist.co → Settings → Developer → Create New Token | **不需要**（不用建应用） |
+| 弹弹play 弹幕匹配 / 发送 | AppId + AppSecret（**应用级**） | dev.dandanplay.com 注册开发者账号 → 完善资料 + 邮件验证 → 创建应用 → **提交审核** | **要审核**（官方流程；公开/私有项目都可申请） |
+
+- **追踪 token 是账号级授权**（以你的身份写收藏），任何第三方 App 都不可能内置别人的，
+  只能用户自己生成——所以「从 Kazumi 抄一份」不存在（它的凭据文件也是
+  `String.fromEnvironment` 占位，见上一节）。
+- 弹弹play 是**应用级**凭据，可以内置（Kazumi 就是这么做的），但要自己注册 + 过审。
+  **过审前的退路**：规则自带弹幕源（`content.danmaku`）**不需要任何凭据**，弹幕照常渲染
+  （已设备验证）；受影响的只有「按番剧名去弹弹play 匹配弹幕」和「发弹幕到弹弹play」。
+- 弹弹play 开发者协议要求展示其数据时**标注完整来源**（「弹弹play」/「弹弹play开放弹幕网络」，
+  不得只写「弹弹」或「dandan」），未书面授权不得商用。设置页文案写的是「弹弹play」，
+  符合标注要求；将来在播放器里显示弹幕来源时也要带上。
+- `bgm.tv` / `next.bgm.tv` / `api.bgm.tv` 在本机网络下都被 DNS 污染，**生成 Bangumi 令牌
+  要用手机或代理**；生成后 App 侧有镜像回退，同一台机器上也能同步。
+
 ### 收尾：把实测结论写回注释与文案（commit `da12277`）
 
 三处**只动注释/文案，不动行为**：

@@ -151,10 +151,14 @@ class _TrackingPageState extends ConsumerState<TrackingPage> {
           const SizedBox(height: AppSpacing.xs),
           Text(
             kind == TrackingServiceKind.bangumi
-                ? '到 bgm.tv 的「开放接口」页生成 Access Token（需要 write:collection 权限）。'
+                // 官方给的是「个人令牌」页：不需要建应用、也没有审核流程，
+                // 登录后点「创建个人令牌」填名称与有效期就能复制。
+                ? '到 next.bgm.tv/demo/access-token 生成个人令牌：登录后点「创建个人令牌」，'
+                      '填名称与有效期即可复制（不用创建应用，也没有审核）。'
                       '官方 api.bgm.tv 连不上时会自动改走镜像 api.bgmapi.com，'
                       '此时 token 也会发给该镜像（仅作确认用，不写日志）。'
-                : '到 anilist.co 设置里创建 Token（授权时勾选编辑列表）。',
+                : '到 anilist.co → Settings → Developer → Create New Token 生成个人令牌'
+                      '（不用创建应用，也没有审核）。',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: AppSpacing.sm),
