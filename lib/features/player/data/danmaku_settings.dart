@@ -226,8 +226,22 @@ class DandanplayCredentialsController extends Notifier<DandanplayCredentials> {
     ref.watch(secureStoreProvider),
   );
 
+  /// 保存凭据。**落盘的是用户填的原值，state 里放的是「生效值」**。
+  ///
+  /// 两者必须分开：用户把 AppId/AppSecret 清空时，落盘要留空（保持「用户没填」的语义），
+  /// 但 state 必须退回内置凭据——否则弹幕设置页会显示「未配置」、`dandanplayClientProvider`
+  /// 也真的拿不到内置值，**要重启 App 才恢复**（设备实测踩到的）。规则与
+  /// [DandanplayCredentials.load] 保持一致。
   Future<void> update(DandanplayCredentials next) async {
-    state = next;
+    state = DandanplayCredentials(
+      appId: next.appId.isNotEmpty
+          ? next.appId
+          : DandanplayCredentials.builtInAppId,
+      appSecret: next.appSecret.isNotEmpty
+          ? next.appSecret
+          : DandanplayCredentials.builtInAppSecret,
+      token: next.token,
+    );
     await next.save(
       ref.read(preferencesProvider),
       ref.read(secureStoreProvider),
