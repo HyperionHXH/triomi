@@ -646,6 +646,26 @@ flutter build apk --dart-define=TRIOMI_DANDANPLAY_APP_ID=xxx \
 - `bgm.tv` / `next.bgm.tv` / `api.bgm.tv` 在本机网络下都被 DNS 污染，**生成 Bangumi 令牌
   要用手机或代理**；生成后 App 侧有镜像回退，同一台机器上也能同步。
 
+### 真实凭据联调结果（2026-09-29）
+
+用户给了三样东西。凭据只在构建时用 `--dart-define=TRIOMI_DANDANPLAY_APP_ID/SECRET`
+注入（**不进仓库**，仓库是公开的），在 emulator-5554 的真实站点包上跑：
+
+| 目标 | 设备上的结果 | 判定 |
+|---|---|---|
+| Bangumi 个人令牌 | `连接正常：Miuna（官方 api.bgm.tv 不可达，本次请求走了镜像 api.bgmapi.com）` | ✅ 可用（含镜像回退） |
+| 弹弹play AppId/Secret | 播放器「搜索弹幕」→ `HTTP 403：Invalid AppId` | ❌ 服务端不认这个 AppId；最可能是应用**还在审核中**（官方流程：审核通过后凭据才生效），也可能是 AppId 没复制全 |
+| AniList 那一对值 | 追踪账号「保存并测试连接」→ `HTTP 400：Invalid token` | ❌ 那串 40 位不是访问令牌（应该是 **Client Secret**）；需要 pin 流程页面上给出的长 JWT |
+
+**顺带修掉两个真问题**（都是这次真实联调才暴露的）：
+
+1. `DandanplayCredentialsController.update` 在用户清空 AppId/AppSecret 后把**内存 state
+   也清空**了 → 内置凭据失效、设置页显示「未配置」，要重启 App 才恢复（commit `52e8569`）。
+   注入本身是好的：清空后播放器照样用内置凭据打到了线上接口（所以才看到 403）。
+2. 网络层对非 2xx 只报状态码，把服务端的解释丢了（commit `bbb9f75`）：现在会带上响应体
+   片段（压平 + 截断 160 字），体为空时退回 `X-Error-Message` / `WWW-Authenticate` 之类的
+   诊断头——上面表格里那两条结论就是靠它才看出来的。
+
 ### 收尾：把实测结论写回注释与文案（commit `da12277`）
 
 三处**只动注释/文案，不动行为**：
