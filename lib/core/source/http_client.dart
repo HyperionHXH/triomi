@@ -170,7 +170,7 @@ class DioSourceHttpClient implements SourceHttpClient {
         throw SourceException(
           sourceId: sourceId,
           type: _classifyStatus(result.statusCode),
-          message: 'HTTP ${result.statusCode}',
+          message: 'HTTP ${result.statusCode}${_bodyHint(result)}',
         );
       }
       return result;
@@ -179,6 +179,29 @@ class DioSourceHttpClient implements SourceHttpClient {
     } catch (error) {
       throw SourceException.wrap(error, sourceId: sourceId, url: request.url);
     }
+  }
+
+  /// 非 2xx 时把「为什么失败」带进错误信息。
+  ///
+  /// 优先用响应体（AniList 的 `{"errors":[{"message":"Invalid token"}]}`），体为空时退回
+  /// 常见的诊断头——弹弹play 的 403 就是空体 + `X-Error-Message: Missing Authentication
+  /// Headers`。只报状态码会让人无从下手（设备上排查 403/400 时就被这个盲区卡过）。
+  /// 压平空白并截断，避免把整页 HTML 塞进界面。
+  static String _bodyHint(SourceResponse response) {
+    final flat = response.body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (flat.isNotEmpty) {
+      final snippet = flat.length > 160 ? '${flat.substring(0, 160)}…' : flat;
+      return '：$snippet';
+    }
+    for (final key in const <String>[
+      'x-error-message',
+      'www-authenticate',
+      'x-error',
+    ]) {
+      final value = response.headers[key]?.trim() ?? '';
+      if (value.isNotEmpty) return '：$value';
+    }
+    return '';
   }
 
   @override
