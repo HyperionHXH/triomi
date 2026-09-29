@@ -654,8 +654,12 @@ flutter build apk --dart-define=TRIOMI_DANDANPLAY_APP_ID=xxx \
 | 目标 | 设备上的结果 | 判定 |
 |---|---|---|
 | Bangumi 个人令牌 | `连接正常：Miuna（官方 api.bgm.tv 不可达，本次请求走了镜像 api.bgmapi.com）` | ✅ 可用（含镜像回退） |
-| 弹弹play AppId/Secret | 播放器「搜索弹幕」→ `HTTP 403：Invalid AppId` | ❌ 服务端不认这个 AppId；最可能是应用**还在审核中**（官方流程：审核通过后凭据才生效），也可能是 AppId 没复制全 |
-| AniList 那一对值 | 追踪账号「保存并测试连接」→ `HTTP 400：Invalid token` | ❌ 那串 40 位不是访问令牌（应该是 **Client Secret**）；需要 pin 流程页面上给出的长 JWT |
+| AniList 个人令牌（JWT） | `连接正常：HyperionHXH` | ✅ 可用（`Viewer` 只读查询走真实 `graphql.anilist.co`） |
+| 弹弹play AppId/Secret | 播放器「搜索弹幕」→ `HTTP 403：Invalid AppId` | ⏸ 应用**还在审核**（官方流程：审核通过后凭据才生效），过了再跑 |
+
+（中途用户先给了一对 AniList 的值，其中 40 位那串是 **Client Secret** 不是令牌，服务端直接
+回 `HTTP 400：Invalid token`；按 pin 流程换到真正的 JWT 后立刻通过。凭据一律只在设备上
+输入/保存——安全策略禁止把明文凭据写进脚本或命令行，所以那一步是**用户在模拟器里自己粘**的。）
 
 **顺带修掉两个真问题**（都是这次真实联调才暴露的）：
 
