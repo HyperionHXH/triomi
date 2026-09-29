@@ -231,7 +231,7 @@ class Downloads extends Table {
   DateTimeColumn get finishedAt => dateTime().nullable()();
 }
 
-/// 追踪服务绑定（Bangumi / AniList / MyAnimeList）。
+/// 追踪服务绑定（Bangumi / AniList）。
 @DataClassName('TrackBindRow')
 class TrackBinds extends Table {
   TextColumn get sourceId => text()();

@@ -646,6 +646,30 @@ flutter build apk --dart-define=TRIOMI_DANDANPLAY_APP_ID=xxx \
 - `bgm.tv` / `next.bgm.tv` / `api.bgm.tv` 在本机网络下都被 DNS 污染，**生成 Bangumi 令牌
   要用手机或代理**；生成后 App 侧有镜像回退，同一台机器上也能同步。
 
+### 真实写入 + UI 巡检（2026-09-29 深夜）
+
+**真实写入已验证**（用户授权「随便挑一个」）：
+
+- 播《夹具番剧 51》第 1 话（该作品已绑到真实 Bangumi 条目 **51 = CLANNAD**）→ 播放 40 秒 →
+  回到「追踪账号」页看到 `51 · Bangumi · 远端条目 51 · 最近同步 2026-09-29 16:33`
+  （播放前是 16:16）。`markSynced` 只在推送**成功**后调用，所以这证明线上真的收到了
+  「在看 + 第 1 集」。
+- 也就是说：**镜像带 token 的写入是通的**（读 `-` 不走、写要 `-` 的坑见上一节）。
+
+**顺手修掉的 UI 文案错**：「我的 → 追踪账号」副标题原本写 `Bangumi / AniList / MyAnimeList`，
+但 MyAnimeList 从没实现（`TrackingServiceKind` 只有两个）——已改成 `Bangumi / AniList`
+（`profile_page.dart` + `tables.dart` 的注释）。
+
+**在设备上还有观察到的两条限制**（不是回归，先记下来）：
+
+1. **镜像上的搜索不可靠**：`POST api.bgmapi.com/v0/search/subjects` 同一关键词有两种表现——
+   带 `Authorization` 回空列表（去掉 token 的同一请求有数据）、或者直接 **连接超时**
+   （20 秒无响应，而同一 host 的 `/v0/me`、写收藏都正常）。Kazumi 恰好**只给这个端点加
+   镜像签名**，说明镜像对它另有保护。客户端已加「空结果 + 带 token + 有备用地址时去掉
+   token 重试一次」（有单测），但**超时这条在设备上还没复验通过**（本轮网络就是超时）。
+   → 影响：在这台机器/网络上，「搜条目并绑定到 Bangumi」可能搜不出结果；**已绑定作品的进度上报不受影响**。
+2. 想手动绑定就得让搜索能用：要么等网络/镜像恢复，要么走真实官方接口（本机不可达）。
+
 ### 真实凭据联调结果（2026-09-29）
 
 用户给了三样东西。凭据只在构建时用 `--dart-define=TRIOMI_DANDANPLAY_APP_ID/SECRET`

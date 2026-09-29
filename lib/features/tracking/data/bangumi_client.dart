@@ -134,39 +134,61 @@ class BangumiClient {
   ///
   /// 官方对搜索是「可选鉴权」，但**有 token 就带上**：认证请求的限流更宽，
   /// 也避免部署方收紧匿名访问时直接 401。
+  ///
+  /// 例外（2026-09-29 设备实测）：**镜像 `api.bgmapi.com` 上的搜索不可靠**。同一关键词
+  /// 出现两种表现：① 带 `Authorization` 时回一个空列表（去掉 token 的同一请求有数据，
+  /// `Naruto`/`Chobits` 都复现过）；② 直接连接超时（`POST /v0/search/subjects` 20 秒无响应，
+  /// 而同一 host 的 `/v0/me`、写收藏都正常）。Kazumi 恰好**只给这个端点加镜像签名**
+  /// （`_shouldSignProtectedMirrorRequest`），说明镜像确实对这个接口有额外限制。
+  /// 所以：配了备用地址、又带了 token 却搜不到结果时，**去掉 token 再试一次**（搜索本来就
+  /// 不需要鉴权）。超时这种网络层问题重试也救不了，先把 `[[connection timeout]]` 如实透出。
   Future<List<TrackCandidate>> search(
     String keyword, {
     int limit = 10,
     String? token,
   }) async {
     if (keyword.trim().isEmpty) return const <TrackCandidate>[];
-    final data = await _json(
-      '/v0/search/subjects?limit=$limit&offset=0',
-      method: 'POST',
-      token: token,
-      body: <String, Object?>{
-        'keyword': keyword.trim(),
-        'sort': 'match',
-        // 2 = 动画；追踪以追番为主，搜索也限定动画避免拿到同名书籍。
-        'filter': <String, Object?>{
-          'type': <int>[2],
-        },
-      },
-    );
-    return <TrackCandidate>[
-      for (final node in _asList(_asMap(data)['data']))
-        if (_asMapOrNull(node) case final map?)
-          TrackCandidate(
-            remoteTrackId: '${_int(map['id']) ?? 0}',
-            title: _string(map['name_cn']).isEmpty
-                ? _string(map['name'])
-                : _string(map['name_cn']),
-            originalTitle: _string(map['name']),
-            coverUrl: _string(_asMapOrNull(map['images'])?['common']),
-            totalEpisodes: _int(map['eps']),
-          ),
-    ]..removeWhere((candidate) => candidate.remoteTrackId == '0');
+    final hasToken = token != null && token.isNotEmpty;
+    Object? data = await _searchRequest(keyword, limit: limit, token: token);
+    var candidates = _toCandidates(data);
+    if (candidates.isEmpty && hasToken && fallbackBaseUrl != null) {
+      data = await _searchRequest(keyword, limit: limit, token: null);
+      candidates = _toCandidates(data);
+    }
+    return candidates;
   }
+
+  Future<Object?> _searchRequest(
+    String keyword, {
+    required int limit,
+    required String? token,
+  }) => _json(
+    '/v0/search/subjects?limit=$limit&offset=0',
+    method: 'POST',
+    token: token,
+    body: <String, Object?>{
+      'keyword': keyword.trim(),
+      'sort': 'match',
+      // 2 = 动画；追踪以追番为主，搜索也限定动画避免拿到同名书籍。
+      'filter': <String, Object?>{
+        'type': <int>[2],
+      },
+    },
+  );
+
+  static List<TrackCandidate> _toCandidates(Object? data) => <TrackCandidate>[
+    for (final node in _asList(_asMap(data)['data']))
+      if (_asMapOrNull(node) case final map?)
+        TrackCandidate(
+          remoteTrackId: '${_int(map['id']) ?? 0}',
+          title: _string(map['name_cn']).isEmpty
+              ? _string(map['name'])
+              : _string(map['name_cn']),
+          originalTitle: _string(map['name']),
+          coverUrl: _string(_asMapOrNull(map['images'])?['common']),
+          totalEpisodes: _int(map['eps']),
+        ),
+  ]..removeWhere((candidate) => candidate.remoteTrackId == '0');
 
   /// 读条目收藏；未收藏返回 null（404）。
   ///

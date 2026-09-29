@@ -93,7 +93,7 @@ class ProfilePage extends StatelessWidget {
                   ListTile(
                     leading: const Icon(Icons.sync_outlined),
                     title: const Text('追踪账号'),
-                    subtitle: const Text('Bangumi / AniList / MyAnimeList'),
+                    subtitle: const Text('Bangumi / AniList'),
                     trailing: const Icon(Icons.chevron_right, size: 20),
                     onTap: () => context.push(AppRoutes.tracking),
                   ),

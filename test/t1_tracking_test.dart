@@ -263,6 +263,50 @@ void main() {
       expect(watched, 2);
     });
 
+    test('带 token 走镜像搜索为空时，去掉 token 再试一次（镜像实测会这样）', () async {
+      final http = FakeHttpClient((request) async {
+        final hasToken = (request.headers['Authorization'] ?? '').isNotEmpty;
+        return SourceResponse(
+          statusCode: 200,
+          url: request.url,
+          body: jsonEncode(<String, Object?>{
+            // 带 token → 空；不带 → 有数据。复刻镜像的真实表现。
+            'data': hasToken
+                ? <Object?>[]
+                : <Object?>[
+                    <String, Object?>{
+                      'id': 2782,
+                      'name': 'NARUTO -ナルト-',
+                      'name_cn': '火影忍者',
+                      'eps': 220,
+                    },
+                  ],
+          }),
+        );
+      });
+      final bangumi = BangumiClient(
+        http: http,
+        fallbackBaseUrl: BangumiClient.mirrorBaseUrl,
+      );
+
+      final candidates = await bangumi.search('Naruto', token: 't');
+
+      expect(candidates.single.remoteTrackId, '2782');
+      expect(candidates.single.title, '火影忍者');
+      expect(http.requests.length, 2);
+      expect(http.requests.first.headers['Authorization'], 'Bearer t');
+      expect(http.requests.last.headers.containsKey('Authorization'), isFalse);
+    });
+
+    test('没有备用地址时不做「去掉 token 重试」（真实站点带 token 是正常的）', () async {
+      final http = client();
+      final results = await BangumiClient(http: http)
+          .search('Naruto', token: 't');
+      expect(results, isEmpty);
+      expect(http.requests.length, 1);
+      expect(http.lastRequest.headers['Authorization'], 'Bearer t');
+    });
+
     test('读收藏用数字 uid，写收藏仍然用 `-`（镜像是反着的，别写成一顺）', () async {
       final http = FakeHttpClient((request) async {
         if (request.url.contains('/v0/me')) {
