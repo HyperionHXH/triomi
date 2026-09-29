@@ -417,12 +417,12 @@ Komikku 的观感 = **GNOME libadwaita**：大留白、圆角卡片、无边框�
 
 > 每个任务完成后再开下一个。所有代码提交到 git，每个任务一个 commit。
 
-- [ ] **T1（M0）**：`flutter create triomi`，配置 `analysis_options.yaml`（严格 lint），接入 go_router + Riverpod + drift + hive_ce；实现第 6 章 Design Token 的 `AppTheme`；搭建自适应四栏壳（含空页面占位）。
-- [ ] **T2（M1）**：定义 `MediaItem/Chapter/TrackEntry` 模型与 drift 表（按第 5 章）；实现 `SourceEngine`：flutter_js 沙箱、受限 API 注入（fetch/xpath/parseHtml）、XPath 简式规则转 JS 实现；写 2 个内置示例规则（1 漫画 + 1 番剧，用真实可用站点）；规则管理页（列表/开关/删除/剪贴板导入）。
-- [ ] **T3（M1）**：发现页 + 全局搜索 + 详情页（不含阅读器），数据全部走 SourceEngine；封面 Hero 动画 + 骨架屏。
-- [ ] **T4（M2）**：漫画阅读器（四模式、预加载、进度记录）；书架页（加入/移除/分类/角标）；历史页。
-- [ ] **T5（M3）**：播放器页（media_kit、手势、倍速、多线路）；canvas_danmaku 弹幕接入弹弹play；追番时间表页（Bangumi API）。
-- [ ] **T6（M4）**：小说模块全量移植，**验收标准 = 2.4 清单 A~G 逐项打勾**。拆解：
+- [x] **T1（M0）**：`flutter create triomi`，配置 `analysis_options.yaml`（严格 lint），接入 go_router + Riverpod + drift + hive_ce；实现第 6 章 Design Token 的 `AppTheme`；搭建自适应四栏壳（含空页面占位）。
+- [x] **T2（M1）**：定义 `MediaItem/Chapter/TrackEntry` 模型与 drift 表（按第 5 章）；实现 `SourceEngine`：flutter_js 沙箱、受限 API 注入（fetch/xpath/parseHtml）、XPath 简式规则转 JS 实现；写 2 个内置示例规则（1 漫画 + 1 番剧，用真实可用站点）；规则管理页（列表/开关/删除/剪贴板导入）。
+- [x] **T3（M1）**：发现页 + 全局搜索 + 详情页（不含阅读器），数据全部走 SourceEngine；封面 Hero 动画 + 骨架屏。
+- [x] **T4（M2）**：漫画阅读器（四模式、预加载、进度记录）；书架页（加入/移除/分类/角标）；历史页。
+- [x] **T5（M3）**：播放器页（media_kit、手势、倍速、多线路）；canvas_danmaku 弹幕接入弹弹play；追番时间表页（Bangumi API）。
+- [x] **T6（M4）**：小说模块全量移植，**验收标准 = 2.4 清单 A~G 逐项打勾**。拆解：
   - ① **LK/LNS 内置适配器**（Dart 重写，参照 Mixn `source/lightnovelkingdom/`、`source/lightnovelshelf/`）：LK 走 HTTP 接口；LNS 用 `signalr_netcore` 对接 SignalR + 服务端专用字体缓存加载（B7）；实现能力接口全家桶——`AccountProvider`（独立登录态、会话恢复、`flutter_secure_storage` 存凭据）、`RemoteShelfProvider`、`ProgressSyncProvider`、`UnlockProvider`（LK 付费章节）、`CommentProvider`（LK）、`RewardProvider`（两源签到）、LNS 收藏同步（清单 C1~C3）；
   - ② **小说阅读器**：TextPainter 分页 + 滚动双模式，B3~B6 逐项过；正文插图处理（B5）；
   - ③ **下载与导出**：D1~D5（EPUB 3/TXT 参照 Mixn `core/epub/`、`core/txt/`）；
@@ -430,8 +430,12 @@ Komikku 的观感 = **GNOME libadwaita**：大留白、圆角卡片、无边框�
   - ⑤ **隐私红线**：F1~F3 作为代码审查检查项；
   - ⑥ LK 站点功能页（资料/轻币/签到/关注粉丝/发布管理/消息中心，C2）可作为 T6 收尾或独立子任务，工作量大则排入 M5。
   Mixn 为 MIT 且属用户自有代码，可直接移植改写；注意是**参照重写为新 App 的 Flutter 代码**，不是在 Mixn 仓库上改。
-- [ ] **T7（M5）**：下载管理器（漫画/小说）；Bangumi + AniList OAuth 绑定与进度上报；WebDAV 同步服务；本地备份导入导出。
-- [ ] **T8**：README（含免责声明、规则编写指南链接）、GPL-3.0 LICENSE、CI（GitHub Actions 构建 Android APK + Windows zip）。
+- [x] **T7（M5）**：下载管理器（漫画/小说）；Bangumi + AniList OAuth 绑定与进度上报；WebDAV 同步服务；本地备份导入导出。
+- [x] **T8**：README（含免责声明、规则编写指南链接）、GPL-3.0 LICENSE、CI（GitHub Actions 构建 Android APK + Windows zip）。✅ 2026-09-29 完成：免责声明/CI 说明在 README，许可证是 GitHub Licenses API 拉的标准 GPL-3.0 全文，CI 见 `.github/workflows/build.yml`（analyze+test / Android APK / Windows zip）。
+
+> **状态**：T1~T8 全部完成。逐项的设备/真实账号验证、未做项与偏差清单记在
+> [`docs/handoff/README.md`](handoff/README.md)（例如：视频画面合成仍需真机；
+> 弹弹play 应用凭据待用户申请）。
 
 **给实现模型的硬约束**：
 1. 任何页面先过第 6 章 UI 规范，禁止裸用默认 Material 样式交差。
