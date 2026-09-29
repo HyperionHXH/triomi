@@ -19,7 +19,7 @@ Future<void> main(List<String> args) async {
     for (final path in analyzedFiles) {
       if (!path.endsWith('.dart')) continue;
       final result = await context.currentSession.getResolvedUnit(path);
-      if (result case AnalysisResultWithDiagnostics diagnostics) {
+      if (result case final AnalysisResultWithDiagnostics diagnostics) {
         final relative = path
             .substring(root.length + 1)
             .replaceAll('\\', '/');
