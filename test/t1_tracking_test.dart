@@ -263,6 +263,78 @@ void main() {
       expect(watched, 2);
     });
 
+    test('读收藏用数字 uid，写收藏仍然用 `-`（镜像是反着的，别写成一顺）', () async {
+      final http = FakeHttpClient((request) async {
+        if (request.url.contains('/v0/me')) {
+          return SourceResponse(
+            statusCode: 200,
+            url: request.url,
+            body: jsonEncode(<String, Object?>{
+              'id': 1003804,
+              'username': '1003804',
+            }),
+          );
+        }
+        return SourceResponse(
+          statusCode: 200,
+          url: request.url,
+          body: jsonEncode(<String, Object?>{
+            'subject_id': 12,
+            'type': 3,
+            'ep_status': 2,
+          }),
+        );
+      });
+      final bangumi = BangumiClient(http: http);
+
+      final collection = await bangumi.collection(12, token: 't');
+      expect(collection?.type, 3);
+      // 第一次请求是解析 uid；读收藏走数字路径（镜像不认 `-`）。
+      expect(http.requests.first.url, contains('/v0/me'));
+      expect(
+        http.requests.last.url,
+        contains('/v0/users/1003804/collections/12'),
+      );
+
+      await bangumi.upsertCollection(12, token: 't', status: 'doing');
+      expect(http.lastRequest.url, contains('/v0/users/-/collections/12'));
+    });
+
+    test('解析不到 uid 时读收藏退回 `-`，不因为解析失败而报错', () async {
+      final http = client(
+        // 500 会让「解析 uid」这一步抛错，但读收藏本身要照常进行。
+        statuses: <String, int>{'/v0/me': 500},
+        routes: <String, String>{
+          '/collections/12': jsonEncode(<String, Object?>{
+            'subject_id': 12,
+            'type': 3,
+            'ep_status': 0,
+          }),
+        },
+      );
+      final collection = await BangumiClient(http: http)
+          .collection(12, token: 't');
+      expect(collection?.type, 3);
+      expect(http.requests.last.url, contains('/v0/users/-/collections/12'));
+    });
+
+    test('逐集收藏固定用 `-`（镜像这条路径只认 `-`）', () async {
+      final http = client(
+        routes: <String, String>{
+          '/episodes?limit': jsonEncode(<String, Object?>{
+            'data': <Object?>[
+              <String, Object?>{'type': 2},
+            ],
+          }),
+        },
+      );
+      await BangumiClient(http: http).watchedEpisodeCount(12, token: 't');
+      expect(
+        http.lastRequest.url,
+        contains('/v0/users/-/collections/12/episodes'),
+      );
+    });
+
     test('官方连不上：带 token 的请求回退镜像，且 token 原样带上', () async {
       final http = FakeHttpClient((request) async {
         if (request.url.startsWith('https://api.bgm.tv')) {
@@ -747,6 +819,41 @@ void main() {
         http.requests.any((request) => request.method == 'PATCH'),
         isFalse,
         reason: '书籍不走逐集收藏',
+      );
+    });
+
+    test('测试连接返回给人看的名字：Bangumi 用昵称而不是数字 uid', () async {
+      // Bangumi 的 username 是数字 uid，昵称才是用户认识的那个名字。
+      final http = FakeHttpClient((request) async {
+        if (request.url.startsWith('https://bgm.test')) {
+          return SourceResponse(
+            statusCode: 200,
+            url: request.url,
+            body: jsonEncode(<String, Object?>{
+              'id': 1003804,
+              'username': '1003804',
+              'nickname': 'Miuna',
+            }),
+          );
+        }
+        return SourceResponse(
+          statusCode: 200,
+          url: request.url,
+          body: jsonEncode(<String, Object?>{
+            'data': <String, Object?>{
+              'Viewer': <String, Object?>{'id': 1, 'name': 'fixture-anilist'},
+            },
+          }),
+        );
+      });
+      final service = serviceOf(http);
+      await service.setToken(TrackingServiceKind.bangumi, 't');
+      await service.setToken(TrackingServiceKind.anilist, 't');
+
+      expect(await service.verify(TrackingServiceKind.bangumi), 'Miuna');
+      expect(
+        await service.verify(TrackingServiceKind.anilist),
+        'fixture-anilist',
       );
     });
 

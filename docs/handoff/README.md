@@ -578,6 +578,27 @@ timeout）→ 自动切镜像并渲染出真实放送表（今日条目：评分
 本次请求走了镜像 api.bgmapi.com）」——401 来自镜像，回退链路真实跑通。
 AniList（`graphql.anilist.co`）本机可直连（伪造 token 返回 401），**不需要镜像**。
 
+**镜像的用户路径有个坑（2026-09-29 用真 token 实测）**：`api.bgmapi.com` 对
+`/v0/users/-/...` 的解析和官方**是反着的**：
+
+| 路径 | 官方 | 镜像 |
+|---|---|---|
+| `GET /v0/users/-/collections/{id}`（读单个收藏） | 200 | **404**「user doesn't exist or has been removed」；换成数字 uid 才 200 |
+| `POST /v0/users/-/collections/{id}`（写收藏） | 202 | 202；换成数字路径 **404** |
+| `GET /v0/users/-/collections/{id}/episodes`（逐集） | 200 | 200；数字路径 400 |
+
+所以客户端按接口分开用：**读单个收藏走数字 uid**（先 `/v0/me` 解析并缓存，拿不到就退回
+`-`），**写收藏与逐集接口固定 `-`**（见 `BangumiClient._readUserSegment` 的注释与
+`collection()` / `watchedEpisodeCount()` 的文档）。不修的话，镜像上「只增不减」的守卫
+会把这个 404 当成「未收藏」，把本地较小的进度写回远端——正好踩了那条红线。
+
+**真 token 设备验证**（emulator-5554，**真实站点包**，用用户自己的 Bangumi 个人令牌）：
+设置页填 token → 「保存并测试连接」→ 约 20 秒（官方 connect timeout）后显示
+**「连接正常：Miuna（官方 api.bgm.tv 不可达，本次请求走了镜像 api.bgmapi.com）」**
+（顺手把「测试连接」的显示名改成昵称——Bangumi 的 `username` 就是数字 uid，
+显示 `1003804` 对用户没意义）。镜像的写入能力也顺带确认：同一 subject 用**原值** POST
+回 202（与官方一致），回读 `type/ep/rate` 未变（只 bump 了 `updated_at`）。
+
 ### 弹幕：Kazumi 为什么「不用登录」
 
 弹弹play 的开放接口**无凭据直接 403**（实测：不带 `X-AppId` 403，伪造 appId

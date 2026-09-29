@@ -79,6 +79,9 @@ class TrackingService {
   }
 
   /// 校验 token 是否可用（追踪账号页「测试连接」）。
+  ///
+  /// 返回**给人看的名字**：Bangumi 的 `username` 就是数字 uid（`1003804` 这种），
+  /// 拿昵称更有用；AniList 的 `name` 本来就是用户名。
   Future<String> verify(TrackingServiceKind kind) async {
     final token = tokenOf(kind);
     if (token == null) {
@@ -88,10 +91,11 @@ class TrackingService {
         message: '还没有填写 ${kind.label} 的 access token',
       );
     }
-    return switch (kind) {
-      TrackingServiceKind.bangumi => (await _bangumi.me(token)).username,
-      TrackingServiceKind.anilist => (await _anilist.viewer(token)).name,
-    };
+    if (kind == TrackingServiceKind.bangumi) {
+      final me = await _bangumi.me(token);
+      return me.nickname.isNotEmpty ? me.nickname : me.username;
+    }
+    return (await _anilist.viewer(token)).name;
   }
 
   // ---------------------------------------------------------------- 搜索与绑定

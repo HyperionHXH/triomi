@@ -93,12 +93,38 @@ class BangumiClient {
   /// 是否走了镜像（主地址之外的备用地址）。
   bool get usedFallback => _usedBaseUrl != null && _usedBaseUrl != baseUrl;
 
+  /// 自己的数字 uid（`/v0/me` 里带回来的）。读单个收藏要用它，见 [collection]。
+  String? _userId;
+
+  /// `/v0/me` 查过了（成功或失败），别为一个请求反复重试。
+  bool _userIdLookupDone = false;
+
+  /// 读接口要用的用户段：优先数字 uid，解析不出来就退回官方支持的 `-`。
+  ///
+  /// 只在**读单个收藏**时用；写接口与逐集接口固定 `-`（实测镜像反过来）。
+  Future<String> _readUserSegment(String token) async {
+    final cached = _userId;
+    if (cached != null) return cached;
+    if (_userIdLookupDone) return '-';
+    _userIdLookupDone = true;
+    try {
+      await me(token); // 成功时会把 uid 记在 [_userId]
+      return _userId ?? '-';
+    } catch (_) {
+      // 拿不到 uid（网络/鉴权问题）不额外抛错：让真正的请求去报错更准确。
+      return '-';
+    }
+  }
+
   /// 当前 token 对应的用户（`GET /v0/me`）。
   Future<({int id, String username, String nickname})> me(String token) async {
     final data = await _json('/v0/me', token: token, allowMissing: false);
     final map = _asMap(data);
+    final id = _int(map['id']) ?? 0;
+    // 顺手记住自己的 uid：读收藏要用数字路径，见 [_readUserSegment]。
+    if (id > 0) _userId = '$id';
     return (
-      id: _int(map['id']) ?? 0,
+      id: id,
       username: _string(map['username']),
       nickname: _string(map['nickname']),
     );
@@ -143,12 +169,18 @@ class BangumiClient {
   }
 
   /// 读条目收藏；未收藏返回 null（404）。
+  ///
+  /// 路径用**数字 uid** 而不是官方的 `-`：镜像（`api.bgmapi.com`）读单个收藏时不认
+  /// `-`（实测 `GET /v0/users/-/collections/{id}` 回 404「user doesn't exist or has
+  /// been removed」，而数字路径 200）。官方两种写法都支持，所以统一走数字更稳。
+  /// 写接口仍然必须用 `-`（镜像的数字路径 POST 回 404），见 [upsertCollection]。
   Future<BangumiCollection?> collection(
     int subjectId, {
     required String token,
   }) async {
+    final segment = await _readUserSegment(token);
     final data = await _json(
-      '/v0/users/-/collections/$subjectId',
+      '/v0/users/$segment/collections/$subjectId',
       token: token,
       allowMissing: true,
     );
@@ -165,6 +197,8 @@ class BangumiClient {
   /// 新增或修改收藏（`POST`，服务端是 upsert）。
   ///
   /// 状态与进度可以**一次请求写完**（Bangumi 有速率限制，少发一次是一次）。
+  /// 用户段固定 `-`：镜像实测写接口只认 `-`（数字路径 POST 回 404，`-` 回 202，
+  /// 与官方的 202 一致），和读单个收藏正好相反——见 [collection] 的说明。
   Future<void> upsertCollection(
     int subjectId, {
     required String token,
@@ -221,6 +255,9 @@ class BangumiClient {
   }
 
   /// 已看集数（读逐集收藏，type == 2 的条数）。
+  ///
+  /// 逐集接口固定 `-`：镜像实测 `/v0/users/-/collections/{id}/episodes` 回 200，
+  /// 数字路径反而 400（与「读单个收藏」相反，别顺手改成 uid）。
   Future<int> watchedEpisodeCount(
     int subjectId, {
     required String token,
