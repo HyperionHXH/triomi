@@ -1,4 +1,8 @@
-# 执行评估与下一步规划
+# 执行评估与下一步规划（历史记录）
+
+> **当前计划已迁移至 [`AFTER_M5_PLAN.md`](AFTER_M5_PLAN.md)。** 本文件保留当时的
+> 评估过程，不要按正文中的旧 P0/P1/D1–D5 清单重新开发；当前状态以
+> `docs/handoff/README.md` 和 `docs/AFTER_M5_PLAN.md` 为准。
 
 > ⚠️ **状态表已过期（保留作历史记录）**：本文件写于 M5 之后，下面的 P0/P1 多数
 > 已完成。**最新状态以 [`handoff/README.md`](handoff/README.md) 为准**；

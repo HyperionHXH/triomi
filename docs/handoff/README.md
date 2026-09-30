@@ -9,9 +9,9 @@
 
 - **Triomi**：「追番 + 漫画 + 小说」聚合客户端，Flutter（go_router + Riverpod 3 +
   drift + Hive），GPL-3.0。规格书：`docs/PROJECT_SPEC.md`（验收标准的最终依据）。
-- 代码：`lib/`（78 文件）；测试：`test/`（15 文件 / 199 用例全绿）；
+- 代码：`lib/`（104 文件）；测试：`test/`（28 个 Dart 文件 / 303 用例全绿）；
   参考实现（Mixn，Kotlin）：`D:\noval_and_manga\_refs\mixn`。
-- 当前 HEAD：`1e4a67d`（feat(T5): 轻之国度账号域接口层）。
+- 当前 HEAD：`38d9130`（Bangumi 镜像搜索回退与真实凭据联调收口）。
 - **交接单 T1–T7 已全部完成**（T4/T5 的协议层与接口层已交付，剩余的是需要
   真实账号/设备的联调与页面接线，见各自文档的「后续集成点」）。
 
