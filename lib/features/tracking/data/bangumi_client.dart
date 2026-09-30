@@ -149,10 +149,33 @@ class BangumiClient {
   }) async {
     if (keyword.trim().isEmpty) return const <TrackCandidate>[];
     final hasToken = token != null && token.isNotEmpty;
-    Object? data = await _searchRequest(keyword, limit: limit, token: token);
+    Object? data;
+    try {
+      data = await _searchRequest(keyword, limit: limit, token: token);
+    } on SourceException catch (error) {
+      // 镜像对带 Authorization 的搜索可能直接超时；搜索本身不需要鉴权，
+      // 在确认请求已经切到备用地址后，按空结果路径再用匿名请求重试一次。
+      if (!hasToken ||
+          fallbackBaseUrl == null ||
+          !usedFallback ||
+          !_unreachable(error)) {
+        rethrow;
+      }
+      data = await _searchRequest(
+        keyword,
+        limit: limit,
+        token: null,
+        requestBaseUrl: fallbackBaseUrl,
+      );
+    }
     var candidates = _toCandidates(data);
     if (candidates.isEmpty && hasToken && fallbackBaseUrl != null) {
-      data = await _searchRequest(keyword, limit: limit, token: null);
+      data = await _searchRequest(
+        keyword,
+        limit: limit,
+        token: null,
+        requestBaseUrl: usedFallback ? fallbackBaseUrl : null,
+      );
       candidates = _toCandidates(data);
     }
     return candidates;
@@ -162,10 +185,12 @@ class BangumiClient {
     String keyword, {
     required int limit,
     required String? token,
+    String? requestBaseUrl,
   }) => _json(
     '/v0/search/subjects?limit=$limit&offset=0',
     method: 'POST',
     token: token,
+    baseUrlOverride: requestBaseUrl,
     body: <String, Object?>{
       'keyword': keyword.trim(),
       'sort': 'match',
@@ -329,15 +354,20 @@ class BangumiClient {
     Object? body,
     bool allowMissing = false,
     bool expectNoContent = false,
+    String? baseUrlOverride,
   }) async {
     // 官方不可达时用备用地址重试一次；403/401 之类的凭据错误不重试。
     SourceResponse response;
     try {
-      _usedBaseUrl = baseUrl;
-      response = await _send(baseUrl, path, method, token, body);
+      final primaryBaseUrl = baseUrlOverride ?? baseUrl;
+      _usedBaseUrl = primaryBaseUrl;
+      response = await _send(primaryBaseUrl, path, method, token, body);
     } on SourceException catch (error) {
       final fallback = fallbackBaseUrl;
-      if (fallback == null || fallback == baseUrl || !_unreachable(error)) {
+      final primaryBaseUrl = baseUrlOverride ?? baseUrl;
+      if (fallback == null ||
+          fallback == primaryBaseUrl ||
+          !_unreachable(error)) {
         rethrow;
       }
       // 先记地址再发请求：`http.send` 对非 2xx 也会抛，等它返回才记就记不上
