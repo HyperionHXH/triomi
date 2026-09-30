@@ -64,11 +64,15 @@ class BackupService {
   ];
 
   static bool _isSensitive(String key) {
-    final lower = key.toLowerCase();
-    return lower.contains('password') ||
-        lower.contains('token') ||
-        lower.contains('security_key') ||
-        lower.contains('secret');
+    // 去掉分隔符再比对：键名拼写不统一（`security_key` vs `lk.securityKey`），
+    // 只按带下划线的原文匹配会漏掉真实键名——旧版本迁移前 Hive 里残留的
+    // securityKey 就是这样差一点进备份包的（D10 审计发现）。
+    final normalized = key.toLowerCase().replaceAll(RegExp(r'[_\-.]'), '');
+    return normalized.contains('password') ||
+        normalized.contains('token') ||
+        normalized.contains('securitykey') ||
+        normalized.contains('secret') ||
+        normalized.contains('credential');
   }
 
   // ---------------------------------------------------------------- 导出
