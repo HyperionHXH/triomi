@@ -287,15 +287,16 @@ class BangumiClient {
     );
     final list = _asList(_asMap(data)['data']);
     final result = <BangumiEpisode>[];
-    for (var index = 0; index < list.length; index++) {
-      final map = _asMapOrNull(list[index]);
+    // 补号按「已解析出的条数」走：垃圾元素不该占据序号位，
+    // 否则它后面的章节会被顶到错的话数上（进度会标错集）。
+    var order = 0;
+    for (final node in list) {
+      final map = _asMapOrNull(node);
       final id = _int(map?['id']);
       if (map == null || id == null) continue;
+      order += 1;
       result.add(
-        BangumiEpisode(
-          id: id,
-          number: _double(map['ep']) ?? (index + 1).toDouble(),
-        ),
+        BangumiEpisode(id: id, number: _double(map['ep']) ?? order.toDouble()),
       );
     }
     return result;
