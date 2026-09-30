@@ -363,6 +363,10 @@ class BangumiClient {
       _usedBaseUrl = primaryBaseUrl;
       response = await _send(primaryBaseUrl, path, method, token, body);
     } on SourceException catch (error) {
+      // 「未收藏 404 → null」在异常路径同样要成立：真实网络层（dio）把非 2xx
+      // 抛成 SourceException，测试替身才走下面的响应路径。404 换到镜像也是
+      // 404（同一套数据），所以不回退、直接按契约返回。
+      if (error.type == SourceErrorType.notFound && allowMissing) return null;
       final fallback = fallbackBaseUrl;
       final primaryBaseUrl = baseUrlOverride ?? baseUrl;
       if (fallback == null ||
@@ -373,7 +377,15 @@ class BangumiClient {
       // 先记地址再发请求：`http.send` 对非 2xx 也会抛，等它返回才记就记不上
       // （镜像回 401 时正好是这种情况，而这时最需要告诉用户「token 发出去了」）。
       _usedBaseUrl = fallback;
-      response = await _send(fallback, path, method, token, body);
+      try {
+        response = await _send(fallback, path, method, token, body);
+      } on SourceException catch (mirrorError) {
+        // 官方不可达、镜像回 404：同样是「未收藏」。
+        if (mirrorError.type == SourceErrorType.notFound && allowMissing) {
+          return null;
+        }
+        rethrow;
+      }
     }
 
     if (response.statusCode == 404 && allowMissing) return null;
