@@ -1,6 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -52,7 +55,11 @@ class PlayerPage extends ConsumerStatefulWidget {
 
 class _PlayerPageState extends ConsumerState<PlayerPage> {
   late final Player _player;
-  late final VideoController _videoController;
+  VideoController? _videoController;
+  late final _NativeAndroidVideoController _nativeVideoController;
+
+  bool get _useNativeAndroidVideo =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   /// initState 里从 ref 取出保存；dispose 里写最后一次进度时用。
   LibraryRepository? _libraryRepository;
@@ -106,24 +113,29 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     _danmakuOn = _danmakuSettings.enabled;
 
     _player = Player();
-    // 真机默认路径可正常出画。模拟器上画面黑已实测排查过 4 种渲染组合
-    // （默认软件 GL / 宿主 GPU / 关 Impeller / 关本开关）均无画面，且用
-    // 宿主窗口截图排除了截屏因素，判定为模拟器（Impeller + x86_64）外部
-    // 纹理合成问题，与本开关无关，故保留默认开启。
-    _videoController = VideoController(
-      _player,
-      configuration: const VideoControllerConfiguration(
-        enableHardwareAcceleration: true,
-      ),
+    _nativeVideoController = _NativeAndroidVideoController(
+      onState: _onNativeVideoState,
+      onError: _onNativeVideoError,
     );
+    if (!_useNativeAndroidVideo) {
+      // Android uses a native SurfaceView because API35 x86_64 emulators
+      // render media_kit's Flutter external texture as black. Desktop keeps
+      // the media_kit/libmpv path.
+      _videoController = VideoController(
+        _player,
+        configuration: const VideoControllerConfiguration(
+          enableHardwareAcceleration: true,
+        ),
+      );
 
-    _positionSub = _player.stream.position.listen(_onPosition);
-    _durationSub = _player.stream.duration.listen((duration) {
-      if (mounted) setState(() => _duration = duration);
-    });
-    _playingSub = _player.stream.playing.listen((playing) {
-      if (mounted) setState(() => _playing = playing);
-    });
+      _positionSub = _player.stream.position.listen(_onPosition);
+      _durationSub = _player.stream.duration.listen((duration) {
+        if (mounted) setState(() => _duration = duration);
+      });
+      _playingSub = _player.stream.playing.listen((playing) {
+        if (mounted) setState(() => _playing = playing);
+      });
+    }
 
     _progressTimer = Timer.periodic(
       const Duration(seconds: 5),
@@ -141,6 +153,27 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     _position = position;
     _danmaku.update(position, playing: _playing);
     if (mounted) setState(() {});
+  }
+
+  void _onNativeVideoState(_NativeVideoState state) {
+    _position = state.position;
+    _duration = state.duration;
+    _playing = state.playing;
+    // Keep the danmaku clock driven by the same position source as the
+    // Android native player.  Desktop receives this through media_kit's
+    // position stream; the TextureView path reports it over the method
+    // channel instead. Without this update, Android danmaku would remain
+    // frozen at the position where the stream was initially loaded.
+    _danmaku.update(state.position, playing: state.playing);
+    if (mounted) setState(() {});
+  }
+
+  void _onNativeVideoError(String message) {
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _error = message;
+    });
   }
 
   // ---------------------------------------------------------------- 加载
@@ -222,8 +255,12 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
 
   Future<void> _openLine(String url) async {
     _danmaku.seek(Duration.zero);
-    await _player.open(Media(url));
-    await _player.play();
+    if (_useNativeAndroidVideo) {
+      await _nativeVideoController.setUrl(url);
+    } else {
+      await _player.open(Media(url));
+      await _player.play();
+    }
   }
 
   Future<void> _loadDanmaku(String? danmakuUrl) async {
@@ -336,6 +373,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
             children: <Widget>[
               _VideoArea(
                 controller: _videoController,
+                nativeController: _nativeVideoController,
                 loading: _loading,
                 error: _error,
                 onRetry: _load,
@@ -387,19 +425,31 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
   Future<void> _skip(int seconds) async {
     final target = _position + Duration(seconds: seconds);
     final clamped = target < Duration.zero ? Duration.zero : target;
-    await _player.seek(clamped);
+    if (_useNativeAndroidVideo) {
+      await _nativeVideoController.seek(clamped);
+    } else {
+      await _player.seek(clamped);
+    }
     _danmaku.seek(clamped);
   }
 
   Future<void> _togglePlay() async {
-    _playing ? await _player.pause() : await _player.play();
+    if (_useNativeAndroidVideo) {
+      _playing
+          ? await _nativeVideoController.pause()
+          : await _nativeVideoController.play();
+    } else {
+      _playing ? await _player.pause() : await _player.play();
+    }
   }
 
   Widget _buildChrome() {
     final theme = Theme.of(context);
     final positionText = _format(_position);
     final durationText = _format(
-      _duration == Duration.zero ? _player.state.duration : _duration,
+      _duration == Duration.zero && !_useNativeAndroidVideo
+          ? _player.state.duration
+          : _duration,
     );
 
     return Positioned.fill(
@@ -563,7 +613,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
                         },
                         onChangeEnd: (value) async {
                           final target = Duration(milliseconds: value.round());
-                          await _player.seek(target);
+                          if (_useNativeAndroidVideo) {
+                            await _nativeVideoController.seek(target);
+                          } else {
+                            await _player.seek(target);
+                          }
                           _danmaku.seek(target);
                         },
                       ),
@@ -601,7 +655,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
       _position.inMilliseconds.clamp(0, _sliderMax).toDouble();
 
   double get _sliderMax {
-    final duration = _duration == Duration.zero
+    final duration = _duration == Duration.zero && !_useNativeAndroidVideo
         ? _player.state.duration
         : _duration;
     return duration.inMilliseconds <= 0
@@ -714,7 +768,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
       ),
     );
     if (selected == null) return;
-    await _player.setRate(selected);
+    if (_useNativeAndroidVideo) {
+      await _nativeVideoController.setRate(selected);
+    } else {
+      await _player.setRate(selected);
+    }
     if (mounted) setState(() => _speed = selected);
   }
 
@@ -946,6 +1004,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     _positionSub?.cancel();
     _durationSub?.cancel();
     _playingSub?.cancel();
+    _nativeVideoController.dispose();
     _player.dispose();
     _danmaku.dispose();
     if (_fullscreen) {
@@ -961,12 +1020,14 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
 class _VideoArea extends StatelessWidget {
   const _VideoArea({
     required this.controller,
+    required this.nativeController,
     required this.loading,
     required this.error,
     required this.onRetry,
   });
 
-  final VideoController controller;
+  final VideoController? controller;
+  final _NativeAndroidVideoController nativeController;
   final bool loading;
   final String? error;
   final VoidCallback onRetry;
@@ -1012,8 +1073,154 @@ class _VideoArea extends StatelessWidget {
       children: <Widget>[
         if (loading)
           const Center(child: CircularProgressIndicator(color: Colors.white)),
-        Video(controller: controller),
+        if (controller != null)
+          Video(controller: controller!)
+        else
+          _NativeAndroidVideoView(controller: nativeController),
       ],
+    );
+  }
+}
+
+class _NativeVideoState {
+  const _NativeVideoState({
+    required this.position,
+    required this.duration,
+    required this.playing,
+  });
+
+  final Duration position;
+  final Duration duration;
+  final bool playing;
+}
+
+class _NativeAndroidVideoController {
+  _NativeAndroidVideoController({required this.onState, required this.onError});
+
+  final void Function(_NativeVideoState state) onState;
+  final void Function(String message) onError;
+  MethodChannel? _channel;
+  String? _pendingUrl;
+  bool _disposed = false;
+
+  void attach(int id) {
+    if (_disposed) return;
+    final channel = MethodChannel('triomi/native-video/$id');
+    _channel = channel;
+    channel.setMethodCallHandler((call) async {
+      final args = call.arguments is Map
+          ? Map<Object?, Object?>.from(call.arguments as Map)
+          : const <Object?, Object?>{};
+      switch (call.method) {
+        case 'state':
+          onState(_stateFrom(args));
+        case 'prepared':
+          onState(_stateFrom(args));
+        case 'completed':
+          onState(_stateFrom(args));
+        case 'error':
+          final details = args['message']?.toString().trim();
+          final code = '${args['what'] ?? ''}/${args['extra'] ?? ''}';
+          onError(
+            details != null && details.isNotEmpty
+                ? '原生播放器错误：$details（$code）'
+                : '原生播放器错误：$code',
+          );
+      }
+    });
+    final url = _pendingUrl;
+    if (url != null) {
+      _pendingUrl = null;
+      unawaited(setUrl(url));
+    }
+  }
+
+  _NativeVideoState _stateFrom(Map<Object?, Object?> args) {
+    int number(String key) => (args[key] as num?)?.toInt() ?? 0;
+    return _NativeVideoState(
+      position: Duration(milliseconds: number('position')),
+      duration: Duration(milliseconds: number('duration')),
+      playing: args['playing'] == true,
+    );
+  }
+
+  Future<void> setUrl(String url) async {
+    if (_disposed) return;
+    final channel = _channel;
+    if (channel == null) {
+      _pendingUrl = url;
+      return;
+    }
+    await channel.invokeMethod<void>('setUrl', <String, Object?>{'url': url});
+  }
+
+  Future<void> play() async => _invoke('play');
+  Future<void> pause() async => _invoke('pause');
+
+  Future<void> seek(Duration position) => _invoke('seek', <String, Object?>{
+    'milliseconds': position.inMilliseconds,
+  });
+
+  Future<void> setRate(double rate) =>
+      _invoke('setRate', <String, Object?>{'rate': rate});
+
+  Future<void> _invoke(String method, [Map<String, Object?>? args]) async {
+    final channel = _channel;
+    if (_disposed || channel == null) return;
+    await channel.invokeMethod<void>(method, args);
+  }
+
+  void dispose() {
+    _disposed = true;
+    _channel?.setMethodCallHandler(null);
+    _channel = null;
+  }
+}
+
+class _NativeAndroidVideoView extends StatefulWidget {
+  const _NativeAndroidVideoView({required this.controller});
+
+  final _NativeAndroidVideoController controller;
+
+  @override
+  State<_NativeAndroidVideoView> createState() =>
+      _NativeAndroidVideoViewState();
+}
+
+class _NativeAndroidVideoViewState extends State<_NativeAndroidVideoView> {
+  @override
+  Widget build(BuildContext context) {
+    // SurfaceAndroidViewController lets Flutter select the hybrid-composition
+    // path for a SurfaceView.  A plain AndroidView may use a virtual display
+    // texture; that path is known to drop the VideoView's buffers on the API 35
+    // x86_64 emulator even though the same view renders in a native Activity.
+    return PlatformViewLink(
+      viewType: 'triomi/native-video',
+      surfaceFactory: (context, controller) {
+        return AndroidViewSurface(
+          controller: controller as AndroidViewController,
+          gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
+          hitTestBehavior: PlatformViewHitTestBehavior.opaque,
+        );
+      },
+      onCreatePlatformView: (params) {
+        // Force Hybrid Composition instead of TLHC/virtual-display fallback.
+        // VideoView owns a real Surface; on this API 35 emulator only the
+        // Android-view hierarchy compositor preserves its buffers.
+        final controller = PlatformViewsService.initExpensiveAndroidView(
+          id: params.id,
+          viewType: 'triomi/native-video',
+          layoutDirection: TextDirection.ltr,
+          creationParams: null,
+          creationParamsCodec: const StandardMessageCodec(),
+        );
+        controller.addOnPlatformViewCreatedListener((id) {
+          widget.controller.attach(id);
+          params.onPlatformViewCreated(id);
+        });
+        controller.create();
+        return controller;
+      },
     );
   }
 }

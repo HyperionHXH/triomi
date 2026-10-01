@@ -1,17 +1,19 @@
 # dpsk 交接文档 · 总览
 
-> 这份文档是给 **dpsk** 的工作单。Triomi 主线路 M0–M5 已完成（见
-> `docs/M*_REVIEW.md`），本目录收录剩余缺口任务 T1–T6。每个任务一份独立
-> 文档，含现状、范围、实现规格、测试要求与验收标准。
-> **先读完本页再开工。**
+> 这份文档最初是给 **dpsk** 的工作单。Triomi 主线路 M0–M5 与纯代码交接任务
+> 已完成（见 `docs/M*_REVIEW.md` 与下方任务表）；本目录保留历史任务规格、
+> 验收证据和仍需真实设备/凭据的联调边界。当前没有尚未分派的纯代码阻塞。
+> **接手联调前先读完本页。**
 
 ## 项目速览
 
 - **Triomi**：「追番 + 漫画 + 小说」聚合客户端，Flutter（go_router + Riverpod 3 +
   drift + Hive），GPL-3.0。规格书：`docs/PROJECT_SPEC.md`（验收标准的最终依据）。
-- 代码：`lib/`（104 文件）；测试：`test/`（28 个 Dart 文件 / 303 用例全绿）；
+- 代码：`lib/`（104 文件）；测试：`test/`（28 个 Dart 文件；2026-10-01 全量运行
+  381 个 `testDone` 事件、343 个非隐藏用例、0 失败）；
   参考实现（Mixn，Kotlin）：`D:\noval_and_manga\_refs\mixn`。
-- 当前 HEAD：`38d9130`（Bangumi 镜像搜索回退与真实凭据联调收口）。
+- 当前基线：`38d9130` 之后已完成 D8/D9/D10；2026-10-01 的 Android 视频合成修复
+  仍在本工作树，提交后以最新 commit 为准。
 - **交接单 T1–T7 已全部完成**（T4/T5 的协议层与接口层已交付，剩余的是需要
   真实账号/设备的联调与页面接线，见各自文档的「后续集成点」）。
 
@@ -103,8 +105,10 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
   并顺手修掉了「合并后书架不刷新」的缺陷（commit `c9f8fa2`）。
 - 性能：模拟器上取到了冷启动 / 内存 / 帧间隔的参考数字（见「模拟器实测补齐」），
   真机数字仍需真机。
-- **仍缺真机**：视频画面合成（模拟器试了 4 种渲染配置都是黑屏，已排除截屏因素，
-  见「模拟器实测补齐」）。
+- **视频画面合成已修复**：API 35 x86_64 `emulator-5554` 正式 Flutter 播放器已用
+  `TextureView + MediaPlayer.setDataSource(String) + Hybrid Composition` 显示真实视频帧；
+  见下文「Android 视频画面合成修复（2026-10-01）」。物理 Android 手机兼容性仍需一次
+  实测，但不再是 dpsk 的代码阻塞。
 - Bangumi 公开数据（追番放送表）：**已加镜像回退**并在模拟器上实测可用
   （见「Bangumi 不可达 → 镜像回退」）。
 - 追踪（Bangumi / AniList）：**夹具链路的设备端到端已验证**（绑定 → 状态上报 →
@@ -116,7 +120,7 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
   发送，见「弹幕发送链路设备验证」），这条不需要凭据。按条目匹配弹幕需要**内置
   凭据槽位已就位**——用户注册弹弹play 应用后，用 `--dart-define` 注入即可开箱拿弹幕；
   发弹幕仍需用户自己的账号 token（见「弹幕：Kazumi 为什么不用登录」）。
-- **Android 10+ 机型复验按用户决定不做**（模拟器已覆盖）。
+- **Android 10+ 机型复验按用户决定不做**（真机只做一次兼容性回归，不扩展版本矩阵）。
 - Anime4K 番剧超分：用户明确不做，项关闭。
 - T7：SAF 目录选择/写入与在线字体下载的模拟器 E2E 已完成。
 
@@ -317,7 +321,7 @@ unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy NO_PROXY
 | 渐进式（第 1/2 话） | `video.mp4` 与源文件**字节一致**（562487 B），任务转「已完成」 |
 | HLS（第 3 话） | `video.ts` = 3 段之和 3072 B（顺序拼接正确） |
 | 失败表现 | 掐断时任务标记失败、残缺文件被清掉、卡片显示 `HttpException: Connection closed while receiving data`，重试可成功 |
-| 离线播放 | **停掉夹具服务**后从下载管理进详情（详情页提示「离线模式…显示本地缓存」）→ 打开第 1 话：播放器时间轴走到 `0:29 / 0:30`（本地文件解码播放；画面仍是模拟器黑帧，见下方真机项） |
+| 离线播放 | **停掉夹具服务**后从下载管理进详情（详情页提示「离线模式…显示本地缓存」）→ 打开第 1 话：播放器时间轴走到 `0:29 / 0:30`（本地文件解码播放；画面验收以 2026-10-01 原生 TextureView 路径记录为准） |
 
 环境注意：模拟器（QEMU slirp）+ 本地夹具下，562KB 的**大响应偶发被掐断**
 （同一地址重试即成功；宿主侧用生产同款 `downloadBytes` 连拉 3 次字节全对，
@@ -426,25 +430,64 @@ connectTimeout 覆盖不到 DNS 阶段的黑洞地址），「追番」页因此
 历史是内存里的 AsyncNotifier，原来导入完不会失效这些 provider —— 表现是
 「提示合并完成，但书架还是空的，重启才出现」。修复后两台设备都当场刷新。
 
-### 视频画面合成：模拟器上仍然确认不了（试了 4 种配置）
+### Android 视频画面合成修复（2026-10-01，已完成）
 
-`sample.mp4`（夹具视频）在宿主用 OpenCV 解码确认**不是黑片**（720 帧 /
-24fps / 640×360 / 平均亮度 126）。但播放时画面区在模拟器上始终是黑的，
-本轮把能试的都试了：
+#### 根因定位
 
-| 配置 | 结果 |
-|---|---|
-| 默认（AVD `hw.gpu.enabled=no`，软件 GL） | 黑 |
-| `hw.gpu.enabled=yes` + `hw.gpu.mode=host`（启用宿主 AMD 780M，模拟器日志 `gles_mode_selected:host`） | 黑，且播放时间轴反而停住不动 |
-| 关 Impeller（`am start --ez enable-impeller false`，日志确认已 opt-out） | 黑 |
-| 关 media_kit 硬件加速（`enableHardwareAcceleration: false`，临时改+重编验证后已还原） | 黑 |
-| 关 `hw.gpu.enabled`（还原回初始配置） | 黑 |
+`sample.mp4`（640×360、24 fps）由宿主 OpenCV 解码正常；HTTP Range/206、Android
+原生解码器和独立原生 Activity 的 `VideoView` 也正常。真正失败的是 `media_kit/libmpv`
+外部纹理在 API 35 x86_64 模拟器中的合成。Flutter 默认 `AndroidView`、
+`PlatformViewLink + initSurfaceAndroidView` 和强制 `initExpensiveAndroidView` 配合
+`VideoView` 都不能稳定显示；后者通过 URI 加载 HTTP 地址时还报：
+`MediaPlayer: FileNotFoundException: No content provider: http://10.0.2.2:8123/video/sample.mp4`。
 
-两层证据说明不是「截屏抓不到」：① `dumpsys SurfaceFlinger --list` 里
-media_kit 用的是 `SurfaceView` 图层；② **绕过 screencap**，直接在宿主用
-GDI 截模拟器窗口，画面区同样是黑的。所以结论保持原样——**画面合成仍需真机**；
-`enableHardwareAcceleration: true` 这条既有注释与实际观察不一致，
-但真机默认路径没问题（media_kit 是 Kazumi 同款成熟路径），本轮不再改。
+#### 最终实现
+
+正式 Android 播放器现在走：
+
+```text
+Flutter PlatformView
+  → PlatformViewLink
+  → initExpensiveAndroidView（Hybrid Composition）
+  → 原生 TextureView
+  → MediaPlayer.setDataSource(String)
+```
+
+实现文件：`lib/features/player/player_page.dart`、
+`android/app/src/main/kotlin/io/github/hyperionhxh/triomi/MainActivity.kt`、
+`android/app/src/main/kotlin/io/github/hyperionhxh/triomi/NativeVideoPlatformView.kt`。
+桌面端仍使用 `media_kit/libmpv`。TextureView 不设置 background drawable（否则会报
+`TextureView doesn't support displaying a background drawable`）；黑色底由外层
+`FrameLayout` 提供。Surface 销毁/重建会保存播放位置与播放状态，重新绑定后恢复；切换
+URL 会清除旧状态。
+
+#### 正式播放器验收
+
+- `flutter build apk --debug` 成功，APK 已安装到 `emulator-5554`。
+- 正式 Flutter 播放器最终回归截图：
+  `D:\noval_and_manga\_shots\video_texture4_0.png`、
+  `video_texture4_1.png`、`video_texture4_2.png`（1080×2400）。
+- 重新构建并安装带原生日志的 APK 后，用 `D:\noval_and_manga\_video_pixel_verify.py`
+  采集 12 帧；`sample.mp4` 源文件为 720 帧、24 fps、约 30 秒，`MediaPlayer` 报告
+  `prepared duration=30023`，播放位置 `1116 → 7363 ms` 连续增长。
+- 中央视频区域非黑比例：**85.45%–86.22%**；相邻截图平均绝对帧差：**3.36–5.92**；
+  超过 2 的变化像素比例：**8.54%–11.53%**。这次明确证明画面持续变化，不是只有时间轴推进。
+- 旧记录里的 `0:04 / 0:04` 是媒体已播放结束后的采样状态，已不再作为夹具时长依据。
+- 播放/暂停、±10 秒、seek、倍速、换线路、换章节和弹幕时间轴都保留；原生桥接状态
+  每 250ms 回传位置/时长/播放状态。
+
+#### 后续边界
+
+- 物理 Android 手机尚未复验；有设备时只做一次首播、暂停/继续、seek、倍速、换线路、
+  旋转/后台恢复、退出重进回归，不扩大到额外 Android 版本矩阵。
+- 不再继续尝试模拟器 GPU/Impeller 开关，也不重新引入 Anime4K 超分（用户已关闭）。
+
+#### 纯代码与设备边界（检查点后）
+
+- GLM / dpsk 可以接：D11 验证数据解析、D12 `sample.mp4` 元信息自检、D13 原生播放状态机
+  测试 seam、D14 语义 UI 定位和文档漂移扫描。它们不能替代真实 Android 设备验证。
+- 本机接手：真实手机兼容性、模拟器截图/帧差、Bangumi 真实 token、弹弹play 审核凭据和
+  用户站点写入；每完成一项追加到 `docs/CHECKPOINT_2026-10-01.md`。
 
 ### 追踪链路设备验证（夹具，emulator-5556）
 
@@ -475,8 +518,9 @@ GDI 截模拟器窗口，画面区同样是黑的。所以结论保持原样—�
 也就是说**规则自带弹幕源时不需要任何凭据**，这条链路是通的——之前只差「弹弹play 凭据」
 那一半（用于按条目匹配弹幕）。
 
-同一张播放截图再次确认：视频**画面区仍是黑的**（上面那 4 组渲染配置的老结论，
-仍需真机），但时间轴推进、弹幕层、线路/剧集/倍速/全屏这些控制都正常。
+这段旧记录描述的是修复前的 media_kit 外部纹理路径；2026-10-01 已由下方
+「Android 视频画面合成修复」章节取代。当前正式 Flutter 播放器画面已通过像素验收，
+时间轴、弹幕层、线路/剧集/倍速/全屏等控制仍正常。
 
 ### 弹幕发送链路设备验证（夹具，emulator-5556）
 
@@ -701,9 +745,10 @@ flutter build apk --dart-define=TRIOMI_DANDANPLAY_APP_ID=xxx \
 | 位置 | 改动 |
 |---|---|
 | `danmaku_settings_page.dart` | 说清 AppId/AppSecret 只管**拉取**弹幕，发弹幕另需账号 token；**规则自带弹幕源时无需任何凭据**；已内置凭据时提示「可被自己的值覆盖」。状态文案由「已配置（仅可拉取）」改为「仅可拉取（未配置账号 token）」，可发送时写「可拉取、可发送」——`isConfigured` 在注入内置值后本就可能为真，旧文案会让人误以为是自己填的 |
-| `player_page.dart` | 原注释声称「显式开硬件加速以保证模拟器调试时画面可见」，与上面那 4 组实测不符；改为「真机默认路径可用，模拟器黑屏已排除截屏因素，判定为模拟器外部纹理合成问题，与本开关无关」，`enableHardwareAcceleration: true` 保持不变 |
+| `player_page.dart` | Android 正式播放器改用原生 TextureView；桌面端继续保留 media_kit/libmpv。`enableHardwareAcceleration: true` 仅作用于非 Android 路径 |
 | `schedule_providers.dart` | `resolveScheduleCover` 的注释点明官方与镜像**都**返回绝对地址，相对地址补全只对夹具生效，避免后人以为镜像也走这条逻辑 |
 
-自查：`dart format`（无改动）+ `flutter analyze`（零问题）+ `flutter test`（291 例全绿）。
+自查（2026-10-01）：`dart format`（无改动）+ `flutter analyze`（零问题）+ 全量
+`flutter test` 通过（JSON 统计 381 个 `testDone` 事件、343 个非隐藏用例、0 失败）。
 另 grep 了 `TODO|FIXME|后续版本|暂不`，剩下的两处（`detail_page.dart` 的章节入口说明、
 `lk_dm_page.dart` 的「本轮为只读：暂不支持发送私信」）都是**准确**的现状描述，不改。

@@ -2,9 +2,9 @@
 
 > **文档用途**：本文件是完整的需求 + 调研 + 方案 + 任务拆解，交给下一个 AI 模型（或人类开发者）直接动工。读完后应能不依赖任何外部上下文开始写代码。
 >
-> **文档版本**：v1.4（2026-09-22，M2 漫画闭环落地：阅读器四模式 + 书架 + 历史）
+> **文档版本**：v1.5（2026-10-01，Android 播放画面合成修复并完成模拟器像素验收）
 >
-> **实施进度**：M0（脚手架）✅ ｜ M1（规则引擎，声明式部分）✅ ｜ M2（漫画闭环）✅ ｜ 项目位于 `D:\noval_and_manga\triomi`
+> **实施进度**：M0（脚手架）✅ ｜ M1（规则引擎，声明式部分）✅ ｜ M2（漫画闭环）✅ ｜ M3（追番闭环）✅ ｜ M4（小说闭环）✅ ｜ M5（增强）✅ ｜ 项目位于 `D:\noval_and_manga\triomi`
 > 复查记录见 `triomi/docs/M0_REVIEW.md`、`M1_REVIEW.md`、`M2_REVIEW.md`；规则写法见 `triomi/docs/RULE_FORMAT.md`
 > **项目代号**（暂定，可改）：**Triomi**（Triple + Anime/Manga/Novel 的组合，亦可沿用用户自有项目 mixn 的名字）
 
@@ -321,14 +321,14 @@ Mixn v1.17.0 阅读器已验证的功能清单，全部作为本项目小说阅�
 
 ### 4.6 追番播放（对齐 Kazumi）
 
-- media_kit(libmpv) 播放器：硬解、倍速 0.5~3x、画面比例、手势亮度/音量/进度。
+- 播放器：桌面端继续使用 `media_kit/libmpv`；Android 使用 `TextureView + MediaPlayer.setDataSource(String)`，通过 Flutter Hybrid Composition 嵌入，避免 API 35 x86_64 模拟器上的外部纹理黑屏。倍速 0.5~3x、画面比例、手势亮度/音量/进度保持不变。
 - 弹幕：弹弹play API 自动匹配 + 手动搜索；弹幕样式/过滤/透明度/速度设置。
-- 多线路切换；失败自动换源；外部播放器调用；DLNA 投屏（二期）；Anime4K 超分（二期，GPU 要求高）。
+- 多线路切换；失败自动换源；外部播放器调用；DLNA 投屏（二期）。Anime4K 超分按用户决定关闭，不列入后续实现。
 - 新番时间表：Bangumi.tv API 按星期展示当季新番；更新提醒。
 
 ### 4.7 追踪与同步
 
-- 内置追踪服务：**Bangumi（国内首选）+ AniList + MyAnimeList**（对齐 Komikku/Kazumi 生态）。进度变更时上报。
+- 内置追踪服务：**Bangumi（国内首选）+ AniList**，进度变更时上报；MyAnimeList 延后，不列入当前验收范围。
 - **WebDAV 同步**书库/历史/设置（Kazumi 已验证可行的零服务器方案）。
 - 本地备份导出/导入（JSON + 封面打包 zip）。
 
@@ -336,7 +336,7 @@ Mixn v1.17.0 阅读器已验证的功能清单，全部作为本项目小说阅�
 
 - 漫画：按章节批量下载为本地图片目录 + CBZ 导出。
 - 小说：章节文本入库。
-- 番剧：视频下载（二期，m3u8 合并）。
+- 番剧：视频下载（已在 M5 收口，支持渐进式 MP4/MKV 与明文 HLS；加密流拒绝）。
 - 队列管理、断点续传、仅 WiFi 选项。
 
 ---
@@ -406,10 +406,10 @@ Komikku 的观感 = **GNOME libadwaita**：大留白、圆角卡片、无边框�
 | **M0 脚手架** | Flutter 工程、go_router+Riverpod 骨架、drift 建表、主题 Token、自适应壳（四栏导航） | 三端跑起空壳，明暗主题切换正常 |
 | **M1 规则引擎** | JS 沙箱 + XPath 简式层 + 规则管理页 + 发现/搜索/详情数据通路 | 用一个漫画源和一个番剧源跑通「搜索→详情→章节列表」 |
 | **M2 漫画闭环** | 漫画阅读器四模式、书架、阅读进度、历史 | 完整看完一章并记录进度，重启后续读 |
-| **M3 追番闭环** | media_kit 播放器、弹幕、追番时间表、多线路 | 播放任意番剧带弹幕，加入追番列表 |
+| **M3 追番闭环** | 跨平台播放器（桌面 media_kit、Android 原生 TextureView）、弹幕、追番时间表、多线路 | 播放任意番剧带弹幕，加入追番列表 |
 | **M4 小说闭环** | 小说阅读器、章节缓存、（对接 mixn 源格式） | 完整阅读一章小说，调字号主题生效 |
 | **M5 增强** | 下载管理、Bangumi/AniList 追踪、WebDAV 同步、备份导入导出 | 进度上报 Bangumi；两台设备 WebDAV 互同步 |
-| **M6 二期** | iOS/macOS/Linux 适配、DLNA、Anime4K、TTS、视频下载、一起看 | 视精力排期 |
+| **M6 二期** | iOS/macOS/Linux 适配、DLNA、TTS、一起看 | 视精力排期；Anime4K 已关闭，视频下载已在 M5 收口 |
 
 ---
 
@@ -433,9 +433,10 @@ Komikku 的观感 = **GNOME libadwaita**：大留白、圆角卡片、无边框�
 - [x] **T7（M5）**：下载管理器（漫画/小说）；Bangumi + AniList OAuth 绑定与进度上报；WebDAV 同步服务；本地备份导入导出。
 - [x] **T8**：README（含免责声明、规则编写指南链接）、GPL-3.0 LICENSE、CI（GitHub Actions 构建 Android APK + Windows zip）。✅ 2026-09-29 完成：免责声明/CI 说明在 README，许可证是 GitHub Licenses API 拉的标准 GPL-3.0 全文，CI 见 `.github/workflows/build.yml`（analyze+test / Android APK / Windows zip）。
 
-> **状态**：T1~T8 全部完成。逐项的设备/真实账号验证、未做项与偏差清单记在
-> [`docs/handoff/README.md`](handoff/README.md)（例如：视频画面合成仍需真机；
-> 弹弹play 应用凭据待用户申请）。
+> **状态（2026-10-01）**：T1~T8 全部完成。Android 视频画面合成已由原生
+> `TextureView + MediaPlayer` 路径修复，并在 API 35 x86_64 模拟器正式播放器中
+> 通过像素与帧变化验收；真实物理 Android 手机仍需一次兼容性复验。其余设备/真实账号
+> 偏差清单见 [`docs/handoff/README.md`](handoff/README.md)。
 
 **给实现模型的硬约束**：
 1. 任何页面先过第 6 章 UI 规范，禁止裸用默认 Material 样式交差。
