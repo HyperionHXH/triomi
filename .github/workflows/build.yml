@@ -9,6 +9,8 @@ on:
 
 env:
   FLUTTER_VERSION: '3.47.5'
+  PYTHONUTF8: '1'
+  PYTHONIOENCODING: 'utf-8'
 
 jobs:
   # 静态检查 + 单元测试：这是硬门槛（analyze 必须零问题、测试必须全绿）。
