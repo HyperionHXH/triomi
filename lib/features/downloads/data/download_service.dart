@@ -11,6 +11,9 @@ import '../../../core/storage/preferences.dart';
 import 'download_repository.dart';
 import 'video_downloader.dart';
 
+/// 网络接口名枚举器（D30 seam）：测试注入替身控制 WiFi 判定。
+typedef InterfaceNamesResolver = Future<List<String>> Function();
+
 /// 单个章节的下载执行：取数 → 落盘 → 更新任务状态。
 ///
 /// 付费/锁定章节**一律拒绝下载**（延续「不解锁不缓存」的红线）。
@@ -19,11 +22,15 @@ class DownloadService {
     required this.repository,
     required this.http,
     required this.preferences,
+    this._interfaceNamesResolver,
   });
 
   final DownloadRepository repository;
   final SourceHttpClient http;
   final Preferences preferences;
+
+  /// 网络接口名枚举器（D30 seam）：默认直读 dart:io；测试注入替身。
+  final InterfaceNamesResolver? _interfaceNamesResolver;
 
   static const String wifiOnlyKey = 'downloads.wifiOnly';
 
@@ -31,26 +38,43 @@ class DownloadService {
 
   Future<void> setWifiOnly(bool value) => preferences.set(wifiOnlyKey, value);
 
+  /// 当前是否连接 WiFi：走 [InterfaceNamesResolver]（默认 dart:io）。
+  ///
+  /// 实例方法（非 static）以便注入；调度器停泵判定仍用 [isOnWifiDefault]。
+  Future<bool> isOnWifi() async {
+    final resolver = _interfaceNamesResolver ?? defaultInterfaceNames;
+    return isOnWifiDefault(resolver: resolver);
+  }
+
   /// 当前是否连接 WiFi（无插件实现：直接看网络接口）。
   ///
   /// Android 上 WiFi 接口名为 `wlan0`；移动数据为 `rmnet*`。
-  static Future<bool> isOnWifi() async {
+  /// 取不到接口信息时不阻塞用户（按可用处理）。
+  static Future<bool> isOnWifiDefault({
+    InterfaceNamesResolver resolver = defaultInterfaceNames,
+  }) async {
     try {
-      final interfaces = await NetworkInterface.list(
-        includeLoopback: false,
-        type: InternetAddressType.IPv4,
-      );
-      return interfaces.any(
-        (interface) =>
-            interface.name.startsWith('wlan') ||
-            interface.name.startsWith('wifi') ||
-            interface.name.startsWith('en'),
-      );
+      return looksLikeWifi(await resolver());
     } catch (_) {
-      // 取不到接口信息时不阻塞用户（按可用处理）。
       return true;
     }
   }
+
+  static Future<List<String>> defaultInterfaceNames() async {
+    final interfaces = await NetworkInterface.list(
+      includeLoopback: false,
+      type: InternetAddressType.IPv4,
+    );
+    return <String>[for (final interface in interfaces) interface.name];
+  }
+
+  /// 接口名 → 是否像 WiFi（wlan* / wifi* / en*；移动数据是 rmnet*）。
+  static bool looksLikeWifi(Iterable<String> names) => names.any(
+    (name) =>
+        name.startsWith('wlan') ||
+        name.startsWith('wifi') ||
+        name.startsWith('en'),
+  );
 
   /// 执行一条下载任务。[provider] 为空表示来源不可用。
   Future<void> run({
@@ -70,11 +94,13 @@ class DownloadService {
     await repository.markRunning(row.id);
     try {
       // 必须用目录里的章节行（带 url）：正文地址由来源规则从 url 推导。
-      final chapter =
-          await repository.chapterOf(
-            row.chapterSourceId,
-            row.chapterRemoteId,
-          ) ??
+      final catalogChapter = await repository.chapterOf(
+        row.chapterSourceId,
+        row.chapterRemoteId,
+      );
+      // 任务行本身保存了章节键；旧任务可能没有目录快照，仍可下载并
+      // 以任务键 upsert 正文。目录存在时继续使用其 URL/锁定标记。
+      final chapter = catalogChapter ??
           Chapter(
             sourceId: row.chapterSourceId,
             remoteId: row.chapterRemoteId,
@@ -135,6 +161,8 @@ class DownloadService {
           title: chapter.title,
           content: content,
         ),
+        itemSourceId: row.sourceId,
+        itemRemoteId: row.remoteId,
       );
       await repository.markDone(row.id);
     } catch (error) {

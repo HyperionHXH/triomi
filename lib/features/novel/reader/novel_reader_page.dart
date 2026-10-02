@@ -19,6 +19,8 @@ import '../../library/data/library_providers.dart';
 import '../../library/data/library_repository.dart';
 import '../../tracking/data/tracking_providers.dart';
 import '../data/lk/lk_source.dart';
+import '../tts/flutter_tts_engine.dart';
+import '../tts/tts_controller.dart';
 import 'novel_blocks.dart';
 import 'novel_reader_settings.dart';
 import 'user_font_store.dart';
@@ -46,7 +48,8 @@ class NovelReaderPage extends ConsumerStatefulWidget {
   ConsumerState<NovelReaderPage> createState() => _NovelReaderPageState();
 }
 
-class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
+class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
+    with WidgetsBindingObserver {
   late final LibraryRepository _libraryRepository;
 
   /// dispose 里不能用 ref：进度上报器同样提前取出。
@@ -70,10 +73,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
 
   int _pageIndex = 0;
   final ScrollController _scrollController = ScrollController();
+  final List<GlobalKey> _blockKeys = <GlobalKey>[];
 
   bool _chromeVisible = true;
   Timer? _saveDebounce;
   bool _keepScreenOn = false;
+  TtsController? _tts;
+  bool _ttsBusy = false;
 
   MediaItem get _item => widget.args.item;
   List<Chapter> get _chapters => widget.args.chapters;
@@ -82,6 +88,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _libraryRepository = ref.read(libraryRepositoryProvider);
     _trackingReporter = ref.read(progressReporterProvider);
     _chapterIndex = widget.args.initialIndex.clamp(
@@ -103,6 +110,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _releaseTts();
     _saveDebounce?.cancel();
     // dispose 里不能用 ref；仓储已在 initState 里取出。
     unawaited(_persistProgress(commit: true));
@@ -112,6 +121,86 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
     unawaited(SystemChrome.setPreferredOrientations(<DeviceOrientation>[]));
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _releaseTts();
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _releaseTts() {
+    _tts?.removeListener(_onTtsChanged);
+    _tts?.dispose();
+    _tts = null;
+  }
+
+  void _onTtsChanged() {
+    if (!mounted) return;
+    final anchor = _tts?.progress?.anchor;
+    if (anchor != null && _settings.mode == NovelReadingMode.paged) {
+      final index = _pages.indexWhere(
+        (page) => page.elements.any((e) => e.blockIndex == anchor),
+      );
+      if (index >= 0) _pageIndex = index;
+    } else if (anchor != null && _settings.mode == NovelReadingMode.scroll) {
+      _scrollToBlock(anchor);
+    }
+    setState(() {});
+    if (_tts?.state == TtsState.error) _toast('朗读失败，请检查系统语音引擎');
+    _scheduleSave();
+  }
+
+  void _scrollToBlock(int blockIndex) {
+    if (blockIndex < 0 || blockIndex >= _blockKeys.length) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final target = _blockKeys[blockIndex].currentContext;
+      if (target == null) return;
+      Scrollable.ensureVisible(
+        target,
+        alignment: 0.18,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  Future<void> _toggleTts() async {
+    if (_ttsBusy || _locked || _loading || _error != null || _blocks.isEmpty) {
+      return;
+    }
+    setState(() => _ttsBusy = true);
+    try {
+      final current = _tts;
+      if (current?.state == TtsState.playing) {
+        await current!.pause();
+      } else if (current?.state == TtsState.paused) {
+        await current!.resume();
+      } else {
+        final anchor = _progressParagraph;
+        _releaseTts();
+        final engine = ref.read(ttsEngineFactoryProvider)();
+        // 语音选项在会话开始前应用一次（D48：变更只影响下一次朗读）。
+        await engine.applySpeechSettings(
+          rate: _settings.ttsRate,
+          voice: _settings.ttsVoice,
+        );
+        final controller = TtsController(engine: engine, blocks: _blocks);
+        _tts = controller;
+        controller.addListener(_onTtsChanged);
+        final index = controller.plan.utterances.indexWhere(
+          (u) => u.blockIndex >= anchor,
+        );
+        if (index >= 0) await controller.seekToUtterance(index);
+      }
+    } catch (_) {
+      _toast('朗读失败，请检查系统语音引擎');
+    } finally {
+      if (mounted) setState(() => _ttsBusy = false);
+    }
   }
 
   /// 应用屏幕方向（B4）；空列表 = 跟随系统。
@@ -143,6 +232,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
 
   /// 繁简设置变化后用缓存的原始正文重转换（不重新请求网络）。
   Future<void> _reconvert() async {
+    _releaseTts();
     final raw = _rawContent;
     if (raw == null) return;
     _zh ??= await ZhConverter.instance();
@@ -154,6 +244,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   }
 
   Future<void> _load() async {
+    _releaseTts();
     setState(() {
       _loading = true;
       _error = null;
@@ -313,6 +404,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
 
   /// 当前读到第几个排版块（进度回传用段落下标）。
   int get _progressParagraph {
+    if (_tts?.state == TtsState.playing || _tts?.state == TtsState.paused) {
+      final anchor = _tts?.progress?.anchor;
+      if (anchor != null) return anchor;
+    }
     if (_settings.mode == NovelReadingMode.scroll) {
       if (!_scrollController.hasClients) return 0;
       final position = _scrollController.offset;
@@ -403,6 +498,28 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   }
 
   // ---------------------------------------------------------------- 设置
+
+  /// TTS 语音选项变更（D48）：先停止当前朗读，下次开始时应用；
+  /// 本机设置即时落盘。
+  void _applyTtsSettings(NovelReaderSettings next) {
+    _releaseTts();
+    setState(() => _settings = next);
+    unawaited(next.save(ref.read(preferencesProvider)));
+  }
+
+  Future<void> _showTtsSettings() async {
+    final engine = ref.read(ttsEngineFactoryProvider)();
+    final voices = await engine.availableVoices();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => _TtsSettingsSheet(
+        settings: _settings,
+        voices: voices,
+        onSettingsChanged: _applyTtsSettings,
+      ),
+    );
+  }
 
   Future<void> _showSettings() async {
     final updated = await showModalBottomSheet<NovelReaderSettings>(
@@ -552,6 +669,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
   }
 
   Widget _buildScrollView() {
+    while (_blockKeys.length < _blocks.length) {
+      _blockKeys.add(GlobalKey());
+    }
+    if (_blockKeys.length > _blocks.length) {
+      _blockKeys.removeRange(_blocks.length, _blockKeys.length);
+    }
     return Stack(
       children: <Widget>[
         NotificationListener<ScrollNotification>(
@@ -568,11 +691,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
             itemCount: _blocks.length,
             separatorBuilder: (context, index) =>
                 SizedBox(height: _settings.fontSize * 0.5),
-            itemBuilder: (context, index) => _BlockView(
-              block: _blocks[index],
-              settings: _settings,
-              sourceId: _item.sourceId,
-              sourceFont: _sourceFont,
+            itemBuilder: (context, index) => KeyedSubtree(
+              key: _blockKeys[index],
+              child: _BlockView(
+                block: _blocks[index],
+                settings: _settings,
+                sourceId: _item.sourceId,
+                sourceFont: _sourceFont,
+              ),
             ),
           ),
         ),
@@ -629,6 +755,42 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage> {
                   ],
                 ),
                 const Spacer(),
+                if (ttsPlatformSupported &&
+                    !_locked &&
+                    !_loading &&
+                    _error == null)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        tooltip: _tts?.state == TtsState.playing
+                            ? '暂停朗读'
+                            : '朗读',
+                        onPressed: _ttsBusy ? null : _toggleTts,
+                        icon: Icon(
+                          _tts?.state == TtsState.playing
+                              ? Icons.pause
+                              : Icons.volume_up_outlined,
+                          color: Colors.white,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '停止朗读',
+                        onPressed: _tts == null || _ttsBusy
+                            ? null
+                            : () {
+                                _releaseTts();
+                                setState(() {});
+                              },
+                        icon: const Icon(Icons.stop, color: Colors.white),
+                      ),
+                      IconButton(
+                        tooltip: '朗读设置',
+                        onPressed: _showTtsSettings,
+                        icon: const Icon(Icons.tune, color: Colors.white),
+                      ),
+                    ],
+                  ),
                 // 底栏
                 Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1173,6 +1335,117 @@ class _SettingsSheetState extends State<_SettingsSheet> {
           ],
         ),
       ),
+    );
+  }
+}
+
+
+/// TTS 语音选项小面板（D48）：语速三档 + 系统音色（仅列引擎返回的可用项）。
+///
+/// 变更即通过 [onSettingsChanged] 提交（阅读器负责停止当前朗读并落盘）。
+class _TtsSettingsSheet extends StatelessWidget {
+  const _TtsSettingsSheet({
+    required this.settings,
+    required this.voices,
+    required this.onSettingsChanged,
+  });
+
+  final NovelReaderSettings settings;
+  final List<TtsVoiceInfo> voices;
+  final void Function(NovelReaderSettings next) onSettingsChanged;
+
+  String _rateLabel(double rate) => switch (rate) {
+    0.3 => '慢速 0.3',
+    0.7 => '快速 0.7',
+    _ => '正常 0.5',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('朗读设置'),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text('语速', style: theme.textTheme.titleSmall),
+            const SizedBox(height: AppSpacing.xs),
+            Wrap(
+              spacing: AppSpacing.xs,
+              children: <Widget>[
+                for (final rate in NovelReaderSettings.ttsRateChoices)
+                  ChoiceChip(
+                    label: Text(_rateLabel(rate)),
+                    selected: settings.ttsRate == rate,
+                    onSelected: (_) =>
+                        onSettingsChanged(settings.copyWith(ttsRate: rate)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text('音色', style: theme.textTheme.titleSmall),
+            const SizedBox(height: AppSpacing.xs),
+            if (voices.isEmpty)
+              Text(
+                '系统未返回可用音色，将使用系统默认音色',
+                style: theme.textTheme.bodySmall,
+              )
+            else
+              Builder(
+                builder: (context) {
+                  // 重启后系统音色列表可能变化：已保存但系统不再返回的
+                  // 音色保留为独立选项（显示「不可用」），避免 Dropdown 断言。
+                  final saved = settings.ttsVoice;
+                  final savedUnavailable =
+                      saved != null && !voices.contains(saved);
+                  return DropdownButton<TtsVoiceInfo?>(
+                    isExpanded: true,
+                    value: saved,
+                    items: <DropdownMenuItem<TtsVoiceInfo?>>[
+                      const DropdownMenuItem<TtsVoiceInfo?>(
+                        value: null,
+                        child: Text('系统默认'),
+                      ),
+                      if (savedUnavailable)
+                        DropdownMenuItem<TtsVoiceInfo?>(
+                          value: saved,
+                          child: Text(
+                            '${saved.label}（不可用）',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      for (final voice in voices)
+                        DropdownMenuItem<TtsVoiceInfo?>(
+                          value: voice,
+                          child: Text(
+                            voice.label,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (voice) => onSettingsChanged(
+                      voice == null
+                          ? settings.copyWith(clearTtsVoice: true)
+                          : settings.copyWith(
+                              ttsVoiceName: voice.name,
+                              ttsVoiceLocale: voice.locale,
+                            ),
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('完成'),
+        ),
+      ],
     );
   }
 }

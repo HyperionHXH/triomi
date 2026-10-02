@@ -503,6 +503,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', '0')
         self.end_headers()
 
+    def _send_range_not_satisfiable(self, size: int) -> None:
+        """RFC 7233：任何不可满足/非法的 Range 一律 416 + bytes */size。"""
+        self.send_response(416)
+        self.send_header('Content-Range', f'bytes */{size}')
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+
     def do_GET(self):  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
@@ -687,24 +694,32 @@ class Handler(BaseHTTPRequestHandler):
             partial = False
             if range_header and range_header.startswith('bytes='):
                 # mpv/播放器会先发 Range 请求；不支持的话部分内核会一直缓冲。
-                spec = range_header.split('=', 1)[1].split(',')[0]
-                start_s, _, end_s = spec.partition('-')
-                if not start_s and end_s:
-                    # 后缀区间 `bytes=-N`：取最后 N 字节。
-                    length_suffix = int(end_s)
-                    start = max(size - length_suffix, 0)
-                    end = size - 1
-                else:
-                    start = int(start_s) if start_s else 0
-                    end = int(end_s) if end_s else size - 1
-                if start >= size:
-                    # 越界区间必须回 416，否则 Content-Length 会是负数。
-                    self.send_response(416)
-                    self.send_header('Content-Range', f'bytes */{size}')
-                    self.send_header('Content-Length', '0')
-                    self.end_headers()
+                # 非法数字/多区间/倒序/越界统一 416，不让 ValueError 在
+                # 服务器线程里打 traceback（D51）。
+                spec_list = range_header.split('=', 1)[1]
+                if ',' in spec_list:
+                    # 多区间本夹具不支持：统一 416，不静默取第一个区间。
+                    self._send_range_not_satisfiable(size)
                     return
-                end = min(max(end, start), size - 1)
+                spec = spec_list.strip()
+                start_s, _, end_s = spec.partition('-')
+                try:
+                    if not start_s and end_s:
+                        # 后缀区间 `bytes=-N`：取最后 N 字节。
+                        length_suffix = int(end_s)
+                        start = max(size - length_suffix, 0)
+                        end = size - 1
+                    else:
+                        start = int(start_s) if start_s else 0
+                        end = int(end_s) if end_s else size - 1
+                except ValueError:
+                    self._send_range_not_satisfiable(size)
+                    return
+                if start > end or start >= size:
+                    # 越界/倒序区间必须回 416，否则 Content-Length 会是负数。
+                    self._send_range_not_satisfiable(size)
+                    return
+                end = min(end, size - 1)
                 partial = True
             length = end - start + 1
             print(

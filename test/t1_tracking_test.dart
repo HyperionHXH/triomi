@@ -298,6 +298,56 @@ void main() {
       expect(http.requests.last.headers.containsKey('Authorization'), isFalse);
     });
 
+    test('镜像搜索带 token 超时时，去掉 token 再试一次', () async {
+      var mirrorTokenAttempt = true;
+      final http = FakeHttpClient((request) async {
+        final hasToken = (request.headers['Authorization'] ?? '').isNotEmpty;
+        if (request.url.startsWith('https://official.test')) {
+          throw const SourceException(
+            sourceId: BangumiClient.sourceId,
+            type: SourceErrorType.network,
+            message: 'official unavailable',
+          );
+        }
+        if (hasToken && mirrorTokenAttempt) {
+          mirrorTokenAttempt = false;
+          throw const SourceException(
+            sourceId: BangumiClient.sourceId,
+            type: SourceErrorType.timeout,
+            message: 'mirror search timed out',
+          );
+        }
+        return SourceResponse(
+          statusCode: 200,
+          url: request.url,
+          body: jsonEncode(<String, Object?>{
+            'data': <Object?>[
+              <String, Object?>{
+                'id': 42,
+                'name': 'Fixture Anime',
+                'name_cn': '夹具番剧',
+                'eps': 12,
+              },
+            ],
+          }),
+        );
+      });
+      final bangumi = BangumiClient(
+        http: http,
+        baseUrl: 'https://official.test',
+        fallbackBaseUrl: BangumiClient.mirrorBaseUrl,
+      );
+
+      final candidates = await bangumi.search('Fixture', token: 't');
+
+      expect(candidates.single.remoteTrackId, '42');
+      expect(http.requests, hasLength(3));
+      expect(http.requests.first.headers['Authorization'], 'Bearer t');
+      expect(http.requests[1].headers['Authorization'], 'Bearer t');
+      expect(http.requests.last.headers.containsKey('Authorization'), isFalse);
+      expect(bangumi.usedFallback, isTrue);
+    });
+
     test('没有备用地址时不做「去掉 token 重试」（真实站点带 token 是正常的）', () async {
       final http = client();
       final results = await BangumiClient(http: http)

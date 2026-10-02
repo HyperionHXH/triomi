@@ -1,0 +1,6 @@
+# Python 工具链验收依赖（D15）：tools/ 下的媒体自检与单测只需要这两样。
+# 只装 headless OpenCV——GUI 变体在 CI 上不可用，本机也不需要。
+# 版本范围从宽到只排除破坏性主版本；升级前先跑
+# python -m unittest discover -s tools -p "test_*.py" -v。
+numpy>=1.26,<3.0
+opencv-python-headless>=4.8,<5.0

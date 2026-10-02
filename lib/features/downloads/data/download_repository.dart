@@ -280,18 +280,48 @@ class DownloadRepository {
   // ------------------------------------------------------------ 离线内容
 
   /// 小说：把正文写进章节行，离线即可阅读（不依赖来源可用）。
-  Future<void> saveChapterContent(Chapter chapter) {
-    final statement = _db.update(_db.chapters)
-      ..where(
-        (table) =>
-            table.sourceId.equals(chapter.sourceId) &
-            table.remoteId.equals(chapter.remoteId),
-      );
-    return statement.write(
-      ChaptersCompanion(
-        contentJson: Value(jsonEncode(chapter.content?.toJson())),
-      ),
-    );
+  Future<void> saveChapterContent(
+    Chapter chapter, {
+    String? itemSourceId,
+    String? itemRemoteId,
+  }) async {
+    final existing = await (_db.select(_db.chapters)
+          ..where(
+            (table) =>
+                table.sourceId.equals(chapter.sourceId) &
+                table.remoteId.equals(chapter.remoteId),
+          ))
+        .getSingleOrNull();
+    final contentJson = jsonEncode(chapter.content?.toJson());
+    if (existing != null) {
+      await (_db.update(_db.chapters)
+            ..where(
+              (table) =>
+                  table.sourceId.equals(chapter.sourceId) &
+                  table.remoteId.equals(chapter.remoteId),
+            ))
+          .write(ChaptersCompanion(contentJson: Value(contentJson)));
+      return;
+    }
+    if (itemSourceId == null || itemRemoteId == null) {
+      throw StateError('缺少章节所属作品键，无法创建离线章节');
+    }
+    await _db.into(_db.chapters).insert(
+          ChaptersCompanion.insert(
+            sourceId: chapter.sourceId,
+            remoteId: chapter.remoteId,
+            itemSourceId: itemSourceId,
+            itemRemoteId: itemRemoteId,
+            title: chapter.title,
+            url: Value(chapter.url),
+            number: Value(chapter.number),
+            sortIndex: Value(chapter.sortIndex),
+            volumeTitle: Value(chapter.volumeTitle),
+            releaseDate: Value(chapter.releaseDate),
+            locked: Value(chapter.locked),
+            contentJson: Value(contentJson),
+          ),
+        );
   }
 
   /// 章节行（含 url 与标题）：下载正文要用目录里的地址，不能只靠 remoteId。

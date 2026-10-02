@@ -149,10 +149,33 @@ class BangumiClient {
   }) async {
     if (keyword.trim().isEmpty) return const <TrackCandidate>[];
     final hasToken = token != null && token.isNotEmpty;
-    Object? data = await _searchRequest(keyword, limit: limit, token: token);
+    Object? data;
+    try {
+      data = await _searchRequest(keyword, limit: limit, token: token);
+    } on SourceException catch (error) {
+      // 镜像对带 Authorization 的搜索可能直接超时；搜索本身不需要鉴权，
+      // 在确认请求已经切到备用地址后，按空结果路径再用匿名请求重试一次。
+      if (!hasToken ||
+          fallbackBaseUrl == null ||
+          !usedFallback ||
+          !_unreachable(error)) {
+        rethrow;
+      }
+      data = await _searchRequest(
+        keyword,
+        limit: limit,
+        token: null,
+        requestBaseUrl: fallbackBaseUrl,
+      );
+    }
     var candidates = _toCandidates(data);
     if (candidates.isEmpty && hasToken && fallbackBaseUrl != null) {
-      data = await _searchRequest(keyword, limit: limit, token: null);
+      data = await _searchRequest(
+        keyword,
+        limit: limit,
+        token: null,
+        requestBaseUrl: usedFallback ? fallbackBaseUrl : null,
+      );
       candidates = _toCandidates(data);
     }
     return candidates;
@@ -162,10 +185,12 @@ class BangumiClient {
     String keyword, {
     required int limit,
     required String? token,
+    String? requestBaseUrl,
   }) => _json(
     '/v0/search/subjects?limit=$limit&offset=0',
     method: 'POST',
     token: token,
+    baseUrlOverride: requestBaseUrl,
     body: <String, Object?>{
       'keyword': keyword.trim(),
       'sort': 'match',
@@ -262,15 +287,16 @@ class BangumiClient {
     );
     final list = _asList(_asMap(data)['data']);
     final result = <BangumiEpisode>[];
-    for (var index = 0; index < list.length; index++) {
-      final map = _asMapOrNull(list[index]);
+    // 补号按「已解析出的条数」走：垃圾元素不该占据序号位，
+    // 否则它后面的章节会被顶到错的话数上（进度会标错集）。
+    var order = 0;
+    for (final node in list) {
+      final map = _asMapOrNull(node);
       final id = _int(map?['id']);
       if (map == null || id == null) continue;
+      order += 1;
       result.add(
-        BangumiEpisode(
-          id: id,
-          number: _double(map['ep']) ?? (index + 1).toDouble(),
-        ),
+        BangumiEpisode(id: id, number: _double(map['ep']) ?? order.toDouble()),
       );
     }
     return result;
@@ -329,21 +355,38 @@ class BangumiClient {
     Object? body,
     bool allowMissing = false,
     bool expectNoContent = false,
+    String? baseUrlOverride,
   }) async {
     // 官方不可达时用备用地址重试一次；403/401 之类的凭据错误不重试。
     SourceResponse response;
     try {
-      _usedBaseUrl = baseUrl;
-      response = await _send(baseUrl, path, method, token, body);
+      final primaryBaseUrl = baseUrlOverride ?? baseUrl;
+      _usedBaseUrl = primaryBaseUrl;
+      response = await _send(primaryBaseUrl, path, method, token, body);
     } on SourceException catch (error) {
+      // 「未收藏 404 → null」在异常路径同样要成立：真实网络层（dio）把非 2xx
+      // 抛成 SourceException，测试替身才走下面的响应路径。404 换到镜像也是
+      // 404（同一套数据），所以不回退、直接按契约返回。
+      if (error.type == SourceErrorType.notFound && allowMissing) return null;
       final fallback = fallbackBaseUrl;
-      if (fallback == null || fallback == baseUrl || !_unreachable(error)) {
+      final primaryBaseUrl = baseUrlOverride ?? baseUrl;
+      if (fallback == null ||
+          fallback == primaryBaseUrl ||
+          !_unreachable(error)) {
         rethrow;
       }
       // 先记地址再发请求：`http.send` 对非 2xx 也会抛，等它返回才记就记不上
       // （镜像回 401 时正好是这种情况，而这时最需要告诉用户「token 发出去了」）。
       _usedBaseUrl = fallback;
-      response = await _send(fallback, path, method, token, body);
+      try {
+        response = await _send(fallback, path, method, token, body);
+      } on SourceException catch (mirrorError) {
+        // 官方不可达、镜像回 404：同样是「未收藏」。
+        if (mirrorError.type == SourceErrorType.notFound && allowMissing) {
+          return null;
+        }
+        rethrow;
+      }
     }
 
     if (response.statusCode == 404 && allowMissing) return null;

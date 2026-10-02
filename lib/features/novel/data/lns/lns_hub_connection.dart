@@ -304,6 +304,7 @@ class SignalRLnsHubConnection implements LnsHubConnection {
 
   void _failConnection(SourceException error, [LnsSocket? failedSocket]) {
     if (failedSocket != null && !identical(_socket, failedSocket)) return;
+    final socket = _socket;
     final handshake = _handshake;
     _socket = null;
     _handshake = null;
@@ -312,10 +313,19 @@ class SignalRLnsHubConnection implements LnsHubConnection {
     final subscription = _subscription;
     _subscription = null;
     if (subscription != null) unawaited(subscription.cancel());
+    if (socket != null) unawaited(_closeQuietly(socket));
     if (handshake != null && !handshake.isCompleted) {
       handshake.completeError(error);
     }
     _failPending(error);
+  }
+
+  Future<void> _closeQuietly(LnsSocket socket) async {
+    try {
+      await socket.close();
+    } catch (_) {
+      // The connection is already failed; close errors must not replace it.
+    }
   }
 
   void _failPending(SourceException error) {

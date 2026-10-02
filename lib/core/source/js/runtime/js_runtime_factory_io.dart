@@ -16,13 +16,17 @@ import '../js_runtime.dart';
 /// 2. **通道回调是同步的**：`sendMessage` 从 JS 调用时，Dart 回调是在 quickjs
 ///    的执行栈里同步进入的。此时任何 `evaluate` 都是重入引擎 → 崩溃。
 ///    因此回推结果必须放到 microtask 之后。
-/// 3. 引擎是同步执行 + `handlePromise` 轮询 microtask：JS 侧 `await` 只在
-///    `handlePromise` 的 Timer 循环里推进，所以跨边界结果必须 resolve 到
-///    promise 上，而不是读 `evaluate` 的返回值。
+/// 3. 引擎同步执行；异步任务由应用持有的 job pump 推进，结果经
+///    triomiResult 通道返回。轮询在超时、释放和调用结束时取消。
 JsRuntime createFlutterJsRuntime() => FlutterJsRuntime();
 
 /// [createFlutterJsRuntime] 的实现细节对上层不可见。
 class FlutterJsRuntime implements JsRuntime {
+  FlutterJsRuntime({this.callTimeout = const Duration(seconds: 30)});
+  final Duration callTimeout;
+  final Map<String, Completer<String>> _calls = {};
+  int _nextCall = 0;
+  Timer? _jobPump;
   JavascriptRuntime? _js;
   JsHostBridge? _bridge;
   bool _disposed = false;
@@ -46,6 +50,13 @@ class FlutterJsRuntime implements JsRuntime {
     _js = runtime;
     _bridge = bridge;
     runtime.setupBridge(_channel, _onHostMessage);
+    runtime.setupBridge('triomiResult', (dynamic args) {
+      final envelope = (args as List).first as Map;
+      final completer = _calls[envelope['id']];
+      if (completer != null && !completer.isCompleted) {
+        completer.complete(envelope['result'] as String);
+      }
+    });
 
     // 宿主函数与调用包装（`triomi.*` / `__triomiCall`）。
     final result = runtime.evaluate(
@@ -76,54 +87,78 @@ class FlutterJsRuntime implements JsRuntime {
   @override
   Future<Object?> call(String function, List<Object?> args) async {
     final runtime = _require();
-    final JsEvalResult evaluated;
+    final id = '${++_nextCall}';
+    final completion = Completer<String>();
+    _calls[id] = completion;
+    _jobPump ??= Timer.periodic(const Duration(milliseconds: 20), (_) {
+      if (_disposed) return;
+      try {
+        runtime.executePendingJob();
+      } catch (error) {
+        for (final pending in _calls.values) {
+          if (!pending.isCompleted) {
+            pending.completeError(JsRuntimeError('$error'));
+          }
+        }
+      }
+    });
     try {
-      evaluated = runtime.evaluate(
-        '__triomiCall(${jsonEncode(function)}, ${jsonEncode(jsonEncode(args))})',
+      final JsEvalResult evaluated;
+      try {
+        evaluated = runtime.evaluate(
+          '__triomiCall(${jsonEncode(function)}, ${jsonEncode(jsonEncode(args))})'
+          '.then(function(result) { sendMessage("triomiResult", JSON.stringify([{id: ${jsonEncode(id)}, result: result}])); })',
+        );
+      } catch (error) {
+        throw JsRuntimeError('调用 $function 失败：$error');
+      }
+      if (evaluated.isError) {
+        throw JsRuntimeError('调用 $function 失败：${evaluated.stringResult}');
+      }
+
+      final String resolved;
+      try {
+        resolved = await completion.future.timeout(callTimeout);
+      } on TimeoutException {
+        throw JsRuntimeError('调用 $function 超时');
+      } catch (error) {
+        throw JsRuntimeError('调用 $function 失败：$error');
+      }
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(resolved);
+      } catch (error) {
+        throw JsRuntimeError('调用 $function 返回了非 JSON 结果：$error');
+      }
+      if (decoded is! Map) {
+        throw JsRuntimeError('调用 $function 返回了非预期结果');
+      }
+      if (decoded['ok'] == true) return decoded['value'];
+
+      final message = decoded['error']?.toString() ?? '未知错误';
+      throw JsRuntimeError(
+        _stripMarker(message),
+        hostError: decodeHostError(message, sourceId: ''),
       );
-    } catch (error) {
-      throw JsRuntimeError('调用 $function 失败：$error');
+    } finally {
+      _calls.remove(id);
+      if (_calls.isEmpty) {
+        _jobPump?.cancel();
+        _jobPump = null;
+      }
     }
-    if (evaluated.isError) {
-      throw JsRuntimeError('调用 $function 失败：${evaluated.stringResult}');
-    }
-
-    final JsEvalResult resolved;
-    try {
-      resolved = await runtime.handlePromise(
-        evaluated,
-        timeout: const Duration(seconds: 30),
-      );
-    } on TimeoutException {
-      throw JsRuntimeError('调用 $function 超时');
-    } catch (error) {
-      throw JsRuntimeError('调用 $function 失败：$error');
-    }
-    if (resolved.isError) {
-      throw JsRuntimeError(resolved.stringResult);
-    }
-
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(resolved.stringResult);
-    } catch (error) {
-      throw JsRuntimeError('调用 $function 返回了非 JSON 结果：$error');
-    }
-    if (decoded is! Map) {
-      throw JsRuntimeError('调用 $function 返回了非预期结果');
-    }
-    if (decoded['ok'] == true) return decoded['value'];
-
-    final message = decoded['error']?.toString() ?? '未知错误';
-    throw JsRuntimeError(
-      _stripMarker(message),
-      hostError: decodeHostError(message, sourceId: ''),
-    );
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _jobPump?.cancel();
+    _jobPump = null;
+    for (final pending in _calls.values) {
+      if (!pending.isCompleted) {
+        pending.completeError(const JsRuntimeError('JS 运行时已释放'));
+      }
+    }
     _js?.dispose();
     _js = null;
   }

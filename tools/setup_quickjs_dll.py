@@ -14,6 +14,7 @@ import shutil
 import sys
 
 PUB_CACHE_ROOTS = [
+    os.path.join(os.environ.get("PUB_CACHE", ""), "hosted"),
     os.path.expanduser(r"~\AppData\Local\Pub\Cache\hosted"),
     os.path.expanduser(r"~/.pub-cache/hosted"),
 ]
@@ -27,7 +28,9 @@ def main() -> int:
         return 0
 
     for base in PUB_CACHE_ROOTS:
-        for pkg in glob.glob(os.path.join(base, "flutter_js-*")):
+        packages = glob.glob(os.path.join(base, "flutter_js-*"))
+        packages += glob.glob(os.path.join(base, "*", "flutter_js-*"))
+        for pkg in packages:
             candidate = os.path.join(pkg, "windows", "shared", "quickjs_c_bridge.dll")
             if os.path.exists(candidate):
                 shutil.copy2(candidate, target)

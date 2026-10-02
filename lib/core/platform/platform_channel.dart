@@ -1,5 +1,14 @@
 import 'package:flutter/services.dart';
 
+/// SAF 授权目录写入器（D49 合同）：写入 [fileName] 并返回系统实际创建的
+/// document URI（`DocumentsContract.createDocument` 的结果）。
+///
+/// 实现**不得合成** `treeUri/fileName` 形式的路径——系统可能对文件改名
+/// （重名加序号等），只有返回的 URI 才是真实位置。失败抛 [PlatformException]，
+/// 空/null URI 视为失败（由调用方回退应用私有目录）。
+typedef SafTreeWriter =
+    Future<String> Function(String treeUri, String fileName, List<int> bytes);
+
 /// 平台能力通道（`triomi/platform`）的 Dart 侧封装。
 ///
 /// 约定：所有方法在平台未实现（测试环境 / 桌面端）或调用失败时静默降级
@@ -54,14 +63,22 @@ class PlatformChannel {
   Future<String?> writeToTree(
     String treeUri,
     String fileName,
-    Uint8List bytes,
-  ) {
-    return _channel.invokeMethod<String>('writeToTree', <String, Object?>{
-      'treeUri': treeUri,
-      'fileName': fileName,
-      'bytes': bytes,
-      'mime': 'application/zip',
-    });
+    Uint8List bytes, {
+    String mime = 'application/zip',
+  }) async {
+    final uri = await _channel.invokeMethod<String>(
+      'writeToTree',
+      <String, Object?>{
+        'treeUri': treeUri,
+        'fileName': fileName,
+        'bytes': bytes,
+        'mime': mime,
+      },
+    );
+    if (uri == null || uri.isEmpty) {
+      throw PlatformException(code: 'write_failed', message: '未返回导出文件 URI');
+    }
+    return uri;
   }
 
   /// 注册 / 取消后台更新提醒（Android JobScheduler 周期任务）。

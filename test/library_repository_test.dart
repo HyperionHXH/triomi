@@ -145,6 +145,176 @@ void main() {
       );
       expect(await repository.loadChapters('test-manga', '12'), hasLength(1));
     });
+
+    test('目录刷新增加章节时累计本地未读，首次缓存不产生误报', () async {
+      await repository.addToLibrary(manga);
+      await repository.saveChapters(
+        itemSourceId: 'test-manga',
+        itemRemoteId: '12',
+        chapters: <Chapter>[chapter(remoteId: '101', title: '第 1 话')],
+      );
+      var entry = (await repository.listLibrary()).single.entry;
+      expect(entry.unreadCount, 0);
+
+      await repository.saveChapters(
+        itemSourceId: 'test-manga',
+        itemRemoteId: '12',
+        chapters: <Chapter>[
+          chapter(remoteId: '101', title: '第 1 话'),
+          chapter(remoteId: '102', title: '第 2 话', index: 1),
+        ],
+      );
+      entry = (await repository.listLibrary()).single.entry;
+      expect(entry.unreadCount, 1);
+
+      await repository.saveChapters(
+        itemSourceId: 'test-manga',
+        itemRemoteId: '12',
+        chapters: <Chapter>[
+          chapter(remoteId: '101', title: '第 1 话'),
+          chapter(remoteId: '102', title: '第 2 话', index: 1),
+        ],
+      );
+      entry = (await repository.listLibrary()).single.entry;
+      expect(entry.unreadCount, 1);
+    });
+  });
+
+  group('G1 更新提示边界（D32）', () {
+    setUp(() async {
+      await repository.addToLibrary(manga);
+      await repository.saveChapters(
+        itemSourceId: 'test-manga',
+        itemRemoteId: '12',
+        chapters: <Chapter>[
+          chapter(remoteId: '101', title: '第 1 话', index: 0),
+          chapter(remoteId: '102', title: '第 2 话', index: 1),
+        ],
+      );
+      await repository.saveChapters(
+        itemSourceId: 'test-manga',
+        itemRemoteId: '12',
+        chapters: <Chapter>[
+          chapter(remoteId: '101', title: '第 1 话', index: 0),
+          chapter(remoteId: '102', title: '第 2 话', index: 1),
+          chapter(remoteId: '103', title: '第 3 话', index: 2),
+        ],
+      ); // 增长 1 条 → unread = 1
+    });
+
+    test('目录缩减（下架章节）不减少也不增加未读', () async {
+      await repository.saveChapters(
+        itemSourceId: 'test-manga',
+        itemRemoteId: '12',
+        chapters: <Chapter>[
+          chapter(remoteId: '101', title: '第 1 话', index: 0),
+        ],
+      );
+      final entry = (await repository.listLibrary()).single.entry;
+      expect(entry.unreadCount, 1,
+          reason: '缩减只影响目录行，未读提示是已累计的阅读决策');
+    });
+
+    test('重排（remoteId 集合不变、sortIndex 变化）不累计未读', () async {
+      await repository.saveChapters(
+        itemSourceId: 'test-manga',
+        itemRemoteId: '12',
+        chapters: <Chapter>[
+          chapter(remoteId: '103', title: '第 3 话', index: 0),
+          chapter(remoteId: '101', title: '第 1 话', index: 1),
+          chapter(remoteId: '102', title: '第 2 话', index: 2),
+        ],
+      );
+      final entry = (await repository.listLibrary()).single.entry;
+      expect(entry.unreadCount, 1, reason: '重复刷新/重排不重复累计');
+
+      final chapters = await repository.loadChapters('test-manga', '12');
+      expect(chapters.map((c) => c.remoteId).toList(), <String>['103', '101', '102']);
+    });
+
+    test('未加入书架的作品刷新目录不崩溃也不产生未读', () async {
+      await repository.removeFromLibrary('test-manga', '12');
+      await repository.saveChapters(
+        itemSourceId: 'test-manga',
+        itemRemoteId: '12',
+        chapters: <Chapter>[
+          chapter(remoteId: '101', title: '第 1 话'),
+          chapter(remoteId: '999', title: '新话'),
+        ],
+      );
+      expect(await repository.listLibrary(), isEmpty);
+    });
+
+    test('markAllRead：清空全部未读并返回条数', () async {
+      // 追加第二本书并制造未读。
+      await repository.addToLibrary(
+        const MediaItem(
+          sourceId: 'test-manga',
+          remoteId: '13',
+          type: MediaType.novel,
+          title: '作品乙',
+        ),
+      );
+      await repository.saveChapters(
+        itemSourceId: 'test-manga',
+        itemRemoteId: '13',
+        chapters: <Chapter>[chapter(remoteId: '201', title: '第 1 话')],
+      );
+      await repository.saveChapters(
+        itemSourceId: 'test-manga',
+        itemRemoteId: '13',
+        chapters: <Chapter>[
+          chapter(remoteId: '201', title: '第 1 话'),
+          chapter(remoteId: '202', title: '第 2 话'),
+          chapter(remoteId: '203', title: '第 3 话'),
+        ],
+      );
+
+      final cleared = await repository.markAllRead();
+      expect(cleared, 2, reason: '只统计 unread > 0 的条目');
+      expect(
+        (await repository.listLibrary()).every((view) => view.entry.unreadCount == 0),
+        isTrue,
+      );
+
+      // 已全部为 0 后再调用：返回 0。
+      expect(await repository.markAllRead(), 0);
+    });
+
+    test('markAllRead：sourceId 过滤只清指定来源', () async {
+      await repository.addToLibrary(
+        const MediaItem(
+          sourceId: 'other-source',
+          remoteId: '12',
+          type: MediaType.novel,
+          title: '别源同号',
+        ),
+      );
+      await repository.saveChapters(
+        itemSourceId: 'other-source',
+        itemRemoteId: '12',
+        chapters: <Chapter>[chapter(remoteId: '301', title: '第 1 话')],
+      );
+      await repository.saveChapters(
+        itemSourceId: 'other-source',
+        itemRemoteId: '12',
+        chapters: <Chapter>[
+          chapter(remoteId: '301', title: '第 1 话'),
+          chapter(remoteId: '302', title: '第 2 话'),
+        ],
+      );
+
+      final cleared = await repository.markAllRead(sourceId: 'test-manga');
+      expect(cleared, 1);
+
+      final entries = await repository.listLibrary();
+      final byKey = <String, int>{
+        for (final view in entries)
+          '${view.item.sourceId}/${view.item.remoteId}': view.entry.unreadCount,
+      };
+      expect(byKey['test-manga/12'], 0, reason: '指定来源被清');
+      expect(byKey['other-source/12'], 1, reason: '其他来源不受影响');
+    });
   });
 
   group('阅读历史', () {

@@ -39,6 +39,21 @@ class Preferences {
     }
     return count;
   }
+
+  /// Restore a key subset after a failed multi-store import.
+  /// [values] contains the previous values; [missing] contains keys that did
+  /// not exist before the attempted import.
+  Future<void> restoreSubset(
+    Map<String, Object?> values,
+    Set<String> missing,
+  ) async {
+    for (final key in missing) {
+      await _box.delete(key);
+    }
+    for (final entry in values.entries) {
+      await _box.put(entry.key, entry.value);
+    }
+  }
 }
 
 /// 在 `main()` 中通过 override 注入，保证页面读取设置时不会拿到未初始化的实例。

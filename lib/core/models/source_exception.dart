@@ -32,11 +32,40 @@ class SourceException implements Exception {
     String? url,
   }) {
     if (error is SourceException) return error;
+    final safeUrl = url == null ? null : _safeUrl(url);
     return SourceException(
       sourceId: sourceId,
       type: _classify(error),
-      message: url == null ? '$error' : '$url：$error',
+      message: safeUrl == null
+          ? sanitizeMessage('$error')
+          : '$safeUrl：${sanitizeMessage('$error')}',
       cause: error,
+    );
+  }
+
+  static String _safeUrl(String value) {
+    try {
+      final uri = Uri.parse(value);
+      if (uri.scheme.isNotEmpty && uri.host.isNotEmpty) {
+        return Uri(
+          scheme: uri.scheme,
+          host: uri.host,
+          port: uri.hasPort ? uri.port : null,
+          path: uri.path,
+        ).toString();
+      }
+    } catch (_) {
+      // Fall through to the conservative string form below.
+    }
+    return value.split('?').first.split('#').first;
+  }
+
+  /// Removes credentials from error text that may contain a request URL.
+  static String sanitizeMessage(String value) {
+    final urlPattern = RegExp(r'https?://[^\s：]+', caseSensitive: false);
+    return value.replaceAllMapped(
+      urlPattern,
+      (match) => _safeUrl(match.group(0)!),
     );
   }
 

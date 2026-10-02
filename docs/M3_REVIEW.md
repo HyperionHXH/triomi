@@ -1,11 +1,11 @@
 # M3 复查记录（追番闭环）
 
-**日期**：2026-09-22 ｜ **提交**：见 git log（feat(M3)）
+**日期**：2026-10-01（原始 M3 交付记录 + Android 播放收口） ｜ **提交**：见 git log
 
 ## 交付内容
 
-### 播放器（media_kit / libmpv）
-- `PlayerPage`：media_kit 播放 + 自绘控制层。播放/暂停、±10 秒（两侧单击）、
+### 播放器（桌面 media_kit / Android 原生 TextureView）
+- `PlayerPage`：桌面端 media_kit/libmpv、Android 端原生 TextureView + MediaPlayer + 自绘控制层。播放/暂停、±10 秒（两侧单击）、
   双击切换播放、进度拖动、倍速接口、上一集/下一集、剧集抽屉、多线路切换、
   全屏（沉浸式 + 横屏，返回键先退全屏）、每 5 秒落一次进度与历史。
 - 番剧内容解析走规则引擎：`content.playSources`（同一元素取线路名 + 地址），
@@ -39,8 +39,9 @@
 | `flutter analyze` | No issues found |
 | `flutter test` | 46 passed（+7：放送解析、弹幕解析、番剧规则全链路） |
 | `flutter build apk --debug` | 成功（含 media_kit 原生库） |
-| 模拟器 E2E | 发现页三源 → 夹具番剧详情（简介+3集）→ 播放器（进度 0:14→0:29 推进、
+| 模拟器 E2E（原始 M3） | 发现页三源 → 夹具番剧详情（简介+3集）→ 播放器（进度 0:14→0:29 推进、
   线路切换入口、剧集抽屉、**弹幕多航道滚动**）→ 追番页（放送表按星期分组、今天高亮） |
+| Android 视频画面收口（2026-10-01） | API 35 x86_64 `emulator-5554` 正式 Flutter 播放器显示并持续播放真实帧；12 帧复验中央视频区域非黑 85.45%–86.22%，相邻帧平均绝对差 3.36–5.92，变化像素 8.54%–11.53% |
 
 ## 模拟器 E2E 发现并修复的问题
 
@@ -69,13 +70,26 @@
   flutter-plugin-loader（PREFER_SETTINGS）冲突，**不可用**，依赖直连可解。
 - 构建含原生插件的 APK 时沙箱会干扰 Gradle 写锁/strip，需要以非沙箱方式运行。
 
-## 已知缺口
+## Android 黑屏根因与修复（2026-10-01）
 
-- **视频帧在模拟器截屏/录屏中是黑的**：media_kit 检测到模拟器强制 S/W 渲染，
-  其外部纹理（Impeller + x86_64 模拟器组合）无法被 screencap/screenrecord 捕获，
-  也可能确实不上屏——播放管线（解码、时间轴、弹幕同步、控制）已验证，
-  画面合成需要真机确认（media_kit 是 Kazumi 同款成熟路径，真机风险低）。
+- MP4、HTTP Range/206、Android 解码器和独立原生 `VideoView` 均正常；问题集中在
+  `media_kit/libmpv` 外部纹理与 API 35 x86_64 模拟器的合成。
+- 原生 `VideoView` 嵌入 Flutter 时还会因 URI 方式报 `No content provider`；
+  `TextureView + MediaPlayer.setDataSource(String)` 消除了该路径问题。
+- 正式 Android 播放路径改为 `PlatformViewLink` + `initExpensiveAndroidView`（Hybrid
+  Composition）+ `TextureView`。`NativeVideoPlatformView.kt` 在 Surface 重建时保存位置/
+  播放状态并恢复；桌面端仍使用 media_kit。
+- 临时原生诊断页只用于定位，正式播放器不依赖它；物理 Android 手机兼容性仍待一次实测。
 - dandanplay 凭据尚未有设置页入口（M5 一并做），目前规则声明的弹幕数据源已可用。
 - 弹幕发送、屏蔽词、透明度设置未做（对齐 Kazumi 的完整弹幕体验属 M5 增强）。
-- 播放倍速 UI 未接（Player.setRate 已具备，控制条入口待加）。
+- 播放倍速、seek、播放/暂停和线路/章节控制已接入 Android 原生桥接；物理真机回归待做。
 - `schedule_providers.dart` 的 dart-define 覆盖仅调试用，正式包默认 Bangumi。
+
+## 动态帧复验补充（2026-10-01）
+
+- `sample.mp4` 经 OpenCV 核对为 720 帧、24 fps、约 30 秒；播放器原生日志报告
+  `prepared duration=30023`，位置从 `1116 ms` 连续推进到 `7363 ms`。
+- 新增临时脚本 `D:\noval_and_manga\_video_pixel_verify.py`，按语义控件导航并等待
+  `TriomiNativeVideo` 的 prepared 事件后采集 12 帧；验证细节与失败修正见
+  `docs/CHECKPOINT_2026-10-01.md`。
+- 旧截图中的 `0:04 / 0:04` 属于媒体已结束时的采样状态，已从“时长/动态帧证据”中剔除。

@@ -21,6 +21,10 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        flutterEngine.platformViewsController.registry.registerViewFactory(
+            "triomi/native-video",
+            NativeVideoViewFactory(flutterEngine.dartExecutor.binaryMessenger),
+        )
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "triomi/platform")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -106,7 +110,9 @@ class MainActivity : FlutterActivity() {
                 result.error("create_failed", "createDocument returned null", null)
                 return
             }
-            contentResolver.openOutputStream(newUri)?.use { output ->
+            val stream = contentResolver.openOutputStream(newUri)
+                ?: throw java.io.IOException("Unable to open document output stream")
+            stream.use { output ->
                 output.write(bytes)
                 output.flush()
             }

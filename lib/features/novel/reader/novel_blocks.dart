@@ -374,7 +374,6 @@ List<ReaderPage> paginateReaderBlocks(
           .getPositionForOffset(Offset(style.pageWidth, lastLine.baseline))
           .offset;
       final safeEnd = math.max(math.min(end, remainingText.length), 1);
-
       elements.add(
         TextElement(
           remainingText.substring(0, safeEnd),
