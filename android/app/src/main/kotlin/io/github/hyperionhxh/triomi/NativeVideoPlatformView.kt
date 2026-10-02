@@ -157,7 +157,11 @@ private class NativeVideoPlatformView(
                 prepared = true
                 lastDurationMs = p.duration.toLong().coerceAtLeast(0L)
                 debug("prepared duration=$lastDurationMs url=${safeUrl(url)} shouldPlay=$shouldPlay")
-                val resume = resumePositionMs.coerceIn(0L, lastDurationMs)
+                val resume = if (lastDurationMs > 0L) {
+                    resumePositionMs.coerceIn(0L, lastDurationMs)
+                } else {
+                    resumePositionMs.coerceIn(0L, Int.MAX_VALUE.toLong())
+                }
                 if (resume > 0L) {
                     try { p.seekTo(resume.toInt()) } catch (_: Throwable) {}
                 }
@@ -202,7 +206,13 @@ private class NativeVideoPlatformView(
 
     private fun applyPlaybackRate() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || !prepared) return
-        try { player?.playbackParams = player?.playbackParams?.setSpeed(playbackRate) ?: return } catch (_: Throwable) {}
+        val p = player ?: return
+        try {
+            // Nonzero playbackParams can start MediaPlayer, including after
+            // a paused Surface rebuild. Restore the explicit pause intent.
+            p.playbackParams = p.playbackParams.setSpeed(playbackRate)
+            if (!shouldPlay && p.isPlaying) p.pause()
+        } catch (_: Throwable) {}
     }
 
     private fun normalizeDataSource(url: String): String =

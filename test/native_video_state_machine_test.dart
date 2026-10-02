@@ -66,10 +66,16 @@ void main() {
 
       machine.onSurfaceDestroyed();
       machine.onSurfaceAvailable();
+      expect(machine.state.phase, NativeVideoPhase.loading);
+      machine.seek(9_000);
+      expect(machine.state.positionMs, 4_500);
       // shouldPlay 已是 false：重建后停在暂停意图上。
       machine.onPrepared(30_023);
-      expect(machine.state.phase, NativeVideoPhase.prepared,
-          reason: '暂停后重建不能自动播放');
+      expect(
+        machine.state.phase,
+        NativeVideoPhase.prepared,
+        reason: '暂停后重建不能自动播放',
+      );
       expect(machine.state.positionMs, 4_500, reason: '位置在重建后保留');
       expect(machine.state.shouldPlay, isFalse);
 
@@ -102,8 +108,11 @@ void main() {
       expect(machine.state.phase, NativeVideoPhase.loading);
       expect(machine.state.shouldPlay, isTrue);
       machine.onPrepared(1_000);
-      expect(machine.state.phase, NativeVideoPhase.playing,
-          reason: '意图为播放，prepared 后自动开播');
+      expect(
+        machine.state.phase,
+        NativeVideoPhase.playing,
+        reason: '意图为播放，prepared 后自动开播',
+      );
 
       // loading 阶段点暂停：不自动开播。
       final other = NativeVideoStateMachine()..setUrl('https://x/b.mp4');
@@ -137,6 +146,29 @@ void main() {
       expect(machine.state.positionMs, 0);
       machine.onPrepared(8_000);
       expect(machine.state.durationMs, 8_000);
+    });
+
+    test('play during paused surface preparation only updates intent', () {
+      final machine = NativeVideoStateMachine()..setUrl('https://x/a.mp4');
+      machine.onPrepared(10_000);
+      machine.pause();
+      machine.onSurfaceDestroyed();
+      machine.onSurfaceAvailable();
+      machine.play();
+      expect(machine.state.phase, NativeVideoPhase.loading);
+      expect(machine.state.shouldPlay, isTrue);
+      machine.onPrepared(10_000);
+      expect(machine.state.phase, NativeVideoPhase.playing);
+    });
+
+    test('unknown duration keeps position across surface preparation', () {
+      final machine = NativeVideoStateMachine()..setUrl('https://x/live.m3u8');
+      machine.onPrepared(0);
+      machine.onPosition(5_000);
+      machine.onSurfaceDestroyed();
+      machine.onSurfaceAvailable();
+      machine.onPrepared(0);
+      expect(machine.state.positionMs, 5_000);
     });
   });
 }

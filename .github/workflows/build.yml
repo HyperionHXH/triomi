@@ -25,6 +25,21 @@ jobs:
       - run: flutter analyze
       - run: flutter test
 
+  # Python 工具链验收（D15）：tools/ 单测、夹具媒体自检与文档漂移扫描。
+  # 只装 headless OpenCV；本机/远端验证结果分开记录，这里通过 ≠ 设备验收。
+  python-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check -r tools/requirements-dev.txt
+      - run: python -m unittest discover -s tools -p "test_*.py" -v
+      - run: python tools/check_fixture_media.py
+      - run: python tools/ui_doc_drift_scan.py --json
+      - run: python tools/delivery_consistency_scan.py --json
+
   # Android APK（release）。项目里没配签名密钥，走的是 Flutter 模板默认的 debug 签名，
   # 仅用于自用/测试安装；要发布请自行配置 keystore。
   android:

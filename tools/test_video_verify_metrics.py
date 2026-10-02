@@ -122,6 +122,21 @@ class VideoVerifyMetricsTest(unittest.TestCase):
         summary = dynamic_states(29000, 100, 700, 1300)
         self.assertEqual(summary.progressed_ms, 1200)
 
+    def test_old_line_progress_cannot_hide_frozen_new_line(self) -> None:
+        summary = parse_logcat(
+            [
+                "D/TriomiNativeVideo: prepared duration=30023 url=https://h/a.mp4",
+                state_line(1000, "https://h/a.mp4"),
+                state_line(5000, "https://h/a.mp4"),
+                "D/TriomiNativeVideo: prepared duration=30023 url=https://h/b.mp4",
+                state_line(100, "https://h/b.mp4"),
+                state_line(100, "https://h/b.mp4"),
+            ]
+        )
+        self.assertEqual(summary.progressed_ms, 0)
+        with self.assertRaisesRegex(AssertionError, "progressed only 0 ms"):
+            assert_dynamic_playback(summary, good_pixels())
+
     def test_frozen_after_first_frame_is_rejected(self) -> None:
         # 只有首帧动了，之后相邻帧差全为 0：均值判定应拒绝，单点尖峰不能蒙混。
         summary = dynamic_states(1000, 1200, 1400, 1600)
@@ -163,8 +178,60 @@ class VideoVerifyMetricsTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "did not change"):
             assert_dynamic_playback(
                 summary,
-                [{"non_black": 0.86, "delta": None, "changed": 0.0}],
+                [{"non_black": 0.86, "delta": None, "changed": 0.0}] * 2,
             )
+
+    def test_same_url_reprepare_discards_previous_progress(self) -> None:
+        for boundary in (
+            "prepared duration=30023 url=https://h/a.mp4",
+            "setUrl url=https://h/a.mp4 surface=true",
+            "surface destroyed prepared=true position=5000",
+        ):
+            with self.subTest(boundary=boundary):
+                summary = parse_logcat([
+                    "D/TriomiNativeVideo: prepared duration=30023",
+                    state_line(1000), state_line(5000),
+                    f"D/TriomiNativeVideo: {boundary}",
+                    state_line(5000), state_line(5000),
+                ])
+                self.assertEqual(summary.progressed_ms, 0)
+                with self.assertRaisesRegex(AssertionError, "progressed only 0 ms"):
+                    assert_dynamic_playback(summary, good_pixels())
+
+    def test_unrelated_tag_mentioning_native_player_is_ignored(self) -> None:
+        summary = parse_logcat([
+            "D/Other: TriomiNativeVideo prepared duration=30023",
+            "D/Other: TriomiNativeVideo state prepared=true playing=true position=1000 duration=30023",
+        ])
+        self.assertEqual(summary.prepared, ())
+        self.assertEqual(summary.states, ())
+
+    def test_threadtime_tag_is_supported(self) -> None:
+        summary = parse_logcat(["10-01 21:00:00.000 123 456 D TriomiNativeVideo: prepared duration=30023"])
+        self.assertEqual(len(summary.prepared), 1)
+
+    def test_small_seek_back_discards_earlier_progress(self) -> None:
+        self.assertEqual(dynamic_states(1000, 2000, 1800, 1800).progressed_ms, 0)
+
+    def test_paused_position_changes_are_not_playback(self) -> None:
+        summary = parse_logcat([
+            "D/TriomiNativeVideo: prepared duration=30023",
+            state_line(1000).replace("playing=true", "playing=false"),
+            state_line(5000).replace("playing=true", "playing=false"),
+        ])
+        self.assertEqual(summary.progressed_ms, 0)
+
+    def test_nonfinite_or_out_of_range_pixels_are_rejected(self) -> None:
+        for key in ("non_black", "changed"):
+            for value in (float("nan"), float("inf"), -0.1, 1.1):
+                rows = good_pixels()
+                rows[0][key] = value
+                with self.subTest(key=key, value=value):
+                    with self.assertRaisesRegex(AssertionError, "invalid pixel"):
+                        assert_dynamic_playback(dynamic_states(1000, 2000), rows)
+
+    def test_url_userinfo_is_removed(self) -> None:
+        self.assertEqual(sanitize_url("https://user:password@h/p.mp4?token=x"), "https://h/p.mp4")
 
 
 if __name__ == "__main__":

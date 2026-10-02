@@ -11,10 +11,8 @@ Contract notes (G1/D11 review):
 - URLs are sanitised to ``scheme://host/path`` before they enter any
   dataclass, so query strings (which may carry tokens) never reach the
   summaries. Kotlin already logs sanitised URLs; this is the second layer.
-- ``progressed_ms`` is the sum of positive position deltas between
-  consecutive samples. A position regression (surface rebuild seek-back) or
-  a reset (line switch restarts at 0) therefore cannot fake progress: the
-  new line must advance on its own to count.
+- ``progressed_ms`` measures the latest preparation session only. Reloads
+  of the same URL and position regressions discard earlier progress.
 - ``assert_dynamic_playback`` requires prepared, zero native errors,
   timeline progress, non-black frames AND frame-to-frame change. The pixel
   checks use the mean over samples so a frozen-after-first-frame capture
@@ -24,9 +22,11 @@ Contract notes (G1/D11 review):
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 import re
 from statistics import mean
 from typing import Iterable, Mapping, Sequence
+from urllib.parse import urlsplit, urlunsplit
 
 
 _PREPARED = re.compile(
@@ -38,6 +38,7 @@ _STATE = re.compile(
     r"\s+duration=(?P<duration>\d+)"
 )
 _ERROR = re.compile(r"error what=(?P<what>-?\d+) extra=(?P<extra>-?\d+)")
+_TAG = re.compile(r"(?:[VDIWEF]/TriomiNativeVideo(?:\(\s*\d+\))?|[VDIWEF]\s+TriomiNativeVideo)\s*:")
 
 
 def sanitize_url(url: str | None) -> str | None:
@@ -45,8 +46,11 @@ def sanitize_url(url: str | None) -> str | None:
 
     if url is None:
         return None
-    cleaned = url.split("?", 1)[0].split("#", 1)[0]
-    return cleaned or None
+    try:
+        parsed = urlsplit(url)
+        return urlunsplit((parsed.scheme, parsed.netloc.rsplit("@", 1)[-1], parsed.path, "", "")) or None
+    except ValueError:
+        return None
 
 
 @dataclass(frozen=True)
@@ -75,22 +79,33 @@ class LogSummary:
     prepared: tuple[PreparedEvent, ...]
     states: tuple[PlayerStateSample, ...]
     errors: tuple[PlayerError, ...]
+    latest_states: tuple[PlayerStateSample, ...] | None = None
 
     @property
     def progressed_ms(self) -> int:
-        """Sum of positive position deltas between consecutive samples.
+        """Return progress from the latest playback session only.
 
-        Regressions and resets contribute nothing, so a capture that only
-        shows the tail of one video and the head of the next does not look
-        like continuous playback.
+        A new URL or a material position reset starts another session. Only
+        the latest session is relevant to the final screen capture: progress
+        from an old line must not let a newly selected but frozen line pass.
         """
 
-        progress = 0
-        for previous, current in zip(self.states, self.states[1:]):
+        session_progress = 0
+        states = self.states if self.latest_states is None else self.latest_states
+        for previous, current in zip(states, states[1:]):
+            url_changed = (
+                previous.url is not None
+                and current.url is not None
+                and previous.url != current.url
+            )
             delta = current.position_ms - previous.position_ms
-            if delta > 0:
-                progress += delta
-        return progress
+            position_reset = delta < 0
+            if url_changed or position_reset:
+                session_progress = 0
+                continue
+            if delta > 0 and previous.prepared and current.prepared and previous.playing and current.playing:
+                session_progress += delta
+        return session_progress
 
 
 def parse_logcat(lines: Iterable[str]) -> LogSummary:
@@ -99,11 +114,17 @@ def parse_logcat(lines: Iterable[str]) -> LogSummary:
     prepared: list[PreparedEvent] = []
     states: list[PlayerStateSample] = []
     errors: list[PlayerError] = []
+    latest_states: list[PlayerStateSample] = []
     for line in lines:
-        if "TriomiNativeVideo" not in line:
+        tag = _TAG.search(line)
+        if tag is None:
             continue
+        line = line[tag.end():].strip()
+        if line.startswith(("setUrl ", "surface destroyed")):
+            latest_states.clear()
         match = _PREPARED.search(line)
         if match:
+            latest_states.clear()
             prepared.append(
                 PreparedEvent(
                     duration_ms=int(match.group("duration")),
@@ -122,6 +143,7 @@ def parse_logcat(lines: Iterable[str]) -> LogSummary:
                     url=sanitize_url(match.group("url")),
                 )
             )
+            latest_states.append(states[-1])
             continue
         match = _ERROR.search(line)
         if match:
@@ -130,7 +152,7 @@ def parse_logcat(lines: Iterable[str]) -> LogSummary:
                     what=int(match.group("what")), extra=int(match.group("extra"))
                 )
             )
-    return LogSummary(tuple(prepared), tuple(states), tuple(errors))
+    return LogSummary(tuple(prepared), tuple(states), tuple(errors), tuple(latest_states))
 
 
 def pixel_summary(rows: Iterable[Mapping[str, float | None]]) -> dict[str, float | int]:
@@ -170,6 +192,8 @@ def assert_dynamic_playback(
     if summary.progressed_ms < min_progress_ms:
         raise AssertionError(f"position progressed only {summary.progressed_ms} ms")
     pixel_rows = list(pixels)
+    if len(pixel_rows) < 2:
+        raise AssertionError("capture needs at least two frames")
     non_black = [
         float(row["non_black"])
         for row in pixel_rows
@@ -180,6 +204,8 @@ def assert_dynamic_playback(
         for row in pixel_rows
         if row.get("changed") is not None
     ]
+    if any(not isfinite(value) or not 0 <= value <= 1 for value in non_black + changed):
+        raise AssertionError("capture has invalid pixel measurements")
     if not non_black:
         raise AssertionError("capture has no non_black measurement")
     if mean(non_black) < min_non_black:

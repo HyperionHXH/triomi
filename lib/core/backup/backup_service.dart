@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../db/app_database.dart';
 import '../models/media_type.dart';
+import '../platform/platform_channel.dart';
 import '../source/http_client.dart';
 import '../storage/preferences.dart';
 
@@ -21,6 +22,7 @@ class BackupSummary {
     required this.settings,
     required this.exportedAt,
     this.path,
+    this.savedToSaf = false,
   });
 
   final int items;
@@ -33,6 +35,11 @@ class BackupSummary {
 
   /// 本地备份包路径（从文件导入或导出后回填）。
   final String? path;
+
+  /// D50：true = path 是用户授权 SAF 目录的真实 document URI；
+  /// false = 应用私有目录（用户取消选择或授权写入失败回退）。
+  /// 文件导入（importFromFile/inspect）时无 SAF 语义，恒为 false。
+  final bool savedToSaf;
 }
 
 /// 备份包结构版本：导入时按版本决定迁移策略。
@@ -89,8 +96,7 @@ class BackupService {
     bool includeCovers = true,
     bool includeOfflineContent = true,
     String? directoryUri,
-    Future<void> Function(String uri, String fileName, List<int> bytes)?
-    writeToTree,
+    SafTreeWriter? writeToTree,
     void Function(int completed, int total)? onProgress,
   }) async {
     final archive = Archive();
@@ -115,20 +121,25 @@ class BackupService {
     final fileName = 'triomi-$stamp.zip';
     final bytes = Uint8List.fromList(ZipEncoder().encode(archive));
 
-    // 用户授权目录优先（SAF）；失败回退应用私有目录。
-    var savedPath = '$directoryUri/$fileName';
-    var wroteToTree = false;
+    // 用户授权目录优先（SAF）；失败/空 URI 回退应用私有目录。
+    // 返回的 document URI 是系统真实创建的位置（系统可能改名），
+    // 不得合成 treeUri/fileName 路径（D49 合同）。
+    var savedPath = '';
+    var savedToTree = false;
     if (directoryUri != null &&
         directoryUri.isNotEmpty &&
         writeToTree != null) {
       try {
-        await writeToTree(directoryUri, fileName, bytes);
-        wroteToTree = true;
+        final documentUri = await writeToTree(directoryUri, fileName, bytes);
+        if (documentUri.isNotEmpty) {
+          savedPath = documentUri;
+          savedToTree = true;
+        }
       } catch (_) {
-        wroteToTree = false; // 回退到本地文件。
+        // 回退到本地文件。
       }
     }
-    if (!wroteToTree) {
+    if (savedPath.isEmpty) {
       final docs = await getApplicationDocumentsDirectory();
       final dir = Directory('${docs.path}${Platform.pathSeparator}backups');
       if (!dir.existsSync()) dir.createSync(recursive: true);
@@ -148,6 +159,7 @@ class BackupService {
         settings: payload['settings'] as int? ?? 0,
         exportedAt: DateTime.now(),
         path: savedPath,
+        savedToSaf: savedToTree,
       ),
     );
   }
@@ -353,137 +365,184 @@ class BackupService {
     var historyCount = 0;
     var chapterCount = 0;
     var itemCount = 0;
-
     final items = _listOf(payload['mediaItems']);
-    await database.transaction(() async {
-      for (final row in items) {
-        final sourceId = row['sourceId']?.toString();
-        final remoteId = row['remoteId']?.toString();
-        if (sourceId == null || remoteId == null) continue;
-        await database
-            .into(database.mediaItems)
-            .insertOnConflictUpdate(
-              MediaItemsCompanion.insert(
-                sourceId: sourceId,
-                remoteId: remoteId,
-                type: _typeOf(row['type']),
-                title: '${row['title'] ?? remoteId}',
-                url: Value(row['url'] as String?),
-                coverUrl: Value(row['coverUrl'] as String?),
-                author: Value(row['author'] as String?),
-                description: Value(row['description'] as String?),
-                tagsJson: Value(row['tagsJson'] as String?),
-                rating: Value((row['rating'] as num?)?.toDouble()),
-                status: Value(row['status'] as String?),
-                cachedAt: Value(_dateOf(row['cachedAt']) ?? DateTime.now()),
-              ),
-            );
-        itemCount += 1;
-      }
-
-      for (final row in _listOf(payload['libraryEntries'])) {
-        final sourceId = row['sourceId']?.toString();
-        final remoteId = row['remoteId']?.toString();
-        if (sourceId == null || remoteId == null) continue;
-        final incomingUpdated = _dateOf(row['updatedAt']) ?? DateTime.now();
-        final existing =
-            await (database.select(database.libraryEntries)..where(
-                  (table) =>
-                      table.sourceId.equals(sourceId) &
-                      table.remoteId.equals(remoteId),
-                ))
-                .getSingleOrNull();
-        // 较新者胜：本机进度更新则保留本机。
-        if (existing != null && existing.updatedAt.isAfter(incomingUpdated)) {
-          continue;
-        }
-        await database
-            .into(database.libraryEntries)
-            .insertOnConflictUpdate(
-              LibraryEntriesCompanion.insert(
-                sourceId: sourceId,
-                remoteId: remoteId,
-                type: _typeOf(row['type']),
-                progress: Value((row['progress'] as num?)?.toDouble() ?? 0),
-                score: Value((row['score'] as num?)?.toInt()),
-                status: Value('${row['status'] ?? 'doing'}'),
-                pinned: Value(row['pinned'] == true),
-                unreadCount: Value((row['unreadCount'] as num?)?.toInt() ?? 0),
-                addedAt: _dateOf(row['addedAt']) ?? incomingUpdated,
-                updatedAt: incomingUpdated,
-              ),
-            );
-        libraryCount += 1;
-      }
-
-      for (final row in _listOf(payload['histories'])) {
-        final sourceId = row['sourceId']?.toString();
-        final remoteId = row['remoteId']?.toString();
-        final chapterRemoteId = row['chapterRemoteId']?.toString();
-        if (sourceId == null || remoteId == null || chapterRemoteId == null) {
-          continue;
-        }
-        final visitedAt = _dateOf(row['visitedAt']) ?? DateTime.now();
-        final existing =
-            await (database.select(database.histories)..where(
-                  (table) =>
-                      table.sourceId.equals(sourceId) &
-                      table.remoteId.equals(remoteId) &
-                      table.chapterRemoteId.equals(chapterRemoteId),
-                ))
-                .getSingleOrNull();
-        if (existing != null && existing.visitedAt.isAfter(visitedAt)) {
-          continue;
-        }
-        await database
-            .into(database.histories)
-            .insert(
-              HistoriesCompanion.insert(
-                sourceId: sourceId,
-                remoteId: remoteId,
-                chapterSourceId: row['chapterSourceId']?.toString() ?? sourceId,
-                chapterRemoteId: chapterRemoteId,
-                position: Value((row['position'] as num?)?.toDouble() ?? 0),
-                device: Value(row['device'] as String?),
-                visitedAt: visitedAt,
-              ),
-            );
-        historyCount += 1;
-      }
-
-      for (final row in _listOf(payload['chapterRows'])) {
-        final sourceId = row['sourceId']?.toString();
-        final remoteId = row['remoteId']?.toString();
-        if (sourceId == null || remoteId == null) continue;
-        await database
-            .into(database.chapters)
-            .insertOnConflictUpdate(
-              ChaptersCompanion.insert(
-                sourceId: sourceId,
-                remoteId: remoteId,
-                itemSourceId: row['itemSourceId']?.toString() ?? sourceId,
-                itemRemoteId: row['itemRemoteId']?.toString() ?? '',
-                title: '${row['title'] ?? remoteId}',
-                url: Value(row['url'] as String?),
-                number: Value((row['number'] as num?)?.toDouble()),
-                sortIndex: Value((row['sortIndex'] as num?)?.toInt() ?? 0),
-                volumeTitle: Value(row['volumeTitle'] as String?),
-                releaseDate: Value(_dateOf(row['releaseDate'])),
-                locked: Value(row['locked'] == true),
-                contentJson: Value(row['contentJson'] as String?),
-              ),
-            );
-        chapterCount += 1;
-      }
-    });
 
     final settingsValues = payload['settingsValues'];
+    final incomingSettings = settingsValues is Map
+        ? <String, Object?>{
+            for (final entry in settingsValues.entries)
+              if (entry.key is String &&
+                  !_isSensitive(entry.key as String) &&
+                  !_excludedSettingPrefixes.any(
+                    (prefix) => (entry.key as String).startsWith(prefix),
+                  ))
+                entry.key as String: entry.value,
+          }
+        : const <String, Object?>{};
+    final beforeSettings = <String, Object?>{};
+    final missingSettings = <String>{};
+    final currentSettings = preferences.exportAll();
+    for (final key in incomingSettings.keys) {
+      if (currentSettings.containsKey(key)) {
+        beforeSettings[key] = currentSettings[key];
+      } else {
+        missingSettings.add(key);
+      }
+    }
+
+    // Hive and Drift cannot share a transaction. Write settings first and
+    // compensate them if either store fails, so a failed import leaves the
+    // pre-import state recoverable.
     var settingCount = 0;
-    if (settingsValues is Map) {
-      settingCount = await preferences.importAll(<String, Object?>{
-        for (final entry in settingsValues.entries)
-          if (entry.key is String) entry.key as String: entry.value,
+    try {
+      settingCount = await preferences.importAll(incomingSettings);
+    } catch (_) {
+      await preferences.restoreSubset(beforeSettings, missingSettings);
+      rethrow;
+    }
+
+    try {
+      await database.transaction(() async {
+        for (final row in items) {
+          final sourceId = row['sourceId']?.toString();
+          final remoteId = row['remoteId']?.toString();
+          if (sourceId == null || remoteId == null) continue;
+          await database
+              .into(database.mediaItems)
+              .insertOnConflictUpdate(
+                MediaItemsCompanion.insert(
+                  sourceId: sourceId,
+                  remoteId: remoteId,
+                  type: _typeOf(row['type']),
+                  title: '${row['title'] ?? remoteId}',
+                  url: Value(row['url'] as String?),
+                  coverUrl: Value(row['coverUrl'] as String?),
+                  author: Value(row['author'] as String?),
+                  description: Value(row['description'] as String?),
+                  tagsJson: Value(row['tagsJson'] as String?),
+                  rating: Value((row['rating'] as num?)?.toDouble()),
+                  status: Value(row['status'] as String?),
+                  cachedAt: Value(_dateOf(row['cachedAt']) ?? DateTime.now()),
+                ),
+              );
+          itemCount += 1;
+        }
+
+        for (final row in _listOf(payload['libraryEntries'])) {
+          final sourceId = row['sourceId']?.toString();
+          final remoteId = row['remoteId']?.toString();
+          if (sourceId == null || remoteId == null) continue;
+          // 没有时间戳的旧备份不能伪装成“刚刚更新”，否则会覆盖本机较新的进度。
+          final incomingUpdated = _dateOf(row['updatedAt']) ?? _oldestTimestamp;
+          final existing =
+              await (database.select(database.libraryEntries)..where(
+                    (table) =>
+                        table.sourceId.equals(sourceId) &
+                        table.remoteId.equals(remoteId),
+                  ))
+                  .getSingleOrNull();
+          // 较新者胜：本机进度更新则保留本机。
+          if (existing != null && existing.updatedAt.isAfter(incomingUpdated)) {
+            continue;
+          }
+          await database
+              .into(database.libraryEntries)
+              .insertOnConflictUpdate(
+                LibraryEntriesCompanion.insert(
+                  sourceId: sourceId,
+                  remoteId: remoteId,
+                  type: _typeOf(row['type']),
+                  progress: Value((row['progress'] as num?)?.toDouble() ?? 0),
+                  score: Value((row['score'] as num?)?.toInt()),
+                  status: Value('${row['status'] ?? 'doing'}'),
+                  pinned: Value(row['pinned'] == true),
+                  unreadCount: Value(
+                    (row['unreadCount'] as num?)?.toInt() ?? 0,
+                  ),
+                  addedAt: _dateOf(row['addedAt']) ?? incomingUpdated,
+                  updatedAt: incomingUpdated,
+                ),
+              );
+          libraryCount += 1;
+        }
+
+        for (final row in _listOf(payload['histories'])) {
+          final sourceId = row['sourceId']?.toString();
+          final remoteId = row['remoteId']?.toString();
+          final chapterRemoteId = row['chapterRemoteId']?.toString();
+          if (sourceId == null || remoteId == null || chapterRemoteId == null) {
+            continue;
+          }
+          final visitedAt = _dateOf(row['visitedAt']) ?? _oldestTimestamp;
+          final existing =
+              await (database.select(database.histories)..where(
+                    (table) =>
+                        table.sourceId.equals(sourceId) &
+                        table.remoteId.equals(remoteId) &
+                        table.chapterRemoteId.equals(chapterRemoteId),
+                  ))
+                  .getSingleOrNull();
+          if (existing != null && existing.visitedAt.isAfter(visitedAt)) {
+            continue;
+          }
+          if (existing == null) {
+            await database
+                .into(database.histories)
+                .insert(
+                  HistoriesCompanion.insert(
+                    sourceId: sourceId,
+                    remoteId: remoteId,
+                    chapterSourceId:
+                        row['chapterSourceId']?.toString() ?? sourceId,
+                    chapterRemoteId: chapterRemoteId,
+                    position: Value((row['position'] as num?)?.toDouble() ?? 0),
+                    device: Value(row['device'] as String?),
+                    visitedAt: visitedAt,
+                  ),
+                );
+            historyCount += 1;
+          } else if (existing.visitedAt.isBefore(visitedAt)) {
+            await (database.update(
+              database.histories,
+            )..where((table) => table.id.equals(existing.id))).write(
+              HistoriesCompanion(
+                position: Value((row['position'] as num?)?.toDouble() ?? 0),
+                device: Value(row['device'] as String?),
+                visitedAt: Value(visitedAt),
+              ),
+            );
+            historyCount += 1;
+          }
+        }
+
+        for (final row in _listOf(payload['chapterRows'])) {
+          final sourceId = row['sourceId']?.toString();
+          final remoteId = row['remoteId']?.toString();
+          if (sourceId == null || remoteId == null) continue;
+          await database
+              .into(database.chapters)
+              .insertOnConflictUpdate(
+                ChaptersCompanion.insert(
+                  sourceId: sourceId,
+                  remoteId: remoteId,
+                  itemSourceId: row['itemSourceId']?.toString() ?? sourceId,
+                  itemRemoteId: row['itemRemoteId']?.toString() ?? '',
+                  title: '${row['title'] ?? remoteId}',
+                  url: Value(row['url'] as String?),
+                  number: Value((row['number'] as num?)?.toDouble()),
+                  sortIndex: Value((row['sortIndex'] as num?)?.toInt() ?? 0),
+                  volumeTitle: Value(row['volumeTitle'] as String?),
+                  releaseDate: Value(_dateOf(row['releaseDate'])),
+                  locked: Value(row['locked'] == true),
+                  contentJson: Value(row['contentJson'] as String?),
+                ),
+              );
+          chapterCount += 1;
+        }
       });
+    } catch (_) {
+      await preferences.restoreSubset(beforeSettings, missingSettings);
+      rethrow;
     }
 
     return BackupSummary(
@@ -531,6 +590,11 @@ class BackupService {
 
   static DateTime? _dateOf(Object? raw) =>
       raw == null ? null : DateTime.tryParse(raw.toString());
+
+  static final DateTime _oldestTimestamp = DateTime.fromMillisecondsSinceEpoch(
+    0,
+    isUtc: true,
+  );
 
   static MediaType _typeOf(Object? raw) =>
       MediaType.values

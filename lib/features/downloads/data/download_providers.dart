@@ -132,9 +132,7 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>> {
         }
         await refresh();
         // WiFi 限制不满足时不再继续，等用户切网后重新 resume。
-        if (service.wifiOnly &&
-            pending.length > 1 &&
-            !await DownloadService.isOnWifi()) {
+        if (service.wifiOnly && !await service.isOnWifi()) {
           break;
         }
       }

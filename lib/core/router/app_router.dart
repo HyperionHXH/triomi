@@ -11,6 +11,7 @@ import '../../features/novel/lk/lk_account_page.dart';
 import '../../features/novel/lk/lk_dm_page.dart';
 import '../../features/novel/lk/lk_message_list_page.dart';
 import '../../features/novel/lk/lk_messages_page.dart';
+import '../../features/novel/lk/lk_works_page.dart';
 import '../../features/novel/lns/lns_account_page.dart';
 import '../../features/novel/reader/fonts_page.dart';
 import '../../features/novel/reader/novel_reader_page.dart';
@@ -49,6 +50,7 @@ abstract final class AppRoutes {
   static const String remoteShelf = '/remote-shelf';
   static const String lkAccount = '/lk-account';
   static const String lkMessages = '/lk-messages';
+  static const String lkWorks = '/lk-works';
   static const String lkMessageCategory = '/lk-message-category';
   static const String lkDm = '/lk-dm';
   static const String lkDmThread = '/lk-dm-thread';
@@ -212,6 +214,11 @@ abstract final class AppRouter {
         path: AppRoutes.lkMessages,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const LkMessagesPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.lkWorks,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const LkWorksPage(),
       ),
       GoRoute(
         path: '${AppRoutes.lkMessageCategory}/:code',

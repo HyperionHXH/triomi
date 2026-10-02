@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import '../../core/models/chapter.dart';
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/models/source_exception.dart';
+import '../../core/platform/platform_channel.dart';
 import '../../core/router/app_router.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
@@ -98,6 +100,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         item: detail,
         sourceName: entry.descriptor.name,
         chapters: chapters,
+        supportsContent: entry.descriptor.supports(SourceCapability.content),
       );
     } catch (error) {
       return await _loadFromCache() ?? _DetailData(error: '$error');
@@ -232,6 +235,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       if (provider is! ContentProvider) {
         throw StateError('来源没有正文能力');
       }
+      final directoryUri = await platformChannel.pickDirectory();
       final result = epub
           ? await NovelExportService.exportEpub(
               item: item,
@@ -239,20 +243,49 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               source: provider,
               http: ref.read(sourceHttpClientProvider),
               onProgress: (completed, total) {},
+              directoryUri: directoryUri,
+              writeToTree: (uri, fileName, bytes) async {
+                // D49：返回系统真实 document URI；null/空 → 服务层回退。
+                return await platformChannel.writeToTree(
+                      uri,
+                      fileName,
+                      Uint8List.fromList(bytes),
+                      mime: 'application/epub+zip',
+                    ) ??
+                    '';
+              },
             )
           : await NovelExportService.exportTxt(
               item: item,
               chapters: data.chapters,
               source: provider,
               onProgress: (completed, total) {},
+              directoryUri: directoryUri,
+              writeToTree: (uri, fileName, bytes) async {
+                return await platformChannel.writeToTree(
+                      uri,
+                      fileName,
+                      Uint8List.fromList(bytes),
+                      mime: 'text/plain',
+                    ) ??
+                    '';
+              },
             );
       if (!mounted) return;
       navigator.pop();
+      // D50：显式区分保存位置——授权目录成功 / 用户取消目录选择 /
+      // 授权目录写入失败回退；回退是导出成功，不得报成导出失败。
+      final location = result.savedToAuthorizedDirectory
+          ? '已保存到授权目录'
+          : (directoryUri == null
+                ? '未选择授权目录，已保存到应用导出目录'
+                : '授权目录写入失败，已保存到应用导出目录');
       messenger.showSnackBar(
         SnackBar(
           content: Text(
             '导出完成：${result.exportedChapters} 章'
-            '（跳过 ${result.skippedChapters}，含锁定章节）\n${result.path}',
+            '（跳过 ${result.skippedChapters}，含锁定章节）\n'
+            '$location\n${result.path}',
           ),
           duration: const Duration(seconds: 5),
         ),
@@ -417,7 +450,11 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                     ),
                   ),
                 ),
-              _ChapterSection(item: data.item, chapters: data.chapters),
+              _ChapterSection(
+                item: data.item,
+                chapters: data.chapters,
+                supportsContent: data.supportsContent,
+              ),
               // 评论区：只有实现账号域能力的来源（轻之国度）才渲染。
               if (data.item case final detailItem?)
                 BookCommentsSection(item: detailItem),
@@ -436,6 +473,7 @@ class _DetailData {
     this.chapters = const <Chapter>[],
     this.error,
     this.offline = false,
+    this.supportsContent = true,
   });
 
   final MediaItem? item;
@@ -445,6 +483,7 @@ class _DetailData {
 
   /// 来源取数失败、改用本地缓存渲染（下载过的作品断网仍可进入阅读）。
   final bool offline;
+  final bool supportsContent;
 }
 
 class _Header extends ConsumerWidget {
@@ -553,10 +592,15 @@ class _Header extends ConsumerWidget {
 }
 
 class _ChapterSection extends StatelessWidget {
-  const _ChapterSection({required this.item, required this.chapters});
+  const _ChapterSection({
+    required this.item,
+    required this.chapters,
+    required this.supportsContent,
+  });
 
   final MediaItem? item;
   final List<Chapter> chapters;
+  final bool supportsContent;
 
   @override
   Widget build(BuildContext context) {
@@ -590,6 +634,21 @@ class _ChapterSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
+        if (item?.type == MediaType.anime && !supportsContent)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.sm,
+              AppSpacing.lg,
+              0,
+            ),
+            child: Text(
+              '此来源只提供番剧资料与目录，不提供播放地址；请导入具有 content.playSources 的番剧规则。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: palette.mutedForeground,
+              ),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.lg,
@@ -647,10 +706,12 @@ class _ChapterSection extends StatelessWidget {
                             color: palette.mutedForeground,
                           )
                         : const Icon(Icons.chevron_right, size: 18),
-                    onTap: () => _openChapter(
-                      context,
-                      chapters.indexOf(entry.value[index]),
-                    ),
+                    onTap: item?.type == MediaType.anime && !supportsContent
+                        ? null
+                        : () => _openChapter(
+                            context,
+                            chapters.indexOf(entry.value[index]),
+                          ),
                   ),
                 ],
               ],

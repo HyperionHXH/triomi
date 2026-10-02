@@ -110,7 +110,9 @@ class MainActivity : FlutterActivity() {
                 result.error("create_failed", "createDocument returned null", null)
                 return
             }
-            contentResolver.openOutputStream(newUri)?.use { output ->
+            val stream = contentResolver.openOutputStream(newUri)
+                ?: throw java.io.IOException("Unable to open document output stream")
+            stream.use { output ->
                 output.write(bytes)
                 output.flush()
             }

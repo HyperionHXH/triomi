@@ -217,33 +217,30 @@ class _BackupPageState extends ConsumerState<BackupPage> {
             includeOfflineContent: includeOfflineContent,
             directoryUri: directory,
             writeToTree: (uri, fileName, bytes) async {
-              await platformChannel.writeToTree(
-                uri,
-                fileName,
-                Uint8List.fromList(bytes),
-              );
+              // D49：返回系统真实 document URI；null/空 → 服务层回退。
+              return await platformChannel.writeToTree(
+                    uri,
+                    fileName,
+                    Uint8List.fromList(bytes),
+                  ) ??
+                  '';
             },
           );
       await _refreshLocal();
       if (!mounted) return;
-      final note = directory != null && result.path.startsWith(directory)
-          ? ''
-          : '\n（授权目录写入失败，已回退应用私有目录）';
+      // D50：显式区分保存位置；回退是导出成功，不得报成导出失败。
+      final location = result.summary.savedToSaf
+          ? '已保存到授权目录'
+          : (directory == null
+                ? '未选择授权目录，已保存到应用私有目录'
+                : '授权目录写入失败，已保存到应用私有目录');
       setState(() {
         _status =
             '已导出：${result.summary.libraryEntries} 条书架、'
             '${result.summary.historyEntries} 条历史、'
             '${result.summary.cachedChapters} 条目录缓存、'
-            '${result.summary.covers} 张封面\n${result.path}$note';
-      });
-      await _refreshLocal();
-      if (!mounted) return;
-      setState(() {
-        _status =
-            '已导出：${result.summary.libraryEntries} 条书架、'
-            '${result.summary.historyEntries} 条历史、'
-            '${result.summary.cachedChapters} 条目录缓存、'
-            '${result.summary.covers} 张封面\n${result.path}';
+            '${result.summary.covers} 张封面\n'
+            '$location\n${result.path}';
       });
     } catch (error) {
       if (mounted) setState(() => _status = '导出失败：$error');

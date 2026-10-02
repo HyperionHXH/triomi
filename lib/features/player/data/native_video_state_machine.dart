@@ -65,7 +65,7 @@ class NativeVideoState {
 
 class NativeVideoStateMachine {
   NativeVideoStateMachine({NativeVideoState initial = const NativeVideoState()})
-      : state = initial;
+    : state = initial;
 
   NativeVideoState state;
 
@@ -93,7 +93,10 @@ class NativeVideoStateMachine {
     state = state.copyWith(
       phase: phase,
       durationMs: durationMs.clamp(0, 1 << 31),
-      positionMs: state.positionMs.clamp(0, durationMs.clamp(0, 1 << 31)),
+      positionMs: state.positionMs.clamp(
+        0,
+        durationMs > 0 ? durationMs : 1 << 31,
+      ),
       clearError: true,
     );
   }
@@ -152,10 +155,6 @@ class NativeVideoStateMachine {
 
   void onSurfaceAvailable() {
     if (state.url == null) return;
-    state = state.copyWith(
-      phase: state.shouldPlay
-          ? NativeVideoPhase.loading
-          : NativeVideoPhase.paused,
-    );
+    state = state.copyWith(phase: NativeVideoPhase.loading);
   }
 }

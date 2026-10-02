@@ -342,11 +342,16 @@ void main() {
         directoryUri: 'content://com.android.externalstorage/tree/primary',
         writeToTree: (uri, fileName, bytes) async {
           written.add('$uri/$fileName');
+          // D49：返回系统真实 document URI（可能被系统改名）。
+          return 'content://com.android.externalstorage/document/primary/renamed-$fileName';
         },
       );
 
       expect(written, hasLength(1));
-      expect(result.path, startsWith('content://com.android.externalstorage'));
+      expect(
+        result.path,
+        startsWith('content://com.android.externalstorage/document/primary/renamed-'),
+      );
       expect(result.path, endsWith('.zip'));
     });
 

@@ -179,6 +179,10 @@ class LibraryRepository {
       final offlineContent = <String, String?>{
         for (final row in existing) row.remoteId: row.contentJson,
       };
+      final existingChapterIds = <String>{for (final row in existing) row.remoteId};
+      final addedChapterCount = existing.isEmpty
+          ? 0
+          : chapters.where((chapter) => !existingChapterIds.contains(chapter.remoteId)).length;
 
       final deleteStatement = _db.delete(_db.chapters)
         ..where(
@@ -207,6 +211,29 @@ class LibraryRepository {
                 contentJson: Value(offlineContent[chapter.remoteId]),
               ),
             );
+      }
+      if (addedChapterCount > 0) {
+        final entry = await (_db.select(_db.libraryEntries)
+              ..where(
+                (table) =>
+                    table.sourceId.equals(itemSourceId) &
+                    table.remoteId.equals(itemRemoteId),
+              ))
+            .getSingleOrNull();
+        if (entry != null) {
+          await (_db.update(_db.libraryEntries)
+                ..where(
+                  (table) =>
+                      table.sourceId.equals(itemSourceId) &
+                      table.remoteId.equals(itemRemoteId),
+                ))
+              .write(
+                LibraryEntriesCompanion(
+                  unreadCount: Value(entry.unreadCount + addedChapterCount),
+                  updatedAt: Value(DateTime.now()),
+                ),
+              );
+        }
       }
     });
   }

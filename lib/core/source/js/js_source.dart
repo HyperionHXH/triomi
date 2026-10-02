@@ -157,7 +157,9 @@ class JsSource
         throw SourceException(
           sourceId: _id,
           type: hostError.type,
-          message: hostError.message,
+          message: hostError.message == null
+              ? null
+              : SourceException.sanitizeMessage(hostError.message!),
         );
       }
       if (error.message.startsWith('TRIOMI_NO_FUNCTION|')) {
@@ -171,7 +173,8 @@ class JsSource
       throw SourceException(
         sourceId: _id,
         type: SourceErrorType.parse,
-        message: 'JS 规则 $function 执行失败：${error.message}',
+        message:
+            'JS 规则 $function 执行失败：${SourceException.sanitizeMessage(error.message)}',
       );
     }
   }

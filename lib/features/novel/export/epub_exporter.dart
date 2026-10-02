@@ -301,7 +301,7 @@ abstract final class EpubExporter {
     }
     for (var index = 0; index < chapterCount; index++) {
       buffer.write(
-        '<item id="chapter-$index" href="${_chapterPath(index)}" '
+        '<item id="chapter-$index" href="${_chapterPath(index).split('/').last}" '
         'media-type="application/xhtml+xml"/>\n',
       );
     }

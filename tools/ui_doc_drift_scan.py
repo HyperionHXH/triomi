@@ -14,10 +14,22 @@ failure modes so they cannot sneak back in:
 - ``historical_doc`` / ``historical_copy`` (severity ``info``): files that are
   declared historical are reported, never "fixed" — history stays.
 
+Scope (D15): by default only repository files are read. Out-of-repo device
+drivers (they intentionally live one directory above the repo) are scanned
+only when passed explicitly via ``--device-script PATH`` (repeatable) —
+historical or retired scripts are never picked up automatically, and a
+missing path becomes an explicit warning instead of being ignored.
+
+Stale-task numbering semantics (D15): ``D1–D5`` inside the spec's requirement
+checklists (「功能全量清单」「验收基准」 sections) are product requirements,
+not the retired download work orders; they are matched by section context and
+only plan-style documents produce ``stale_task`` warnings.
+
 Usage::
 
     python tools/ui_doc_drift_scan.py            # human-readable
     python tools/ui_doc_drift_scan.py --json     # machine-readable
+    python tools/ui_doc_drift_scan.py --device-script ../_video_pixel_verify.py
 
 Exit code is 1 only when a genuine fragile locator is found.
 """
@@ -51,8 +63,12 @@ _POSITIONAL_LABEL_RE = re.compile(
 _SUPPRESS_MARKER = "drift-scan: allow"
 
 # 旧工作单编号：T8 是 README/CI 收尾、D8+ 是后来的纯代码任务，都不在
-# 「旧待开发」范围里；\b 保证 D1 不会命中 D11。
+# 「旧待开发」范围里；\b 保证 D1 不会命中 D11。规格 2.4 的「下载要求
+# D1–D5」是产品需求不是旧工作单，按章节上下文排除，见 _REQUIREMENT_SECTION_RE。
 _STALE_TASK_RE = re.compile(r"-\s*\[ \].*\b(?:T[1-7]|D[1-5])\b")
+_REQUIREMENT_SECTION_RE = re.compile(
+    r"全量清单|验收基准|功能清单|能力清单|需求清单"
+)
 
 # 历史声明必须是「本文件是历史副本/记录」这类自指，或者标题里带
 # （历史记录）；仅引用到「历史」二字的当前文档不能算。
@@ -64,6 +80,13 @@ _CURRENT_DOCS = (
     "docs/AFTER_M5_PLAN.md",
     "docs/handoff/README.md",
     "docs/PROJECT_SPEC.md",
+    # D34 收口：当前真相文档随第四轮工作单扩展。验收矩阵/平台矩阵/工作单
+    # 状态都进扫描范围，防止已完成工作单重新以未勾选条目出现。
+    "docs/ACCEPTANCE_MATRIX.md",
+    "docs/PLATFORM_DEPENDENCY_AUDIT.md",
+    "docs/GLM_DPSK_WORK_ORDERS.md",
+    "docs/GLM_BATCH_D27_D34.md",
+    "docs/GLM_BATCH_D18_D26.md",
 )
 _DEPRECATION_MARKER = "不作为当前执行状态"
 
@@ -180,8 +203,16 @@ def scan_docs(root: Path) -> list[Finding]:
                 )
             )
             continue
+        heading = ""
         for number, line in enumerate(text.splitlines(), start=1):
+            heading_match = re.match(r"^#{1,6}\s+(.*)$", line)
+            if heading_match:
+                heading = heading_match.group(1)
             if _STALE_TASK_RE.search(line) and not _is_suppressed(line):
+                # 章节上下文区分编号语义：规格 2.4 的「下载要求 D1–D5」是
+                # 产品需求清单，不因编号与旧工作单相同就判为文档漂移。
+                if _REQUIREMENT_SECTION_RE.search(heading):
+                    continue
                 snippet = line.strip()
                 if len(snippet) > 80:
                     snippet = snippet[:80] + "…"
@@ -233,8 +264,66 @@ def _rel(root: Path, path: Path) -> str:
         return path.name
 
 
-def run_scan(root: Path) -> list[Finding]:
-    return scan_code(root) + scan_docs(root)
+def _device_script_label(root: Path, path: Path) -> str:
+    """``../name`` for out-of-repo drivers, repo-relative otherwise.
+
+    只取名字级的相对标签：输出永远不暴露机器上的绝对路径。
+    """
+
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return f"../{path.name}"
+
+
+def scan_device_script(
+    root: Path, path: Path
+) -> tuple[list[Finding], bool]:
+    """Scan one explicitly-passed device script; bool = file existed."""
+
+    label = _device_script_label(root, path)
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as error:
+        return (
+            [
+                Finding(
+                    "warning",
+                    "device_script_missing",
+                    label,
+                    0,
+                    f"显式传入的设备脚本读不到：{error}",
+                )
+            ],
+            False,
+        )
+    findings = [
+        Finding("error", kind, label, number, message)
+        for number, line in enumerate(lines, start=1)
+        for kind, message in scan_line(line)
+    ]
+    return findings, True
+
+
+def run_scan(
+    root: Path, device_scripts: Sequence[Path] = ()
+) -> tuple[list[Finding], int]:
+    """Scan the repo plus explicitly-listed device scripts.
+
+    Returns the findings and the number of device scripts actually scanned
+    (missing paths produce a warning finding and are not counted). Default
+    scope is repository-only: historical or retired out-of-repo scripts are
+    never picked up automatically.
+    """
+
+    findings = scan_code(root) + scan_docs(root)
+    scanned = 0
+    for path in device_scripts:
+        script_findings, existed = scan_device_script(root, path)
+        findings.extend(script_findings)
+        if existed:
+            scanned += 1
+    return findings, scanned
 
 
 def exit_code(findings: Sequence[Finding]) -> int:
@@ -245,10 +334,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     default_root = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", default=str(default_root), help="仓库根目录")
+    parser.add_argument(
+        "--device-script",
+        action="append",
+        default=[],
+        help="额外扫描的设备脚本路径（可重复传入）；默认只读仓库，"
+        "不自动扫描仓库外的历史/废弃脚本",
+    )
     parser.add_argument("--json", action="store_true", help="输出机器可读 JSON")
     args = parser.parse_args(argv)
 
-    findings = run_scan(Path(args.root))
+    root = Path(args.root)
+    device_scripts = [Path(raw) for raw in args.device_script]
+    findings, device_scripts_scanned = run_scan(root, device_scripts)
+    files_scanned = len(_code_files(root))
     code = exit_code(findings)
     if args.json:
         counts = {
@@ -263,7 +362,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "errors": counts["error"],
                         "warnings": counts["warning"],
                         "infos": counts["info"],
-                        "files_scanned": len(_code_files(Path(args.root))),
+                        "files_scanned": files_scanned,
+                        "device_scripts_scanned": device_scripts_scanned,
                     },
                 },
                 ensure_ascii=False,
@@ -277,6 +377,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"          {finding.message}")
         print(
             f"ui_doc_drift_scan: {len(findings)} finding(s), "
+            f"files={files_scanned}, device_scripts={device_scripts_scanned}, "
             f"exit={code}（只有 error 级别的脆弱定位才非零）"
         )
     return code
