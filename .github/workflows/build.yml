@@ -13,15 +13,19 @@ env:
 jobs:
   # 静态检查 + 单元测试：这是硬门槛（analyze 必须零问题、测试必须全绿）。
   test:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - run: flutter pub get
+      - run: python tools/setup_quickjs_dll.py
       - run: flutter analyze
       - run: flutter test
 
@@ -39,6 +43,7 @@ jobs:
       - run: python tools/check_fixture_media.py
       - run: python tools/ui_doc_drift_scan.py --json
       - run: python tools/delivery_consistency_scan.py --json
+      - run: python tools/check_text_encoding.py
 
   # Android APK（release）。项目里没配签名密钥，走的是 Flutter 模板默认的 debug 签名，
   # 仅用于自用/测试安装；要发布请自行配置 keystore。

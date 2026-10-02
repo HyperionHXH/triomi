@@ -14,6 +14,7 @@ import shutil
 import sys
 
 PUB_CACHE_ROOTS = [
+    os.path.join(os.environ.get("PUB_CACHE", ""), "hosted"),
     os.path.expanduser(r"~\AppData\Local\Pub\Cache\hosted"),
     os.path.expanduser(r"~/.pub-cache/hosted"),
 ]
