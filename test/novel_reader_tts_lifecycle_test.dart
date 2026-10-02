@@ -18,9 +18,9 @@ import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/novel/reader/novel_reader_page.dart';
 import 'package:triomi/features/novel/tts/flutter_tts_engine.dart';
 
-import 'tts_test_fakes.dart';
 import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
+import 'tts_test_fakes.dart';
 
 /// D47：阅读器 TTS 生命周期 widget 回归（在 Codex 的 novel_reader_tts_test
 /// 控制组之上补齐边界）。

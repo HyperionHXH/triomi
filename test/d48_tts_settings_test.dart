@@ -19,9 +19,9 @@ import 'package:triomi/features/novel/reader/novel_reader_settings.dart';
 import 'package:triomi/features/novel/tts/flutter_tts_engine.dart';
 import 'package:triomi/features/novel/tts/tts_controller.dart';
 
-import 'tts_test_fakes.dart';
 import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
+import 'tts_test_fakes.dart';
 
 /// D48：TTS 语速/音色选择与本机持久化。
 ///

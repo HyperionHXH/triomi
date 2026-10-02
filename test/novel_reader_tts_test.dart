@@ -17,9 +17,9 @@ import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/novel/reader/novel_reader_page.dart';
 import 'package:triomi/features/novel/tts/flutter_tts_engine.dart';
 
-import 'tts_test_fakes.dart';
 import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
+import 'tts_test_fakes.dart';
 
 class _Source implements ContentProvider {
   @override
