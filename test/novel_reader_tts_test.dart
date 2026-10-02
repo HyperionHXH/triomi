@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,7 +17,7 @@ import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/novel/reader/novel_reader_page.dart';
 import 'package:triomi/features/novel/tts/flutter_tts_engine.dart';
 
-import 'd31_tts_contract_test.dart' show FakeTtsEngine;
+import 'package:triomi/test/d31_tts_contract_test.dart' show FakeTtsEngine;
 import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
 
@@ -33,7 +33,7 @@ class _Source implements ContentProvider {
   bool get isReady => true;
   @override
   Future<ChapterContent> content(Chapter chapter) async =>
-      const ChapterContent(text: '第一段正文。\n\n第二段正文。');
+      const ChapterContent(text: '绗竴娈垫鏂囥€俓n\n绗簩娈垫鏂囥€?);
 }
 
 class _Sources extends SourceRegistryController {
@@ -55,7 +55,7 @@ void main() {
   final item = const MediaItem(
     sourceId: 'tts-fixture',
     remoteId: 'book',
-    title: '测试书',
+    title: '娴嬭瘯涔?,
     type: MediaType.novel,
   );
 
@@ -106,7 +106,7 @@ void main() {
                 Chapter(
                   sourceId: 'tts-fixture',
                   remoteId: 'chapter',
-                  title: '第一章',
+                  title: '绗竴绔?,
                   locked: locked,
                 ),
               ],
@@ -129,19 +129,19 @@ void main() {
     (tester) async {
       final engine = FakeTtsEngine(supportsPause: false);
       await open(tester, engine);
-      await tester.tap(find.byTooltip('朗读'));
+      await tester.tap(find.byTooltip('鏈楄'));
       await tester.pump();
       expect(engine.spoken, isNotEmpty);
-      await tester.tap(find.byTooltip('暂停朗读'));
+      await tester.tap(find.byTooltip('鏆傚仠鏈楄'));
       await tester.pump();
       expect(engine.stopCalled, greaterThan(0));
       final count = engine.spoken.length;
-      await tester.tap(find.byTooltip('朗读'));
+      await tester.tap(find.byTooltip('鏈楄'));
       await tester.pump();
       expect(engine.spoken.length, count + 1);
-      await tester.tap(find.byTooltip('停止朗读'));
+      await tester.tap(find.byTooltip('鍋滄鏈楄'));
       await tester.pump();
-      expect(find.byTooltip('暂停朗读'), findsNothing);
+      expect(find.byTooltip('鏆傚仠鏈楄'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
@@ -149,8 +149,9 @@ void main() {
   testWidgets('locked chapter never offers speech controls', (tester) async {
     final engine = FakeTtsEngine();
     await open(tester, engine, locked: true);
-    expect(find.byTooltip('朗读'), findsNothing);
+    expect(find.byTooltip('鏈楄'), findsNothing);
     expect(engine.spoken, isEmpty);
     expect(tester.takeException(), isNull);
   });
 }
+

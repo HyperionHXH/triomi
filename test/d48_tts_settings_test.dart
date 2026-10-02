@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,25 +19,25 @@ import 'package:triomi/features/novel/reader/novel_reader_settings.dart';
 import 'package:triomi/features/novel/tts/flutter_tts_engine.dart';
 import 'package:triomi/features/novel/tts/tts_controller.dart';
 
-import 'd31_tts_contract_test.dart' show FakeTtsEngine;
+import 'package:triomi/test/d31_tts_contract_test.dart' show FakeTtsEngine;
 import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
 
-/// D48：TTS 语速/音色选择与本机持久化。
+/// D48锛歍TS 璇€?闊宠壊閫夋嫨涓庢湰鏈烘寔涔呭寲銆?
 ///
-/// 已决定的设计：语速 0.3/0.5/0.7（默认 0.5）、语言默认 zh-CN、音色仅列
-/// 引擎返回的可用项；设置存本机，不自动下载语音包；选项变更先停止当前
-/// 朗读，下次开始时应用。不动状态机代次逻辑（D41 已有覆盖）。
+/// 宸插喅瀹氱殑璁捐锛氳閫?0.3/0.5/0.7锛堥粯璁?0.5锛夈€佽瑷€榛樿 zh-CN銆侀煶鑹蹭粎鍒?
+/// 寮曟搸杩斿洖鐨勫彲鐢ㄩ」锛涜缃瓨鏈満锛屼笉鑷姩涓嬭浇璇煶鍖咃紱閫夐」鍙樻洿鍏堝仠姝㈠綋鍓?
+/// 鏈楄锛屼笅娆″紑濮嬫椂搴旂敤銆備笉鍔ㄧ姸鎬佹満浠ｆ閫昏緫锛圖41 宸叉湁瑕嗙洊锛夈€?
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const item = MediaItem(
     sourceId: 'tts-fixture',
     remoteId: 'book',
-    title: '测试书',
+    title: '娴嬭瘯涔?,
     type: MediaType.novel,
   );
 
-  group('FlutterTtsEngine：语音选项与音色查询（插件 mock）', () {
+  group('FlutterTtsEngine锛氳闊抽€夐」涓庨煶鑹叉煡璇紙鎻掍欢 mock锛?, () {
     const channel = MethodChannel('flutter_tts');
     final calls = <MethodCall>[];
     Object? voicesResult = <Map<String, String>>[
@@ -64,7 +64,7 @@ void main() {
           .setMockMethodCallHandler(channel, null);
     });
 
-    test('availableVoices 把系统返回映射成 TtsVoiceInfo', () async {
+    test('availableVoices 鎶婄郴缁熻繑鍥炴槧灏勬垚 TtsVoiceInfo', () async {
       final engine = FlutterTtsEngine();
       final voices = await engine.availableVoices();
       expect(voices.map((v) => v.name), <String>['xiaoxiao', 'en-us-x']);
@@ -72,22 +72,22 @@ void main() {
       await engine.stop();
     });
 
-    test('插件返回垃圾形状/抛错：降级为空列表而不是崩溃', () async {
+    test('鎻掍欢杩斿洖鍨冨溇褰㈢姸/鎶涢敊锛氶檷绾т负绌哄垪琛ㄨ€屼笉鏄穿婧?, () async {
       voicesResult = <String>['garbage'];
       final engine = FlutterTtsEngine();
       expect(await engine.availableVoices(), isEmpty);
-      voicesResult = null; // 模拟通道异常路径由 catch 兜底
+      voicesResult = null; // 妯℃嫙閫氶亾寮傚父璺緞鐢?catch 鍏滃簳
       expect(await engine.availableVoices(), isEmpty);
     });
 
-    test('applySpeechSettings 在下一次 speak 前生效（语速与音色）', () async {
+    test('applySpeechSettings 鍦ㄤ笅涓€娆?speak 鍓嶇敓鏁堬紙璇€熶笌闊宠壊锛?, () async {
       final engine = FlutterTtsEngine();
       await engine.applySpeechSettings(
         rate: 0.3,
         voice: const TtsVoiceInfo(name: 'xiaoxiao', locale: 'zh-CN'),
       );
       await engine.speak(
-        const TtsUtterance(blockIndex: 0, text: '正文', token: 1),
+        const TtsUtterance(blockIndex: 0, text: '姝ｆ枃', token: 1),
       );
       final rates = calls.where((c) => c.method == 'setSpeechRate').toList();
       expect(rates, isNotEmpty);
@@ -101,10 +101,10 @@ void main() {
       await engine.stop();
     });
 
-    test('未设置选项时初始化仍带默认语速 0.5', () async {
+    test('鏈缃€夐」鏃跺垵濮嬪寲浠嶅甫榛樿璇€?0.5', () async {
       final engine = FlutterTtsEngine();
       await engine.speak(
-        const TtsUtterance(blockIndex: 0, text: '正文', token: 1),
+        const TtsUtterance(blockIndex: 0, text: '姝ｆ枃', token: 1),
       );
       final rates = calls.where((c) => c.method == 'setSpeechRate').toList();
       expect(rates.single.arguments, 0.5);
@@ -113,7 +113,7 @@ void main() {
     });
   });
 
-  group('阅读器朗读设置面板（widget）', () {
+  group('闃呰鍣ㄦ湕璇昏缃潰鏉匡紙widget锛?, () {
     late Preferences preferences;
     late _VoiceEngine engine;
     late List<TtsVoiceInfo> voices;
@@ -162,7 +162,7 @@ void main() {
                   Chapter(
                     sourceId: 'tts-fixture',
                     remoteId: 'chapter',
-                    title: '第一章',
+                    title: '绗竴绔?,
                   ),
                 ],
                 initialIndex: 0,
@@ -186,45 +186,45 @@ void main() {
       engine = _VoiceEngine(voices: () => voices);
     });
 
-    testWidgets('面板展示三档语速与系统音色；选慢速即停当前朗读并落盘', (tester) async {
+    testWidgets('闈㈡澘灞曠ず涓夋。璇€熶笌绯荤粺闊宠壊锛涢€夋參閫熷嵆鍋滃綋鍓嶆湕璇诲苟钀界洏', (tester) async {
       await open(tester);
-      await tester.tap(find.byTooltip('朗读'));
+      await tester.tap(find.byTooltip('鏈楄'));
       await tester.pump();
       expect(engine.spoken, isNotEmpty);
 
-      await tester.tap(find.byTooltip('朗读设置'));
+      await tester.tap(find.byTooltip('鏈楄璁剧疆'));
       await tester.pumpAndSettle();
-      expect(find.text('慢速 0.3'), findsOneWidget);
-      expect(find.text('正常 0.5'), findsOneWidget);
-      expect(find.text('快速 0.7'), findsOneWidget);
-      // Dropdown 收起态显示当前选中项（系统默认音色）。
+      expect(find.text('鎱㈤€?0.3'), findsOneWidget);
+      expect(find.text('姝ｅ父 0.5'), findsOneWidget);
+      expect(find.text('蹇€?0.7'), findsOneWidget);
+      // Dropdown 鏀惰捣鎬佹樉绀哄綋鍓嶉€変腑椤癸紙绯荤粺榛樿闊宠壊锛夈€?
       expect(find.byType(DropdownButton<TtsVoiceInfo?>), findsOneWidget);
-      expect(find.text('系统默认'), findsOneWidget);
+      expect(find.text('绯荤粺榛樿'), findsOneWidget);
 
       final stopsBefore = engine.stopCalled;
-      await tester.tap(find.text('慢速 0.3'));
+      await tester.tap(find.text('鎱㈤€?0.3'));
       await tester.pumpAndSettle();
 
       expect(engine.stopCalled, greaterThan(stopsBefore),
-          reason: '选项变更先停止当前朗读');
-      expect(find.byTooltip('朗读'), findsOneWidget, reason: '回到未播放态');
+          reason: '閫夐」鍙樻洿鍏堝仠姝㈠綋鍓嶆湕璇?);
+      expect(find.byTooltip('鏈楄'), findsOneWidget, reason: '鍥炲埌鏈挱鏀炬€?);
 
-      // 本机设置即时落盘（重启可恢复的前提）。
+      // 鏈満璁剧疆鍗虫椂钀界洏锛堥噸鍚彲鎭㈠鐨勫墠鎻愶級銆?
       final restored = NovelReaderSettings.load(preferences);
       expect(restored.ttsRate, 0.3);
     });
 
-    testWidgets('无可用音色：面板降级提示，不伪造选项', (tester) async {
+    testWidgets('鏃犲彲鐢ㄩ煶鑹诧細闈㈡澘闄嶇骇鎻愮ず锛屼笉浼€犻€夐」', (tester) async {
       voices = const <TtsVoiceInfo>[];
       await open(tester);
-      await tester.tap(find.byTooltip('朗读设置'));
+      await tester.tap(find.byTooltip('鏈楄璁剧疆'));
       await tester.pumpAndSettle();
-      expect(find.text('系统未返回可用音色，将使用系统默认音色'), findsOneWidget);
+      expect(find.text('绯荤粺鏈繑鍥炲彲鐢ㄩ煶鑹诧紝灏嗕娇鐢ㄧ郴缁熼粯璁ら煶鑹?), findsOneWidget);
       expect(find.byType(DropdownButton<TtsVoiceInfo?>), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('重启设置恢复：持久化的语速/音色在面板中回显', (tester) async {
+    testWidgets('閲嶅惎璁剧疆鎭㈠锛氭寔涔呭寲鐨勮閫?闊宠壊鍦ㄩ潰鏉夸腑鍥炴樉', (tester) async {
       final prefs = memoryPreferences();
       const saved = NovelReaderSettings(
         ttsRate: 0.7,
@@ -237,15 +237,15 @@ void main() {
       expect(NovelReaderSettings.load(prefs).ttsRate, 0.7);
       expect(NovelReaderSettings.load(prefs).ttsVoiceName, 'xiaoxiao');
 
-      await tester.tap(find.byTooltip('朗读设置'));
+      await tester.tap(find.byTooltip('鏈楄璁剧疆'));
       await tester.pumpAndSettle();
-      // 0.7 档被选中（同 text 只有当前档会渲染成选中态 chip 文本，出现一次）。
-      expect(find.text('快速 0.7'), findsOneWidget);
-      expect(find.text('xiaoxiao（zh-CN）'), findsOneWidget);
+      // 0.7 妗ｈ閫変腑锛堝悓 text 鍙湁褰撳墠妗ｄ細娓叉煋鎴愰€変腑鎬?chip 鏂囨湰锛屽嚭鐜颁竴娆★級銆?
+      expect(find.text('蹇€?0.7'), findsOneWidget);
+      expect(find.text('xiaoxiao锛坺h-CN锛?), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('已保存音色不在系统返回列表：显示「不可用」而不是崩溃', (tester) async {
+    testWidgets('宸蹭繚瀛橀煶鑹蹭笉鍦ㄧ郴缁熻繑鍥炲垪琛細鏄剧ず銆屼笉鍙敤銆嶈€屼笉鏄穿婧?, (tester) async {
       final prefs = memoryPreferences();
       const saved = NovelReaderSettings(
         ttsVoiceName: 'ghost-voice',
@@ -254,18 +254,18 @@ void main() {
       await saved.save(prefs);
 
       await open(tester, prefs: prefs);
-      await tester.tap(find.byTooltip('朗读设置'));
+      await tester.tap(find.byTooltip('鏈楄璁剧疆'));
       await tester.pumpAndSettle();
-      expect(find.text('ghost-voice（zh-CN）（不可用）'), findsOneWidget);
+      expect(find.text('ghost-voice锛坺h-CN锛夛紙涓嶅彲鐢級'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('开始朗读时引擎收到当前语速选项', (tester) async {
+    testWidgets('寮€濮嬫湕璇绘椂寮曟搸鏀跺埌褰撳墠璇€熼€夐」', (tester) async {
       final prefs = memoryPreferences();
       await const NovelReaderSettings(ttsRate: 0.3).save(prefs);
       await open(tester, prefs: prefs);
 
-      await tester.tap(find.byTooltip('朗读'));
+      await tester.tap(find.byTooltip('鏈楄'));
       await tester.pump();
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 20)),
@@ -275,7 +275,7 @@ void main() {
   });
 }
 
-/// 可编程音色的假引擎（语速/音色应用有记录）。
+/// 鍙紪绋嬮煶鑹茬殑鍋囧紩鎿庯紙璇€?闊宠壊搴旂敤鏈夎褰曪級銆?
 class _VoiceEngine extends FakeTtsEngine {
   _VoiceEngine({required this.voices});
 
@@ -306,7 +306,7 @@ class _Source implements ContentProvider {
 
   @override
   Future<ChapterContent> content(Chapter chapter) async =>
-      const ChapterContent(text: '第一段正文。\n\n第二段正文。');
+      const ChapterContent(text: '绗竴娈垫鏂囥€俓n\n绗簩娈垫鏂囥€?);
 }
 
 class _Sources extends SourceRegistryController {
@@ -322,3 +322,4 @@ class _Sources extends SourceRegistryController {
     failures: const [],
   );
 }
+

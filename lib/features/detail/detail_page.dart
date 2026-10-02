@@ -14,6 +14,7 @@ import '../../core/router/app_router.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
+import '../../core/models/source_descriptor.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';

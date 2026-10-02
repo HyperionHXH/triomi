@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -18,22 +18,22 @@ import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/novel/reader/novel_reader_page.dart';
 import 'package:triomi/features/novel/tts/flutter_tts_engine.dart';
 
-import 'd31_tts_contract_test.dart' show FakeTtsEngine;
+import 'package:triomi/test/d31_tts_contract_test.dart' show FakeTtsEngine;
 import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
 
-/// D47：阅读器 TTS 生命周期 widget 回归（在 Codex 的 novel_reader_tts_test
-/// 控制组之上补齐边界）。
+/// D47锛氶槄璇诲櫒 TTS 鐢熷懡鍛ㄦ湡 widget 鍥炲綊锛堝湪 Codex 鐨?novel_reader_tts_test
+/// 鎺у埗缁勪箣涓婅ˉ榻愯竟鐣岋級銆?
 ///
-/// 已决定的设计：退出、换章、繁简切换、进入后台时停止朗读；停止后引擎的
-/// 迟到完成事件不得刷新已销毁的页面（控制器 dispose 会清空引擎回调）。
-/// fake engine 驱动，不替代设备语音验收。
+/// 宸插喅瀹氱殑璁捐锛氶€€鍑恒€佹崲绔犮€佺箒绠€鍒囨崲銆佽繘鍏ュ悗鍙版椂鍋滄鏈楄锛涘仠姝㈠悗寮曟搸鐨?
+/// 杩熷埌瀹屾垚浜嬩欢涓嶅緱鍒锋柊宸查攢姣佺殑椤甸潰锛堟帶鍒跺櫒 dispose 浼氭竻绌哄紩鎿庡洖璋冿級銆?
+/// fake engine 椹卞姩锛屼笉鏇夸唬璁惧璇煶楠屾敹銆?
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final item = const MediaItem(
     sourceId: 'tts-fixture',
     remoteId: 'book',
-    title: '测试书',
+    title: '娴嬭瘯涔?,
     type: MediaType.novel,
   );
 
@@ -85,7 +85,7 @@ void main() {
                   Chapter(
                     sourceId: 'tts-fixture',
                     remoteId: 'chapter-$index',
-                    title: '第$index章',
+                    title: '绗?index绔?,
                   ),
               ],
               initialIndex: 0,
@@ -103,22 +103,22 @@ void main() {
   }
 
   Future<void> startTts(WidgetTester tester, FakeTtsEngine engine) async {
-    await tester.tap(find.byTooltip('朗读'));
+    await tester.tap(find.byTooltip('鏈楄'));
     await tester.pump();
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 20)),
     );
     await tester.pump();
-    expect(engine.spoken, isNotEmpty, reason: '朗读已开始');
+    expect(engine.spoken, isNotEmpty, reason: '鏈楄宸插紑濮?);
   }
 
-  testWidgets('换章停止朗读：引擎收到 stop，控制回到「朗读」', (tester) async {
+  testWidgets('鎹㈢珷鍋滄鏈楄锛氬紩鎿庢敹鍒?stop锛屾帶鍒跺洖鍒般€屾湕璇汇€?, (tester) async {
     final engine = FakeTtsEngine();
     await open(tester, engine, chapterCount: 2);
     await startTts(tester, engine);
     final stopsBefore = engine.stopCalled;
 
-    await tester.tap(find.text('下一章'));
+    await tester.tap(find.text('涓嬩竴绔?));
     for (var i = 0; i < 8; i++) {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 10)),
@@ -126,38 +126,38 @@ void main() {
       await tester.pump();
     }
 
-    expect(engine.stopCalled, greaterThan(stopsBefore), reason: '换章必须停止朗读');
-    expect(find.byTooltip('朗读'), findsOneWidget, reason: '控制器已释放，回到未播放态');
-    expect(find.byTooltip('暂停朗读'), findsNothing);
+    expect(engine.stopCalled, greaterThan(stopsBefore), reason: '鎹㈢珷蹇呴』鍋滄鏈楄');
+    expect(find.byTooltip('鏈楄'), findsOneWidget, reason: '鎺у埗鍣ㄥ凡閲婃斁锛屽洖鍒版湭鎾斁鎬?);
+    expect(find.byTooltip('鏆傚仠鏈楄'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('退出页面停止朗读，迟到完成事件不刷新已销毁页面', (tester) async {
+  testWidgets('閫€鍑洪〉闈㈠仠姝㈡湕璇伙紝杩熷埌瀹屾垚浜嬩欢涓嶅埛鏂板凡閿€姣侀〉闈?, (tester) async {
     final engine = FakeTtsEngine();
     await open(tester, engine);
     await startTts(tester, engine);
     final stopsBefore = engine.stopCalled;
 
-    // 退出：卸载页面触发 reader.dispose → _releaseTts → controller.dispose
-    // （清空引擎回调 + engine.stop）。dispose 里还有进度落盘（unawaited），
-    // 让真实事件循环收尾后再进 FakeAsync 区收定时器。
+    // 閫€鍑猴細鍗歌浇椤甸潰瑙﹀彂 reader.dispose 鈫?_releaseTts 鈫?controller.dispose
+    // 锛堟竻绌哄紩鎿庡洖璋?+ engine.stop锛夈€俤ispose 閲岃繕鏈夎繘搴﹁惤鐩橈紙unawaited锛夛紝
+    // 璁╃湡瀹炰簨浠跺惊鐜敹灏惧悗鍐嶈繘 FakeAsync 鍖烘敹瀹氭椂鍣ㄣ€?
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 30)),
     );
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 4));
-    expect(engine.stopCalled, greaterThan(stopsBefore), reason: '退出必须停止朗读');
+    expect(engine.stopCalled, greaterThan(stopsBefore), reason: '閫€鍑哄繀椤诲仠姝㈡湕璇?);
 
-    // 页面销毁后引擎的迟到事件（无令牌旧插件形态）不得抛错：
-    // 控制器 dispose 已把 callbacks 清空，事件被引擎侧安全丢弃。
+    // 椤甸潰閿€姣佸悗寮曟搸鐨勮繜鍒颁簨浠讹紙鏃犱护鐗屾棫鎻掍欢褰㈡€侊級涓嶅緱鎶涢敊锛?
+    // 鎺у埗鍣?dispose 宸叉妸 callbacks 娓呯┖锛屼簨浠惰寮曟搸渚у畨鍏ㄤ涪寮冦€?
     unawaited(engine.completeCurrent());
-    // completeCurrent 内部有 Future.delayed(Duration.zero)——pump 带时长
-    // 才会在 FakeAsync 区把这个零延时 Timer 冲掉，否则遗留 pending timer。
+    // completeCurrent 鍐呴儴鏈?Future.delayed(Duration.zero)鈥斺€攑ump 甯︽椂闀?
+    // 鎵嶄細鍦?FakeAsync 鍖烘妸杩欎釜闆跺欢鏃?Timer 鍐叉帀锛屽惁鍒欓仐鐣?pending timer銆?
     await tester.pump(const Duration(milliseconds: 5));
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('进入后台（非 resumed 生命周期）停止朗读', (tester) async {
+  testWidgets('杩涘叆鍚庡彴锛堥潪 resumed 鐢熷懡鍛ㄦ湡锛夊仠姝㈡湕璇?, (tester) async {
     final engine = FakeTtsEngine();
     await open(tester, engine);
     await startTts(tester, engine);
@@ -166,28 +166,28 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump();
 
-    expect(engine.stopCalled, greaterThan(stopsBefore), reason: '后台必须停止朗读');
-    expect(find.byTooltip('朗读'), findsOneWidget, reason: '回到未播放态');
+    expect(engine.stopCalled, greaterThan(stopsBefore), reason: '鍚庡彴蹇呴』鍋滄鏈楄');
+    expect(find.byTooltip('鏈楄'), findsOneWidget, reason: '鍥炲埌鏈挱鏀炬€?);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('繁简切换停止朗读（_reconvert 重建排版块前先释放控制器）', (tester) async {
+  testWidgets('绻佺畝鍒囨崲鍋滄鏈楄锛坃reconvert 閲嶅缓鎺掔増鍧楀墠鍏堥噴鏀炬帶鍒跺櫒锛?, (tester) async {
     final engine = FakeTtsEngine();
     await open(tester, engine);
     await startTts(tester, engine);
     final stopsBefore = engine.stopCalled;
 
-    await tester.tap(find.byTooltip('阅读设置'));
+    await tester.tap(find.byTooltip('闃呰璁剧疆'));
     await tester.pumpAndSettle();
-    // 弹层内容超出测试视口（600 高）：《简→繁》chip 在屏幕外，
-    // 先在弹层自己的 Scrollable 里滚动到可见再点击。
+    // 寮瑰眰鍐呭瓒呭嚭娴嬭瘯瑙嗗彛锛?00 楂橈級锛氥€婄畝鈫掔箒銆媍hip 鍦ㄥ睆骞曞锛?
+    // 鍏堝湪寮瑰眰鑷繁鐨?Scrollable 閲屾粴鍔ㄥ埌鍙鍐嶇偣鍑汇€?
     await tester.scrollUntilVisible(
-      find.text('简→繁'),
+      find.text('绠€鈫掔箒'),
       120,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.tap(find.text('简→繁'));
-    // ChoiceChip 选中即 commit → 弹层带回新设置 → zhChanged → _reconvert。
+    await tester.tap(find.text('绠€鈫掔箒'));
+    // ChoiceChip 閫変腑鍗?commit 鈫?寮瑰眰甯﹀洖鏂拌缃?鈫?zhChanged 鈫?_reconvert銆?
     await tester.pump(const Duration(milliseconds: 100));
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 30)),
@@ -202,7 +202,7 @@ void main() {
     expect(
       engine.stopCalled,
       greaterThan(stopsBefore),
-      reason: '繁简切换重建正文前必须停止朗读',
+      reason: '绻佺畝鍒囨崲閲嶅缓姝ｆ枃鍓嶅繀椤诲仠姝㈡湕璇?,
     );
     expect(tester.takeException(), isNull);
   });
@@ -222,7 +222,7 @@ class _Source implements ContentProvider {
 
   @override
   Future<ChapterContent> content(Chapter chapter) async =>
-      const ChapterContent(text: '第一段正文。\n\n第二段正文。');
+      const ChapterContent(text: '绗竴娈垫鏂囥€俓n\n绗簩娈垫鏂囥€?);
 }
 
 class _Sources extends SourceRegistryController {
@@ -238,3 +238,4 @@ class _Sources extends SourceRegistryController {
     failures: const [],
   );
 }
+
