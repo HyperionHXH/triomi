@@ -170,6 +170,6 @@ docs/GLM_DPSK_WORK_ORDERS.md。D11–D14 与 P2 均已交付；接收结论、�
 后续集成点: <若有，只写本机需要接的类/验证步骤>
 ```
 
-> 2026-10-02 ��Χ���᣺�� [SCOPE_FREEZE_2026-10-02.md](SCOPE_FREEZE_2026-10-02.md)��Kazumi/Komikku/Mixn ���ղ����Զ��ȼ���ȫ���������ܣ�D61 ����ذ�ȫ�з���������鶨λ��D59/D60 ���Ǽܹ��������
+> 2026-10-02 范围冻结：见 [SCOPE_FREEZE_2026-10-02.md](SCOPE_FREEZE_2026-10-02.md)。Kazumi/Komikku/Mixn 参照不再自动等价于全量新增功能；D61 已落地安全切分与滚动按块定位，D59/D60 仍是架构级保留项。
 
-��һ�� GLM�����տڣ��������ܣ���[GLM_BATCH_D62_D69.md](GLM_BATCH_D62_D69.md)��
+下一批 GLM（仅收口，不扩功能）：[GLM_BATCH_D62_D69.md](GLM_BATCH_D62_D69.md)。

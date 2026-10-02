@@ -135,4 +135,4 @@ debug 签名（仓库不含密钥），仅供自用安装；要发布请自行�
 
 客户端源代码采用 GPL-3.0（见 [LICENSE](LICENSE)）。站点内容、书籍正文、插图与相关商标不因本许可证改变其权利归属。
 
-��Χ��������һ�� GLM �������� [SCOPE_FREEZE_2026-10-02.md](docs/SCOPE_FREEZE_2026-10-02.md)��
+范围冻结与下一批 GLM 工作单见 [SCOPE_FREEZE_2026-10-02.md](docs/SCOPE_FREEZE_2026-10-02.md)。
