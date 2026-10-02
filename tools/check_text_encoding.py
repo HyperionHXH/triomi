@@ -9,7 +9,7 @@ def main() -> int:
     paths = subprocess.check_output(
         ["git", "ls-files", "-z"], cwd=root
     ).decode("utf-8").split("\0")
-    suffixes = {".md", ".dart", ".json", ".py", ".yaml", ".yml", ".xml", ".kt"}
+    suffixes = {".md", ".dart", ".json", ".py", ".ps1", ".yaml", ".yml", ".xml", ".kt"}
     errors = []
     for name in paths:
         path = root / name
