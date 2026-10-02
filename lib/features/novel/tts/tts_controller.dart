@@ -1,16 +1,21 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
 import '../../novel/reader/novel_blocks.dart';
 
-/// TTS 鏈楄浣嶇疆锛氭鍦ㄦ湕璇诲摢涓帓鐗堝潡銆?///
-/// 涓庨槄璇诲櫒鐨?`_progressParagraph`锛堝潡涓嬫爣锛夊悓涓€閿氭ā鍨嬶紝涓嶅彂鏄庣浜屽浣嶇疆銆?typedef TtsAnchor = int;
+/// TTS 朗读位置：正在朗读哪个排版块。
+///
+/// 与阅读器的 `_progressParagraph`（块下标）同一锚模型，不发明第二套位置。
+typedef TtsAnchor = int;
 
-/// 涓€鏉″緟鏈楄鐨勮闊冲崟鍏冿紙D31 鍚堝悓锛氱涓€鐗堟寜銆屾钀姐€嶄负 utterance 绮掑害锛夈€?///
-/// - 鎻掑浘鍧椾骇鍑?[isPlaceholder] = true 鐨勫崰浣?utterance锛堟湕璇绘浛鎹㈣瘝锛屽
-///   銆屾彃鍥俱€嶏級锛屾湕璇讳細鎵ц锛屼絾**涓嶈鍏ラ槄璇昏繘搴﹂敋**锛堣 [TtsProgress.anchor]锛夛紱
-/// - 鍒嗛〉鎶婁竴涓钀藉垏鎴愬椤垫椂锛岃法椤靛彞瀛愬厛鎸夊潡鎷兼帴鍐嶄氦缁欏紩鎿庘€斺€旀湰灞傚彧璁?///   `List<ReaderBlock>`锛屽垎椤垫槸娓叉煋灞傛蹇碉紝涓嶅奖鍝?utterance 鍒掑垎銆?class TtsUtterance {
+/// 一条待朗读的语音单元（D31 合同：第一版按「段落」为 utterance 粒度）。
+///
+/// - 插图块产出 [isPlaceholder] = true 的占位 utterance（朗读替换词，如
+///   「插图」），朗读会执行，但**不计入阅读进度锚**（见 [TtsProgress.anchor]）；
+/// - 分页把一个段落切成多页时，跨页句子先按块拼接再交给引擎——本层只认
+///   `List<ReaderBlock>`，分页是渲染层概念，不影响 utterance 划分。
+class TtsUtterance {
   const TtsUtterance({
     required this.blockIndex,
     required this.text,
@@ -19,49 +24,62 @@ import '../../novel/reader/novel_blocks.dart';
     this.token = 0,
   });
 
-  /// 浜у嚭璇?utterance 鐨勬帓鐗堝潡涓嬫爣锛坄ReaderBlock` 搴忓垪涓殑浣嶇疆锛夈€?  final int blockIndex;
+  /// 产出该 utterance 的排版块下标（`ReaderBlock` 序列中的位置）。
+  final int blockIndex;
 
-  /// 鏈楄鏂囨湰锛堟爣棰?娈佃惤鍘熸枃锛涙彃鍥惧崰浣嶄负鏇挎崲璇嶏級銆?  final String text;
+  /// 朗读文本（标题/段落原文；插图占位为替换词）。
+  final String text;
 
-  /// 鏄惁涓烘彃鍥惧崰浣嶏紙鍗犱綅涓嶆帹杩涢槄璇婚敋锛夈€?  final bool isPlaceholder;
+  /// 是否为插图占位（占位不推进阅读锚）。
+  final bool isPlaceholder;
 
-  /// 鏈楄瀹岃鏉″悗鐨勫缓璁仠椤匡紙鏍囬/鎻掑浘鍚庡仠椤匡級銆?  final int pauseAfterMs;
+  /// 朗读完该条后的建议停顿（标题/插图后停顿）。
+  final int pauseAfterMs;
   final int token;
 }
 
-/// 鏈楄杩涘害锛氭湕璇讳綅缃?+ 闃呰閿氥€?class TtsProgress {
+/// 朗读进度：朗读位置 + 阅读锚。
+class TtsProgress {
   const TtsProgress({
     required this.utteranceIndex,
     required this.blockIndex,
     this.anchor,
   });
 
-  /// 褰撳墠 utterance 鍦ㄨ鍒掍腑鐨勪笅鏍囥€?  final int utteranceIndex;
+  /// 当前 utterance 在计划中的下标。
+  final int utteranceIndex;
 
-  /// 姝ｅ湪鏈楄鐨勫潡涓嬫爣锛堝崰浣嶆椂涓烘彃鍥惧潡涓嬫爣锛夈€?  final int blockIndex;
+  /// 正在朗读的块下标（占位时为插图块下标）。
+  final int blockIndex;
 
-  /// 闃呰鍣ㄥ簲鏄剧ず鐨勪綅缃敋锛氭渶杩戜竴涓潪鍗犱綅 utterance 鐨勫潡涓嬫爣锛?  /// 杩樻病璇诲埌浠讳綍鍙鍧楁椂涓?null锛堝崰浣嶄笉鎺ㄨ繘閿氾級銆?  final TtsAnchor? anchor;
+  /// 阅读器应显示的位置锚：最近一个非占位 utterance 的块下标；
+  /// 还没读到任何可读块时为 null（占位不推进锚）。
+  final TtsAnchor? anchor;
 }
 
-/// 寮曟搸鍥炶皟锛歶tterance 瀹屾垚 / 鍑洪敊銆?class TtsEngineCallbacks {
+/// 引擎回调：utterance 完成 / 出错。
+class TtsEngineCallbacks {
   TtsEngineCallbacks({this.onComplete, this.onCompleteWithToken, this.onError});
 
-  /// 褰撳墠 utterance 鑷劧鎾畬锛坱ext 鐢ㄤ簬鏍″褰掑睘锛夈€?  final void Function(String text)? onComplete;
+  /// 当前 utterance 自然播完（text 用于校对归属）。
+  final void Function(String text)? onComplete;
 
   /// Preferred completion callback. [token] is issued for each speak call and
   /// lets the controller discard a late callback after seek/stop.
   final void Function(String text, int token)? onCompleteWithToken;
 
-  /// 寮曟搸灞傞敊璇紙鍚堟垚澶辫触銆佸紩鎿庝笉鍙敤绛夛級銆?  final void Function(Object error)? onError;
+  /// 引擎层错误（合成失败、引擎不可用等）。
+  final void Function(Object error)? onError;
 }
 
-/// 绯荤粺闊宠壊锛圖48锛夛細鍚嶇О + 璇█鍖哄煙锛屼粎鏉ヨ嚜寮曟搸瀹為檯杩斿洖鐨勫彲鐢ㄩ」銆?class TtsVoiceInfo {
+/// 系统音色（D48）：名称 + 语言区域，仅来自引擎实际返回的可用项。
+class TtsVoiceInfo {
   const TtsVoiceInfo({required this.name, required this.locale});
 
   final String name;
   final String locale;
 
-  String get label => '$name锛?locale锛?;
+  String get label => '$name（$locale）';
 
   @override
   bool operator ==(Object other) =>
@@ -71,41 +89,55 @@ import '../../novel/reader/novel_blocks.dart';
   int get hashCode => Object.hash(name, locale);
 }
 
-/// TTS 寮曟搸鎶借薄锛圖31 鍚堝悓锛夛細鎻掍欢瀹炵幇鐢?Codex 鎻愪緵锛圖37 flutter_tts 鎺ョ嚎锛夛紝
-/// 鏈眰涓庢祴璇曞彧渚濊禆鎺ュ彛銆?///
-/// 濂戠害锛?/// - [speak] 杩斿洖鍗宠〃绀哄紩鎿庡凡鍙楃悊锛涘畬鎴愮敱 [callbacks] 鐨?onComplete 閫氱煡锛?/// - [pause] 骞冲彴宸紓澶э紙Android 闇€瑕?workaround銆乄indows 鏃?speech marks锛夛紝
-///   杩斿洖 false 琛ㄧず骞冲彴涓嶆敮鎸佲€斺€旀帶鍒跺櫒鎸夈€屽仠姝㈠綋鍓嶆銆佹仮澶嶆椂閲嶈銆嶉檷绾э紱
-/// - [stop] 蹇呴』骞傜瓑銆?abstract class TtsEngine {
+/// TTS 引擎抽象（D31 合同）：插件实现由 Codex 提供（D37 flutter_tts 接线），
+/// 本层与测试只依赖接口。
+///
+/// 契约：
+/// - [speak] 返回即表示引擎已受理；完成由 [callbacks] 的 onComplete 通知；
+/// - [pause] 平台差异大（Android 需要 workaround、Windows 无 speech marks），
+///   返回 false 表示平台不支持——控制器按「停止当前段、恢复时重读」降级；
+/// - [stop] 必须幂等。
+abstract class TtsEngine {
   bool get supportsPause;
 
-  /// 寮曟搸鎶婂畬鎴?閿欒鍥炶皟鎶ュ埌杩欓噷锛堟帶鍒跺櫒鏋勯€犳椂娉ㄥ叆锛夈€?  set callbacks(TtsEngineCallbacks value);
+  /// 引擎把完成/错误回调报到这里（控制器构造时注入）。
+  set callbacks(TtsEngineCallbacks value);
 
   Future<void> speak(TtsUtterance utterance);
 
-  /// @return 骞冲彴鏄惁鐪熸鏀寔鏆傚仠锛坒alse 鈫?璋冪敤鏂规寜鍋滄-閲嶈闄嶇骇锛夈€?  Future<bool> pause();
+  /// @return 平台是否真正支持暂停（false → 调用方按停止-重读降级）。
+  Future<bool> pause();
 
   Future<void> resume();
 
   Future<void> stop();
 
-  /// 璇煶閫夐」锛圖48锛夛細浼氳瘽寮€濮嬪墠搴旂敤涓€娆°€傞粯璁ゅ疄鐜颁负銆屾棤閫夐」銆嶏紝渚?  /// 娴嬭瘯鏇胯韩涓庝笉鏀寔闊宠壊/璇€熺殑骞冲彴鐩存帴澶嶇敤锛涚湡瀹炲紩鎿庢寜闇€瑕嗙洊銆?  Future<void> applySpeechSettings({double? rate, TtsVoiceInfo? voice}) async {}
+  /// 语音选项（D48）：会话开始前应用一次。默认实现为「无选项」，供
+  /// 测试替身与不支持音色/语速的平台直接复用；真实引擎按需覆盖。
+  Future<void> applySpeechSettings({double? rate, TtsVoiceInfo? voice}) async {}
 
-  /// 绯荤粺鍙敤闊宠壊鍒楄〃锛圖48锛夈€傞粯璁よ繑鍥炵┖ = 骞冲彴鏈彁渚涙垨鏌ヨ涓嶅彲鐢紝
-  /// 璋冪敤鏂规寜銆岀郴缁熼粯璁ら煶鑹层€嶉檷绾э紝涓嶄吉閫犻€夐」銆?  Future<List<TtsVoiceInfo>> availableVoices() async =>
+  /// 系统可用音色列表（D48）。默认返回空 = 平台未提供或查询不可用，
+  /// 调用方按「系统默认音色」降级，不伪造选项。
+  Future<List<TtsVoiceInfo>> availableVoices() async =>
       const <TtsVoiceInfo>[];
 }
 
-/// TTS 浼氳瘽鐘舵€併€?enum TtsState { idle, playing, paused, completed, error }
+/// TTS 会话状态。
+enum TtsState { idle, playing, paused, completed, error }
 
-/// 鏈楄璁″垝锛歶tterance 搴忓垪锛堢函鍑芥暟浜у嚭锛屽彲鐙珛娴嬭瘯锛夈€?class TtsPlan {
+/// 朗读计划：utterance 序列（纯函数产出，可独立测试）。
+class TtsPlan {
   const TtsPlan({required this.utterances});
 
   final List<TtsUtterance> utterances;
 
-  static const String illustrationPlaceholder = '鎻掑浘';
+  static const String illustrationPlaceholder = '插图';
 
-  /// 鎶婃帓鐗堝潡瑙勫垝鎴?utterance 搴忓垪锛?  /// - 鏍囬/娈佃惤 鈫?鍘熸枃锛屾爣棰樺悗鍋滈】 [headingPauseMs]锛?  /// - 鎻掑浘 鈫?鍗犱綅璇嶏紙鍗犱綅涓嶈鍏ラ槄璇婚敋锛夛紱
-  /// - 绌虹櫧鏂囨湰娈佃惤璺宠繃锛堥槻寰℃€у鐞嗭級銆?  static TtsPlan of(
+  /// 把排版块规划成 utterance 序列：
+  /// - 标题/段落 → 原文，标题后停顿 [headingPauseMs]；
+  /// - 插图 → 占位词（占位不计入阅读锚）；
+  /// - 空白文本段落跳过（防御性处理）。
+  static TtsPlan of(
     List<ReaderBlock> blocks, {
     String illustrationText = illustrationPlaceholder,
     int headingPauseMs = 240,
@@ -165,20 +197,31 @@ import '../../novel/reader/novel_blocks.dart';
       }
       var end = start + limit;
       final window = value.substring(start, end);
-      final breakAt = window.lastIndexOf(RegExp(r'[\n\r\t 锛屻€傦紒锛燂紱锛氥€?.!?;:)]'));
+      final breakAt = window.lastIndexOf(RegExp(r'[\n\r\t ，。！？；：、,.!?;:)]'));
       if (breakAt > limit ~/ 2) end = start + breakAt + 1;
       final chunk = value.substring(start, end).trim();
       if (chunk.isNotEmpty) result.add(chunk);
       start = end;
-      while (start < value.length && value[start].trim().isEmpty) {`r`n        start++;`r`n      }
+      while (start < value.length && value[start].trim().isEmpty) {
+        start++;
+      }
     }
     return result;
   }
 }
 
-/// TTS 鎺у埗鍣紙D31 鍚堝悓 + 绾?Dart seam锛夈€?///
-/// 鑱岃矗锛?/// - 鎸佹湁 [TtsPlan]锛屾寜搴忛┍鍔?[TtsEngine]锛?/// - 缁存姢 [state] 涓?[progress]锛堟湕璇讳綅缃?+ 闃呰閿氾級锛?/// - 閿佸畾绔?*鎷掔粷鏈楄**锛坄start` 鎶涢敊銆佸紩鎿庨浂璋冪敤鈥斺€斻€屼笉瑙ｉ攣涓嶇紦瀛樸€嶇孩绾?///   鍦ㄦ湕璇诲煙鐨勯暅鍍忥級锛?/// - 寮曟搸瀹屾垚鍥炶皟椹卞姩鎺ㄨ繘锛涢敊璇繘鍏?[TtsState.error]锛?/// - 骞冲彴涓嶆敮鎸佹殏鍋滄椂鎸夈€屽仠姝㈠綋鍓嶆銆佹仮澶嶉噸璇汇€嶉檷绾э紙绗竴鐗堝熀绾匡級銆?///
-/// 涓嶅惈鎻掍欢銆侀煶棰戠劍鐐广€佸墠鍙版湇鍔′笌闃呰鍣ㄦ帴绾匡紙Codex 鑷暀 D37 鑼冨洿锛夈€?class TtsController extends ChangeNotifier {
+/// TTS 控制器（D31 合同 + 纯 Dart seam）。
+///
+/// 职责：
+/// - 持有 [TtsPlan]，按序驱动 [TtsEngine]；
+/// - 维护 [state] 与 [progress]（朗读位置 + 阅读锚）；
+/// - 锁定章**拒绝朗读**（`start` 抛错、引擎零调用——「不解锁不缓存」红线
+///   在朗读域的镜像）；
+/// - 引擎完成回调驱动推进；错误进入 [TtsState.error]；
+/// - 平台不支持暂停时按「停止当前段、恢复重读」降级（第一版基线）。
+///
+/// 不含插件、音频焦点、前台服务与阅读器接线（Codex 自留 D37 范围）。
+class TtsController extends ChangeNotifier {
   TtsController({required this._engine, required List<ReaderBlock> blocks})
     : _plan = TtsPlan.of(blocks) {
     _engine.callbacks = TtsEngineCallbacks(
@@ -194,9 +237,11 @@ import '../../novel/reader/novel_blocks.dart';
   TtsState _state = TtsState.idle;
   int _utteranceIndex = -1;
 
-  /// 闃呰閿氾細鏈€杩戜竴涓潪鍗犱綅 utterance 鐨勫潡涓嬫爣銆?  TtsAnchor? _anchor;
+  /// 阅读锚：最近一个非占位 utterance 的块下标。
+  TtsAnchor? _anchor;
 
-  /// 鏄惁澶勪簬銆岄檷绾ф殏鍋溿€嶏紙寮曟搸涓嶆敮鎸?pause锛屾仮澶嶆椂闇€瑕侀噸璇诲綋鍓嶆锛夈€?  bool _degradedPause = false;
+  /// 是否处于「降级暂停」（引擎不支持 pause，恢复时需要重读当前段）。
+  bool _degradedPause = false;
   int _speakToken = 0;
   int _activeSpeakToken = 0;
 
@@ -204,7 +249,8 @@ import '../../novel/reader/novel_blocks.dart';
   TtsPlan get plan => _plan;
   int get utteranceIndex => _utteranceIndex;
 
-  /// 褰撳墠鏈楄杩涘害锛坕dle/completed/error 涓旀湭寮€濮嬫椂涓?null锛夈€?  TtsProgress? get progress {
+  /// 当前朗读进度（idle/completed/error 且未开始时为 null）。
+  TtsProgress? get progress {
     if (_utteranceIndex < 0 || _utteranceIndex >= _plan.utterances.length) {
       return null;
     }
@@ -216,13 +262,15 @@ import '../../novel/reader/novel_blocks.dart';
     );
   }
 
-  /// 寮曟搸鏄惁鏀寔鏆傚仠锛堥€忎紶锛屼緵 UI 鍐冲畾鎸夐挳褰㈡€侊級銆?  bool get supportsPause => _engine.supportsPause;
+  /// 引擎是否支持暂停（透传，供 UI 决定按钮形态）。
+  bool get supportsPause => _engine.supportsPause;
 
-  /// 寮€濮嬫湕璇汇€傞攣瀹氱珷鐩存帴鎷掔粷锛堝紩鎿庨浂璋冪敤锛岀姸鎬佺疆 error锛夈€?  Future<void> start({required bool locked}) async {
+  /// 开始朗读。锁定章直接拒绝（引擎零调用，状态置 error）。
+  Future<void> start({required bool locked}) async {
     if (_state == TtsState.playing || _state == TtsState.paused) return;
     if (locked) {
       _state = TtsState.error;
-      throw StateError('閿佸畾绔犺妭涓嶆彁渚涙湕璇?);
+      throw StateError('锁定章节不提供朗读');
     }
     if (_plan.utterances.isEmpty) {
       _state = TtsState.completed;
@@ -259,7 +307,8 @@ import '../../novel/reader/novel_blocks.dart';
     }
   }
 
-  /// 鏆傚仠锛氬紩鎿庝笉鏀寔鏃堕檷绾т负銆屽仠姝㈠綋鍓嶆锛屾仮澶嶆椂閲嶈銆嶃€?  Future<void> pause() async {
+  /// 暂停：引擎不支持时降级为「停止当前段，恢复时重读」。
+  Future<void> pause() async {
     if (_state != TtsState.playing) return;
     _state = TtsState.paused;
     notifyListeners();
@@ -273,12 +322,14 @@ import '../../novel/reader/novel_blocks.dart';
     _state = TtsState.playing;
     if (_degradedPause) {
       _degradedPause = false;
-      await _speakCurrent(); // 涓嶆敮鎸佹殏鍋滅殑骞冲彴锛氶噸璇诲綋鍓嶆銆?      return;
+      await _speakCurrent(); // 不支持暂停的平台：重读当前段。
+      return;
     }
     await _engine.resume();
   }
 
-  /// 鍋滄锛氬洖鍒?idle锛岃繘搴︽竻闆躲€?  Future<void> stop() async {
+  /// 停止：回到 idle，进度清零。
+  Future<void> stop() async {
     if (_state == TtsState.idle) return;
     _activeSpeakToken = -1;
     _state = TtsState.idle;
@@ -289,7 +340,8 @@ import '../../novel/reader/novel_blocks.dart';
     await _engine.stop();
   }
 
-  /// 璺冲埌鎸囧畾 utterance锛圲I 鐐归€夋钀?涓婁竴娈?涓嬩竴娈电敤锛夈€?  Future<void> seekToUtterance(int index) async {
+  /// 跳到指定 utterance（UI 点选段落/上一段/下一段用）。
+  Future<void> seekToUtterance(int index) async {
     if (index < 0 || index >= _plan.utterances.length) return;
     _activeSpeakToken = -1;
     _state = TtsState.paused;
@@ -311,7 +363,8 @@ import '../../novel/reader/novel_blocks.dart';
     if (_state != TtsState.playing) return;
     if (token != null && token != _activeSpeakToken) return;
     final current = _plan.utterances[_utteranceIndex];
-    if (current.text != text) return; // 杩熷埌鐨勬棫鍥炶皟锛氫涪寮冦€?    if (_utteranceIndex + 1 >= _plan.utterances.length) {
+    if (current.text != text) return; // 迟到的旧回调：丢弃。
+    if (_utteranceIndex + 1 >= _plan.utterances.length) {
       _state = TtsState.completed;
       notifyListeners();
       return;
@@ -334,4 +387,3 @@ import '../../novel/reader/novel_blocks.dart';
     super.dispose();
   }
 }
-
