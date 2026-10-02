@@ -14,10 +14,12 @@ run 37025611076：Flutter analyze、Python 工具、Android/Windows 构建通过
 
 完整 Flutter 测试改到 Windows runner，通过已有 tools/setup_quickjs_dll.py 从 pub cache 复制随依赖分发的 DLL 到宿主搜索目录。支持 PUB_CACHE 环境变量及 hosted/pub.dev 子目录；CI 为 Python 明确设置 UTF-8。没有删除断言或把失败改为跳过。
 
-run 37028520208 全部通过：Flutter analyze 零问题，547 tests passed，QuickJS 探测 OK；Python 工具和 Android/Windows 构建通过。PR #1 已合并，测试标签 v0.1.0-test.1 已建立，发布工作流 run 37029792864 正在生成安装包。
+run 37028520208 全部通过：Flutter analyze 零问题，547 tests passed，QuickJS 探测 OK；Python 工具和 Android/Windows 构建通过。PR #1 已合并，发布工作流 run 37029792864 成功，v0.1.0-test.1 已标记为预发布，APK/Windows ZIP 两个附件状态均为 uploaded。
+
+下载：https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.1
 
 ## 尚未完成
 
 - D59 同步 JS 强隔离和 D60 跨存储崩溃恢复仍需实现，不是手机才能完成的任务。
 - 真实番剧规则与真实内容播放尚未验证；Bangumi 资料源无法提供正片。
-- Release 自动化已经入分支，但尚未发布可下载版本；手机验收尚未开始。
+- Release 自动化与可下载测试版本已完成；手机验收尚未开始。
