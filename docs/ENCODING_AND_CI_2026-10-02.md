@@ -12,7 +12,9 @@ Windows PowerShell 中运行 `. ./tools/utf8_shell.ps1` 可为当前会话设置
 
 run 37025611076：Flutter analyze、Python 工具、Android/Windows 构建通过；Flutter test 为 525 passed / 14 failed / 8 skipped。14 条失败均因 Linux 测试机缺少 libquickjs_c_bridge_plugin.so。
 
-完整 Flutter 测试改到 Windows runner，通过已有 tools/setup_quickjs_dll.py 从 pub cache 复制随依赖分发的 DLL 到宿主搜索目录。支持 PUB_CACHE 环境变量；没有删除断言或把失败改为跳过。新 run 结果尚待验收，CI 全绿前不发布测试版本。
+完整 Flutter 测试改到 Windows runner，通过已有 tools/setup_quickjs_dll.py 从 pub cache 复制随依赖分发的 DLL 到宿主搜索目录。支持 PUB_CACHE 环境变量及 hosted/pub.dev 子目录；CI 为 Python 明确设置 UTF-8。没有删除断言或把失败改为跳过。
+
+run 37028520208 全部通过：Flutter analyze 零问题，547 tests passed，QuickJS 探测 OK；Python 工具和 Android/Windows 构建通过。PR #1 已合并，测试标签 v0.1.0-test.1 已建立，发布工作流 run 37029792864 正在生成安装包。
 
 ## 尚未完成
 
