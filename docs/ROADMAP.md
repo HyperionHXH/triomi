@@ -6,7 +6,7 @@
 
 ## 当前请求（R153：批准四工作区重构并完整实施发布）
 
-用户已批准 [完整重构大纲](REFACTOR_OUTLINE_FOUR_MODULES.md)，并要求真实使用优先、不对小改重复全量检查，最终更新README、提交推送GitHub并发布签名Android与完整Windows测试版。四工作区、独立搜索/范围/分类迁移、番剧加载与单详情选源、漫画订阅/单源/原始筛选、MixN小说发现/书架已实现并交叉Review；最终974项Flutter通过/3跳过、85项Python通过、analyze无问题。原三设备保数据升级/hash一致，API35视频/漫画真图、API26与正式小说正文及小说书架冷启恢复已有当前字节证据。Windows最终构建/完整打包通过，但本会话没有专用桌面交互接口，当前Windows可见旅程和完整视觉矩阵仍未验；不以构建替代实跑。本轮发布正在进行，见[C153证据](delivery/evidence/C153-final-acceptance.json)。
+用户已批准 [完整重构大纲](REFACTOR_OUTLINE_FOUR_MODULES.md)，并要求真实使用优先、不对小改重复全量检查，最终更新README、提交推送GitHub并发布签名Android与完整Windows测试版。四工作区、独立搜索/范围/分类迁移、番剧加载与单详情选源、漫画订阅/单源/原始筛选、MixN小说发现/书架已实现并交叉Review；最终974项Flutter通过/3跳过、85项Python通过、analyze无问题。原三设备保数据升级/hash一致，API35视频/漫画真图、API26与正式小说正文及小说书架冷启恢复已有当前字节证据。[v0.1.0-test.153](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.153)已发布，四项资产实际下载与本地SHA-256一致。Windows最终构建/完整打包通过，但本会话没有专用桌面交互接口，当前Windows可见旅程和完整视觉矩阵仍未验；不以构建替代实跑，见[C153证据](delivery/evidence/C153-final-acceptance.json)。
 
 R0–R5实施依赖与验收契约仍见大纲；R6以当前字节实跑为准。真实公开资料/HTTP取消已记录 [R153运行烟测](delivery/evidence/R153-runtime-smoke.json)，不冒称UI/视频首帧通过；完整原P1–P12剩余与外部授权条件仍集中在CURRENT_STATUS，不创建平行台账。
 

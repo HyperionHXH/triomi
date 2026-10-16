@@ -8,7 +8,7 @@
 
 ## 下载与安装
 
-到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases) 下载 **v0.1.0-test.151**：
+到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.153) 下载 **v0.1.0-test.153**：
 
 | 文件 | 用途 |
 | --- | --- |
@@ -18,6 +18,9 @@
 | `SHA256SUMS.txt` | 下载文件 SHA-256 校验值 |
 
 已有同签名版本可覆盖安装，勿卸载或清除数据；建议先在「我的 → 备份与恢复」导出本地备份。开发/Actions 验收包使用另一证书，不能直接覆盖正式包，遇到签名冲突不要通过卸载丢弃原数据。当前为测试版，不宣称完整全平台验收；详情见 [当前状态](docs/CURRENT_STATUS.md)。
+
+本版已完成原三台Android设备保数据升级和关键播放/阅读旅程；Windows完整构建与打包已核验，但本轮环境无专用桌面交互接口，当前字节Windows可见旅程尚未完成。全量974项Flutter通过/3跳过、85项Python通过；不将测试全绿等同完整平台矩阵通过。
+
 
 ## 开始使用
 

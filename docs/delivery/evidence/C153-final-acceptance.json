@@ -1,9 +1,23 @@
 {
   "id": "C153-R153-four-workspaces",
   "version": "0.1.0+153",
-  "status": "release-prepared-platform-acceptance-partial",
-  "releasePublished": false,
+  "status": "published-and-download-verified-platform-acceptance-partial",
+  "releasePublished": true,
   "sourceBaseline": "37b12bde82d1bf2aa9acce5022736fc6a6a4ef7e",
+  "sourceCommit": "1ed77f5e6f366d27b7e685825cb1119229d8c420",
+  "release": {
+    "tag": "v0.1.0-test.153",
+    "url": "https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.153",
+    "id": 414988298,
+    "publishedAt": "2026-10-16T13:23:48Z",
+    "draft": false,
+    "prerelease": true,
+    "publicPageVerifiedWithoutLogin": true,
+    "allFourGitHubAssetDigestsMatchLocal": true,
+    "allFourAssetsDownloadedAndHashesMatch": true,
+    "assets": ["triomi-android.apk", "triomi-windows.zip", "triomi-windows.update.json", "SHA256SUMS.txt"],
+    "checksumFileSha256": "10a431c6320ab18b80dbfc496023aa0073b9fdcbf43058b164c5139fde3c44a3"
+  },
   "runtimeEvidence": "R153-runtime-smoke.json",
   "verification": {
     "driftGeneration": "passed",
@@ -15,6 +29,7 @@
     "uiDocDriftErrors": 0,
     "uiDocDriftWarnings": 0,
     "deliveryReferenceErrors": 0,
+    "deliveryDocumentationWarnings": 35,
     "secretScan": "C153-secret-scan.json"
   },
   "artifacts": [
