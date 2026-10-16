@@ -23,7 +23,7 @@
 Windows 可任选 ZIP 或 MSI，不需要两个都装。MSI 默认安装到 `%LOCALAPPDATA%\Programs\Triomi`，不自动导入/删除旧 ZIP 目录；两种形式沿用同一应用数据目录。升级 MSI 前退出 Triomi，再运行新 MSI；卸载只移除安装文件和快捷方式，保留收藏、账号、设置及下载。MSI 目前没有 Windows Authenticode 发布者签名，系统可能提示未知发布者；请从本仓库 Release 下载并核对 SHA-256，Android 签名证书不能用于 Windows 签名。
 
 
-本版修复应用内字号覆盖系统无障碍缩放：保留系统（含Android非线性）缩放，再叠加应用界面字号偏好。原三台Android设备已保数据升级并核对hash，双API/正式大字号界面、API26横屏及API35本地键盘筛选有实际样本；全量975项Flutter通过/3跳过、analyze无问题。ZIP/MSI同源构建通过，MSI153→154真实升级和卸载保留原数据；Windows应用可见旅程、真实读屏和完整矩阵仍未完成，详情见[C154证据](docs/delivery/evidence/C154-final-acceptance.json)。
+本版修复应用内字号覆盖系统无障碍缩放：保留系统（含Android非线性）缩放，再叠加应用界面字号偏好。原三台Android设备已保数据升级并核对hash，双API/正式大字号界面、API26横屏及API35本地键盘筛选有实际样本；全量975项Flutter通过/3跳过、analyze无问题。ZIP/MSI同源构建、MSI153→154升级和卸载保数据通过。Windows当前下载字节已实际操作：单源搜索、跨栏草稿隔离、漫画真图、小说冷启同页、窄窗口系统200%字号，以及NVDA实际语音输出均有样本；不宣称完整平台矩阵通过，详情见[C154证据](docs/delivery/evidence/C154-final-acceptance.json)。
 
 
 ## 开始使用

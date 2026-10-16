@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-更新时间：C154系统无障碍字号修复已发布[v0.1.0-test.154](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.154)，五项资产已实际下载且大小/SHA-256均与本地匹配。全量975项Flutter通过/3跳过，analyze无问题；原三设备保数据安装/hash及双API/正式大字号样本已证，结束字号均恢复1.0。WindowsZIP/MSI同源构建、真实MSI153→154升级及卸载保留原数据通过。Windows应用可见旅程与真实读屏仍缺接口/前置条件，完整平台矩阵仍partial。
+更新时间：C154系统无障碍字号修复已发布[v0.1.0-test.154](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.154)，五项资产已实际下载且大小/SHA-256均与本地匹配。全量975项Flutter通过/3跳过，analyze无问题；原三设备保数据安装/hash及双API/正式大字号样本已证，结束字号均恢复1.0。Windows ZIP/MSI同源构建、真实MSI153→154升级及卸载保留原数据通过。用户已授权终端驱动原生桌面自动化，当前下载ZIP的真实界面、阅读与冷启、窄窗口200%字号及NVDA语音输出样本已补；缺专用桌面工具不再是阻塞，完整平台矩阵仍partial。
 
 当前执行入口为本文件和 `docs/ROADMAP.md`；历史证据在 `docs/delivery/evidence/`。R152重构大纲是用户本轮明确要求的设计交付，不另建执行进度台账。
 
@@ -12,11 +12,13 @@
 
 当前生产资料适配器真实HTTPS烟测：《葬送的芙莉莲》详情713ms，含36集资料总计1050ms；第二次缓存详情0ms、总计339ms。真实loopback HTTP取消25ms返回错误，并行同客户端请求仍200且正文一致。证据见 [R153运行烟测](delivery/evidence/R153-runtime-smoke.json)；仅证明传输与公开资料Adapter，不是UI/真实视频首帧或百分位数。原R152官方接口超时诊断保留，不重新探测确认。
 
-最终生产源码整套974项Flutter通过/3跳过，85项Python通过，analyze无问题。原三设备已`install -r`保数据升级到最终C153并逐台核对hash；API35真实推荐→资料、保留原7sefun映射→本地已下载视频24:22/25:11真帧、MangaDex JS/API第76.2话5/14双页真图通过。API35/API26小说书架“已下载”独立强停重启保留，API26原小说20/22、正式包原小说3/37正文目视可读。设备DNS故障期间只用普通设置配置临时CONNECT代理，未解密/绕过TLS；结束已恢复空代理、移除自有转发、停止临时服务并以无自定义DNS启动原AVD，不把临时网络依赖放进产品。详见[C153当前证据](delivery/evidence/C153-final-acceptance.json)。Windows最终构建成功、50成员逐字节匹配，但工具库存无专用桌面交互接口，本轮Windows可见旅程及完整视觉/键盘/读屏/200%字号矩阵不冒称完成；不是账号授权阻塞。
+最终生产源码整套974项Flutter通过/3跳过，85项Python通过，analyze无问题。原三设备已`install -r`保数据升级到最终C153并逐台核对hash；API35真实推荐→资料、保留原7sefun映射→本地已下载视频24:22/25:11真帧、MangaDex JS/API第76.2话5/14双页真图通过。API35/API26小说书架“已下载”独立强停重启保留，API26原小说20/22、正式包原小说3/37正文目视可读。设备DNS故障期间只用普通设置配置临时CONNECT代理，未解密/绕过TLS；结束已恢复空代理、移除自有转发、停止临时服务并以无自定义DNS启动原AVD，不把临时网络依赖放进产品。详见[C153历史证据](delivery/evidence/C153-final-acceptance.json)。C153当轮Windows只有构建/50成员匹配，界面工具限制已由下方C154实际桌面操作补证，不回改历史字节范围。
 
 Windows MSI补充：仓库新增`tools/package_windows.ps1`单命令执行Flutter release构建、WiX固定版本还原、ZIP/MSI/更新清单/校验文件打包，`build.yml`与`release.yml`均复用。本机完整命令实际退出0（Flutter构建74秒），MSI的50文件与原153公开ZIP解压内容逐字节一致；原ZIP/APK/更新清单资产未替换。当前用户安装到`%LOCALAPPDATA%\Programs\Triomi`，创建开始菜单入口，版本`0.1.153`、稳定UpgradeCode与降级拒绝；原用户数据不作为安装器资源。真实安装/升级/修复/卸载退出0、降级以明确较新版本提示退出1603，用户自建文件保留，测试安装已清理。MSI未签Windows Authenticode，不使用Android证书冒充。ZIP和MSI任选，原ZIP目录不自动接管。安装器CLI实证不等于应用窗口/安装向导视觉验收，见[C153综合证据](delivery/evidence/C153-final-acceptance.json)。
 
-C154无障碍补验：系统`font_scale=2.0`时原应用仍以固定UI字号显示，根组件回归失败前实际高度30px而非大于54px；已保留系统TextScaler并叠加应用偏好，不破坏Android非线性缩放。原API26真实小说/漫画/番剧、筛选sheet与Escape、200%横屏追番入口；原API35与正式包实际大字号小说书架，API35本地键盘查询0本→清空恢复2本已观察，原正式离线书架1本保留。关机后只重启原AVD/端口、未清数据，三台安装hash与产物一致。33项相关定向、全量975/3跳过及analyze通过；[C154证据](delivery/evidence/C154-final-acceptance.json)。以上不等于完整读屏/桌面视觉通过，也不把此前两次主机请求计为p95。
+C154无障碍补验：系统`font_scale=2.0`时原应用仍以固定UI字号显示，根组件回归失败前实际高度30px而非大于54px；已保留系统TextScaler并叠加应用偏好，不破坏Android非线性缩放。原API26真实小说/漫画/番剧、筛选sheet与Escape、200%横屏追番入口；原API35与正式包实际大字号小说书架，API35本地键盘查询0本→清空恢复2本已观察，原正式离线书架1本保留。关机后只重启原AVD/端口、未清数据，三台安装hash与产物一致。33项相关定向、全量975/3跳过及analyze通过；[C154证据](delivery/evidence/C154-final-acceptance.json)。不把此前两次主机请求计为p95。
+
+C154 Windows续验：使用已下载ZIP原字节和原用户数据，以获授权的PowerShell、原生MSAA/鼠标/键盘操作真实窗口并目视截图。推荐页、四栏、MangaDex单源20部及Berserk搜索1部、小说noveldraft与漫画搜索草稿各自保留、原小说书架1本及筛选取消已观察；原漫画211章→9/88真图，原已下载小说3/83→正常关闭→新进程同页，正文AX逐字一致。650×820窗口下系统字号200%实际放大并换行，四个底部标签可见，筛选可打开/Escape关闭；Windows字号原注册表值缺省已还原。官方签名NVDA2026.2便携版的真实Speech Viewer输出记录了书架/查找/筛选及阅读器按钮，Tab/Shift+Tab/Escape已实操，非仅枚举AX；结束正常退出应用与自有NVDA均0，系统读屏标志恢复false。未做声学清晰度、全工作区读屏遍历或Android TalkBack，不把样本扩成全矩阵，也不声称Windows能执行APK扩展；证据与截图统一在[C154](delivery/evidence/C154-final-acceptance.json)。
 
 
 

@@ -6,13 +6,13 @@
 
 ## 当前请求（R153：批准四工作区重构并完整实施发布）
 
-用户已批准 [完整重构大纲](REFACTOR_OUTLINE_FOUR_MODULES.md)，并要求真实使用优先、不对小改重复全量检查，最终更新README、提交推送GitHub并发布签名Android与完整Windows测试版。四工作区、独立搜索/范围/分类迁移、番剧加载与单详情选源、漫画订阅/单源/原始筛选、MixN小说发现/书架已实现并交叉Review；最终974项Flutter通过/3跳过、85项Python通过、analyze无问题。原三设备保数据升级/hash一致，API35视频/漫画真图、API26与正式小说正文及小说书架冷启恢复已有当前字节证据。[v0.1.0-test.153](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.153)已发布，四项资产实际下载与本地SHA-256一致。Windows最终构建/完整打包通过，但本会话没有专用桌面交互接口，当前Windows可见旅程和完整视觉矩阵仍未验；不以构建替代实跑，见[C153证据](delivery/evidence/C153-final-acceptance.json)。
+用户已批准 [完整重构大纲](REFACTOR_OUTLINE_FOUR_MODULES.md)，并要求真实使用优先、不对小改重复全量检查，最终更新README、提交推送GitHub并发布签名Android与完整Windows测试版。四工作区、独立搜索/范围/分类迁移、番剧加载与单详情选源、漫画订阅/单源/原始筛选、MixN小说发现/书架已实现并交叉Review；最终974项Flutter通过/3跳过、85项Python通过、analyze无问题。原三设备保数据升级/hash一致，API35视频/漫画真图、API26与正式小说正文及小说书架冷启恢复已有当前字节证据。[v0.1.0-test.153](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.153)已发布，四项资产实际下载与本地SHA-256一致。C153当轮Windows仅构建/完整打包通过；后续C154实际桌面旅程见下方，不以新字节观察回填[C153历史证据](delivery/evidence/C153-final-acceptance.json)。
 
 R0–R5实施依赖与验收契约仍见大纲；R6以当前字节实跑为准。真实公开资料/HTTP取消已记录 [R153运行烟测](delivery/evidence/R153-runtime-smoke.json)，不冒称UI/视频首帧通过；完整原P1–P12剩余与外部授权条件仍集中在CURRENT_STATUS，不创建平行台账。
 
-Windows打包补充：保留ZIP并增加当前用户MSI，仓库`tools/package_windows.ps1`单命令构建并产出ZIP/MSI/清单/SHA256SUMS，普通构建与Release工作流共用；原153程序字节直接封装MSI，不替换已发布APK/ZIP。真实安装、152→153升级、修复、降级拒绝与卸载已验证，原用户数据584文件hash不变；89项Python工具通过。安装器生命周期不替代仍受桌面接口限制的应用UI验收，详情统一见CURRENT_STATUS和C153综合证据。
+Windows打包补充：保留ZIP并增加当前用户MSI，仓库`tools/package_windows.ps1`单命令构建并产出ZIP/MSI/清单/SHA256SUMS，普通构建与Release工作流共用；原153程序字节直接封装MSI，不替换已发布APK/ZIP。真实安装、152→153升级、修复、降级拒绝与卸载已验证，原用户数据584文件hash不变；89项Python工具通过。安装器生命周期和应用UI分别记证，C154已获授权通过终端完成实际桌面操作，不再以缺专用工具为阻塞。
 
-C154继续补验发现并修复系统200%字号被应用设置覆盖的问题：保留平台TextScaler并合成应用偏好，根组件失败前/修后回归与双API/正式大字号实际画面已证，API26横屏和API35本地键盘筛选及还原通过。975项Flutter通过/3跳过、analyze无问题；正式原证书Android与ZIP/MSI同源构建完成，MSI153→154真实升级与卸载保留584个原数据文件。当前发布进度与未验的桌面/读屏/性能分布统一见[C154](delivery/evidence/C154-final-acceptance.json)及CURRENT_STATUS。
+C154继续补验发现并修复系统200%字号被应用设置覆盖的问题：保留平台TextScaler并合成应用偏好，根组件失败前/修后回归与双API/正式大字号实际画面已证，API26横屏和API35本地键盘筛选及还原通过。975项Flutter通过/3跳过、analyze无问题；正式原证书Android与ZIP/MSI同源构建完成，MSI153→154真实升级与卸载保留584个原数据文件。当前下载ZIP已完成真实单源搜索/跨栏草稿、漫画9/88真图、缓存小说3/83冷启同页、窄窗口系统200%和NVDA实际语音输出样本，原Windows字号/自有读屏进程均已还原/退出。完整读屏遍历、Android TalkBack和性能分布不扩大为通过，统一见[C154](delivery/evidence/C154-final-acceptance.json)及CURRENT_STATUS。
 
 
 
