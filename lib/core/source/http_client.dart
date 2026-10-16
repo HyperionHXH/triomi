@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 
 import '../models/media_type.dart';
@@ -18,6 +20,26 @@ enum RequestBodyType {
   }
 }
 
+/// Per-operation cancellation handle. The owner can cancel an in-flight Dio
+/// request and use [cancelled] to discard late adapter results.
+class SourceRequestCancellation {
+  final CancelToken token = CancelToken();
+  static final Object _ownerKey = Object();
+  static SourceRequestCancellation? get current =>
+      Zone.current[_ownerKey] as SourceRequestCancellation?;
+
+  /// Each asynchronous invocation retains its own owner, even when sources
+  /// share the HTTP client. No global mutable "current request" is involved.
+  Future<T> run<T>(Future<T> Function() action) =>
+      runZoned(action, zoneValues: {_ownerKey: this});
+
+  bool get cancelled => token.isCancelled;
+
+  void cancel([String reason = '请求已取消']) {
+    if (!token.isCancelled) token.cancel(reason);
+  }
+}
+
 /// 来源请求。
 class SourceRequest {
   const SourceRequest({
@@ -28,6 +50,7 @@ class SourceRequest {
     this.bodyType = RequestBodyType.none,
     this.followRedirects = true,
     this.checkStatus = true,
+    this.cancellation,
   });
 
   final String url;
@@ -40,6 +63,7 @@ class SourceRequest {
   final RequestBodyType bodyType;
   final bool followRedirects;
   final bool checkStatus;
+  final SourceRequestCancellation? cancellation;
 }
 
 /// 来源响应。
@@ -226,6 +250,8 @@ class DioSourceHttpClient
           receiveTimeout: timeout,
           responseType: ResponseType.plain,
         ),
+        cancelToken:
+            (request.cancellation ?? SourceRequestCancellation.current)?.token,
       );
 
       final result = SourceResponse(

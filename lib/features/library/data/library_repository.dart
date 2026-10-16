@@ -134,56 +134,73 @@ class LibraryRepository {
   }
 
   Future<List<LibraryItemView>> listAnimeFollows() =>
-      listLibrary(type: MediaType.anime);
+      listLibrary(type: MediaType.anime, revealHidden: true);
 
-  /// 包括播放器退出后的进度、备份恢复和旧收藏。
+  /// All legacy follows remain reachable, including records formerly grouped
+  /// in a hidden reading-library category.
   Stream<List<LibraryItemView>> watchAnimeFollows() =>
-      (_db.select(_db.libraryEntries)
-            ..where((table) => table.type.equalsValue(MediaType.anime)))
-          .watch()
-          .asyncMap((_) => listAnimeFollows());
+      watchLibrary(type: MediaType.anime);
 
-  Future<void> removeFromLibrary(String sourceId, String remoteId) {
+  Future<void> removeFromLibrary(
+    String sourceId,
+    String remoteId, {
+    MediaType? type,
+  }) {
     final statement = _db.delete(_db.libraryEntries)
       ..where(
         (table) =>
-            table.sourceId.equals(sourceId) & table.remoteId.equals(remoteId),
+            table.sourceId.equals(sourceId) &
+            table.remoteId.equals(remoteId) &
+            (type == null
+                ? const Constant(true)
+                : table.type.equalsValue(type)),
       );
     return statement.go();
   }
 
-  Future<void> setPinnedFor(Set<(String, String)> keys, bool pinned) =>
-      _db.transaction(() async {
-        final updatedAt = DateTime.now();
-        for (final key in keys) {
-          await (_db.update(_db.libraryEntries)..where(
-                (t) => t.sourceId.equals(key.$1) & t.remoteId.equals(key.$2),
-              ))
-              .write(
-                LibraryEntriesCompanion(
-                  pinned: Value(pinned),
-                  updatedAt: Value(updatedAt),
-                ),
-              );
-        }
-      });
+  Future<void> setPinnedFor(
+    Set<(String, String)> keys,
+    bool pinned, {
+    MediaType? type,
+  }) => _db.transaction(() async {
+    final updatedAt = DateTime.now();
+    for (final key in keys) {
+      await (_db.update(_db.libraryEntries)..where(
+            (t) =>
+                t.sourceId.equals(key.$1) &
+                t.remoteId.equals(key.$2) &
+                (type == null
+                    ? const Constant(true)
+                    : t.type.equalsValue(type)),
+          ))
+          .write(
+            LibraryEntriesCompanion(
+              pinned: Value(pinned),
+              updatedAt: Value(updatedAt),
+            ),
+          );
+    }
+  });
 
-  Future<void> removeSelectedFromLibrary(Set<(String, String)> keys) =>
-      _db.transaction(() async {
-        for (final key in keys) {
-          await (_db.delete(_db.libraryEntries)..where(
-                (t) => t.sourceId.equals(key.$1) & t.remoteId.equals(key.$2),
-              ))
-              .go();
-        }
-      });
+  Future<void> removeSelectedFromLibrary(
+    Set<(String, String)> keys, {
+    MediaType? type,
+  }) => _db.transaction(() async {
+    for (final key in keys) {
+      await (_db.delete(_db.libraryEntries)..where(
+            (t) =>
+                t.sourceId.equals(key.$1) &
+                t.remoteId.equals(key.$2) &
+                (type == null
+                    ? const Constant(true)
+                    : t.type.equalsValue(type)),
+          ))
+          .go();
+    }
+  });
 
-  /// 书架列表，按最近更新排序。
-  ///
-  /// 默认只返回漫画与小说（ADR-2026-10-05：书架是阅读收藏库，动画走独立的
-  /// 追番工作区）。历史番剧条目不删除：
-  /// - [type] 传 `MediaType.anime` 是**兼容查看**（旧数据审计入口）；
-  /// - [includeAnime] 为 true 时返回全部类型（迁移工具用）。
+  /// Local snapshots are scoped at the SQL entry point. Maintenance callers
+  /// may explicitly request all types; business pages always supply [type].
   Future<List<LibraryItemView>> listLibrary({
     MediaType? type,
     bool includeAnime = false,
@@ -219,36 +236,94 @@ class LibraryRepository {
           entry: row.readTable(_db.libraryEntries),
         ),
     ];
-    return (await categorySnapshot()).visible(entries,
-        categoryId: categoryId, revealHidden: revealHidden);
+    return (await categorySnapshot(type: type))
+        .visible(entries, categoryId: categoryId, revealHidden: revealHidden);
   }
 
-  Future<LibraryCategorySnapshot> categorySnapshot() async =>
-      LibraryCategorySnapshot(
-        await (_db.select(_db.categories)..orderBy([
-          (t) => OrderingTerm.asc(t.sortIndex),
-          (t) => OrderingTerm.asc(t.id),
-        ])).get(),
-        await _db.select(_db.libraryCategoryLinks).get(),
-      );
+  Future<LibraryCategorySnapshot> categorySnapshot({MediaType? type}) async {
+    final query = _db.select(_db.categories)
+      ..orderBy([
+        (t) => OrderingTerm.asc(t.sortIndex),
+        (t) => OrderingTerm.asc(t.id),
+      ]);
+    if (type != null) query.where((t) => t.module.equals(type.name));
+    final categories = await query.get();
+    final ids = categories.map((category) => category.id).toList();
+    final links = ids.isEmpty
+        ? <LibraryCategoryLinkRow>[]
+        : await (_db.select(
+            _db.libraryCategoryLinks,
+          )..where((t) => t.categoryId.isIn(ids))).get();
+    return LibraryCategorySnapshot(categories, links, type: type);
+  }
 
   /// UI snapshots include hidden entries, but must apply category visibility
   /// before rendering, counting or freezing any action identities.
-  Stream<List<LibraryItemView>> watchLibrary({MediaType? type}) =>
-      _db.customSelect(
-        'SELECT *, library_entries.status AS reading_status FROM library_entries LEFT JOIN media_items ON '
-        'library_entries.source_id = media_items.source_id AND '
-        'library_entries.remote_id = media_items.remote_id',
-        readsFrom: {_db.libraryEntries, _db.mediaItems, _db.categories, _db.libraryCategoryLinks},
-      ).watch().asyncMap((_) => listLibrary(type: type, revealHidden: true));
+  Stream<List<LibraryItemView>> watchLibrary({required MediaType type}) => _db
+      .customSelect(
+        'SELECT library_entries.source_id FROM library_entries '
+        'WHERE library_entries.type = ?',
+        variables: [Variable<String>(type.name)],
+        readsFrom: {
+          _db.libraryEntries,
+          _db.mediaItems,
+          _db.categories,
+          _db.libraryCategoryLinks,
+        },
+      )
+      .watch()
+      .asyncMap((_) => listLibrary(type: type, revealHidden: true));
 
-  Stream<LibraryCategorySnapshot> watchCategories() =>
-      _db.customSelect('SELECT * FROM categories LEFT JOIN library_category_links '
-        'ON categories.id = library_category_links.category_id',
+  Stream<LibraryCategorySnapshot> watchCategories({MediaType? type}) => _db
+      .customSelect(
+        'SELECT categories.id FROM categories '
+        '${type == null ? '' : 'WHERE categories.module = ?'}',
+        variables: [if (type != null) Variable<String>(type.name)],
         readsFrom: {_db.categories, _db.libraryCategoryLinks},
-      ).watch().asyncMap((_) => categorySnapshot());
+      )
+      .watch()
+      .asyncMap((_) => categorySnapshot(type: type));
+
+  Stream<Map<(String, String), DateTime>> watchLastRead(MediaType type) => _db
+      .customSelect(
+        'SELECT histories.source_id, histories.remote_id, '
+        'MAX(histories.visited_at) AS last_read FROM histories '
+        'INNER JOIN media_items ON histories.source_id = media_items.source_id '
+        'AND histories.remote_id = media_items.remote_id '
+        'WHERE media_items.type = ? AND histories.incognito = 0 '
+        'GROUP BY histories.source_id, histories.remote_id',
+        variables: [Variable<String>(type.name)],
+        readsFrom: {_db.histories, _db.mediaItems},
+      )
+      .watch()
+      .map(
+        (rows) => {
+          for (final row in rows)
+            (row.read<String>('source_id'), row.read<String>('remote_id')): row
+                .read<DateTime>('last_read'),
+        },
+      );
+
+  Stream<Set<(String, String)>> watchTrackedKeys(MediaType type) => _db
+      .customSelect(
+        'SELECT DISTINCT track_binds.source_id, track_binds.remote_id '
+        'FROM track_binds INNER JOIN media_items '
+        'ON track_binds.source_id = media_items.source_id '
+        'AND track_binds.remote_id = media_items.remote_id '
+        'WHERE media_items.type = ?',
+        variables: [Variable<String>(type.name)],
+        readsFrom: {_db.trackBinds, _db.mediaItems},
+      )
+      .watch()
+      .map(
+        (rows) => {
+          for (final row in rows)
+            (row.read<String>('source_id'), row.read<String>('remote_id')),
+        },
+      );
 
   Future<int> saveCategory({
+    required MediaType type,
     int? id,
     required String name,
     bool hidden = false,
@@ -256,18 +331,28 @@ class LibraryRepository {
   }) => _db.transaction(() async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) throw ArgumentError('分类名称不能为空');
-    final snapshot = await categorySnapshot();
-    if (snapshot.categories.any((c) => c.id != id && c.name.toLowerCase() == trimmed.toLowerCase())) {
+    final snapshot = await categorySnapshot(type: type);
+    if (snapshot.categories.any(
+      (c) => c.id != id && c.name.toLowerCase() == trimmed.toLowerCase(),
+    )) {
       throw ArgumentError('分类名称已存在');
     }
     if (rule != null && !rule.valid) throw ArgumentError('规则无法识别');
+    if (rule?.type != null && rule!.type != type) {
+      throw ArgumentError('动态分类规则不能跨模块');
+    }
     if (id == null) {
-      return _db.into(_db.categories).insert(CategoriesCompanion.insert(
-        name: trimmed,
-        sortIndex: Value(snapshot.categories.length),
-        hidden: Value(hidden),
-        rulesJson: Value(rule?.encode()),
-      ));
+      return _db
+          .into(_db.categories)
+          .insert(
+            CategoriesCompanion.insert(
+              name: trimmed,
+              module: Value(type.name),
+              sortIndex: Value(snapshot.categories.length),
+              hidden: Value(hidden),
+              rulesJson: Value(rule?.encode()),
+            ),
+          );
     }
     final existing = snapshot.categories.where((c) => c.id == id).firstOrNull;
     if (existing == null) throw StateError('分类已删除');
@@ -275,52 +360,112 @@ class LibraryRepository {
       throw ArgumentError('创建后不能改变分类种类，请新建分类');
     }
     await (_db.update(_db.categories)..where((t) => t.id.equals(id))).write(
-      CategoriesCompanion(name: Value(trimmed), hidden: Value(hidden), rulesJson: Value(rule?.encode())),
+      CategoriesCompanion(
+        name: Value(trimmed),
+        hidden: Value(hidden),
+        rulesJson: Value(rule?.encode()),
+      ),
     );
     if (rule != null) {
-      await (_db.delete(_db.libraryCategoryLinks)..where((t) => t.categoryId.equals(id))).go();
+      await (_db.delete(
+        _db.libraryCategoryLinks,
+      )..where((t) => t.categoryId.equals(id))).go();
     }
     return id;
   });
 
-  Future<void> reorderCategories(List<int> ids) => _db.transaction(() async {
-    final current = (await categorySnapshot()).categories.map((c) => c.id).toSet();
-    if (ids.length != current.length ||
-        ids.toSet().length != ids.length ||
-        !current.containsAll(ids)) {
-      throw ArgumentError('分类列表已变化');
-    }
-    for (var index = 0; index < ids.length; index++) {
-      await (_db.update(_db.categories)..where((t) => t.id.equals(ids[index])))
-          .write(CategoriesCompanion(sortIndex: Value(index)));
-    }
-  });
-
-  /// Only grouping is removed. Cached works, reading, downloads and binds stay.
-  Future<void> deleteCategory(int id) => _db.transaction(() async {
-    await (_db.delete(_db.libraryCategoryLinks)..where((t) => t.categoryId.equals(id))).go();
-    await (_db.delete(_db.categories)..where((t) => t.id.equals(id))).go();
-  });
-
-  Future<void> assignCategory(int id, Set<(String, String)> keys, {required bool add}) =>
+  Future<void> reorderCategories(List<int> ids, {required MediaType type}) =>
       _db.transaction(() async {
-        final category = await (_db.select(_db.categories)..where((t) => t.id.equals(id))).getSingleOrNull();
-        if (category == null) throw StateError('分类已删除');
-        if (category.rulesJson != null) throw StateError('动态分类由规则自动匹配，不能手动分配');
-        for (final key in keys) {
-          if (!await isInLibrary(key.$1, key.$2)) continue;
-          if (add) {
-            await _db.into(_db.libraryCategoryLinks).insert(
-              LibraryCategoryLinksCompanion.insert(sourceId: key.$1, remoteId: key.$2, categoryId: id),
-              mode: InsertMode.insertOrIgnore,
-            );
-          } else {
-            await (_db.delete(_db.libraryCategoryLinks)..where((t) =>
-              t.sourceId.equals(key.$1) & t.remoteId.equals(key.$2) & t.categoryId.equals(id),
-            )).go();
-          }
+        final current = (await categorySnapshot(type: type)).categories
+            .map((c) => c.id)
+            .toSet();
+        if (ids.length != current.length ||
+            ids.toSet().length != ids.length ||
+            !current.containsAll(ids)) {
+          throw ArgumentError('分类列表已变化');
+        }
+        for (var index = 0; index < ids.length; index++) {
+          await (_db.update(_db.categories)
+                ..where((t) => t.id.equals(ids[index])))
+              .write(CategoriesCompanion(sortIndex: Value(index)));
         }
       });
+
+  /// Only grouping is removed. Cached works, reading, downloads and binds stay.
+  Future<void> deleteCategory(int id, {required MediaType type}) =>
+      _db.transaction(() async {
+        await _requireCategory(id, type);
+        await (_db.delete(
+          _db.libraryCategoryLinks,
+        )..where((t) => t.categoryId.equals(id))).go();
+        await (_db.delete(
+          _db.categories,
+        )..where((t) => t.id.equals(id) & t.module.equals(type.name))).go();
+      });
+
+  Future<void> assignCategory(
+    int id,
+    Set<(String, String)> keys, {
+    required MediaType type,
+    required bool add,
+  }) => _db.transaction(() async {
+    final category = await _requireCategory(id, type);
+    if (category.rulesJson != null) throw StateError('动态分类由规则自动匹配，不能手动分配');
+    final scopedKeys = await _keysForType(keys, type);
+    if (scopedKeys.length != keys.length) {
+      throw ArgumentError('分类只能修改当前模块的收藏');
+    }
+    for (final key in scopedKeys) {
+      if (add) {
+        await _db
+            .into(_db.libraryCategoryLinks)
+            .insert(
+              LibraryCategoryLinksCompanion.insert(
+                sourceId: key.$1,
+                remoteId: key.$2,
+                categoryId: id,
+              ),
+              mode: InsertMode.insertOrIgnore,
+            );
+      } else {
+        await (_db.delete(_db.libraryCategoryLinks)..where(
+              (t) =>
+                  t.sourceId.equals(key.$1) &
+                  t.remoteId.equals(key.$2) &
+                  t.categoryId.equals(id),
+            ))
+            .go();
+      }
+    }
+  });
+
+  Future<CategoryRow> _requireCategory(int id, MediaType type) async {
+    final category =
+        await (_db.select(_db.categories)
+              ..where((t) => t.id.equals(id) & t.module.equals(type.name)))
+            .getSingleOrNull();
+    if (category == null) throw StateError('分类不存在或不属于当前模块');
+    return category;
+  }
+
+  Future<Set<(String, String)>> _keysForType(
+    Set<(String, String)> keys,
+    MediaType type,
+  ) async {
+    if (keys.isEmpty) return {};
+    final rows =
+        await (_db.select(_db.libraryEntries)..where(
+              (t) =>
+                  t.type.equalsValue(type) &
+                  t.sourceId.isIn(keys.map((key) => key.$1)),
+            ))
+            .get();
+    return {
+      for (final row in rows)
+        if (keys.contains((row.sourceId, row.remoteId)))
+          (row.sourceId, row.remoteId),
+    };
+  }
 
   // ------------------------------------------------------------ 目录缓存
 
@@ -470,7 +615,7 @@ class LibraryRepository {
   }
 
   /// Clear only the explicitly reviewed source-qualified identities.
-  Future<int> markEntriesRead(Set<(String, String)> keys) =>
+  Future<int> markEntriesRead(Set<(String, String)> keys, {MediaType? type}) =>
       _db.transaction(() async {
         var updated = 0;
         for (final key in keys) {
@@ -479,7 +624,10 @@ class LibraryRepository {
                     (table) =>
                         table.sourceId.equals(key.$1) &
                         table.remoteId.equals(key.$2) &
-                        table.unreadCount.isBiggerThanValue(0),
+                        table.unreadCount.isBiggerThanValue(0) &
+                        (type == null
+                            ? const Constant(true)
+                            : table.type.equalsValue(type)),
                   ))
                   .write(const LibraryEntriesCompanion(unreadCount: Value(0)));
         }
@@ -541,7 +689,10 @@ class LibraryRepository {
   }
 
   /// 最近的阅读记录（含作品信息，按时间倒序）。
-  Future<List<HistoryView>> recentHistory({int limit = 50}) async {
+  Future<List<HistoryView>> recentHistory({
+    int limit = 50,
+    MediaType? type,
+  }) async {
     final query = _db.select(_db.histories).join(<Join<HasResultSet, dynamic>>[
       leftOuterJoin(
         _db.mediaItems,
@@ -549,6 +700,7 @@ class LibraryRepository {
             _db.mediaItems.remoteId.equalsExp(_db.histories.remoteId),
       ),
     ]);
+    if (type != null) query.where(_db.mediaItems.type.equalsValue(type));
     query.orderBy(<OrderingTerm>[OrderingTerm.desc(_db.histories.visitedAt)]);
     query.limit(limit);
 
@@ -598,7 +750,21 @@ class LibraryRepository {
     );
   }
 
-  Future<void> clearHistory() => _db.delete(_db.histories).go();
+  Future<void> clearHistory({MediaType? type}) async {
+    if (type == null) {
+      await _db.delete(_db.histories).go();
+      return;
+    }
+    await _db.customStatement(
+      'DELETE FROM histories WHERE EXISTS (SELECT 1 FROM media_items '
+      'WHERE media_items.source_id = histories.source_id '
+      'AND media_items.remote_id = histories.remote_id AND media_items.type = ?)',
+      [type.name],
+    );
+    _db.notifyUpdates({
+      TableUpdate.onTable(_db.histories, kind: UpdateKind.delete),
+    });
+  }
 
   // ------------------------------------------------------------ 映射
 

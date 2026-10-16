@@ -1,0 +1,311 @@
+{
+  "recordedAt": "2026-10-16T10:19:13.411146+00:00",
+  "kind": "research-and-diagnosis-only",
+  "sourceRevisions": {
+    "triomi": {
+      "head": "37b12bde82d1bf2aa9acce5022736fc6a6a4ef7e",
+      "origin": "https://github.com/HyperionHXH/triomi.git"
+    },
+    "kazumi": {
+      "head": "02afdabf72af7eee04a7403786ee60236701086c",
+      "origin": "https://github.com/Predidit/Kazumi.git"
+    },
+    "komikku": {
+      "head": "64aeb48f31a211e734dafe6c838ae2c712ae69e2",
+      "origin": "https://github.com/komikku-app/komikku.git"
+    },
+    "mixn": {
+      "head": "ac05d544dc00dc0f3c917e326b2198e2a7145c61",
+      "origin": "https://github.com/HyperionHXH/lightnovel-android-aggregator.git"
+    }
+  },
+  "runtimeChanged": false,
+  "installedSourcesChanged": false,
+  "accountsUsed": false,
+  "deviceScope": "adb devices -l returned no attached devices; no new Android UI or media playback acceptance",
+  "productionChainBaseline": {
+    "environment": "Windows host, actual shipped DeclarativeSource and DioSourceHttpClient, public network, no account",
+    "runs": [
+      {
+        "round": 1,
+        "subjectId": "400602",
+        "status": "failed",
+        "totalMs": 20060,
+        "error": "SourceException(bangumi-anime, timeout): https://api.bgm.tv/v0/subjects/400602：DioException [connection timeout]: The request connection took longer than 0:00:20.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:20.000000 or improve the response time of the server."
+      },
+      {
+        "round": 2,
+        "subjectId": "400602",
+        "status": "failed",
+        "totalMs": 20006,
+        "error": "SourceException(bangumi-anime, timeout): https://api.bgm.tv/v0/subjects/400602：DioException [connection timeout]: The request connection took longer than 0:00:20.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:20.000000 or improve the response time of the server."
+      }
+    ],
+    "calls": [
+      {
+        "url": "https://api.bgm.tv/v0/subjects/400602",
+        "method": "GET",
+        "sourceId": "bangumi-anime",
+        "error": "SourceException",
+        "elapsedMs": 20053
+      },
+      {
+        "url": "https://api.bgm.tv/v0/subjects/400602",
+        "method": "GET",
+        "sourceId": "bangumi-anime",
+        "error": "SourceException",
+        "elapsedMs": 20006
+      }
+    ]
+  },
+  "singleVariableExperiment": {
+    "environment": "Windows host, actual shipped DeclarativeSource and DioSourceHttpClient; only in-memory rule baseUrl changed to public api.bgmapi.com; no installed rule changed; no account",
+    "runs": [
+      {
+        "round": 1,
+        "subjectId": "400602",
+        "detailMs": 669,
+        "title": "葬送的芙莉莲",
+        "chapters": 36,
+        "totalMs": 991,
+        "status": "ok"
+      },
+      {
+        "round": 2,
+        "subjectId": "400602",
+        "detailMs": 309,
+        "title": "葬送的芙莉莲",
+        "chapters": 36,
+        "totalMs": 644,
+        "status": "ok"
+      }
+    ],
+    "calls": [
+      {
+        "url": "https://api.bgmapi.com/v0/subjects/400602",
+        "method": "GET",
+        "sourceId": "bangumi-anime",
+        "status": 200,
+        "bodyBytes": 7877,
+        "elapsedMs": 661
+      },
+      {
+        "url": "https://api.bgmapi.com/v0/episodes?subject_id=400602&limit=100",
+        "method": "GET",
+        "sourceId": "bangumi-anime",
+        "status": 200,
+        "bodyBytes": 24432,
+        "elapsedMs": 316
+      },
+      {
+        "url": "https://api.bgmapi.com/v0/subjects/400602",
+        "method": "GET",
+        "sourceId": "bangumi-anime",
+        "status": 200,
+        "bodyBytes": 7877,
+        "elapsedMs": 308
+      },
+      {
+        "url": "https://api.bgmapi.com/v0/episodes?subject_id=400602&limit=100",
+        "method": "GET",
+        "sourceId": "bangumi-anime",
+        "status": 200,
+        "bodyBytes": 24432,
+        "elapsedMs": 333
+      }
+    ]
+  },
+  "publicEndpointProbes": [
+    {
+      "http_code": 0,
+      "time_namelookup": 0.013907,
+      "time_connect": 0.0,
+      "time_appconnect": 0.0,
+      "time_starttransfer": 0.0,
+      "time_total": 8.005688,
+      "size_download": 0,
+      "url": "https://api.bgm.tv/v0/subjects/400602",
+      "route": "direct",
+      "exit": 28,
+      "error": "curl: (28) Connection timed out after 8005 milliseconds"
+    },
+    {
+      "http_code": 0,
+      "time_namelookup": 0.008634,
+      "time_connect": 0.0,
+      "time_appconnect": 0.0,
+      "time_starttransfer": 0.0,
+      "time_total": 8.000417,
+      "size_download": 0,
+      "url": "https://api.bgm.tv/v0/subjects/400602",
+      "route": "environment",
+      "exit": 28,
+      "error": "curl: (28) Connection timed out after 8000 milliseconds"
+    },
+    {
+      "http_code": 404,
+      "time_namelookup": 0.013906,
+      "time_connect": 0.117614,
+      "time_appconnect": 0.875906,
+      "time_starttransfer": 1.15296,
+      "time_total": 1.153058,
+      "size_download": 62,
+      "url": "https://api.kazumi.fyi/v0/subjects/400602",
+      "route": "direct",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "http_code": 404,
+      "time_namelookup": 0.01392,
+      "time_connect": 0.12008,
+      "time_appconnect": 0.870283,
+      "time_starttransfer": 1.354063,
+      "time_total": 1.354124,
+      "size_download": 62,
+      "url": "https://api.kazumi.fyi/v0/subjects/400602",
+      "route": "environment",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "http_code": 0,
+      "time_namelookup": 0.012546,
+      "time_connect": 0.0,
+      "time_appconnect": 0.0,
+      "time_starttransfer": 0.0,
+      "time_total": 8.004025,
+      "size_download": 0,
+      "url": "https://next.bgm.tv/p1/trending/subjects?type=2&limit=1&offset=0",
+      "route": "direct",
+      "exit": 28,
+      "error": "curl: (28) Connection timed out after 8004 milliseconds"
+    },
+    {
+      "http_code": 0,
+      "time_namelookup": 0.00598,
+      "time_connect": 0.0,
+      "time_appconnect": 0.0,
+      "time_starttransfer": 0.0,
+      "time_total": 8.005896,
+      "size_download": 0,
+      "url": "https://next.bgm.tv/p1/trending/subjects?type=2&limit=1&offset=0",
+      "route": "environment",
+      "exit": 28,
+      "error": "curl: (28) Connection timed out after 8005 milliseconds"
+    },
+    {
+      "http_code": 200,
+      "time_namelookup": 0.027512,
+      "time_connect": 0.134499,
+      "time_appconnect": 0.25745,
+      "time_starttransfer": 0.756474,
+      "time_total": 0.756537,
+      "size_download": 789,
+      "url": "https://api.kazumi.fyi/kazumi/v1/popular/subjects?limit=1&offset=0",
+      "route": "direct",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "http_code": 200,
+      "time_namelookup": 0.011369,
+      "time_connect": 0.158663,
+      "time_appconnect": 0.333821,
+      "time_starttransfer": 0.745832,
+      "time_total": 0.745893,
+      "size_download": 789,
+      "url": "https://api.kazumi.fyi/kazumi/v1/popular/subjects?limit=1&offset=0",
+      "route": "environment",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "http_code": 0,
+      "time_namelookup": 0.012099,
+      "time_connect": 0.0,
+      "time_appconnect": 0.0,
+      "time_starttransfer": 0.0,
+      "time_total": 8.001868,
+      "size_download": 0,
+      "url": "https://next.bgm.tv/p1/subjects/400602",
+      "route": "direct",
+      "exit": 28,
+      "error": "curl: (28) Connection timed out after 8001 milliseconds"
+    },
+    {
+      "http_code": 200,
+      "time_namelookup": 0.012109,
+      "time_connect": 0.116023,
+      "time_appconnect": 0.232254,
+      "time_starttransfer": 0.382417,
+      "time_total": 0.382505,
+      "size_download": 5924,
+      "url": "https://api.kazumi.fyi/p1/subjects/400602",
+      "route": "direct",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "http_code": 200,
+      "time_namelookup": 0.019837,
+      "time_connect": 0.127308,
+      "time_appconnect": 0.644982,
+      "time_starttransfer": 0.993504,
+      "time_total": 0.993558,
+      "size_download": 7877,
+      "url": "https://api.bgmapi.com/v0/subjects/400602",
+      "route": "direct",
+      "exit": 0,
+      "error": ""
+    },
+    {
+      "http_code": 200,
+      "time_namelookup": 0.011991,
+      "time_connect": 0.120526,
+      "time_appconnect": 0.238585,
+      "time_starttransfer": 0.753606,
+      "time_total": 0.762308,
+      "size_download": 23059,
+      "url": "https://api.kazumi.fyi/v0/episodes?subject_id=400602&limit=100",
+      "route": "direct",
+      "exit": 0,
+      "error": ""
+    }
+  ],
+  "findings": [
+    {
+      "hypothesis": "metadata endpoint transport route causes host failure",
+      "status": "confirmed-for-host",
+      "evidence": "actual shipped provider api.bgm.tv two connect timeouts; same provider only in-memory baseUrl changed to api.bgmapi.com returned correct subject title and 36 episodes twice"
+    },
+    {
+      "hypothesis": "DNS resolution dominates measured delay",
+      "status": "not-supported-for-these-host-probes",
+      "evidence": "curl DNS 0.00598-0.027512s; failed official routes show time_connect=0 and connect deadline exceeded"
+    },
+    {
+      "hypothesis": "serial detail and chapters amplify wait",
+      "status": "code-confirmed-and-successful-chain-observed; no slow-directory UI reproduction",
+      "evidence": "DetailPage._load awaits detail then chapters; full _DetailData emitted after both; anime loading already exposes selection button"
+    },
+    {
+      "hypothesis": "cache fallback delays reopening",
+      "status": "code-confirmed; device impact not measured",
+      "evidence": "DetailPage._loadFromCache called after source failure; requires nonempty chapters"
+    },
+    {
+      "hypothesis": "unrelated source initialization delays anime readiness",
+      "status": "code-risk-only-not-measured",
+      "evidence": "SourceRegistry.load awaits enabled JS initialization serially; consumers await shared sourcesProvider.future"
+    }
+  ],
+  "limitations": [
+    "not a fix or Release",
+    "no Android device-specific root cause established",
+    "no real provider playlist-to-first-video-frame timing measured",
+    "two rounds are not a percentile or SLA",
+    "public mirror availability and responses can change; no guarantee of full API compatibility",
+    "no borrowed protected mirror credentials, account tokens, TLS bypass or proxy bypass in production"
+  ]
+}

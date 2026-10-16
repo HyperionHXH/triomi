@@ -2790,6 +2790,16 @@ class $CategoriesTable extends Categories
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _moduleMeta = const VerificationMeta('module');
+  @override
+  late final GeneratedColumn<String> module = GeneratedColumn<String>(
+    'module',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('manga'),
+  );
   static const VerificationMeta _sortIndexMeta = const VerificationMeta(
     'sortIndex',
   );
@@ -2830,6 +2840,7 @@ class $CategoriesTable extends Categories
   List<GeneratedColumn> get $columns => [
     id,
     name,
+    module,
     sortIndex,
     hidden,
     rulesJson,
@@ -2856,6 +2867,12 @@ class $CategoriesTable extends Categories
       );
     } else if (isInserting) {
       context.missing(_nameMeta);
+    }
+    if (data.containsKey('module')) {
+      context.handle(
+        _moduleMeta,
+        module.isAcceptableOrUnknown(data['module']!, _moduleMeta),
+      );
     }
     if (data.containsKey('sort_index')) {
       context.handle(
@@ -2892,6 +2909,10 @@ class $CategoriesTable extends Categories
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
+      module: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}module'],
+      )!,
       sortIndex: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}sort_index'],
@@ -2916,6 +2937,9 @@ class $CategoriesTable extends Categories
 class CategoryRow extends DataClass implements Insertable<CategoryRow> {
   final int id;
   final String name;
+
+  /// Owning workspace, persisted as MediaType.name. Real writes set this explicitly.
+  final String module;
   final int sortIndex;
   final bool hidden;
 
@@ -2924,6 +2948,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
   const CategoryRow({
     required this.id,
     required this.name,
+    required this.module,
     required this.sortIndex,
     required this.hidden,
     this.rulesJson,
@@ -2933,6 +2958,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
+    map['module'] = Variable<String>(module);
     map['sort_index'] = Variable<int>(sortIndex);
     map['hidden'] = Variable<bool>(hidden);
     if (!nullToAbsent || rulesJson != null) {
@@ -2945,6 +2971,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
     return CategoriesCompanion(
       id: Value(id),
       name: Value(name),
+      module: Value(module),
       sortIndex: Value(sortIndex),
       hidden: Value(hidden),
       rulesJson: rulesJson == null && nullToAbsent
@@ -2961,6 +2988,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
     return CategoryRow(
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
+      module: serializer.fromJson<String>(json['module']),
       sortIndex: serializer.fromJson<int>(json['sortIndex']),
       hidden: serializer.fromJson<bool>(json['hidden']),
       rulesJson: serializer.fromJson<String?>(json['rulesJson']),
@@ -2972,6 +3000,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
+      'module': serializer.toJson<String>(module),
       'sortIndex': serializer.toJson<int>(sortIndex),
       'hidden': serializer.toJson<bool>(hidden),
       'rulesJson': serializer.toJson<String?>(rulesJson),
@@ -2981,12 +3010,14 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
   CategoryRow copyWith({
     int? id,
     String? name,
+    String? module,
     int? sortIndex,
     bool? hidden,
     Value<String?> rulesJson = const Value.absent(),
   }) => CategoryRow(
     id: id ?? this.id,
     name: name ?? this.name,
+    module: module ?? this.module,
     sortIndex: sortIndex ?? this.sortIndex,
     hidden: hidden ?? this.hidden,
     rulesJson: rulesJson.present ? rulesJson.value : this.rulesJson,
@@ -2995,6 +3026,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
     return CategoryRow(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
+      module: data.module.present ? data.module.value : this.module,
       sortIndex: data.sortIndex.present ? data.sortIndex.value : this.sortIndex,
       hidden: data.hidden.present ? data.hidden.value : this.hidden,
       rulesJson: data.rulesJson.present ? data.rulesJson.value : this.rulesJson,
@@ -3006,6 +3038,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
     return (StringBuffer('CategoryRow(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('module: $module, ')
           ..write('sortIndex: $sortIndex, ')
           ..write('hidden: $hidden, ')
           ..write('rulesJson: $rulesJson')
@@ -3014,13 +3047,15 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
   }
 
   @override
-  int get hashCode => Object.hash(id, name, sortIndex, hidden, rulesJson);
+  int get hashCode =>
+      Object.hash(id, name, module, sortIndex, hidden, rulesJson);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is CategoryRow &&
           other.id == this.id &&
           other.name == this.name &&
+          other.module == this.module &&
           other.sortIndex == this.sortIndex &&
           other.hidden == this.hidden &&
           other.rulesJson == this.rulesJson);
@@ -3029,12 +3064,14 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
 class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
   final Value<int> id;
   final Value<String> name;
+  final Value<String> module;
   final Value<int> sortIndex;
   final Value<bool> hidden;
   final Value<String?> rulesJson;
   const CategoriesCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
+    this.module = const Value.absent(),
     this.sortIndex = const Value.absent(),
     this.hidden = const Value.absent(),
     this.rulesJson = const Value.absent(),
@@ -3042,6 +3079,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
   CategoriesCompanion.insert({
     this.id = const Value.absent(),
     required String name,
+    this.module = const Value.absent(),
     this.sortIndex = const Value.absent(),
     this.hidden = const Value.absent(),
     this.rulesJson = const Value.absent(),
@@ -3049,6 +3087,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
   static Insertable<CategoryRow> custom({
     Expression<int>? id,
     Expression<String>? name,
+    Expression<String>? module,
     Expression<int>? sortIndex,
     Expression<bool>? hidden,
     Expression<String>? rulesJson,
@@ -3056,6 +3095,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
+      if (module != null) 'module': module,
       if (sortIndex != null) 'sort_index': sortIndex,
       if (hidden != null) 'hidden': hidden,
       if (rulesJson != null) 'rules_json': rulesJson,
@@ -3065,6 +3105,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
   CategoriesCompanion copyWith({
     Value<int>? id,
     Value<String>? name,
+    Value<String>? module,
     Value<int>? sortIndex,
     Value<bool>? hidden,
     Value<String?>? rulesJson,
@@ -3072,6 +3113,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
     return CategoriesCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
+      module: module ?? this.module,
       sortIndex: sortIndex ?? this.sortIndex,
       hidden: hidden ?? this.hidden,
       rulesJson: rulesJson ?? this.rulesJson,
@@ -3086,6 +3128,9 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
+    }
+    if (module.present) {
+      map['module'] = Variable<String>(module.value);
     }
     if (sortIndex.present) {
       map['sort_index'] = Variable<int>(sortIndex.value);
@@ -3104,6 +3149,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
     return (StringBuffer('CategoriesCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('module: $module, ')
           ..write('sortIndex: $sortIndex, ')
           ..write('hidden: $hidden, ')
           ..write('rulesJson: $rulesJson')
@@ -9070,6 +9116,7 @@ typedef $$LibraryEntriesTableProcessedTableManager =
 typedef $$CategoriesTableCreateCompanionBuilder = CategoriesCompanion Function({
   Value<int> id,
   required String name,
+  Value<String> module,
   Value<int> sortIndex,
   Value<bool> hidden,
   Value<String?> rulesJson,
@@ -9077,6 +9124,7 @@ typedef $$CategoriesTableCreateCompanionBuilder = CategoriesCompanion Function({
 typedef $$CategoriesTableUpdateCompanionBuilder = CategoriesCompanion Function({
   Value<int> id,
   Value<String> name,
+  Value<String> module,
   Value<int> sortIndex,
   Value<bool> hidden,
   Value<String?> rulesJson,
@@ -9098,6 +9146,11 @@ class $$CategoriesTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
     column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get module => $composableBuilder(
+    column: $table.module,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9136,6 +9189,11 @@ class $$CategoriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get module => $composableBuilder(
+    column: $table.module,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get sortIndex => $composableBuilder(
     column: $table.sortIndex,
     builder: (column) => ColumnOrderings(column),
@@ -9166,6 +9224,9 @@ class $$CategoriesTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get module =>
+      $composableBuilder(column: $table.module, builder: (column) => column);
 
   GeneratedColumn<int> get sortIndex =>
       $composableBuilder(column: $table.sortIndex, builder: (column) => column);
@@ -9210,12 +9271,14 @@ class $$CategoriesTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
+                Value<String> module = const Value.absent(),
                 Value<int> sortIndex = const Value.absent(),
                 Value<bool> hidden = const Value.absent(),
                 Value<String?> rulesJson = const Value.absent(),
               }) => CategoriesCompanion(
                 id: id,
                 name: name,
+                module: module,
                 sortIndex: sortIndex,
                 hidden: hidden,
                 rulesJson: rulesJson,
@@ -9224,12 +9287,14 @@ class $$CategoriesTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 required String name,
+                Value<String> module = const Value.absent(),
                 Value<int> sortIndex = const Value.absent(),
                 Value<bool> hidden = const Value.absent(),
                 Value<String?> rulesJson = const Value.absent(),
               }) => CategoriesCompanion.insert(
                 id: id,
                 name: name,
+                module: module,
                 sortIndex: sortIndex,
                 hidden: hidden,
                 rulesJson: rulesJson,

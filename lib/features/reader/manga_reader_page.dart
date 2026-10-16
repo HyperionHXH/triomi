@@ -395,8 +395,9 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
         );
         // 书架与历史页要立刻反映进度；dispose 时 mounted 已为 false。
         if (mounted) {
-          ref.invalidate(libraryProvider);
+          ref.invalidate(libraryByTypeProvider);
           ref.invalidate(historyProvider);
+          ref.invalidate(historyByTypeProvider);
         }
       } catch (_) {
         if (_lastQueuedProgress == progress) _lastQueuedProgress = null;
@@ -474,7 +475,13 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   // ------------------------------------------------------------------ 翻页
 
   void _onScroll() {
-    if (!mounted || _privacyLock.blocksAccess || _isPaged || _restoring || _loading) return;
+    if (!mounted ||
+        _privacyLock.blocksAccess ||
+        _isPaged ||
+        _restoring ||
+        _loading) {
+      return;
+    }
     final visible =
         _positions.itemPositions.value
             .where((p) => p.itemTrailingEdge > 0 && p.itemLeadingEdge < 1)
@@ -566,11 +573,13 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
   /// 图片加载失败后重试：先把缓存里的失败结果清掉，再重建。
   void _retryImage(String url) {
-    unawaited(SourceNetworkImage(
-      url,
-      http: ref.read(sourceHttpClientProvider),
-      sourceId: _chapter.sourceId,
-    ).evict());
+    unawaited(
+      SourceNetworkImage(
+        url,
+        http: ref.read(sourceHttpClientProvider),
+        sourceId: _chapter.sourceId,
+      ).evict(),
+    );
     if (mounted) setState(() {});
   }
 

@@ -1,10 +1,18 @@
 # Triomi 当前状态
 
-更新时间：C151来源管理分类UI与Review已完成，测试版[v0.1.0-test.151](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.151)已发布，四项下载资产GitHub SHA-256与本地逐项一致。968项Flutter通过/3跳过、85项Python通过、analyze/文档扫描无错误；原三设备保数据安装hash匹配。历史媒体/账号/扩展实证保留字节范围，完整来源/平台矩阵仍partial。
+更新时间：R153四工作区实现、交叉Review及Android当前字节旅程已完成；974项Flutter通过/3跳过、85项Python通过、analyze无问题。C153双APK原证书验签、三原设备保数据升级/hash、完整Windows 50成员构建与秘密扫描通过，正在发布新测试版。Windows当前字节可见旅程因本会话无专用桌面接口尚未完成，完整平台矩阵仍partial。
 
-当前执行入口为本文件和 `docs/ROADMAP.md`；历史证据在 `docs/delivery/evidence/`，不再重复创建规划文档。
+当前执行入口为本文件和 `docs/ROADMAP.md`；历史证据在 `docs/delivery/evidence/`。R152重构大纲是用户本轮明确要求的设计交付，不另建执行进度台账。
 
 当前主线、近期解决的问题、新发现问题和全部剩余项统一见下方“剩余主线”。后续逐轮记录是历史证据，不代表仍然使用当轮产物；当前产物以“当前产物与原设备”为准。
+
+## 当前请求：R153 四工作区实施与发布（2026-10-16，Android已实跑，发布准备就绪）
+
+用户已批准 [R152完整大纲](REFACTOR_OUTLINE_FOUR_MODULES.md)，要求完整实施、真实操作验收、更新README并提交GitHub/发布可下载的新测试版。当前四工作区、模块固定搜索/历史/下载、番剧缓存首屏与独立选源、漫画无需命名订阅/单源页/分组筛选、小说分站发现/本地优先书架、SQLite v10分类与旧备份迁移已接线；交叉Review修复了远端小说收藏误变本地收藏、LNS未读基线遗漏、换源分页身份、路由跨模块身份和JS宿主请求归属问题。
+
+当前生产资料适配器真实HTTPS烟测：《葬送的芙莉莲》详情713ms，含36集资料总计1050ms；第二次缓存详情0ms、总计339ms。真实loopback HTTP取消25ms返回错误，并行同客户端请求仍200且正文一致。证据见 [R153运行烟测](delivery/evidence/R153-runtime-smoke.json)；仅证明传输与公开资料Adapter，不是UI/真实视频首帧或百分位数。原R152官方接口超时诊断保留，不重新探测确认。
+
+最终生产源码整套974项Flutter通过/3跳过，85项Python通过，analyze无问题。原三设备已`install -r`保数据升级到最终C153并逐台核对hash；API35真实推荐→资料、保留原7sefun映射→本地已下载视频24:22/25:11真帧、MangaDex JS/API第76.2话5/14双页真图通过。API35/API26小说书架“已下载”独立强停重启保留，API26原小说20/22、正式包原小说3/37正文目视可读。设备DNS故障期间只用普通设置配置临时CONNECT代理，未解密/绕过TLS；结束已恢复空代理、移除自有转发、停止临时服务并以无自定义DNS启动原AVD，不把临时网络依赖放进产品。详见[C153当前证据](delivery/evidence/C153-final-acceptance.json)。Windows最终构建成功、50成员逐字节匹配，但工具库存无专用桌面交互接口，本轮Windows可见旅程及完整视觉/键盘/读屏/200%字号矩阵不冒称完成；不是账号授权阻塞。
 
 ## 产品完成度
 
@@ -154,6 +162,20 @@ C149生产引擎补验：实际`JsSource + FlutterJsRuntime(QuickJS) + HTTPS`公
 5. 技术未完成与账号阻塞分开；账号授权仅影响P10实写/P11外部云，不暂停其他工作。旧轮次产物与新同源产物的视觉/耐久边界保留，CF豁免与明确暂缓不变。
 
 ## 当前产物与原设备
+
+C153当前产物位于仓库外`_tools/`及`_tools/C153-release/`，版本`0.1.0+153`：
+
+| 产物 | 字节 | SHA-256 |
+| --- | ---: | --- |
+| 验收APK（不公开替换正式包） | 130470900 | `d78b277045144cd7465c383845287ad7269811e9c8daa366b6e5baa06c2fac7d` |
+| `triomi-android.apk`（原正式证书） | 130470900 | `ff5e7864b9303e6ee1990372ae73a69208d29a0a9869e202b7630cc129c293d8` |
+| `triomi-windows.zip`（完整50成员） | 37133016 | `558106572b73c22be0f0aa5174a94358216b20f78d73d4b8d5d8a1eb3d59d051` |
+| `triomi-windows.update.json`（完整性清单，非发布者签名） | 8312 | `e7e12eaa91c2b9ccf9ea28b30acfaa8c1c8aaac47cdf3ea4dc29ab3ac7c00a2a` |
+
+双APK单签名/v2验证通过；5554/5556安装验收hash，5558安装正式hash，均为覆盖安装且保留原数据。源码1317文件、两APK各601成员与ZIP 50成员秘密/私密材料/debug名称零命中。公开测试版发布状态以[C153综合证据](delivery/evidence/C153-final-acceptance.json)为准；未完成平台矩阵不能用旧轮次实证替代。
+
+### C151及更早历史产物（非当前安装）
+
 
 C151当前同源三产物：验收`Triomi-C151-sources-acceptance.apk`，129176824字节/SHA256 `22c827b7bbab937128edea6b4706e5f217bde8027e16e9e773bdd6e71616b371`；正式`Triomi-C151-sources-android-signed.apk`，129176824字节/SHA256 `b628ba3b3043e0d56424524b691176fca4429bdbd281645bb4f2f7d299ec0bc0`；Windows`Triomi-C151-windows-release.zip`，38112011字节/SHA256 `7c47dd9aacabd45d837b04b75720524e21b63ff7b92eded3647704966e9e152e`，50成员完整匹配Release。双APK原证书单签名v2通过，原5554/5556/5558 install-r保数据且hash匹配；最终新UI已实际操作并目视，Windows正常退出0。公开包命名`triomi-android.apk`、`triomi-windows.zip`并附Windows清单/SHA256SUMS；[C151验收与Review](delivery/evidence/C151-final-acceptance.json)。C125–C150均保留历史，不混称当前安装或完整矩阵通过。
 

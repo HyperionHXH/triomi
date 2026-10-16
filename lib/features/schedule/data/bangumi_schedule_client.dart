@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:convert';
 
 import '../../../core/models/media_type.dart';
@@ -92,13 +94,38 @@ class BangumiScheduleClient {
   }
 
   Future<List<ScheduleDay>> _fetch(String base) async {
-    final response = await http.send(
-      SourceRequest(
-        url: base,
-        headers: <String, String>{'User-Agent': userAgent},
-      ),
-      sourceId: 'bangumi-schedule',
-    );
+    final parent = SourceRequestCancellation.current;
+    final owner = SourceRequestCancellation();
+    var finished = false;
+    if (parent?.cancelled == true) owner.cancel();
+    unawaited(parent?.token.whenCancel.then((_) {
+      if (!finished) owner.cancel();
+    }));
+    final SourceResponse response;
+    try {
+      response = await http
+          .send(
+            SourceRequest(
+              url: base,
+              headers: <String, String>{'User-Agent': userAgent},
+              cancellation: owner,
+            ),
+            sourceId: 'bangumi-schedule',
+          )
+          .timeout(
+            const Duration(seconds: 8),
+            onTimeout: () {
+              owner.cancel('每日放送请求超时');
+              throw const SourceException(
+                sourceId: 'bangumi-schedule',
+                type: SourceErrorType.timeout,
+                message: '每日放送请求超时',
+              );
+            },
+          );
+    } finally {
+      finished = true;
+    }
 
     final Object? decoded;
     try {

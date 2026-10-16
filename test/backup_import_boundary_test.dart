@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:triomi/core/backup/backup_restore_preview.dart';
 import 'package:triomi/core/backup/backup_service.dart';
 import 'package:triomi/core/backup/webdav_client.dart';
 import 'package:triomi/core/db/app_database.dart';
@@ -363,6 +364,362 @@ void main() {
       entries = await LibraryRepository(db).listLibrary();
       expect(entries.single.entry.progress, 8);
     });
+  });
+
+  test('legacy backup splits mixed, matched dynamic and empty categories with stable keys and raw rules', () async {
+    const dynamicRule =
+        '{"version":1,"sources":["comic","novel"],"type":null,"unread":null,"status":"","query":"","matchAll":false}';
+    const animeRule =
+        '{"version":1,"sources":[],"type":"anime","unread":null,"status":"","query":"missing","matchAll":false}';
+    const invalidRule = '{"version":99,"type":"anime"}';
+    final payload =
+        payloadOf(
+          mediaItems: [
+            for (final type in ['anime', 'manga', 'novel'])
+              {
+                'sourceId': type == 'manga' ? 'comic' : type,
+                'remoteId': 'same',
+                'type': type,
+                'title': type,
+              },
+          ],
+          libraryEntries: [
+            for (final type in ['anime', 'manga', 'novel'])
+              {
+                'sourceId': type == 'manga' ? 'comic' : type,
+                'remoteId': 'same',
+                'type': type,
+                'status': 'doing',
+                'addedAt': '2026-09-01T00:00:00Z',
+                'updatedAt': '2026-09-01T00:00:00Z',
+              },
+          ],
+        )..addAll({
+          'categories': [
+            {'id': 1, 'name': '混合', 'sortIndex': 17, 'hidden': true},
+            {
+              'id': 2,
+              'name': '动态',
+              'sortIndex': 18,
+              'hidden': true,
+              'rulesJson': dynamicRule,
+            },
+            {'id': 3, 'name': '空番剧', 'sortIndex': 19, 'rulesJson': animeRule},
+            {'id': 4, 'name': '空分类', 'sortIndex': 20, 'hidden': true},
+            {
+              'id': 5,
+              'name': '未知规则',
+              'sortIndex': 21,
+              'rulesJson': invalidRule,
+            },
+          ],
+          'categoryLinks': [
+            for (final source in ['anime', 'comic', 'novel'])
+              {'sourceId': source, 'remoteId': 'same', 'categoryId': 1},
+            // Dynamic rules do not erase historical explicit memberships.
+            {'sourceId': 'novel', 'remoteId': 'same', 'categoryId': 2},
+          ],
+        });
+    final bytes = zipOf(payload);
+    final preview = await previewBackupRestore(db, bytes);
+    expect(preview.incomingCategories, 10);
+    expect(preview.keptCategories, 0);
+    expect(await db.select(db.categories).get(), isEmpty);
+    await serviceOf().importFromBytes(bytes);
+    final categories = await db.select(db.categories).get();
+    final byId = {for (final row in categories) row.id: row};
+    expect(categories, hasLength(10));
+    expect(byId[1]!.module, 'anime');
+    expect(byId[6]!.module, 'manga');
+    expect(byId[7]!.module, 'novel');
+    for (final id in [1, 6, 7]) {
+      expect(byId[id]!.name, '混合');
+      expect(byId[id]!.sortIndex, 17);
+      expect(byId[id]!.hidden, isTrue);
+    }
+    expect(byId[2]!.module, 'manga');
+    expect(byId[8]!.module, 'novel');
+    expect(byId[2]!.rulesJson, dynamicRule);
+    expect(byId[8]!.rulesJson, dynamicRule);
+    expect(byId[3]!.module, 'anime');
+    expect(byId[3]!.rulesJson, animeRule);
+    expect(byId[4]!.module, 'manga');
+    expect(byId[9]!.module, 'novel');
+    expect(byId[5]!.module, 'manga');
+    expect(byId[10]!.module, 'novel');
+    expect(byId[10]!.rulesJson, invalidRule);
+    final links = await db.select(db.libraryCategoryLinks).get();
+    expect(links.map((l) => (l.sourceId, l.remoteId, l.categoryId)).toSet(), {
+      ('anime', 'same', 1),
+      ('comic', 'same', 6),
+      ('novel', 'same', 7),
+      ('novel', 'same', 8),
+    });
+    final repo = LibraryRepository(db);
+    expect(
+      (await repo.listLibrary(
+        type: MediaType.manga,
+        categoryId: 2,
+      )).single.item.sourceId,
+      'comic',
+    );
+    expect(
+      (await repo.listLibrary(
+        type: MediaType.novel,
+        categoryId: 8,
+      )).single.item.sourceId,
+      'novel',
+    );
+    await serviceOf().importFromBytes(bytes);
+    expect(await db.select(db.categories).get(), categories);
+    expect(await db.select(db.libraryCategoryLinks).get(), links);
+    final repeated = await previewBackupRestore(db, bytes);
+    expect(repeated.incomingCategories, 0);
+    expect(repeated.keptCategories, 10);
+    final exported = (await serviceOf().exportToBytes(includeCovers: false))
+        .bytes;
+    final encoded =
+        BackupService.validatedPayload(exported)['categories'] as List;
+    expect(encoded.map((r) => (r as Map)['module']).toSet(), {
+      'anime',
+      'manga',
+      'novel',
+    });
+    final restored = openTestDatabase();
+    addTearDown(restored.close);
+    await BackupService(
+      database: restored,
+      preferences: memoryPreferences(),
+      http: FakeHttpClient(
+        (_) async => const SourceResponse(statusCode: 200, body: ''),
+      ),
+    ).importFromBytes(exported);
+    expect(await restored.select(restored.categories).get(), categories);
+    expect(await restored.select(restored.libraryCategoryLinks).get(), links);
+  });
+
+  test('restore category collisions are module plus name and keep local definitions and memberships', () async {
+    final repo = LibraryRepository(db);
+    final manga = await repo.saveCategory(
+      type: MediaType.manga,
+      name: '同名',
+      hidden: true,
+    );
+    final novel = await repo.saveCategory(type: MediaType.novel, name: '同名');
+    const localRule = '{"version":99,"local":"keep"}';
+    await db.customStatement(
+      'UPDATE categories SET sort_index = 77, rules_json = ? WHERE id = ?',
+      [localRule, manga],
+    );
+    await db.customStatement(
+      "INSERT INTO library_category_links (source_id, remote_id, category_id) VALUES ('local', 'same', ?)",
+      [novel],
+    );
+    final payload =
+        payloadOf(
+          mediaItems: [
+            for (final type in ['anime', 'manga', 'novel'])
+              {
+                'sourceId': type,
+                'remoteId': 'same',
+                'type': type,
+                'title': type,
+              },
+          ],
+          libraryEntries: [
+            for (final type in ['anime', 'manga', 'novel'])
+              {'sourceId': type, 'remoteId': 'same', 'type': type},
+          ],
+        )..addAll({
+          'categories': [
+            {'id': 30, 'name': '同名', 'hidden': false, 'sortIndex': 1},
+          ],
+          'categoryLinks': [
+            for (final type in ['anime', 'manga', 'novel'])
+              {'sourceId': type, 'remoteId': 'same', 'categoryId': 30},
+          ],
+        });
+    final bytes = zipOf(payload);
+    final preview = await previewBackupRestore(db, bytes);
+    expect(preview.incomingCategories, 1);
+    expect(preview.keptCategories, 2);
+    await serviceOf().importFromBytes(bytes);
+    final categories = await db.select(db.categories).get();
+    expect(categories, hasLength(3));
+    final localManga = categories.singleWhere((r) => r.id == manga);
+    expect(localManga.module, 'manga');
+    expect(localManga.hidden, isTrue);
+    expect(localManga.sortIndex, 77);
+    expect(localManga.rulesJson, localRule);
+    expect(categories.singleWhere((r) => r.id == novel).rulesJson, isNull);
+    final anime = categories.singleWhere((r) => r.module == 'anime');
+    expect(anime.id, 30);
+    final links = await db.select(db.libraryCategoryLinks).get();
+    expect(links.map((l) => (l.sourceId, l.remoteId, l.categoryId)).toSet(), {
+      ('local', 'same', novel),
+      ('novel', 'same', novel),
+      ('anime', 'same', anime.id),
+    });
+  });
+
+  test('scoped backup rejects cross-module category memberships and compensates the transaction', () async {
+    final repo = LibraryRepository(db);
+    const local = MediaItem(
+      sourceId: 'comic',
+      remoteId: 'same',
+      type: MediaType.manga,
+      title: '本地漫画',
+    );
+    await repo.addToLibrary(local);
+    final category = await repo.saveCategory(
+      type: MediaType.novel,
+      name: '小说分类',
+    );
+    final beforeCategories = await db.select(db.categories).get();
+    final beforeLibrary = await db.select(db.libraryEntries).get();
+    await preferences.set('library.novel.sort', 'local');
+    final payload =
+        payloadOf(
+          mediaItems: [
+            {
+              'sourceId': 'comic',
+              'remoteId': 'same',
+              'type': 'manga',
+              'title': '远端漫画',
+            },
+          ],
+          libraryEntries: [
+            {'sourceId': 'comic', 'remoteId': 'same', 'type': 'manga'},
+          ],
+          settings: {
+            'library.novel.sort': 'remote',
+            'library.novel.layout': 'grid',
+          },
+        )..addAll({
+          'categories': [
+            {'id': 100, 'name': '小说分类', 'module': 'novel'},
+          ],
+          'categoryLinks': [
+            {'sourceId': 'comic', 'remoteId': 'same', 'categoryId': 100},
+          ],
+        });
+    await expectLater(
+      serviceOf().importFromBytes(zipOf(payload)),
+      throwsFormatException,
+    );
+    expect(await db.select(db.categories).get(), beforeCategories);
+    expect(await db.select(db.libraryEntries).get(), beforeLibrary);
+    expect(await db.select(db.libraryCategoryLinks).get(), isEmpty);
+    expect(await db.select(db.backupImportJournals).get(), isEmpty);
+    expect(preferences.exportAll(), {'library.novel.sort': 'local'});
+    expect(
+      (await repo.categorySnapshot(type: MediaType.novel)).categories.single.id,
+      category,
+    );
+  });
+
+  test('scoped library preferences round trip while existing local choices win and preview agrees', () async {
+    await preferences.set('library.manga.sort', 'title');
+    await preferences.set('library.novel.layout', 'list');
+    final bytes = zipOf(
+      payloadOf(
+        settings: {
+          'library.manga.sort': 'updated',
+          'library.manga.layout': 'grid',
+          'library.novel.sort': 'recent',
+          'library.novel.layout': 'grid',
+        },
+      ),
+    );
+    final preview = await previewBackupRestore(
+      db,
+      bytes,
+      preferences: preferences,
+    );
+    expect(preview.incomingScopedLibrarySettings, 2);
+    expect(preview.keptScopedLibrarySettings, 2);
+    await serviceOf().importFromBytes(bytes);
+    expect(preferences.get<String>('library.manga.sort'), 'title');
+    expect(preferences.get<String>('library.novel.layout'), 'list');
+    expect(preferences.get<String>('library.manga.layout'), 'grid');
+    expect(preferences.get<String>('library.novel.sort'), 'recent');
+    final exported = (await serviceOf().exportToBytes(includeCovers: false))
+        .bytes;
+    expect(
+      BackupService.validatedPayload(exported)['settingsValues'],
+      preferences.exportAll(),
+    );
+  });
+
+  test('backup preserves legacy and versioned saved search filters and deleted feed tombstones verbatim', () async {
+    const legacy = '[{"type":"text","name":"作者","state":"甲"}]';
+    const versioned =
+        '{ "version": 1, "filters": [{"type":"tri","name":"完结","state":2}] }';
+    final payload = payloadOf()
+      ..['mangaFeeds'] = [
+        for (final entry in {'legacy': legacy, 'versioned': versioned}.entries)
+          {
+            'id': entry.key,
+            'sourceId': 'unavailable',
+            'name': '旧名称',
+            'kind': 'search',
+            'query': '旧查询',
+            'filtersJson': entry.value,
+            'position': 4,
+            'hidden': entry.key == 'legacy',
+            'updatedAt': '2026-09-01T00:00:00Z',
+          },
+      ];
+    final bytes = zipOf(payload);
+    await previewBackupRestore(db, bytes);
+    await serviceOf().importFromBytes(bytes);
+    final feeds = await db.select(db.mangaFeeds).get();
+    expect(feeds, hasLength(2));
+    expect(feeds.singleWhere((r) => r.id == 'legacy').filtersJson, legacy);
+    expect(feeds.singleWhere((r) => r.id == 'legacy').hidden, isTrue);
+    expect(
+      feeds.singleWhere((r) => r.id == 'versioned').filtersJson,
+      versioned,
+    );
+    final exported = (await serviceOf().exportToBytes(includeCovers: false))
+        .bytes;
+    final records =
+        BackupService.validatedPayload(exported)['mangaFeeds'] as List;
+    expect(
+      {for (final row in records) (row as Map)['id']: row['filtersJson']},
+      {'legacy': legacy, 'versioned': versioned},
+    );
+    await serviceOf().importFromBytes(bytes);
+    expect(await db.select(db.mangaFeeds).get(), feeds);
+  });
+
+  test('unsupported restored filter version rejects preview and restore without losing local records', () async {
+    const local = '[{"type":"text","name":"关键词","state":"保留"}]';
+    await db.customStatement(
+      "INSERT INTO manga_feeds (id, source_id, name, kind, filters_json, position, updated_at) VALUES ('keep', 'unavailable', '本地搜索', 'search', ?, 0, 1727000000)",
+      [local],
+    );
+    await preferences.set('library.manga.sort', 'title');
+    final before = await db.select(db.mangaFeeds).get();
+    final payload = payloadOf(settings: {'library.novel.sort': 'recent'})
+      ..['mangaFeeds'] = [
+        {
+          'id': 'keep',
+          'sourceId': 'unavailable',
+          'kind': 'search',
+          'filtersJson': '{"version":99,"filters":[]}',
+          'updatedAt': '2026-10-01T00:00:00Z',
+        },
+      ];
+    final bytes = zipOf(payload);
+    await expectLater(previewBackupRestore(db, bytes), throwsFormatException);
+    await expectLater(
+      serviceOf().importFromBytes(bytes),
+      throwsFormatException,
+    );
+    expect(await db.select(db.mangaFeeds).get(), before);
+    expect(await db.select(db.backupImportJournals).get(), isEmpty);
+    expect(preferences.exportAll(), {'library.manga.sort': 'title'});
   });
 
   group('离线内容与设置', () {

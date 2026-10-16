@@ -13,11 +13,13 @@ import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
+import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/features/anime/anime_follows_page.dart';
 import 'package:triomi/features/detail/detail_page.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
-import 'package:triomi/features/schedule/schedule_page.dart';
 
 import 'fixtures/fake_http_client.dart';
+import 'fixtures/fake_preferences.dart';
 
 /// D89：番剧详情的收藏边界（ADR-2026-10-05）。
 ///
@@ -52,13 +54,14 @@ void main() {
         ),
         GoRoute(
           path: '/schedule',
-          builder: (context, state) => const SchedulePage(),
+          builder: (context, state) => const Scaffold(body: AnimeFollowsPage()),
         ),
       ],
     );
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        preferencesProvider.overrideWithValue(memoryPreferences()),
         sourcesProvider.overrideWith(() => StubSources(snapshotOf(item))),
         sourceHttpClientProvider.overrideWithValue(
           FakeHttpClient(
@@ -102,14 +105,20 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 100));
     }
-    expect(find.text('已追番 · 取消'), findsOneWidget);
+    expect(
+      await repository.isInLibrary(animeItem.sourceId, animeItem.remoteId),
+      true,
+    );
     expect(await repository.listLibrary(), isEmpty);
     expect(await repository.listAnimeFollows(), hasLength(1));
     harness.router.go('/schedule');
     await tester.pumpAndSettle();
-    expect(find.text('我的追番'), findsOneWidget);
     expect(find.text(animeItem.title), findsOneWidget);
     await tester.longPress(find.text(animeItem.title));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('批量修改追番状态'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('取消所选追番（保留历史与缓存）'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '取消追番'));
     for (var i = 0; i < 8; i++) {
@@ -118,7 +127,7 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 100));
     }
-    expect(find.text('还没有追番'), findsOneWidget);
+    expect(find.text(animeItem.title), findsNothing);
     expect(await repository.listAnimeFollows(), isEmpty);
     expect(
       await repository.itemByKey(animeItem.sourceId, animeItem.remoteId),

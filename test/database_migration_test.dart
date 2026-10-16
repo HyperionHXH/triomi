@@ -182,6 +182,7 @@ void main() {
     final old = openRaw();
     old.execute('ALTER TABLE categories DROP COLUMN hidden');
     old.execute('ALTER TABLE categories DROP COLUMN rules_json');
+    old.execute('ALTER TABLE categories DROP COLUMN module');
     old.execute('PRAGMA user_version = 8');
     old.close();
     db = AppDatabase.forTesting(NativeDatabase(dbFile));
@@ -191,19 +192,204 @@ void main() {
       expect(category.name, '在读');
       expect(category.hidden, isFalse);
       expect(category.rulesJson, isNull);
-      expect((await repo.listLibrary(categoryId: category.id)).single.item.sourceId, 'lk');
-      await repo.saveCategory(id: category.id, name: '在读隐藏', hidden: true);
+      expect(
+        (await repo.listLibrary(categoryId: category.id)).single.item.sourceId,
+        'lk',
+      );
+      await repo.saveCategory(
+        type: MediaType.novel,
+        id: category.id,
+        name: '在读隐藏',
+        hidden: true,
+      );
       expect((await repo.listLibrary()).single.item.sourceId, 'lns');
-      expect((await repo.listLibrary(categoryId: category.id)).single.entry.progress, 3);
+      expect(
+        (await repo.listLibrary(categoryId: category.id)).single.entry.progress,
+        3,
+      );
       expect((await repo.loadChapters('lk', '1001')).single.content, isNotNull);
       await db.close();
       db = AppDatabase.forTesting(NativeDatabase(dbFile));
-      expect((await LibraryRepository(db).categorySnapshot()).categories.single.hidden, isTrue);
-      expect((await LibraryRepository(db).listLibrary()).single.item.sourceId, 'lns');
+      expect(
+        (await LibraryRepository(
+          db,
+        ).categorySnapshot()).categories.single.hidden,
+        isTrue,
+      );
+      expect(
+        (await LibraryRepository(db).listLibrary()).single.item.sourceId,
+        'lns',
+      );
     } finally {
       await db.close();
     }
   });
+
+  test('v9 splits mixed and dynamic categories deterministically without losing raw metadata or keys', () async {
+    createV1Database(seed: true);
+    final before = AppDatabase.forTesting(NativeDatabase(dbFile));
+    await LibraryRepository(before).listLibrary();
+    await before.close();
+    const dynamicRule =
+        '{"version":1,"sources":["lns","comic"],"type":null,"unread":null,"status":"","query":"","matchAll":false}';
+    const animeRule =
+        '{"version":1,"sources":[],"type":"anime","unread":null,"status":"","query":"","matchAll":false}';
+    const novelRule =
+        '{"version":1,"sources":[],"type":"novel","unread":null,"status":"","query":"no matches","matchAll":false}';
+    final old = openRaw();
+    old.execute('ALTER TABLE categories DROP COLUMN module');
+    old.execute(
+      "UPDATE categories SET name = '混合', sort_index = 17, hidden = 1 WHERE id = 1",
+    );
+    old.execute(
+      "INSERT INTO media_items (source_id, remote_id, type, title) VALUES ('comic', '1001', 'manga', '漫画'), ('anime', '1001', 'anime', '番剧')",
+    );
+    old.execute(
+      "INSERT INTO library_entries (source_id, remote_id, type, added_at, updated_at) VALUES ('comic', '1001', 'manga', 1727000000, 1727000500), ('anime', '1001', 'anime', 1727000000, 1727000500)",
+    );
+    old.execute(
+      "INSERT INTO library_category_links (source_id, remote_id, category_id) VALUES ('comic', '1001', 1), ('anime', '1001', 1)",
+    );
+    old.execute(
+      "INSERT INTO categories (id, name, sort_index, hidden, rules_json) VALUES (2, '动态', 18, 1, ?), (3, '空番剧', 19, 0, ?), (4, '空分类', 20, 1, NULL), (5, '未知规则', 21, 0, ?), (6, '空小说规则', 22, 0, ?)",
+      [dynamicRule, animeRule, '{"version":99,"type":"anime"}', novelRule],
+    );
+    old.execute(
+      "INSERT INTO library_category_links (source_id, remote_id, category_id) VALUES ('lns', '1001', 2)",
+    );
+    old.execute('PRAGMA user_version = 9');
+    old.close();
+    var db = AppDatabase.forTesting(NativeDatabase(dbFile));
+    try {
+      final categories = await db.select(db.categories).get();
+      final byId = {for (final row in categories) row.id: row};
+      expect(categories, hasLength(11));
+      expect(byId[1]!.module, 'anime');
+      expect(byId[7]!.module, 'manga');
+      expect(byId[8]!.module, 'novel');
+      for (final id in [1, 7, 8]) {
+        expect(byId[id]!.name, '混合');
+        expect(byId[id]!.sortIndex, 17);
+        expect(byId[id]!.hidden, isTrue);
+      }
+      expect(byId[2]!.module, 'manga');
+      expect(byId[9]!.module, 'novel');
+      for (final id in [2, 9]) {
+        expect(byId[id]!.rulesJson, dynamicRule);
+        expect(byId[id]!.sortIndex, 18);
+        expect(byId[id]!.hidden, isTrue);
+      }
+      expect(byId[3]!.module, 'anime');
+      expect(byId[3]!.rulesJson, animeRule);
+      expect(byId[4]!.module, 'manga');
+      expect(byId[10]!.module, 'novel');
+      expect(byId[5]!.module, 'manga');
+      expect(byId[11]!.module, 'novel');
+      expect(byId[11]!.rulesJson, '{"version":99,"type":"anime"}');
+      expect(byId[6]!.module, 'novel');
+      expect(byId[6]!.rulesJson, novelRule);
+      final links = await db.select(db.libraryCategoryLinks).get();
+      expect(links.map((l) => (l.sourceId, l.remoteId, l.categoryId)).toSet(), {
+        ('lk', '1001', 8),
+        ('comic', '1001', 7),
+        ('anime', '1001', 1),
+        ('lns', '1001', 9),
+      });
+      final repo = LibraryRepository(db);
+      expect(
+        (await repo.listLibrary(
+          type: MediaType.manga,
+          categoryId: 2,
+        )).single.item.sourceId,
+        'comic',
+      );
+      expect(
+        (await repo.listLibrary(
+          type: MediaType.novel,
+          categoryId: 9,
+        )).single.item.sourceId,
+        'lns',
+      );
+      expect(await db.select(db.libraryEntries).get(), hasLength(4));
+      expect(
+        (await repo.loadChapters('lns', '1001')).single.content!.html,
+        '正文乙',
+      );
+      await db.close();
+      db = AppDatabase.forTesting(NativeDatabase(dbFile));
+      expect(await db.select(db.categories).get(), categories);
+      expect(await db.select(db.libraryCategoryLinks).get(), links);
+    } finally {
+      await db.close();
+    }
+  });
+
+  test(
+    'v9 category split failure rolls back the new column and all memberships',
+    () async {
+      createV1Database(seed: true);
+      final before = AppDatabase.forTesting(NativeDatabase(dbFile));
+      await LibraryRepository(before).listLibrary();
+      await before.close();
+      final old = openRaw();
+      old.execute('ALTER TABLE categories DROP COLUMN module');
+      old.execute(
+        "INSERT INTO media_items (source_id, remote_id, type, title) VALUES ('comic', '1001', 'manga', '漫画')",
+      );
+      old.execute(
+        "INSERT INTO library_entries (source_id, remote_id, type, added_at, updated_at) VALUES ('comic', '1001', 'manga', 1727000000, 1727000500)",
+      );
+      old.execute(
+        "INSERT INTO library_category_links (source_id, remote_id, category_id) VALUES ('comic', '1001', 1)",
+      );
+      old.execute(
+        "CREATE TRIGGER fail_category_copy BEFORE INSERT ON categories BEGIN SELECT RAISE(ABORT, 'forced category migration failure'); END",
+      );
+      old.execute('PRAGMA user_version = 9');
+      old.close();
+      final failing = AppDatabase.forTesting(NativeDatabase(dbFile));
+      await expectLater(
+        failing.select(failing.categories).get(),
+        throwsA(isA<Object>()),
+      );
+      await failing.close();
+      final failed = openRaw();
+      expect(failed.select('PRAGMA user_version').single['user_version'], 9);
+      expect(
+        failed.select('PRAGMA table_info(categories)').map((r) => r['name']),
+        isNot(contains('module')),
+      );
+      expect(failed.select('SELECT id, name FROM categories').single['id'], 1);
+      expect(
+        failed.select('SELECT * FROM library_category_links'),
+        hasLength(2),
+      );
+      failed.execute('DROP TRIGGER fail_category_copy');
+      failed.close();
+      final recovered = AppDatabase.forTesting(NativeDatabase(dbFile));
+      try {
+        expect(
+          (await recovered.select(recovered.categories).get()).map(
+            (r) => r.module,
+          ),
+          ['manga', 'novel'],
+        );
+        final links = await recovered
+            .select(recovered.libraryCategoryLinks)
+            .get();
+        expect(
+          links.map((l) => (l.sourceId, l.remoteId, l.categoryId)).toSet(),
+          {('comic', '1001', 1), ('lk', '1001', 2)},
+        );
+        expect(
+          await recovered.select(recovered.libraryEntries).get(),
+          hasLength(3),
+        );
+      } finally {
+        await recovered.close();
+      }
+    },
+  );
 
   test('v3 用户库升级后可保存番剧关联且原正文和追番保留', () async {
     createV1Database(seed: true);
@@ -240,6 +426,7 @@ void main() {
     old.execute('DROP TABLE manga_feeds');
     old.execute('ALTER TABLE categories DROP COLUMN hidden');
     old.execute('ALTER TABLE categories DROP COLUMN rules_json');
+    old.execute('ALTER TABLE categories DROP COLUMN module');
     old.execute('PRAGMA user_version = 3');
     old.close();
     final upgraded = AppDatabase.forTesting(NativeDatabase(dbFile));
@@ -279,6 +466,7 @@ void main() {
     old.execute('DROP TABLE manga_feeds');
     old.execute('ALTER TABLE categories DROP COLUMN hidden');
     old.execute('ALTER TABLE categories DROP COLUMN rules_json');
+    old.execute('ALTER TABLE categories DROP COLUMN module');
     old.execute('PRAGMA user_version = 4');
     old.close();
     final upgraded = AppDatabase.forTesting(NativeDatabase(dbFile));
@@ -358,5 +546,4 @@ void main() {
     expect(countOf('chapters'), 0);
     expect(countOf('histories'), 0);
   });
-
 }

@@ -61,7 +61,7 @@ class _TrackingSyncPageState extends ConsumerState<TrackingSyncPage> {
           .read(trackingSyncProvider)
           .pull(preview, status: _status, score: _score);
       if (mounted) setState(() => _undo = undo);
-      ref.invalidate(libraryProvider);
+      ref.invalidate(libraryByTypeProvider);
       ref.invalidate(animeFollowsProvider);
       await _reload();
     } catch (error) {
@@ -233,7 +233,7 @@ class _TrackingSyncPageState extends ConsumerState<TrackingSyncPage> {
                       try {
                         await ref.read(trackingSyncProvider).undoLocal(_undo!);
                         _undo = null;
-                        ref.invalidate(libraryProvider);
+                        ref.invalidate(libraryByTypeProvider);
                         ref.invalidate(animeFollowsProvider);
                         await _reload();
                       } catch (error) {

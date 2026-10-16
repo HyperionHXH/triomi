@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/media_item.dart';
+import '../../core/models/media_type.dart';
 import '../../core/models/source_descriptor.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/router/app_router.dart';
@@ -14,6 +15,7 @@ import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../../core/widgets/source_network_image.dart';
 import '../library/data/library_providers.dart';
+import '../sources/source_account_entries.dart';
 
 /// 远端书架：聚合各来源站点收藏的入口。
 ///
@@ -32,7 +34,9 @@ class RemoteShelfPage extends ConsumerStatefulWidget {
 List<SourceEntry> remoteShelfEntries(SourceRegistrySnapshot snapshot) =>
     <SourceEntry>[
       for (final entry in snapshot.enabledWith(SourceCapability.remoteShelf))
-        if (entry.source is RemoteShelfProvider) entry,
+        if (entry.descriptor.type == MediaType.novel &&
+            entry.source is RemoteShelfProvider)
+          entry,
     ];
 
 class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
@@ -86,7 +90,8 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
   void _reloadCurrent() {
     final entry = _current;
     if (entry == null) return;
-    setState(() => _future = _load(entry));
+    final refreshed = _load(entry);
+    setState(() { _future = refreshed; });
   }
 
   @override
@@ -163,10 +168,12 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
                 return EmptyStateView(
                   icon: Icons.person_off_outlined,
                   title: '还没有登录${entry.descriptor.name}',
-                  message: '到「我的 → 来源与规则管理」登录后即可看到站点书架。',
+                  message: '打开对应站点账号登录，返回后刷新本站书架。',
                   action: FilledButton.icon(
-                    onPressed: () =>
-                        context.push('${AppRoutes.sources}?type=novel'),
+                    onPressed: () async {
+                      await context.push(accountRouteFor(entry.descriptor.id));
+                      if (mounted) _reloadCurrent();
+                    },
                     icon: const Icon(Icons.login, size: 18),
                     label: const Text('去登录'),
                   ),
@@ -207,7 +214,8 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
                     final book = result.books[index];
                     return _ShelfCard(
                       book: book,
-                      onTap: () => context.push(AppRoutes.detail, extra: book),
+                      onTap: () =>
+                          context.push(AppRoutes.detailFor(book), extra: book),
                     );
                   },
                 ),

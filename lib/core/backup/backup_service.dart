@@ -7,6 +7,7 @@ import 'package:drift/drift.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../db/app_database.dart';
+import '../db/legacy_category_scopes.dart';
 import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
 import '../platform/platform_channel.dart';
@@ -65,7 +66,8 @@ class BackupSummary {
 const int backupFormatVersion = 1;
 
 const _missingRestoredMedia = '从备份恢复离线索引；原设备文件不在本机，需要明确重新下载';
-const _missingRestoredLocalComic = '仅恢复本地漫画目录；图片未包含在备份中。请恢复包含媒体的备份或移除此目录后重新导入原始ZIP/图片，不能从网络重新下载';
+const _missingRestoredLocalComic =
+    '仅恢复本地漫画目录；图片未包含在备份中。请恢复包含媒体的备份或移除此目录后重新导入原始ZIP/图片，不能从网络重新下载';
 
 /// Timestamped records always use newer-wins; equal timestamps keep this device.
 /// Untimestamped settings and tracking identities require an explicit policy.
@@ -106,10 +108,14 @@ class BackupService {
   final DownloadBackupFiles? downloadFiles;
   final ApkBackupFiles? apkFiles;
 
-  Future<ApkBackupFiles> openApkFiles() async => apkFiles ?? ApkBackupFiles(
-    root: Directory('${await (await getApplicationSupportDirectory()).resolveSymbolicLinks()}/mihon-pending'),
-    preferences: preferences,
-  );
+  Future<ApkBackupFiles> openApkFiles() async =>
+      apkFiles ??
+      ApkBackupFiles(
+        root: Directory(
+          '${await (await getApplicationSupportDirectory()).resolveSymbolicLinks()}/mihon-pending',
+        ),
+        preferences: preferences,
+      );
 
   static const String dataFileName = 'data.json';
   static const String coversDirName = 'covers';
@@ -127,6 +133,14 @@ class BackupService {
     'mihon.pendingPackages',
     'secure.',
   ];
+
+  /// Scoped workspace choices have no timestamps; existing local keys win.
+  static bool isScopedLibraryPreference(String key) => const {
+    'library.manga.sort',
+    'library.manga.layout',
+    'library.novel.sort',
+    'library.novel.layout',
+  }.contains(key);
 
   static bool _isSensitive(String key) {
     // 去掉分隔符再比对：键名拼写不统一（`security_key` vs `lk.securityKey`），
@@ -192,7 +206,9 @@ class BackupService {
       do {
         await publication?.delete(recursive: true);
         publication = await dir.createTemp('.export-$stamp-');
-        final unique = publication.uri.pathSegments.where((s) => s.isNotEmpty).last;
+        final unique = publication.uri.pathSegments
+            .where((s) => s.isNotEmpty)
+            .last;
         fileName = 'triomi-${unique.substring('.export-'.length)}.zip';
         file = File('${dir.path}${Platform.pathSeparator}$fileName');
       } while (await file.exists());
@@ -433,8 +449,12 @@ class BackupService {
             'mediaFiles': ?media[row.id],
           },
       ],
-      'downloadedMedia': media.values.where((row) => !(row['kind'] as String).endsWith('-partial')).length,
-      'partialDownloads': media.values.where((row) => (row['kind'] as String).endsWith('-partial')).length,
+      'downloadedMedia': media.values
+          .where((row) => !(row['kind'] as String).endsWith('-partial'))
+          .length,
+      'partialDownloads': media.values
+          .where((row) => (row['kind'] as String).endsWith('-partial'))
+          .length,
       'settings': settings.length,
       'mediaItems': <Object?>[
         for (final row in items)
@@ -545,7 +565,11 @@ class BackupService {
       payload['rules'] = sourceRulesOf(payload).length;
     }
     if (apkStaging != null) {
-      payload['apkPackages'] = await (await openApkFiles()).capture(archive, apkStaging, mediaIntegrity ?? {});
+      payload['apkPackages'] = await (await openApkFiles()).capture(
+        archive,
+        apkStaging,
+        mediaIntegrity ?? {},
+      );
     }
     return payload;
   }
@@ -604,7 +628,8 @@ class BackupService {
       settings: payload['settings'] as int? ?? 0,
       downloadedMedia: payload['downloadedMedia'] as int? ?? 0,
       partialDownloads: payload['partialDownloads'] as int? ?? 0,
-      apkPackages: ApkBackupFiles.validatePayload(payload['apkPackages']).length,
+      apkPackages: ApkBackupFiles.validatePayload(payload['apkPackages'])
+          .length,
       sourceRules: sourceRulesOf(payload).length,
       exportedAt:
           DateTime.tryParse('${payload['exportedAt'] ?? ''}') ?? DateTime.now(),
@@ -649,6 +674,32 @@ class BackupService {
     return decoded.cast<String, Object?>();
   }
 
+  /// Validate only the stored envelope, never source capabilities or execution.
+  /// Keep original JSON bytes; legacy FilterLists and v1 envelopes round-trip.
+  static void validateSavedSearchFilters(Map<String, Object?> payload) {
+    for (final feed in _listOf(payload['mangaFeeds'])) {
+      final raw = feed['filtersJson'];
+      if (raw == null) continue;
+      if (raw is! String) throw const FormatException('保存筛选格式无效；未修改本机记录');
+      final decoded = jsonDecode(raw);
+      final Object? filters;
+      if (decoded is Map) {
+        if (decoded['version'] != 1) {
+          throw const FormatException('保存筛选格式不受支持；未修改本机记录');
+        }
+        filters = decoded['filters'];
+      } else {
+        filters = decoded;
+      }
+      if (filters is! List ||
+          filters.any(
+            (row) => row is! Map || row.keys.any((key) => key is! String),
+          )) {
+        throw const FormatException('保存筛选格式无效；未修改本机记录');
+      }
+    }
+  }
+
   Future<BackupSummary> _apply(
     Archive archive, {
     String? path,
@@ -661,6 +712,7 @@ class BackupService {
     if (version is int && version > backupFormatVersion) {
       throw StateError('备份包版本（$version）高于当前应用支持的 $backupFormatVersion');
     }
+    validateSavedSearchFilters(payload);
     final rules = sourceRulesOf(payload);
     ApkBackupFiles.validatePayload(payload['apkPackages']);
     ApkRestoreTransaction? apkTransaction;
@@ -679,7 +731,9 @@ class BackupService {
     final artifactLease = await BackupArtifactGuard.acquireOperation();
     try {
       if (localMediaFiles == null &&
-          archive.files.any((f) => f.name.startsWith('media/') || f.name.startsWith('apks/'))) {
+          archive.files.any(
+            (f) => f.name.startsWith('media/') || f.name.startsWith('apks/'),
+          )) {
         mediaInput = await Directory.systemTemp.createTemp(
           'triomi-media-input-',
         );
@@ -713,19 +767,24 @@ class BackupService {
                   entry.key as String: entry.value,
             }
           : <String, Object?>{};
-      if (!options.replaceSettings) {
-        final localSettings = preferences.exportAll();
-        incomingSettings.removeWhere(
-          (key, _) => localSettings.containsKey(key),
-        );
-      }
-      if (options.restoreApkPackages && (payload['apkPackages'] as List? ?? []).isNotEmpty) {
+      final localSettings = preferences.exportAll();
+      incomingSettings.removeWhere(
+        (key, _) =>
+            localSettings.containsKey(key) &&
+            (!options.replaceSettings || isScopedLibraryPreference(key)),
+      );
+      if (options.restoreApkPackages &&
+          (payload['apkPackages'] as List? ?? []).isNotEmpty) {
         final files = await openApkFiles();
         restoredApks = files.preview(payload['apkPackages']).available;
-        apkTransaction = await files.prepareRestore(payload['apkPackages'], localMediaFiles ?? {});
+        apkTransaction = await files.prepareRestore(
+          payload['apkPackages'],
+          localMediaFiles ?? {},
+        );
         // This internal device-path key never comes from payload settings. It
         // shares SQLite/Hive compensation with the rest of this restore.
-        incomingSettings[ApkBackupFiles.pendingKey] = apkTransaction.pendingPackages;
+        incomingSettings[ApkBackupFiles.pendingKey] =
+            apkTransaction.pendingPackages;
       }
       final beforeSettings = <String, Object?>{};
       final missingSettings = <String>{};
@@ -768,7 +827,9 @@ class BackupService {
         // publish before SQL/Hive mutation; failed imports can leave unused cache
         // bytes, but never replace existing local files.
         settingCount = await preferences.importAll(incomingSettings);
-        if (incomingSettings.containsKey(ApkBackupFiles.pendingKey)) settingCount--;
+        if (incomingSettings.containsKey(ApkBackupFiles.pendingKey)) {
+          settingCount--;
+        }
         await preferences.flush();
       } catch (_) {
         await BackupImportRecovery.recover(database, preferences);
@@ -1111,48 +1172,87 @@ class BackupService {
                 );
             chapterCount += 1;
           }
-          final categoryIds = <int, int>{};
-          final dynamicCategoryIds = <int>{};
-          for (final row in _listOf(payload['categories'])) {
+          final categoryRows = _listOf(payload['categories'])
+            ..sort(
+              (a, b) => ((a['id'] as num?)?.toInt() ?? 0).compareTo(
+                (b['id'] as num?)?.toInt() ?? 0,
+              ),
+            );
+          final categoryLinks = _listOf(payload['categoryLinks']);
+          final scopes = LegacyCategoryScopes(
+            library: _listOf(payload['libraryEntries']),
+            items: items,
+            links: categoryLinks,
+          );
+          final categoryIds = <int, Map<MediaType, int>>{};
+          final existingDynamicIds = <int>{};
+          final occupiedIds = {
+            for (final row in await database.select(database.categories).get())
+              row.id,
+          };
+          var nextCategoryId = 1;
+          for (final id in [
+            ...occupiedIds,
+            for (final row in categoryRows) (row['id'] as num?)?.toInt() ?? 0,
+          ]) {
+            if (id >= nextCategoryId) nextCategoryId = id + 1;
+          }
+          for (final row in categoryRows) {
             final oldId = (row['id'] as num?)?.toInt(),
                 name = row['name'] as String?;
             if (oldId == null || name == null) {
               throw const FormatException('分类身份缺失');
             }
-            final matches =
-                await (database.select(database.categories)
-                      ..where((t) => t.name.equals(name))
-                      ..orderBy([(t) => OrderingTerm.asc(t.id)]))
-                    .get();
-            final existing = matches.firstOrNull;
-            // Categories have no modification timestamp. Keep the device's
-            // same-name definition/order, including hidden/rules metadata;
-            // legacy or repeated packages must not unhide local collections.
-            categoryIds[oldId] =
-                existing?.id ??
-                await database
-                    .into(database.categories)
-                    .insert(
-                      CategoriesCompanion.insert(
-                        name: name,
-                        sortIndex: Value(
-                          (row['sortIndex'] as num?)?.toInt() ?? 0,
-                        ),
-                        hidden: Value(row['hidden'] == true),
-                        rulesJson: Value(row['rulesJson'] as String?),
+            final ids = categoryIds[oldId] = {};
+            for (final module in scopes.modulesFor(row)) {
+              final matches =
+                  await (database.select(database.categories)
+                        ..where(
+                          (t) =>
+                              t.module.equals(module.name) &
+                              t.name.equals(name),
+                        )
+                        ..orderBy([(t) => OrderingTerm.asc(t.id)]))
+                      .get();
+              final existing = matches.firstOrNull;
+              // No per-category timestamp: local scoped definitions win.
+              // Never evaluate restored rules while importing memberships.
+              if (existing != null) {
+                ids[module] = existing.id;
+                if (existing.rulesJson != null) {
+                  existingDynamicIds.add(existing.id);
+                }
+                continue;
+              }
+              final id = ids.isEmpty && !occupiedIds.contains(oldId)
+                  ? oldId
+                  : nextCategoryId++;
+              ids[module] = id;
+              occupiedIds.add(id);
+              await database
+                  .into(database.categories)
+                  .insert(
+                    CategoriesCompanion.insert(
+                      id: Value(id),
+                      name: name,
+                      module: Value(module.name),
+                      sortIndex: Value(
+                        (row['sortIndex'] as num?)?.toInt() ?? 0,
                       ),
-                    );
-            if (existing?.rulesJson != null ||
-                (existing == null && row['rulesJson'] != null)) {
-              dynamicCategoryIds.add(categoryIds[oldId]!);
+                      hidden: Value(row['hidden'] == true),
+                      rulesJson: Value(row['rulesJson'] as String?),
+                    ),
+                  );
             }
           }
-          for (final row in _listOf(payload['categoryLinks'])) {
-            final category = categoryIds[(row['categoryId'] as num?)?.toInt()];
-            if (category == null) throw const FormatException('分类关联没有对应分类');
-            // A same-name local dynamic category keeps its rule, never copied
-            // manual memberships from an older package.
-            if (dynamicCategoryIds.contains(category)) continue;
+          for (final row in categoryLinks) {
+            final ids = categoryIds[(row['categoryId'] as num?)?.toInt()];
+            if (ids == null) throw const FormatException('分类关联没有对应分类');
+            final category = ids[scopes.moduleFor(row)];
+            if (category == null) throw const FormatException('分类关联没有对应模块');
+            // Preserve every restored link, including legacy links on dynamic
+            // definitions, but do not add manual members to a local dynamic rule.
+            if (existingDynamicIds.contains(category)) continue;
             await database
                 .into(database.libraryCategoryLinks)
                 .insertOnConflictUpdate(
@@ -1260,7 +1360,8 @@ class BackupService {
             // A later complete media backup may fill those, but never a current
             // queue entry, partial download, or any existing local file index.
             final mediaKind = (row['mediaFiles'] as Map?)?['kind'];
-            final fillMissingMedia = existing != null &&
+            final fillMissingMedia =
+                existing != null &&
                 existing.status == 'paused' &&
                 existing.path == null &&
                 (existing.errorMessage == _missingRestoredMedia ||
@@ -1268,7 +1369,11 @@ class BackupService {
                 (mediaKind == 'images' || mediaKind == 'video');
             if (existing != null && !fillMissingMedia) continue;
             String? restoredPath;
-            final partial = ['video-partial', 'hls-partial', 'image-partial'].contains((row['mediaFiles'] as Map?)?['kind']);
+            final partial = [
+              'video-partial',
+              'hls-partial',
+              'image-partial',
+            ].contains((row['mediaFiles'] as Map?)?['kind']);
             if (row['mediaFiles'] != null) {
               final store =
                   downloadFiles ??
@@ -1279,13 +1384,21 @@ class BackupService {
                   );
               restoredPath = await store.restore(row, localMediaFiles ?? {});
               publishedMedia.add(restoredPath);
-              if (partial) { restoredPartial++; } else { restoredMedia++; }
+              if (partial) {
+                restoredPartial++;
+              } else {
+                restoredMedia++;
+              }
             }
             if (fillMissingMedia) {
-              await (database.update(database.downloads)..where((t) => t.id.equals(existing.id))).write(
+              await (database.update(
+                database.downloads,
+              )..where((t) => t.id.equals(existing.id))).write(
                 DownloadsCompanion(
-                  status: const Value('done'), progress: const Value(1),
-                  path: Value(restoredPath), errorMessage: const Value(null),
+                  status: const Value('done'),
+                  progress: const Value(1),
+                  path: Value(restoredPath),
+                  errorMessage: const Value(null),
                 ),
               );
               continue;
@@ -1309,9 +1422,11 @@ class BackupService {
                     errorMessage: Value(
                       restoredPath == null
                           ? source == 'local-comic'
-                              ? _missingRestoredLocalComic
-                              : _missingRestoredMedia
-                          : partial ? '已恢复部分下载文件；明确继续后校验新来源与文件完整性，普通视频还需强ETag验证' : null,
+                                ? _missingRestoredLocalComic
+                                : _missingRestoredMedia
+                          : partial
+                          ? '已恢复部分下载文件；明确继续后校验新来源与文件完整性，普通视频还需强ETag验证'
+                          : null,
                     ),
                   ),
                 );

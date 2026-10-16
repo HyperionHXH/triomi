@@ -3,6 +3,7 @@ import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
+import 'package:triomi/features/library/data/library_category.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 
 import 'fixtures/test_database.dart';
@@ -86,7 +87,7 @@ void main() {
       expect(await repository.listLibrary(type: MediaType.novel), hasLength(1));
     });
 
-    test('书架默认范围是漫画与小说，旧番剧数据不丢失（D89）', () async {
+    test('scoped follows keep legacy anime records reachable without touching original data', () async {
       await repository.addToLibrary(manga);
       const anime = MediaItem(
         sourceId: 'bangumi-anime',
@@ -101,14 +102,33 @@ void main() {
       expect(default_, hasLength(1));
       expect(default_.single.item.type, MediaType.manga);
 
-      // 兼容查看：显式按番剧筛选仍能取回旧条目。
-      final animeOnly = await repository.listLibrary(type: MediaType.anime);
+      final before = (await repository.listAnimeFollows()).single.entry;
+      final category = await repository.saveCategory(
+        type: MediaType.anime,
+        name: '原隐藏收藏',
+        hidden: true,
+        rule: const LibraryCategoryRule(matchAll: true),
+      );
+      expect(await repository.listLibrary(type: MediaType.anime), isEmpty);
+      final animeOnly = await repository.listAnimeFollows();
       expect(animeOnly, hasLength(1));
       expect(animeOnly.single.item.title, '命运石之门');
       expect(await repository.isInLibrary('bangumi-anime', '1002'), isTrue);
+      expect(animeOnly.single.entry, before);
+      expect((await repository.watchAnimeFollows().first).single.entry, before);
+      expect(
+        (await repository.categorySnapshot(type: MediaType.anime))
+            .categories
+            .single
+            .id,
+        category,
+      );
 
       // 迁移工具口径：includeAnime 不过滤类型。
-      expect(await repository.listLibrary(includeAnime: true), hasLength(2));
+      expect(
+        await repository.listLibrary(includeAnime: true, revealHidden: true),
+        hasLength(2),
+      );
     });
 
     test('更新进度会写回书架条目', () async {

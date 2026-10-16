@@ -14,13 +14,22 @@ Future<void> runJsWorker(int port, String token) async {
   final runtimes = <String, FlutterJsRuntime>{};
   final hostCalls = <String, Completer<Object?>>{};
   var sequence = 0;
+  final invocationKey = Object();
   late JsWorkerWire wire;
   Future<Object?> host(String session, Map<String, Object?> request) async {
+    final parentId = Zone.current[invocationKey];
+    if (parentId is! String) throw const JsRuntimeError('宿主请求缺少调用身份');
     final id = '$session:host:${++sequence}';
     final completion = Completer<Object?>();
     hostCalls[id] = completion;
     try {
-      wire.send({'kind': 'host', 'session': session, 'id': id, ...request});
+      wire.send({
+        'kind': 'host',
+        'session': session,
+        'id': id,
+        'parentId': parentId,
+        ...request,
+      });
       return await completion.future.timeout(const Duration(seconds: 30));
     } finally {
       hostCalls.remove(id);
@@ -65,61 +74,65 @@ Future<void> runJsWorker(int port, String token) async {
         wire.close();
         return;
       }
-      unawaited(() async {
-        try {
-          Object? value;
-          final operation = message['operation'];
-          if (operation == 'load') {
-            if (runtimes.length >= 32 && !runtimes.containsKey(session)) {
-              throw const JsRuntimeError('JS 会话数量超限');
-            }
-            runtimes.remove(session)?.dispose();
-            final runtime = FlutterJsRuntime();
-            runtimes[session] = runtime;
-            await runtime.load(
-              message['script'] as String,
-              name: message['name'] as String,
-              baseUrl: message['baseUrl'] as String?,
-              bridge: _WorkerBridge((request) => host(session, request)),
-            );
-          } else if (operation == 'dispose') {
-            runtimes.remove(session)?.dispose();
-          } else {
-            final runtime = runtimes[session];
-            if (runtime == null) throw const JsRuntimeError('JS 会话已失效');
-            if (operation == 'has') {
-              value = await runtime.hasFunction(message['function'] as String);
-            } else if (operation == 'call') {
-              value = await runtime.call(
-                message['function'] as String,
-                (message['args'] as List).cast<Object?>(),
-              );
-            } else {
-              throw const JsRuntimeError('无效的 worker 操作');
-            }
-          }
-          wire.send({
-            'kind': 'result',
-            'session': session,
-            'id': id,
-            'ok': true,
-            'value': value,
-          });
-        } catch (error) {
+      unawaited(
+        runZoned(() async {
           try {
-            // Do not print arbitrary JS, HTTP response bodies or host errors.
+            Object? value;
+            final operation = message['operation'];
+            if (operation == 'load') {
+              if (runtimes.length >= 32 && !runtimes.containsKey(session)) {
+                throw const JsRuntimeError('JS 会话数量超限');
+              }
+              runtimes.remove(session)?.dispose();
+              final runtime = FlutterJsRuntime();
+              runtimes[session] = runtime;
+              await runtime.load(
+                message['script'] as String,
+                name: message['name'] as String,
+                baseUrl: message['baseUrl'] as String?,
+                bridge: _WorkerBridge((request) => host(session, request)),
+              );
+            } else if (operation == 'dispose') {
+              runtimes.remove(session)?.dispose();
+            } else {
+              final runtime = runtimes[session];
+              if (runtime == null) throw const JsRuntimeError('JS 会话已失效');
+              if (operation == 'has') {
+                value = await runtime.hasFunction(
+                  message['function'] as String,
+                );
+              } else if (operation == 'call') {
+                value = await runtime.call(
+                  message['function'] as String,
+                  (message['args'] as List).cast<Object?>(),
+                );
+              } else {
+                throw const JsRuntimeError('无效的 worker 操作');
+              }
+            }
             wire.send({
               'kind': 'result',
               'session': session,
               'id': id,
-              'ok': false,
-              'error': error is JsRuntimeError ? error.message : 'JS 执行失败',
+              'ok': true,
+              'value': value,
             });
-          } catch (_) {
-            wire.close();
+          } catch (error) {
+            try {
+              // Do not print arbitrary JS, HTTP response bodies or host errors.
+              wire.send({
+                'kind': 'result',
+                'session': session,
+                'id': id,
+                'ok': false,
+                'error': error is JsRuntimeError ? error.message : 'JS 执行失败',
+              });
+            } catch (_) {
+              wire.close();
+            }
           }
-        }
-      }());
+        }, zoneValues: {invocationKey: id}),
+      );
     },
     () {
       exit(0);

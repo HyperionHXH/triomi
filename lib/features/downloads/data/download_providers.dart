@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/db/database_provider.dart';
 import '../../../core/models/chapter.dart';
 import '../../../core/models/media_item.dart';
+import '../../../core/models/media_type.dart';
 import '../../../core/models/video_resolve_cancellation.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/source/source_api.dart';
@@ -31,7 +32,8 @@ final downloadGroupsProvider = StreamProvider<List<DownloadGroup>>(
 
 /// Look up the root navigator only when resolution starts, never retain a page.
 final downloadResolveContextProvider = Provider<BuildContext? Function()>(
-  (ref) => () => AppRouter.rootNavigator?.context,
+  (ref) =>
+      () => AppRouter.rootNavigator?.context,
 );
 
 typedef DownloadVideoResolver = Future<PlaySource> Function(
@@ -41,7 +43,9 @@ typedef DownloadVideoResolver = Future<PlaySource> Function(
 
 final downloadVideoResolverProvider = Provider<DownloadVideoResolver?>((ref) {
   if (kIsWeb) return null;
-  if (defaultTargetPlatform == TargetPlatform.android) return _resolveAndroidVideo;
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    return _resolveAndroidVideo;
+  }
   if (defaultTargetPlatform != TargetPlatform.windows) return null;
   final contextForResolve = ref.watch(downloadResolveContextProvider);
   final privacy = ref.watch(privacyLockProvider);
@@ -57,7 +61,11 @@ final downloadVideoResolverProvider = Provider<DownloadVideoResolver?>((ref) {
       purpose: '下载',
       privacyLock: privacy,
     );
-    return PlaySource(name: source.name, url: result.url, headers: result.headers);
+    return PlaySource(
+      name: source.name,
+      url: result.url,
+      headers: result.headers,
+    );
   };
 });
 
@@ -196,9 +204,10 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
   }
 
   /// 重试失败与中断的任务。
-  Future<void> retryFailed() async {
+  Future<void> retryFailed({MediaType? type}) async {
     final rows = await _repository.grouped();
     for (final group in rows) {
+      if (type != null && group.type != type) continue;
       for (final entry in group.entries) {
         if (entry.status == DownloadStatus.failed) {
           await _repository.markQueued(entry.row.id);
@@ -215,14 +224,24 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
     unawaited(_pump());
   }
 
-  Future<void> pauseAll() async {
+  Future<void> pauseAll({MediaType? type}) async {
     _queueGeneration++;
-    final rows = await _repository.pending();
+    final groups = await _repository.grouped();
+    final ids = {
+      for (final group in groups)
+        if (type == null || group.type == type)
+          for (final entry in group.entries) entry.row.id,
+    };
+    final rows = (await _repository.pending())
+        .where((row) => ids.contains(row.id))
+        .toList();
     _stopped.addAll(rows.map((row) => row.id));
     _resumeAfterStop.removeAll(rows.map((row) => row.id));
-    final done = _activeDone?.future;
-    _activeResolve?.cancel('下载已暂停，请在下载页继续');
-    if (_activeId != null &&
+    final ownsActive = ids.contains(_activeId);
+    final done = ownsActive ? _activeDone?.future : null;
+    if (ownsActive) _activeResolve?.cancel('下载已暂停，请在下载页继续');
+    if (ownsActive &&
+        _activeId != null &&
         !kIsWeb &&
         defaultTargetPlatform == TargetPlatform.android) {
       await const MethodChannel('triomi/platform')
@@ -235,20 +254,37 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
     if (done != null) await done;
   }
 
-  Future<void> resumePaused() async {
-    await _repository.resumePaused();
-    if (_activeId != null && _stopped.contains(_activeId)) {
+  Future<void> resumePaused({MediaType? type}) async {
+    final groups = await _repository.grouped();
+    final ids = {
+      for (final group in groups)
+        if (type == null || group.type == type)
+          for (final entry in group.entries)
+            if (entry.row.sourceId != 'local-comic') entry.row.id,
+    };
+    for (final group in groups) {
+      for (final entry in group.entries) {
+        if (ids.contains(entry.row.id) &&
+            entry.status == DownloadStatus.paused) {
+          await _repository.markQueued(entry.row.id);
+        }
+      }
+    }
+    if (_activeId != null &&
+        ids.contains(_activeId) &&
+        _stopped.contains(_activeId)) {
       _resumeAfterStop.add(_activeId!);
     }
-    _stopped.removeWhere((id) => id != _activeId);
+    _stopped.removeWhere((id) => ids.contains(id) && id != _activeId);
     await refresh();
     unawaited(_pump());
   }
 
   /// 清理无需文件索引的已完成记录；保留文件型离线内容的唯一持久引用。
-  Future<void> clearFinished() async {
+  Future<void> clearFinished({MediaType? type}) async {
     final groups = await _repository.grouped();
     for (final group in groups) {
+      if (type != null && group.type != type) continue;
       for (final entry in group.entries) {
         if (entry.status == DownloadStatus.done &&
             (entry.row.path == null || entry.row.path!.isEmpty)) {
@@ -324,7 +360,8 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
             await _repository.markPaused(row.id, message: cancellation.reason);
             continue;
           }
-          final snapshot = ref.read(sourcesProvider).asData?.value ?? loadedSnapshot;
+          final snapshot =
+              ref.read(sourcesProvider).asData?.value ?? loadedSnapshot;
           final provider = snapshot.enabledEntries
               .where((entry) => entry.descriptor.id == row.sourceId)
               .map((entry) => entry.source)
@@ -342,7 +379,8 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
                 if (_windows) {
                   final lifecycle = WidgetsBinding.instance.lifecycleState;
                   if (_privacy?.blocksAccess == true ||
-                      (lifecycle != null && lifecycle != AppLifecycleState.resumed)) {
+                      (lifecycle != null &&
+                          lifecycle != AppLifecycleState.resumed)) {
                     throw VideoResolveCancelled('请返回应用前台并解锁，在下载页继续任务');
                   }
                 }

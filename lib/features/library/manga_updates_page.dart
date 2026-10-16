@@ -17,7 +17,8 @@ import 'data/manga_update_service.dart';
 import 'source_migration_page.dart';
 
 class MangaUpdatesPage extends ConsumerStatefulWidget {
-  const MangaUpdatesPage({super.key});
+  const MangaUpdatesPage({super.key, this.embedded = false});
+  final bool embedded;
   @override
   ConsumerState<MangaUpdatesPage> createState() => _MangaUpdatesPageState();
 }
@@ -55,7 +56,7 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
       await service.enqueue(onlyFailed: failed, itemKeys: keys);
       await service.run(itemKeys: keys);
       await notifyMangaUpdates(container);
-      container.invalidate(libraryProvider);
+      container.invalidate(libraryByTypeProvider(MediaType.manga));
       container.invalidate(mangaUpdateLibraryProvider);
     } catch (_) {
       if (mounted) setState(() => _error = '更新未完成，已保存的目录及进度保留');
@@ -66,8 +67,11 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
   }
 
   Future<void> _settings() async {
-    final db = ref.read(databaseProvider);
-    final categories = await db.select(db.categories).get();
+    final categories =
+        (await ref
+                .read(libraryRepositoryProvider)
+                .categorySnapshot(type: MediaType.manga))
+            .categories;
     final sources = await ref.read(sourcesProvider.future);
     if (!mounted) return;
     final prefs = ref.read(preferencesProvider);
@@ -220,150 +224,151 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
         groups.update(entry.item.sourceId, (n) => n + 1, ifAbsent: () => 1);
       }
     }
-    return PageScaffold(
-      title: '漫画更新与错误',
-      actions: [
-        IconButton(
-          tooltip: '更新策略',
-          onPressed: _running ? null : _settings,
-          icon: const Icon(Icons.tune),
+    final controls = <Widget>[
+      IconButton(
+        tooltip: '更新策略',
+        onPressed: _running ? null : _settings,
+        icon: const Icon(Icons.tune),
+      ),
+      IconButton(
+        tooltip: '取消更新',
+        onPressed: () async {
+          ref.read(mangaUpdateServiceProvider).cancel();
+          try {
+            await const MethodChannel('triomi/platform')
+                .invokeMethod<void>('cancelMangaUpdate');
+          } on MissingPluginException {
+            // Desktop has only the already-cancelled foreground service.
+          }
+        },
+        icon: const Icon(Icons.stop),
+      ),
+    ];
+    final content = Column(
+      children: [
+        Wrap(
+          spacing: 8,
+          children: [
+            ...controls,
+            FilledButton(
+              onPressed: _running ? null : _run,
+              child: const Text('更新漫画书架'),
+            ),
+            TextButton(
+              onPressed: _running ? null : () => _run(failed: true),
+              child: const Text('重试失败/待更新'),
+            ),
+          ],
         ),
-        IconButton(
-          tooltip: '取消更新',
-          onPressed: () async {
-            ref.read(mangaUpdateServiceProvider).cancel();
-            try {
-              await const MethodChannel('triomi/platform')
-                  .invokeMethod<void>('cancelMangaUpdate');
-            } on MissingPluginException {
-              // Desktop has only the already-cancelled foreground service.
-            }
-          },
-          icon: const Icon(Icons.stop),
-        ),
-      ],
-      child: Column(
-        children: [
-          Wrap(
-            spacing: 8,
+        if (_running)
+          LinearProgressIndicator(
+            value: progress == null || progress.$2 == 0
+                ? null
+                : progress.$1 / progress.$2,
+          ),
+        if (progress != null) Text('已检查 ${progress.$1} / ${progress.$2}'),
+        if (_error != null) Text(_error!),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
             children: [
-              FilledButton(
-                onPressed: _running ? null : _run,
-                child: const Text('更新漫画书架'),
-              ),
-              TextButton(
-                onPressed: _running ? null : () => _run(failed: true),
-                child: const Text('重试失败/待更新'),
-              ),
+              for (final group in groups.entries)
+                Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: ActionChip(
+                    label: Text(
+                      '${sourceLabels[group.key] ?? group.key} · ${group.value}本',
+                    ),
+                    onPressed: _running
+                        ? null
+                        : () => _run(
+                            keys: {
+                              for (final entry in library)
+                                if (entry.item.sourceId == group.key)
+                                  '${entry.item.sourceId}\u0000${entry.item.remoteId}',
+                            },
+                          ),
+                  ),
+                ),
             ],
           ),
-          if (_running)
-            LinearProgressIndicator(
-              value: progress == null || progress.$2 == 0
-                  ? null
-                  : progress.$1 / progress.$2,
-            ),
-          if (progress != null) Text('已检查 ${progress.$1} / ${progress.$2}'),
-          if (_error != null) Text(_error!),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
+        ),
+        Expanded(
+          child: rows.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (_, _) => const Text('更新列表读取失败'),
+            data: (rows) => ListView(
               children: [
-                for (final group in groups.entries)
-                  Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: ActionChip(
-                      label: Text(
-                        '${sourceLabels[group.key] ?? group.key} · ${group.value}本',
-                      ),
-                      onPressed: _running
-                          ? null
-                          : () => _run(
-                              keys: {
-                                for (final entry in library)
-                                  if (entry.item.sourceId == group.key)
-                                    '${entry.item.sourceId}\u0000${entry.item.remoteId}',
-                              },
+                for (final row in rows)
+                  Builder(
+                    builder: (context) {
+                      final item = library
+                          .where(
+                            (e) =>
+                                e.item.sourceId == row.sourceId &&
+                                e.item.remoteId == row.remoteId,
+                          )
+                          .firstOrNull
+                          ?.item;
+                      return Card(
+                        child: Column(
+                          children: [
+                            ListTile(
+                              title: Text(item?.title ?? row.remoteId),
+                              subtitle: Text(
+                                '${sourceLabels[row.sourceId] ?? row.sourceId}\n${statusLabels[row.status] ?? row.status} · 新增${row.added}章${row.error == null ? '' : '\n${row.error}'}',
+                              ),
+                              leading: SizedBox(
+                                width: 42,
+                                height: 56,
+                                child: MediaCover(url: item?.coverUrl),
+                              ),
+                              onTap: item == null
+                                  ? null
+                                  : () => context.push(
+                                      AppRoutes.detailFor(item),
+                                      extra: item,
+                                    ),
                             ),
-                    ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                TextButton(
+                                  onPressed: _running
+                                      ? null
+                                      : () => _run(
+                                          keys: {
+                                            '${row.sourceId}\u0000${row.remoteId}',
+                                          },
+                                        ),
+                                  child: const Text('重试此作品'),
+                                ),
+                                if (item != null && row.status == 'failed')
+                                  TextButton(
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute<void>(
+                                        builder: (_) =>
+                                            SourceMigrationPage(item: item),
+                                      ),
+                                    ),
+                                    child: const Text('迁移到其他来源'),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
               ],
             ),
           ),
-          Expanded(
-            child: rows.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, _) => const Text('更新列表读取失败'),
-              data: (rows) => ListView(
-                children: [
-                  for (final row in rows)
-                    Builder(
-                      builder: (context) {
-                        final item = library
-                            .where(
-                              (e) =>
-                                  e.item.sourceId == row.sourceId &&
-                                  e.item.remoteId == row.remoteId,
-                            )
-                            .firstOrNull
-                            ?.item;
-                        return Card(
-                          child: Column(
-                            children: [
-                              ListTile(
-                                title: Text(item?.title ?? row.remoteId),
-                                subtitle: Text(
-                                  '${sourceLabels[row.sourceId] ?? row.sourceId}\n${statusLabels[row.status] ?? row.status} · 新增${row.added}章${row.error == null ? '' : '\n${row.error}'}',
-                                ),
-                                leading: SizedBox(
-                                  width: 42,
-                                  height: 56,
-                                  child: MediaCover(url: item?.coverUrl),
-                                ),
-                                onTap: item == null
-                                    ? null
-                                    : () => context.push(
-                                        AppRoutes.detail,
-                                        extra: item,
-                                      ),
-                              ),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  TextButton(
-                                    onPressed: _running
-                                        ? null
-                                        : () => _run(
-                                            keys: {
-                                              '${row.sourceId}\u0000${row.remoteId}',
-                                            },
-                                          ),
-                                    child: const Text('重试此作品'),
-                                  ),
-                                  if (item != null && row.status == 'failed')
-                                    TextButton(
-                                      onPressed: () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute<void>(
-                                          builder: (_) =>
-                                              SourceMigrationPage(item: item),
-                                        ),
-                                      ),
-                                      child: const Text('迁移到其他来源'),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
+    return widget.embedded
+        ? content
+        : PageScaffold(title: '漫画更新与错误', child: content);
   }
 }

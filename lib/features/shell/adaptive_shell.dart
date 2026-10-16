@@ -1,38 +1,41 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_router.dart';
+import '../../core/storage/preferences.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 
 /// 应用外壳：三档自适应导航（对齐 PROJECT_SPEC 6.2）。
 ///
-/// 导航顺序固定为「发现、书架、追番、我的」（ADR-2026-10-05）：
-/// 发现是默认首屏；书架是漫画/小说阅读收藏库；追番是独立的动画工作区。
+/// 四个工作区各自保留页面栈，不以全局类型筛选互相切换。
 ///
 /// - `compact`  (< 600)   底部 NavigationBar
 /// - `medium`   (600~1240) NavigationRail
 /// - `expanded` (> 1240)  Komikku 式 Sidebar + Content
-class AdaptiveShell extends StatelessWidget {
+class AdaptiveShell extends ConsumerWidget {
   const AdaptiveShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   static const List<_ShellDestination> _destinations = <_ShellDestination>[
     _ShellDestination(
-      label: '发现',
-      icon: Icons.explore_outlined,
-      selectedIcon: Icons.explore,
+      label: '追番',
+      icon: Icons.live_tv_outlined,
+      selectedIcon: Icons.live_tv,
     ),
     _ShellDestination(
-      label: '书架',
+      label: '漫画',
       icon: Icons.collections_bookmark_outlined,
       selectedIcon: Icons.collections_bookmark,
     ),
     _ShellDestination(
-      label: '追番',
-      icon: Icons.live_tv_outlined,
-      selectedIcon: Icons.live_tv,
+      label: '小说',
+      icon: Icons.menu_book_outlined,
+      selectedIcon: Icons.menu_book,
     ),
     _ShellDestination(
       label: '我的',
@@ -41,8 +44,15 @@ class AdaptiveShell extends StatelessWidget {
     ),
   ];
 
-  void _goBranch(int index) {
+  void _goBranch(int index, WidgetRef ref) {
     // 再次点击当前分支时回到该分支的根页面，符合移动端习惯。
+    final path = [
+      AppRoutes.anime,
+      AppRoutes.manga,
+      AppRoutes.novel,
+      AppRoutes.profile,
+    ][index];
+    unawaited(ref.read(preferencesProvider).set('navigation.workspace', path));
     navigationShell.goBranch(
       index,
       initialLocation: index == navigationShell.currentIndex,
@@ -50,7 +60,7 @@ class AdaptiveShell extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final sizeClass = AppBreakpoints.of(MediaQuery.sizeOf(context).width);
 
     switch (sizeClass) {
@@ -59,7 +69,7 @@ class AdaptiveShell extends StatelessWidget {
           body: navigationShell,
           bottomNavigationBar: NavigationBar(
             selectedIndex: navigationShell.currentIndex,
-            onDestinationSelected: _goBranch,
+            onDestinationSelected: (index) => _goBranch(index, ref),
             destinations: <Widget>[
               for (final destination in _destinations)
                 NavigationDestination(
@@ -83,7 +93,7 @@ class AdaptiveShell extends StatelessWidget {
             children: <Widget>[
               NavigationRail(
                 selectedIndex: navigationShell.currentIndex,
-                onDestinationSelected: _goBranch,
+                onDestinationSelected: (index) => _goBranch(index, ref),
                 destinations: <NavigationRailDestination>[
                   for (final destination in _destinations)
                     NavigationRailDestination(
@@ -111,7 +121,7 @@ class AdaptiveShell extends StatelessWidget {
             children: <Widget>[
               _DesktopSidebar(
                 currentIndex: navigationShell.currentIndex,
-                onSelect: _goBranch,
+                onSelect: (index) => _goBranch(index, ref),
               ),
               VerticalDivider(width: 1, color: context.palette.divider),
               Expanded(child: navigationShell),
@@ -182,7 +192,7 @@ class _DesktopSidebar extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(AppSpacing.md),
               child: Text(
-                'v0.1.0 · M0',
+                '追番 · 漫画 · 小说',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: palette.mutedForeground,
                 ),

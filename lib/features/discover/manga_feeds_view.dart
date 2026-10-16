@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../core/db/app_database.dart';
 import '../../core/models/media_item.dart';
+import '../../core/models/media_type.dart';
 import '../../core/router/app_router.dart';
+import '../../core/source/http_client.dart';
 import '../../core/source/source_providers.dart';
-import '../library/batch_collection_page.dart';
+import '../manga/manga_source_page.dart';
 import 'manga_feed_editor.dart';
 import 'manga_feed_repository.dart';
 import 'widgets/media_item_card.dart';
@@ -20,65 +23,97 @@ class MangaFeedsView extends ConsumerStatefulWidget {
 }
 
 class _MangaFeedsViewState extends ConsumerState<MangaFeedsView> {
-  bool _seeding = false;
-  String? _seedError;
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_seed());
-  }
+  final _scroll = ItemScrollController();
+  String? _focusedId;
 
-  Future<void> _seed() async {
-    if (_seeding) return;
-    _seeding = true;
+  Future<void> _add() async {
     try {
       final snapshot = await ref.read(sourcesProvider.future);
       if (!mounted) return;
-      await ref.read(mangaFeedRepositoryProvider).seed(snapshot);
-    } catch (_) {
-      if (mounted) setState(() => _seedError = '默认Feed初始化失败，已保存配置不受影响');
-    } finally {
-      _seeding = false;
+      final id = await showDialog<String>(
+        context: context,
+        builder: (_) => MangaFeedEditor(snapshot: snapshot),
+      );
+      if (id == null || !mounted) return;
+      final rows = await ref.read(mangaFeedRepositoryProvider).list();
+      if (!mounted) return;
+      setState(() => _focusedId = id);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scroll.isAttached) return;
+        final index = rows.indexWhere((row) => row.id == id);
+        if (index >= 0) {
+          unawaited(
+            _scroll.scrollTo(
+              index: index,
+              duration: const Duration(milliseconds: 250),
+            ),
+          );
+        }
+      });
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('无法添加订阅：$error')));
+      }
     }
   }
 
-  Future<void> _edit({MangaFeedRow? row}) async {
-    final snapshot = await ref.read(sourcesProvider.future);
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (_) => MangaFeedEditor(snapshot: snapshot, initial: row),
-    );
-  }
-
-  Future<void> _openSaved(MangaFeedRow feed) => showModalBottomSheet<void>(
+  Future<void> _sort() => showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (sheetContext) => SafeArea(
+    builder: (context) => SafeArea(
       child: SizedBox(
-        height: MediaQuery.sizeOf(sheetContext).height * .8,
+        height: MediaQuery.sizeOf(context).height * .8,
         child: Consumer(
           builder: (_, ref, _) {
-            final current =
-                ref
-                    .watch(mangaFeedsProvider)
-                    .asData
-                    ?.value
-                    .where((row) => row.id == feed.id)
-                    .firstOrNull ??
-                feed;
-            return ListView(
+            final feeds =
+                ref.watch(mangaFeedsProvider).asData?.value ?? <MangaFeedRow>[];
+            final sources = ref.watch(sourcesProvider).asData?.value;
+            return Column(
               children: [
-                MangaFeedCard(
-                  feed: current,
-                  onEdit: () => _edit(row: current),
-                  onDelete: () async {
-                    await ref
-                        .read(mangaFeedRepositoryProvider)
-                        .delete(current.id);
-                    if (sheetContext.mounted) Navigator.pop(sheetContext);
-                  },
+                ListTile(
+                  title: const Text('订阅排序'),
+                  trailing: IconButton(
+                    tooltip: '关闭排序',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+                Expanded(
+                  child: ReorderableListView.builder(
+                    itemCount: feeds.length,
+                    onReorderItem: (oldIndex, newIndex) async {
+                      final ids = feeds.map((row) => row.id).toList();
+                      ids.insert(newIndex, ids.removeAt(oldIndex));
+                      try {
+                        await ref
+                            .read(mangaFeedRepositoryProvider)
+                            .reorder(ids);
+                      } on Object catch (error) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('排序未保存：$error')),
+                          );
+                        }
+                      }
+                    },
+                    itemBuilder: (_, index) => ListTile(
+                      key: ValueKey(feeds[index].id),
+                      title: Text(
+                        mangaFeedTitle(
+                          feeds[index],
+                          sources?.entries
+                              .where(
+                                (e) => e.descriptor.id == feeds[index].sourceId,
+                              )
+                              .firstOrNull,
+                        ),
+                      ),
+                      subtitle: Text(feeds[index].sourceId),
+                      trailing: const Icon(Icons.drag_handle),
+                    ),
+                  ),
                 ),
               ],
             );
@@ -88,26 +123,35 @@ class _MangaFeedsViewState extends ConsumerState<MangaFeedsView> {
     ),
   );
 
-  Future<void> _sort() => showModalBottomSheet<void>(
-    context: context, isScrollControlled: true, showDragHandle: true,
-    builder: (context) => SafeArea(child: SizedBox(
-      height: MediaQuery.sizeOf(context).height * .8,
-      child: Consumer(builder: (_, ref, _) {
-        final feeds = ref.watch(mangaFeedsProvider).asData?.value ?? <MangaFeedRow>[];
-        return ReorderableListView.builder(
-          itemCount: feeds.length,
-          onReorderItem: (oldIndex, newIndex) {
-            final ids = feeds.map((row) => row.id).toList();
-            ids.insert(newIndex, ids.removeAt(oldIndex));
-            unawaited(ref.read(mangaFeedRepositoryProvider).reorder(ids));
-          },
-          itemBuilder: (_, index) => ListTile(key: ValueKey(feeds[index].id),
-            title: Text(feeds[index].name), subtitle: Text(feeds[index].sourceId),
-            trailing: const Icon(Icons.drag_handle)),
-        );
-      }),
-    )),
-  );
+  Future<void> _remove(MangaFeedRow row) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('移除订阅？'),
+        content: const Text('仅移除此订阅，不卸载来源、不删除收藏、历史或离线文件。可重新手动添加。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('移除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        await ref.read(mangaFeedRepositoryProvider).delete(row.id);
+      } on Object catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('移除失败：$error')));
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -115,75 +159,39 @@ class _MangaFeedsViewState extends ConsumerState<MangaFeedsView> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              const Expanded(child: Text('漫画Feed · 各网站独立加载')),
-              IconButton(tooltip: 'Feed排序', onPressed: _sort, icon: const Icon(Icons.sort)),
+              const Expanded(child: Text('各来源独立加载 · 长按管理订阅')),
               TextButton.icon(
-                onPressed: _edit,
+                onPressed: _add,
                 icon: const Icon(Icons.add),
-                label: const Text('添加Feed'),
+                label: const Text('添加订阅'),
               ),
             ],
           ),
         ),
-        if (_seedError != null)
-          TextButton(
-            onPressed: () {
-              setState(() => _seedError = null);
-              unawaited(_seed());
-            },
-            child: Text('$_seedError · 重试'),
-          ),
-        if (rows.asData?.value.any((row) => row.kind == 'search') ?? false)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  for (final feed in rows.asData!.value.where(
-                    (row) => row.kind == 'search',
-                  ))
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ActionChip(
-                        label: Text(feed.name),
-                        onPressed: () => _openSaved(feed),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
         Expanded(
           child: rows.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, _) => const Center(child: Text('Feed配置读取失败')),
+            error: (error, _) => Center(child: Text('订阅配置读取失败：$error')),
             data: (feeds) => feeds.isEmpty
                 ? Center(
                     child: TextButton(
-                      onPressed: _edit,
-                      child: const Text('添加热门 / 更新 / 保存搜索'),
+                      onPressed: _add,
+                      child: const Text('选择来源，添加第一个订阅'),
                     ),
                   )
-                : ReorderableListView.builder(
+                : ScrollablePositionedList.builder(
+                    key: const PageStorageKey('manga-subscriptions'),
+                    itemScrollController: _scroll,
                     itemCount: feeds.length,
-                    onReorderItem: (oldIndex, newIndex) {
-                      final ids = feeds.map((r) => r.id).toList();
-                      ids.insert(newIndex, ids.removeAt(oldIndex));
-                      unawaited(
-                        ref.read(mangaFeedRepositoryProvider).reorder(ids),
-                      );
-                    },
-                    itemBuilder: (context, index) => MangaFeedCard(
+                    itemBuilder: (_, index) => MangaFeedCard(
                       key: ValueKey(feeds[index].id),
                       feed: feeds[index],
-                      onEdit: () => _edit(row: feeds[index]),
-                      onDelete: () => ref
-                          .read(mangaFeedRepositoryProvider)
-                          .delete(feeds[index].id),
+                      focused: feeds[index].id == _focusedId,
+                      onEdit: _sort,
+                      onDelete: () => unawaited(_remove(feeds[index])),
                     ),
                   ),
           ),
@@ -199,22 +207,28 @@ class MangaFeedCard extends ConsumerStatefulWidget {
     required this.feed,
     required this.onEdit,
     required this.onDelete,
+    this.focused = false,
   });
   final MangaFeedRow feed;
   final VoidCallback onEdit, onDelete;
+  final bool focused;
   @override
   ConsumerState<MangaFeedCard> createState() => _MangaFeedCardState();
 }
 
-class _MangaFeedCardState extends ConsumerState<MangaFeedCard> {
+class _MangaFeedCardState extends ConsumerState<MangaFeedCard>
+    with AutomaticKeepAliveClientMixin {
   final _items = <MediaItem>[];
-  int _page = 0, _epoch = 0;
-  bool _busy = false, _more = true;
+  int _epoch = 0;
+  bool _busy = false;
   String? _error;
+  SourceRequestCancellation? _request;
+  @override
+  bool get wantKeepAlive => true;
   @override
   void initState() {
     super.initState();
-    unawaited(_load(reset: true));
+    unawaited(_load());
   }
 
   @override
@@ -225,135 +239,182 @@ class _MangaFeedCardState extends ConsumerState<MangaFeedCard> {
         old.feed.feedId != widget.feed.feedId ||
         old.feed.query != widget.feed.query ||
         old.feed.filtersJson != widget.feed.filtersJson) {
-      unawaited(_load(reset: true));
-    }
-  }
-
-  Future<void> _load({bool reset = false}) async {
-    if (_busy && !reset || !_more && !reset) return;
-    final epoch = reset ? ++_epoch : _epoch;
-    setState(() {
-      _busy = true;
-      _error = null;
-      if (reset) {
-        _items.clear();
-        _page = 0;
-        _more = true;
-      }
-    });
-    try {
-      final snapshot = await ref.read(sourcesProvider.future);
-      final result = await ref
-          .read(mangaFeedRepositoryProvider)
-          .load(widget.feed, snapshot, _page + 1);
-      if (!mounted || epoch != _epoch) return;
-      setState(() {
-        final ids = _items.map((item) => item.remoteId).toSet();
-        _items.addAll(
-          result.items.where(
-            (item) =>
-                item.sourceId == widget.feed.sourceId && ids.add(item.remoteId),
-          ),
-        );
-        _page++;
-        _more = result.hasMore;
-      });
-    } catch (_) {
-      if (mounted && epoch == _epoch) {
-        setState(() => _error = '本站请求失败或来源不可用；配置及已有结果保留');
-      }
-    } finally {
-      if (mounted && epoch == _epoch) setState(() => _busy = false);
+      _items.clear();
+      unawaited(_load());
     }
   }
 
   @override
+  void dispose() {
+    _epoch++;
+    _request?.cancel('已离开订阅预览');
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final epoch = ++_epoch;
+    _request?.cancel('订阅预览已刷新或改变');
+    final owner = SourceRequestCancellation();
+    _request = owner;
+    final feed = widget.feed;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final result = await owner.run(() async {
+        final snapshot = await ref.read(sourcesProvider.future);
+        if (!mounted || epoch != _epoch || owner.cancelled) return null;
+        return ref.read(mangaFeedRepositoryProvider).load(feed, snapshot, 1);
+      }).timeout(const Duration(seconds: 20), onTimeout: () {
+        owner.cancel('订阅来源请求超时');
+        throw TimeoutException('订阅来源请求超时；Android APK 在途调用可能仍会完成，晚到结果不再接收');
+      });
+      if (!mounted || epoch != _epoch || owner.cancelled || result == null) return;
+      setState(() {
+        final ids = <String>{};
+        _items
+          ..clear()
+          ..addAll(
+            result.items.where(
+              (item) =>
+                  item.type == MediaType.manga &&
+                  item.sourceId == feed.sourceId &&
+                  ids.add(item.remoteId),
+            ),
+          );
+      });
+    } on Object catch (error) {
+      if (mounted && epoch == _epoch) setState(() => _error = '$error');
+    } finally {
+      if (mounted && epoch == _epoch) setState(() => _busy = false);
+      if (identical(_request, owner)) _request = null;
+    }
+  }
+
+  void _open() => context.push(
+    MangaSourcePage.location(
+      widget.feed.sourceId,
+      listing: widget.feed.kind == 'search' ? 'search' : widget.feed.feedId,
+      query: widget.feed.query,
+      filtersJson: widget.feed.filtersJson,
+    ),
+  );
+
+  Future<void> _manage() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.refresh),
+              title: const Text('刷新此来源'),
+              onTap: () => Navigator.pop(context, 'refresh'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.sort),
+              title: const Text('排序订阅'),
+              onTap: () => Navigator.pop(context, 'sort'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.remove_circle_outline),
+              title: const Text('移除订阅'),
+              onTap: () => Navigator.pop(context, 'remove'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (selected == 'refresh') unawaited(_load());
+    if (selected == 'sort') widget.onEdit();
+    if (selected == 'remove') widget.onDelete();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     final snapshot = ref.watch(sourcesProvider).asData?.value;
     final source = snapshot?.entries
         .where((e) => e.descriptor.id == widget.feed.sourceId)
         .firstOrNull;
-    final enabled = source?.enabled == true;
+    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
     return Card(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ListTile(
-            title: Text(widget.feed.name),
-            subtitle: Text(
-              '${source?.descriptor.name ?? widget.feed.sourceId} · ${source?.descriptor.lang ?? ''}${enabled ? '' : ' · 已停用/移除，配置保留'}',
-            ),
-            trailing: PopupMenuButton<String>(
-              onSelected: (v) {
-                if (v == 'edit') widget.onEdit();
-                if (v == 'delete') widget.onDelete();
-                if (v == 'refresh') unawaited(_load(reset: true));
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'refresh', child: Text('刷新本站Feed')),
-                PopupMenuItem(value: 'edit', child: Text('编辑Feed')),
-                PopupMenuItem(value: 'delete', child: Text('移除Feed')),
-              ],
-            ),
-          ),
-          if (_items.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextButton.icon(
-                icon: const Icon(Icons.bookmark_add_outlined),
-                label: const Text('批量收藏当前结果'),
-                onPressed: () => Navigator.push(context, MaterialPageRoute<void>(
-                  builder: (_) => BatchCollectionPage(candidates: _items),
-                )),
+      margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+      color: widget.focused
+          ? Theme.of(context).colorScheme.secondaryContainer
+          : null,
+      child: GestureDetector(
+        onLongPress: _manage,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListTile(
+              title: Text(mangaFeedTitle(widget.feed, source)),
+              subtitle: Text(
+                '${source?.descriptor.lang ?? '语言未知'} · ${source?.enabled == true
+                    ? widget.feed.kind == 'search'
+                          ? '保存搜索：${widget.feed.query}'
+                          : '来源目录'
+                    : '已停用/移除，配置保留'}',
               ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _open,
+              onLongPress: _manage,
             ),
-          if (widget.feed.kind == 'search')
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Chip(label: Text('保存搜索：${widget.feed.query}')),
-            ),
-          if (_items.isNotEmpty)
-            SizedBox(
-              height: 215,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _items.length,
-                itemBuilder: (context, index) {
-                  final item = _items[index];
-                  return SizedBox(
-                    width: 130,
-                    child: Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: MediaItemCard(
-                        item: item,
-                        sourceName: source?.descriptor.name ?? '',
-                        onTap: () =>
-                            context.push(AppRoutes.detail, extra: item),
+            if (_items.isNotEmpty)
+              SizedBox(
+                height: 232 + (scale - 1).clamp(0, 2) * 80,
+                child: ListView.builder(
+                  key: PageStorageKey('feed-covers:${widget.feed.id}'),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _items.length,
+                  itemBuilder: (context, index) {
+                    final item = _items[index];
+                    return SizedBox(
+                      width: 140 + (scale - 1).clamp(0, 2) * 25,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: MediaItemCard(
+                          item: item,
+                          sourceName: source?.descriptor.name ?? '',
+                          onTap: () => context.push(
+                            AppRoutes.detailFor(item),
+                            extra: item,
+                          ),
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
-            ),
-          if (_busy)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: LinearProgressIndicator(),
-            ),
-          if (_error != null)
-            TextButton(
-              onPressed: enabled ? () => _load(reset: _items.isEmpty) : null,
-              child: Text('$_error · 重试本站'),
-            ),
-          if (!_busy && _error == null && _items.isEmpty)
-            const Padding(padding: EdgeInsets.all(16), child: Text('本站没有返回作品')),
-          if (!_busy && _error == null && _more)
-            TextButton(
-              onPressed: enabled ? _load : null,
-              child: const Text('加载更多本站作品'),
-            ),
-        ],
+            if (_busy)
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: LinearProgressIndicator(),
+              ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_error!),
+                    TextButton(onPressed: _load, child: const Text('重试此来源')),
+                  ],
+                ),
+              ),
+            if (!_busy && _error == null && _items.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('此来源没有返回作品；点击标题浏览完整目录'),
+              ),
+          ],
+        ),
       ),
     );
   }

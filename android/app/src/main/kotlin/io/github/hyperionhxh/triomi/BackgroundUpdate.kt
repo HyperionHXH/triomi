@@ -78,6 +78,7 @@ object BackgroundUpdate {
 
         val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            ?.putExtra("triomi_route", "/anime")
         val pending = launch?.let {
             PendingIntent.getActivity(
                 context,

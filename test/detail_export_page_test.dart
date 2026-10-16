@@ -118,7 +118,7 @@ void main() {
   /// 打开「导出」菜单并选择 EPUB / TXT；导出对话框含无限进度圈，
   /// 只能有界 pump 推进到完成。
   Future<void> runExport(WidgetTester tester, {required bool epub}) async {
-    await tester.tap(find.byTooltip('导出'));
+    await tester.tap(find.byTooltip('更多'));
     await tester.pumpAndSettle();
     await tester.tap(find.text(epub ? '导出 EPUB' : '导出 TXT'));
     // 授权目录路径只走 mock 通道（微任务即可完成）；回退路径有真实文件 IO，

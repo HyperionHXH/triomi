@@ -10,6 +10,7 @@ import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/js/js_runtime.dart';
 import 'package:triomi/core/source/js/js_source.dart';
 import 'package:triomi/core/source/rule_schema.dart';
+import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/source_repository.dart';
 
@@ -570,12 +571,13 @@ void main() {
 
       expect(snapshot.failures, isEmpty);
       final entry = snapshot.entries.single;
+      await (entry.source as JsSource).initialize();
       expect(entry.descriptor.id, 'js-source');
       expect(entry.supports(SourceCapability.search), isTrue);
       expect(entry.supports(SourceCapability.content), isFalse);
     });
 
-    test('脚本语法错 → 进失败列表（坏规则不能静默消失）', () async {
+    test('坏脚本保持可见并仅在实际调用时报告错误', () async {
       final db = openTestDatabase();
       addTearDown(db.close);
       final repository = SourceRepository(db);
@@ -595,10 +597,17 @@ void main() {
       );
       final snapshot = await registry.load();
 
-      expect(snapshot.entries, isEmpty);
-      expect(snapshot.failures, hasLength(1));
-      expect(snapshot.failures.single.id, 'js-broken');
-      expect(snapshot.failures.single.message, contains('SyntaxError'));
+      final source = snapshot.entries.single.source as SearchProvider;
+      await expectLater(
+        source.search('probe'),
+        throwsA(
+          isA<SourceException>().having(
+            (error) => error.type,
+            'type',
+            SourceErrorType.parse,
+          ),
+        ),
+      );
     });
 
     test('引擎不可用 → 同样进失败列表而不是崩溃', () async {

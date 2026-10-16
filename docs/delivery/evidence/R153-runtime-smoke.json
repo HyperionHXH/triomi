@@ -1,0 +1,32 @@
+{
+  "recordedAt": "2026-10-16T11:15:42.018941Z",
+  "environment": "Windows host; production Dio client and BangumiSource; real loopback and HTTPS",
+  "httpCancellation": {
+    "cancelledTransportReturnedError": true,
+    "cancelElapsedMs": 25,
+    "peerStatus": 200,
+    "peerBodyExact": true,
+    "peerCancelled": false
+  },
+  "publicMetadata": [
+    {
+      "status": "ok",
+      "detailMs": 713,
+      "totalMs": 1050,
+      "title": "葬送的芙莉莲",
+      "subjectId": "400602",
+      "episodes": 36,
+      "playableUrls": 0
+    },
+    {
+      "status": "ok",
+      "detailMs": 0,
+      "totalMs": 339,
+      "title": "葬送的芙莉莲",
+      "subjectId": "400602",
+      "episodes": 36,
+      "playableUrls": 0
+    }
+  ],
+  "scope": "HTTP transport and production public adapter only; not UI, video first frame or performance percentiles"
+}

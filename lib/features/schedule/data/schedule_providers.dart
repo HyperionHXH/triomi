@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/source/http_client.dart';
 import '../../../core/source/source_providers.dart';
 import '../data/bangumi_schedule_client.dart';
 
@@ -13,7 +14,7 @@ const String _scheduleBase = String.fromEnvironment(
 
 /// 每日放送数据源。
 ///
-/// 官方接口（`api.bgm.tv`）在部分网络下被 DNS 污染 / IP 黑洞，整页会一直转圈；
+/// 官方接口在部分网络下可能不可达；请求有界并遵从用户网络策略，
 /// 默认地址取不到时回退到公开镜像（Kazumi 同款做法）。用 dart-define 指到
 /// 夹具时不回退——夹具才是权威来源。
 final scheduleClientProvider = Provider<BangumiScheduleClient>((ref) {
@@ -26,8 +27,12 @@ final scheduleClientProvider = Provider<BangumiScheduleClient>((ref) {
 });
 
 /// 一周放送表。
-final weeklyScheduleProvider = FutureProvider<List<ScheduleDay>>((ref) async {
-  return ref.watch(scheduleClientProvider).fetchWeekly();
+final weeklyScheduleProvider = FutureProvider.autoDispose<List<ScheduleDay>>((
+  ref,
+) async {
+  final owner = SourceRequestCancellation();
+  ref.onDispose(owner.cancel);
+  return owner.run(() => ref.watch(scheduleClientProvider).fetchWeekly());
 });
 
 /// 夹具服务的封面是相对地址，这里统一补全；官方接口与镜像返回的都是绝对

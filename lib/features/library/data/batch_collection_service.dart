@@ -8,11 +8,17 @@ class BatchCollectionService {
   BatchCollectionService(this.database);
   final AppDatabase database;
 
-  Future<({int added, int kept})> add(Iterable<MediaItem> candidates) async {
+  Future<({int added, int kept})> add(
+    Iterable<MediaItem> candidates, {
+    required MediaType type,
+  }) async {
+    if (type == MediaType.anime) {
+      throw ArgumentError('番剧请使用追番。');
+    }
     final snapshot = <(String, String), MediaItem>{};
     for (final item in candidates) {
-      if (item.type == MediaType.anime || item.sourceId.isEmpty || item.remoteId.isEmpty) {
-        throw ArgumentError('批量阅读收藏只接受具有完整来源身份的漫画和小说；番剧请使用追番。');
+      if (item.type != type || item.sourceId.isEmpty || item.remoteId.isEmpty) {
+        throw ArgumentError('批量收藏只能处理当前模块且具有完整来源身份的作品。');
       }
       snapshot.putIfAbsent((item.sourceId, item.remoteId), () => item);
     }
@@ -25,6 +31,9 @@ class BatchCollectionService {
           kept++;
         } else {
           final cached = await library.itemByKey(item.sourceId, item.remoteId);
+          if (cached != null && cached.type != type) {
+            throw StateError('本地作品类型与当前模块不一致，未修改任何收藏。');
+          }
           await library.addToLibrary(cached ?? item);
           added++;
         }

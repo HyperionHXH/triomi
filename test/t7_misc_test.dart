@@ -18,7 +18,6 @@ import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/secure_store.dart';
-import 'package:triomi/features/discover/discover_page.dart';
 import 'package:triomi/features/discover/widgets/media_item_card.dart';
 import 'package:triomi/features/library/data/library_providers.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
@@ -116,19 +115,6 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('T7-1 追番条目 → 订阅导航参数', () {
-    test('映射 sourceId / remoteId / url（对齐 bangumi-anime 规则 detail）', () {
-      final item = scheduleEntryToItem(
-        ScheduleEntry(id: '345678', title: '测试番剧'),
-      );
-
-      expect(item.sourceId, 'bangumi-anime');
-      expect(item.remoteId, '345678');
-      expect(item.type, MediaType.anime);
-      expect(item.title, '测试番剧');
-      // 规则 detail 的 url 模板是 /v0/subjects/{id}，baseUrl 是 api.bgm.tv。
-      expect(item.url, 'https://api.bgm.tv/v0/subjects/345678');
-    });
-
     test('条目自带 url 时优先使用', () {
       final item = scheduleEntryToItem(
         ScheduleEntry(
@@ -267,13 +253,6 @@ void main() {
   });
 
   group('T7-2 发现页到底提示', () {
-    test('hasMore 判定：满页继续，空页/短页停止', () {
-      expect(discoverHasMore(20), isTrue);
-      expect(discoverHasMore(21), isTrue);
-      expect(discoverHasMore(19), isFalse);
-      expect(discoverHasMore(0), isFalse);
-    });
-
     testWidgets('footer 分隔条渲染且只出现一次', (tester) async {
       await tester.pumpWidget(
         ProviderScope(

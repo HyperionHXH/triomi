@@ -4,10 +4,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_exception.dart';
+import 'package:triomi/core/source/bangumi_public_client.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/kazumi_repository.dart';
 import 'package:triomi/core/source/kazumi_source.dart';
@@ -15,11 +17,13 @@ import 'package:triomi/core/source/rule_schema.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/source_repository.dart';
+import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/features/detail/anime_info_repository.dart';
 import 'package:triomi/features/discover/anime_recommendations.dart';
 import 'package:triomi/features/player/episode_selector.dart';
 
 import 'fixtures/fake_http_client.dart';
+import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
 
 Map<String, Object?> rule({String version = '1.1'}) => {
@@ -57,9 +61,8 @@ Map<String, Object?> subject(int id) => {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  test('首页连接失败切换镜像，追加保持同一排行榜及正确偏移', () async {
+  test('公开推荐分页始终保持同一排行榜及正确偏移', () async {
     final http = FakeHttpClient((r) async {
-      if (r.url.contains('next.bgm.tv')) throw StateError('offline');
       return SourceResponse(
         statusCode: 200,
         body: jsonEncode({
@@ -67,17 +70,14 @@ void main() {
         }),
       );
     });
-    final repo = AnimeRecommendationRepository(http);
+    final repo = AnimeRecommendationRepository(BangumiPublicClient(http));
     final first = await repo.load(0);
     expect(first.items, hasLength(24));
     expect(repo.usesMirror, true);
     await repo.load(first.nextOffset);
     expect(http.requests.last.url, contains('api.kazumi.fyi'));
     expect(http.requests.last.url, contains('offset=24'));
-    expect(
-      http.requests.where((r) => r.url.contains('next.bgm.tv')),
-      hasLength(1),
-    );
+    expect(http.requests.where((r) => r.url.contains('next.bgm.tv')), isEmpty);
   });
   test('Kazumi 子树 XPath 保留不同作品及独立播放列表', () async {
     final http = routingHttpClient({
@@ -181,7 +181,8 @@ void main() {
         }),
       ),
     );
-    final page = await AnimeRecommendationRepository(http).load(24);
+    final page = await AnimeRecommendationRepository(BangumiPublicClient(http))
+        .load(24);
     expect(page.items.single.remoteId, '1');
     expect(page.items.single.sourceId, 'bangumi-anime');
     expect(page.nextOffset, 27);
@@ -226,16 +227,31 @@ void main() {
     expect(find.text('第51集'), findsNothing);
   });
   testWidgets('刷新替换旧推荐且等待网络完成', (tester) async {
+    final db = openTestDatabase();
     final first = Completer<AnimeRecommendationPage>();
     final repository = ControlledRecommendations(first);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          animeRecommendationRepositoryProvider.overrideWithValue(repository),
-          sourceHttpClientProvider.overrideWithValue(FakeHttpClient(
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        preferencesProvider.overrideWithValue(memoryPreferences()),
+        animeRecommendationRepositoryProvider.overrideWithValue(repository),
+        sourceHttpClientProvider.overrideWithValue(
+          FakeHttpClient(
             (_) async => const SourceResponse(statusCode: 200, body: ''),
-          )),
-        ],
+          ),
+        ),
+      ],
+    );
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(() async {
+        container.dispose();
+        await db.close();
+      });
+    });
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
         child: const MaterialApp(home: Scaffold(body: AnimeRecommendations())),
       ),
     );
@@ -268,7 +284,9 @@ MediaItem constItem(int id) => MediaItem(
 class ControlledRecommendations extends AnimeRecommendationRepository {
   ControlledRecommendations(this.first)
     : super(
-        FakeHttpClient((_) async => throw StateError('unexpected network')),
+        BangumiPublicClient(
+          FakeHttpClient((_) async => throw StateError('unexpected network')),
+        ),
       );
   final Completer<AnimeRecommendationPage> first;
   final refresh = Completer<AnimeRecommendationPage>();

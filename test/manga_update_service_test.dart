@@ -13,6 +13,7 @@ import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_descriptor.dart';
 import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_registry.dart';
+import 'package:triomi/features/library/data/library_category.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/library/data/manga_update_background.dart';
 import 'package:triomi/features/library/data/manga_update_execution_lock.dart';
@@ -98,6 +99,53 @@ void main() {
     services.add(s);
     return s;
   }
+
+  test('category update selection evaluates scoped dynamic rules instead of stale links', () async {
+    await seed('s', 'included');
+    await seed('s', 'excluded');
+    final manga = await library.saveCategory(
+      type: MediaType.manga,
+      name: '本模块',
+      rule: const LibraryCategoryRule(query: 'included'),
+    );
+    final novel = await library.saveCategory(
+      type: MediaType.novel,
+      name: '其他模块',
+      rule: const LibraryCategoryRule(matchAll: true),
+    );
+    var calls = 0;
+    add(
+      UpdateSource('s', (item) async {
+        calls++;
+        return [
+          Chapter(
+            sourceId: 's',
+            remoteId: '${item.remoteId}-old',
+            title: 'old',
+          ),
+          Chapter(
+            sourceId: 's',
+            remoteId: '${item.remoteId}-new',
+            title: 'new',
+          ),
+        ];
+      }),
+    );
+    final wrongScope = service(
+      options: MangaUpdateOptions(categories: {novel}),
+    );
+    await wrongScope.enqueue();
+    expect(await db.select(db.mangaUpdates).get(), isEmpty);
+    final scoped = service(options: MangaUpdateOptions(categories: {manga}));
+    await scoped.enqueue();
+    expect(
+      (await db.select(db.mangaUpdates).get()).single.remoteId,
+      'included',
+    );
+    await scoped.run();
+    expect(calls, 1);
+    expect((await db.select(db.mangaUpdates).get()).single.status, 'success');
+  });
 
   test('empty or disabled sources preserve cached directory and unread while another source succeeds', () async {
     await seed('empty', 'a');

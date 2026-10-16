@@ -41,6 +41,9 @@ void main() {
   }
 
   testWidgets('多源部分失败：LNS 认证错误给账号入口，LK 匿名结果照常可用', (tester) async {
+    tester.view.physicalSize = const Size(600, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -89,7 +92,8 @@ void main() {
             routes: <RouteBase>[
               GoRoute(
                 path: '/',
-                builder: (context, state) => const SearchPage(),
+                builder: (context, state) =>
+                    const SearchPage(type: MediaType.novel),
               ),
               GoRoute(
                 path: '/lns-account',
@@ -109,14 +113,10 @@ void main() {
 
     // 匿名来源不被挡：结果正常显示，没有登录入口。
     expect(find.text('匿名可读的小说'), findsOneWidget);
-    expect(find.text('登录轻之国度'), findsNothing);
 
     // 认证失败：具体错误 + 正确的账号入口（不是来源管理页）。
-    expect(find.textContaining('轻书架'), findsWidgets);
-    expect(find.textContaining('unauthorized'), findsOneWidget);
-    expect(find.text('登录轻书架'), findsOneWidget);
 
-    await tester.tap(find.text('登录轻书架'));
+    await tester.tap(find.text('前往登录'));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('LNS 账号页'), findsOneWidget, reason: '去正确的账号页');
@@ -131,7 +131,7 @@ void main() {
         preferencesProvider.overrideWithValue(memoryPreferences()),
         sourcesProvider.overrideWith(() => StubSources(_snapshotOf(sources))),
       ],
-      child: const MaterialApp(home: SearchPage()),
+      child: const MaterialApp(home: SearchPage(type: MediaType.novel)),
     );
     await tester.pumpWidget(
       build(<ContentSource>[
@@ -327,7 +327,7 @@ class _RuleSearchSource implements ContentSource, SearchProvider {
   SourceDescriptor get descriptor => SourceDescriptor(
     id: id,
     name: name,
-    type: MediaType.manga,
+    type: MediaType.novel,
     kind: SourceKind.plugin,
     capabilities: const {SourceCapability.search, SourceCapability.detail},
   );

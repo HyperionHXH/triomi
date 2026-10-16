@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
@@ -7,36 +8,101 @@ import '../../core/db/app_database.dart';
 import '../../core/db/database_provider.dart';
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
+import '../../core/source/bangumi_public_client.dart';
 import '../../core/source/http_client.dart';
-import '../../core/source/source_providers.dart';
 
 class AnimeFilter {
   const AnimeFilter({
-    this.tag = '',
+    this.tags = const <String>[],
     this.year,
     this.quarter,
-    this.format = '',
+    this.minScore,
+    this.maxScore,
     this.sort = 'heat',
+    this.onlyWatching = false,
+    this.hideCompleted = false,
+    this.hideDropped = false,
   });
-  final String tag, format, sort;
+
+  final List<String> tags;
   final int? year, quarter;
+  final double? minScore, maxScore;
+  final String sort;
+  final bool onlyWatching, hideCompleted, hideDropped;
+
+  AnimeFilter withTags(List<String> value) => AnimeFilter(
+    tags: value,
+    year: year,
+    quarter: quarter,
+    minScore: minScore,
+    maxScore: maxScore,
+    sort: sort,
+    onlyWatching: onlyWatching,
+    hideCompleted: hideCompleted,
+    hideDropped: hideDropped,
+  );
+
   bool get active =>
-      tag.isNotEmpty || year != null || format.isNotEmpty || sort != 'heat';
-  Map<String, Object?> get body => {
-    'keyword': '',
+      tags.isNotEmpty ||
+      year != null ||
+      quarter != null ||
+      minScore != null ||
+      maxScore != null ||
+      sort != 'heat' ||
+      onlyWatching ||
+      hideCompleted ||
+      hideDropped;
+
+  Map<String, Object?> get body => AnimePublicFilter(
+    tags: tags,
+    year: year,
+    quarter: quarter,
+    minScore: minScore,
+    maxScore: maxScore,
+    sort: sort,
+  ).toBody();
+
+  Map<String, Object?> toJson() => {
+    'version': 1,
+    'tags': tags,
+    'year': year,
+    'quarter': quarter,
+    'minScore': minScore,
+    'maxScore': maxScore,
     'sort': sort,
-    'filter': {
-      'type': [2],
-      'nsfw': false,
-      if (tag.isNotEmpty || format.isNotEmpty)
-        'tag': [if (tag.isNotEmpty) tag, if (format.isNotEmpty) format],
-      if (year != null)
-        'air_date': [
-          '>=${DateTime(year!, quarter == null ? 1 : (quarter! - 1) * 3 + 1).toIso8601String().substring(0, 10)}',
-          '<${DateTime(year!, quarter == null ? 13 : quarter! * 3 + 1).toIso8601String().substring(0, 10)}',
-        ],
-    },
+    'onlyWatching': onlyWatching,
+    'hideCompleted': hideCompleted,
+    'hideDropped': hideDropped,
   };
+
+  static AnimeFilter fromJson(Object? value) {
+    if (value is! Map || value['version'] != 1) return const AnimeFilter();
+    final sort = '${value['sort'] ?? 'heat'}';
+    return AnimeFilter(
+      tags: value['tags'] is List
+          ? [
+              for (final tag in value['tags'] as List)
+                if (tag is String) tag,
+            ]
+          : const [],
+      year: value['year'] is num ? (value['year'] as num).toInt() : null,
+      quarter: value['quarter'] is num
+          ? (value['quarter'] as num).toInt()
+          : null,
+      minScore: value['minScore'] is num
+          ? (value['minScore'] as num).toDouble()
+          : null,
+      maxScore: value['maxScore'] is num
+          ? (value['maxScore'] as num).toDouble()
+          : null,
+      sort: const ['heat', 'rank', 'score', 'date'].contains(sort)
+          ? sort
+          : 'heat',
+      onlyWatching: value['onlyWatching'] == true,
+      hideCompleted: value['hideCompleted'] == true,
+      hideDropped: value['hideDropped'] == true,
+    );
+  }
 }
 
 MediaItem bangumiItem(Map<Object?, Object?> node) {
@@ -55,6 +121,13 @@ MediaItem bangumiItem(Map<Object?, Object?> node) {
     rating: rating is Map ? double.tryParse('${rating['score']}') : null,
     description: node['summary']?.toString(),
     status: node['platform']?.toString(),
+    tags: [
+      for (final tag in node['tags'] is List ? node['tags'] as List : const [])
+        if (tag is Map && tag['name'] is String)
+          '${tag['name']}'
+        else if (tag is String)
+          tag,
+    ],
   );
 }
 
@@ -71,13 +144,27 @@ class AnimeInfoPage {
 }
 
 class AnimeInfoRepository {
-  AnimeInfoRepository(this.http, this.db);
-  final SourceHttpClient http;
+  AnimeInfoRepository(this.publicClient, this.db);
+  final BangumiPublicClient publicClient;
   final AppDatabase db;
-  static const headers = {
-    'User-Agent': 'Triomi/0.1.0 (https://github.com/HyperionHXH/triomi)',
-  };
-  Future<AnimeInfoPage> section(
+  final _inflight =
+      <
+        (String, String, int, SourceRequestCancellation?),
+        Future<AnimeInfoPage>
+      >{};
+
+  Future<AnimeInfoPage> section(String id, String section, {int offset = 0}) {
+    final key = (id, section, offset, SourceRequestCancellation.current);
+    return _inflight.putIfAbsent(key, () async {
+      try {
+        return await _section(id, section, offset: offset);
+      } finally {
+        unawaited(_inflight.remove(key));
+      }
+    });
+  }
+
+  Future<AnimeInfoPage> _section(
     String id,
     String section, {
     int offset = 0,
@@ -90,7 +177,11 @@ class AnimeInfoRepository {
         ? <String, dynamic>{}
         : Map<String, dynamic>.from(jsonDecode(item!.detailJson!) as Map);
     final key = '$section:$offset';
+
     AnimeInfoPage parse(Object? raw, {bool cached = false}) {
+      if (raw is Map && raw['format'] == 'bangumi-public-v1') {
+        raw = raw['payload'];
+      }
       final values = raw is List
           ? raw
           : raw is Map
@@ -109,29 +200,22 @@ class AnimeInfoRepository {
         hasMore:
             raw is Map &&
             values.isNotEmpty &&
-            (total is num ? next < total : values.length >= 20),
+            (total is num
+                ? next < total
+                : values.length >= (section == 'episodes' ? 100 : 20)),
         cached: cached,
       );
     }
 
     try {
-      final path = switch (section) {
-        'comments' =>
-          'https://next.bgm.tv/p1/subjects/$id/comments?limit=20&offset=$offset',
-        'episodes' =>
-          'https://api.bgm.tv/v0/episodes?subject_id=$id&limit=100&offset=$offset',
-        'info' => 'https://api.bgm.tv/v0/subjects/$id',
-        _ => 'https://api.bgm.tv/v0/subjects/$id/$section',
-      };
-      final response = await http.send(
-        SourceRequest(url: path, headers: headers),
-        sourceId: 'bangumi-anime',
-      );
-      if (!response.isSuccess) {
-        throw StateError('资料HTTP ${response.statusCode}');
+      final Object? raw;
+      if (section == 'info') {
+        raw = [await publicClient.subject(id)];
+      } else if (section == 'episodes') {
+        raw = {'data': await publicClient.episodes(id, offset: offset)};
+      } else {
+        raw = await publicClient.section(id, section, offset: offset);
       }
-      final decoded = jsonDecode(response.body);
-      final raw = section == 'info' ? [decoded] : decoded;
       final result = parse(raw);
       if (item != null) {
         await db.transaction(() async {
@@ -141,7 +225,11 @@ class AnimeInfoRepository {
               : Map<String, dynamic>.from(
                   jsonDecode(current!.detailJson!) as Map,
                 );
-          merged[key] = raw;
+          merged[key] = {
+            'format': 'bangumi-public-v1',
+            'updatedAt': DateTime.now().toUtc().toIso8601String(),
+            'payload': raw,
+          };
           await (db.update(db.mediaItems)..where(
                 (t) =>
                     t.sourceId.equals('bangumi-anime') & t.remoteId.equals(id),
@@ -161,7 +249,7 @@ class AnimeInfoRepository {
 
 final animeInfoRepositoryProvider = Provider(
   (ref) => AnimeInfoRepository(
-    ref.watch(sourceHttpClientProvider),
+    ref.watch(bangumiPublicClientProvider),
     ref.watch(databaseProvider),
   ),
 );

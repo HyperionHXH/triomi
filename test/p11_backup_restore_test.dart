@@ -39,7 +39,12 @@ void main() {
         );
     final category = await source
         .into(source.categories)
-        .insert(CategoriesCompanion.insert(name: 'Keep'));
+        .insert(
+          CategoriesCompanion.insert(
+            name: 'Keep',
+            module: const Value('manga'),
+          ),
+        );
     await source
         .into(source.libraryCategoryLinks)
         .insert(
@@ -105,6 +110,10 @@ void main() {
     await service.importFromBytes(bytes, options: options);
     await service.importFromBytes(bytes, options: options);
     expect((await target.select(target.categories).getSingle()).name, 'Keep');
+    expect(
+      (await target.select(target.categories).getSingle()).module,
+      'manga',
+    );
     expect(
       (await target.select(target.libraryCategoryLinks).getSingle()).categoryId,
       (await target.select(target.categories).getSingle()).id,

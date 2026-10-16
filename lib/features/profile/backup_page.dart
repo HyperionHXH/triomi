@@ -105,9 +105,13 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('同时备份APK包'),
-                  subtitle: const Text('仅本次本地导出，默认关闭；含已安装或待确认的包文件与签名身份，不含发布者信任。恢复只暂存，加载前逐包确认。'),
+                  subtitle: const Text(
+                    '仅本次本地导出，默认关闭；含已安装或待确认的包文件与签名身份，不含发布者信任。恢复只暂存，加载前逐包确认。',
+                  ),
                   value: _includeApkPackages,
-                  onChanged: _busy ? null : (value) => setState(() => _includeApkPackages = value),
+                  onChanged: _busy
+                      ? null
+                      : (value) => setState(() => _includeApkPackages = value),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 FilledButton.icon(
@@ -148,11 +152,12 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                   title: const Text('每日自动本地备份'),
                   subtitle: Text(
                     Platform.isWindows
-                      ? 'Windows 每日 03:00 或登录后执行（仅当前用户登录且应用关闭时）；只备份元数据，不含封面、正文、媒体、规则、APK 或凭据，不联网、不上传，旧备份保留。'
-                      : 'Android 约每日执行，电量不足延后；不联网取封面、不上传。授权目录不可用时回退私有目录；旧备份保留。',
+                        ? 'Windows 每日 03:00 或登录后执行（仅当前用户登录且应用关闭时）；只备份元数据，不含封面、正文、媒体、规则、APK 或凭据，不联网、不上传，旧备份保留。'
+                        : 'Android 约每日执行，电量不足延后；不联网取封面、不上传。授权目录不可用时回退私有目录；旧备份保留。',
                   ),
                   value: _scheduledBackup,
-                  onChanged: _busy || !(Platform.isAndroid || Platform.isWindows)
+                  onChanged:
+                      _busy || !(Platform.isAndroid || Platform.isWindows)
                       ? null
                       : _toggleScheduledBackup,
                 ),
@@ -455,6 +460,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
       final preview = await previewBackupRestoreFile(
         ref.read(databaseProvider),
         path,
+        preferences: ref.read(preferencesProvider),
         apkFiles: await ref.read(backupServiceProvider).openApkFiles(),
       );
       if (!mounted) return;
@@ -473,7 +479,8 @@ class _BackupPageState extends ConsumerState<BackupPage> {
           );
       // 导入写的是数据库，书架/历史是内存里的 AsyncNotifier：不刷新就要
       // 重启才看得到。
-      ref.invalidate(libraryProvider);
+      ref.invalidate(libraryByTypeProvider);
+      ref.invalidate(libraryCategoriesForTypeProvider);
       ref.invalidate(historyProvider);
       ref.invalidate(sourcesProvider);
       if (!mounted) return;

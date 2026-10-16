@@ -42,7 +42,8 @@ class LibraryCategoryRule {
         (type == null || view.item.type == type) &&
         (unread == null || (view.entry.unreadCount > 0) == unread) &&
         (status.trim().isEmpty ||
-            view.item.status?.trim().toLowerCase() == status.trim().toLowerCase()) &&
+            view.item.status?.trim().toLowerCase() ==
+                status.trim().toLowerCase()) &&
         (localStatus.isEmpty || view.entry.status == localStatus) &&
         localLibraryQueryMatches(view, needle);
   }
@@ -61,15 +62,20 @@ class LibraryCategoryRule {
   static LibraryCategoryRule decode(String raw) {
     try {
       final data = jsonDecode(raw);
-      if (data is! Map || data['version'] != 1 || data['sources'] is! List ||
+      if (data is! Map ||
+          data['version'] != 1 ||
+          data['sources'] is! List ||
           (data['sources'] as List).any((s) => s is! String) ||
           (data['unread'] != null && data['unread'] is! bool) ||
-          data['status'] is! String || data['query'] is! String ||
+          data['status'] is! String ||
+          data['query'] is! String ||
           (data['localStatus'] != null && data['localStatus'] is! String) ||
           data['matchAll'] is! bool) {
         return const LibraryCategoryRule(valid: false);
       }
-      final type = MediaType.values.where((t) => t.name == data['type']).firstOrNull;
+      final type = MediaType.values
+          .where((t) => t.name == data['type'])
+          .firstOrNull;
       if (data['type'] != null && type == null) {
         return const LibraryCategoryRule(valid: false);
       }
@@ -90,27 +96,34 @@ class LibraryCategoryRule {
   String describe(Map<String, String> labels) => !valid
       ? '规则无法识别，不匹配任何作品；请编辑规则'
       : [
-          if (sources.isNotEmpty) '来源：${(sources.toList()..sort()).map((s) => labels[s] ?? s).join('、')}',
+          if (sources.isNotEmpty)
+            '来源：${(sources.toList()..sort()).map((s) => labels[s] ?? s).join('、')}',
           if (type != null) '类型：${type!.label}',
           if (unread != null) unread! ? '有未读' : '无未读',
           if (status.trim().isNotEmpty) '状态：${status.trim()}',
           if (localStatus.isNotEmpty) '阅读状态：$localStatus',
           if (query.trim().isNotEmpty) '标题/作者/标签：${query.trim()}',
-          if (sources.isEmpty && type == null && unread == null && status.trim().isEmpty && localStatus.isEmpty && query.trim().isEmpty)
+          if (sources.isEmpty &&
+              type == null &&
+              unread == null &&
+              status.trim().isEmpty &&
+              localStatus.isEmpty &&
+              query.trim().isEmpty)
             matchAll ? '显式匹配全部作品' : '空规则：不匹配任何作品',
         ].join(' · ');
 }
 
 bool localLibraryQueryMatches(LibraryItemView view, String query) {
   final needle = query.trim().toLowerCase();
-  return needle.isEmpty || view.item.title.toLowerCase().contains(needle) ||
+  return needle.isEmpty ||
+      view.item.title.toLowerCase().contains(needle) ||
       (view.item.author?.toLowerCase().contains(needle) ?? false) ||
       view.item.tags.any((tag) => tag.toLowerCase().contains(needle));
 }
 
 /// A single snapshot applies hidden precedence before query/count/action selection.
 class LibraryCategorySnapshot {
-  LibraryCategorySnapshot(this.categories, this.links) {
+  LibraryCategorySnapshot(this.categories, this.links, {this.type}) {
     for (final category in categories) {
       if (category.rulesJson != null) {
         _rules[category.id] = LibraryCategoryRule.decode(category.rulesJson!);
@@ -123,32 +136,43 @@ class LibraryCategorySnapshot {
 
   final List<CategoryRow> categories;
   final List<LibraryCategoryLinkRow> links;
+  final MediaType? type;
   final _rules = <int, LibraryCategoryRule>{};
   final _members = <int, Set<(String, String)>>{};
 
   bool belongs(CategoryRow category, LibraryItemView view) =>
-      category.rulesJson != null
+      category.module == view.entry.type.name &&
+      category.module == view.item.type.name &&
+      (category.rulesJson != null
           ? _rules[category.id]!.matches(view)
-          : (_members[category.id]?.contains((view.item.sourceId, view.item.remoteId)) ?? false);
+          : (_members[category.id]?.contains((
+                  view.item.sourceId,
+                  view.item.remoteId,
+                )) ??
+                false));
 
   bool isHidden(LibraryItemView view) =>
       categories.any((category) => category.hidden && belongs(category, view));
 
-  bool matches(LibraryItemView view, {
+  bool matches(
+    LibraryItemView view, {
     int? categoryId,
     bool revealHidden = false,
     String query = '',
     String? source,
     bool unreadOnly = false,
   }) {
+    if (type != null && (view.entry.type != type || view.item.type != type)) {
+      return false;
+    }
     final category = categories.where((c) => c.id == categoryId).firstOrNull;
     // Deleted/stale category selection must never reveal ordinary all.
     if (categoryId != null && category == null) return false;
     return (category == null || belongs(category, view)) &&
-      (revealHidden || category?.hidden == true || !isHidden(view)) &&
-      (source == null || view.item.sourceId == source) &&
-      (!unreadOnly || view.entry.unreadCount > 0) &&
-      localLibraryQueryMatches(view, query);
+        (revealHidden || category?.hidden == true || !isHidden(view)) &&
+        (source == null || view.item.sourceId == source) &&
+        (!unreadOnly || view.entry.unreadCount > 0) &&
+        localLibraryQueryMatches(view, query);
   }
 
   List<LibraryItemView> visible(
@@ -159,9 +183,17 @@ class LibraryCategorySnapshot {
     String? source,
     bool unreadOnly = false,
   }) {
-    return entries.where((view) => matches(view,
-      categoryId: categoryId, revealHidden: revealHidden,
-      query: query, source: source, unreadOnly: unreadOnly,
-    )).toList();
+    return entries
+        .where(
+          (view) => matches(
+            view,
+            categoryId: categoryId,
+            revealHidden: revealHidden,
+            query: query,
+            source: source,
+            unreadOnly: unreadOnly,
+          ),
+        )
+        .toList();
   }
 }

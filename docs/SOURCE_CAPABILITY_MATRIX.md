@@ -1,12 +1,12 @@
 # 来源能力矩阵与生产/夹具边界（D75）
 
-> 更新：2026-10-16（C151）。来源管理按番剧/漫画/小说分开，添加入口沿各自规则/扩展/站点流程；Mihon已安装列表独立于远端仓库，支持范围不因UI改版扩大。当前产物、问题和剩余验收以[CURRENT_STATUS](CURRENT_STATUS.md#剩余主线)为准；下方带轮次记录保留历史事实。
+> 更新：2026-10-16（R153四工作区已实现，平台验收仍partial）。追番/漫画/小说是独立工作区；公开资料后端与播放来源分开，来源元数据注册不提前执行全部JS，实际调用时验证导出。Mihon执行仍只在Android，支持范围不因UI改版扩大。当前产物、问题和剩余验收以[CURRENT_STATUS](CURRENT_STATUS.md#剩余主线)为准；下方带轮次记录保留历史事实。
 
 ## 来源矩阵
 
 | 来源 | 类型 | discover | search | detail | content | 播放线路 | 生产/调试 | 证据 |
 |---|---|---|---|---|---|---|---|---|
-| `bangumi-anime.json`（Bangumi 番剧资料） | anime | ❌ | ✅ | ✅ | ❌ | **无**——资料源，不提供正片 | 生产（随包） | 规则文件 `capabilities: [search, detail]` |
+| `bangumi-anime.json`（Bangumi 番剧资料） | anime | ❌ | ✅ | ✅ | ❌ | **无**——资料源，不提供正片 | 生产随包身份，官方base的公开读取由专用v0/p1 Adapter处理 | R153生产HTTPS详情713ms、36集总1050ms，缓存后339ms；0个可播放URL。账号请求不转发公开兼容后端；仅当前主机样本，不代表全站/设备网络 |
 | `local-fixture.json`（本地夹具·漫画） | manga | ✅ | ✅ | ✅ | ✅（图片） | 图片页，仅夹具服务器 | **debug且显式开发开关** | `source_registry.dart` 的 `developmentSourcesEnabled` |
 | `local-fixture-anime.json`（本地夹具·番剧） | anime | ✅ | ✅ | ✅ | ✅（mp4/HLS） | 夹具 sample.mp4/m3u8，**不是真实番剧** | **仅调试** | 同上 |
 | `local-fixture-novel.json`（本地夹具·小说） | novel | ✅ | ✅ | ✅ | ✅（文本） | — | **仅调试** | 同上 |
@@ -15,10 +15,15 @@
 | 用户 Mihon APK 仓库 | manga | ✅ | ✅ | ✅ | ✅（插件图片） | — | Android 宿主真实验收；不代表全仓库兼容 | MangaDex 1.6、拷贝漫画 1.4、Jinman 1.6.59 阅读/重启；Jinman 原始来源设置与图片还原通过；十八漫画 1.6 加载成功但站点超时 |
 | `age-anime-js.json` v1.0.1 | anime | ✅（首页最新） | ✅ | ✅（分线路） | ✅（网页 PlaySource） | Android WebView 解析到实际 HLS/MP4 | 随包播种，可从目录更新；本轮 Android 实测 | C99 芙莉莲线路 2 第 08 集 24:49 正片；线路 1 错误卡明确拒绝 |
 | Kazumi 7sefun v1.3 / MXdm v2.4 / DM84 v1.4 | anime | ❌（推荐独立） | ✅ | ✅（站内播放列表） | ✅（网页/直接流） | 各站各列表独立，不冒充多个网站 | C124随包MIT原规则、支持XPath子集 | 三站真实网络搜索/目录见C124-kazumi-live-network；7sefun设备视频另记，不宣称三站全视频通过 |
-| 推荐服务（非播放provider） | anime | 24条触底分页/刷新 | — | 跳到Bangumi资料 | ❌ | 不生成播放地址 | Bangumi trending / Kazumi公开镜像 | C124原始offset推进/去重/失败重试，镜像追加固定同backend |
+| 推荐服务（非播放provider） | anime | 24条触底分页/刷新 | — | 跳到Bangumi资料 | ❌ | 不生成播放地址 | 公开推荐与v0搜索采用各自合法响应Adapter | 分页使用原始rows/offset，筛选切换清后端游标；公开资料镜像说明在界面可见，不传凭据 |
 | `archive-animation-js.json` v1.0.1 | anime | ✅ | ✅ | ✅ | ✅（MP4 契约） | 显式 MP4 文件地址 | 动画馆藏候选，网络未通过 | D87 真实请求超时；QuickJS 离线契约通过 |
 | 轻之国度 LK（内置适配器） | novel | ✅ | ✅ | ✅ | ✅ | —（正文） | 生产；公开内容可匿名，账号/付费另需权限 | C125双API本人登录/书架2/非0未读/重复合并稳定、20章/19471字符及缓存/TXT/EPUB；有界LK DNS回退保留TLS校验 |
 | 轻书架 LNS（内置适配器） | novel | ✅（账号） | 声明支持，未独立复验 | ✅（账号） | ✅（正文/字体） | — | 生产，真实接口需要会话；整书官方站点下载 | C125双API本人登录/169章/4124字符/专用字体/缓存；游客及无效会话拒绝；CanDownload=false、DownloadCost=200；整书重打包拒绝，不扣金币 |
+
+R153请求生命周期：Dio已接每操作取消，真实loopback取消25ms并保留同客户端并行200；JS worker宿主使用parentId和各调用Zone归属，取消HTTP不终止其他来源会话。同步native JS仍依赖既有watchdog/销毁终止；Mihon/SignalR没有物理取消的调用允许在途完成但禁止过期结果发布，不宣称已停止。漫画来源明确不支持搜索时不请求，能力未知仍尝试，不从空结果推断不支持。
+
+C153最终Android实际旅程：公开推荐/FX资料、保留原7sefun映射与21集目录、已下载小林第01集24:22/25:11真帧；MangaDex无需命名订阅确认→单源最近更新20部→原书库第76.2话5/14双页真图。该漫画是JS/API来源，不新增APK执行主张。API26/正式包原LK缓存正文20/22、3/37可读，双API小说已下载书架冷启恢复。上述在线API35临时经普通CONNECT代理解决模拟器DNS问题，结束恢复默认网络、停止临时服务；不证明默认网络可达或新网页视频解析。当前整套974通过/3跳过、85Python、analyze无问题；Windows仅本轮最终构建与50成员打包通过，缺专用桌面接口，当前UI旅程未验。完整边界见[C153](delivery/evidence/C153-final-acceptance.json)。
+
 
 ## 边界规则（守卫测试逐条断言）
 

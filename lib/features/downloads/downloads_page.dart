@@ -18,7 +18,8 @@ import 'data/video_downloader.dart';
 
 /// 下载管理：按作品分组展示队列与已完成内容。
 class DownloadsPage extends ConsumerStatefulWidget {
-  const DownloadsPage({super.key});
+  const DownloadsPage({super.key, this.type});
+  final MediaType? type;
 
   @override
   ConsumerState<DownloadsPage> createState() => _DownloadsPageState();
@@ -36,34 +37,40 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final groups = ref.watch(downloadGroupsProvider);
+    final groups = ref
+        .watch(downloadGroupsProvider)
+        .whenData(
+          (rows) => [
+            for (final row in rows)
+              if (widget.type == null || row.type == widget.type) row,
+          ],
+        );
     final wifiOnly = ref.watch(downloadWifiOnlyProvider);
 
     return PageScaffold(
-      title: '下载管理',
+      title: widget.type == null ? '下载管理' : '${widget.type!.label}下载',
       actions: <Widget>[
-        IconButton(
-          tooltip: '暂停队列',
-          onPressed: () =>
-              unawaited(ref.read(downloadsProvider.notifier).pauseAll()),
-          icon: const Icon(Icons.pause),
-        ),
-        IconButton(
-          tooltip: '恢复暂停任务',
-          onPressed: () =>
-              unawaited(ref.read(downloadsProvider.notifier).resumePaused()),
-          icon: const Icon(Icons.play_arrow),
-        ),
-        IconButton(
-          tooltip: '重试失败项',
-          onPressed: () =>
-              unawaited(ref.read(downloadsProvider.notifier).retryFailed()),
-          icon: const Icon(Icons.refresh),
-        ),
-        IconButton(
-          tooltip: '清理已完成记录',
-          onPressed: _confirmClear,
-          icon: const Icon(Icons.cleaning_services_outlined),
+        PopupMenuButton<String>(
+          tooltip: '下载操作',
+          onSelected: (value) {
+            final queue = ref.read(downloadsProvider.notifier);
+            switch (value) {
+              case 'pause':
+                unawaited(queue.pauseAll(type: widget.type));
+              case 'resume':
+                unawaited(queue.resumePaused(type: widget.type));
+              case 'retry':
+                unawaited(queue.retryFailed(type: widget.type));
+              case 'clear':
+                unawaited(_confirmClear());
+            }
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'pause', child: Text('暂停当前范围')),
+            PopupMenuItem(value: 'resume', child: Text('继续当前范围')),
+            PopupMenuItem(value: 'retry', child: Text('重试失败项')),
+            PopupMenuItem(value: 'clear', child: Text('清理无文件的已完成记录')),
+          ],
         ),
       ],
       child: RefreshIndicator(
@@ -82,7 +89,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                 child: SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: wifiOnly,
-                  title: const Text('仅 WiFi 下载'),
+                  title: const Text('仅 WiFi 下载（全部任务）'),
                   subtitle: const Text('移动网络下队列会暂停，回到 WiFi 自动继续'),
                   onChanged: (value) => unawaited(
                     ref.read(downloadsProvider.notifier).setWifiOnly(value),
@@ -124,7 +131,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                               onRetry: () => unawaited(
                                 ref
                                     .read(downloadsProvider.notifier)
-                                    .retryFailed(),
+                                    .retryFailed(type: widget.type),
                               ),
                               onOpen: () => unawaited(_openItem(group)),
                             ),
@@ -153,7 +160,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
           title: group.title,
         );
     if (!mounted) return;
-    unawaited(context.push(AppRoutes.detail, extra: item));
+    unawaited(context.push(AppRoutes.detailFor(item), extra: item));
   }
 
   Future<void> _confirmClear() async {
@@ -161,7 +168,9 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清理已完成记录'),
-        content: const Text('仅清理不含离线文件路径的已完成记录，缓存正文仍保留。漫画、视频和本地导入的文件索引会保留在列表中，确保仍可离线打开；需要删除文件时请移除该作品的下载。'),
+        content: const Text(
+          '仅清理不含离线文件路径的已完成记录，缓存正文仍保留。漫画、视频和本地导入的文件索引会保留在列表中，确保仍可离线打开；需要删除文件时请移除该作品的下载。',
+        ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -175,7 +184,9 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
       ),
     );
     if (confirmed == true) {
-      await ref.read(downloadsProvider.notifier).clearFinished();
+      await ref
+          .read(downloadsProvider.notifier)
+          .clearFinished(type: widget.type);
     }
   }
 }
@@ -212,8 +223,11 @@ class _DownloadGroupCard extends StatelessWidget {
         .length;
     // Paused browser jobs explain the foreground/unlock/source action needed.
     final failedReason = group.entries
-        .where((entry) => entry.status == DownloadStatus.failed ||
-            entry.status == DownloadStatus.paused)
+        .where(
+          (entry) =>
+              entry.status == DownloadStatus.failed ||
+              entry.status == DownloadStatus.paused,
+        )
         .map((entry) => entry.row.errorMessage?.trim())
         .whereType<String>()
         .where((message) => message.isNotEmpty)

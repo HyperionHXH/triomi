@@ -68,6 +68,7 @@ object MangaUpdatesRuntime {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "漫画更新", NotificationManager.IMPORTANCE_DEFAULT))
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
+        intent.putExtra("triomi_route", "/manga/updates")
         val pending = PendingIntent.getActivity(context, id.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val builder = android.app.Notification.Builder(context, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle(title).setContentText(body)

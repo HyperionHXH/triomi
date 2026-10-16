@@ -10,15 +10,30 @@ final libraryRepositoryProvider = Provider<LibraryRepository>(
   (ref) => LibraryRepository(ref.watch(databaseProvider)),
 );
 
-final libraryCategoriesProvider = StreamProvider<LibraryCategorySnapshot>(
-  (ref) => ref.watch(libraryRepositoryProvider).watchCategories(),
-);
+/// Every local module owns an immutable query scope. Hidden entries remain in
+/// the snapshot so its scoped category snapshot can apply visibility first.
+final libraryByTypeProvider =
+    StreamProvider.family<List<LibraryItemView>, MediaType>(
+      (ref, type) =>
+          ref.watch(libraryRepositoryProvider).watchLibrary(type: type),
+    );
 
-final _librarySnapshotProvider = StreamProvider<List<LibraryItemView>>(
-  (ref) => ref.watch(libraryRepositoryProvider).watchLibrary(
-    type: ref.watch(libraryFilterProvider),
-  ),
-);
+final libraryCategoriesForTypeProvider =
+    StreamProvider.family<LibraryCategorySnapshot, MediaType>(
+      (ref, type) =>
+          ref.watch(libraryRepositoryProvider).watchCategories(type: type),
+    );
+
+final libraryLastReadProvider =
+    StreamProvider.family<Map<(String, String), DateTime>, MediaType>(
+      (ref, type) => ref.watch(libraryRepositoryProvider).watchLastRead(type),
+    );
+
+final libraryTrackedKeysProvider =
+    StreamProvider.family<Set<(String, String)>, MediaType>(
+      (ref, type) =>
+          ref.watch(libraryRepositoryProvider).watchTrackedKeys(type),
+    );
 
 final _localSourceRowsProvider = StreamProvider(
   (ref) => ref
@@ -67,59 +82,10 @@ final animeFollowsProvider = StreamProvider<List<LibraryItemView>>(
   (ref) => ref.watch(libraryRepositoryProvider).watchAnimeFollows(),
 );
 
-/// 书架分类（漫画 / 小说 / 番剧兼容查看），默认漫画。
-///
-/// null 表示默认范围（漫画与小说）；`MediaType.anime` 只用于历史条目的
-/// 兼容查看（ADR-2026-10-05），新的动画收藏不进阅读书架。
-class LibraryFilterController extends Notifier<MediaType?> {
-  @override
-  MediaType? build() => MediaType.manga;
-
-  void set(MediaType? type) => state = type;
-}
-
-final libraryFilterProvider =
-    NotifierProvider<LibraryFilterController, MediaType?>(
-      LibraryFilterController.new,
-    );
-
-/// Raw local snapshot for the shelf and category editor; page visibility must
-/// be applied before counts or actions. Repository listLibrary hides by default.
-/// Live database changes update unread-driven rules without a source runtime.
-class LibraryController extends AsyncNotifier<List<LibraryItemView>> {
-  @override
-  Future<List<LibraryItemView>> build() {
-    final type = ref.watch(libraryFilterProvider);
-    ref.listen(_librarySnapshotProvider, (_, next) {
-      next.when(
-        data: (entries) => state = AsyncData(entries),
-        error: (error, stack) => state = AsyncError(error, stack),
-        loading: () {},
-      );
-    });
-    return ref.watch(libraryRepositoryProvider).listLibrary(type: type, revealHidden: true);
-  }
-
-  Future<void> refresh() async {
-    state = const AsyncValue<List<LibraryItemView>>.loading();
-    state = await AsyncValue.guard(
-      () => ref
-          .read(libraryRepositoryProvider)
-          .listLibrary(type: ref.read(libraryFilterProvider), revealHidden: true),
-    );
-  }
-
-  Future<void> remove(String sourceId, String remoteId) async {
-    await ref
-        .read(libraryRepositoryProvider)
-        .removeFromLibrary(sourceId, remoteId);
-    await refresh();
-  }
-}
-
-final libraryProvider =
-    AsyncNotifierProvider<LibraryController, List<LibraryItemView>>(
-      LibraryController.new,
+final historyByTypeProvider = FutureProvider.autoDispose
+    .family<List<HistoryView>, MediaType?>(
+      (ref, type) =>
+          ref.watch(libraryRepositoryProvider).recentHistory(type: type),
     );
 
 /// 阅读历史。
@@ -129,6 +95,7 @@ class HistoryController extends AsyncNotifier<List<HistoryView>> {
       ref.watch(libraryRepositoryProvider).recentHistory();
 
   Future<void> refresh() async {
+    ref.invalidate(historyByTypeProvider);
     state = const AsyncValue<List<HistoryView>>.loading();
     state = await AsyncValue.guard(
       () => ref.read(libraryRepositoryProvider).recentHistory(),

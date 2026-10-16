@@ -44,7 +44,7 @@ class _MigrationPlansPageState extends ConsumerState<MigrationPlansPage> {
           _error = '部分计划失败，原数据保留；查看单项错误';
         }
       }
-      ref.invalidate(libraryProvider);
+      ref.invalidate(libraryByTypeProvider);
       ref.invalidate(historyProvider);
     } finally {
       if (mounted) setState(() => _running = false);

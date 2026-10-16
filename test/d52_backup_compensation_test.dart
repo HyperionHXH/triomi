@@ -116,6 +116,37 @@ void main() {
   }
 
   group('数据库第 2/3+ 个写入失败：此前写入整体回滚', () {
+    test('legacy category split failure rolls back copies, links and scoped preference imports', () async {
+      await preferences.set('library.manga.sort', 'local');
+      await db.customStatement(
+        "CREATE TRIGGER fail_scoped_category BEFORE INSERT ON categories WHEN NEW.module = 'novel' BEGIN SELECT RAISE(ABORT, 'forced scoped category failure'); END",
+      );
+      final payload =
+          payloadOf(
+            mediaItems: [mediaItem('1')],
+            libraryEntries: [libraryRow('1')],
+            settings: {
+              'library.manga.sort': 'remote',
+              'library.novel.sort': 'remote',
+              'library.novel.layout': 'list',
+            },
+          )..addAll({
+            'categories': [
+              {'id': 10, 'name': '空旧分类', 'hidden': true},
+            ],
+          });
+      await expectLater(
+        serviceOf().importFromBytes(zipOf(payload)),
+        throwsA(isA<Object>()),
+      );
+      expect(await db.select(db.categories).get(), isEmpty);
+      expect(await db.select(db.libraryCategoryLinks).get(), isEmpty);
+      expect(await db.select(db.libraryEntries).get(), isEmpty);
+      expect(await db.select(db.mediaItems).get(), isEmpty);
+      expect(await db.select(db.backupImportJournals).get(), isEmpty);
+      expect(preferences.exportAll(), {'library.manga.sort': 'local'});
+    });
+
     test('第 2 类行（libraryEntries）类型错误：mediaItems 已回滚、设置已补偿', () async {
       await preferences.set('reader.theme', 'old');
       final payload = payloadOf(

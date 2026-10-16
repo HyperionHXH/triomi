@@ -88,6 +88,13 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _manageAccount() async {
+    await context.push(
+      '${AppRoutes.sources}?type=novel&account=light-novel-kingdom',
+    );
+    if (mounted) await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     return PageScaffold(
@@ -97,6 +104,11 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
           tooltip: '刷新',
           onPressed: _loading ? null : _load,
           icon: const Icon(Icons.refresh),
+        ),
+        IconButton(
+          tooltip: '账号登录与退出',
+          onPressed: _manageAccount,
+          icon: const Icon(Icons.manage_accounts_outlined),
         ),
       ],
       child: _buildBody(),
@@ -111,7 +123,7 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
         title: '还没有登录轻之国度',
         message: '登录后可以查看轻币余额、七日签到与站点消息。',
         action: FilledButton.icon(
-          onPressed: () => context.push('${AppRoutes.sources}?type=novel'),
+          onPressed: _manageAccount,
           icon: const Icon(Icons.login, size: 18),
           label: const Text('去登录'),
         ),

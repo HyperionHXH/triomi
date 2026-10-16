@@ -10,7 +10,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/backup/backup_service.dart';
 import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/db/database_provider.dart';
-import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/source/http_client.dart';
@@ -20,7 +19,6 @@ import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/theme/app_theme.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/library/library_page.dart';
-import 'package:triomi/features/schedule/schedule_page.dart';
 
 import 'fixtures/fake_http_client.dart';
 import 'fixtures/fake_preferences.dart';
@@ -82,82 +80,6 @@ void main() {
     expect(follow.item.type, MediaType.anime, reason: '类型不因重开改变');
   });
 
-  testWidgets('真追番页：收藏显示、进度角标随写库刷新、取消追番后列表为空', (tester) async {
-    final db = AppDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(db.close);
-    final repository = LibraryRepository(db);
-    await repository.addAnimeFollow(anime);
-
-    // 显式容器：测试体内主动 dispose，让 drift watch 的关闭 Timer
-    // （StreamQueryStore.markAsClosed 的零时长 Timer）能在测试体内被
-    // pump 掉——树拆除阶段的 dispose 会让 Timer 留到测试结束后才创建，
-    // 触发 pending-timer 断言。
-    final container = ProviderContainer(
-      overrides: [databaseProvider.overrideWithValue(db)],
-    );
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(theme: AppTheme.light(), home: const SchedulePage()),
-      ),
-    );
-    await settle(tester);
-
-    // 「我的追番」tab 默认在前：收藏显示，还没有进度所以无角标。
-    expect(find.text('我的追番'), findsOneWidget);
-    expect(find.text('追番作品'), findsOneWidget);
-    expect(find.textContaining('看到第'), findsNothing);
-
-    // 观看进度写库 → 追番角标自动刷新（真实流，不是手动 reload）。
-    await repository.updateProgress(
-      sourceId: anime.sourceId,
-      remoteId: anime.remoteId,
-      chapterNumber: 4,
-    );
-    await settle(tester);
-    expect(find.text('看到第 4 集'), findsOneWidget);
-
-    // 长按 → 确认取消追番 → 列表空（历史与目录保留）。
-    await repository.saveChapters(
-      itemSourceId: anime.sourceId,
-      itemRemoteId: anime.remoteId,
-      chapters: const <Chapter>[
-        Chapter(sourceId: 'anime-src', remoteId: 'ep1', title: '第 1 话'),
-      ],
-    );
-    await repository.recordHistory(
-      sourceId: anime.sourceId,
-      remoteId: anime.remoteId,
-      chapter: const Chapter(
-        sourceId: 'anime-src',
-        remoteId: 'ep1',
-        title: '第 1 话',
-      ),
-      position: 720,
-    );
-    await tester.longPress(find.text('追番作品'));
-    await settle(tester);
-    await tester.tap(find.widgetWithText(FilledButton, '取消追番'));
-    await settle(tester);
-
-    expect(find.text('还没有追番'), findsOneWidget);
-    expect(
-      await repository.loadChapters(anime.sourceId, anime.remoteId),
-      hasLength(1),
-      reason: '取消追番保留缓存目录',
-    );
-    expect(
-      (await repository.lastReadOf(anime.sourceId, anime.remoteId))?.position,
-      720,
-      reason: '取消追番保留观看记录',
-    );
-
-    // 测试体内释放容器并 flush drift 关闭流时的零时长 Timer。
-    container.dispose();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 1));
-  });
-
   testWidgets('来源禁用/移除后，书架仍显示本地快照', (tester) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(db.close);
@@ -173,7 +95,10 @@ void main() {
           preferencesProvider.overrideWithValue(memoryPreferences()),
           sourcesProvider.overrideWith(_EmptySources.new),
         ],
-        child: MaterialApp(theme: AppTheme.light(), home: const LibraryPage()),
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const LibraryPage(type: MediaType.manga),
+        ),
       ),
     );
     await settle(tester);

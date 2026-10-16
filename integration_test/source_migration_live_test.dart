@@ -211,7 +211,7 @@ void main() {
         unawaited(
           container
               .read(routerProvider)
-              .push<void>(AppRoutes.detail, extra: original),
+              .push<void>(AppRoutes.detailFor(original), extra: original),
         );
         await waitFor(find.byTooltip('复制到其他来源'));
         await tester.tap(find.byTooltip('复制到其他来源'));

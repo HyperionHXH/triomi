@@ -1,17 +1,23 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/source/bangumi_public_client.dart';
 import '../../core/source/http_client.dart';
-import '../../core/source/source_providers.dart';
+import '../../core/storage/preferences.dart';
 import '../detail/anime_filter_dialog.dart';
 import '../detail/anime_info_repository.dart';
 import '../discover/widgets/media_item_card.dart';
+import '../library/data/library_providers.dart';
+import 'data/schedule_providers.dart';
 
+/// Current and historical seasons share one retained calendar state. Only the
+/// upstream broadcast weekday is used; missing weekday is an explicit bucket.
 class SeasonSchedule extends ConsumerStatefulWidget {
-  const SeasonSchedule({super.key});
+  const SeasonSchedule({super.key, this.embedded = false});
+  final bool embedded;
+
   @override
   ConsumerState<SeasonSchedule> createState() => _SeasonScheduleState();
 }
@@ -21,72 +27,95 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
     year: DateTime.now().year,
     quarter: (DateTime.now().month - 1) ~/ 3 + 1,
   );
-  final _rows = <Map<Object?, Object?>>[];
-  var _epoch = 0, _offset = 0, _weekday = 0;
+  final _rows = <Map<String, Object?>>[];
+  int _generation = 0, _offset = 0;
+  int _weekday = DateTime.now().weekday;
   bool _busy = false, _more = true;
   String? _error;
+  SourceRequestCancellation? _owner;
+  final _weekdays = <String, int>{};
+
   @override
   void initState() {
     super.initState();
+    final saved = ref
+        .read(preferencesProvider)
+        .get<Object?>('anime.calendar.filter');
+    if (saved != null) _filter = AnimeFilter.fromJson(saved);
+    final weekday = ref
+        .read(preferencesProvider)
+        .get<int>('anime.calendar.weekday');
+    if (weekday != null && weekday >= -1 && weekday <= 7) _weekday = weekday;
     unawaited(_load(reset: true));
+  }
+
+  @override
+  void dispose() {
+    _generation++;
+    _owner?.cancel();
+    super.dispose();
   }
 
   Future<void> _load({bool reset = false}) async {
     if (_busy && !reset || !_more && !reset) return;
-    final epoch = reset ? ++_epoch : _epoch;
-    final filter = _filter;
+    final generation = reset ? ++_generation : _generation;
+    if (reset) _owner?.cancel();
+    final owner = _owner = SourceRequestCancellation();
     setState(() {
       _busy = true;
       _error = null;
-      if (reset) {
-        _rows.clear();
-        _offset = 0;
-        _more = true;
-      }
     });
     try {
-      final response = await ref
-          .read(sourceHttpClientProvider)
-          .send(
-            SourceRequest(
-              url:
-                  'https://api.bgm.tv/v0/search/subjects?limit=100&offset=$_offset',
-              method: 'POST',
-              headers: AnimeInfoRepository.headers,
-              bodyType: RequestBodyType.json,
-              body: jsonEncode(filter.body),
+      final page = await owner.run(
+        () => ref
+            .read(bangumiPublicClientProvider)
+            .search(
+              filter: AnimePublicFilter(
+                tags: _filter.tags,
+                year: _filter.year,
+                quarter: _filter.quarter,
+                minScore: _filter.minScore,
+                maxScore: _filter.maxScore,
+                sort: _filter.sort,
+              ),
+              offset: reset ? 0 : _offset,
+              limit: 100,
             ),
-            sourceId: 'bangumi-anime',
-          );
-      if (!response.isSuccess) throw StateError('季度资料暂不可用');
-      final raw = jsonDecode(response.body) as Map;
-      final rows = raw['data'] as List;
-      if (!mounted || epoch != _epoch) return;
+      );
+      if (!mounted || owner.cancelled || generation != _generation) return;
       setState(() {
-        final ids = _rows.map((r) => r['id']).toSet();
+        if (reset) _rows.clear();
+        final ids = _rows.map((row) => '${row['id']}').toSet();
         _rows.addAll(
-          rows.whereType<Map<Object?, Object?>>().where(
-            (r) => r['type'] == 2 && r['nsfw'] != true && ids.add(r['id']),
+          page.rows.where(
+            (row) =>
+                row['type'] == 2 &&
+                row['nsfw'] != true &&
+                ids.add('${row['id']}'),
           ),
         );
-        _offset += rows.length;
-        _more =
-            rows.isNotEmpty &&
-            (raw['total'] is num
-                ? _offset < (raw['total'] as num)
-                : rows.length >= 20);
+        _offset = page.nextOffset;
+        _more = page.hasMore;
       });
-    } catch (_) {
-      if (mounted && epoch == _epoch) setState(() => _error = '历史季暂不可用');
+    } catch (error) {
+      if (mounted && !owner.cancelled && generation == _generation) {
+        setState(() => _error = '季度资料暂不可用：$error');
+      }
     } finally {
-      if (mounted && epoch == _epoch) setState(() => _busy = false);
+      if (mounted && generation == _generation) setState(() => _busy = false);
     }
   }
 
-  int _day(Map<Object?, Object?> row) {
+  int _day(Map<String, Object?> row) {
+    final known = _weekdays['${row['id']}'];
+    if (known != null) return known;
+    final weekday = row['weekday'];
+    if (weekday is Map && weekday['id'] is num) {
+      return (weekday['id'] as num).toInt();
+    }
     const days = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
-    for (final field in (row['infobox'] as List? ?? [])) {
-      if (field is Map && field['key'] == '放送星期') {
+    for (final field in (row['infobox'] as List? ?? const [])) {
+      if (field is Map && (field['key'] == '放送星期' || field['key'] == '播放星期')) {
         final index = days.indexOf('${field['value']}');
         if (index >= 0) return index + 1;
       }
@@ -94,84 +123,147 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
     return 0;
   }
 
+  Future<void> _pickFilter() async {
+    final filter = await showModalBottomSheet<AnimeFilter>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => AnimeFilterDialog(initial: _filter),
+    );
+    if (!mounted || filter == null) return;
+    setState(() {
+      unawaited(
+        ref
+            .read(preferencesProvider)
+            .set('anime.calendar.filter', filter.toJson()),
+      );
+      _filter = filter;
+      _rows.clear();
+      _more = true;
+      _offset = 0;
+    });
+    unawaited(_load(reset: true));
+  }
+
+  void _setWeekday(int day) {
+    setState(() => _weekday = day);
+    unawaited(ref.read(preferencesProvider).set('anime.calendar.weekday', day));
+  }
+
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: SizedBox(
-      height: MediaQuery.sizeOf(context).height * .9,
-      child: Column(
-        children: [
-          ListTile(
-            title: Text(
-              '${_filter.year ?? '全部年代'} · ${_filter.quarter == null ? '全年' : '${_filter.quarter}季度'}时间表',
-            ),
-            subtitle: const Text('按上游放送星期分类；未提供星期的条目保留为未注明'),
-            trailing: IconButton(
-              tooltip: '选择历史季',
-              icon: const Icon(Icons.date_range),
-              onPressed: () async {
-                final filter = await showDialog<AnimeFilter>(
-                  context: context,
-                  builder: (_) => AnimeFilterDialog(initial: _filter),
-                );
-                if (!mounted || filter == null) return;
-                _filter = filter;
-                unawaited(_load(reset: true));
-              },
-            ),
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final currentSeason =
+        _filter.year == now.year && _filter.quarter == (now.month - 1) ~/ 3 + 1;
+    _weekdays.clear();
+    if (currentSeason) {
+      for (final day in ref.watch(weeklyScheduleProvider).asData?.value ?? <ScheduleDay>[]) {
+        for (final entry in day.items) {
+          _weekdays[entry.id] = day.weekday;
+        }
+      }
+    }
+    final statuses = {
+      for (final view in ref.watch(animeFollowsProvider).asData?.value ?? [])
+        '${view.item.sourceId}:${view.item.remoteId}': view.entry.status,
+    };
+    final visible = _rows
+        .where((row) {
+          if (_weekday != -1 && _day(row) != _weekday) return false;
+          final status = statuses['bangumi-anime:${row['id']}'];
+          if (_filter.onlyWatching && status != 'doing') return false;
+          if (_filter.hideCompleted && status == 'done') return false;
+          if (_filter.hideDropped && status == 'dropped') return false;
+          return true;
+        })
+        .toList(growable: false);
+    final body = Column(
+      children: [
+        ListTile(
+          title: Text(
+            '${_filter.year ?? '全部年份'} · ${_filter.quarter == null ? '全年' : '${_filter.quarter}季度'}',
           ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (var day = 0; day <= 7; day++)
-                  Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: ChoiceChip(
-                      label: Text(
-                        day == 0
-                            ? '全部'
-                            : '周${['一', '二', '三', '四', '五', '六', '日'][day - 1]}',
-                      ),
-                      selected: day == _weekday,
-                      onSelected: (_) => setState(() => _weekday = day),
+          subtitle: Text(
+            '${_filter.tags.join(' · ')}${_filter.tags.isEmpty ? '' : ' · '}按公开放送星期；未提供则保留未注明',
+          ),
+          trailing: IconButton(
+            tooltip: '筛选历史季度',
+            icon: const Icon(Icons.tune),
+            onPressed: _pickFilter,
+          ),
+        ),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              for (var day = -1; day <= 7; day++)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(
+                      day == -1
+                          ? '全部'
+                          : day == 0
+                          ? '未注明'
+                          : '周${['一', '二', '三', '四', '五', '六', '日'][day - 1]}',
                     ),
+                    selected: day == _weekday,
+                    onSelected: (_) => _setWeekday(day),
                   ),
-              ],
-            ),
+                ),
+              TextButton(
+                onPressed: () => _setWeekday(DateTime.now().weekday),
+                child: const Text('今天'),
+              ),
+            ],
           ),
-          Expanded(
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () => _load(reset: true),
             child: MediaItemCollection(
-              items: [
-                for (final row in _rows)
-                  if (_weekday == 0 || _day(row) == _weekday) bangumiItem(row),
-              ],
-              sourceName: 'Bangumi 历史季',
+              items: [for (final row in visible) bangumiItem(row)],
+              sourceName: 'Bangumi · 公开兼容季度资料',
               preferGrid: true,
               badgeOf: (item) {
-                final row = _rows.firstWhere(
-                  (r) => '${r['id']}' == item.remoteId,
+                final row = visible.firstWhere(
+                  (row) => '${row['id']}' == item.remoteId,
                 );
                 final day = _day(row);
                 return day == 0
                     ? '星期未注明'
                     : '周${['一', '二', '三', '四', '五', '六', '日'][day - 1]}';
               },
-              footer: Center(
-                child: _busy
-                    ? const CircularProgressIndicator()
-                    : _error != null
-                    ? TextButton(onPressed: _load, child: Text('$_error · 重试'))
-                    : _more
-                    ? TextButton(
-                        onPressed: _load,
-                        child: const Text('加载更多本季作品'),
-                      )
-                    : const Text('本季作品已加载'),
+              footer: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Center(
+                  child: _busy
+                      ? const CircularProgressIndicator()
+                      : _error != null
+                      ? TextButton(
+                          onPressed: _load,
+                          child: Text('$_error · 重试'),
+                        )
+                      : _more
+                      ? TextButton(
+                          onPressed: _load,
+                          child: const Text('加载更多本季作品'),
+                        )
+                      : Text(visible.isEmpty ? '没有符合条件的作品' : '本季作品已加载'),
+                ),
               ),
             ),
           ),
-        ],
-      ),
-    ),
-  );
+        ),
+      ],
+    );
+    return widget.embedded
+        ? body
+        : SafeArea(
+            child: SizedBox(
+              height: MediaQuery.sizeOf(context).height * .9,
+              child: body,
+            ),
+          );
+  }
 }

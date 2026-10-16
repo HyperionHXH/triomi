@@ -1,16 +1,16 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/media_item.dart';
-import '../../core/models/media_type.dart';
 import '../../core/models/source_exception.dart';
+import '../../core/source/bangumi_public_client.dart';
 import '../../core/source/http_client.dart';
-import '../../core/source/source_providers.dart';
+import '../../core/storage/preferences.dart';
 import '../detail/anime_filter_dialog.dart';
 import '../detail/anime_info_repository.dart';
+import '../library/data/library_providers.dart';
 import 'widgets/media_item_card.dart';
 
 class AnimeRecommendationPage {
@@ -21,8 +21,8 @@ class AnimeRecommendationPage {
 }
 
 class AnimeRecommendationRepository {
-  AnimeRecommendationRepository(this.http);
-  final SourceHttpClient http;
+  AnimeRecommendationRepository(this.client);
+  final BangumiPublicClient client;
   bool _mirror = false;
   int _epoch = 0;
   bool get usesMirror => _mirror;
@@ -32,107 +32,48 @@ class AnimeRecommendationRepository {
     AnimeFilter filter = const AnimeFilter(),
   }) async {
     final epoch = offset == 0 ? ++_epoch : _epoch;
-    if (filter.active) {
-      final response = await http.send(
-        SourceRequest(
-          url: 'https://api.bgm.tv/v0/search/subjects?limit=24&offset=$offset',
-          method: 'POST',
-          headers: AnimeInfoRepository.headers,
-          bodyType: RequestBodyType.json,
-          body: jsonEncode(filter.body),
+    final BangumiPublicPage page;
+    if (filter.tags.isNotEmpty ||
+        filter.year != null ||
+        filter.minScore != null ||
+        filter.maxScore != null ||
+        filter.sort != 'heat') {
+      page = await client.search(
+        filter: AnimePublicFilter(
+          tags: filter.tags,
+          year: filter.year,
+          quarter: filter.quarter,
+          minScore: filter.minScore,
+          maxScore: filter.maxScore,
+          sort: filter.sort,
         ),
-        sourceId: 'bangumi-anime',
+        offset: offset,
       );
-      if (!response.isSuccess) throw StateError('筛选接口暂不可用');
-      final raw = jsonDecode(response.body) as Map;
-      final rows = raw['data'] as List;
-      final next = offset + rows.length;
       if (epoch == _epoch) _mirror = false;
-      return AnimeRecommendationPage(
-        [
-          for (final row in rows)
-            if (row is Map && row['type'] == 2 && row['nsfw'] != true)
-              bangumiItem(row),
-        ],
-        next,
-        rows.isNotEmpty &&
-            (raw['total'] is num
-                ? next < (raw['total'] as num)
-                : rows.length >= 20),
-      );
-    }
-    var mirror = _mirror;
-    Future<SourceResponse> fetch(bool mirror) => http
-        .send(
-          SourceRequest(
-            url: mirror
-                ? 'https://api.kazumi.fyi/kazumi/v1/popular/subjects?limit=24&offset=$offset'
-                : 'https://next.bgm.tv/p1/trending/subjects?type=2&limit=24&offset=$offset',
-          ),
-          sourceId: 'bangumi-anime',
-        )
-        .timeout(Duration(seconds: mirror ? 25 : 8));
-    SourceResponse response;
-    // Keep pagination on one backend; different rankings cannot share offsets.
-    if (offset == 0) {
-      try {
-        response = await fetch(false);
-        if (!response.isSuccess) throw StateError('推荐接口暂不可用');
-        mirror = false;
-      } catch (_) {
-        response = await fetch(true);
-        mirror = true;
-      }
     } else {
-      response = await fetch(mirror);
+      try {
+        page = await client.popular(offset: offset);
+        if (epoch == _epoch) _mirror = true;
+      } catch (_) {
+        // The dedicated public popular endpoint is the only supported
+        // fallback; do not mix its cursor with a different ranking.
+        rethrow;
+      }
     }
-    if (!response.isSuccess) {
-      throw StateError('推荐请求失败（HTTP ${response.statusCode}）');
-    }
-    final raw = jsonDecode(response.body);
-    if (raw is! Map || raw['data'] is! List) {
-      throw const FormatException('推荐数据格式有变化');
-    }
-    final rows = raw['data'] as List;
     final items = <MediaItem>[];
-    for (final row in rows) {
-      final subject = row is Map ? (mirror ? row : row['subject']) : null;
-      if (subject is! Map ||
-          subject['id'] == null ||
-          subject['type'] != 2 ||
-          subject['nsfw'] == true) {
+    for (final row in page.rows) {
+      if (row['id'] == null || row['type'] != 2 || row['nsfw'] == true) {
         continue;
       }
-      final name = '${subject['nameCN'] ?? ''}'.trim();
-      final rating = subject['rating'];
-      final images = subject['images'];
-      items.add(
-        MediaItem(
-          sourceId: 'bangumi-anime',
-          remoteId: '${subject['id']}',
-          type: MediaType.anime,
-          title: name.isEmpty ? '${subject['name'] ?? ''}' : name,
-          url: 'https://bgm.tv/subject/${subject['id']}',
-          coverUrl: images is Map
-              ? '${images['large'] ?? images['common'] ?? ''}'
-              : null,
-          rating: rating is Map ? double.tryParse('${rating['score']}') : null,
-        ),
-      );
+      items.add(bangumiItem(row));
     }
-    final next = offset + rows.length;
-    if (epoch == _epoch) _mirror = mirror;
-    final total = raw['total'];
-    return AnimeRecommendationPage(
-      items,
-      next,
-      rows.isNotEmpty && (total is num ? next < total : rows.length >= 24),
-    );
+    return AnimeRecommendationPage(items, page.nextOffset, page.hasMore);
   }
 }
 
 final animeRecommendationRepositoryProvider = Provider(
-  (ref) => AnimeRecommendationRepository(ref.watch(sourceHttpClientProvider)),
+  (ref) =>
+      AnimeRecommendationRepository(ref.watch(bangumiPublicClientProvider)),
 );
 
 class AnimeRecommendations extends ConsumerStatefulWidget {
@@ -148,24 +89,42 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
   bool _busy = false, _more = true;
   String? _error;
   AnimeFilter _filter = const AnimeFilter();
+  SourceRequestCancellation? _owner;
+
+  @override
+  void dispose() {
+    _generation++;
+    _owner?.cancel();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
+    _filter = AnimeFilter.fromJson(
+      ref
+          .read(preferencesProvider)
+          .get<Object?>('anime.recommendations.filter'),
+    );
     unawaited(_load());
   }
 
   Future<void> _load({bool refresh = false}) async {
     if (_busy && !refresh || !_more && !refresh) return;
     final generation = refresh ? ++_generation : _generation;
+    if (refresh) _owner?.cancel();
+    final owner = _owner = SourceRequestCancellation();
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final page = await ref
-          .read(animeRecommendationRepositoryProvider)
-          .load(refresh ? 0 : _offset, filter: _filter);
-      if (!mounted || generation != _generation) return;
+      final page = await owner.run(
+        () => ref
+            .read(animeRecommendationRepositoryProvider)
+            .load(refresh ? 0 : _offset, filter: _filter),
+      );
+      if (!mounted || owner.cancelled || generation != _generation) return;
       setState(() {
         if (refresh) _items.clear();
         final ids = _items.map((item) => item.remoteId).toSet();
@@ -196,7 +155,7 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
             Expanded(
               child: Text(
                 _filter.active
-                    ? '${_filter.year ?? '全部年代'} ${_filter.quarter == null ? '' : '${_filter.quarter}季度'} ${_filter.format} ${_filter.tag}'
+                    ? '${_filter.year ?? '全部年代'} ${_filter.quarter == null ? '' : '${_filter.quarter}季度'} ${_filter.minScore ?? 0}–${_filter.maxScore ?? 10}分 · ${_filter.sort}${_filter.onlyWatching ? ' · 仅在看（本机）' : ''}${_filter.hideCompleted ? ' · 隐藏看过' : ''}${_filter.hideDropped ? ' · 隐藏抛弃' : ''}'
                     : '热门推荐',
               ),
             ),
@@ -205,21 +164,55 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
               icon: const Icon(Icons.tune),
               label: const Text('筛选'),
             ),
+            if (_filter.active)
+              IconButton(
+                tooltip: '清除当前筛选',
+                onPressed: () => _applyFilter(const AnimeFilter()),
+                icon: const Icon(Icons.filter_alt_off_outlined),
+              ),
           ],
         ),
       ),
+      if (_filter.tags.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Wrap(
+            spacing: 8,
+            children: [
+              for (final tag in _filter.tags)
+                InputChip(
+                  label: Text(tag),
+                  onDeleted: () => _applyFilter(
+                    _filter.withTags(
+                      _filter.tags.where((value) => value != tag).toList(),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       Expanded(child: _content(context)),
     ],
   );
 
   Future<void> _pickFilter() async {
-    final selected = await showDialog<AnimeFilter>(
+    final selected = await showModalBottomSheet<AnimeFilter>(
       context: context,
+      isScrollControlled: true,
       builder: (_) => AnimeFilterDialog(initial: _filter),
     );
     if (!mounted || selected == null) return;
+    _applyFilter(selected);
+  }
+
+  void _applyFilter(AnimeFilter selected) {
     setState(() {
       _filter = selected;
+      unawaited(
+        ref
+            .read(preferencesProvider)
+            .set('anime.recommendations.filter', selected.toJson()),
+      );
       _items.clear();
       _offset = 0;
       _more = true;
@@ -228,6 +221,19 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
   }
 
   Widget _content(BuildContext context) {
+    final statuses = {
+      for (final view in ref.watch(animeFollowsProvider).asData?.value ?? [])
+        '${view.item.sourceId}:${view.item.remoteId}': view.entry.status,
+    };
+    final visible = _items
+        .where((item) {
+          final status = statuses['${item.sourceId}:${item.remoteId}'];
+          if (_filter.onlyWatching && status != 'doing') return false;
+          if (_filter.hideCompleted && status == 'done') return false;
+          if (_filter.hideDropped && status == 'dropped') return false;
+          return true;
+        })
+        .toList(growable: false);
     if (_items.isEmpty && _busy) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -258,7 +264,7 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
           return false;
         },
         child: MediaItemCollection(
-          items: _items,
+          items: visible,
           sourceName: '',
           preferGrid: true,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -272,9 +278,14 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
                   ? const CircularProgressIndicator()
                   : _error != null
                   ? TextButton(onPressed: _load, child: Text('$_error\n点击继续加载'))
-                  : Text(
-                      '${ref.read(animeRecommendationRepositoryProvider).usesMirror ? '推荐由 Kazumi 公开镜像提供 · ' : ''}${_more ? '向下浏览更多推荐' : '本次推荐已看完，可下拉刷新'}',
-                    ),
+                  : _more
+                  ? TextButton(
+                      onPressed: _load,
+                      child: Text(
+                        '${ref.read(animeRecommendationRepositoryProvider).usesMirror ? 'Kazumi 公开推荐 · ' : ''}加载更多',
+                      ),
+                    )
+                  : const Text('本次结果已看完，可下拉刷新'),
             ),
           ),
         ),

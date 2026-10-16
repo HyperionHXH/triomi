@@ -5,6 +5,7 @@ import 'package:flutter_js/flutter_js.dart';
 
 import '../../../models/media_type.dart';
 import '../../../models/source_exception.dart';
+import '../../http_client.dart';
 import '../js_runtime.dart';
 
 /// 基于 flutter_js 的 JS 运行时（Android/iOS/Windows/Linux/macOS）。
@@ -23,7 +24,10 @@ import '../js_runtime.dart';
 class FlutterJsRuntime implements JsRuntime {
   FlutterJsRuntime({this.callTimeout = const Duration(seconds: 30)});
   final Duration callTimeout;
-  final Map<String, Completer<String>> _calls = {};
+  final _calls = <String, ({Completer<String> completion, Zone zone})>{};
+  Future<void> _callQueue = Future<void>.value();
+  Zone? _loadZone;
+  final Object _invocationKey = Object();
   int _nextCall = 0;
   Timer? _jobPump;
   JavascriptRuntime? _js;
@@ -48,10 +52,11 @@ class FlutterJsRuntime implements JsRuntime {
     }
     _js = runtime;
     _bridge = bridge;
+    _loadZone = Zone.current;
     runtime.setupBridge(_channel, _onHostMessage);
     runtime.setupBridge('triomiResult', (dynamic args) {
       final envelope = (args as List).first as Map;
-      final completer = _calls[envelope['id']];
+      final completer = _calls[envelope['id']]?.completion;
       if (completer != null && !completer.isCompleted) {
         completer.complete(envelope['result'] as String);
       }
@@ -66,7 +71,13 @@ class FlutterJsRuntime implements JsRuntime {
       throw JsRuntimeError('JS 桥初始化失败：${result.stringResult}');
     }
 
-    final loaded = runtime.evaluate(script, sourceUrl: name);
+    final JsEvalResult loaded;
+    try {
+      loaded = runtime.evaluate(script, sourceUrl: name);
+    } finally {
+      // Only synchronous load-time bridge calls may use the load owner.
+      _loadZone = null;
+    }
     if (loaded.isError) {
       // 语法错误 / 顶层异常：这一层必须可读，否则规则作者无从下手。
       throw JsRuntimeError(loaded.stringResult);
@@ -84,19 +95,50 @@ class FlutterJsRuntime implements JsRuntime {
   }
 
   @override
-  Future<Object?> call(String function, List<Object?> args) async {
-    final runtime = _require();
+  Future<Object?> call(String function, List<Object?> args) {
+    final zone = Zone.current;
+    final previous = _callQueue;
+    final released = Completer<void>();
+    _callQueue = released.future;
+    return zone.run(() async {
+      await previous;
+      try {
+        if (SourceRequestCancellation.current?.cancelled == true) {
+          throw const JsRuntimeError('JS 请求已取消');
+        }
+        return await _call(function, args);
+      } finally {
+        released.complete();
+      }
+    });
+  }
+
+  // One invocation per engine, but different sessions remain independent.
+  // This keeps asynchronous host callbacks attached to their captured Zone.
+  Future<Object?> _call(String function, List<Object?> args) {
     final id = '${++_nextCall}';
+    return runZoned(
+      () => _invoke(function, args, id),
+      zoneValues: {_invocationKey: id},
+    );
+  }
+
+  Future<Object?> _invoke(
+    String function,
+    List<Object?> args,
+    String id,
+  ) async {
+    final runtime = _require();
     final completion = Completer<String>();
-    _calls[id] = completion;
+    _calls[id] = (completion: completion, zone: Zone.current);
     _jobPump ??= Timer.periodic(const Duration(milliseconds: 20), (_) {
       if (_disposed) return;
       try {
         runtime.executePendingJob();
       } catch (error) {
         for (final pending in _calls.values) {
-          if (!pending.isCompleted) {
-            pending.completeError(JsRuntimeError('$error'));
+          if (!pending.completion.isCompleted) {
+            pending.completion.completeError(JsRuntimeError('$error'));
           }
         }
       }
@@ -154,8 +196,8 @@ class FlutterJsRuntime implements JsRuntime {
     _jobPump?.cancel();
     _jobPump = null;
     for (final pending in _calls.values) {
-      if (!pending.isCompleted) {
-        pending.completeError(const JsRuntimeError('JS 运行时已释放'));
+      if (!pending.completion.isCompleted) {
+        pending.completion.completeError(const JsRuntimeError('JS 运行时已释放'));
       }
     }
     _js?.dispose();
@@ -185,19 +227,34 @@ class FlutterJsRuntime implements JsRuntime {
     final id = envelope['id']?.toString();
     final payload = envelope['payload'];
     if (id == null || payload is! Map<Object?, Object?>) return;
+    final invocationId = Zone.current[_invocationKey];
+    final invocation = _calls[invocationId];
+    final ownerZone =
+        invocation?.zone ??
+        (invocationId == null && _calls.isEmpty ? _loadZone : null);
+    if (ownerZone == null) return;
 
     // 脱离当前 quickjs 执行栈后再处理：microtask 会在 evaluate 返回后执行。
-    Future<void>.microtask(() async {
-      final encoded = await _dispatch(payload);
-      if (_disposed) return;
-      try {
-        _js?.evaluate(
-          '__triomiResolve(${jsonEncode(id)}, ${jsonEncode(encoded)})',
-        );
-      } catch (_) {
-        // 引擎已释放或脚本已结束等待，忽略。
-      }
-    });
+    ownerZone.run(
+      () => Future<void>.microtask(() async {
+        final encoded = await _dispatch(payload);
+        if (_disposed ||
+            (invocation != null &&
+                !identical(
+                  _calls[invocationId]?.completion,
+                  invocation.completion,
+                ))) {
+          return;
+        }
+        try {
+          _js?.evaluate(
+            '__triomiResolve(${jsonEncode(id)}, ${jsonEncode(encoded)})',
+          );
+        } catch (_) {
+          // 引擎已释放或脚本已结束等待，忽略。
+        }
+      }),
+    );
   }
 
   Future<String> _dispatch(Map<Object?, Object?> payload) async {
@@ -205,10 +262,25 @@ class FlutterJsRuntime implements JsRuntime {
     try {
       switch (op) {
         case 'fetch':
-          final response = await _requireBridge().fetch(
+          final owner = SourceRequestCancellation.current;
+          if (owner?.cancelled == true) {
+            throw const JsRuntimeError('JS 请求已取消');
+          }
+          final response = _requireBridge().fetch(
             JsFetchRequest.fromJson(payload),
           );
-          return jsonEncode(response.toJson());
+          final resolved = await (owner == null
+              ? response
+              : Future.any<JsFetchResponse>([
+                  response,
+                  owner.token.whenCancel.then<JsFetchResponse>(
+                    (_) => throw const JsRuntimeError('JS 请求已取消'),
+                  ),
+                ]));
+          if (owner?.cancelled == true) {
+            throw const JsRuntimeError('JS 请求已取消');
+          }
+          return jsonEncode(resolved.toJson());
         case 'select':
           final fields = payload['fields'];
           final rows = await _requireBridge().selectRows(

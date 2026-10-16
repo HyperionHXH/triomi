@@ -58,6 +58,11 @@ class MainActivity : FlutterActivity() {
     private val localComicPicker by lazy { LocalComicPicker(this) }
     private lateinit var appUpdateHost: AppUpdateHost
 
+    private fun notificationRoute(value: Intent): String? =
+        value.getStringExtra("triomi_route")?.takeIf { it == "/anime" || it == "/manga/updates" }
+
+    override fun getInitialRoute(): String? = notificationRoute(intent) ?: super.getInitialRoute()
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         appUpdateHost = AppUpdateHost(this, flutterEngine.dartExecutor.binaryMessenger)
@@ -424,6 +429,7 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        notificationRoute(intent)?.let { flutterEngine?.navigationChannel?.pushRouteInformation(it) }
     }
 
     override fun onUserLeaveHint() {

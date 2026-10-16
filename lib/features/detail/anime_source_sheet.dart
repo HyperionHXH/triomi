@@ -10,13 +10,14 @@ import '../../core/models/media_type.dart';
 import '../../core/models/source_descriptor.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/router/app_router.dart';
+import '../../core/source/http_client.dart';
 import '../../core/source/kazumi_source.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
 import '../library/data/anime_identity_repository.dart';
 
-Future<void> showAnimeSources(
+Future<MediaItem?> showAnimeSources(
   BuildContext context,
   MediaItem item, {
   bool replacePlayer = false,
@@ -27,13 +28,10 @@ Future<void> showAnimeSources(
     showDragHandle: true,
     builder: (_) => AnimeSourceSheet(item: item),
   );
-  if (selected != null && context.mounted) {
-    if (replacePlayer) {
-      context.pushReplacement(AppRoutes.detail, extra: selected);
-    } else {
-      await context.push(AppRoutes.detail, extra: selected);
-    }
+  if (selected != null && context.mounted && replacePlayer) {
+    context.pushReplacement(AppRoutes.detailFor(selected), extra: selected);
   }
+  return selected;
 }
 
 class AnimeSourceSheet extends ConsumerStatefulWidget {
@@ -51,6 +49,7 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
   final _verification = <String, KazumiVerificationRequired>{};
   final _pending = <String>{};
   final _sessions = <String, int>{};
+  final _owners = <String, SourceRequestCancellation>{};
   final _expanded = <String>{};
   int _generation = 0;
   String? _loadError;
@@ -71,12 +70,19 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
   @override
   void dispose() {
     _generation++;
+    for (final owner in _owners.values) {
+      owner.cancel();
+    }
     _query.dispose();
     super.dispose();
   }
 
   Future<void> _start() async {
     final generation = ++_generation;
+    for (final owner in _owners.values) {
+      owner.cancel();
+    }
+    _owners.clear();
     final query = _query.text.trim();
     setState(() {
       _results.clear();
@@ -143,6 +149,8 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
     final id = entry.descriptor.id;
     final session = (_sessions[id] ?? 0) + 1;
     _sessions[id] = session;
+    _owners[id]?.cancel();
+    final owner = _owners[id] = SourceRequestCancellation();
     final keyword = query ?? _query.text.trim();
     setState(() {
       _pending.add(id);
@@ -150,9 +158,15 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
       _verification.remove(id);
     });
     try {
-      final result = await (entry.source as SearchProvider)
-          .search(keyword)
-          .timeout(const Duration(seconds: 30));
+      final result = await owner
+          .run(() => (entry.source as SearchProvider).search(keyword))
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              owner.cancel('搜索来源超时');
+              throw TimeoutException('搜索来源超时');
+            },
+          );
       if (!mounted || generation != _generation || session != _sessions[id]) {
         return;
       }
@@ -213,12 +227,21 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
 
   Future<void> _choose(MediaItem candidate) async {
     final subject = _subject ?? widget.item;
+    final known = _saved.any(
+      (link) =>
+          link.sourceId == candidate.sourceId &&
+          link.remoteId == candidate.remoteId,
+    );
+    if (known) {
+      Navigator.pop(context, candidate);
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('确认作品关联'),
         content: Text(
-          '资料作品：${subject.title}\n站点作品：${candidate.title}\n\n核对季数、年份和剧场版。确认后保留同一追番身份；请在下一页选择目标播放列表和剧集，不套用其他站点时间。',
+          '资料作品：${subject.title}\n站点作品：${candidate.title}\n\n核对季数、年份和原名。确认后在当前详情选择目标播放列表和剧集，不套用其他站点时间。',
         ),
         actions: [
           TextButton(

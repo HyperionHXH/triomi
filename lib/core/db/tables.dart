@@ -160,6 +160,9 @@ class Categories extends Table {
 
   TextColumn get name => text()();
 
+  /// Owning workspace, persisted as MediaType.name. Real writes set this explicitly.
+  TextColumn get module => text().withDefault(const Constant('manga'))();
+
   IntColumn get sortIndex => integer().withDefault(const Constant(0))();
 
   BoolColumn get hidden => boolean().withDefault(const Constant(false))();

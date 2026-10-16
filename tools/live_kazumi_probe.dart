@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:triomi/core/source/bangumi_public_client.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/kazumi_source.dart';
 import 'package:triomi/features/discover/anime_recommendations.dart';
@@ -34,7 +35,7 @@ void main() {
         'kind': 'desktop-real-network-not-device-playback',
       };
       try {
-        final repository = AnimeRecommendationRepository(http);
+        final repository = AnimeRecommendationRepository(BangumiPublicClient(http));
         final first = await repository.load(0),
             second = await repository.load(24);
         expect(first.items, isNotEmpty);

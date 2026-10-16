@@ -51,21 +51,21 @@ class Device:
         self.call('shell', 'input', 'keyevent', '4')
 
     def history(self):
-        for _ in range(5):
+        for _ in range(8):
             nodes = self.ui()
-            if any(t == '阅读历史' for t, _ in nodes) and any(
+            if any(t == '全部历史' for t, _ in nodes) and any(
                     t == '清空历史' for t, _ in nodes):
                 return nodes
-            history = self.text('阅读历史', nodes)
+            history = self.text('全部观看与阅读历史', nodes)
             if history:
                 self.tap(history)
                 continue
-            shelf = self.text('切换到书架', nodes)
-            if shelf:
-                self.tap(shelf)
+            profile = self.text('切换到我的', nodes)
+            if profile:
+                self.tap(profile)
                 continue
             self.back()
-        raise RuntimeError('Reading history unavailable')
+        raise RuntimeError('Unified reading history unavailable')
 
     def sample(self):
         try:

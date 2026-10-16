@@ -187,7 +187,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   Future<void> _toggleTts() async {
-    if (_privacyLock.blocksAccess || _ttsBusy || _locked || _loading || _error != null || _blocks.isEmpty) {
+    if (_privacyLock.blocksAccess ||
+        _ttsBusy ||
+        _locked ||
+        _loading ||
+        _error != null ||
+        _blocks.isEmpty) {
       return;
     }
     if (_sourceFont != null) {
@@ -480,8 +485,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               Future<void>.value(),
         );
         if (mounted) {
-          ref.invalidate(libraryProvider);
+          ref.invalidate(libraryByTypeProvider);
           ref.invalidate(historyProvider);
+          ref.invalidate(historyByTypeProvider);
         }
         // 登录来源（如轻之国度）同步进度到站点。
         if (sourceFuture != null) {

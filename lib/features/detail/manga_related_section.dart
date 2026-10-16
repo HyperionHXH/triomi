@@ -75,12 +75,15 @@ class _MangaRelatedSectionState extends ConsumerState<MangaRelatedSection> {
               ListTile(
                 title: Text(item.title),
                 subtitle: const Text('本站相关作品'),
-                onTap: () => context.push(AppRoutes.detail, extra: item),
+                onTap: () =>
+                    context.push(AppRoutes.detailFor(item), extra: item),
               ),
             TextButton.icon(
               onPressed: () => context.push(
-                AppRoutes.search,
-                extra: (sourceId: widget.item.sourceId, type: MediaType.manga),
+                AppRoutes.searchFor(
+                  MediaType.manga,
+                  sourceId: widget.item.sourceId,
+                ),
               ),
               icon: const Icon(Icons.search),
               label: const Text('手动搜索相关作品'),

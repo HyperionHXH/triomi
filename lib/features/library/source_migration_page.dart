@@ -231,7 +231,7 @@ class _SourceMigrationPageState extends ConsumerState<SourceMigrationPage> {
         chapterMappings: _chapterMappings,
       );
       await _repository.executeMigration(plan);
-      ref.invalidate(libraryProvider);
+      ref.invalidate(libraryByTypeProvider);
       ref.invalidate(historyProvider);
       ref.invalidate(
         inLibraryProvider((

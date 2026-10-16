@@ -45,7 +45,7 @@ class ProfilePage extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                          Text('未登录', style: theme.textTheme.titleSmall),
+                          Text('账号与设置', style: theme.textTheme.titleSmall),
                           const SizedBox(height: 2),
                           Text(
                             '各来源独立登录，凭据互不共享',
@@ -68,7 +68,7 @@ class ProfilePage extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: SettingsGroup(
-                title: '通用',
+                title: '外观与内容设置',
                 children: <Widget>[
                   ListTile(
                     leading: const Icon(Icons.palette_outlined),
@@ -133,16 +133,19 @@ class ProfilePage extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: SettingsGroup(
-                title: '数据',
+                title: '数据与任务',
                 children: <Widget>[
                   ListTile(
                     leading: const Icon(Icons.folder_open_outlined),
                     title: const Text('本地漫画库'),
                     subtitle: const Text('导入 CBZ / ZIP 或图片目录，离线阅读'),
                     trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => Navigator.push(context, MaterialPageRoute<void>(
-                      builder: (_) => const LocalComicLibraryPage(),
-                    )),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => const LocalComicLibraryPage(),
+                      ),
+                    ),
                   ),
                   ListTile(
                     leading: const Icon(Icons.bookmarks_outlined),
@@ -163,6 +166,12 @@ class ProfilePage extends StatelessWidget {
                     title: const Text('下载管理'),
                     trailing: const Icon(Icons.chevron_right, size: 20),
                     onTap: () => context.push(AppRoutes.downloads),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.history),
+                    title: const Text('全部观看与阅读历史'),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => context.push(AppRoutes.history),
                   ),
                   ListTile(
                     leading: const Icon(Icons.settings_backup_restore_outlined),

@@ -3,6 +3,10 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_descriptor.dart';
+import 'package:triomi/core/models/source_exception.dart';
+import 'package:triomi/core/source/js/js_runtime.dart';
+import 'package:triomi/core/source/js/js_source.dart';
+import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/source_repository.dart';
 
@@ -70,6 +74,7 @@ void main() {
         enabled: true,
       );
       final active = (await registry.load()).entries.single;
+      await (active.source as JsSource).initialize();
       expect(active.source.isReady, true);
       await registry.setEnabled('js-source', enabled: false);
       final stopped = await registry.load();
@@ -79,6 +84,7 @@ void main() {
       expect(active.source.isReady, false);
       await registry.setEnabled('js-source', enabled: true);
       final restarted = (await registry.load()).entries.single;
+      await (restarted.source as JsSource).initialize();
       expect(restarted.source.isReady, true);
       expect(restarted.supports(SourceCapability.search), true);
       expect(identical(active.source, restarted.source), false);
@@ -110,12 +116,14 @@ void main() {
         ruleText: jsRuleText(),
         enabled: true,
       );
-      final loading = registry.load();
+      final active = (await registry.load()).entries.single;
+      final loading = (active.source as JsSource).initialize();
+      final rejected = expectLater(loading, throwsStateError);
       await started.future;
       await registry.setEnabled('js-source', enabled: false);
       expect(engine.disposed, true);
       release.complete();
-      expect((await loading).enabledEntries, isEmpty);
+      await rejected;
       final stopped = await registry.load();
       expect(stopped.failures, isEmpty);
       expect(stopped.entries.single.source.isReady, false);
@@ -149,6 +157,7 @@ void main() {
       );
       await put('function search() { return []; }');
       final first = await registry.load();
+      await (first.entries.single.source as JsSource).initialize();
       final second = await registry.load();
       expect(engines, hasLength(1));
       expect(
@@ -156,7 +165,8 @@ void main() {
         true,
       );
       await put('function search() { return [1]; }');
-      await registry.load();
+      final replacement = await registry.load();
+      await (replacement.entries.single.source as JsSource).initialize();
       expect(engines, hasLength(2));
       expect(engines.first.disposed, true);
       expect(engines.last.disposed, false);
@@ -166,6 +176,8 @@ void main() {
       expect(engines.last.disposed, true);
       await put('function search() { return [2]; }');
       await registry.load();
+      await ((await registry.load()).entries.single.source as JsSource)
+          .initialize();
       registry.dispose();
       await Future<void>.delayed(Duration.zero);
       expect(engines.every((e) => e.disposed), true);
@@ -173,24 +185,18 @@ void main() {
     },
   );
   test(
-    'failed initialization releases engine and can be retried unchanged',
+    'lazy initialization failure stays local and the source can retry',
     () async {
       final db = openTestDatabase();
       addTearDown(db.close);
       final repository = SourceRepository(db);
-      final engines = <FakeJsRuntime>[];
+      final engine = _RetryRuntime();
       final registry = SourceRegistry(
         repository: repository,
         http: FakeHttpClient(
           (_) async => throw StateError('No network expected'),
         ),
-        jsRuntimeFactory: () {
-          final engine = FakeJsRuntime(
-            loadError: engines.isEmpty ? 'transient engine failure' : null,
-          );
-          engines.add(engine);
-          return engine;
-        },
+        jsRuntimeFactory: () => engine,
       );
       await repository.upsert(
         id: 'js-source',
@@ -200,13 +206,16 @@ void main() {
         ruleText: jsRuleText(),
         enabled: true,
       );
-      expect((await registry.load()).failures, hasLength(1));
-      expect(engines.single.disposed, true);
-      expect((await registry.load()).failures, isEmpty);
-      expect(engines, hasLength(2));
+      final active = (await registry.load()).entries.single;
+      await expectLater(
+        (active.source as SearchProvider).search('probe'),
+        throwsA(isA<SourceException>()),
+      );
+      final results = await (active.source as SearchProvider).search('probe');
+      expect(results.single.remoteId, 'recovered');
       registry.dispose();
       await Future<void>.delayed(Duration.zero);
-      expect(engines.last.disposed, true);
+      expect(engine.disposed, true);
     },
   );
   test(
@@ -237,13 +246,15 @@ void main() {
         enabled: true,
       );
       await put(jsRuleText());
-      await registry.load();
+      await ((await registry.load()).entries.single.source as JsSource)
+          .initialize();
       await put('{broken');
       expect((await registry.load()).failures, hasLength(1));
       await Future<void>.delayed(Duration.zero);
       expect(engines.single.disposed, true);
       await put(jsRuleText());
-      await registry.load();
+      await ((await registry.load()).entries.single.source as JsSource)
+          .initialize();
       await put(
         '{"id":"js-source","name":"Plain","type":"manga","version":"1","baseUrl":"https://example.com","search":{"url":"/search?q={keyword}","list":".item","fields":{"title":".title","remoteId":"a@href"}}}',
       );
@@ -265,5 +276,31 @@ class _DelayedJsRuntime extends FakeJsRuntime {
     if (!started.isCompleted) started.complete();
     await release.future;
     return super.hasFunction(function);
+  }
+}
+
+class _RetryRuntime extends FakeJsRuntime {
+  _RetryRuntime()
+    : super(
+        functions: {'search'},
+        responses: {
+          'search': [
+            {'remoteId': 'recovered', 'title': 'Recovered book'},
+          ],
+        },
+      );
+  bool failed = false;
+  @override
+  Future<void> load(
+    String script, {
+    required String name,
+    required JsHostBridge bridge,
+    String? baseUrl,
+  }) {
+    if (!failed) {
+      failed = true;
+      throw const JsRuntimeError('transient engine failure');
+    }
+    return super.load(script, name: name, bridge: bridge, baseUrl: baseUrl);
   }
 }

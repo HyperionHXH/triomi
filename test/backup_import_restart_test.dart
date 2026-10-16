@@ -150,6 +150,7 @@ void main() {
       await db.customStatement('DROP TABLE backup_import_journals');
       await db.customStatement('ALTER TABLE categories DROP COLUMN hidden');
       await db.customStatement('ALTER TABLE categories DROP COLUMN rules_json');
+      await db.customStatement('ALTER TABLE categories DROP COLUMN module');
       await db.customStatement('PRAGMA user_version = 2');
       await reopen();
       expect(await db.select(db.backupImportJournals).get(), isEmpty);

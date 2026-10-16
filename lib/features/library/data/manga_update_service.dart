@@ -100,13 +100,16 @@ class MangaUpdateService {
   Future<void> enqueue({Set<String>? itemKeys, bool onlyFailed = false}) async {
     final library = await LibraryRepository(db)
         .listLibrary(type: MediaType.manga);
-    final links = options.categories.isEmpty
-        ? const <LibraryCategoryLinkRow>[]
-        : await db.select(db.libraryCategoryLinks).get();
+    final snapshot = await LibraryRepository(db)
+        .categorySnapshot(type: MediaType.manga);
     final eligible = {
-      for (final link in links)
-        if (options.categories.contains(link.categoryId))
-          '${link.sourceId}\u0000${link.remoteId}',
+      for (final item in library)
+        if (snapshot.categories.any(
+          (category) =>
+              options.categories.contains(category.id) &&
+              snapshot.belongs(category, item),
+        ))
+          '${item.item.sourceId}\u0000${item.item.remoteId}',
     };
     for (final item in library) {
       final key = '${item.item.sourceId}\u0000${item.item.remoteId}';
@@ -165,13 +168,16 @@ class MangaUpdateService {
               !['completed', '2', '已完结'].contains(entry.item.status))
             '${entry.item.sourceId}\u0000${entry.item.remoteId}',
       };
-      final categoryLinks = options.categories.isEmpty
-          ? const <LibraryCategoryLinkRow>[]
-          : await db.select(db.libraryCategoryLinks).get();
+      final snapshot = await LibraryRepository(db)
+          .categorySnapshot(type: MediaType.manga);
       final categoryKeys = {
-        for (final link in categoryLinks)
-          if (options.categories.contains(link.categoryId))
-            '${link.sourceId}\u0000${link.remoteId}',
+        for (final entry in entries)
+          if (snapshot.categories.any(
+            (category) =>
+                options.categories.contains(category.id) &&
+                snapshot.belongs(category, entry),
+          ))
+            '${entry.item.sourceId}\u0000${entry.item.remoteId}',
       };
       final rows = queued
           .where(

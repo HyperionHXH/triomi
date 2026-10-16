@@ -182,10 +182,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       });
     }
 
-    _progressTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) { if (!_privacyLock.blocksAccess) unawaited(_persistProgress()); },
-    );
+    _progressTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!_privacyLock.blocksAccess) unawaited(_persistProgress());
+    });
 
     unawaited(_load());
   }
@@ -353,20 +352,30 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) unawaited(_persistProgress());
-    if (state == AppLifecycleState.resumed && _privacyLock.blocksAccess) _onPrivacyLockChanged();
+    if (state == AppLifecycleState.resumed && _privacyLock.blocksAccess) {
+      _onPrivacyLockChanged();
+    }
   }
 
   void _onPrivacyLockChanged() {
     if (!_privacyLock.blocksAccess || _privacyPausePending) return;
     _privacyPausePending = true;
     // Pausing, not disposing or seeking, preserves the reader's true position.
-    unawaited((_useNativeAndroidVideo ? _nativeVideoController.pause() : _player.pause())
-        .catchError((Object _) {})
-        .whenComplete(() => _privacyPausePending = false));
+    unawaited(
+      (_useNativeAndroidVideo
+              ? _nativeVideoController.pause()
+              : _player.pause())
+          .catchError((Object _) {})
+          .whenComplete(() => _privacyPausePending = false),
+    );
   }
 
   Future<void> _onCompleted() async {
-    if (_privacyLock.blocksAccess || _loading || _error != null || _awaitingPlaybackStart || _advancing) {
+    if (_privacyLock.blocksAccess ||
+        _loading ||
+        _error != null ||
+        _awaitingPlaybackStart ||
+        _advancing) {
       return;
     }
     _advancing = true;
@@ -541,8 +550,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       // dispose 时 mounted 已为 false，ref 不可用；书架与历史页
       // 会在下次进入时自动取最新数据。
       if (mounted) {
-        ref.invalidate(libraryProvider);
+        ref.invalidate(libraryByTypeProvider);
         ref.invalidate(historyProvider);
+        ref.invalidate(historyByTypeProvider);
       }
     } catch (_) {
       // 进度写失败不应该打断播放。

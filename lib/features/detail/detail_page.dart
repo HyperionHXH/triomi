@@ -12,6 +12,8 @@ import '../../core/models/source_descriptor.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/platform/platform_channel.dart';
 import '../../core/router/app_router.dart';
+import '../../core/source/bangumi_public_client.dart';
+import '../../core/source/http_client.dart';
 import '../../core/source/kazumi_source.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
@@ -20,6 +22,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../anime/anime_follows_page.dart';
 import '../discover/widgets/media_item_card.dart';
 import '../downloads/data/download_providers.dart';
 import '../library/data/anime_identity_repository.dart';
@@ -36,6 +39,7 @@ import '../reader/manga_reader_page.dart';
 import '../tracking/bind_sheet.dart';
 import '../tracking/data/tracking_models.dart';
 import '../tracking/tracking_sync_page.dart';
+import 'anime_info_repository.dart';
 import 'anime_info_sheet.dart';
 import 'anime_source_sheet.dart';
 import 'manga_related_section.dart';
@@ -55,109 +59,332 @@ class DetailPage extends ConsumerStatefulWidget {
 
 class _DetailPageState extends ConsumerState<DetailPage> {
   Future<_DetailData>? _future;
+  late _DetailData _data = _DetailData(
+    item: widget.item,
+    supportsContent: widget.item.sourceId != 'bangumi-anime',
+  );
+  _DetailData? _playback;
+  SourceRequestCancellation? _metadataOwner, _directoryOwner;
+  int _generation = 0, _directoryGeneration = 0;
+  bool _metadataBusy = false, _directoryBusy = false;
+  String? _selectedEpisodeId;
+  String? _metadataError, _directoryError;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+    if (widget.item.type == MediaType.anime) unawaited(_restoreSelection());
+  }
+
+  @override
+  void dispose() {
+    _generation++;
+    _directoryGeneration++;
+    _metadataOwner?.cancel();
+    _directoryOwner?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _restoreSelection() async {
+    final identity = ref.read(animeIdentityRepositoryProvider);
+    final subject = await identity.subjectFor(widget.item) ?? widget.item;
+    if (!mounted) return;
+    if (subject.sourceId != widget.item.sourceId ||
+        subject.remoteId != widget.item.remoteId) {
+      setState(
+        () => _data = _DetailData(item: subject, supportsContent: false),
+      );
+      _future = _load();
+    }
+    final selected = await identity.lastSelection(subject);
+    if (!mounted) return;
+    if (selected != null) {
+      await _loadPlayback(
+        selected.item,
+        preferredChapterId: selected.chapter?.remoteId,
+      );
+    } else if (widget.item.sourceId != 'bangumi-anime') {
+      await _loadPlayback(widget.item);
+    }
+  }
+
+  void _publish(_DetailData data, int generation) {
+    if (!mounted || generation != _generation) return;
+    setState(() => _data = data);
+  }
 
   Future<_DetailData> _load() async {
-    final item = widget.item;
+    final generation = ++_generation;
+    _metadataOwner?.cancel();
+    final owner = _metadataOwner = SourceRequestCancellation();
+    _metadataBusy = true;
+    _metadataError = null;
+    final cached = await _loadFromCache(
+      fallbackItem: _data.item ?? widget.item,
+    );
+    if (!mounted || generation != _generation) return _data;
+    if (cached != null) _publish(cached, generation);
+    final item = _data.item ?? widget.item;
     if (item.sourceId == 'local-comic') {
-      return await _loadFromCache(sourceName: '本地漫画 · 离线', fallbackItem: item) ??
-          _DetailData(item: item, sourceName: '本地漫画 · 离线', error: '本地目录缺失，请重新导入原始文件或包含媒体的备份');
+      _metadataBusy = false;
+      return _data;
+    }
+    if (item.type == MediaType.anime && item.sourceId != 'bangumi-anime') {
+      // The playback chain owns the provider detail request, avoiding a second
+      // metadata fetch for the same site item.
+      _metadataBusy = false;
+      return _data;
+    }
+    if (item.sourceId == 'bangumi-anime') {
+      try {
+        if (item.type != MediaType.anime) throw StateError('资料来源不属于当前工作区');
+        final row = await owner.run(
+          () => ref.read(bangumiPublicClientProvider).subject(item.remoteId),
+        );
+        if (!mounted || generation != _generation || owner.cancelled) {
+          return _data;
+        }
+        final detail = bangumiItem(row);
+        _publish(
+          _DetailData(
+            item: detail,
+            sourceName: 'Bangumi · 公开兼容资料',
+            supportsContent: false,
+          ),
+          generation,
+        );
+        unawaited(
+          ref
+              .read(libraryRepositoryProvider)
+              .cacheItem(detail)
+              .catchError((Object _) {}),
+        );
+      } catch (error) {
+        if (mounted && generation == _generation && !owner.cancelled) {
+          setState(() => _metadataError = '资料暂不可用：$error');
+        }
+      } finally {
+        if (mounted && generation == _generation) {
+          setState(() => _metadataBusy = false);
+        }
+      }
+      return _data;
     }
     try {
       final snapshot = await ref.read(sourcesProvider.future);
+      if (!mounted || generation != _generation) return _data;
       final entry = snapshot.entries
           .where((candidate) => candidate.descriptor.id == item.sourceId)
           .firstOrNull;
       if (entry == null || !entry.enabled) {
-        return await _loadFromCache() ??
-            _DetailData(
-              error: entry == null ? '该来源已被移除，无法加载详情' : '该来源已停用，请启用来源后重试',
-            );
+        throw StateError(entry == null ? '该来源已移除' : '该来源已停用');
       }
-
+      if (entry.descriptor.type != item.type) throw StateError('来源不属于当前工作区');
       final provider = entry.source;
-      if (provider is! DetailProvider) {
-        return _DetailData(
-          item: item,
-          sourceName: entry.descriptor.name,
-          error: '该来源没有声明 detail 能力',
-        );
-      }
-
+      if (provider is! DetailProvider) throw StateError('来源不支持详情');
       var detail = item;
-      try {
-        detail = await provider.detail(item);
-      } catch (error) {
-        // 详情补全失败（含断网）：下载过的作品退到本地缓存继续可读。
-        return await _loadFromCache(
-              sourceName: entry.descriptor.name,
-              fallbackItem: item,
-            ) ??
-            _DetailData(
-              item: item,
-              sourceName: entry.descriptor.name,
-              error: _describe(error, entry),
-              supportsContent: entry.supports(SourceCapability.content),
-            );
-      }
-
-      var chapters = const <Chapter>[];
-      try {
-        chapters = await provider.chapters(detail);
-      } catch (error) {
-        return await _loadFromCache(
-              sourceName: entry.descriptor.name,
-              fallbackItem: detail,
-            ) ??
+      final metadata = owner.run(() async {
+        try {
+          detail = await provider.detail(item);
+          if (detail.type != item.type ||
+              detail.sourceId != item.sourceId ||
+              detail.remoteId != item.remoteId) {
+            throw StateError('来源返回的作品身份不一致');
+          }
+          if (owner.cancelled || !mounted || generation != _generation) return;
+          _publish(
             _DetailData(
               item: detail,
               sourceName: entry.descriptor.name,
-              chapters: chapters,
-              error: _describe(error, entry),
+              chapters: _data.chapters,
               supportsContent: entry.supports(SourceCapability.content),
-            );
+            ),
+            generation,
+          );
+          unawaited(
+            ref
+                .read(libraryRepositoryProvider)
+                .cacheItem(detail)
+                .catchError((Object _) {}),
+          );
+        } catch (error) {
+          if (mounted && generation == _generation && !owner.cancelled) {
+            setState(() => _metadataError = _describe(error, entry));
+          }
+        }
+      });
+      // Directory reads are independent: metadata failure must not suppress
+      // an otherwise available cached/live reader directory.
+      if (item.type != MediaType.anime) {
+        final directory = _loadReaderDirectory(item, entry, generation);
+        await Future.wait([metadata, directory]);
+      } else {
+        await metadata;
       }
+    } catch (error) {
+      if (mounted && generation == _generation && !owner.cancelled) {
+        setState(() {
+          _metadataError = '$error';
+          if (item.type != MediaType.anime) _directoryError = '$error';
+        });
+      }
+    } finally {
+      if (mounted && generation == _generation) {
+        setState(() => _metadataBusy = false);
+      }
+    }
+    return _data;
+  }
 
-      final library = ref.read(libraryRepositoryProvider);
-      try {
+  Future<void> _loadReaderDirectory(
+    MediaItem item,
+    SourceEntry entry,
+    int generation,
+  ) async {
+    _directoryBusy = true;
+    _directoryError = null;
+    try {
+      final chapters = await _metadataOwner!.run(
+        () => (entry.source as DetailProvider).chapters(item),
+      );
+      if (!mounted || generation != _generation) return;
+      _publish(
+        _DetailData(
+          item: _data.item,
+          sourceName: entry.descriptor.name,
+          chapters: chapters,
+          supportsContent: entry.supports(SourceCapability.content),
+        ),
+        generation,
+      );
+      unawaited(
+        ref
+            .read(libraryRepositoryProvider)
+            .saveChapters(
+              itemSourceId: item.sourceId,
+              itemRemoteId: item.remoteId,
+              chapters: chapters,
+            )
+            .catchError((Object _) {}),
+      );
+    } catch (error) {
+      if (mounted && generation == _generation) {
+        setState(() => _directoryError = _describe(error, entry));
+      }
+    } finally {
+      if (mounted && generation == _generation) {
+        setState(() => _directoryBusy = false);
+      }
+    }
+  }
+
+  Future<void> _chooseSource() async {
+    final selected = await showAnimeSources(context, _data.item ?? widget.item);
+    if (!mounted || selected == null) return;
+    await _loadPlayback(selected);
+  }
+
+  Future<void> _loadPlayback(
+    MediaItem item, {
+    String? preferredChapterId,
+  }) async {
+    final generation = ++_directoryGeneration;
+    _directoryOwner?.cancel();
+    final owner = _directoryOwner = SourceRequestCancellation();
+    setState(() {
+      _directoryBusy = true;
+      _directoryError = null;
+      _playback = _DetailData(item: item, sourceName: item.sourceId);
+      _selectedEpisodeId = preferredChapterId;
+    });
+    final library = ref.read(libraryRepositoryProvider);
+    final cachedItem =
+        await library.itemByKey(item.sourceId, item.remoteId) ?? item;
+    final cachedChapters = await library.loadChapters(
+      item.sourceId,
+      item.remoteId,
+    );
+    final history = await library.lastReadOf(item.sourceId, item.remoteId);
+    if (!mounted || generation != _directoryGeneration) return;
+    setState(() {
+      _selectedEpisodeId = preferredChapterId ?? history?.chapterRemoteId;
+      _playback = _DetailData(
+        item: cachedItem,
+        chapters: cachedChapters,
+        offline: true,
+      );
+    });
+    try {
+      await owner.run(() async {
+        final snapshot = await ref.read(sourcesProvider.future);
+        final entry = snapshot.enabledEntries
+            .where((e) => e.descriptor.id == item.sourceId)
+            .firstOrNull;
+        if (entry == null ||
+            entry.descriptor.type != MediaType.anime ||
+            item.type != MediaType.anime ||
+            !entry.supports(SourceCapability.content) ||
+            entry.source is! DetailProvider) {
+          throw StateError('该播放来源已停用或不支持播放');
+        }
+        final source = entry.source as DetailProvider;
+        // A playable provider may need hidden playlist ids from its detail.
+        final detail = await source.detail(cachedItem);
+        final chapters = await source.chapters(detail);
+        if (!mounted || owner.cancelled || generation != _directoryGeneration) {
+          return;
+        }
+        setState(() {
+          _playback = _DetailData(
+            item: detail,
+            sourceName: entry.descriptor.name,
+            chapters: chapters,
+          );
+          final subject = _data.item;
+          if (subject?.sourceId == detail.sourceId &&
+              subject?.remoteId == detail.remoteId) {
+            _data = _DetailData(
+              item: detail,
+              sourceName: entry.descriptor.name,
+              supportsContent: false,
+            );
+          }
+        });
         await library.cacheItem(detail);
+        if (owner.cancelled || generation != _directoryGeneration) return;
         await library.saveChapters(
           itemSourceId: detail.sourceId,
           itemRemoteId: detail.remoteId,
           chapters: chapters,
         );
-      } catch (_) {
-        // A cache write failure must not discard a successful live directory.
-      }
-      return _DetailData(
-        item: detail,
-        sourceName: entry.descriptor.name,
-        chapters: chapters,
-        supportsContent: entry.descriptor.supports(SourceCapability.content),
-      );
+      });
     } catch (error) {
-      return await _loadFromCache() ?? _DetailData(error: '$error');
+      if (mounted && generation == _directoryGeneration && !owner.cancelled) {
+        setState(() => _directoryError = '获取播放目录失败：$error');
+      }
+    } finally {
+      if (mounted && generation == _directoryGeneration) {
+        setState(() => _directoryBusy = false);
+      }
     }
   }
 
-  /// 本地缓存回退：作品快照与目录都来自下载/收藏时写入的表。
-  ///
-  /// 只在目录非空时返回——空目录进详情页没有意义，不如把真实错误抛给用户。
   Future<_DetailData?> _loadFromCache({
     String sourceName = '',
     MediaItem? fallbackItem,
   }) async {
-    final item = widget.item;
+    final item = fallbackItem ?? widget.item;
     try {
       final library = ref.read(libraryRepositoryProvider);
-      final cachedItem =
-          await library.itemByKey(item.sourceId, item.remoteId) ?? fallbackItem;
+      final storedItem = await library.itemByKey(item.sourceId, item.remoteId);
+      if (storedItem != null && storedItem.type != item.type) return null;
       final chapters = await library.loadChapters(item.sourceId, item.remoteId);
-      if (chapters.isEmpty) return null;
       return _DetailData(
-        item: cachedItem,
+        item: storedItem ?? fallbackItem ?? item,
         sourceName: sourceName,
         chapters: chapters,
-        offline: true,
+        offline: storedItem != null || chapters.isNotEmpty,
         supportsContent: item.sourceId != 'bangumi-anime',
       );
     } catch (_) {
@@ -183,7 +410,9 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       await _showLnsDownloadPermission();
       return;
     }
-    final data = await (_future ?? _load());
+    final data = widget.item.type == MediaType.anime
+        ? _playback ?? _data
+        : await (_future ?? _load());
     if (!mounted) return;
     final item = data.item;
     if (item == null || data.chapters.isEmpty) {
@@ -465,7 +694,9 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     try {
       final snapshot = await ref.read(sourcesProvider.future);
       final source = snapshot.enabledEntries
-          .where((e) => e.descriptor.id == widget.item.sourceId)
+          .where(
+            (e) => e.descriptor.id == (_playback?.item ?? widget.item).sourceId,
+          )
           .firstOrNull
           ?.source;
       if (source is! KazumiSource) {
@@ -474,10 +705,13 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       }
       final saved = await source.openWebSession();
       if (!mounted || !saved) return;
-      final future = _load();
-      setState(() {
-        _future = future;
-      });
+      final selected = _playback?.item;
+      if (selected != null) {
+        await _loadPlayback(selected);
+      } else {
+        final refreshed = _load();
+        setState(() { _future = refreshed; });
+      }
     } catch (_) {
       _toast('当前平台无法打开站点验证；未宣称验证成功');
     }
@@ -489,7 +723,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     );
     if (!mounted || target == null) return;
     _toast('已复制到本地书架：${target.title}');
-    unawaited(context.push(AppRoutes.detail, extra: target));
+    unawaited(context.push(AppRoutes.detailFor(target), extra: target));
   }
 
   Future<void> _showLnsDownloadPermission() async {
@@ -532,258 +766,239 @@ class _DetailPageState extends ConsumerState<DetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final item = widget.item;
-    _future ??= _load();
-
+    final data = _data;
+    final item = data.item ?? widget.item;
+    final playable = item.type == MediaType.anime ? _playback : data;
     return PageScaffold(
       title: item.title,
-      actions: <Widget>[
-        if (item.type == MediaType.manga)
-          IconButton(
-            tooltip: '多来源合并',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute<void>(
-                builder: (_) => MergedMangaPage(anchor: item),
-              ),
-            ),
-            icon: const Icon(Icons.merge_type),
-          ),
-        if (item.type == MediaType.anime && item.sourceId.startsWith('kazumi:'))
-          IconButton(
-            tooltip: '打开站点人工验证',
-            onPressed: _openRuleSession,
-            icon: const Icon(Icons.open_in_browser),
-          ),
-        if (item.sourceId == 'bangumi-anime')
-          IconButton(
-            tooltip: '完整番剧资料',
-            icon: const Icon(Icons.info_outline),
-            onPressed: () => showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              showDragHandle: true,
-              builder: (_) => AnimeInfoSheet(id: item.remoteId),
-            ),
-          ),
-        if (item.sourceId != 'local-comic')
-        IconButton(
-          tooltip: '下载全部章节',
-          onPressed: () => unawaited(_downloadOffline()),
-          icon: const Icon(Icons.download_outlined),
-        ),
-        IconButton(
-          tooltip: '追踪',
-          onPressed: () => unawaited(showTrackingBindSheet(context, item)),
-          icon: const Icon(Icons.sync_alt),
-        ),
-        PopupMenuButton<TrackingServiceKind>(
-          tooltip: '双向追踪同步',
-          icon: const Icon(Icons.compare_arrows),
-          itemBuilder: (_) => [
-            for (final kind in TrackingServiceKind.values)
-              PopupMenuItem(value: kind, child: Text('${kind.label}同步预览')),
-          ],
-          onSelected: (kind) => Navigator.push(
-            context,
-            MaterialPageRoute<void>(
-              builder: (_) => TrackingSyncPage(item: item, kind: kind),
-            ),
-          ),
-        ),
+      actions: [
         PopupMenuButton<String>(
-          tooltip: '导出',
-          icon: const Icon(Icons.ios_share),
+          tooltip: '更多',
           onSelected: (value) {
-            if (value == 'epub') unawaited(_export(epub: true));
-            if (value == 'txt') unawaited(_export(epub: false));
+            switch (value) {
+              case 'reload':
+                final refreshed = _load();
+                setState(() { _future = refreshed; });
+              case 'download':
+                unawaited(_downloadOffline());
+              case 'epub':
+                unawaited(_export(epub: true));
+              case 'txt':
+                unawaited(_export(epub: false));
+              case 'site':
+                unawaited(_openRuleSession());
+              case 'merge':
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => MergedMangaPage(anchor: item),
+                  ),
+                );
+              case 'copy':
+                unawaited(_copyToSource());
+              case 'tracking':
+                unawaited(showTrackingBindSheet(context, item));
+              case 'info':
+                showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  showDragHandle: true,
+                  builder: (_) => AnimeInfoSheet(id: item.remoteId),
+                );
+              default:
+                final kind = TrackingServiceKind.values
+                    .where((kind) => 'sync:${kind.name}' == value)
+                    .firstOrNull;
+                if (kind != null) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => TrackingSyncPage(item: item, kind: kind),
+                    ),
+                  );
+                }
+            }
           },
-          itemBuilder: (context) => const <PopupMenuEntry<String>>[
-            PopupMenuItem(
-              value: 'epub',
-              child: ListTile(
-                leading: Icon(Icons.import_contacts_outlined, size: 20),
-                title: Text('导出 EPUB'),
-                subtitle: Text('含目录与插图，跳过锁定章节'),
-                contentPadding: EdgeInsets.zero,
-                dense: true,
+          itemBuilder: (_) => [
+            if (item.sourceId == 'bangumi-anime')
+              const PopupMenuItem(value: 'info', child: Text('完整番剧资料')),
+            if (playable != null &&
+                playable.supportsContent &&
+                playable.chapters.isNotEmpty &&
+                item.sourceId != 'local-comic')
+              const PopupMenuItem(value: 'download', child: Text('下载到本地')),
+            if (item.type == MediaType.novel) ...[
+              if (item.sourceId == LnsSource.id)
+                const PopupMenuItem(value: 'download', child: Text('查看站点下载权限'))
+              else ...[
+                const PopupMenuItem(value: 'epub', child: Text('导出 EPUB')),
+                const PopupMenuItem(value: 'txt', child: Text('导出 TXT')),
+              ],
+            ],
+            if (item.type == MediaType.manga)
+              const PopupMenuItem(value: 'merge', child: Text('多来源合并')),
+            if (item.type != MediaType.anime)
+              const PopupMenuItem(value: 'copy', child: Text('复制到其他来源')),
+            if ((_playback?.item ?? item).sourceId.startsWith('kazumi:'))
+              const PopupMenuItem(value: 'site', child: Text('打开站点人工验证')),
+            const PopupMenuItem(value: 'tracking', child: Text('追踪绑定')),
+            for (final kind in TrackingServiceKind.values)
+              PopupMenuItem(
+                value: 'sync:${kind.name}',
+                child: Text('${kind.label}同步预览'),
               ),
-            ),
-            PopupMenuItem(
-              value: 'txt',
-              child: ListTile(
-                leading: Icon(Icons.article_outlined, size: 20),
-                title: Text('导出 TXT'),
-                subtitle: Text('UTF-8 纯文本整书'),
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-              ),
-            ),
+            const PopupMenuItem(value: 'reload', child: Text('重新补全资料')),
           ],
-        ),
-        if (item.type != MediaType.anime)
-          IconButton(
-            tooltip: '复制到其他来源',
-            onPressed: () => unawaited(_copyToSource()),
-            icon: const Icon(Icons.library_add_outlined),
-          ),
-        IconButton(
-          tooltip: '重新加载',
-          onPressed: () {
-            final future = _load();
-            setState(() {
-              _future = future;
-            });
-          },
-          icon: const Icon(Icons.refresh),
         ),
       ],
-      child: FutureBuilder<_DetailData>(
-        future: _future,
-        builder: (context, asyncSnapshot) {
-          if (asyncSnapshot.connectionState == ConnectionState.waiting) {
-            if (item.type == MediaType.anime) {
-              return ListView(
-                children: [
-                  _Header(
-                    data: _DetailData(item: item, supportsContent: false),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: FilledButton.icon(
-                      onPressed: () => showAnimeSources(context, item),
-                      icon: const Icon(Icons.travel_explore),
-                      label: const Text('选择播放来源'),
-                    ),
-                  ),
-                  const Center(child: CircularProgressIndicator()),
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('正在补全作品资料…'),
-                  ),
-                ],
-              );
-            }
-            return const Center(child: CircularProgressIndicator());
-          }
-          final data =
-              asyncSnapshot.data ?? _DetailData(item: item, error: '加载失败');
-          final description = data.item?.description;
-          return ListView(
-            padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-            children: <Widget>[
-              _Header(data: data),
-              if (item.type == MediaType.anime)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: FilledButton.icon(
-                    onPressed: () =>
-                        showAnimeSources(context, data.item ?? item),
-                    icon: const Icon(Icons.travel_explore),
-                    label: Text(
-                      data.supportsContent && item.sourceId != 'bangumi-anime'
-                          ? '更换播放来源'
-                          : '选择播放来源',
-                    ),
-                  ),
-                ),
-              if (data.offline)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    AppSpacing.md,
-                    AppSpacing.lg,
-                    0,
-                  ),
-                  child: AppCard(
-                    child: Row(
-                      children: <Widget>[
-                        Icon(
-                          Icons.cloud_off_outlined,
-                          size: 18,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(width: AppSpacing.xs),
-                        Expanded(
-                          child: Text(
-                            item.sourceId == 'local-comic'
-                                ? '本地漫画 · 完全离线。图片缺失时请恢复包含媒体的备份或重新导入原始文件。'
-                                : '离线模式：来源暂时取不到数据，正在显示本地缓存（已下载的章节可以直接阅读）。',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              if (data.error != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    AppSpacing.md,
-                    AppSpacing.lg,
-                    0,
-                  ),
-                  child: AppCard(
-                    child: Row(
-                      children: <Widget>[
-                        Icon(
-                          Icons.info_outline,
-                          size: 18,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                        const SizedBox(width: AppSpacing.xs),
-                        Expanded(
-                          child: Text(
-                            data.error!,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              if (description != null && description.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    AppSpacing.md,
-                    AppSpacing.lg,
-                    0,
-                  ),
-                  child: AppCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          '简介',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          description,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              if ((data.item ?? item).type == MediaType.manga && item.sourceId != 'local-comic')
-                MangaRelatedSection(item: data.item ?? item),
-              _ChapterSection(
-                item: data.item,
-                chapters: data.chapters,
-                supportsContent: data.supportsContent,
-                loadError: data.error,
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+        children: [
+          _Header(
+            data: data,
+            onPlay: item.type == MediaType.anime ? _continueAnime : null,
+          ),
+          if (_metadataBusy)
+            const ListTile(
+              leading: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              // 评论区：只有实现账号域能力的来源（轻之国度）才渲染。
-              if (data.item case final detailItem? when detailItem.sourceId != 'local-comic')
-                BookCommentsSection(item: detailItem),
-            ],
-          );
-        },
+              title: Text('补全资料'),
+            ),
+          if (_metadataError != null)
+            ListTile(
+              title: Text(_metadataError!),
+              trailing: TextButton(
+                onPressed: () {
+                  final refreshed = _load();
+                  setState(() { _future = refreshed; });
+                },
+                child: const Text('重试资料'),
+              ),
+            ),
+          if (item.type == MediaType.anime) ...[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 20, 16, 0),
+              child: Text('播放'),
+            ),
+            ListTile(
+              title: Text(
+                _playback?.sourceName.isNotEmpty == true
+                    ? _playback!.sourceName
+                    : '尚未选择播放来源',
+              ),
+              subtitle: _playback?.item == null
+                  ? null
+                  : Text(_playback!.item!.title),
+              trailing: TextButton(
+                onPressed: _chooseSource,
+                child: Text(_playback == null ? '选择来源' : '更换来源'),
+              ),
+            ),
+          ],
+          if (_directoryBusy)
+            const ListTile(
+              leading: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              title: Text('获取目录'),
+            ),
+          if (_directoryError != null)
+            ListTile(
+              title: Text(_directoryError!),
+              trailing: TextButton(
+                onPressed: () {
+                  if (_playback?.item case final selected?) {
+                    unawaited(_loadPlayback(selected));
+                  } else {
+                    final refreshed = _load();
+                    setState(() { _future = refreshed; });
+                  }
+                },
+                child: const Text('重试目录'),
+              ),
+            ),
+          if (data.offline && !_metadataBusy)
+            const ListTile(
+              leading: Icon(Icons.offline_pin_outlined),
+              title: Text('显示本机缓存；刷新失败不会清除已缓存资料或目录'),
+            ),
+          if (playable != null)
+            _ChapterSection(
+              item: playable.item,
+              chapters: playable.chapters,
+              supportsContent: playable.supportsContent,
+              loadError: _directoryBusy ? '正在获取目录' : _directoryError,
+              selectedChapterId: item.type == MediaType.anime
+                  ? _selectedEpisodeId
+                  : null,
+              onSelected: item.type == MediaType.anime
+                  ? (id) => setState(() => _selectedEpisodeId = id)
+                  : null,
+            ),
+          if (item.type == MediaType.anime)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 20, 16, 0),
+              child: Text('资料'),
+            ),
+          if (item.description?.isNotEmpty == true)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(item.description!),
+            ),
+          if (item.sourceId == 'bangumi-anime')
+            TextButton.icon(
+              onPressed: () => showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                showDragHandle: true,
+                builder: (_) => AnimeInfoSheet(id: item.remoteId),
+              ),
+              icon: const Icon(Icons.info_outline),
+              label: const Text('角色 / Staff / 关联 / 评论 / 分集资料'),
+            ),
+          if (item.type == MediaType.manga && item.sourceId != 'local-comic')
+            MangaRelatedSection(item: item),
+          if (item.type == MediaType.novel && item.sourceId != 'local-comic')
+            BookCommentsSection(item: item),
+        ],
       ),
     );
+  }
+
+  Future<void> _continueAnime() async {
+    if (_playback == null || _playback!.chapters.isEmpty) {
+      await _chooseSource();
+      return;
+    }
+    final data = _playback!;
+    final item = data.item!;
+    final history = await ref
+        .read(libraryRepositoryProvider)
+        .lastReadOf(item.sourceId, item.remoteId);
+    if (!mounted) return;
+    var index = data.chapters.indexWhere(
+      (chapter) =>
+          chapter.remoteId ==
+              (_selectedEpisodeId ?? history?.chapterRemoteId) &&
+          !chapter.locked,
+    );
+    if (index < 0) {
+      index = data.chapters.indexWhere((chapter) => !chapter.locked);
+    }
+    if (index < 0) {
+      _toast('当前目录没有可播放的未锁剧集');
+      return;
+    }
+    _ChapterSection(
+      item: item,
+      chapters: data.chapters,
+      supportsContent: true,
+    )._openChapter(context, index);
   }
 }
 
@@ -792,7 +1007,6 @@ class _DetailData {
     this.item,
     this.sourceName = '',
     this.chapters = const <Chapter>[],
-    this.error,
     this.offline = false,
     this.supportsContent = true,
   });
@@ -800,7 +1014,6 @@ class _DetailData {
   final MediaItem? item;
   final String sourceName;
   final List<Chapter> chapters;
-  final String? error;
 
   /// 来源取数失败、改用本地缓存渲染（下载过的作品断网仍可进入阅读）。
   final bool offline;
@@ -808,9 +1021,10 @@ class _DetailData {
 }
 
 class _Header extends ConsumerWidget {
-  const _Header({required this.data});
+  const _Header({required this.data, this.onPlay});
 
   final _DetailData data;
+  final VoidCallback? onPlay;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -884,26 +1098,11 @@ class _Header extends ConsumerWidget {
                   ),
                 ],
                 const SizedBox(height: AppSpacing.md),
-                if (item.type == MediaType.anime &&
-                    item.sourceId == 'bangumi-anime')
-                  FutureBuilder<AnimeSelection?>(
-                    future: ref
-                        .read(animeIdentityRepositoryProvider)
-                        .lastSelection(item),
-                    builder: (context, snapshot) {
-                      final selection = snapshot.data;
-                      if (selection == null) return const SizedBox.shrink();
-                      return FilledButton.tonalIcon(
-                        icon: const Icon(Icons.play_arrow),
-                        label: Text(
-                          '最近来源 · ${ref.watch(sourcesProvider).asData?.value.entries.where((e) => e.descriptor.id == selection.item.sourceId).firstOrNull?.descriptor.name ?? selection.item.sourceId} · ${selection.chapter?.volumeTitle ?? selection.item.title}${selection.chapter == null ? '' : ' · ${selection.chapter!.title}'}',
-                        ),
-                        onPressed: () => context.push(
-                          AppRoutes.detail,
-                          extra: selection.item,
-                        ),
-                      );
-                    },
+                if (onPlay != null)
+                  FilledButton.icon(
+                    onPressed: onPlay,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('开始 / 继续观看'),
                   ),
                 _FollowButton(item: item),
                 if (data.chapters.isNotEmpty && data.supportsContent)
@@ -915,17 +1114,17 @@ class _Header extends ConsumerWidget {
                       final index = data.chapters.indexWhere(
                         (c) => c.remoteId == snapshot.data?.chapterRemoteId,
                       );
-                      if (index < 0) return const SizedBox.shrink();
+                      final startIndex = index < 0 ? 0 : index;
                       return FilledButton.tonalIcon(
                         icon: const Icon(Icons.play_arrow),
                         label: Text(
-                          '继续${item.type == MediaType.anime ? '观看' : '阅读'} · ${data.chapters[index].title}',
+                          '${index < 0 ? '开始' : '继续'}${item.type == MediaType.anime ? '观看' : '阅读'} · ${data.chapters[startIndex].title}',
                         ),
                         onPressed: () => _ChapterSection(
                           item: item,
                           chapters: data.chapters,
                           supportsContent: true,
-                        )._openChapter(context, index),
+                        )._openChapter(context, startIndex),
                       );
                     },
                   ),
@@ -944,6 +1143,8 @@ class _ChapterSection extends StatelessWidget {
     required this.chapters,
     required this.supportsContent,
     this.loadError,
+    this.selectedChapterId,
+    this.onSelected,
   });
 
   final MediaItem? item;
@@ -953,6 +1154,8 @@ class _ChapterSection extends StatelessWidget {
   /// 详情/目录加载失败的原因（null 表示请求成功）。空目录是否可操作
   /// 取决于它：成功但空 → 引导搜索；失败 → 不把失败伪装成空目录。
   final String? loadError;
+  final String? selectedChapterId;
+  final ValueChanged<String>? onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -965,6 +1168,12 @@ class _ChapterSection extends StatelessWidget {
       return Padding(
         padding: const EdgeInsets.all(16),
         child: EpisodeSelector(
+          key: ValueKey(
+            '${item?.sourceId}:${item?.remoteId}:$selectedChapterId',
+          ),
+          currentIndex: chapters.indexWhere(
+            (chapter) => chapter.remoteId == selectedChapterId,
+          ),
           chapters: chapters,
           onSelected: (index) => _openChapter(context, index),
         ),
@@ -1000,8 +1209,10 @@ class _ChapterSection extends StatelessWidget {
                     const SizedBox(height: AppSpacing.sm),
                     OutlinedButton.icon(
                       onPressed: () => context.push(
-                        AppRoutes.search,
-                        extra: (sourceId: item!.sourceId, type: item!.type),
+                        AppRoutes.searchFor(
+                          item!.type,
+                          sourceId: item!.sourceId,
+                        ),
                       ),
                       icon: const Icon(Icons.search, size: 18),
                       label: const Text('搜索其他作品'),
@@ -1040,6 +1251,7 @@ class _ChapterSection extends StatelessWidget {
   void _openChapter(BuildContext context, int index) {
     final target = item;
     if (target == null || index < 0 || index >= chapters.length) return;
+    onSelected?.call(chapters[index].remoteId);
 
     if (target.type == MediaType.manga) {
       context.push(
@@ -1078,8 +1290,11 @@ class _ChapterSection extends StatelessWidget {
 
 /// Render one bounded chapter range while retaining original reader indices.
 class _ChapterCatalog extends StatefulWidget {
-  const _ChapterCatalog({required this.chapters, required this.canOpen,
-    required this.onSelected});
+  const _ChapterCatalog({
+    required this.chapters,
+    required this.canOpen,
+    required this.onSelected,
+  });
   final List<Chapter> chapters;
   final bool canOpen;
   final ValueChanged<int> onSelected;
@@ -1097,7 +1312,9 @@ class _ChapterCatalogState extends State<_ChapterCatalog> {
   void _group() {
     _groups.clear();
     for (var i = 0; i < widget.chapters.length; i++) {
-      _groups.putIfAbsent(widget.chapters[i].volumeTitle ?? '', () => []).add(i);
+      _groups
+          .putIfAbsent(widget.chapters[i].volumeTitle ?? '', () => [])
+          .add(i);
     }
     if (!_groups.containsKey(_volume)) {
       _volume = _groups.keys.first;
@@ -1130,20 +1347,34 @@ class _ChapterCatalogState extends State<_ChapterCatalog> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('目录（${widget.chapters.length}）', style: theme.textTheme.titleMedium),
+          Text(
+            '目录（${widget.chapters.length}）',
+            style: theme.textTheme.titleMedium,
+          ),
           if (!widget.canOpen)
-            const Text('此来源只提供番剧资料与目录，不提供播放地址；请导入具有 content.playSources 的番剧规则。'),
+            const Text(
+              '此来源只提供番剧资料与目录，不提供播放地址；请导入具有 content.playSources 的番剧规则。',
+            ),
           if (_groups.length > 1)
             DropdownButtonFormField<String>(
               initialValue: _volume,
               isExpanded: true,
               decoration: const InputDecoration(labelText: '分卷'),
-              items: [for (final entry in _groups.entries) DropdownMenuItem(
-                value: entry.key,
-                child: Text('${entry.key.isEmpty ? '未分卷' : entry.key} · ${entry.value.length}章',
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-              )],
-              onChanged: (value) => setState(() { _volume = value; _range = 0; }),
+              items: [
+                for (final entry in _groups.entries)
+                  DropdownMenuItem(
+                    value: entry.key,
+                    child: Text(
+                      '${entry.key.isEmpty ? '未分卷' : entry.key} · ${entry.value.length}章',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (value) => setState(() {
+                _volume = value;
+                _range = 0;
+              }),
             )
           else if (_volume!.isNotEmpty)
             Text(_volume!, style: theme.textTheme.titleSmall),
@@ -1152,28 +1383,40 @@ class _ChapterCatalogState extends State<_ChapterCatalog> {
               key: ValueKey(_volume),
               initialValue: _range,
               decoration: const InputDecoration(labelText: '章节范围'),
-              items: [for (var page = 0; page < ranges; page++) DropdownMenuItem(
-                value: page,
-                child: Text('${page * _pageSize + 1}–${((page + 1) * _pageSize).clamp(1, indices.length)}'),
-              )],
-              onChanged: (value) { if (value != null) setState(() => _range = value); },
+              items: [
+                for (var page = 0; page < ranges; page++)
+                  DropdownMenuItem(
+                    value: page,
+                    child: Text(
+                      '${page * _pageSize + 1}–${((page + 1) * _pageSize).clamp(1, indices.length)}',
+                    ),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _range = value);
+              },
             ),
           const SizedBox(height: AppSpacing.sm),
           AppCard(
             padding: EdgeInsets.zero,
-            child: Column(children: [
-              for (var offset = start; offset < end; offset++) ...[
-                if (offset > start) const Divider(height: 1, indent: AppSpacing.md),
-                ListTile(
-                  dense: true,
-                  title: Text(widget.chapters[indices[offset]].title),
-                  trailing: widget.chapters[indices[offset]].locked
-                    ? const Icon(Icons.lock_outline, size: 18)
-                    : const Icon(Icons.chevron_right, size: 18),
-                  onTap: !widget.canOpen ? null : () => widget.onSelected(indices[offset]),
-                ),
+            child: Column(
+              children: [
+                for (var offset = start; offset < end; offset++) ...[
+                  if (offset > start)
+                    const Divider(height: 1, indent: AppSpacing.md),
+                  ListTile(
+                    dense: true,
+                    title: Text(widget.chapters[indices[offset]].title),
+                    trailing: widget.chapters[indices[offset]].locked
+                        ? const Icon(Icons.lock_outline, size: 18)
+                        : const Icon(Icons.chevron_right, size: 18),
+                    onTap: !widget.canOpen
+                        ? null
+                        : () => widget.onSelected(indices[offset]),
+                  ),
+                ],
               ],
-            ]),
+            ),
           ),
         ],
       ),
@@ -1241,6 +1484,44 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
     }
 
     if (membership.value ?? false) {
+      if (anime) {
+        return OutlinedButton.icon(
+          icon: const Icon(Icons.check, size: 18),
+          label: const Text('管理追番'),
+          onPressed: () async {
+            final status = await showModalBottomSheet<String>(
+              context: context,
+              showDragHandle: true,
+              builder: (context) => SafeArea(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final status in animeFollowStatuses.entries.where(
+                      (e) => e.key.isNotEmpty,
+                    ))
+                      ListTile(
+                        title: Text(status.value),
+                        onTap: () => Navigator.pop(context, status.key),
+                      ),
+                    ListTile(
+                      title: const Text('取消追番（保留历史与缓存）'),
+                      onTap: () => Navigator.pop(context, 'remove'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+            if (!context.mounted || status == null) return;
+            if (status == 'remove') {
+              await _setMembership(context, ref, add: false);
+            } else {
+              await setAnimeFollowStatus(ref, {
+                (followedItem.sourceId, followedItem.remoteId),
+              }, status);
+            }
+          },
+        );
+      }
       return OutlinedButton.icon(
         onPressed: () => _setMembership(context, ref, add: false),
         icon: const Icon(Icons.check, size: 18),
@@ -1283,7 +1564,7 @@ class _FollowButtonState extends ConsumerState<_FollowButton> {
       }
       if (!mounted) return;
       ref.invalidate(inLibraryProvider);
-      ref.invalidate(libraryProvider);
+      ref.invalidate(libraryByTypeProvider(item.type));
       ref.invalidate(animeFollowsProvider);
       // 站点收藏尽力而为：来源支持远端书架且已登录时才写，失败只提示不回滚本地。
       String? syncFailure;

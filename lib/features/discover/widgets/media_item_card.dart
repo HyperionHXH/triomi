@@ -63,7 +63,7 @@ class MediaItemCollection extends StatelessWidget {
         handler(item);
         return;
       }
-      context.push(AppRoutes.detail, extra: item);
+      context.push(AppRoutes.detailFor(item), extra: item);
     }
 
     final extra = footer == null ? 0 : 1;
@@ -72,7 +72,8 @@ class MediaItemCollection extends StatelessWidget {
       if (key is! ValueKey<(String, String, MediaType)>) return null;
       indices ??= {
         for (var index = 0; index < items.length; index++)
-          (items[index].sourceId, items[index].remoteId, items[index].type): index,
+          (items[index].sourceId, items[index].remoteId, items[index].type):
+              index,
       };
       return indices![key.value];
     }
@@ -109,14 +110,18 @@ class MediaItemCollection extends StatelessWidget {
       builder: (context, constraints) {
         final width = constraints.maxWidth - padding.horizontal;
         final scaler = MediaQuery.textScalerOf(context);
-        final minimumWidth = appearance.minimumCardWidth *
+        final minimumWidth =
+            appearance.minimumCardWidth *
             (scaler.scale(13) / 13).clamp(1.0, 2.5);
-        final columns = ((width + appearance.gap) /
-                (minimumWidth + appearance.gap)).floor().clamp(1, 8);
+        final columns =
+            ((width + appearance.gap) / (minimumWidth + appearance.gap))
+                .floor()
+                .clamp(1, 8);
         final coverWidth = (width - (columns - 1) * appearance.gap) / columns;
         // A mixed auto grid reserves portrait-height cells, but every cover
         // keeps its own type's exact ratio rather than stretching anime.
-        final hasPortrait = appearance.shape == CoverShape.auto &&
+        final hasPortrait =
+            appearance.shape == CoverShape.auto &&
             items.any((item) => item.type != MediaType.anime);
         final ratio = appearance.ratio(isAnime: !hasPortrait);
         return CustomScrollView(
@@ -134,21 +139,26 @@ class MediaItemCollection extends StatelessWidget {
                       coverWidth / ratio +
                       scaler.scale(13) * 2.8 +
                       scaler.scale(11) * 1.4 +
-                      appearance.gap + 4,
+                      appearance.gap +
+                      4,
                 ),
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final item = items[index];
-                  return MediaItemCard(
-                    item: item,
-                    key: ValueKey((item.sourceId, item.remoteId, item.type)),
-                    sourceName: sourceNameOf?.call(item) ?? sourceName,
-                    badge: badgeOf?.call(item),
-                    onTap: () => open(item),
-                    onLongPress: onLongPressItem == null
-                        ? null
-                        : () => onLongPressItem!(item),
-                  );
-                }, childCount: items.length, findChildIndexCallback: indexOfKey),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final item = items[index];
+                    return MediaItemCard(
+                      item: item,
+                      key: ValueKey((item.sourceId, item.remoteId, item.type)),
+                      sourceName: sourceNameOf?.call(item) ?? sourceName,
+                      badge: badgeOf?.call(item),
+                      onTap: () => open(item),
+                      onLongPress: onLongPressItem == null
+                          ? null
+                          : () => onLongPressItem!(item),
+                    );
+                  },
+                  childCount: items.length,
+                  findChildIndexCallback: indexOfKey,
+                ),
               ),
             ),
             if (footer != null) SliverToBoxAdapter(child: footer),
@@ -197,9 +207,8 @@ class MediaItemCard extends StatelessWidget {
           Flexible(
             fit: FlexFit.loose,
             child: AspectRatio(
-              aspectRatio: CoverAppearance.of(context).ratio(
-                isAnime: item.type == MediaType.anime,
-              ),
+              aspectRatio: CoverAppearance.of(context)
+                  .ratio(isAnime: item.type == MediaType.anime),
               child: Stack(
                 fit: StackFit.expand,
                 children: <Widget>[
@@ -246,7 +255,8 @@ class MediaItemCard extends StatelessWidget {
             child: Text(
               <String>[
                 if (sourceName.isNotEmpty) sourceName,
-                if (item.status != null && item.status!.isNotEmpty) item.status!,
+                if (item.status != null && item.status!.isNotEmpty)
+                  item.status!,
               ].join(' · '),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -301,9 +311,9 @@ class MediaItemRow extends StatelessWidget {
             ClipRRect(
               borderRadius: AppRadius.controlRadius,
               child: SizedBox(
-                width: 56 * appearance.ratio(
-                  isAnime: item.type == MediaType.anime,
-                ),
+                width:
+                    56 *
+                    appearance.ratio(isAnime: item.type == MediaType.anime),
                 height: 56,
                 child: MediaCover(url: item.coverUrl, sourceId: item.sourceId),
               ),
@@ -361,21 +371,15 @@ class _MediaBadge extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       semanticsLabel: text,
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-        fontSize: 11,
-        color: const Color(0xFF1A1A1A),
-      ),
+      style: Theme.of(context).textTheme.bodySmall
+          ?.copyWith(fontSize: 11, color: const Color(0xFF1A1A1A)),
     ),
   );
 }
 
 /// 封面图：地址缺失或加载失败时落回占位底色，不允许破图撑坏布局。
 class MediaCover extends ConsumerStatefulWidget {
-  const MediaCover({
-    super.key,
-    required this.url,
-    this.sourceId = 'images',
-  });
+  const MediaCover({super.key, required this.url, this.sourceId = 'images'});
 
   final String? url;
   final String sourceId;
@@ -481,11 +485,7 @@ class _MediaCoverState extends ConsumerState<MediaCover> {
     if (value == null || value.isEmpty) return placeholder;
 
     return Image(
-      image: SourceNetworkImage(
-        value,
-        http: http,
-        sourceId: widget.sourceId,
-      ),
+      image: SourceNetworkImage(value, http: http, sourceId: widget.sourceId),
       fit: BoxFit.cover,
       frameBuilder: (context, child, frame, synchronous) {
         if (frame != null || synchronous) {

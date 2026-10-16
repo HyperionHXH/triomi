@@ -1,0 +1,71 @@
+{
+  "id": "C153-R153-four-workspaces",
+  "version": "0.1.0+153",
+  "status": "release-prepared-platform-acceptance-partial",
+  "releasePublished": false,
+  "sourceBaseline": "37b12bde82d1bf2aa9acce5022736fc6a6a4ef7e",
+  "runtimeEvidence": "R153-runtime-smoke.json",
+  "verification": {
+    "driftGeneration": "passed",
+    "analyzer": {"result": "No issues found", "elapsedSeconds": 73.3},
+    "flutterSuite": {"passed": 974, "skipped": 3, "failed": 0, "elapsedSeconds": 96.85, "scope": "final production source including refresh callback and workspace persistence fixes"},
+    "targetedAfterFix": {"animeDetailNovel": 13, "categoryLibrary": 22, "kazumiMisc": 34, "routeNovelPersistence": "passed; not added to full-suite total"},
+    "python": {"passed": 85, "failed": 0, "elapsedSeconds": 5.936},
+    "encodingErrors": 0,
+    "uiDocDriftErrors": 0,
+    "uiDocDriftWarnings": 0,
+    "deliveryReferenceErrors": 0,
+    "secretScan": "C153-secret-scan.json"
+  },
+  "artifacts": [
+    {"name": "C153-android-acceptance.apk", "published": false, "bytes": 130470900, "sha256": "d78b277045144cd7465c383845287ad7269811e9c8daa366b6e5baa06c2fac7d", "v2Verified": true, "signers": 1, "certificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6"},
+    {"name": "triomi-android.apk", "bytes": 130470900, "sha256": "ff5e7864b9303e6ee1990372ae73a69208d29a0a9869e202b7630cc129c293d8", "v2Verified": true, "signers": 1, "certificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077", "packageName": "io.github.hyperionhxh.triomi", "versionCode": 153},
+    {"name": "triomi-windows.zip", "bytes": 37133016, "sha256": "558106572b73c22be0f0aa5174a94358216b20f78d73d4b8d5d8a1eb3d59d051", "members": 50, "allMemberBytesMatchFinalBuild": true},
+    {"name": "triomi-windows.update.json", "bytes": 8312, "sha256": "e7e12eaa91c2b9ccf9ea28b30acfaa8c1c8aaac47cdf3ea4dc29ab3ac7c00a2a", "versionCode": 153, "filesVerified": 50, "publisherSignature": false}
+  ],
+  "preserveData": {
+    "uninstallOrClear": false,
+    "originalDevicePackages": [
+      {"serial": "emulator-5554", "sha256": "22c827b7bbab937128edea6b4706e5f217bde8027e16e9e773bdd6e71616b371"},
+      {"serial": "emulator-5556", "sha256": "22c827b7bbab937128edea6b4706e5f217bde8027e16e9e773bdd6e71616b371"},
+      {"serial": "emulator-5558", "sha256": "b628ba3b3043e0d56424524b691176fca4429bdbd281645bb4f2f7d299ec0bc0"}
+    ],
+    "finalInstalledPackages": [
+      {"serial": "emulator-5554", "installReplace": "Success", "sha256": "d78b277045144cd7465c383845287ad7269811e9c8daa366b6e5baa06c2fac7d", "matchesFinalArtifact": true},
+      {"serial": "emulator-5556", "installReplace": "Success", "sha256": "d78b277045144cd7465c383845287ad7269811e9c8daa366b6e5baa06c2fac7d", "matchesFinalArtifact": true},
+      {"serial": "emulator-5558", "installReplace": "Success", "sha256": "ff5e7864b9303e6ee1990372ae73a69208d29a0a9869e202b7630cc129c293d8", "matchesFinalArtifact": true}
+    ],
+    "api35Manga": "original JS and zh-Hans APK favorites retained; saved chapter 76.2 badge visible; JS/API item resumed as actual 5/14 two-page spread",
+    "api35Novel": "4 local/history snapshots; downloaded shelf shows 2 books; selected shelf/downloaded state survives independent force-stop/restart",
+    "api26Novel": "downloaded shelf shows 2 books after independent restart; original cached LK novel resumes 20/22 with readable Chinese text",
+    "signedNovel": "downloaded shelf shows 1 book; original cached LK novel resumes 3/37 with readable Chinese text"
+  },
+  "actualSurface": {
+    "api35FourBranches": true,
+    "api35Anime": {"recommendation": "actual FX and other returned cards", "detail": "snapshot first, then public metadata; playback selection remains independent", "follow": "original Kobayashi follow and confirmed 7sefun catalogue retained", "branchStacks": "manga source page to anime detail restores each branch"},
+    "api35MangaSubscription": "existing subscription selected through no-name-required confirmation, then full source latest catalogue with 20 returned titles",
+    "api35MangaReader": {"source": "MangaDex JS/API, not APK execution", "chapter": "76.2", "page": "5/14", "visual": "actual grayscale two-page content after initial loading spinners", "screenshot": "C153-api35-manga-reader-loaded.png"},
+    "api35MangaShelfScreenshot": "C153-api35-manga-shelf.png",
+    "api35MangaShelfVisual": "cover grid and four destinations visibly rendered; APK cached cover absent while JS cover rendered",
+    "restartFinding": "novel secondary tab initially did not restore; persisted module tabs, downloaded view and source/channel selection added; final API35/API26 independent restarts observed on downloaded novel shelf",
+    "novelScreenshots": ["C153-api35-novel-restarted.png", "C153-api26-novel-reader.png", "C153-signed-novel-reader.png"],
+    "onlineNetwork": "original API35 emulator DNS failed while IP ping succeeded; normal user-visible source HTTP proxy temporarily used loopback CONNECT relay to Windows resolver; TLS not terminated or bypassed; actual recommendation and manga source catalogue succeeded",
+    "temporaryNetworkCleanup": "source proxy cleared through normal settings to default network; owned adb reverse removed; both owned relays stopped and throwaway relay scripts removed; original noval_api35 AVD relaunched without custom DNS and without data reset",
+    "video": {"visual": "actual Kobayashi episode 01 frame and 24:22 / 25:11 controls", "session": "Media3 PLAYING, speed 1.5, position 1463160ms at sample", "screenshot": "C153-api35-video.png", "limits": "existing completed local download; does not prove fresh webpage resolution or network video startup latency"},
+    "windows": "final source release build succeeded in 99.5s; all 50 ZIP members exactly match build; no desktop interaction tool exposed in this session, so actual final-byte desktop UI journey not performed"
+  },
+  "security": {
+    "credentialsPrinted": false,
+    "cloudOrPaidWrites": false,
+    "tlsBypass": false,
+    "cloudflare": "waived; actual verification not completed",
+    "secretScan": {"filesScanned": 1317, "filesWithSecret": 0, "artifactMembers": [601, 601, 50], "artifactSecretsPrivateMaterialsDebugNames": 0}
+  },
+  "limits": [
+    "Current Windows visible journey remains blocked by unavailable dedicated desktop interaction interface, not an account prerequisite",
+    "Full API26/API35/formal/Windows visual, keyboard, screen-reader, 200-percent text and performance matrix not claimed complete",
+    "Native Mihon and SignalR calls may finish in flight; late publication is rejected, not claimed physically interrupted",
+    "Synchronous native JS still requires shared worker watchdog/disposal termination",
+    "Historical C151 and C125 evidence retains its original artifact scope; no new external account writes or Cloudflare success claimed"
+  ]
+}

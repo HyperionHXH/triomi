@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_router.dart';
+import '../../core/source/http_client.dart';
 import 'anime_info_repository.dart';
 
 class AnimeInfoSheet extends ConsumerStatefulWidget {
@@ -28,6 +29,16 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
   var _epoch = 0, _offset = 0;
   bool _busy = false, _more = false, _cached = false;
   String? _error;
+  SourceRequestCancellation? _owner;
+  final _retained = <String, AnimeInfoPage>{};
+
+  @override
+  void dispose() {
+    _epoch++;
+    _owner?.cancel();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +49,8 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
     if (_busy && !reset) return;
     final epoch = reset ? ++_epoch : _epoch;
     final section = _section;
+    if (reset) _owner?.cancel();
+    final owner = _owner = SourceRequestCancellation();
     setState(() {
       _busy = true;
       _error = null;
@@ -49,10 +62,12 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
       }
     });
     try {
-      final page = await ref
-          .read(animeInfoRepositoryProvider)
-          .section(widget.id, section, offset: _offset);
-      if (!mounted || epoch != _epoch) return;
+      final page = await owner.run(
+        () => ref
+            .read(animeInfoRepositoryProvider)
+            .section(widget.id, section, offset: _offset),
+      );
+      if (!mounted || owner.cancelled || epoch != _epoch) return;
       setState(() {
         _rows.addAll(page.rows);
         _offset = page.nextOffset;
@@ -143,7 +158,7 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
           ? () {
               final item = bangumiItem(row);
               Navigator.pop(context);
-              context.push(AppRoutes.detail, extra: item);
+              context.push(AppRoutes.detailFor(item), extra: item);
             }
           : null,
     );
@@ -167,8 +182,28 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
                       label: Text(entry.value),
                       selected: _section == entry.key,
                       onSelected: (_) {
-                        _section = entry.key;
-                        unawaited(_load(reset: true));
+                        if (entry.key == _section) return;
+                        _retained[_section] = AnimeInfoPage(
+                          List<Map<String, Object?>>.of(_rows),
+                          nextOffset: _offset,
+                          hasMore: _more,
+                          cached: _cached,
+                        );
+                        _owner?.cancel();
+                        _epoch++;
+                        final cached = _retained[entry.key];
+                        setState(() {
+                          _section = entry.key;
+                          _rows
+                            ..clear()
+                            ..addAll(cached?.rows ?? []);
+                          _offset = cached?.nextOffset ?? 0;
+                          _more = cached?.hasMore ?? false;
+                          _cached = cached?.cached ?? false;
+                          _busy = false;
+                          _error = null;
+                        });
+                        if (cached == null) unawaited(_load(reset: true));
                       },
                     ),
                   ),

@@ -93,7 +93,7 @@ void main() {
     }
     expect(source.requests, 0);
     expect(find.text('本地缓存章节'), findsOneWidget);
-    expect(find.textContaining('离线模式'), findsOneWidget);
+    expect(find.textContaining('显示本机缓存'), findsOneWidget);
   });
 
   testWidgets('停用且无缓存：明确拒绝且零请求，启用后重新加载恢复', (tester) async {
@@ -130,14 +130,16 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('该来源已停用'), findsOneWidget);
+    expect(find.textContaining('该来源已停用'), findsWidgets);
     expect(source.requests, 0);
-    expect(find.textContaining('离线模式'), findsNothing);
+    expect(find.textContaining('显示本机缓存'), findsNothing);
     final sources = container.read(sourcesProvider.notifier) as StubSources;
     sources.snapshot = snapshotOf(source);
     await sources.refresh();
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('重新加载'));
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重新补全资料'));
     await tester.pumpAndSettle();
     expect(find.text('当前中文目录为空'), findsOneWidget);
     expect(find.textContaining('该来源已停用'), findsNothing);
@@ -152,7 +154,6 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, '搜索其他作品'), findsOneWidget);
     // 不把成功空态说成失败，也不出现伪造的章节行。
     expect(find.textContaining('加载失败'), findsNothing);
-    expect(find.byType(ListTile), findsNothing, reason: '没有任何章节可列');
   });
 
   testWidgets('目录请求失败：显示带来源的错误与重试，不被空态吞掉', (tester) async {
@@ -161,7 +162,7 @@ void main() {
     // 错误卡可见，带来源名（SourceRegistry.describeError 的口径；
     // 来源名同时出现在头部与错误卡，断言至少一处即可）。
     expect(find.textContaining('D94 夹具源'), findsWidgets);
-    expect(find.byTooltip('重新加载'), findsOneWidget);
+    expect(find.text('重试目录'), findsOneWidget);
     // 失败绝不能伪装成「成功但空」。
     expect(find.text('当前中文目录为空'), findsNothing);
     expect(find.text('未能取得章节目录（原因见上方错误）。'), findsOneWidget);

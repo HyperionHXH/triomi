@@ -65,15 +65,25 @@ class SourceMigrationRepository {
             ..limit(1))
           .getSingleOrNull();
 
-  Future<List<LibraryCategoryLinkRow>> _categories(MediaItem item) =>
-      (_db.select(_db.libraryCategoryLinks)
-            ..where(
-              (t) =>
-                  t.sourceId.equals(item.sourceId) &
-                  t.remoteId.equals(item.remoteId),
-            )
-            ..orderBy([(t) => OrderingTerm.asc(t.categoryId)]))
-          .get();
+  Future<List<LibraryCategoryLinkRow>> _categories(MediaItem item) async {
+    final query =
+        _db.select(_db.libraryCategoryLinks).join([
+            innerJoin(
+              _db.categories,
+              _db.categories.id.equalsExp(_db.libraryCategoryLinks.categoryId),
+            ),
+          ])
+          ..where(
+            _db.libraryCategoryLinks.sourceId.equals(item.sourceId) &
+                _db.libraryCategoryLinks.remoteId.equals(item.remoteId) &
+                _db.categories.module.equals(item.type.name),
+          )
+          ..orderBy([OrderingTerm.asc(_db.libraryCategoryLinks.categoryId)]);
+    return [
+      for (final row in await query.get())
+        row.readTable(_db.libraryCategoryLinks),
+    ];
+  }
 
   Future<MigrationOrigin> origin(MediaItem item) => _db.transaction(() async {
     if (item.type == MediaType.anime) {

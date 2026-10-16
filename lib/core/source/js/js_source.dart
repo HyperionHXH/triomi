@@ -11,10 +11,8 @@ import '../selector_engine.dart';
 import '../source_api.dart';
 import 'js_runtime.dart';
 
-/// JS 规则导出的函数名 → 对应能力。
-///
-/// 能力由**运行时探测**决定（`typeof fn === 'function'`），元数据里的
-/// `capabilities` 对 JS 规则不参与判定——这样规则作者少一处会写错的地方。
+/// JS exports are verified when the source is first used. Browsing metadata
+/// does not execute downloaded code; invocation still checks the real export.
 const Map<String, SourceCapability> jsFunctionCapabilities =
     <String, SourceCapability>{
       'discover': SourceCapability.discover,
@@ -52,12 +50,19 @@ class JsSource
   final Set<SourceCapability> _capabilities = <SourceCapability>{};
   final Map<String, _JsDetail> _detailCache = <String, _JsDetail>{};
   bool _ready = false;
+  bool _disposed = false;
+  Future<void>? _initializing;
 
   String get _id => rule.descriptor.id;
 
   @override
-  SourceDescriptor get descriptor =>
-      rule.descriptor.copyWith(capabilities: _capabilities);
+  SourceDescriptor get descriptor => rule.descriptor.copyWith(
+    capabilities: _ready
+        ? _capabilities
+        : rule.descriptor.capabilities.isEmpty
+        ? jsFunctionCapabilities.values.toSet()
+        : rule.descriptor.capabilities,
+  );
 
   @override
   bool get isReady => _ready;
@@ -69,7 +74,15 @@ class JsSource
   ///
   /// 失败抛 [SourceException]（[SourceErrorType.parse]），由注册表记成
   /// 可见的失败项——坏规则不能静默消失。
-  Future<void> initialize() async {
+  Future<void> initialize() {
+    if (_disposed) throw StateError('来源已停用、移除或替换');
+    if (_ready) return Future.value();
+    return _initializing ??= _initialize().whenComplete(
+      () => _initializing = null,
+    );
+  }
+
+  Future<void> _initialize() async {
     final script = rule.jsCode;
     if (script == null || script.trim().isEmpty) {
       throw SourceException(
@@ -97,10 +110,12 @@ class JsSource
     for (final entry in jsFunctionCapabilities.entries) {
       if (await runtime.hasFunction(entry.key)) _capabilities.add(entry.value);
     }
+    if (_disposed) throw StateError('来源已停用、移除或替换');
     _ready = true;
   }
 
   void dispose() {
+    _disposed = true;
     _ready = false;
     _detailCache.clear();
     runtime.dispose();
@@ -158,8 +173,12 @@ class JsSource
 
   /// 调用 JS 函数并把错误翻译成来源错误。
   Future<Object?> _invoke(String function, List<Object?> args) async {
+    if (_disposed) throw StateError('来源已停用、移除或替换');
+    if (!_ready) await initialize();
     try {
-      return await runtime.call(function, args);
+      final value = await runtime.call(function, args);
+      if (_disposed) throw StateError('来源已停用、移除或替换');
+      return value;
     } on JsRuntimeError catch (error) {
       final hostError = error.hostError;
       if (hostError != null) {

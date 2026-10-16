@@ -158,17 +158,15 @@ class _LkMessageListPageState extends ConsumerState<LkMessageListPage> {
   Future<void> _openTarget(LkNotification notification) async {
     final bookId = notification.targetBookId;
     if (bookId == null) return;
-    await context.push(
-      AppRoutes.detail,
-      extra: MediaItem(
-        sourceId: LkSource.id,
-        remoteId: '$bookId',
-        type: MediaType.novel,
-        title: notification.relatedTitle.isNotEmpty
-            ? notification.relatedTitle
-            : notification.title,
-      ),
+    final item = MediaItem(
+      sourceId: LkSource.id,
+      remoteId: '$bookId',
+      type: MediaType.novel,
+      title: notification.relatedTitle.isNotEmpty
+          ? notification.relatedTitle
+          : notification.title,
     );
+    await context.push(AppRoutes.detailFor(item), extra: item);
   }
 
   @override

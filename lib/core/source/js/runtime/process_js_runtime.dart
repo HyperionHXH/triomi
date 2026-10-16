@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter/services.dart';
 
 import '../../../models/source_exception.dart';
+import '../../http_client.dart';
 
 import '../js_runtime.dart';
 import 'js_worker_wire.dart';
@@ -160,7 +161,15 @@ class _JsWorkerBroker {
   static const _channel = MethodChannel('triomi/js-worker');
   final sessions = <String, ProcessJsRuntime>{};
   final _pending =
-      <String, ({String session, Completer<Object?> completion})>{};
+      <
+        String,
+        ({
+          String session,
+          Completer<Object?> completion,
+          Zone zone,
+          SourceRequestCancellation? owner,
+        })
+      >{};
   JsWorkerWire? _wire;
   ServerSocket? _server;
   Process? _child;
@@ -266,7 +275,17 @@ class _JsWorkerBroker {
     if (wire == null) throw const JsRuntimeError('JS 子进程不可用');
     final id = '${++_sequence}';
     final completer = Completer<Object?>();
-    _pending[id] = (session: session, completion: completer);
+    final owner = SourceRequestCancellation.current;
+    _pending[id] = (
+      session: session,
+      completion: completer,
+      zone: Zone.current,
+      owner: owner,
+    );
+    if (owner?.cancelled == true) {
+      _pending.remove(id);
+      throw const JsRuntimeError('JS 请求已取消');
+    }
     try {
       wire.send({
         'kind': 'request',
@@ -298,7 +317,9 @@ class _JsWorkerBroker {
           pending.completion.isCompleted) {
         return;
       }
-      if (message['ok'] == true) {
+      if (pending.owner?.cancelled == true) {
+        pending.completion.completeError(const JsRuntimeError('JS 请求已取消'));
+      } else if (message['ok'] == true) {
         pending.completion.complete(message['value']);
       } else {
         final error = message['error'] as String? ?? 'JS 执行失败';
@@ -311,25 +332,55 @@ class _JsWorkerBroker {
       }
     } else if (message['kind'] == 'host') {
       final runtime = sessions[session];
-      // Only a currently active invocation may exercise host capabilities.
+      final parentId = message['parentId'];
+      final pending = parentId is String ? _pending[parentId] : null;
+      // Host authority belongs to an exact invocation, never another request
+      // which happens to share this worker/session.
       if (runtime == null ||
-          !_pending.values.any((p) => p.session == session)) {
+          pending == null ||
+          pending.session != session ||
+          pending.completion.isCompleted) {
+        _wire?.send({
+          'kind': 'hostResult',
+          'session': session,
+          'id': id,
+          'value': null,
+          'error': 'JS 请求已取消或已结束',
+        });
         return;
       }
       unawaited(() async {
         Object? value;
         String? error;
         try {
-          value = await runtime._host(message);
+          if (pending.owner?.cancelled == true) {
+            throw const JsRuntimeError('JS 请求已取消');
+          }
+          final result = pending.zone.run(() => runtime._host(message));
+          final owner = pending.owner;
+          value = await (owner == null
+              ? result
+              : Future.any<Object?>([
+                  result,
+                  owner.token.whenCancel.then<Object?>(
+                    (_) => throw const JsRuntimeError('JS 请求已取消'),
+                  ),
+                ]));
+          if (pending.owner?.cancelled == true) {
+            value = null;
+            error = 'JS 请求已取消';
+          }
         } catch (e) {
           error = e is JsRuntimeError ? e.message : '宿主请求失败';
           // Preserve classified HTTP errors without logging their text.
           if (e is SourceException) error = encodeHostError(e);
         }
-        if (_generation != generation ||
-            sessions[session] != runtime ||
-            !_pending.values.any((p) => p.session == session)) {
-          return;
+        if (_generation != generation || sessions[session] != runtime) return;
+        if (!identical(_pending[parentId]?.completion, pending.completion) ||
+            pending.owner?.cancelled == true) {
+          // Settle this host promise with an error, never late fetched data.
+          value = null;
+          error = 'JS 请求已取消或已结束';
         }
         try {
           _wire?.send({

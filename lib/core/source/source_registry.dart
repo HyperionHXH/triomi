@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
 import '../models/source_exception.dart';
+import 'bangumi_source.dart';
 import 'declarative_source.dart';
 import 'http_client.dart';
 import 'js/js_runtime.dart';
@@ -28,14 +29,17 @@ const developmentSourceIds = <String>{
 /// 一个可用的来源：描述信息 + 执行实现。
 class SourceEntry {
   const SourceEntry({
-    required this.descriptor,
+    required this._descriptor,
     required this.source,
     required this.enabled,
     this.ruleText,
     this.repoUrl,
   });
 
-  final SourceDescriptor descriptor;
+  final SourceDescriptor _descriptor;
+  SourceDescriptor get descriptor => source is JsSource && source.isReady
+      ? source.descriptor.copyWith(kind: _descriptor.kind)
+      : _descriptor;
   final ContentSource source;
   final bool enabled;
   final String? ruleText;
@@ -145,8 +149,7 @@ class SourceRegistry {
   final Map<String, Object?> Function(String sourceId)? jsContentOptions;
 
   final AssetBundle _bundle;
-  final Map<String, ({String text, JsSource instance, Future<JsSource> source})>
-  _scripts = {};
+  final Map<String, ({String text, JsSource instance})> _scripts = {};
   bool _disposed = false;
 
   /// Own JS engines for the lifetime of this registry. Refreshes reuse an
@@ -159,10 +162,10 @@ class SourceRegistry {
     _scripts.clear();
   }
 
-  Future<JsSource> _script(String id, String text, SourceRule rule) {
+  JsSource _script(String id, String text, SourceRule rule) {
     if (_disposed) throw StateError('来源注册表已关闭');
     final previous = _scripts[id];
-    if (previous?.text == text) return previous!.source;
+    if (previous?.text == text) return previous!.instance;
     previous?.instance.dispose();
     final source = JsSource(
       rule: rule,
@@ -172,23 +175,8 @@ class SourceRegistry {
           ? null
           : () => jsContentOptions!(id),
     );
-    late final Future<JsSource> future;
-    future = () async {
-      try {
-        await source.initialize();
-        if (_disposed) throw StateError('来源注册表已关闭');
-        if (!identical(_scripts[id]?.source, future)) {
-          throw StateError('来源已停用、移除或替换');
-        }
-        return source;
-      } catch (_) {
-        if (identical(_scripts[id]?.source, future)) _scripts.remove(id);
-        source.dispose();
-        rethrow;
-      }
-    }();
-    _scripts[id] = (text: text, instance: source, source: future);
-    return future;
+    _scripts[id] = (text: text, instance: source);
+    return source;
   }
 
   /// 随包分发的示例规则。用户删掉后不会自动复活（[seedBuiltins] 只补没记录过的）。
@@ -284,7 +272,7 @@ class SourceRegistry {
         metadata = rule.descriptor;
         if (rule.isScript) {
           final ContentSource source = row.enabled
-              ? await _script(row.id, text, rule)
+              ? _script(row.id, text, rule)
               : _DisabledScriptSource(
                   rule.descriptor.copyWith(
                     capabilities: const <SourceCapability>{},
@@ -304,7 +292,11 @@ class SourceRegistry {
         entries.add(
           SourceEntry(
             descriptor: rule.descriptor.copyWith(kind: row.kind),
-            source: DeclarativeSource(rule: rule, http: http),
+            source:
+                rule.descriptor.id == 'bangumi-anime' &&
+                    rule.baseUrl == 'https://api.bgm.tv'
+                ? BangumiSource(rule: rule, http: http)
+                : DeclarativeSource(rule: rule, http: http),
             enabled: row.enabled,
             ruleText: text,
             repoUrl: row.repoUrl,
@@ -312,15 +304,36 @@ class SourceRegistry {
         );
       } on RuleFormatException catch (error) {
         failures.add(
-          SourceFailure(id: row.id, name: row.name, message: error.message, lang: metadata?.lang ?? row.lang, type: row.type, nsfw: metadata?.nsfw),
+          SourceFailure(
+            id: row.id,
+            name: row.name,
+            message: error.message,
+            lang: metadata?.lang ?? row.lang,
+            type: row.type,
+            nsfw: metadata?.nsfw,
+          ),
         );
       } on SourceException catch (error) {
         failures.add(
-          SourceFailure(id: row.id, name: row.name, message: error.userMessage, lang: metadata?.lang ?? row.lang, type: row.type, nsfw: metadata?.nsfw),
+          SourceFailure(
+            id: row.id,
+            name: row.name,
+            message: error.userMessage,
+            lang: metadata?.lang ?? row.lang,
+            type: row.type,
+            nsfw: metadata?.nsfw,
+          ),
         );
       } catch (error) {
         failures.add(
-          SourceFailure(id: row.id, name: row.name, message: '$error', lang: metadata?.lang ?? row.lang, type: row.type, nsfw: metadata?.nsfw),
+          SourceFailure(
+            id: row.id,
+            name: row.name,
+            message: '$error',
+            lang: metadata?.lang ?? row.lang,
+            type: row.type,
+            nsfw: metadata?.nsfw,
+          ),
         );
       }
     }

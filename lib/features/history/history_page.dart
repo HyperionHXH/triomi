@@ -14,14 +14,15 @@ import '../library/data/library_providers.dart';
 ///
 /// 每条记录带作品与章节信息（目录未缓存时章节标题会降级显示，而不是整条消失）。
 class HistoryPage extends ConsumerWidget {
-  const HistoryPage({super.key});
+  const HistoryPage({super.key, this.type});
+  final MediaType? type;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final history = ref.watch(historyProvider);
+    final history = ref.watch(historyByTypeProvider(type));
 
     return PageScaffold(
-      title: '阅读历史',
+      title: type == null ? '全部历史' : '${type!.label}历史',
       actions: <Widget>[
         IconButton(
           tooltip: '清空历史',
@@ -89,7 +90,8 @@ class HistoryPage extends ConsumerWidget {
                 trailing: const Icon(Icons.chevron_right, size: 20),
                 onTap: item == null
                     ? null
-                    : () => context.push(AppRoutes.detail, extra: item),
+                    : () =>
+                          context.push(AppRoutes.detailFor(item), extra: item),
               );
             },
           );
@@ -103,7 +105,7 @@ class HistoryPage extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('清空阅读历史'),
-        content: const Text('将删除本机保存的全部阅读记录，书架与缓存不受影响。'),
+        content: Text('将删除本机${type?.label ?? '全部内容'}的历史记录，收藏与缓存不受影响。'),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -117,7 +119,9 @@ class HistoryPage extends ConsumerWidget {
       ),
     );
     if (confirmed != true) return;
-    await ref.read(historyProvider.notifier).clear();
+    await ref.read(libraryRepositoryProvider).clearHistory(type: type);
+    ref.invalidate(historyByTypeProvider(type));
+    ref.invalidate(historyProvider);
   }
 
   /// 相对时间：刚刚 / N 分钟前 / N 小时前 / 昨天 / MM-DD。

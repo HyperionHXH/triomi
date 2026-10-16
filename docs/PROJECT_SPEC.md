@@ -2,7 +2,7 @@
 
 > **文档用途**：本文件是完整的需求 + 调研 + 方案 + 任务拆解，交给下一个 AI 模型（或人类开发者）直接动工。读完后应能不依赖任何外部上下文开始写代码。
 >
-> **文档版本**：v1.8（2026-10-05，分类/封面网格、完整中文漫画与APK仓库调查）
+> **文档版本**：v1.9（2026-10-16，R153 四工作区实施；历史验收范围以 CURRENT_STATUS 为准）
 >
 > **实施进度**：Android真实番剧24:49正片、LK小说7/45页重启续读、来源安全事务升级已通过[C99–C102](delivery/C99_C102_CORE_ACCEPTANCE.md)。最新[C107–C108](delivery/C107_C108_DISCOVER_MANGA_ACCEPTANCE.md)修复发现按钮裁字、改三列封面、取消发现/书架「全部」，MangaDex1.0.3真实中文目录211章、连续两章88/69页与4/69页重启恢复通过；用户 Mihon APK 宿主已完成首批真实 MangaDex 1.6、十八漫画 1.6 和拷贝漫画 1.4 的安装、执行、搜索、目录、章节和图片阅读验收，见[C110](delivery/C110_MIHON_HOST_RUNTIME_AUDIT.md)。用户 APK 仓库仍有2489个来源，不能据此宣称全量兼容；Windows/非 Android 平台保持平台限制。以下历史勾选不代表原软件全部功能已验收。LNS账号/付费与物理手机兼容需用户条件；桌面动态播放、恶意JS强制隔离仍待实现。项目位于 `D:\noval_and_manga\triomi`。
 > 复查记录见 `triomi/docs/M0_REVIEW.md`、`M1_REVIEW.md`、`M2_REVIEW.md`；规则写法见 `triomi/docs/RULE_FORMAT.md`
@@ -19,7 +19,7 @@
 - **看小说**：**完整移植**用户自有项目 **Mixn** 的全部功能（不是 subset）——LK/LNS 双源聚合、阅读器、账号体系、站点功能、下载导出、字体外观，见 2.4 全量功能清单。
 
 **开发方式声明**：本项目是**全新独立开发的 App**（Flutter），不是在 Mixn 仓库上叠加开发。Mixn 的角色是「设计蓝本 + 功能验收基准」——其架构思想被吸收、Kotlin 代码作为移植参照（MIT，用户自有），但新 App 的代码从零写。小说模块的完成定义 = **Mixn v1.17.0 功能全量对齐**（下含清单逐项打勾）。
-- **UI 一定要好看**：以 **Komikku 的 GNOME/libadwaita 风格**为视觉基准（简洁、卡片化、自适应、圆角、留白充足），在跨端框架中复刻其设计语言。
+- **UI 与业务基准**：番剧参考 Kazumi，漫画参考 Android `komikku-app/komikku`，小说参考 MixN。共享 Material 3 主题，但保留不同业务工作流；不再以 GNOME Python Komikku 的导航与插件生态作为当前目标。具体决策见 [四工作区 ADR](adr/ADR-2026-10-16-four-independent-workspaces.md)。
 
 **核心原则**：软件本身**不存储任何内容**，一切内容来自用户导入的「规则/源」，软件只做聚合、解析、呈现与管理。这是 Komikku / Kazumi / Miru / Mihon 共同的生存模式，也是法律风险的隔离带。
 
@@ -43,7 +43,7 @@
 2. **规则引擎选 JS 不选纯 XPath**：Kazumi 的 XPath 规则简单但表达力弱（遇到 JS 渲染、加密、复杂翻页就抓瞎）；Miru 的 JS 扩展表达力强且社区生态好。**最佳方案：JS 为主，内置 XPath 兼容层作为简式写法**（简单站点 5 行选择器搞定，复杂站点写完整 JS）。
 3. **Flutter 是唯一合理选择**：单代码库覆盖 Android/Windows/iOS/macOS/Linux；Kazumi 和 Miru 两个最重要的参照都是 Flutter，播放器（media_kit）、弹幕、解析等轮子全部现成可参考。
 4. **许可证红线**：Komikku(GPL3)/Kazumi(GPL3)/Miru(AGPL3) 的代码**不能直接复制**，否则本项目必须同许可证开源。正确姿势：**参考架构思想，自己实现**；若要直接复用代码，本项目须采用 GPL-3.0 并在 README 声明。**本项目建议直接采用 GPL-3.0 开源**，与生态保持一致，省去所有纠结。
-5. **UI 复刻路径**：Komikku 是 libadwaita 风格（Adw 大圆角卡片、Sidebar + Content 布局、自适应断点、柔和阴影）。Flutter 用 Material 3 + 自定义 Design Token 可以高度还原（见第 6 章）。
+5. **UI 落地路径**：统一 Material 3 Design Token、圆角/留白与自适应布局；工作流分别对齐 Kazumi、Android Komikku、MixN，不把三类筛选和收藏 UI 强行合成一个页面。
 
 ### 2.3 Mixn 深入解析（已读源码，2026-09-22）
 
@@ -366,7 +366,7 @@ settings     (hive KV)
 
 ### 6.1 设计语言
 
-Komikku 的观感 = **GNOME libadwaita**：大留白、圆角卡片、无边框线（用背景色分层）、柔和投影、自适应布局。Flutter 落地为 **Material 3 + 以下 Design Token**：
+当前采用 **Material 3 + 以下 Design Token**；历史 GNOME/libadwaita 视觉调研保留为设计来源，不代表使用 Linux Komikku 的业务导航或 Python server 插件：
 
 | Token | 浅色 | 深色 | 说明 |
 |---|---|---|---|
@@ -381,16 +381,16 @@ Komikku 的观感 = **GNOME libadwaita**：大留白、圆角卡片、无边框�
 
 ### 6.2 全局布局（自适应断点）
 
-- **< 600dp（手机）**：底部 NavigationBar 四栏 —— `发现 │ 书架 │ 追番 │ 我的`（2026-10-05 调整为发现优先，见 ADR-2026-10-05：发现是默认首屏，书架定位为漫画/小说阅读收藏库，追番保持独立动画工作区）。
-- **600~1240dp（平板/小窗）**：NavigationRail 侧栏，四栏顺序同上。
-- **> 1240dp（桌面）**：Komikku 式 **Sidebar（源/分类列表）+ Content 区**，四栏顺序同上；窗口最小 360×600，标题栏用自定义 header bar（ window_manager 去原生边框）。
+- **< 600dp（手机）**：底部 NavigationBar 四栏 —— `追番 │ 漫画 │ 小说 │ 我的`。首次进入追番推荐，之后恢复上次工作区。
+- **600~1240dp（平板/小窗）**：NavigationRail，目的地与业务状态同上。
+- **> 1240dp（桌面）**：Sidebar + Content，同四个工作区。各分支独立保留搜索/详情/来源页栈，读器和播放器独占内容区。
 
 ### 6.3 页面清单与要点
 
-1. **书架库页**：漫画订阅与小说收藏共用阅读书架，默认漫画，筛选仅漫画/小说/番剧（旧），取消「全部」；最后一项是共享收藏表的兼容入口。保留阅读进度、未读角标、历史和离线缓存。动画收藏在独立追番页管理。
-2. **发现页**：默认番剧，番剧/漫画/小说类别独立，无「全部」；来源选择器 + 热门/最新封面网格（正常手机三列，极窄两列，宽屏自适应），标题两行、来源独立；按钮按字号自然增高。全局搜索跨源并发并按来源分组。见[新ADR](adr/ADR-2026-10-05-category-grid-and-apk-boundary.md)。
-3. **详情页**（Komikku Details 复刻）：顶部封面毛玻璃背景 + 大封面 + 标题/作者/标签/评分；操作行（追/已追、继续观看按钮、下载、分享）；Tab：章节列表（已读置灰、当前高亮、下载状态图标）│ 简介 │ 关联推荐。
-4. **追番页**：默认「我的追番」本地列表，动画详情可加入或取消，无需账号；保留来源、观看进度和旧收藏。第二个标签为「放送表」，选中时加载周更资料。远端追踪账号设置在独立 `/tracking` 页面；Bangumi 资料和时间表不提供正片播放地址。
+1. **漫画工作区**：书库 / 更新 / 浏览；书库分类、搜索、筛选和批量动作只作用于漫画。浏览含显式订阅、来源列表及完整单源工作区；真实 APK 执行只在 Android。
+2. **小说工作区**：发现 / 书架；分站榜单，全部 / 已下载书架，来源/未读/下载筛选；本机收藏与站点收藏保留区别，账号功能不混入漫画扩展。
+3. **详情页**：复合身份可冷启恢复，快照与缓存先显示；番剧播放/资料解耦，资料分区按需加载。主操作是继续与收藏，其余归更多；不把资料分集当视频地址。
+4. **追番工作区**：推荐 / 时间表 / 我的追番，固定动画身份；历史“番剧（旧）”数据仍可达，但混合类型筛选和旧内部路由删除。时间表使用上游星期，不猜造。搜索只在当前模块，资料/播放站模式明确分开。
 5. **阅读器×3**：全屏沉浸，顶部/底部控制条点击呼出并自动隐藏；设置面板从底部弹出（圆角 sheet）。
 6. **设置页**：Komikku Preferences 式分组列表（常规/书库/阅读器/播放器/规则管理/追踪账号/同步/关于），每组一个圆角卡片容器。
 7. **规则管理页**：已装规则列表（类型图标+开关+更新按钮）；规则仓库浏览；剪贴板/文件/URL 三种导入方式。
@@ -468,7 +468,7 @@ Komikku 的观感 = **GNOME libadwaita**：大留白、圆角卡片、无边框�
   - LK 适配器：`app/.../source/lightnovelkingdom/`；LNS 适配器：`app/.../source/lightnovelshelf/`
   - EPUB/TXT 导出：`app/.../core/epub/`、`app/.../core/txt/`
   - 架构文档：仓库内 `CONTEXT.md`、`docs/AGGREGATOR_PLAN.md`、`docs/adr/0001-built-in-source-adapters.md`
-- Komikku: https://codeberg.org/valos/Komikku （GNOME Apps 页面有全套界面截图，UI 复刻照它画）
+- Android Komikku: https://github.com/komikku-app/komikku （当前漫画业务基准；GNOME https://codeberg.org/valos/Komikku 仅为历史独立项目参考）
 - Kazumi: https://github.com/Predidit/Kazumi （规则格式、播放器、弹幕、WebDAV 同步实现参考）
 - Miru: https://github.com/miru-project/miru-app （三合一架构、JS 扩展 API 设计的最直接参照）
 - Mihon: https://github.com/mihonapp/mihon （书库/章节/追踪的领域设计参考）

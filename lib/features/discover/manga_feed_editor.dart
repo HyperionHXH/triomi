@@ -1,179 +1,122 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/db/app_database.dart';
 import '../../core/models/media_type.dart';
-import '../../core/source/mihon_source.dart';
-import '../../core/source/source_api.dart';
 import '../../core/source/source_registry.dart';
+import '../manga/manga_filter_snapshot.dart';
 import 'manga_feed_repository.dart';
 
+/// The ordinary subscription flow deliberately has no name/query form. Advanced
+/// listings and saved searches belong to the source workspace.
 class MangaFeedEditor extends ConsumerStatefulWidget {
-  const MangaFeedEditor({super.key, required this.snapshot, this.initial});
+  const MangaFeedEditor({super.key, required this.snapshot});
   final SourceRegistrySnapshot snapshot;
-  final MangaFeedRow? initial;
   @override
   ConsumerState<MangaFeedEditor> createState() => _MangaFeedEditorState();
 }
 
 class _MangaFeedEditorState extends ConsumerState<MangaFeedEditor> {
-  late final _name = TextEditingController(text: widget.initial?.name ?? '');
-  late final _query = TextEditingController(text: widget.initial?.query ?? '');
-  late String? _sourceId = widget.initial?.sourceId;
-  late String _mode = widget.initial?.kind == 'search'
-      ? 'search'
-      : widget.initial?.feedId ?? 'popular';
-  late List<Map<String, Object?>> _filters = [
-    for (final row in jsonDecode(widget.initial?.filtersJson ?? '[]') as List)
-      Map<String, Object?>.from(row as Map),
-  ];
+  String? _sourceId;
   bool _busy = false;
   String? _error;
-  @override
-  void dispose() {
-    _name.dispose();
-    _query.dispose();
-    super.dispose();
-  }
-
-  Future<void> _editFilters() async {
-    final source = widget.snapshot.enabledEntries
-        .where((e) => e.descriptor.id == _sourceId)
-        .firstOrNull
-        ?.source;
-    if (source is! MihonSource) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final fresh = await source.searchFilters();
-      if (!mounted) return;
-      final selected = await showDialog<List<Map<String, Object?>>>(
-        context: context,
-        builder: (_) => MangaFiltersDialog(fresh: fresh, saved: _filters),
-      );
-      if (mounted && selected != null) setState(() => _filters = selected);
-    } catch (_) {
-      if (mounted) setState(() => _error = '来源筛选暂不可用，未覆盖保存值');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final entries = widget.snapshot.enabledEntries
         .where(
-          (e) =>
-              e.descriptor.type == MediaType.manga &&
-              (e.source is DiscoverProvider || e.source is SearchProvider),
+          (entry) =>
+              entry.descriptor.type == MediaType.manga &&
+              defaultMangaFeed(entry.source) != null,
         )
         .toList();
-    if (_sourceId == null && entries.isNotEmpty) {
-      _sourceId = entries.first.descriptor.id;
-    }
+    _sourceId ??= entries.firstOrNull?.descriptor.id;
     final entry = entries
         .where((e) => e.descriptor.id == _sourceId)
         .firstOrNull;
-    final feeds = entry?.source is DiscoverProvider
-        ? (entry!.source as DiscoverProvider).feeds
-        : <DiscoverFeed>[];
-    final modes = <String, String>{
-      for (final f in feeds) f.id: f.name,
-      if (entry?.source is SearchProvider) 'search': '保存搜索',
-    };
-    if (!modes.containsKey(_mode) && modes.isNotEmpty) _mode = modes.keys.first;
+    final feed = entry == null ? null : defaultMangaFeed(entry.source);
     return AlertDialog(
-      title: Text(widget.initial == null ? '添加漫画Feed' : '编辑漫画Feed'),
-      content: SingleChildScrollView(
-        child: SizedBox(
-          width: 420,
+      title: const Text('添加订阅'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextField(
-                controller: _name,
-                decoration: const InputDecoration(labelText: '名称'),
-              ),
-              DropdownButtonFormField<String>(
-                isExpanded: true,
-                initialValue: entry?.descriptor.id,
-                decoration: const InputDecoration(labelText: '来源'),
-                items: [
-                  for (final e in entries)
-                    DropdownMenuItem(
-                      value: e.descriptor.id,
-                      child: Text(
-                        '${e.descriptor.name} · ${e.descriptor.lang}',
-                        overflow: TextOverflow.ellipsis,
+              if (entries.isEmpty)
+                const Text('没有可订阅的已启用漫画来源。请先在来源/扩展管理中启用来源。')
+              else
+                DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  initialValue: entry?.descriptor.id,
+                  decoration: const InputDecoration(labelText: '选择来源'),
+                  items: [
+                    for (final e in entries)
+                      DropdownMenuItem(
+                        value: e.descriptor.id,
+                        child: Text(
+                          '${e.descriptor.name} · ${e.descriptor.lang}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                ],
-                onChanged: _busy
-                    ? null
-                    : (value) => setState(() {
-                        _sourceId = value;
-                        _filters = [];
-                      }),
-              ),
-              DropdownButtonFormField<String>(
-                key: ValueKey(_sourceId),
-                initialValue: modes.containsKey(_mode) ? _mode : null,
-                decoration: const InputDecoration(labelText: '内容'),
-                items: [
-                  for (final e in modes.entries)
-                    DropdownMenuItem(value: e.key, child: Text(e.value)),
-                ],
-                onChanged: _busy
-                    ? null
-                    : (value) => setState(() => _mode = value ?? 'popular'),
-              ),
-              if (_mode == 'search')
-                TextField(
-                  controller: _query,
-                  decoration: const InputDecoration(labelText: '搜索词'),
+                  ],
+                  onChanged: _busy
+                      ? null
+                      : (id) => setState(() => _sourceId = id),
                 ),
-              if (_mode == 'search' && entry?.source is MihonSource)
-                TextButton(
-                  onPressed: _busy ? null : _editFilters,
-                  child: Text(_filters.isEmpty ? '网站筛选' : '网站筛选 · 已保存'),
+              if (feed != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 20),
+                  child: Text(
+                    isLatestMangaFeed(feed)
+                        ? '订阅最近更新'
+                        : feed.id == 'popular'
+                        ? '此来源未提供最近更新，将订阅热门'
+                        : '订阅 ${feed.name}（此来源未提供最近更新）',
+                  ),
                 ),
-              if (_busy) const CircularProgressIndicator(),
-              if (_error != null) Text(_error!),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(_error!),
+                ),
             ],
           ),
         ),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _busy ? null : () => Navigator.pop(context),
           child: const Text('取消'),
         ),
         FilledButton(
-          onPressed: _busy || entry == null || modes.isEmpty
+          onPressed: _busy || entry == null || feed == null
               ? null
               : () async {
-                  if (_name.text.trim().isEmpty) {
-                    setState(() => _error = '请填写Feed名称');
-                    return;
+                  setState(() {
+                    _busy = true;
+                    _error = null;
+                  });
+                  try {
+                    final id = await ref
+                        .read(mangaFeedRepositoryProvider)
+                        .save(
+                          sourceId: entry.descriptor.id,
+                          name: '${entry.descriptor.name} · ${feed.name}',
+                          kind: 'discover',
+                          feedId: feed.id,
+                        );
+                    if (context.mounted) Navigator.pop(context, id);
+                  } catch (error) {
+                    if (mounted) {
+                      setState(() {
+                        _busy = false;
+                        _error = '订阅未保存：$error';
+                      });
+                    }
                   }
-                  await ref
-                      .read(mangaFeedRepositoryProvider)
-                      .save(
-                        id: widget.initial?.id,
-                        sourceId: _sourceId!,
-                        name: _name.text.trim(),
-                        kind: _mode == 'search' ? 'search' : 'discover',
-                        feedId: _mode == 'search' ? 'popular' : _mode,
-                        query: _query.text.trim(),
-                        filters: _filters,
-                      );
-                  if (context.mounted) Navigator.pop(context);
                 },
-          child: const Text('保存Feed'),
+          child: Text(_busy ? '保存中…' : '确认'),
         ),
       ],
     );
@@ -185,214 +128,275 @@ class MangaFiltersDialog extends StatefulWidget {
     super.key,
     required this.fresh,
     required this.saved,
+    this.onSaveApplied,
   });
   final List<Map<String, Object?>> fresh, saved;
+  final VoidCallback? onSaveApplied;
   @override
   State<MangaFiltersDialog> createState() => _MangaFiltersDialogState();
 }
 
 class _MangaFiltersDialogState extends State<MangaFiltersDialog> {
-  late List<Map<String, Object?>> _rows = _copy(widget.fresh);
-  final _texts = <Map<String, Object?>, TextEditingController>{};
-  List<Map<String, Object?>> _copy(List<Map<String, Object?>> rows) => [
-    for (final row in jsonDecode(jsonEncode(rows)) as List)
-      Map<String, Object?>.from(row as Map),
-  ];
+  late List<Map<String, Object?>> _rows;
+  String? _mismatch;
+  int _revision = 0;
+  final _optionQueries = <String, String>{};
+
   @override
   void initState() {
     super.initState();
-    _merge(_rows, widget.saved);
+    try {
+      _rows = restoreMangaFilters(widget.fresh, widget.saved);
+    } on FormatException catch (error) {
+      _rows = copyMangaFilters(widget.fresh);
+      _mismatch = error.message;
+    }
   }
 
-  void _merge(
+  void _reset() => setState(() {
+    _rows = copyMangaFilters(widget.fresh);
+    _mismatch = null;
+    _optionQueries.clear();
+    _revision++;
+  });
+
+  int _selected(
     List<Map<String, Object?>> rows,
-    List<Map<String, Object?>> saved,
+    List<Map<String, Object?>> defaults,
   ) {
-    if (rows.length != saved.length) return;
+    var count = 0;
     for (var i = 0; i < rows.length; i++) {
-      final row = rows[i], old = saved[i];
-      if (row['name'] != old['name'] ||
-          row['type'] != old['type'] ||
-          jsonEncode(row['values']) != jsonEncode(old['values'])) {
-        continue;
-      }
-      if (row['type'] == 'group') {
-        final children = [
-          for (final v in row['state'] as List)
-            Map<String, Object?>.from(v as Map),
-        ];
-        _merge(children, [
-          for (final v in old['state'] as List)
-            Map<String, Object?>.from(v as Map),
-        ]);
-        row['state'] = children;
-      } else {
-        row['state'] = old['state'];
+      if (mangaFilterFingerprint([rows[i]]) !=
+          mangaFilterFingerprint([defaults[i]])) {
+        count++;
       }
     }
+    return count;
   }
 
-  @override
-  void dispose() {
-    for (final c in _texts.values) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  Widget _filter(Map<String, Object?> row) {
-    final name = '${row['name']}';
-    final values = row['values'] as List? ?? [];
+  Widget _filter(Map<String, Object?> row, {String path = ''}) {
+    final name = '${row['name'] ?? ''}';
+    final values = row['values'] as List? ?? const [];
     switch (row['type']) {
       case 'header':
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text(name, style: Theme.of(context).textTheme.titleSmall),
-        );
+        return Text(name, style: Theme.of(context).textTheme.titleMedium);
       case 'separator':
-        return const Divider();
+        return const Divider(height: 24);
       case 'group':
-        return ExpansionTile(
-          title: Text(name),
+        final children = [
+          for (final child in row['state'] as List)
+            Map<String, Object?>.from(child as Map),
+        ];
+        final query = _optionQueries[path] ?? '';
+        row['state'] = children;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final child in row['state'] as List)
-              _filter(child as Map<String, Object?>),
+            Text(name, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (children.length > 16)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: TextFormField(
+                  initialValue: query,
+                  decoration: InputDecoration(
+                    labelText: '查找$name选项',
+                    prefixIcon: const Icon(Icons.search),
+                  ),
+                  onChanged: (value) => setState(
+                    () => _optionQueries[path] = value.trim().toLowerCase(),
+                  ),
+                ),
+              ),
+            for (var i = 0; i < children.length; i++)
+              if ('${children[i]['name'] ?? ''}'.toLowerCase().contains(query))
+                Padding(
+                  key: ValueKey('$path.$i'),
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _filter(children[i], path: '$path.$i'),
+                ),
+            const Divider(height: 24),
           ],
         );
       case 'text':
-        final c = _texts.putIfAbsent(
-          row,
-          () => TextEditingController(text: '${row['state'] ?? ''}'),
-        );
-        return TextField(
-          controller: c,
-          decoration: InputDecoration(labelText: name),
-          onChanged: (v) => row['state'] = v,
+        return TextFormField(
+          initialValue: '${row['state'] ?? ''}',
+          decoration: InputDecoration(
+            labelText: name,
+            helperText: '按来源原始文本条件查询',
+          ),
+          onChanged: (value) => row['state'] = value,
         );
       case 'multi':
         final selected = row['state'] as List? ?? [];
+        final query = _optionQueries[path] ?? '';
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(name),
+            Text('$name · 已选 ${selected.length}'),
+            const SizedBox(height: 8),
+            if (values.length > 16)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: TextFormField(
+                  initialValue: query,
+                  decoration: InputDecoration(
+                    labelText: '查找$name选项',
+                    prefixIcon: const Icon(Icons.search),
+                    helperText: '只查询来源提供的选项，不提交自由文本标签',
+                  ),
+                  onChanged: (value) => setState(
+                    () => _optionQueries[path] = value.trim().toLowerCase(),
+                  ),
+                ),
+              ),
             Wrap(
-              spacing: 4,
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                for (final value in selected)
-                  InputChip(
-                    label: Text('$value'),
-                    onDeleted: () => setState(
-                      () => row['state'] = [...selected]..remove(value),
+                for (final value in values)
+                  if (selected.contains(value) ||
+                      '$value'.toLowerCase().contains(query))
+                    FilterChip(
+                      label: Text('$value'),
+                      selected: selected.contains(value),
+                      onSelected: (checked) => setState(
+                        () => row['state'] = checked
+                            ? [...selected, value]
+                            : ([...selected]..remove(value)),
+                      ),
                     ),
-                  ),
               ],
-            ),
-            Autocomplete<String>(
-              optionsBuilder: (text) => values
-                  .map((v) => '$v')
-                  .where(
-                    (v) =>
-                        v.toLowerCase().contains(text.text.toLowerCase()) &&
-                        !selected.contains(v),
-                  ),
-              onSelected: (value) =>
-                  setState(() => row['state'] = [...selected, value]),
             ),
           ],
         );
       case 'check':
         return CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
           title: Text(name),
           value: row['state'] == true,
-          onChanged: (v) => setState(() => row['state'] = v),
+          onChanged: (value) => setState(() => row['state'] = value ?? false),
         );
       case 'tri':
-        return DropdownButtonFormField<int>(
-          initialValue: row['state'] as int? ?? 0,
-          decoration: InputDecoration(labelText: name),
-          items: [
-            for (var i = 0; i < 3; i++)
-              DropdownMenuItem(value: i, child: Text(['不筛选', '包含', '排除'][i])),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(name),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (var i = 0; i < 3; i++)
+                  ChoiceChip(
+                    label: Text(['不限', '包含', '排除'][i]),
+                    selected: row['state'] == i,
+                    onSelected: (_) => setState(() => row['state'] = i),
+                  ),
+              ],
+            ),
           ],
-          onChanged: (v) => row['state'] = v,
         );
       case 'select':
         return DropdownButtonFormField<int>(
+          isExpanded: true,
           initialValue: row['state'] as int?,
           decoration: InputDecoration(labelText: name),
           items: [
             for (var i = 0; i < values.length; i++)
-              DropdownMenuItem(
-                value: i,
-                child: Text('${values[i]}', overflow: TextOverflow.ellipsis),
-              ),
+              DropdownMenuItem(value: i, child: Text('${values[i]}')),
           ],
-          onChanged: (v) => row['state'] = v,
+          onChanged: (value) => setState(() => row['state'] = value),
         );
       case 'sort':
         final state = row['state'];
-        final selected = state is Map ? state['index'] as int? : null;
+        final index = state is Map ? state['index'] as int? : null;
         final ascending = state is Map && state['ascending'] == true;
         return Column(
           children: [
             DropdownButtonFormField<int>(
-              initialValue: selected ?? -1,
+              isExpanded: true,
+              initialValue: index ?? -1,
               decoration: InputDecoration(labelText: name),
               items: [
                 const DropdownMenuItem(value: -1, child: Text('默认排序')),
                 for (var i = 0; i < values.length; i++)
                   DropdownMenuItem(value: i, child: Text('${values[i]}')),
               ],
-              onChanged: (v) => setState(
-                () => row['state'] = v == -1
+              onChanged: (value) => setState(
+                () => row['state'] = value == -1
                     ? null
-                    : {'index': v, 'ascending': ascending},
+                    : {'index': value, 'ascending': ascending},
               ),
             ),
-            if (selected != null)
+            if (index != null)
               SwitchListTile(
+                contentPadding: EdgeInsets.zero,
                 title: const Text('升序'),
                 value: ascending,
-                onChanged: (v) => setState(
-                  () => row['state'] = {'index': selected, 'ascending': v},
+                onChanged: (value) => setState(
+                  () => row['state'] = {'index': index, 'ascending': value},
                 ),
               ),
           ],
         );
       default:
-        return Text('$name：暂不支持的来源筛选');
+        return Text('$name：此筛选类型当前不支持编辑，保留来源原值');
     }
   }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('网站筛选'),
+    title: Row(
+      children: [
+        Expanded(child: Text('来源筛选 · ${_selected(_rows, widget.fresh)} 项')),
+        IconButton(
+          tooltip: '取消筛选编辑',
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.close),
+        ),
+      ],
+    ),
     content: SizedBox(
-      width: 480,
+      width: 520,
       child: SingleChildScrollView(
         child: Column(
+          key: ValueKey(_revision),
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final row in _rows)
-              KeyedSubtree(key: ObjectKey(row), child: _filter(row)),
+            if (_mismatch != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 24),
+                child: Text('$_mismatch\n点击重置后可重新选择；取消不会修改记录。'),
+              ),
+            if (_rows.isEmpty) const Text('此来源没有提供站内筛选'),
+            for (var i = 0; i < _rows.length; i++)
+              Padding(
+                key: ValueKey('$i'),
+                padding: const EdgeInsets.only(bottom: 24),
+                child: _filter(_rows[i], path: '$i'),
+              ),
           ],
         ),
       ),
     ),
     actions: [
+      if (widget.onSaveApplied != null)
+        TextButton(
+          onPressed: widget.onSaveApplied,
+          child: const Text('保存已应用搜索为订阅'),
+        ),
       TextButton(
         onPressed: () => Navigator.pop(context),
         child: const Text('取消'),
       ),
-      TextButton(
-        onPressed: () => setState(() {
-          _rows = _copy(widget.fresh);
-        }),
-        child: const Text('重置筛选'),
-      ),
+      TextButton(onPressed: _reset, child: const Text('重置')),
       FilledButton(
-        onPressed: () => Navigator.pop(context, _rows),
-        child: const Text('应用网站筛选'),
+        onPressed: _mismatch != null
+            ? null
+            : () => Navigator.pop(context, _rows),
+        child: const Text('应用'),
       ),
     ],
   );

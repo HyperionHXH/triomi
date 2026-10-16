@@ -10,6 +10,7 @@ import '../../core/backup/versioned_webdav_backup.dart';
 import '../../core/backup/webdav_client.dart';
 import '../../core/db/database_provider.dart';
 import '../../core/source/source_providers.dart';
+import '../../core/storage/preferences.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
@@ -151,9 +152,7 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
                   ? null
                   : (value) => setState(() => _includeDownloadedMedia = value),
               title: const Text('包含已完成/部分下载媒体'),
-              subtitle: const Text(
-                '默认仅备份元数据和封面；启用后云端仍不包含来源代码或 APK。',
-              ),
+              subtitle: const Text('默认仅备份元数据和封面；启用后云端仍不包含来源代码或 APK。'),
             ),
           ),
           _card(
@@ -296,12 +295,14 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
       );
       if (proceed != true || !mounted) return;
       setState(() => _status = '正在打包并上传（磁盘流式）…');
-      final backup = await ref.read(backupServiceProvider).exportToFile(
-        includeCovers: true,
-        includeDownloadedMedia: _includeDownloadedMedia,
-        includeSourceRules: false,
-        includeApkPackages: false,
-      );
+      final backup = await ref
+          .read(backupServiceProvider)
+          .exportToFile(
+            includeCovers: true,
+            includeDownloadedMedia: _includeDownloadedMedia,
+            includeSourceRules: false,
+            includeApkPackages: false,
+          );
       ownedPath = backup.path;
       await store.uploadFile(config, backup.path, expected);
       await ref.read(webDavConfigProvider.notifier).update(config);
@@ -343,7 +344,9 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
       guard = await BackupArtifactGuard.acquireOperation();
       final client = ref.read(webDavClientProvider);
       operation = await Directory.systemTemp.createTemp('triomi-media-input-');
-      final destination = File('${operation.path}${Platform.pathSeparator}backup.zip');
+      final destination = File(
+        '${operation.path}${Platform.pathSeparator}backup.zip',
+      );
       final store = VersionedWebDavBackup(client);
       final downloaded = await store.downloadToFile(config, destination);
       if (downloaded == null) {
@@ -360,6 +363,7 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
       final preview = await previewBackupRestoreFile(
         ref.read(databaseProvider),
         destination.path,
+        preferences: ref.read(preferencesProvider),
         apkFiles: await ref.read(backupServiceProvider).openApkFiles(),
       );
       if (!mounted) return;
@@ -369,12 +373,15 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
         target: config.fileUrl,
       );
       if (options == null || !mounted) return;
-      final summary = await ref.read(backupServiceProvider).importFromFile(
-        destination.path,
-        options: options,
-        expectedHash: preview.byteHash,
-      );
-      ref.invalidate(libraryProvider);
+      final summary = await ref
+          .read(backupServiceProvider)
+          .importFromFile(
+            destination.path,
+            options: options,
+            expectedHash: preview.byteHash,
+          );
+      ref.invalidate(libraryByTypeProvider);
+      ref.invalidate(libraryCategoriesForTypeProvider);
       ref.invalidate(historyProvider);
       ref.invalidate(sourcesProvider);
       if (!mounted) return;
@@ -398,6 +405,6 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
       } catch (_) {
         // Preserve the transfer/import result if lease release is delayed.
       }
+    }
   }
-}
 }
