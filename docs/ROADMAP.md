@@ -8,7 +8,7 @@
 
 完整的“近期已解决 / 新发现N1–N18 / 原P1–P12剩余 / 全平台与外部条件”只在 [CURRENT_STATUS剩余主线](CURRENT_STATUS.md#剩余主线) 统一维护；下方阶段和轮次记录保留实现契约与历史证据，不把历史“未实现”当当前结论。
 
-0. **C151来源交互与发布。** 番剧/漫画/小说独立分类与添加入口，发现/小说账号携带分类；Mihon已安装/浏览/仓库分离，本机扩展不受仓库网络失败影响。Review修复分类目录筛选串类、启停竞态与旧夹具展示；双API/正式/Windows实际可见操作通过，968全量/3跳过、85Python、analyze/文档扫描通过。README改为下载/安装/操作指南，本机原证书三产物验签并保数据安装，公开Release待上传核验，见[C151](delivery/evidence/C151-final-acceptance.json)。
+0. **C151来源交互与发布完成。** 番剧/漫画/小说独立分类与添加流程，Mihon已安装/浏览/仓库分离；Review修复筛选串类/启停竞态/旧夹具展示。双API/正式/Windows实际可见操作、968全量/3跳过、85Python、analyze/文档扫描通过。README操作指南与完整仓库已推送，测试版[v0.1.0-test.151](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.151)正式证书APK/完整Windows ZIP/清单/SHA256SUMS已发布并逐项核对GitHub digest；见[C151](delivery/evidence/C151-final-acceptance.json)。
 1. **C150真实APK备份缺陷修复并闭环。** 缺versionName仅在静态验签且原package/code/hash/完整signer匹配后补出，不改信任/旧配置。25定向、967全量/3跳过、analyze无问题；同源三产物/原证书v2/签名材料扫描/原三设备install-r与hash通过。5554正常五APK导出729296B；完整原件仅预览取消，明确APK-only子集在5556正常SAF恢复→冷启停用待确认→先拒绝再显式接受→DEX七语言/真实Feed/Suitor Armor169章通过；仅自有新增清理，原状态/pin不变。见[C150闭环](delivery/evidence/C150-apk-restore-final-journey.json)。C149其他视觉/隐私/媒体证据不改标C150。
 2. **无账号主线新增实证。** Windows每日任务启用/触发/生成/冷启/取消及网页MP4下载SHA一致；P9六进程媒体迁移/冲突/进度；API26新增章通知/下载/低电/无网络/取消重试loopback；正式包六资料tabs离线冷启均通过。API35双页/反色/滚动与无痕三媒体后原记录不变；正式包自有图15%白边裁掉且内黄框保留，唯一自建9.0KiB封面UI确认后实删，样本清理。系统JobStore落盘后重启，app未启动且无PID时7401持久任务已恢复；立即重启早于OS落盘的失败观察保留，结束恢复off。相关推荐unsupported如实保留。见[C149最终验收](delivery/evidence/C149-final-acceptance.json)。
 3. **账号与授权只阻塞对应实写。** P10真实追踪服务写入及P11外部WebDAV需要具体目标和授权；不读取旧账号文件、不注册新账号、不代作远端写入决定。其余本地工作继续。

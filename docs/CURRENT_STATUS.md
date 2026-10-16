@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-更新时间：C151完成来源管理分类UI、Review和双平台真实操作验收，准备发布`v0.1.0-test.151`。番剧/漫画/小说独立入口、分类筛选、漫画已安装/浏览/仓库分离；968项Flutter通过/3跳过、85项Python通过、analyze无问题。原三设备保数据安装hash一致。历史媒体/账号/扩展实证保留原字节范围，外部实写与完整全平台矩阵仍partial。
+更新时间：C151来源管理分类UI与Review已完成，测试版[v0.1.0-test.151](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.151)已发布，四项下载资产GitHub SHA-256与本地逐项一致。968项Flutter通过/3跳过、85项Python通过、analyze/文档扫描无错误；原三设备保数据安装hash匹配。历史媒体/账号/扩展实证保留字节范围，完整来源/平台矩阵仍partial。
 
 当前执行入口为本文件和 `docs/ROADMAP.md`；历史证据在 `docs/delivery/evidence/`，不再重复创建规划文档。
 

@@ -2,7 +2,7 @@
   "round": "C151",
   "version": "0.1.0+151",
   "releaseTag": "v0.1.0-test.151",
-  "status": "verified-local; ready-to-publish-v0.1.0-test.151",
+  "status": "published-and-verified-v0.1.0-test.151",
   "changes": [
     "SourcesPage distinct anime/manga/novel tabs and per-category filters/catalog",
     "Contextual source entry from discovery/anime selection/novel account pages",
@@ -149,6 +149,40 @@
       "triomi-windows.update.json",
       "SHA256SUMS.txt"
     ],
-    "fullOriginalWorktreePreservedAndIncludedAfterSafetyReview": true
+    "fullOriginalWorktreePreservedAndIncludedAfterSafetyReview": true,
+    "releaseUrl": "https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.151",
+    "releaseCommit": "403cf198b0f3054ab7e73f7536550597e8feeed6",
+    "publicAssetDigestsVerifiedAgainstGitHub": [
+      {
+        "name": "SHA256SUMS.txt",
+        "bytes": 263,
+        "sha256": "c8508e7dad9926ddf3de842b6461365dea96d75c19e3d52842814262110b0d79",
+        "githubDigestMatches": true,
+        "url": "https://github.com/HyperionHXH/triomi/releases/download/v0.1.0-test.151/SHA256SUMS.txt"
+      },
+      {
+        "name": "triomi-android.apk",
+        "bytes": 129176824,
+        "sha256": "b628ba3b3043e0d56424524b691176fca4429bdbd281645bb4f2f7d299ec0bc0",
+        "githubDigestMatches": true,
+        "url": "https://github.com/HyperionHXH/triomi/releases/download/v0.1.0-test.151/triomi-android.apk"
+      },
+      {
+        "name": "triomi-windows.update.json",
+        "bytes": 8103,
+        "sha256": "c71851fc44f05ca54baa9d0a75ad3177155775b614dfb448708aa57f97b9643d",
+        "githubDigestMatches": true,
+        "url": "https://github.com/HyperionHXH/triomi/releases/download/v0.1.0-test.151/triomi-windows.update.json"
+      },
+      {
+        "name": "triomi-windows.zip",
+        "bytes": 38112011,
+        "sha256": "7c47dd9aacabd45d837b04b75720524e21b63ff7b92eded3647704966e9e152e",
+        "githubDigestMatches": true,
+        "url": "https://github.com/HyperionHXH/triomi/releases/download/v0.1.0-test.151/triomi-windows.zip"
+      }
+    ],
+    "prerelease": true,
+    "draft": false
   }
 }
