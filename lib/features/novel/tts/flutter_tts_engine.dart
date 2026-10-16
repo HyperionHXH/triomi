@@ -21,9 +21,13 @@ bool get ttsPlatformSupported =>
 /// Each speak Future owns its token. Global completion callbacks have no ID
 /// and cannot safely distinguish repeated paragraphs after a seek.
 class FlutterTtsEngine implements TtsEngine {
-  FlutterTtsEngine({FlutterTts? plugin}) : _plugin = plugin ?? FlutterTts();
+  FlutterTtsEngine({FlutterTts? plugin, this.synthesisTimeout})
+    : _plugin = plugin ?? FlutterTts();
 
   final FlutterTts _plugin;
+
+  /// Optional bound for device tests; normal paragraphs scale with text/rate.
+  final Duration? synthesisTimeout;
   TtsEngineCallbacks _callbacks = TtsEngineCallbacks();
   Future<void>? _initialization;
   int _generation = 0;
@@ -78,6 +82,10 @@ class FlutterTtsEngine implements TtsEngine {
             TtsVoiceInfo(
               name: entry['name'] as String,
               locale: entry['locale'] as String,
+              networkRequired: entry['network_required'] == '1',
+              installed: !(entry['features']?.toString() ?? '').contains(
+                'notInstalled',
+              ),
             ),
       ];
     } on PlatformException {
@@ -99,7 +107,16 @@ class FlutterTtsEngine implements TtsEngine {
 
   Future<void> _synthesize(TtsUtterance utterance, int generation) async {
     try {
-      final result = await _plugin.speak(utterance.text, focus: true);
+      // Android's plugin does not resolve awaitSpeakCompletion on synthesis
+      // errors. Bound that Future without relying on global callbacks lacking
+      // utterance IDs, which can belong to a previous paragraph after a seek.
+      final seconds =
+          (utterance.text.length / (5 * _pendingRate.clamp(0.1, 1)) + 20)
+              .ceil()
+              .clamp(30, 600);
+      final result = await _plugin
+          .speak(utterance.text, focus: true)
+          .timeout(synthesisTimeout ?? Duration(seconds: seconds));
       if (generation != _generation) return;
       if (result != 1) throw StateError('语音引擎未完成朗读');
       if (utterance.pauseAfterMs > 0) {
@@ -110,7 +127,22 @@ class FlutterTtsEngine implements TtsEngine {
       if (generation != _generation) return;
       _callbacks.onCompleteWithToken?.call(utterance.text, utterance.token);
     } catch (error) {
-      if (generation == _generation) _callbacks.onError?.call(error);
+      if (generation == _generation) {
+        ++_generation;
+        // Release plugin pending result/audio focus before a user retries.
+        try {
+          await _plugin.stop();
+        } catch (_) {
+          /* Preserve synthesis error. */
+        }
+        if (_generation == generation + 1) {
+          _callbacks.onError?.call(
+            error is TimeoutException
+                ? StateError('语音引擎未完成朗读，请检查语音资源和网络后重试')
+                : error,
+          );
+        }
+      }
     }
   }
 

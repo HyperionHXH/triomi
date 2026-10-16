@@ -1,0 +1,70 @@
+{
+  "status": "passed",
+  "fix": "Restore exact source/item/chapter playback time, native seek after preparation, guard initial persistence; desktop Media.start; no cross-source time transfer",
+  "artifacts": {
+    "status": "passed",
+    "artifacts": {
+      "acceptance": {
+        "path": "D:/noval_and_manga/_tools/Triomi-C125-android-acceptance.apk",
+        "bytes": 123552200,
+        "sha256": "307f2778a2fdc2015fd683ef13518a6d838ad02bd4ec756e57ac7a64980efd07",
+        "members": 530,
+        "zipIntegrity": true
+      },
+      "production": {
+        "path": "D:/noval_and_manga/_tools/Triomi-C125-android-signed.apk",
+        "bytes": 123556296,
+        "sha256": "8c913420a174e1efe2b3588213e0cac95311107481ca7e51d8f58267b56bb246",
+        "members": 530,
+        "zipIntegrity": true
+      },
+      "windowsZip": {
+        "path": "D:/noval_and_manga/_tools/Triomi-C125-windows-release.zip",
+        "bytes": 37323439,
+        "sha256": "d1262536b0033eb26b3fc29e474df434654c07a1530033bf2921d1d1d93b68ad",
+        "members": 50,
+        "zipIntegrity": true
+      }
+    },
+    "installed": {
+      "emulator-5554": "307f2778a2fdc2015fd683ef13518a6d838ad02bd4ec756e57ac7a64980efd07",
+      "emulator-5556": "307f2778a2fdc2015fd683ef13518a6d838ad02bd4ec756e57ac7a64980efd07",
+      "emulator-5558": "8c913420a174e1efe2b3588213e0cac95311107481ca7e51d8f58267b56bb246"
+    }
+  },
+  "tests": {
+    "status": "passed",
+    "count": 14,
+    "log": "D:/noval_and_manga/_tools/C125-player-resume-green-final4.log",
+    "redLog": "D:/noval_and_manga/_tools/C125-player-resume-red.log"
+  },
+  "initialVisualPlayback": {
+    "signed": "4:02/24:17",
+    "api35": "9:06/23:40"
+  },
+  "independentRestartHistorySeconds": {
+    "emulator-5558": 267,
+    "emulator-5554": 580
+  },
+  "windows": "Rebuilt; actual new-bundle seek/UI still blocked by Sky RPC",
+  "independentRestartPlayback": {
+    "signed": {
+      "savedSeconds": 267,
+      "visible": "4:32/24:17",
+      "realFrameVerified": true
+    },
+    "api35": {
+      "savedSeconds": 580,
+      "visible": "9:39/23:40",
+      "realFrameVerified": true,
+      "keyframeToleranceSeconds": 2
+    }
+  },
+  "screenshots": [
+    "C125-player-resume-signed-first.png",
+    "C125-player-resume-api35-first.png",
+    "C125-player-resume-signed-restart-final.png",
+    "C125-player-resume-api35-restart-final.png"
+  ],
+  "scope": "Android API35 acceptance and production-signed true playback restore; Windows rebuilt but actual seek still unverified; not all-content lifecycle"
+}

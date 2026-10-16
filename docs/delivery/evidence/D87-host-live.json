@@ -1,0 +1,33 @@
+{
+  "recordedAt": "2026-10-05T08:36:30.171933Z",
+  "environment": "Windows host; shipped JsSource + QuickJS + real HTTPS",
+  "results": {
+    "mangadex-api": {
+      "listCount": 20,
+      "item": {
+        "sourceId": "mangadex",
+        "remoteId": "77bee52c-d2d6-44ad-a33a-1734c1fe696a",
+        "type": "manga",
+        "title": "Kage no Jitsuryokusha ni Naritakute!",
+        "url": "https://api.mangadex.org/manga/77bee52c-d2d6-44ad-a33a-1734c1fe696a",
+        "coverUrl": "https://uploads.mangadex.org/covers/77bee52c-d2d6-44ad-a33a-1734c1fe696a/6079dd31-838b-4d61-87c4-121f3ad19158.jpg.256.jpg",
+        "author": null,
+        "description": "Just like how everyone adored heroes in their childhood, a certain young man adored those powers hidden in shadows. Ninjas, rogues, shadowy mentor types, that sort of deal.  \r\nAfter hiding his strength and living the mediocre life of a NPC by day while undergoing frenzied training by night, he finally reincarnates into a different world and gains ultimate power.  \r\nThe young man who is only pretending to be a power in the shadows… his subordinates who took him more seriously than he expected… and a giant organization in the shadows that gets accidentally trampled…  \r\nThis is the story of a young boy who had adored powers in shadows possibly eventually reigning over the world of shadows in another world.",
+        "tags": [],
+        "rating": null,
+        "status": "ongoing"
+      },
+      "detailTitle": "Kage no Jitsuryokusha ni Naritakute!",
+      "chapterCount": 2,
+      "chapterTitle": "第 76.1 话",
+      "imageCount": 15,
+      "firstImageUrl": "https://cmdxd98sb0x3yprd.mangadex.network/data/00b740935ba9f17c4c92ab81a298a1fe/1-47dbd5443d841ca98f8ab5570c2a1260c84bc97ae25a0b378e3908c146dc351d.jpg",
+      "firstImageBytes": 1089789,
+      "status": "passed"
+    },
+    "archive-animation": {
+      "status": "failed",
+      "error": "SourceException(archive-animation, timeout): https://archive.org/advancedsearch.php：DioException [connection timeout]: The request connection took longer than 0:00:12.000000 and it was aborted. To get rid of this exception, try raising the RequestOptions.connectTimeout above the duration of 0:00:12.000000 or improve the response time of the server."
+    }
+  }
+}

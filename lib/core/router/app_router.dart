@@ -7,6 +7,7 @@ import '../../features/discover/discover_page.dart';
 import '../../features/downloads/downloads_page.dart';
 import '../../features/history/history_page.dart';
 import '../../features/library/library_page.dart';
+import '../../features/library/manga_updates_page.dart';
 import '../../features/novel/lk/lk_account_page.dart';
 import '../../features/novel/lk/lk_dm_page.dart';
 import '../../features/novel/lk/lk_message_list_page.dart';
@@ -29,11 +30,13 @@ import '../../features/shell/adaptive_shell.dart';
 import '../../features/sources/sources_page.dart';
 import '../../features/tracking/tracking_page.dart';
 import '../models/media_item.dart';
+import '../models/media_type.dart';
 import '../widgets/page_scaffold.dart';
 
 /// 全应用路由表。
 abstract final class AppRoutes {
   static const String library = '/library';
+  static const String mangaUpdates = '/manga-updates';
   static const String discover = '/discover';
   static const String schedule = '/schedule';
   static const String profile = '/profile';
@@ -65,11 +68,15 @@ abstract final class AppRoutes {
 abstract final class AppRouter {
   static final GlobalKey<NavigatorState> _rootNavigatorKey =
       GlobalKey<NavigatorState>(debugLabel: 'root');
+  static NavigatorState? get rootNavigator => _rootNavigatorKey.currentState;
 
   /// 四个主导航分支用 [StatefulShellRoute] 保持各自页面栈与滚动位置。
+  ///
+  /// 分支顺序即导航顺序（ADR-2026-10-05）：发现 → 书架 → 追番 → 我的；
+  /// 发现是默认首屏，打开应用先看到可探索的内容。
   static GoRouter create() => GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: AppRoutes.library,
+    initialLocation: AppRoutes.discover,
     routes: <RouteBase>[
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
@@ -78,16 +85,16 @@ abstract final class AppRouter {
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
-                path: AppRoutes.library,
-                builder: (context, state) => const LibraryPage(),
+                path: AppRoutes.discover,
+                builder: (context, state) => const DiscoverPage(),
               ),
             ],
           ),
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
-                path: AppRoutes.discover,
-                builder: (context, state) => const DiscoverPage(),
+                path: AppRoutes.library,
+                builder: (context, state) => const LibraryPage(),
               ),
             ],
           ),
@@ -110,6 +117,11 @@ abstract final class AppRouter {
         ],
       ),
       GoRoute(
+        path: AppRoutes.mangaUpdates,
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const MangaUpdatesPage(),
+      ),
+      GoRoute(
         path: AppRoutes.settings,
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const SettingsPage(),
@@ -117,12 +129,25 @@ abstract final class AppRouter {
       GoRoute(
         path: AppRoutes.sources,
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const SourcesPage(),
+        builder: (context, state) => SourcesPage(
+          initialType: MediaType.tryParse(state.uri.queryParameters['type']),
+        ),
       ),
       GoRoute(
         path: AppRoutes.search,
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const SearchPage(),
+        builder: (context, state) {
+          // D94：发现页资料源空态带来的上下文（所选来源 + 内容形态），
+          // extra 是 `(sourceId: String?, type: MediaType?)` 记录。
+          final extra = state.extra;
+          if (extra is ({String? sourceId, MediaType? type})) {
+            return SearchPage(
+              initialSourceId: extra.sourceId,
+              initialType: extra.type,
+            );
+          }
+          return const SearchPage();
+        },
       ),
       GoRoute(
         path: AppRoutes.detail,

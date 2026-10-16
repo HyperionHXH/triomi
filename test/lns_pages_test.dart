@@ -81,6 +81,9 @@ class FakeShelfSource implements RemoteShelfProvider {
 
   @override
   Future<void> setInRemoteShelf(MediaItem item, bool add) async {}
+
+  @override
+  Future<Map<String, int>> remoteUnreadCounts() async => const <String, int>{};
 }
 
 /// 声明了远端书架能力但没实现契约的来源（不应出现在切换条里）。

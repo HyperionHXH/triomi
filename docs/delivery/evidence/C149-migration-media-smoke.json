@@ -1,0 +1,708 @@
+{
+  "id": "C149-migration-media-smoke",
+  "at": "2026-10-15T13:29:41.162829+00:00",
+  "status": "passed",
+  "scope": "Windows host-isolated smoke using actual production repository APIs and on-disk SQLite/files; not a unit-test result, real-site catalog-equivalence claim, actual App UI journey, or Android acceptance",
+  "environment": {
+    "os": "Windows x64",
+    "execution": "SDK frontend_server compiled a throwaway main importing unchanged production repositories; existing flutter_tester.exe ran six ordinary main processes with explicit DB close and process exit",
+    "flutterCommandsRun": [],
+    "testFrameworkInvoked": false,
+    "sharedBuildOrDartToolWrites": false,
+    "nativeLibrary": "prebuilt sqlite3.dll copied to the isolated temporary directory; per-runner native-assets mapping; no native compilation",
+    "database": "AppDatabase.forTesting(NativeDatabase(File(isolated.sqlite))); real persistent SQLite rather than in-memory database",
+    "files": "Only copied public media and temporary destination files under own host-isolated directory",
+    "devicesTouched": [],
+    "credentialsRead": false,
+    "productionFilesEdited": []
+  },
+  "productionApisExercised": [
+    "SourceMigrationRepository.origin",
+    "PersistentMigration.prepareMigration",
+    "PersistentMigration.executeMigration",
+    "MergedMangaRepository.reference",
+    "MergedMangaRepository.save",
+    "MergedMangaRepository.directory",
+    "MergedMangaRepository.members",
+    "LibraryRepository.addToLibrary",
+    "LibraryRepository.saveChapters",
+    "LibraryRepository.updateProgress",
+    "LibraryRepository.recordHistory",
+    "LibraryRepository.chapterPositionOf",
+    "DownloadRepository.enqueue",
+    "DownloadRepository.markDone",
+    "DownloadRepository.localImageDir",
+    "DownloadManifest.read/write"
+  ],
+  "productionSourceSha256": {
+    "lib/features/library/data/source_migration_repository.dart": "548cd3c628b5fcc73b69e831e3a25f75ac0a2d9d61f4d8e1265c54280f8e4e19",
+    "lib/features/library/data/migration_plan.dart": "5101b3693a22084aa339c8f3ea0cf2dec607359c12bbb3064167607b74a6fb81",
+    "lib/features/library/data/merged_manga_repository.dart": "717abf003506e4f989b2007b0e404912e5c5922dadb8190f6bb6b33a62b30ff0",
+    "lib/features/library/data/library_repository.dart": "80833f522f60a44ec776b8d953978969a65317b5a2f8423f5258112a35c3fa43",
+    "lib/features/downloads/data/download_repository.dart": "5ae47fa4da41dbc40973a255747acd44aadd917544a6ff65300e22167151cd79"
+  },
+  "runnerSha256": "9e6774364e5ad20d77c453974fb065f978fa75d6eb8b0416c09984fa569c7ca6",
+  "mediaProvenance": {
+    "archive": "_tools/C148-local-comic-smoke.cbz",
+    "archiveSha256": "ceffea754f5aa933d1fcd00a30b7011ef20f4329f92cb487e68cc0e80bde3821",
+    "description": "Existing publicly sourced xkcd PNG bytes from supplied archive; no new live-image retrieval or live source adapter compatibility claimed",
+    "originalArchiveModified": false,
+    "pages": [
+      {
+        "file": "001.png",
+        "archiveEntry": "Volume 1/Chapter 1/2.png",
+        "bytes": 28205,
+        "sha256": "d571e513d94f76a160adbf0a3d7f6322dabc4ee041d1607263d0f20ea7d0a8e8",
+        "format": "PNG",
+        "width": 614,
+        "height": 208,
+        "decoded": true
+      },
+      {
+        "file": "002.png",
+        "archiveEntry": "Volume 1/Chapter 1/10.png",
+        "bytes": 26345,
+        "sha256": "5d8ef0ad8eb4cadb10c6ed7d6e2e26c81c37c8d818847b3832c924d1e0237b54",
+        "format": "PNG",
+        "width": 402,
+        "height": 393,
+        "decoded": true
+      }
+    ]
+  },
+  "hostDecoder": {
+    "library": "Pillow",
+    "method": "Image.open(actual original or production-localImageDir destination file); image.load() fully decodes pixels; only image metadata/hashes recorded, no pixel/body data",
+    "results": [
+      {
+        "role": "originalMedia",
+        "file": "001.png",
+        "bytes": 28205,
+        "sha256": "d571e513d94f76a160adbf0a3d7f6322dabc4ee041d1607263d0f20ea7d0a8e8",
+        "format": "PNG",
+        "width": 614,
+        "height": 208,
+        "decoded": true
+      },
+      {
+        "role": "originalMedia",
+        "file": "002.png",
+        "bytes": 26345,
+        "sha256": "5d8ef0ad8eb4cadb10c6ed7d6e2e26c81c37c8d818847b3832c924d1e0237b54",
+        "format": "PNG",
+        "width": 402,
+        "height": 393,
+        "decoded": true
+      },
+      {
+        "role": "freshMedia",
+        "file": "001.png",
+        "bytes": 28205,
+        "sha256": "d571e513d94f76a160adbf0a3d7f6322dabc4ee041d1607263d0f20ea7d0a8e8",
+        "format": "PNG",
+        "width": 614,
+        "height": 208,
+        "decoded": true
+      },
+      {
+        "role": "freshMedia",
+        "file": "002.png",
+        "bytes": 26345,
+        "sha256": "5d8ef0ad8eb4cadb10c6ed7d6e2e26c81c37c8d818847b3832c924d1e0237b54",
+        "format": "PNG",
+        "width": 402,
+        "height": 393,
+        "decoded": true
+      },
+      {
+        "role": "existingMedia",
+        "file": "001.png",
+        "bytes": 28205,
+        "sha256": "d571e513d94f76a160adbf0a3d7f6322dabc4ee041d1607263d0f20ea7d0a8e8",
+        "format": "PNG",
+        "width": 614,
+        "height": 208,
+        "decoded": true
+      },
+      {
+        "role": "existingMedia",
+        "file": "002.png",
+        "bytes": 26345,
+        "sha256": "5d8ef0ad8eb4cadb10c6ed7d6e2e26c81c37c8d818847b3832c924d1e0237b54",
+        "format": "PNG",
+        "width": 402,
+        "height": 393,
+        "decoded": true
+      }
+    ],
+    "allTargetHashesEqualOriginal": true,
+    "allTargetBytesEqualOriginal": true
+  },
+  "durability": {
+    "processes": [
+      {
+        "phase": "prepare",
+        "pid": 23388,
+        "exitCode": 0,
+        "databaseClosed": true
+      },
+      {
+        "phase": "execute",
+        "pid": 5500,
+        "exitCode": 0,
+        "databaseClosed": true
+      },
+      {
+        "phase": "consume",
+        "pid": 2552,
+        "exitCode": 0,
+        "databaseClosed": true
+      },
+      {
+        "phase": "reopen-consumer",
+        "pid": 16732,
+        "exitCode": 0,
+        "databaseClosed": true
+      },
+      {
+        "phase": "conflicts",
+        "pid": 5672,
+        "exitCode": 0,
+        "databaseClosed": true
+      },
+      {
+        "phase": "reopen-conflict",
+        "pid": 11248,
+        "exitCode": 0,
+        "databaseClosed": true
+      }
+    ],
+    "allProcessesDistinct": true,
+    "sequence": [
+      "prepare two plans and close DB/exit before any target publication",
+      "new process reopens ready plans and executes both media migrations",
+      "new process reopens completed plans, exercises idempotence and mapping/priority consumers",
+      "new process reopens persistent explicit groups/member priority and consumes them again",
+      "new process checks conflict guards and saves failed plan without overwriting published media",
+      "new process confirms failed state and unchanged independent progress/media persist"
+    ]
+  },
+  "migrationSummary": {
+    "preparedPlanCount": 2,
+    "preparedStatuses": [
+      "ready",
+      "ready"
+    ],
+    "prepareDidNotCreateDestination": true,
+    "prepareDidNotPublishNewTarget": true,
+    "reopenedStatuses": [
+      "ready",
+      "ready"
+    ],
+    "completedStatuses": [
+      "completed",
+      "completed"
+    ],
+    "originalShelfAndHistoryRowsByteEquivalent": true,
+    "originalFilesAndManifestRetainedWithEqualHashes": true,
+    "newTargetMigratedPagePosition": 1.0,
+    "existingTargetShelfProgressBeforeAndAfter": 9.0,
+    "existingTargetMappedChapterPositionBeforeAndAfter": 1.5,
+    "existingTargetOtherChapterPositionBeforeAndAfter": 0.5,
+    "existingTargetAllShelfAndHistoryRowsRetained": true
+  },
+  "mergedConsumerSummary": {
+    "identities": "Synthetic source/work/chapter IDs deliberately distinct; same synthetic title and chapter names/numbers are not real adapter identity mappings",
+    "automaticTitleLinking": false,
+    "unconfirmedDirectoryRejected": true,
+    "unmappedDirectoryCount": 4,
+    "explicitGroupDirectoryCount": 3,
+    "manualEquivalence": {
+      "[\"host-original\",\"original-1\"]": "human-confirmed-1",
+      "[\"host-new\",\"new-1\"]": "human-confirmed-1"
+    },
+    "priorityBeforeReorder": [
+      "[\"host-original\",\"original-1\"]",
+      "[\"host-original\",\"original-2\"]",
+      "[\"host-new\",\"new-2\"]"
+    ],
+    "priorityAfterReorder": [
+      "[\"host-new\",\"new-1\"]",
+      "[\"host-new\",\"new-2\"]",
+      "[\"host-original\",\"original-2\"]"
+    ],
+    "preferredSourceDisabledFallback": [
+      "[\"host-original\",\"original-1\"]",
+      "[\"host-new\",\"new-2\"]",
+      "[\"host-original\",\"original-2\"]"
+    ],
+    "selectedChapterOwners": [
+      {
+        "chapter": "[\"host-new\",\"new-1\"]",
+        "work": "[\"host-new\",\"new\"]"
+      },
+      {
+        "chapter": "[\"host-new\",\"new-2\"]",
+        "work": "[\"host-new\",\"new\"]"
+      },
+      {
+        "chapter": "[\"host-original\",\"original-2\"]",
+        "work": "[\"host-original\",\"original\"]"
+      }
+    ],
+    "selectedOwnerMediaLoadedThrough": "DownloadRepository.localImageDir followed by DownloadManifest.read on selected owner; actual target PNG bytes decoded with Pillow",
+    "independentProgressRetained": true,
+    "invalidChapterMappingRejected": true,
+    "reopenedPriorityAndGroupsConsumed": true,
+    "availabilityScope": "Explicit in-memory host metadata entries, intentionally without DetailProvider; directory consumes real DB cached chapters and reports cache-only diagnostics. No mock network responses, live source adapters, or real-site equivalence claimed",
+    "cacheOnlyDiagnostics": 2
+  },
+  "conflictSummary": {
+    "unreviewedMergeRejected": true,
+    "manyToOneMappingRejected": true,
+    "existingDownloadRejected": true,
+    "error": "目标章节已有下载，不覆盖目标文件",
+    "failedPlanStatus": "failed",
+    "originalAndExistingProgressUnchanged": true,
+    "publishedTargetMediaUnchanged": true,
+    "targetDownloadCount": 1
+  },
+  "phaseEvidence": {
+    "prepare": {
+      "status": "passed",
+      "phase": "prepare",
+      "pid": 23388,
+      "plans": {
+        "new": "migration-1792070802040158",
+        "existing": "migration-1792070802059212"
+      },
+      "oldBefore": {
+        "entry": [
+          {
+            "sourceId": "host-original",
+            "remoteId": "original",
+            "type": "manga",
+            "progress": 1.0,
+            "score": null,
+            "status": "doing",
+            "pinned": false,
+            "unreadCount": 0,
+            "addedAt": 1792070800000,
+            "updatedAt": 1792070800000
+          }
+        ],
+        "history": [
+          {
+            "id": 1,
+            "sourceId": "host-original",
+            "remoteId": "original",
+            "chapterSourceId": "host-original",
+            "chapterRemoteId": "original-1",
+            "position": 1.0,
+            "device": null,
+            "visitedAt": 1792070800000,
+            "incognito": false
+          }
+        ]
+      },
+      "existingBefore": {
+        "entry": [
+          {
+            "sourceId": "host-existing",
+            "remoteId": "existing",
+            "type": "manga",
+            "progress": 9.0,
+            "score": null,
+            "status": "doing",
+            "pinned": false,
+            "unreadCount": 0,
+            "addedAt": 1792070800000,
+            "updatedAt": 1792070800000
+          }
+        ],
+        "history": [
+          {
+            "id": 2,
+            "sourceId": "host-existing",
+            "remoteId": "existing",
+            "chapterSourceId": "host-existing",
+            "chapterRemoteId": "existing-1",
+            "position": 1.5,
+            "device": null,
+            "visitedAt": 1792070801000,
+            "incognito": false
+          },
+          {
+            "id": 3,
+            "sourceId": "host-existing",
+            "remoteId": "existing",
+            "chapterSourceId": "host-existing",
+            "chapterRemoteId": "existing-2",
+            "position": 0.5,
+            "device": null,
+            "visitedAt": 1792070801000,
+            "incognito": false
+          }
+        ]
+      },
+      "originalMedia": {
+        "directory": "$ISOLATED_TEMP_ROOT/original-files",
+        "files": [
+          {
+            "name": "001.png",
+            "bytes": 28205,
+            "sha256": "d571e513d94f76a160adbf0a3d7f6322dabc4ee041d1607263d0f20ea7d0a8e8"
+          },
+          {
+            "name": "002.png",
+            "bytes": 26345,
+            "sha256": "5d8ef0ad8eb4cadb10c6ed7d6e2e26c81c37c8d818847b3832c924d1e0237b54"
+          }
+        ]
+      },
+      "preparedStatuses": [
+        "ready",
+        "ready"
+      ],
+      "destinationNotCreated": true,
+      "newTargetNotPublished": true
+    },
+    "execute": {
+      "status": "passed",
+      "phase": "execute",
+      "pid": 5500,
+      "reopenedPreparedStatuses": [
+        "ready",
+        "ready"
+      ],
+      "completedStatuses": [
+        "completed",
+        "completed"
+      ],
+      "oldAfter": {
+        "entry": [
+          {
+            "sourceId": "host-original",
+            "remoteId": "original",
+            "type": "manga",
+            "progress": 1.0,
+            "score": null,
+            "status": "doing",
+            "pinned": false,
+            "unreadCount": 0,
+            "addedAt": 1792070800000,
+            "updatedAt": 1792070800000
+          }
+        ],
+        "history": [
+          {
+            "id": 1,
+            "sourceId": "host-original",
+            "remoteId": "original",
+            "chapterSourceId": "host-original",
+            "chapterRemoteId": "original-1",
+            "position": 1.0,
+            "device": null,
+            "visitedAt": 1792070800000,
+            "incognito": false
+          }
+        ]
+      },
+      "existingAfter": {
+        "entry": [
+          {
+            "sourceId": "host-existing",
+            "remoteId": "existing",
+            "type": "manga",
+            "progress": 9.0,
+            "score": null,
+            "status": "doing",
+            "pinned": false,
+            "unreadCount": 0,
+            "addedAt": 1792070800000,
+            "updatedAt": 1792070800000
+          }
+        ],
+        "history": [
+          {
+            "id": 2,
+            "sourceId": "host-existing",
+            "remoteId": "existing",
+            "chapterSourceId": "host-existing",
+            "chapterRemoteId": "existing-1",
+            "position": 1.5,
+            "device": null,
+            "visitedAt": 1792070801000,
+            "incognito": false
+          },
+          {
+            "id": 3,
+            "sourceId": "host-existing",
+            "remoteId": "existing",
+            "chapterSourceId": "host-existing",
+            "chapterRemoteId": "existing-2",
+            "position": 0.5,
+            "device": null,
+            "visitedAt": 1792070801000,
+            "incognito": false
+          }
+        ]
+      },
+      "freshAfter": {
+        "entry": [
+          {
+            "sourceId": "host-new",
+            "remoteId": "new",
+            "type": "manga",
+            "progress": 1.0,
+            "score": null,
+            "status": "doing",
+            "pinned": false,
+            "unreadCount": 0,
+            "addedAt": 1792070800000,
+            "updatedAt": 1792070816000
+          }
+        ],
+        "history": [
+          {
+            "id": 4,
+            "sourceId": "host-new",
+            "remoteId": "new",
+            "chapterSourceId": "host-new",
+            "chapterRemoteId": "new-1",
+            "position": 1.0,
+            "device": null,
+            "visitedAt": 1792070800000,
+            "incognito": false
+          }
+        ]
+      },
+      "originalRowsUnchanged": true,
+      "existingTargetRowsUnchanged": true,
+      "newTargetPosition": 1.0,
+      "originalMedia": {
+        "directory": "$ISOLATED_TEMP_ROOT/original-files",
+        "files": [
+          {
+            "name": "001.png",
+            "bytes": 28205,
+            "sha256": "d571e513d94f76a160adbf0a3d7f6322dabc4ee041d1607263d0f20ea7d0a8e8"
+          },
+          {
+            "name": "002.png",
+            "bytes": 26345,
+            "sha256": "5d8ef0ad8eb4cadb10c6ed7d6e2e26c81c37c8d818847b3832c924d1e0237b54"
+          }
+        ]
+      },
+      "freshMedia": {
+        "directory": "$ISOLATED_TEMP_ROOT/destination/migration-1792070802040158/a680d1c998b593f43dee84d7f6d73f19c5c4987eca61cde29dcc43577aa2544d",
+        "files": [
+          {
+            "name": "001.png",
+            "bytes": 28205,
+            "sha256": "d571e513d94f76a160adbf0a3d7f6322dabc4ee041d1607263d0f20ea7d0a8e8"
+          },
+          {
+            "name": "002.png",
+            "bytes": 26345,
+            "sha256": "5d8ef0ad8eb4cadb10c6ed7d6e2e26c81c37c8d818847b3832c924d1e0237b54"
+          }
+        ]
+      },
+      "existingMedia": {
+        "directory": "$ISOLATED_TEMP_ROOT/destination/migration-1792070802059212/01eb1f7a93e81d9128bd35dbcf4ed39645ac464d60fd496f21115a3f03b2a33f",
+        "files": [
+          {
+            "name": "001.png",
+            "bytes": 28205,
+            "sha256": "d571e513d94f76a160adbf0a3d7f6322dabc4ee041d1607263d0f20ea7d0a8e8"
+          },
+          {
+            "name": "002.png",
+            "bytes": 26345,
+            "sha256": "5d8ef0ad8eb4cadb10c6ed7d6e2e26c81c37c8d818847b3832c924d1e0237b54"
+          }
+        ]
+      }
+    },
+    "consume": {
+      "status": "passed",
+      "phase": "consume",
+      "pid": 2552,
+      "completedPlansReopened": 2,
+      "completedExecuteIdempotent": true,
+      "sameTitleAutoLinked": false,
+      "unconfirmedDirectoryRejected": true,
+      "unmappedCount": 4,
+      "explicitlyMappedCount": 3,
+      "mapping": {
+        "[\"host-original\",\"original-1\"]": "human-confirmed-1",
+        "[\"host-new\",\"new-1\"]": "human-confirmed-1"
+      },
+      "priorityOriginal": [
+        "[\"host-original\",\"original-1\"]",
+        "[\"host-original\",\"original-2\"]",
+        "[\"host-new\",\"new-2\"]"
+      ],
+      "priorityReordered": [
+        "[\"host-new\",\"new-1\"]",
+        "[\"host-new\",\"new-2\"]",
+        "[\"host-original\",\"original-2\"]"
+      ],
+      "disabledPreferredFallback": [
+        "[\"host-original\",\"original-1\"]",
+        "[\"host-new\",\"new-2\"]",
+        "[\"host-original\",\"original-2\"]"
+      ],
+      "owners": [
+        {
+          "chapter": "[\"host-new\",\"new-1\"]",
+          "work": "[\"host-new\",\"new\"]"
+        },
+        {
+          "chapter": "[\"host-new\",\"new-2\"]",
+          "work": "[\"host-new\",\"new\"]"
+        },
+        {
+          "chapter": "[\"host-original\",\"original-2\"]",
+          "work": "[\"host-original\",\"original\"]"
+        }
+      ],
+      "consumedMedia": {
+        "directory": "$ISOLATED_TEMP_ROOT/destination/migration-1792070802040158/a680d1c998b593f43dee84d7f6d73f19c5c4987eca61cde29dcc43577aa2544d",
+        "files": [
+          {
+            "name": "001.png",
+            "bytes": 28205,
+            "sha256": "d571e513d94f76a160adbf0a3d7f6322dabc4ee041d1607263d0f20ea7d0a8e8"
+          },
+          {
+            "name": "002.png",
+            "bytes": 26345,
+            "sha256": "5d8ef0ad8eb4cadb10c6ed7d6e2e26c81c37c8d818847b3832c924d1e0237b54"
+          }
+        ]
+      },
+      "invalidMappingRejected": true,
+      "independentReadingRowsRetained": true,
+      "cacheOnlyDiagnostics": 2
+    },
+    "reopen-consumer": {
+      "status": "passed",
+      "phase": "reopen-consumer",
+      "pid": 16732,
+      "memberOrder": [
+        "[\"host-new\",\"new\"]",
+        "[\"host-original\",\"original\"]"
+      ],
+      "storedGroups": {
+        "[\"host-original\",\"original-1\"]": "human-confirmed-1",
+        "[\"host-new\",\"new-1\"]": "human-confirmed-1"
+      },
+      "directoryCount": 3,
+      "preferredSource": "host-new",
+      "originalAndExistingProgressPreserved": true,
+      "originalMedia": {
+        "directory": "$ISOLATED_TEMP_ROOT/original-files",
+        "files": [
+          {
+            "name": "001.png",
+            "bytes": 28205,
+            "sha256": "d571e513d94f76a160adbf0a3d7f6322dabc4ee041d1607263d0f20ea7d0a8e8"
+          },
+          {
+            "name": "002.png",
+            "bytes": 26345,
+            "sha256": "5d8ef0ad8eb4cadb10c6ed7d6e2e26c81c37c8d818847b3832c924d1e0237b54"
+          }
+        ]
+      },
+      "freshMedia": {
+        "directory": "$ISOLATED_TEMP_ROOT/destination/migration-1792070802040158/a680d1c998b593f43dee84d7f6d73f19c5c4987eca61cde29dcc43577aa2544d",
+        "files": [
+          {
+            "name": "001.png",
+            "bytes": 28205,
+            "sha256": "d571e513d94f76a160adbf0a3d7f6322dabc4ee041d1607263d0f20ea7d0a8e8"
+          },
+          {
+            "name": "002.png",
+            "bytes": 26345,
+            "sha256": "5d8ef0ad8eb4cadb10c6ed7d6e2e26c81c37c8d818847b3832c924d1e0237b54"
+          }
+        ]
+      },
+      "existingMedia": {
+        "directory": "$ISOLATED_TEMP_ROOT/destination/migration-1792070802059212/01eb1f7a93e81d9128bd35dbcf4ed39645ac464d60fd496f21115a3f03b2a33f",
+        "files": [
+          {
+            "name": "001.png",
+            "bytes": 28205,
+            "sha256": "d571e513d94f76a160adbf0a3d7f6322dabc4ee041d1607263d0f20ea7d0a8e8"
+          },
+          {
+            "name": "002.png",
+            "bytes": 26345,
+            "sha256": "5d8ef0ad8eb4cadb10c6ed7d6e2e26c81c37c8d818847b3832c924d1e0237b54"
+          }
+        ]
+      }
+    },
+    "conflicts": {
+      "status": "passed",
+      "phase": "conflicts",
+      "pid": 5672,
+      "unreviewedMergeRejected": true,
+      "manyToOneMappingRejected": true,
+      "existingDownloadRejected": true,
+      "error": "目标章节已有下载，不覆盖目标文件",
+      "failedPlanId": "migration-1792070906811846",
+      "failedPlanStatus": "failed",
+      "originalAndExistingProgressUnchanged": true,
+      "publishedTargetMediaUnchanged": true,
+      "targetDownloadCount": 1,
+      "existingMedia": {
+        "directory": "$ISOLATED_TEMP_ROOT/destination/migration-1792070802059212/01eb1f7a93e81d9128bd35dbcf4ed39645ac464d60fd496f21115a3f03b2a33f",
+        "files": [
+          {
+            "name": "001.png",
+            "bytes": 28205,
+            "sha256": "d571e513d94f76a160adbf0a3d7f6322dabc4ee041d1607263d0f20ea7d0a8e8"
+          },
+          {
+            "name": "002.png",
+            "bytes": 26345,
+            "sha256": "5d8ef0ad8eb4cadb10c6ed7d6e2e26c81c37c8d818847b3832c924d1e0237b54"
+          }
+        ]
+      }
+    },
+    "reopen-conflict": {
+      "status": "passed",
+      "phase": "reopen-conflict",
+      "pid": 11248,
+      "failedPlanStatus": "failed",
+      "originalAndExistingProgressPreserved": true,
+      "publishedTargetMediaPreserved": true
+    }
+  },
+  "notClaimed": [
+    "Actual Windows or Android App UI interaction",
+    "Live public-site cross-adapter title/catalog correspondence",
+    "Authentication, paid/locked content, or account-required behavior",
+    "Image-reader rendering or human visual inspection; decoder verification is host-side",
+    "Unit test/full-suite/build/lint/formatter execution by this smoke"
+  ],
+  "cleanup": {
+    "temporaryScriptsRemoved": true,
+    "temporaryKernelRemoved": true,
+    "temporaryDatabaseAndJournalsRemoved": true,
+    "temporaryOriginalCopiesAndMigratedMediaRemoved": true,
+    "copiedSqliteDllAndNativeAssetMappingRemoved": true,
+    "ownIsolatedDirectoryRemoved": true,
+    "spawnedProcessesExited": true,
+    "suppliedPublicArchiveRetained": true,
+    "originalDevicesAndApplicationDataUntouched": true
+  }
+}

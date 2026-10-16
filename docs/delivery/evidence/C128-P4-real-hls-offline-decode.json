@@ -1,0 +1,45 @@
+{
+  "probeExit": 0,
+  "probe": {
+    "programs": [
+      {
+        "streams": [
+          {
+            "codec_name": "aac",
+            "codec_type": "audio"
+          },
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 320,
+            "height": 184
+          }
+        ]
+      }
+    ],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "aac",
+        "codec_type": "audio"
+      },
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 320,
+        "height": 184
+      }
+    ],
+    "format": {
+      "duration": "634.634000"
+    }
+  },
+  "decode30SecondsExit": 0,
+  "allowedProtocols": [
+    "file",
+    "crypto",
+    "data"
+  ],
+  "networkProtocolsDisabled": true,
+  "toolPublisherSha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba"
+}

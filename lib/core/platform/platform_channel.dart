@@ -6,8 +6,19 @@ import 'package:flutter/services.dart';
 /// 实现**不得合成** `treeUri/fileName` 形式的路径——系统可能对文件改名
 /// （重名加序号等），只有返回的 URI 才是真实位置。失败抛 [PlatformException]，
 /// 空/null URI 视为失败（由调用方回退应用私有目录）。
-typedef SafTreeWriter =
-    Future<String> Function(String treeUri, String fileName, List<int> bytes);
+typedef SafTreeWriter = Future<String> Function(
+  String treeUri,
+  String fileName,
+  List<int> bytes,
+);
+
+/// SAF copy of an already-published application-private file. Returns the real
+/// document URI; an exception or empty URI retains the local backup.
+typedef SafFileTreeWriter = Future<String> Function(
+  String treeUri,
+  String fileName,
+  String sourcePath,
+);
 
 /// 平台能力通道（`triomi/platform`）的 Dart 侧封装。
 ///
@@ -17,6 +28,216 @@ class PlatformChannel {
   const PlatformChannel._();
 
   static const MethodChannel _channel = MethodChannel('triomi/platform');
+
+  /// Verify APK bytes and read publisher metadata without executing its DEX.
+  Future<bool> openMihonSettings(String packageName, String sourceId) async {
+    try {
+      return await _channel.invokeMethod<bool>('mihonOpenSettings', {
+            'packageName': packageName,
+            'sourceId': sourceId,
+          }) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  Future<Map<String, Object?>> inspectMihonMetadata({
+    required String apkPath,
+    required String packageName,
+    required int versionCode,
+  }) async {
+    try {
+      final raw = await _channel.invokeMethod<Object?>('mihonInspectMetadata', {
+        'apkPath': apkPath,
+        'packageName': packageName,
+        'versionCode': versionCode,
+      });
+      if (raw is Map) {
+        return {for (final entry in raw.entries) '${entry.key}': entry.value};
+      }
+      return {'ok': false, 'error': '宿主没有返回 APK 元数据'};
+    } on MissingPluginException {
+      return {'ok': false, 'supported': false, 'error': '当前平台没有 Mihon 宿主'};
+    } on PlatformException catch (error) {
+      return {'ok': false, 'error': error.message ?? error.code};
+    }
+  }
+
+  /// Validate and probe a downloaded Mihon extension without installing it as
+  /// an Android application. The native side returns a structured diagnostic
+  /// so the source UI cannot mistake a downloaded APK for an executable one.
+  Future<Map<String, Object?>> inspectMihonExtension({
+    required String apkPath,
+    required String packageName,
+    required int versionCode,
+    String? signerSha256,
+    String? apkSha256,
+  }) async {
+    try {
+      final raw = await _channel.invokeMethod<Object?>(
+        'mihonInspect',
+        <String, Object?>{
+          'apkPath': apkPath,
+          'packageName': packageName,
+          'versionCode': versionCode,
+          'signerSha256': signerSha256,
+          'apkSha256': ?apkSha256,
+        },
+      );
+      if (raw is Map) {
+        return <String, Object?>{
+          for (final entry in raw.entries) '${entry.key}': entry.value,
+        };
+      }
+      return const <String, Object?>{'ok': false, 'error': '宿主没有返回诊断结果'};
+    } on MissingPluginException {
+      return const <String, Object?>{'ok': false, 'error': '当前平台没有 Mihon 宿主'};
+    } on PlatformException catch (error) {
+      return <String, Object?>{
+        'ok': false,
+        'error': error.message ?? error.code,
+      };
+    }
+  }
+
+  Future<bool> setMihonEnabled(String packageName, bool enabled) async {
+    try {
+      final raw = await _channel.invokeMethod<Object?>(
+        'mihonSetEnabled',
+        <String, Object?>{'packageName': packageName, 'enabled': enabled},
+      );
+      return raw is Map && raw['ok'] == true;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  Future<Map<String, Object?>> mihonRequest({
+    required String packageName,
+    required String operation,
+    String? apkPath,
+    int? versionCode,
+    String? signerSha256,
+    String? sourceId,
+    int page = 1,
+    String query = '',
+    Map<String, Object?>? manga,
+    Map<String, Object?>? chapter,
+    Map<String, Object?>? pageData,
+    List<Map<String, Object?>>? filters,
+  }) async {
+    final args = <String, Object?>{
+      'packageName': packageName,
+      'operation': operation,
+      'apkPath': apkPath,
+      'versionCode': versionCode,
+      'signerSha256': signerSha256,
+      'sourceId': sourceId,
+      'page': page,
+      'query': query,
+      'manga': manga,
+      'chapter': chapter,
+      'pageData': pageData,
+      'filters': ?filters,
+    };
+    try {
+      final raw = await _channel.invokeMethod<Object?>('mihonRequest', args);
+      if (raw is Map) {
+        return <String, Object?>{
+          for (final e in raw.entries) '${e.key}': e.value,
+        };
+      }
+      return const <String, Object?>{'ok': false, 'error': '宿主没有返回结果'};
+    } on PlatformException catch (error) {
+      return <String, Object?>{
+        'ok': false,
+        'error': error.message ?? error.code,
+      };
+    } on MissingPluginException {
+      return const <String, Object?>{'ok': false, 'error': '当前平台没有 Mihon 宿主'};
+    }
+  }
+
+  Future<Map<String, Object?>> openMihonSession({
+    required String packageName,
+    required String sourceId,
+    String? apkPath,
+    int? versionCode,
+    String? signerSha256,
+  }) async {
+    try {
+      final raw = await _channel.invokeMethod<Object?>(
+        'mihonOpenSession',
+        <String, Object?>{
+          'packageName': packageName,
+          'sourceId': sourceId,
+          'apkPath': apkPath,
+          'versionCode': versionCode,
+          'signerSha256': signerSha256,
+        },
+      );
+      if (raw is Map) {
+        return <String, Object?>{
+          for (final e in raw.entries) '${e.key}': e.value,
+        };
+      }
+      return const <String, Object?>{'ok': false, 'error': '宿主没有返回会话结果'};
+    } on PlatformException catch (error) {
+      return <String, Object?>{
+        'ok': false,
+        'error': error.message ?? error.code,
+      };
+    } on MissingPluginException {
+      return const <String, Object?>{'ok': false, 'error': '当前平台没有 Mihon 宿主'};
+    }
+  }
+
+  Future<bool> openRuleSession(String url, String userAgent) async {
+    final raw = await _channel.invokeMethod<Object?>('ruleOpenSession', {
+      'url': url,
+      'userAgent': userAgent,
+    });
+    if (raw is! Map || raw['ok'] != true) {
+      throw StateError('当前平台无法打开规则站点验证');
+    }
+    return raw['saved'] == true;
+  }
+
+  /// Cookies stay in WebView storage and transient request memory, never prefs.
+  Future<String?> ruleCookieHeader(String url) async {
+    try {
+      return await _channel.invokeMethod<String>('ruleCookieHeader', {
+        'url': url,
+      });
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  Future<void> storeRuleCookies(String url, List<String> cookies) async {
+    if (cookies.isEmpty) return;
+    try {
+      await _channel.invokeMethod<bool>('ruleStoreCookies', {
+        'url': url,
+        'cookies': cookies,
+      });
+    } on MissingPluginException {
+      // Desktop public rules remain usable without Android WebView sessions.
+    }
+  }
+
+  Future<int?> availableDiskBytes(String path) async {
+    try {
+      return await _channel.invokeMethod<int>('availableDiskBytes', {
+        'path': path,
+      });
+    } on MissingPluginException {
+      return null;
+    }
+  }
 
   /// 屏幕常亮（Android FLAG_KEEP_SCREEN_ON）。
   Future<void> setKeepScreenOn(bool enabled) async {
@@ -75,6 +296,24 @@ class PlatformChannel {
         'mime': mime,
       },
     );
+    if (uri == null || uri.isEmpty) {
+      throw PlatformException(code: 'write_failed', message: '未返回导出文件 URI');
+    }
+    return uri;
+  }
+
+  /// Copy an application-private file to SAF without channel byte buffers.
+  Future<String> writeFileToTree(
+    String treeUri,
+    String fileName,
+    String sourcePath,
+  ) async {
+    final uri = await _channel.invokeMethod<String>('writeToTree', {
+      'treeUri': treeUri,
+      'fileName': fileName,
+      'sourcePath': sourcePath,
+      'mime': 'application/zip',
+    });
     if (uri == null || uri.isEmpty) {
       throw PlatformException(code: 'write_failed', message: '未返回导出文件 URI');
     }

@@ -7,7 +7,7 @@ import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/js/js_runtime.dart';
 import 'package:triomi/core/source/js/js_source.dart';
-import 'package:triomi/core/source/js/runtime/js_runtime_factory.dart';
+import 'package:triomi/core/source/js/runtime/flutter_js_runtime.dart';
 import 'package:triomi/core/source/rule_schema.dart';
 
 import 'fixtures/fake_http_client.dart';
@@ -67,7 +67,7 @@ void main() {
 
   setUpAll(() async {
     // 真实加载一次脚本，判定引擎在本机是否可用。
-    final runtime = createFlutterJsRuntime();
+    final runtime = FlutterJsRuntime();
     try {
       await runtime.load(
         'function ping() { return "pong"; }',
@@ -105,7 +105,7 @@ void main() {
   Future<JsSource> prepare(FakeHttpClient http) async {
     final source = JsSource(
       rule: SourceRule.parseJson(_exampleRuleText),
-      runtime: createFlutterJsRuntime(),
+      runtime: FlutterJsRuntime(),
       http: http,
     );
     addTearDown(source.dispose);
@@ -267,7 +267,7 @@ async function search(keyword, page) {
 ''',
         }),
       ),
-      runtime: createFlutterJsRuntime(),
+      runtime: FlutterJsRuntime(),
       http: http,
     );
     addTearDown(source.dispose);

@@ -108,6 +108,30 @@ void main() {
     });
   });
 
+  group('LK 远端书架未读', () {
+    test('bookshelf-v1 解析未读章节数并保留缺字段为空', () async {
+      await secureStore.set('lk.securityKey', 'k-test');
+      final http = routingHttpClient(<String, String>{
+        '/bookshelf-v1': jsonEncode(<String, Object?>{
+          'code': 0,
+          'data': <String, Object?>{
+            'list': <Object?>[
+              <String, Object?>{
+                'book_id': 1001,
+                'title': '有未读',
+                'unread_chapter_count': 4,
+              },
+              <String, Object?>{'book_id': 1002, 'title': '无字段'},
+            ],
+          },
+        }),
+      });
+
+      final books = await clientOf(http).bookshelf();
+      expect(books.map((book) => book.unreadChapterCount), <int?>[4, null]);
+    });
+  });
+
   group('T5 签到', () {
     test('七日格子解析；领取后连续天数 +1', () async {
       await secureStore.set('lk.securityKey', 'k-test');

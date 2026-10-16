@@ -14,11 +14,8 @@ import 'package:triomi/features/novel/export/novel_export_service.dart';
 import 'fixtures/fake_http_client.dart';
 
 /// D29：小说导出的 SAF 注入（授权目录优先，私有目录回退）。
-Chapter chapterOf(String remoteId) => Chapter(
-  sourceId: 's',
-  remoteId: remoteId,
-  title: '第一章',
-);
+Chapter chapterOf(String remoteId) =>
+    Chapter(sourceId: 's', remoteId: remoteId, title: '第一章');
 
 MediaItem itemOf(String title) => MediaItem(
   sourceId: 's',
@@ -81,7 +78,9 @@ void main() {
         item: itemOf('注入书'),
         chapters: <Chapter>[chapterOf('1')],
         source: StubProvider(),
-        http: FakeHttpClient((_) async => const SourceResponse(statusCode: 200, body: '')),
+        http: FakeHttpClient(
+          (_) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
         onProgress: (_, _) {},
         directoryUri: 'content://com.android.externalstorage/tree/exports',
         writeToTree: (uri, fileName, bytes) async {
@@ -133,8 +132,11 @@ void main() {
 
       final file = File(result.path);
       expect(file.existsSync(), isTrue);
-      expect(result.path.startsWith(docsDir.path), isTrue,
-          reason: '空 URI 不构成成功路径');
+      expect(
+        result.path.startsWith(docsDir.path),
+        isTrue,
+        reason: '空 URI 不构成成功路径',
+      );
     });
 
     test('SAF 写入失败：回退私有目录且文件可读', () async {
@@ -151,8 +153,11 @@ void main() {
 
       final file = File(result.path);
       expect(file.existsSync(), isTrue, reason: '回退到私有目录并落盘');
-      expect(result.path.startsWith(docsDir.path), isTrue,
-          reason: '回退路径在应用文档目录下');
+      expect(
+        result.path.startsWith(docsDir.path),
+        isTrue,
+        reason: '回退路径在应用文档目录下',
+      );
       expect(utf8.decode(file.readAsBytesSync()), contains('回退书'));
     });
 

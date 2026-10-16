@@ -38,6 +38,13 @@ final trackingServiceProvider = Provider<TrackingService>((ref) {
   );
 });
 
+final trackingSyncProvider = Provider(
+  (ref) => TrackingSync(
+    service: ref.watch(trackingServiceProvider),
+    db: ref.watch(databaseProvider),
+  ),
+);
+
 /// base 覆盖（默认不覆盖，走真实站点）。
 ///
 /// 调试用：`--dart-define=TRIOMI_TRACKING_BASE=http://10.0.2.2:8123/tracking`
@@ -93,12 +100,20 @@ class ProgressReporter {
     required String remoteId,
     required double chapterNumber,
     required MediaType type,
-  }) => _service.reportProgress(
-    sourceId: sourceId,
-    remoteId: remoteId,
-    chapterNumber: chapterNumber,
-    type: type,
-  );
+  }) async {
+    if (_service.preferences.get<bool>(
+          'tracking.manualOnly.$sourceId\u0000$remoteId',
+        ) ==
+        true) {
+      return const <TrackSyncResult>[];
+    }
+    return _service.reportProgress(
+      sourceId: sourceId,
+      remoteId: remoteId,
+      chapterNumber: chapterNumber,
+      type: type,
+    );
+  }
 
   Future<List<TrackSyncResult>> reportStatus({
     required String sourceId,
@@ -106,11 +121,19 @@ class ProgressReporter {
     required String status,
     required MediaType type,
     double chapterNumber = 0,
-  }) => _service.reportStatus(
-    sourceId: sourceId,
-    remoteId: remoteId,
-    status: status,
-    type: type,
-    chapterNumber: chapterNumber,
-  );
+  }) async {
+    if (_service.preferences.get<bool>(
+          'tracking.manualOnly.$sourceId\u0000$remoteId',
+        ) ==
+        true) {
+      return const <TrackSyncResult>[];
+    }
+    return _service.reportStatus(
+      sourceId: sourceId,
+      remoteId: remoteId,
+      status: status,
+      type: type,
+      chapterNumber: chapterNumber,
+    );
+  }
 }

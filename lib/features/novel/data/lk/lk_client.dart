@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -93,7 +92,7 @@ class LkClient {
     await preferences.set(_unlockedKey, <String>[]);
   }
 
-  LkSession _parseAndSaveSession(Map<Object?, Object?> data) {
+  Future<LkSession> _parseAndSaveSession(Map<Object?, Object?> data) async {
     final auth = _obj(data, 'auth') ?? const <Object?, Object?>{};
     final key = _string2(
       _string(auth, 'security_key', 'securityKey', 'token'),
@@ -112,7 +111,7 @@ class LkClient {
         : (_int(data, 'uid') > 0
               ? _int(data, 'uid')
               : _int(user ?? {}, 'uid', 'id'));
-    unawaited(secureStore.set(_sessionKey, key));
+    await secureStore.set(_sessionKey, key);
     return LkSession(
       loggedIn: true,
       securityKey: key,
@@ -211,6 +210,25 @@ class LkClient {
       }),
     );
     return booksPage(data);
+  }
+
+  /// 当前登录用户发布的长篇作品。
+  ///
+  /// 契约来自 Mixn 的 `longform-book-list-v1`：这是账号域接口，不能在
+  /// 未登录时退化为空列表，否则发布管理页会把鉴权缺失误报成没有作品。
+  Future<LkPublishedWorksPage> publishedWorks({
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final key = _requireSession();
+    final requestedPage = page < 1 ? 1 : page;
+    final requestedSize = pageSize.clamp(1, 100);
+    final data = await _post('api/bff/longform-book-list-v1', {
+      'security_key': key,
+      'page': requestedPage,
+      'pageSize': requestedSize,
+    });
+    return parsePublishedWorksPage(data, requestedPage, requestedSize);
   }
 
   // ------------------------------------------------------------ 详情与目录
@@ -1215,6 +1233,122 @@ class LkClient {
       if (_int(node, 'book_id', 'id') > 0) parseBook(node),
   ];
 
+  /// 解析发布管理接口。字段兼容 Mixn 已验证的 snake_case/camelCase 变体。
+  static LkPublishedWorksPage parsePublishedWorksPage(
+    Map<Object?, Object?> data,
+    int requestedPage,
+    int pageSize,
+  ) {
+    final items = <LkPublishedWork>[];
+    for (final node in _listOf(
+      data,
+      'list,items,books,published_books,book_list',
+      'cards,results',
+    )) {
+      final bookId = _int(node, 'book_id', 'bookId', 'id');
+      if (bookId <= 0) continue;
+      final meta = _obj(node, 'meta_json', 'metaJson');
+      final review = _obj(node, 'review_state', 'reviewState');
+      final rawStatus =
+          _string(
+            meta ?? const <Object?, Object?>{},
+            'serialize_status',
+            'serial_status',
+          ).isNotEmpty
+          ? _string(
+              meta ?? const <Object?, Object?>{},
+              'serialize_status',
+              'serial_status',
+            )
+          : _string(node, 'serial_status', 'serialStatus', 'status_text');
+      final numericStatus = _int(node, 'status');
+      final completed =
+          _bool(meta ?? const <Object?, Object?>{}, 'is_completed') == true ||
+          _bool(node, 'is_completed', 'isCompleted') == true;
+      final status = rawStatus == '已完结'
+          ? '已完本'
+          : rawStatus.isNotEmpty
+          ? rawStatus
+          : completed
+          ? '已完本'
+          : numericStatus == 2
+          ? '已隐藏'
+          : numericStatus == 0
+          ? '草稿中'
+          : '连载中';
+      final reviewStatus =
+          _string(
+            review ?? const <Object?, Object?>{},
+            'review_status',
+            'reviewStatus',
+          ).isNotEmpty
+          ? _string(
+              review ?? const <Object?, Object?>{},
+              'review_status',
+              'reviewStatus',
+            )
+          : _string(node, 'review_status', 'reviewStatus');
+      final explicitReviewText = _string(
+        review ?? const <Object?, Object?>{},
+        'progress_text',
+        'progressText',
+      );
+      final reviewText = explicitReviewText.isNotEmpty
+          ? explicitReviewText
+          : switch (reviewStatus) {
+              'pending' => '审核中',
+              'approved' => '审核通过',
+              'rejected' => '审核未通过',
+              _ => '',
+            };
+      items.add(
+        LkPublishedWork(
+          id: bookId,
+          title: _fallback(_string(node, 'title'), '未命名作品'),
+          coverUrl: _nullable(_string(node, 'cover_url', 'coverUrl', 'cover')),
+          author: _string(node, 'author_name', 'author', 'authorName'),
+          summary: _string(node, 'summary', 'long_summary', 'longSummary'),
+          type: _string(meta ?? const <Object?, Object?>{}, 'type').isNotEmpty
+              ? _string(meta ?? const <Object?, Object?>{}, 'type')
+              : _string(node, 'type'),
+          status: status,
+          reviewStatus: reviewStatus,
+          reviewText: reviewText,
+          volumeCount: _int(node, 'volume_count', 'volumeCount'),
+          chapterCount: _int(node, 'chapter_count', 'chapterCount'),
+          wordCount: _int(node, 'word_count', 'wordCount'),
+          updatedAt: _string(node, 'updated_at', 'updatedAt'),
+        ),
+      );
+    }
+    final info = _obj(data, 'pagination', 'page_info', 'pageInfo');
+    final total = info == null
+        ? items.length
+        : (_pickNonNegative(info, const <String>['total', 'count']) ??
+              items.length);
+    final actualSize = info == null
+        ? pageSize
+        : (_pickPositive(info, const <String>[
+                'page_size',
+                'pageSize',
+                'size',
+              ]) ??
+              pageSize);
+    final next = info == null
+        ? 0
+        : (_pickInt(info, const <String>['next']) ?? 0);
+    final hasMore = info == null
+        ? items.length >= pageSize
+        : (_bool(info, 'has_more', 'hasMore', 'has_next') ??
+              next > 0 || requestedPage * actualSize < total);
+    return LkPublishedWorksPage(
+      items: items,
+      page: requestedPage,
+      total: total,
+      hasMore: hasMore,
+    );
+  }
+
   static LkBook parseBook(Map<Object?, Object?> source) {
     final rating = _obj(source, 'rating');
     // 标签可能是字符串数组或对象数组（不同接口版本），都要吃。
@@ -1274,6 +1408,12 @@ class LkClient {
       score: (score10 != null && score10 > 0)
           ? score10 / 2.0
           : ((score5 != null && score5 > 0) ? score5 : null),
+      unreadChapterCount: _pickNonNegative(source, const <String>[
+        'unread_chapter_count',
+        'unreadChapterCount',
+        'unread_chapters',
+        'unreadChapters',
+      ]),
     );
   }
 
@@ -1566,6 +1706,7 @@ class LkBook {
     this.coverUrl,
     this.tags = const <String>[],
     this.score,
+    this.unreadChapterCount,
     this.alternateVersions = const <LkAlternateBook>[],
   });
 
@@ -1577,8 +1718,58 @@ class LkBook {
   final List<String> tags;
   final double? score;
 
+  /// 远端书架提供的未读章节数；非书架接口通常没有此字段。
+  final int? unreadChapterCount;
+
   /// 同书的不同版本（B1，get-book-detail 的 alternate_versions）。
   final List<LkAlternateBook> alternateVersions;
+}
+
+/// LK 发布管理接口返回的一项作品。
+class LkPublishedWork {
+  const LkPublishedWork({
+    required this.id,
+    required this.title,
+    this.coverUrl,
+    this.author = '',
+    this.summary = '',
+    this.type = '',
+    this.status = '',
+    this.reviewStatus = '',
+    this.reviewText = '',
+    this.volumeCount = 0,
+    this.chapterCount = 0,
+    this.wordCount = 0,
+    this.updatedAt = '',
+  });
+
+  final int id;
+  final String title;
+  final String? coverUrl;
+  final String author;
+  final String summary;
+  final String type;
+  final String status;
+  final String reviewStatus;
+  final String reviewText;
+  final int volumeCount;
+  final int chapterCount;
+  final int wordCount;
+  final String updatedAt;
+}
+
+class LkPublishedWorksPage {
+  const LkPublishedWorksPage({
+    required this.items,
+    required this.page,
+    required this.total,
+    required this.hasMore,
+  });
+
+  final List<LkPublishedWork> items;
+  final int page;
+  final int total;
+  final bool hasMore;
 }
 
 /// 同书版本的精简信息（标题 + bookId）。

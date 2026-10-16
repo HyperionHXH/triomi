@@ -1,0 +1,23 @@
+{
+  "status": "passed",
+  "devices": [
+    {
+      "serial": "emulator-5554",
+      "actualHistoryReached": true,
+      "noBookWhitelistRequired": true,
+      "originalPackageReplaced": false
+    },
+    {
+      "serial": "emulator-5556",
+      "actualHistoryReached": true,
+      "noBookWhitelistRequired": true,
+      "originalPackageReplaced": false
+    },
+    {
+      "serial": "emulator-5558",
+      "actualHistoryReached": true,
+      "noBookWhitelistRequired": true,
+      "originalPackageReplaced": false
+    }
+  ]
+}

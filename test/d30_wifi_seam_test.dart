@@ -42,7 +42,8 @@ void main() {
       remoteId: '1',
       chapter: const Chapter(sourceId: 'lk', remoteId: '1:1', title: '第 1 章'),
     );
-    final query = db.select(db.downloads)..where((table) => table.id.equals(id));
+    final query = db.select(db.downloads)
+      ..where((table) => table.id.equals(id));
     return query.getSingle();
   }
 
@@ -85,11 +86,15 @@ void main() {
   group('isOnWifiDefault：解析器异常时按可用处理', () {
     test('解析成功：按接口名判定', () async {
       expect(
-        await DownloadService.isOnWifiDefault(resolver: () async => <String>['wlan0']),
+        await DownloadService.isOnWifiDefault(
+          resolver: () async => <String>['wlan0'],
+        ),
         isTrue,
       );
       expect(
-        await DownloadService.isOnWifiDefault(resolver: () async => <String>['rmnet0']),
+        await DownloadService.isOnWifiDefault(
+          resolver: () async => <String>['rmnet0'],
+        ),
         isFalse,
       );
     });
@@ -116,9 +121,8 @@ void main() {
           resolver: () async => <String>['rmnet0'],
         ).run(
           row: row,
-          provider: StubContentProvider(
-            const ChapterContent(text: '不该被取到的正文'),
-          )..onContent = () => contentAsked = true,
+          provider: StubContentProvider(const ChapterContent(text: '不该被取到的正文'))
+            ..onContent = () => contentAsked = true,
         ),
         throwsA(isA<Object>()),
       );
@@ -126,8 +130,11 @@ void main() {
       final query = db.select(db.downloads)
         ..where((table) => table.id.equals(row.id));
       final after = await query.getSingle();
-      expect(after.status, DownloadStatus.queued.value,
-          reason: '非 WiFi 只回排队，等切网后重新调度');
+      expect(
+        after.status,
+        DownloadStatus.queued.value,
+        reason: '非 WiFi 只回排队，等切网后重新调度',
+      );
       expect(after.errorMessage, isNull, reason: '排队不是失败，不写错误原因');
       expect(contentAsked, isFalse, reason: '门卫在取正文之前拦截');
     });
@@ -138,7 +145,10 @@ void main() {
       await serviceOf(
         prefs: preferences,
         resolver: () async => <String>['rmnet0', 'wlan0'],
-      ).run(row: row, provider: providerOf(const ChapterContent(text: '正文')));
+      ).run(
+        row: row,
+        provider: providerOf(const ChapterContent(text: '正文')),
+      );
 
       final query = db.select(db.downloads)
         ..where((table) => table.id.equals(row.id));
@@ -151,7 +161,10 @@ void main() {
       await serviceOf(
         prefs: preferences,
         resolver: () async => throw StateError('接口枚举不可用'),
-      ).run(row: row, provider: providerOf(const ChapterContent(text: '正文')));
+      ).run(
+        row: row,
+        provider: providerOf(const ChapterContent(text: '正文')),
+      );
 
       final query = db.select(db.downloads)
         ..where((table) => table.id.equals(row.id));
@@ -167,7 +180,10 @@ void main() {
           resolverCalls += 1;
           return <String>['rmnet0'];
         },
-      ).run(row: row, provider: providerOf(const ChapterContent(text: '正文')));
+      ).run(
+        row: row,
+        provider: providerOf(const ChapterContent(text: '正文')),
+      );
 
       expect(resolverCalls, 0, reason: '关闭开关时连网络判断都不做');
       final query = db.select(db.downloads)

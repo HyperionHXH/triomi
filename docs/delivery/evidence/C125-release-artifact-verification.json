@@ -1,0 +1,70 @@
+{
+  "at": "2026-10-10T14:45:59.006Z",
+  "status": "passed",
+  "artifacts": [
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-android-acceptance.apk",
+      "bytes": 123961800,
+      "sha256": "52c391bd5ecf25e03d74981718aaad8505af570b7f87067085960510919b28b3",
+      "zipIntegrity": true,
+      "members": 530
+    },
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-android-signed.apk",
+      "bytes": 123965896,
+      "sha256": "acc302287b6f69468004ec608c0b2b89b8be6e6c244804d32726c660799944a9",
+      "zipIntegrity": true,
+      "members": 530
+    },
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-windows-release.zip",
+      "bytes": 37322677,
+      "sha256": "3ac7d53d76f8fc1ca1d65b71b5ae0ed932472eb7c3261fdb4fe9cab251b18d89",
+      "zipIntegrity": true,
+      "members": 50
+    },
+    {
+      "path": "D:\\noval_and_manga\\triomi\\build\\windows\\x64\\runner\\Release\\triomi.exe",
+      "bytes": 94208,
+      "sha256": "f5620d365954c1f227a3e78bf8ae3ff9fb64799387a51643074c116066d94927"
+    }
+  ],
+  "windowsZipMatchesBundle": {
+    "zipMembers": 50,
+    "bundleFiles": 50,
+    "mismatchedMembers": 0
+  },
+  "installedDevices": [
+    {
+      "serial": "emulator-5554",
+      "installedSha256": "52c391bd5ecf25e03d74981718aaad8505af570b7f87067085960510919b28b3",
+      "matchesArtifact": true
+    },
+    {
+      "serial": "emulator-5556",
+      "installedSha256": "52c391bd5ecf25e03d74981718aaad8505af570b7f87067085960510919b28b3",
+      "matchesArtifact": true
+    },
+    {
+      "serial": "emulator-5558",
+      "installedSha256": "acc302287b6f69468004ec608c0b2b89b8be6e6c244804d32726c660799944a9",
+      "matchesArtifact": true
+    }
+  ],
+  "signatures": [
+    {
+      "artifact": "D:\\noval_and_manga\\_tools\\Triomi-C125-android-acceptance.apk",
+      "v2": true,
+      "signers": 1,
+      "keyBits": 2048,
+      "certificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6"
+    },
+    {
+      "artifact": "D:\\noval_and_manga\\_tools\\Triomi-C125-android-signed.apk",
+      "v2": true,
+      "signers": 1,
+      "keyBits": 4096,
+      "certificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077"
+    }
+  ]
+}

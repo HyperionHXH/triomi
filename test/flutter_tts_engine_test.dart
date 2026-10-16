@@ -35,6 +35,49 @@ void main() {
 
   Future<void> flush() => Future<void>.delayed(Duration.zero);
 
+  test(
+    'unresolved native synthesis fails and releases engine for retry',
+    () async {
+      final controller = TtsController(
+        engine: FlutterTtsEngine(
+          synthesisTimeout: const Duration(milliseconds: 25),
+        ),
+        blocks: const [ParagraphBlock('正文')],
+      );
+      await controller.start(locked: false);
+      await Future<void>.delayed(const Duration(milliseconds: 75));
+      expect(controller.state, TtsState.error);
+      expect(calls.where((c) => c.method == 'stop'), isNotEmpty);
+      await controller.start(locked: false);
+      await flush();
+      pending.first.complete(1);
+      await flush();
+      expect(controller.state, TtsState.playing);
+      pending.last.complete(1);
+      await flush();
+      expect(controller.state, TtsState.completed);
+      controller.dispose();
+    },
+  );
+
+  test(
+    'stopped unresolved synthesis cannot report a late timeout error',
+    () async {
+      final controller = TtsController(
+        engine: FlutterTtsEngine(
+          synthesisTimeout: const Duration(milliseconds: 25),
+        ),
+        blocks: const [ParagraphBlock('正文')],
+      );
+      await controller.start(locked: false);
+      await flush();
+      await controller.stop();
+      await Future<void>.delayed(const Duration(milliseconds: 75));
+      expect(controller.state, TtsState.idle);
+      controller.dispose();
+    },
+  );
+
   test('real plugin Future returns the issued token with platform speech arguments', () async {
     final controller = TtsController(
       engine: FlutterTtsEngine(),

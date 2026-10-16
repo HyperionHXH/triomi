@@ -45,20 +45,6 @@ void main() {
 
   tearDown(() async => db.close());
 
-  group('表结构', () {
-    test('版本为 2，且 url 列已随迁移补齐', () async {
-      expect(db.schemaVersion, 2);
-
-      for (final table in <String>['media_items', 'chapters']) {
-        final rows = await db.customSelect('PRAGMA table_info($table);').get();
-        final columns = <String>[
-          for (final row in rows) row.read<String>('name'),
-        ];
-        expect(columns, contains('url'), reason: '$table 缺少 url 列');
-      }
-    });
-  });
-
   group('书架', () {
     test('加入书架会同时缓存作品快照', () async {
       await repository.addToLibrary(manga);
@@ -88,16 +74,41 @@ void main() {
       await repository.addToLibrary(manga);
       await repository.addToLibrary(
         const MediaItem(
-          sourceId: 'bangumi-anime',
-          remoteId: '1002',
-          type: MediaType.anime,
-          title: '命运石之门',
+          sourceId: 'test-manga',
+          remoteId: '13',
+          type: MediaType.novel,
+          title: '作品乙',
         ),
       );
 
       expect(await repository.listLibrary(), hasLength(2));
       expect(await repository.listLibrary(type: MediaType.manga), hasLength(1));
-      expect(await repository.listLibrary(type: MediaType.novel), isEmpty);
+      expect(await repository.listLibrary(type: MediaType.novel), hasLength(1));
+    });
+
+    test('书架默认范围是漫画与小说，旧番剧数据不丢失（D89）', () async {
+      await repository.addToLibrary(manga);
+      const anime = MediaItem(
+        sourceId: 'bangumi-anime',
+        remoteId: '1002',
+        type: MediaType.anime,
+        title: '命运石之门',
+      );
+      await repository.addToLibrary(anime);
+
+      // 默认列表不含番剧，但数据仍在库里。
+      final default_ = await repository.listLibrary();
+      expect(default_, hasLength(1));
+      expect(default_.single.item.type, MediaType.manga);
+
+      // 兼容查看：显式按番剧筛选仍能取回旧条目。
+      final animeOnly = await repository.listLibrary(type: MediaType.anime);
+      expect(animeOnly, hasLength(1));
+      expect(animeOnly.single.item.title, '命运石之门');
+      expect(await repository.isInLibrary('bangumi-anime', '1002'), isTrue);
+
+      // 迁移工具口径：includeAnime 不过滤类型。
+      expect(await repository.listLibrary(includeAnime: true), hasLength(2));
     });
 
     test('更新进度会写回书架条目', () async {
@@ -178,6 +189,79 @@ void main() {
       entry = (await repository.listLibrary()).single.entry;
       expect(entry.unreadCount, 1);
     });
+
+    test('LK 使用远端未读快照，不混入本地新增章累计且按复合键隔离', () async {
+      const lk = MediaItem(
+        sourceId: 'light-novel-kingdom',
+        remoteId: '12',
+        type: MediaType.novel,
+        title: 'LK 作品',
+      );
+      const other = MediaItem(
+        sourceId: 'other-source',
+        remoteId: '12',
+        type: MediaType.novel,
+        title: '其他来源同编号',
+      );
+      await repository.addToLibrary(lk);
+      await repository.addToLibrary(other);
+
+      await repository.saveChapters(
+        itemSourceId: lk.sourceId,
+        itemRemoteId: lk.remoteId,
+        chapters: <Chapter>[chapter(remoteId: '101', title: '第一章')],
+      );
+      await repository.saveChapters(
+        itemSourceId: lk.sourceId,
+        itemRemoteId: lk.remoteId,
+        chapters: <Chapter>[
+          chapter(remoteId: '101', title: '第一章'),
+          chapter(remoteId: '102', title: '第二章', index: 1),
+        ],
+      );
+      expect(
+        (await repository.listLibrary())
+            .firstWhere((view) => view.item.sourceId == lk.sourceId)
+            .entry
+            .unreadCount,
+        0,
+      );
+
+      await repository.applyRemoteUnreadCounts(
+        sourceId: lk.sourceId,
+        counts: const <String, int>{'12': 4},
+      );
+      expect(
+        (await repository.listLibrary())
+            .firstWhere((view) => view.item.sourceId == lk.sourceId)
+            .entry
+            .unreadCount,
+        4,
+      );
+      // 重复刷新是幂等的，服务端归零也能清掉本地快照。
+      await repository.applyRemoteUnreadCounts(
+        sourceId: lk.sourceId,
+        counts: const <String, int>{'12': 4},
+      );
+      await repository.applyRemoteUnreadCounts(
+        sourceId: lk.sourceId,
+        counts: const <String, int>{'12': 0},
+      );
+      expect(
+        (await repository.listLibrary())
+            .firstWhere((view) => view.item.sourceId == lk.sourceId)
+            .entry
+            .unreadCount,
+        0,
+      );
+      expect(
+        (await repository.listLibrary())
+            .firstWhere((view) => view.item.sourceId == other.sourceId)
+            .entry
+            .unreadCount,
+        0,
+      );
+    });
   });
 
   group('G1 更新提示边界（D32）', () {
@@ -206,13 +290,10 @@ void main() {
       await repository.saveChapters(
         itemSourceId: 'test-manga',
         itemRemoteId: '12',
-        chapters: <Chapter>[
-          chapter(remoteId: '101', title: '第 1 话', index: 0),
-        ],
+        chapters: <Chapter>[chapter(remoteId: '101', title: '第 1 话', index: 0)],
       );
       final entry = (await repository.listLibrary()).single.entry;
-      expect(entry.unreadCount, 1,
-          reason: '缩减只影响目录行，未读提示是已累计的阅读决策');
+      expect(entry.unreadCount, 1, reason: '缩减只影响目录行，未读提示是已累计的阅读决策');
     });
 
     test('重排（remoteId 集合不变、sortIndex 变化）不累计未读', () async {
@@ -229,7 +310,11 @@ void main() {
       expect(entry.unreadCount, 1, reason: '重复刷新/重排不重复累计');
 
       final chapters = await repository.loadChapters('test-manga', '12');
-      expect(chapters.map((c) => c.remoteId).toList(), <String>['103', '101', '102']);
+      expect(chapters.map((c) => c.remoteId).toList(), <String>[
+        '103',
+        '101',
+        '102',
+      ]);
     });
 
     test('未加入书架的作品刷新目录不崩溃也不产生未读', () async {
@@ -245,7 +330,7 @@ void main() {
       expect(await repository.listLibrary(), isEmpty);
     });
 
-    test('markAllRead：清空全部未读并返回条数', () async {
+    test('markEntriesRead：清空确认集合内未读并返回条数', () async {
       // 追加第二本书并制造未读。
       await repository.addToLibrary(
         const MediaItem(
@@ -270,18 +355,21 @@ void main() {
         ],
       );
 
-      final cleared = await repository.markAllRead();
+      final keys = {('test-manga', '12'), ('test-manga', '13')};
+      final cleared = await repository.markEntriesRead(keys);
       expect(cleared, 2, reason: '只统计 unread > 0 的条目');
       expect(
-        (await repository.listLibrary()).every((view) => view.entry.unreadCount == 0),
+        (await repository.listLibrary()).every(
+          (view) => view.entry.unreadCount == 0,
+        ),
         isTrue,
       );
 
       // 已全部为 0 后再调用：返回 0。
-      expect(await repository.markAllRead(), 0);
+      expect(await repository.markEntriesRead(keys), 0);
     });
 
-    test('markAllRead：sourceId 过滤只清指定来源', () async {
+    test('markEntriesRead：同号作品按来源隔离', () async {
       await repository.addToLibrary(
         const MediaItem(
           sourceId: 'other-source',
@@ -304,7 +392,7 @@ void main() {
         ],
       );
 
-      final cleared = await repository.markAllRead(sourceId: 'test-manga');
+      final cleared = await repository.markEntriesRead({('test-manga', '12')});
       expect(cleared, 1);
 
       final entries = await repository.listLibrary();

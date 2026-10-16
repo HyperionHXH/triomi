@@ -1,0 +1,10 @@
+{
+  "status": "passed",
+  "files": 50,
+  "memberBytesMatch": true,
+  "bundleBytes": 87631081,
+  "zipBytes": 37323439,
+  "zipSha256": "d1262536b0033eb26b3fc29e474df434654c07a1530033bf2921d1d1d93b68ad",
+  "exeSha256": "f5620d365954c1f227a3e78bf8ae3ff9fb64799387a51643074c116066d94927",
+  "behaviorScope": "Rebuilt with video resume fix; new desktop UI acceptance blocked by unavailable Sky RPC. Earlier behavior remains tied to pre-fix ZIP"
+}

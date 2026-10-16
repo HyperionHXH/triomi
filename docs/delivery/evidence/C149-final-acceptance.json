@@ -1,0 +1,464 @@
+{
+  "round": "C149",
+  "status": "final-artifacts-built; scoped-actual-acceptance; account-and-broad-matrix-gates-partial",
+  "artifacts": [
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C149-postfix-acceptance.apk",
+      "bytes": 129094792,
+      "sha256": "96c0ace8c10712b0290215c98ecfdfd9cbb3a503ae97906548e62f9aad1b7159",
+      "v2Verified": true,
+      "signerCertificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6",
+      "signerCount": "1"
+    },
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C149-postfix-android-signed.apk",
+      "bytes": 129094792,
+      "sha256": "bc5e1f0548f4d93bf09a21bf8f8c23ae0e6c42764070daa7f958a390d71b07ef",
+      "v2Verified": true,
+      "signerCertificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077",
+      "signerCount": "1"
+    },
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C149-windows-release.zip",
+      "bytes": 38100642,
+      "sha256": "de87b59e96a7337442d7768b298fa323a0c86a4f54178c181a01adf3b1c72f24"
+    }
+  ],
+  "windowsZipMembers": 50,
+  "windowsZipMembersMatchRelease": true,
+  "verification": {
+    "flutterFullSuite": {
+      "passed": 963,
+      "skipped": 3,
+      "exitCode": 0,
+      "log": "_tools/C149-postfix-flutter-suite.log"
+    },
+    "flutterAnalyze": {
+      "exitCode": 0,
+      "issues": 0,
+      "log": "_tools/C149-postfix-analyze.log"
+    },
+    "pythonSuite": {
+      "passed": 85,
+      "log": "_tools/C149-python-suite.log"
+    },
+    "signingSecretScan": {
+      "status": "passed",
+      "filesScanned": 1283,
+      "artifactMembers": [
+        601,
+        601,
+        50,
+        50
+      ],
+      "accountInputsRead": false,
+      "scope": "signing passwords exact representations plus private-material/debug member names; not an exact account credential scan",
+      "evidence": "C149-signing-material-scan.json",
+      "artifactPaths": "postfix APKs and final de87b59e Windows ZIP/Release"
+    },
+    "encodingJson": {
+      "encodingErrors": 0,
+      "validJsonFiles": 176,
+      "invalidJsonFiles": 0,
+      "scope": "tracked plus untracked nonignored project text as observed before later peer evidence"
+    },
+    "privacyTargeted": {
+      "exitCode": 0,
+      "log": "_tools/C149-postfix-secure-targeted.log",
+      "passed": 20
+    },
+    "builds": {
+      "acceptanceExit": 0,
+      "productionExit": 0,
+      "windowsExit": 0,
+      "sameSourceSnapshot": true,
+      "buildNumber": 149
+    }
+  },
+  "installedDevices": [
+    {
+      "serial": "emulator-5554",
+      "installedSha256": "8b7757d4cbaf9245f7c20916fabf66f23d5774a12128b37f430c09cd0182cd47",
+      "preserveDataInstall": true,
+      "releaseAbiChecksPassed": 3
+    },
+    {
+      "serial": "emulator-5558",
+      "installedSha256": "06acce73dfca6f3a09926e6d3af50733f3647224434a12f792bf64c293e4be82",
+      "preserveDataInstall": true
+    },
+    {
+      "serial": "emulator-5556",
+      "installedSha256": "8b7757d4cbaf9245f7c20916fabf66f23d5774a12128b37f430c09cd0182cd47",
+      "preserveDataInstall": true,
+      "releaseAbiChecksPassed": 3
+    }
+  ],
+  "actualFinalImageFix": {
+    "device": "emulator-5554",
+    "recommendationFourCoversVisuallyConfirmed": true,
+    "realMangaPageVisuallyConfirmed": "Kage no Jitsuryokusha ni Naritakute! ch76.2 3/14, two-page landscape",
+    "temporarySourceProxy": "http://10.0.2.2:7890",
+    "originalUnsetProxyRestored": true,
+    "mangadexRuleUpdatedViaCatalogUI": "1.0.3 -> 1.0.4",
+    "dataSaverToggledAndRestored": true,
+    "limits": "Existing manga cached/loaded page does not prove the remote server selected data-saver filenames; low-traffic route boundary covered by behavioral tests. Four final recommendation covers demonstrate real image traffic through source proxy.",
+    "screenshots": [
+      "C149-final-api35-discovery.png",
+      "C149-final-api35-manga-datasaver.png"
+    ]
+  },
+  "finalProductionSigned": {
+    "novelRead": "real cached Chinese body 3/37 visually confirmed",
+    "privacy": "enable temporary in-memory PIN; verified SECURE own native window; manual source verification transition returned locked; Back remained locked; normal PIN unlock; authenticated disable; independent cold start no gate",
+    "video": "real source current parsing failed with explicit no media address error; no successful final C149 video/PiP claim",
+    "temporaryPinDiscarded": true,
+    "incognitoSwitchRestoredOff": true
+  },
+  "priorArtifactJourneys": [
+    "C149-api26-journey.json",
+    "C149-signed-journey.json",
+    "C149-windows-acceptance.json"
+  ],
+  "productionApiSmoke": [
+    "C149-migration-media-smoke.json"
+  ],
+  "limits": [
+    "No remote tracking or WebDAV writes authorized/performed",
+    "Prior C148 full journeys not relabelled final C149 byte acceptance",
+    "Broad full-platform matrix, real-site compatibility and long-duration endurance not inferred from suite or short smoke"
+  ],
+  "operationalIssues": [
+    {
+      "problem": "Windows Release executable locked during link",
+      "resolution": "Closed assistant-started process normally, rebuilt release exit0; no source change"
+    },
+    {
+      "problem": "apksigner.bat wrapper syntax failed",
+      "resolution": "Used same SDK apksigner.jar via installed Java; both signatures verified exit0, v2, one signer"
+    },
+    {
+      "problem": "Rehydrated subprocess environment lacked Android SDK and acceptance Gradle signing switch",
+      "resolution": "Explicit ANDROID_HOME/ANDROID_SDK_ROOT/JAVA_HOME and GRADLE_OPTS system project flag; both subsequent APK release builds exit0",
+      "productDefect": false
+    },
+    {
+      "problem": "All original Android emulator qemu processes disappeared during a worker UI run; adb had no devices",
+      "evidence": "Host process query found adb only, no qemu/emulator process",
+      "resolution": "Relaunched only original noval_api35:5554,triomi_api26_acceptance:5556,triomi_c125_signed:5558 without wipe or snapshot replacement; all boot_completed=1",
+      "productCrashClaim": false
+    }
+  ],
+  "finalReaderSmoke": {
+    "evidence": "C149-final-reader-smoke.json",
+    "elapsedSeconds": 605.8,
+    "entries": 20,
+    "inputActions": 160,
+    "cyclesWithDifferentEndPage": 4,
+    "homeResume": 4,
+    "coldRestarts": 2,
+    "newCrashMarkers": 0,
+    "pssKiBRange": [
+      191703,
+      232147
+    ],
+    "limits": "No forced outage or chapter switch; not 160 effective page turns, no hour-long endurance claim"
+  },
+  "finalReaderVisual": {
+    "device": "emulator-5554",
+    "doublePage": "two actual decoded pages at 3/14 visually confirmed",
+    "invert": "actual inverted black/white output visually confirmed",
+    "autoScroll": "60 px/s strips moved from face/first panel to visibly later dialogue panel after 7 seconds",
+    "restored": "autoScroll=0, original RTL, original grayscale, double-page/orientation/crop unchanged",
+    "limits": "No screenshot-pixel crop threshold assertion or all-platform/TalkBack claim"
+  },
+  "newChapterSmoke": "C149-new-chapter-acceptance.json",
+  "openDefects": [],
+  "incognitoActual": {
+    "device": "emulator-5554",
+    "modeEnabledViaUI": true,
+    "media": [
+      "real MangaDex manga moved 5/14 -> 3/14",
+      "real cached LNS novel opened and page input issued",
+      "real completed local anime video actual decoded at24:58/25:11"
+    ],
+    "readOnlySqliteSnapshots": {
+      "histories": {
+        "unchanged": true,
+        "beforeRows": 19,
+        "afterRows": 19
+      },
+      "library_entries": {
+        "unchanged": true,
+        "beforeRows": 6,
+        "afterRows": 6
+      },
+      "anime_source_links": {
+        "unchanged": true,
+        "beforeRows": 2,
+        "afterRows": 2
+      },
+      "track_binds": {
+        "unchanged": true,
+        "beforeRows": 0,
+        "afterRows": 0
+      }
+    },
+    "observedInvariant": "all complete table rows byte-value equal before/after across histories/library_entries/anime_source_links/track_binds",
+    "modeRestoredOff": true,
+    "proxyColdStartVerifiedUnset": true,
+    "limits": "Novel page change not claimed without a before/after anchor; no remote write capture or all-platform guarantee"
+  },
+  "cacheMemoryActual": {
+    "beforeReusableImages": 6,
+    "beforeReusableMiB": 52.8,
+    "liveImages": 0,
+    "afterReusableImages": 0,
+    "userConfirmationThroughUI": true,
+    "diskCoversNotDeleted": true,
+    "limits": "No user offline cover files deleted; only reusable memory cache released"
+  },
+  "associationActual": {
+    "work": "FX战士久留美",
+    "source": "MXdm",
+    "confirmDialogObserved": true,
+    "targetLists": [
+      3,
+      2,
+      3
+    ],
+    "noOldTimestampApplied": true,
+    "independentRestartConfirmedMappingVisible": true,
+    "cleanup": "own new mapping removed via explicit 解除 dialog; original favorite/history/download untouched",
+    "limits": "No successful new source video playback or final playback-position write claimed; no same-name season conflict fabricated"
+  },
+  "additionalFinalJourney": "C149-p5-p6-final-journey.json",
+  "preWindowsFixArtifacts": [
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C149-final-acceptance.apk",
+      "bytes": 129094792,
+      "sha256": "8b7757d4cbaf9245f7c20916fabf66f23d5774a12128b37f430c09cd0182cd47",
+      "signatureVerificationExit": 0,
+      "v2Verified": true,
+      "signerCertificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6",
+      "signerCount": "1"
+    },
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C149-android-signed.apk",
+      "bytes": 129094792,
+      "sha256": "06acce73dfca6f3a09926e6d3af50733f3647224434a12f792bf64c293e4be82",
+      "signatureVerificationExit": 0,
+      "v2Verified": true,
+      "signerCertificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077",
+      "signerCount": "1"
+    }
+  ],
+  "postfixInstalledDevices": [
+    {
+      "serial": "emulator-5554",
+      "installedSha256": "96c0ace8c10712b0290215c98ecfdfd9cbb3a503ae97906548e62f9aad1b7159",
+      "preserveDataInstall": true,
+      "releaseAbiChecksPassed": 3
+    },
+    {
+      "serial": "emulator-5558",
+      "installedSha256": "bc5e1f0548f4d93bf09a21bf8f8c23ae0e6c42764070daa7f958a390d71b07ef",
+      "preserveDataInstall": true
+    },
+    {
+      "serial": "emulator-5556",
+      "installedSha256": "96c0ace8c10712b0290215c98ecfdfd9cbb3a503ae97906548e62f9aad1b7159",
+      "preserveDataInstall": true,
+      "releaseAbiChecksPassed": 3
+    }
+  ],
+  "postfixActualSmoke": {
+    "androidAPI35": "real MangaDex two decoded pages at5/14 after initial loading spinners",
+    "productionSigned": "real LK Chinese novel at3/37 rendered; no new account login",
+    "screenshots": [
+      "C149-postfix-api35-manga-loaded.png",
+      "C149-postfix-signed-novel.png"
+    ],
+    "limits": "P5/P7/PIN/soak detailed earlier C149 hashes remain pre-Windows-fix; not relabelled these final bytes"
+  },
+  "postfixCountsApi35": {
+    "sources": 14,
+    "library_entries": 6,
+    "chapters": 4081,
+    "histories": 19,
+    "downloads": 6,
+    "backup_import_journals": 0,
+    "qualification": "Retained original6 library/19 histories/6 downloads; chapters increased through actual public detail/catalog acquisition. No whole-database restore or row deletion."
+  },
+  "releaseSignaturesVerified": true,
+  "fixedDefects": [
+    {
+      "id": "N17",
+      "rootCause": "Old C++ per-key secure-file durability path was used against pinned Windows Dart FFI DPAPI JSON storage",
+      "fix": "Remove obsolete Windows durability channel; await plugin flush:true write and protected readback; keep Android durable channel unchanged",
+      "verification": "963 full suite/3 skip,20 privacy targeted,analyze0; actual final Windows enable/minimize relock/known PIN/cold relock/known PIN passed",
+      "uiEvidence": "C149-windows-acceptance.json",
+      "pinRestoration": "passed authenticated disable, original off restored"
+    }
+  ],
+  "postfixWindowsActual": {
+    "executableSha256": "b108f487a8a5001d14b8b8830f57b793ad99a2bd882c2018281560e70b95715b",
+    "appSoSha256": "88d86bcc2d98c4b48b681baa9b7ba10d54166fb691f134c7bdd8b7534e05d1bb",
+    "enabledAndColdLockScreenshotsActuallyReadByParent": true,
+    "httpOnlyCookieColdStart": "Own HTTPS origin server false/true then app close/cold first root true before new Set-Cookie; normal Save/Cancel; exact own certificate/private key removed",
+    "playerLifecycle": "Final C149 own30s media seek/pause0:05 -> minimize/restore0:05. Reopen0:30 not accepted as saved-position restore; temporary HTTP host has no Range. PrintWindow black capture not decoded-frame proof; desktop subtitles remain unaccepted.",
+    "evidence": "C149-windows-acceptance.json",
+    "cleanup": "Own player/source/limited metadata/download/server/TLS certificate/private key/profile cleared; unrelated user content retained. P11/P4 journeys remain C148-byte scope.",
+    "limits": "Own loopback session, not external account/challenge or all-site profile compatibility; no final-byte P4/P11 or full Windows media lifecycle claim"
+  },
+  "embeddedSubtitleActual": {
+    "device": "emulator-5556",
+    "installedHash": "96c0ace8c10712b0290215c98ecfdfd9cbb3a503ae97906548e62f9aad1b7159",
+    "syntheticOnly": true,
+    "media": "FFmpeg640x360 30s testsrc2+AAC+mov_text en,not burned-in subtitle",
+    "bytes": 6787811,
+    "sha256": "258188f98e81eb69b0381cd16a2a61394b43f6e6404ca9ca1c398e474fb1e8a5",
+    "normalUi": "URL rule import -> aggregate search -> own detail -> actual native player -> Subtitle en -> visible TRIOMI C149 SUBTITLE VERIFIED -> close subtitles -> seek6sec within cue range visible no subtitle",
+    "openedImages": [
+      "C149-postfix-subtitle-playing.png",
+      "C149-postfix-subtitle-track-picker.png",
+      "C149-postfix-subtitle-on.png",
+      "C149-postfix-subtitle-off-midstream.png"
+    ],
+    "httpPathsObserved": [
+      "/anime/149",
+      "/anime/list",
+      "/play/c149",
+      "/rule.json",
+      "/subtitle.mp4"
+    ],
+    "cleanup": "own source normal remove confirmation; exact own-source cached history/chapter/media/feed rows deleted; no favorite/download created; own server/reverse/MP4/SRT directory removed",
+    "remainingRows": "sources|0\r\nchapters|0\r\nmedia|0\r\nhistory|0\r\nfavorites|0\r\ndownloads|0",
+    "limits": "Actual real embedded track API26 final consumer, not external-site subtitles or all formats/platforms"
+  },
+  "remainingDeveloperAcceptance": [
+    "Cross-platform exhaustive P1/P2/P3/P4 and reader/Feed matrix remains scoped partial; see CURRENT_STATUS, not transferred to user",
+    "P6 tested installed MangaDex/Webtoons/Jinman explicitly do not supply related results; no unsupported source counted as success",
+    "C150 subsequently passed normal5APK export and explicitly scoped APK-only restore/accept/DEX; see C150-apk-restore-final-journey.json, not C149-byte coverage or unmodified whole-library cross-device restore",
+    "Longer final-byte endurance, arbitrary-art crop/TalkBack and all native overlay/installer combinations not inferred; one15percent synthetic border image visually verified and cleaned"
+  ],
+  "productionMangaDexNetworkSmoke": {
+    "exitCode": 0,
+    "evidence": "C149-mangadex-live-host.json",
+    "productionJsSourceAndQuickJS": true,
+    "publicNetworkOnly": true,
+    "discoveryItems": 20,
+    "catalogChapters": 211,
+    "imagePages": 88,
+    "originalBytes": 1113232,
+    "dataSaverBytes": 575519,
+    "officialAliases": [
+      "烙印勇士",
+      "劍風傳奇"
+    ],
+    "absentSimplifiedSpellingResults": 0
+  },
+  "cropPixelActual": {
+    "device": "emulator-5558",
+    "installedHash": "bc5e1f0548f4d93bf09a21bf8f8c23ae0e6c42764070daa7f958a390d71b07ef",
+    "syntheticOnly": true,
+    "normalSAFImport": true,
+    "sourceImageSize": [
+      1000,
+      1400
+    ],
+    "uniformWhiteBorderPercentPerSide": 15,
+    "content": "unique blue rectangle and preserved inner yellow frame with label",
+    "beforeAfterActuallyRead": true,
+    "pixelBounds": [
+      {
+        "file": "C149-crop-before.png",
+        "blueContentBoundsWithinImageArea": [
+          162,
+          641,
+          917,
+          1698
+        ]
+      },
+      {
+        "file": "C149-crop-after.png",
+        "blueContentBoundsWithinImageArea": [
+          0,
+          414,
+          1079,
+          1925
+        ]
+      }
+    ],
+    "geometry": "Blue content originally inset with visible white border; after toggle white border gone, entire yellow inner frame preserved",
+    "cleanup": "only exact local import identity4c821e978e6f7eda0357d1169777c9c6774fdc7e9836418a3fc889d705adecef removed via visible confirmation; own original CBZ copies removed",
+    "limits": "One15%uniform border synthetic image; not arbitrary art/crop threshold-all-cases or TalkBack claim"
+  },
+  "cacheDiskActual": {
+    "device": "emulator-5558",
+    "syntheticFixturePlacement": true,
+    "originalCoverDirectory": "absent,observed before fixture",
+    "ownFile": "31b4906476f74fac9260879006087fd421aa559eb367f2ac0250d267db55e02a.img",
+    "bytes": 9170,
+    "normalUI": "scan1cover9KiB -> visible exact one-file confirmation -> clear -> deleted1/remaining0",
+    "ownFileAbsentVerified": true,
+    "originalOfflineCoverDeleted": false,
+    "noPersonalDataDeletion": true,
+    "limitations": "Self-placed valid published cover exercises real app scan/lease/clear; not restore-acquisition proof. Actual10 cached novel chapters remained shown as retained."
+  },
+  "mangaUpdateSystemRebootActual": {
+    "device": "emulator-5558",
+    "originalPolicy": {
+      "wifiOnly": true,
+      "batteryNotLow": true,
+      "skipCompleted": true,
+      "autoDownload": false,
+      "background": false
+    },
+    "normalUIEnabledThenSystemReboot": true,
+    "observedAfterReboot": {
+      "job7401Present": true,
+      "persisted": true,
+      "periodicHours": 12,
+      "sameNetworkAndBatteryConstraints": true,
+      "backgroundSwitchOn": true
+    },
+    "observationLimit": "Immediate reboot before asynchronous OS JobStore flush lost7401 in a new boot with app PID absent and user RUNNING_UNLOCKED. After normal app launch/save, seven-second dwell and observing7401/MangaUpdateJobService in system jobs_10209.xml ABX, another real reboot restored7401/PERSISTED/12h/same constraints before any app launch, app PID absent. Boot identity changed, not a stale boot-complete sample. This proves persisted registration recovery, not scheduled network fetch. No production change or new chapter inserted.",
+    "restoration": {
+      "normalUISavedBackgroundOff": true,
+      "registeredJob7401Absent": true,
+      "persistedSystemJob7401AbsentAfterSevenSecondDwell": true
+    },
+    "controlledPreLaunchReboot": {
+      "systemJobABXContained7401BeforeReboot": true,
+      "systemJobStoreFlushDwellSeconds": 7,
+      "bootIdentityChanged": true,
+      "job7401RestoredBeforeAnyAppLaunch": true,
+      "appPidAbsentAtObservation": true,
+      "userUnlocked": true,
+      "productionChanged": false
+    },
+    "actualPolicyChecked": [
+      {
+        "label": "仅非计费网络",
+        "checked": "true"
+      },
+      {
+        "label": "电量低时暂停",
+        "checked": "true"
+      },
+      {
+        "label": "跳过已完结作品",
+        "checked": "true"
+      },
+      {
+        "label": "自动下载新可读章节",
+        "checked": "false"
+      },
+      {
+        "label": "Android后台每12小时更新\n不支持的平台明确拒绝；通知使用已有授权",
+        "checked": "true"
+      }
+    ]
+  }
+}

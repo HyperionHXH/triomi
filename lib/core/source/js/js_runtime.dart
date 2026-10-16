@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../models/media_type.dart';
 import '../../models/source_exception.dart';
 
@@ -71,7 +73,7 @@ abstract class JsHostBridge {
   /// 列表解析：选择器命中多个节点，按字段表提取为对象数组。
   ///
   /// [fields] 为 null 时每个节点回退为 `{text: 节点文本}`。
-  List<Map<String, String>> selectRows(
+  FutureOr<List<Map<String, String>>> selectRows(
     String html,
     String selector,
     Map<Object?, Object?>? fields,
@@ -79,7 +81,7 @@ abstract class JsHostBridge {
   );
 
   /// 取第一个命中值（按 [attr]：`text` / `html` / 属性名）。
-  String? selectValue(
+  FutureOr<String?> selectValue(
     String html,
     String selector,
     String attr,
@@ -87,7 +89,7 @@ abstract class JsHostBridge {
   );
 
   /// 取全部命中值（图片列表这类多值字段）。
-  List<String> selectValues(
+  FutureOr<List<String>> selectValues(
     String html,
     String selector,
     String attr,

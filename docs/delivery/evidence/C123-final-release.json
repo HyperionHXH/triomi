@@ -1,0 +1,64 @@
+{
+  "at": "2026-10-09T15:20:20.856481+00:00",
+  "variant": "release",
+  "apk": "build/app/outputs/flutter-apk/app-release.apk",
+  "bytes": 123156386,
+  "sha256": "04b8f7db37172394bfdf465f3874b2761325cedf74e6b755cf3394d90e41563c",
+  "signatureVerified": true,
+  "signerSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6",
+  "signer": "Android Debug; production keystore not configured",
+  "flutterTests": 724,
+  "flutterAnalyze": "No issues found",
+  "pythonTests": "Not rerun; Python application logic unchanged; prior 83 are historical",
+  "logs": [
+    "D:/noval_and_manga/_tools/C123-flutter-tests-verified.log",
+    "D:/noval_and_manga/_tools/C123-analyze-final.log",
+    "D:/noval_and_manga/_tools/C123-release-build.log"
+  ],
+  "checks": {
+    "allProjectTextEncodingErrors": 0,
+    "credentialValueCandidates": 3,
+    "credentialValueScanMatches": 0,
+    "gitDiffCheckExit": 0
+  },
+  "deviceChecks": {
+    "35": {
+      "device": "emulator-5554",
+      "installedWithDataPreserved": true,
+      "installedApkMatchesFinalSha256": true,
+      "releaseLaunched": true,
+      "productionMigrationBoundaryVerified": "目标作品已有本地记录，请选择尚未收藏、阅读或下载的作品",
+      "boundaryWithoutStateErrorPrefix": true,
+      "sameTitleShelfCount": 2,
+      "sourceLabels": [
+        "MangaDex · zh-Hans · APK",
+        "MangaDex 漫画（开放 API） · zh"
+      ],
+      "offlineAfterForceStop": "Active default network: none; both entries and local source labels visible",
+      "copiedTargetActualApkReading": "Ch.76.2, 1/14, actual image visually verified",
+      "networkRestoredAfterOfflineCheck": true
+    },
+    "26": {
+      "device": "emulator-5556",
+      "installedWithDataPreserved": true,
+      "installedApkMatchesFinalSha256": true,
+      "releaseLaunched": true,
+      "productionMigrationBoundaryVerified": "请先将原作品加入本地书架",
+      "boundaryWithoutStateErrorPrefix": true
+    }
+  },
+  "screenshots": [
+    "C123-release-source-labels-api35.png",
+    "C123-release-offline-shelf-api35.png",
+    "C123-release-migrated-reading-api35.png",
+    "C123-release-migration-conflict-api35.png",
+    "C123-release-migration-boundary-api26.png"
+  ],
+  "scope": "Local per-item shelf source labels, reactive SQLite/Hive metadata, migration error wording; earlier C122 copy data retained",
+  "boundaries": [
+    "API 26 checked launch and requires-local-shelf boundary; no successful copy or same-title shelf demonstrated on API 26",
+    "Successful real rule-to-APK copy and independent-process restart are C122 evidence; copy phase was not rerun this turn",
+    "Offline check demonstrates shelf and labels, not offline retrieval of uncached manga pages",
+    "No native ABI change this turn; prior C121 native checks remain historical"
+  ]
+}

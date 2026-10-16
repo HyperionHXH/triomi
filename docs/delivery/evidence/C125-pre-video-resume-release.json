@@ -1,0 +1,325 @@
+{
+  "schemaVersion": 1,
+  "release": "C125",
+  "updatedAt": "2026-10-10T15:18:51.925Z",
+  "status": "partial",
+  "gate": {
+    "requiredChecks": 9,
+    "allSatisfied": false,
+    "roadmapP1ToP12Advanced": false,
+    "policy": "Complete nine acceptance areas before P1-P12; externally blocked checks remain outstanding"
+  },
+  "artifacts": {
+    "androidAcceptance": {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-android-acceptance.apk",
+      "bytes": 123961800,
+      "sha256": "52c391bd5ecf25e03d74981718aaad8505af570b7f87067085960510919b28b3",
+      "zipIntegrity": true,
+      "members": 530,
+      "purpose": "release-mode package with old debug certificate; preserve-data update for emulator-5554/5556",
+      "certificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6"
+    },
+    "androidProduction": {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-android-signed.apk",
+      "bytes": 123965896,
+      "sha256": "acc302287b6f69468004ec608c0b2b89b8be6e6c244804d32726c660799944a9",
+      "zipIntegrity": true,
+      "members": 530,
+      "purpose": "production certificate package on dedicated emulator-5558; cannot replace old debug-signed installs",
+      "certificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077",
+      "publicKeySha256": "c288d6b0b5cdb3320311db1acb20721eaa674d197d8bb2f563c0325d7169cce0",
+      "rsaBits": 4096
+    },
+    "windowsZip": {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-windows-release.zip",
+      "bytes": 37322677,
+      "sha256": "3ac7d53d76f8fc1ca1d65b71b5ae0ed932472eb7c3261fdb4fe9cab251b18d89",
+      "zipIntegrity": true,
+      "members": 50,
+      "bundleFiles": 50,
+      "bundleBytes": 87631081,
+      "includesDllsAndData": true,
+      "nativeWebviewPlugin": true,
+      "exactMemberBytesMatchRelease": true
+    },
+    "windowsExe": {
+      "path": "D:\\noval_and_manga\\triomi\\build\\windows\\x64\\runner\\Release\\triomi.exe",
+      "bytes": 94208,
+      "sha256": "f5620d365954c1f227a3e78bf8ae3ff9fb64799387a51643074c116066d94927"
+    }
+  },
+  "verification": {
+    "artifactAndInstalledHash": "C125-release-artifact-verification.json",
+    "allThreeInstalledHashesMatch": true,
+    "apkV2SignaturesVerified": true,
+    "singleSignerPerApk": true,
+    "windowsZipIntegrity": true,
+    "latestSourceChangesRebuilt": true,
+    "buildLogs": [
+      "D:/noval_and_manga/_tools/C125-android-final-acceptance-build.log",
+      "D:/noval_and_manga/_tools/C125-android-final-production-build.log",
+      "D:/noval_and_manga/_tools/C125-windows-video-final-build.log"
+    ],
+    "postBuildChanges": "Existing Dart formatting normalized without semantic changes; documents and acceptance evidence updated. No functional production edit after final builds."
+  },
+  "acceptance": [
+    {
+      "id": "lk_account_unread",
+      "status": "passed",
+      "scope": "Real own-account login/unread/shelf merge, real reading/export and independent resume on API35/API26; prior C125 build",
+      "evidence": [
+        "C125-account-api35-login.json",
+        "C125-account-api35-resume.json",
+        "C125-account-api26-login.json",
+        "C125-account-api26-resume.json"
+      ]
+    },
+    {
+      "id": "lns_official_permissions",
+      "status": "passed",
+      "scope": "Official whole-book download model; no per-chapter purchase fiction; guest/invalid session reject; own-account body/font/cache; repack export reject; no charged call",
+      "officialReference": "https://www.lightnovel.life/announcement/detail/16",
+      "evidence": [
+        "C125-permission-api35.json",
+        "C125-lns-offline-api26.json"
+      ]
+    },
+    {
+      "id": "api26_chinese_tts",
+      "status": "passed",
+      "scope": "Verified official eSpeak engine; real offline natural synthesis, stop late-event rejection, deadline failure and natural retry completion",
+      "evidence": [
+        "C125-tts-api26.json"
+      ]
+    },
+    {
+      "id": "js_os_process_isolation",
+      "status": "passed",
+      "scope": "Android API35/API26 and Windows production workers, real external watchdog for malicious loops/allocation and recovery; fault isolation, not full permission sandbox",
+      "evidence": [
+        "C125-js-api35.json",
+        "C125-js-api26.json",
+        "C125-js-windows.json"
+      ]
+    },
+    {
+      "id": "representative_mihon_apks",
+      "status": "passed",
+      "scope": "Original verified xkcd/Webtoons plus retained MangaDex/Copymanga/Jinman evidence; not entire repository compatibility",
+      "evidence": [
+        "C125-webtoons-api35-install.json",
+        "C125-webtoons-api35-resume.json",
+        "C125-xkcd-api35-install.json",
+        "C125-xkcd-api35-resume.json",
+        "C125-xkcd-api26-install.json",
+        "C125-xkcd-api26-resume.json"
+      ]
+    },
+    {
+      "id": "real_cloudflare_success",
+      "status": "blocked",
+      "scope": "Real MangaFire challenge detection and visible WebView observed; API35 blocked, API26 not completed",
+      "missing": [
+        "legitimate verification success",
+        "original request recovery",
+        "session reuse",
+        "restart session recovery"
+      ],
+      "noClearanceForged": true,
+      "evidence": [
+        "C125-cf-api35.json",
+        "C125-cf-api26.json",
+        "C125-cf-api35-webview.png",
+        "C125-cf-api26-webview.png"
+      ],
+      "additionalCandidate": {
+        "source": "Asura1.6.69 on final API26 release",
+        "result": "real popular/detail119chapters; chapter request Refresh Chapter List; no challenge observed",
+        "evidence": "C125-asura-api26.json"
+      }
+    },
+    {
+      "id": "android_final_release",
+      "status": "partial",
+      "passed": [
+        "Distinct final acceptance/production certificate and hashes verified",
+        "install -r preserved data and target packages remain installed",
+        "API35/API26 targetContext.classLoader release ABI checks without replacing target",
+        "latest LNS cache/font resume 2/10 and 3/13",
+        "production MangaDex resume 3/32; ordinary network retry recovered",
+        "Latest API26 release actual no-default-network independent restart, LNS3/13 body/font visually verified; original network settings restored",
+        "Production-signed APK LK public10-chapter download complete, real novel3/73 page HOME/resume and actual offline independent restart, second chapter1/56"
+      ],
+      "missing": [
+        "complete latest-package online account and all-content lifecycle journey"
+      ],
+      "evidence": [
+        "C125-release-installed-api35.json",
+        "C125-release-installed-api26.json",
+        "C125-release-installed-signed.json",
+        "C125-release-abi-api35.json",
+        "C125-release-abi-api26.json",
+        "C125-release-api35-resume.json",
+        "C125-release-api26-resume.json",
+        "C125-release-signed-reader-resume.json",
+        "C125-release-api26-offline-final.json",
+        "C125-signed-novel-final-journey.json"
+      ],
+      "productionDeviceDebugInstrumentationRun": false
+    },
+    {
+      "id": "windows_full_media_journey",
+      "status": "partial",
+      "passed": [
+        "Final 50-file release ZIP verified",
+        "real 7sefun native media_kit playback 0:17/23:40",
+        "real MangaDex 8/88 image resume after normal close/restart",
+        "immediate reader direction selection",
+        "10 LK public chapters downloaded and nonempty cache",
+        "actual TXT/EPUB exports and structural/hash verification",
+        "real system Chinese TTS retained"
+      ],
+      "missing": [
+        "forced-offline desktop read",
+        "downloaded novel read after desktop restart",
+        "actual video seek to saved58 seconds after restart",
+        "download manager ten-of-ten visible UI"
+      ],
+      "toolBlocker": "Dedicated Sky desktop UI RPC not configured at closeout",
+      "evidence": [
+        "C125-windows-final-behavior.json",
+        "C125-windows-bundle.json",
+        "C125-windows-exports.json",
+        "C125-system-windows.json"
+      ]
+    },
+    {
+      "id": "longer_endurance",
+      "status": "partial",
+      "completedRunStatus": "passed",
+      "elapsedSeconds": 1811.6,
+      "readerCycles": 58,
+      "inputActions": 464,
+      "homeResume": 11,
+      "independentRestarts": 5,
+      "resourceSamples": 58,
+      "newCrashMarkers": 0,
+      "pssKiBRange": [
+        183530,
+        226737
+      ],
+      "firstLastTenPssMedianKiB": [
+        210051,
+        205220
+      ],
+      "threadRange": [
+        49,
+        67
+      ],
+      "fileDescriptors": null,
+      "testedArtifact": {
+        "role": "earlier C125 acceptance release",
+        "sha256PrefixFromHandoff": "189b42",
+        "fullSha256Available": false,
+        "isFinalApk": false
+      },
+      "limits": [
+        "No forced network outage or chapter switching in this run",
+        "UI indicators do not verify each decoded image; 464 inputs are not all effective page turns",
+        "FD sampling denied by OS",
+        "No hour-scale leak-free claim",
+        "Earlier build; final changes limited to desktop resolver and validation tooling"
+      ],
+      "evidence": [
+        "C125-release-endurance-api35.json",
+        "C125-reader-soak-api35.json",
+        "C125-soak-resources-api35.json"
+      ]
+    }
+  ],
+  "checks": {
+    "flutterTestBatches": [
+      {
+        "scope": "earlier full suite",
+        "passed": 748,
+        "log": "D:/noval_and_manga/_tools/C125-full-tests-final.log"
+      },
+      {
+        "scope": "later targeted regressions",
+        "passed": 24,
+        "log": "D:/noval_and_manga/_tools/C125-targeted-final.log"
+      },
+      {
+        "scope": "desktop resolver and download safety",
+        "passed": 21,
+        "log": "D:/noval_and_manga/_tools/C125-desktop-resolver-tests.log"
+      },
+      {
+        "scope": "latest desktop parent navigation",
+        "passed": 4,
+        "log": "D:/noval_and_manga/_tools/C125-desktop-navigation-regression.log"
+      }
+    ],
+    "countsNotAdded": true,
+    "flutterAnalyze": {
+      "status": "passed",
+      "log": "D:/noval_and_manga/_tools/C125-analyze-release-closeout.log"
+    },
+    "format": {
+      "status": "passed",
+      "filesChecked": 257,
+      "formatOnlyFilesCorrected": 31,
+      "productionFilesFormatted": [
+        "lib/features/downloads/data/download_repository.dart"
+      ],
+      "nonCommaTokenChanges": 0,
+      "scope": "Dart formatter whitespace and optional comma normalization only; retained existing uncommitted logic",
+      "log": "D:/noval_and_manga/_tools/C125-format-release-closeout.log"
+    },
+    "pythonSyntax": {
+      "status": "passed",
+      "files": [
+        "tools/prepare_windows_plugins.py",
+        "tools/release_device_acceptance.py",
+        "tools/scan_delivery_secrets.py"
+      ]
+    },
+    "encoding": {
+      "status": "passed",
+      "evidence": "C125-encoding-final.json",
+      "pathsScanned": 849
+    },
+    "gitDiffCheck": {
+      "status": "passed"
+    },
+    "temporaryDiagnostics": {
+      "status": "passed",
+      "scope": "desktop resolver/native resolver and changed tools inspected; only count/safe summary output"
+    },
+    "secrets": {
+      "status": "passed",
+      "evidence": "C125-delivery-secret-scan-final.json",
+      "scope": "exact provided account/password and signing password representations; does not prove absence of every possible third-party token"
+    }
+  },
+  "constraints": {
+    "branch": "master",
+    "uncommittedWorkPreserved": true,
+    "autoCommit": false,
+    "referencesReadOnly": true,
+    "noUninstallOrDataClear": true,
+    "noPurchaseOrRemoteAccountMutation": true,
+    "noSecurityOrChallengeBypass": true
+  },
+  "signing": {
+    "privateDirectory": "C:/Users/MiunaH/.triomi/signing",
+    "privateMaterialOutsideRepository": true,
+    "backupRequired": true
+  },
+  "documentsUpdated": [
+    "docs/CURRENT_STATUS.md",
+    "docs/ROADMAP.md",
+    "docs/SOURCE_CAPABILITY_MATRIX.md",
+    "docs/adr/ADR-2026-10-05-core-playback-resume-upgrade.md"
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "schema": "C149-windows-acceptance",
+  "artifact": {"path":"_tools/Triomi-C148-windows-release.zip","sha256":"aa605e184c74f179c70d954bcbdc18676d606355f6b830f483590b92c73d37ee","bytes":37178929,"hashObservedWith":"Python hashlib.sha256"},
+  "finalArtifact":{"path":"_tools/Triomi-C149-windows-release.zip","bytes":38100642,"sha256":"de87b59e96a7337442d7768b298fa323a0c86a4f54178c181a01adf3b1c72f24","acceptedExeExactZipMatch":true,"acceptedAppSoExactZipMatch":true},
+  "runtime":{"executable":"build/windows/x64/runner/Release/triomi.exe","processObserved":true,"windowTitle":"triomi","desktopUiReachable":true,"method":"Scoped Win32 own-window capture, normal pointer clicks and native toolbar BM_CLICK; UIAutomation inspected only Triomi descendants"},
+  "p11WindowsLocalMetadataBackup": {
+    "artifactScope":"C148",
+    "status":"passed-real-ui-task-and-file",
+    "originalState":{"uiSwitchEnabled":false,"taskRegistered":false,"localBackupZipCount":0},
+    "uiEnable":{"observed":true,"screenshot":"_tools/C149-backup-enabled.png"},
+    "taskRegistration":{"observed":true,"queryExitCode":0,"taskName":"TriomiLocalBackup-<current-user-SID>","author":"Triomi","logonType":"InteractiveToken","dailyLocalTime":"03:00:00","logonDelay":"PT1M","arguments":"--triomi-local-backup","executable":"D:/noval_and_manga/triomi/build/windows/x64/runner/Release/triomi.exe","workingDirectory":"D:/noval_and_manga/triomi/build/windows/x64/runner/Release","multipleInstances":"IgnoreNew"},
+    "manualTriggerGeneration":{"observed":true,"appClosedBeforeTrigger":true,"trigger":"schtasks.exe /Run /TN <exact current-user Triomi task>","triggerExitCode":0,"lastTaskResult":0,"taskStatusAfterRun":"Ready","generatedFile":"triomi-2026-10-15T18-36-45.290288-383378a3.zip","bytes":16537,"sha256":"2d020490b8c7730416e058d5e260b9906d63a3b5e5666d737ed0b627b7515858","filePreserved":true},
+    "coldStart":{"observed":true,"screenshot":"_tools/C149-backup-enabled-cold.png"},
+    "cancelRestore":{"observed":true,"method":"Cold-started release, returned to backup page, switched daily automatic local backup OFF via UI","taskQueryExitCodeAfterCancel":1,"taskQueryMessage":"ERROR: The system cannot find the file specified.","screenshot":"_tools/C149-backup-restored-off.png","originalOffStateRestored":true},
+    "dataSafety":"Existing user content and unrelated tasks were not changed; new successful backup was retained."
+  },
+  "p2VisibleWebView":{
+    "artifactScope":"C148",
+    "status":"partial-real-ui",
+    "source":"Existing 7sefun public source",
+    "openedViaSourceUi":true,
+    "nativeTitle":"来源站点验证",
+    "pageTitleObserved":"七色番动漫视频网 - 7SeFuN",
+    "saveButton":{"caption":"保存会话并关闭","enabled":true,"actualNativeButtonClicked":true,"windowClosed":true},
+    "cancelButton":{"caption":"取消并关闭","enabled":true,"actualNativeButtonClicked":true,"windowClosed":true},
+    "screenshot":"_tools/C149-webview-saved.png",
+    "boundaries":["No account login or challenge bypass performed","No HttpOnly cookie/profile persistence success claimed","WebView page itself was not captured by PrintWindow; toolbar and page title were observed through scoped UIAutomation"]
+  },
+  "p4WebpageMediaDownload":{
+    "artifactScope":"C148",
+    "status":"passed-owned-loopback-real-ui",
+    "journey":["Imported assistant-owned JS rule through UI URL import","Searched C149; after unrelated source timeouts own result appeared","Opened own detail, selected 1 episode, confirmed Start Download","Owned loopback received /play and /media.mp4","Download manager visibly completed 1/1, 0.5MiB"],
+    "download":{"relativePath":"downloads/c149-owned-media/owned/episode1/video.mp4","bytes":562487,"sha256":"83e8e215a702eec52e47f218ed9cd10e488483a2138f58f33053e620ca430dd4","exactlyEqualsOwnedSample":true,"screenshot":"_tools/C149-download-complete.png","screenshotSha256":"fb8e8eb94c7ecb25e2a5ff64ccffe956fce2f6b12dbc19f841e898da4a460eeb"},
+    "cleanup":{"ownDownloadRemovedThroughUi":true,"ownFileAbsent":true,"ownSourceRemovedThroughNamedUiConfirmation":true,"existingUserNovelDownloadPreserved":true,"loopbackServerStopped":true},
+    "attempts":["Initial Kazumi HTTP loopback import rejected HTTPS-only restriction; did not bypass","Win32 thread DPI context corrected before successful normal UI pointer actions"],
+    "ownedSourceId":"c149-owned-media",
+    "ownedSourceName":"C149 Owned Media",
+    "scope":"Only owned loopback media; never a whole-site success claim"
+  },
+  "n17WindowsPrivacyStorage":{
+    "artifactScope":"C149-postfix",
+    "preFixUiError":"本机安全存储操作失败，未能完成操作；请检查锁定状态后重试",
+    "rootCause":"Pinned flutter_secure_storage_windows 3.1.2 Dart FFI backend persists a DPAPI-encrypted flutter_secure_storage.dat using writeAsBytes(flush:true); custom Windows flush channel instead required obsolete legacy C++ per-key .secure file, which does not exist for FFI writes.",
+    "fix":"Retain awaited plugin write and protected readback; remove incorrect native Windows flush call, registration and obsolete source/header. Android durable storage path unchanged.",
+    "preFixEvidence":"_tools/C149-final-lock-enabled.png",
+    "postFixCopy":"_tools/C149-windows-postfix-final",
+    "exeSha256":"b108f487a8a5001d14b8b8830f57b793ad99a2bd882c2018281560e70b95715b",
+    "appSoSha256":"88d86bcc2d98c4b48b681baa9b7ba10d54166fb691f134c7bdd8b7534e05d1bb",
+    "postFixUi":{"ownRandomPinEnabled":true,"enabledScreenshot":"_tools/C149-postfix-lock-enabled.png","minimizeRestoreLocked":true,"resumeScreenshot":"_tools/C149-postfix-resume-locked.png","correctPinUnlock":true,"coldStartLockedObserved":true,"coldScreenshot":"_tools/C149-postfix-cold-locked.png","coldStartCorrectPinUnlock":true,"restoration":"passed-original-disabled-state-restored-via-current-PIN","restoredScreenshot":"_tools/C149-postfix-disabled-final.png"},
+    "secrets":"No user credentials/records read or emitted; only own random temporary PIN used. Own temporary Windows credential probe was written then deleted successfully."
+  },
+  "p2OwnedHttpOnlyColdStart":{
+    "artifactScope":"C149-postfix",
+    "status":"passed-owned-loopback-real-ui",
+    "origin":"https://localhost:18500",
+    "rule":"C149 Owned TLS Session",
+    "cookie":"Own noncredential C149OwnedTLS probe; HttpOnly/Secure/SameSite=Lax/Max-Age3600",
+    "journey":["Imported own HTTPS Kazumi rule via normal local URL import","Opened source session from visible globe button","Own server first root request had no cookie, favicon request had HttpOnly cookie","Clicked actual native Save Session and Close button","Closed application and cold-started identical postfix release","Opened same source session through UI again","Own server root request now carried HttpOnly cookie before any fresh Set-Cookie response","Clicked actual Cancel and Close button"],
+    "serverObservations":[{"path":"/","ownedHttpOnlyPresent":false},{"path":"/favicon.ico","ownedHttpOnlyPresent":true},{"path":"/","ownedHttpOnlyPresent":true},{"path":"/favicon.ico","ownedHttpOnlyPresent":true}],
+    "tls":"Temporary assistant-created localhost certificate trusted only in current-user store; no certificate errors bypassed. Flutter HTTP importer rejected self-signed cert, so rule was normally imported from own local HTTP URL while WebView used valid current-user trusted HTTPS.",
+    "screenshot":"_tools/C149-tls-cold-cookie-passed.png",
+    "cleanup":{"ownSourceRemovedThroughUi":true,"sourceManagerRestoredToEightOriginalSources":true,"appClosed":true,"serverProcessesEnded":true,"exactOwnCertificateRemoved":true,"ownPrivateKeyAndCertificateFilesRemoved":true,"exactOwnSourceOriginProfileRemoved":true,"throwawayAutomationHelpersRemoved":true},
+    "scope":"Own loopback HttpOnly profile persistence only; not external account login, challenge success or all-site compatibility. Cancel closure observed; cookie rollback semantics not claimed."
+  },
+  "p3OwnedPlayerLifecycle":{
+    "artifactScope":"C149-postfix",
+    "status":"partial-real-ui",
+    "journey":["Imported own direct-MP4 source through normal UI","Opened actual own episode player, duration observed 0:30","Used timeline to seek and pause at 0:05","Minimized and restored real window; paused 0:05/0:30 remained visible","Returned to detail and reopened episode; observed 0:30/0:30, not accepted as saved 0:05 restoration"],
+    "screenshots":["_tools/C149-player-playing.png","_tools/C149-player-seek-paused.png","_tools/C149-player-restored.png","_tools/C149-player-reopen-position.png"],
+    "boundaries":["PrintWindow does not capture native video pixels; black capture is not visual decoded-frame evidence","Subtitle and persisted playback position acceptance not claimed","Own simple HTTP host does not implement Range; no product defect inferred from reopen position"],
+    "cleanup":{"ownPlayerSourceRemovedThroughUi":true,"ownAppExited":true,"ownListenerClosed":true,"onlyAssistantSourceScopedMetadataRemoved":{"histories":1,"chapters":2,"media_items":2},"unrelatedRowsUnchanged":{"media_items":4,"chapters":259,"histories":4,"downloads":10}}
+  },
+  "finalDesktopCovers":{"artifactScope":"C149-pre-privacy-fix","sourceProxyTemporarilySet":"http://127.0.0.1:7890","fourRealRecommendationCoversVisuallyObserved":true,"screenshot":"_tools/C149-final-proxy-covers.png","originalUnsetRestored":true,"restoreScreenshot":"_tools/C149-postfix-settings-unlocked.png"},
+  "screenshotHashes":{"C149-backup-before.png":"3fdd9915b09c0853ac54ba425b461c2b2b77810604f46b8d00cfc63ec4a2bc77","C149-backup-enabled.png":"a969d316c31f6d7cdc952a9711f5ba845ee38415bde5b39afb8447d031d0e3f5","C149-backup-enabled-cold.png":"1b679d34da6e36fce694acc6badf4e27fe1e25aa895f63b668789ceeb96b01e0","C149-backup-restored-off.png":"212cbcf6439068038b82efb756b156fcd6585963808dc6e327028125295cd3c1","C149-postfix-lock-enabled.png":"fc621dcded04b18b4ea049b12b7aa90c6e5badbde36e3de3396cf60118fe9d95","C149-postfix-resume-locked.png":"8a1c5dc9733865c5ceaae17b61788eccf27c5df385b00278f9a107b202ca597c","C149-postfix-cold-locked.png":"5563a142bde8df0e0d1e057ada893376b5bd64c74b846396bc15629e0fd6e8f0","C149-postfix-disabled-final.png":"5fff4bfe5b281414c13746ff22ee7e5395b0efc447fa32e54e69838083a22e05","C149-tls-cold-cookie-passed.png":"08428bc40a909cc2eacb595b3239ecf6cac27584b4c029f33611ef148f762fef"},
+  "limitations":["P11 and P4 genuine C148 UI journeys are not relabeled as final C149 artifact coverage","P2 public Save/Cancel closure plus final C149 own-loopback HttpOnly profile cold-start persistence genuinely exercised; no external account/challenge success claimed","P3 real player seek/pause/minimize/restore observed; decoded native frame pixels, subtitles and saved-position reopen remain unaccepted","No builds, tests, lint or formatters run by this worker"]
+}

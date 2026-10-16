@@ -1,0 +1,368 @@
+{
+  "id": "C149-p5-p6-final-journey",
+  "at": "2026-10-15T14:44:29.846071+00:00",
+  "status": "partial",
+  "scope": "Actual installed C149 Android app, ordinary UI via explicitly serialized ADB input, existing public network sources. No test/build/lint/formatter, fixture substitution, injected DB rows, account use, new source installation, or trust modification.",
+  "devices": [
+    {
+      "serial": "emulator-5558",
+      "assignment": "P5 no-account actual full information and offline cold-start; P6 installed-source feasibility",
+      "installedPackage": "io.github.hyperionhxh.triomi",
+      "buildIdentity": "Parent-provided retained-data formal C149 APK, SHA-256 prefix 06acce73; no APK replacement performed by this slice"
+    },
+    {
+      "serial": "emulator-5554",
+      "assignment": "Additional P6 existing real APK adapter capability checks after explicit parent authorization",
+      "installedPackage": "io.github.hyperionhxh.triomi",
+      "buildIdentity": "Parent-provided C149 acceptance APK SHA-256 prefix 8b77; no APK replacement performed by this slice"
+    }
+  ],
+  "P5": {
+    "status": "passed_for_actual_cold_offline_information_cache; Medalist episode endpoint unavailable in this run",
+    "initialState": {
+      "screen": "Discovery anime recommendations",
+      "followingCount": 0,
+      "privacyLock": "off per parent; not changed",
+      "incognito": "off; not changed",
+      "sourceHttpProxy": "unset, observed normal settings UI",
+      "wifi_on": "1",
+      "mobile_data": "1",
+      "activeDefaultNetwork": "100"
+    },
+    "onlinePublicJourney": {
+      "source": "Bangumi 番剧资料",
+      "primarySubject": "FX战士久留美",
+      "discovery": "Actual recommendation card opened; complete information sheet loaded",
+      "filter": "Normal filter dialog selected year 2026 / quarter 4; actual seasonal cards returned, including FX subject",
+      "tabs": [
+        {
+          "name": "资料",
+          "observed": "TV, airing date 2026-10-01, tags and subject metadata"
+        },
+        {
+          "name": "角色 / 声优",
+          "observed": "4 visible character rows with actual voice actors; includes 福賀くるみ / 鈴木愛奈"
+        },
+        {
+          "name": "Staff",
+          "observed": "8 visible staff rows including production roles and episode participation"
+        },
+        {
+          "name": "关联作品",
+          "observed": "3 actual related works (book, song, spinoff)"
+        },
+        {
+          "name": "评论",
+          "observed": "6 visible public comment rows; no account action; bodies omitted from retained screenshot evidence"
+        },
+        {
+          "name": "剧集信息",
+          "observed": "2 visible actual episode rows with dates, durations, synopsis/staff data"
+        }
+      ]
+    },
+    "networkOutage": {
+      "mechanism": "ADB svc wifi disable and svc data disable on emulator-5558 only; no simulated HTTP failure",
+      "observedConnectivity": "Active default network: none",
+      "proxyDuringAcquisition": "Temporary normal UI source HTTP proxy http://10.0.2.2:7890, cleared afterwards",
+      "firstColdStart": {
+        "pidBefore": "7429",
+        "pidAfter": "9649",
+        "action": "am force-stop then normal MainActivity start",
+        "discoveryResult": "热门推荐 and reselected 2026 Q4 both show 网络异常 / 重试推荐; no persistent offline discovery-list recovery claimed",
+        "interpretation": "Discovery list is separate from cached subject information; lack of offline discovery entry is not reported as cached-detail failure"
+      },
+      "ownedFollowColdStart": {
+        "authorization": "Parent explicitly permitted one self-owned FX follow and exact removal afterwards; original existing follows were not modified",
+        "followBefore": 0,
+        "temporaryFollow": "FX战士久留美, normal 加入追番 UI",
+        "pidBefore": "9649",
+        "pidAfter": "11289",
+        "action": "No default network, am force-stop, normal MainActivity start, follow tab, self-owned FX detail, complete information sheet",
+        "detailOfflineBanner": "离线模式：来源暂时取不到数据，正在显示本地缓存（已下载的章节可以直接阅读）。",
+        "cacheSheetBanner": "离线缓存资料",
+        "allSixTabsRecovered": true,
+        "tabs": [
+          {
+            "name": "资料",
+            "status": "actual cached metadata visible"
+          },
+          {
+            "name": "角色 / 声优",
+            "visibleRows": 4,
+            "status": "cached actual characters and voice actors visible"
+          },
+          {
+            "name": "Staff",
+            "visibleRows": 8,
+            "status": "cached actual production staff visible"
+          },
+          {
+            "name": "关联作品",
+            "visibleRows": 3,
+            "status": "cached actual relations visible"
+          },
+          {
+            "name": "评论",
+            "visibleRows": 6,
+            "status": "cached actual public comments visible; bodies removed from evidence screenshot"
+          },
+          {
+            "name": "剧集信息",
+            "visibleRows": 2,
+            "status": "cached actual episode dates/durations/data visible"
+          }
+        ]
+      }
+    },
+    "medalistJourney": {
+      "query": "Medalist",
+      "entry": "Normal public search → 金牌得主 / Bangumi 番剧资料 · TV",
+      "noFollowCreated": true,
+      "charactersAndVoiceActors": "Loaded after real request settled, 6 visible rows, includes 結束いのり and 明浦路司",
+      "staff": "Loaded after real request settled, 9 visible rows",
+      "relations": "8 visible actual relations; normal tap of 金牌得主 第二季 opened sequel detail",
+      "comments": "8 visible comment rows; bodies not retained",
+      "episodes": {
+        "status": "unavailable",
+        "actualUILabel": "资料暂不可用；不影响选择播放来源 · 重试",
+        "retry": "Tapped normal retry once and waited 15 seconds; same unavailable message remained",
+        "notClaimed": "No successful Medalist episode data or playback claimed; actual FX episode data and offline cache recovered independently"
+      },
+      "scopeLimit": "Cold-start offline acceptance is FX, not Medalist"
+    },
+    "restoration": {
+      "temporaryFollowRemovedVia": "FX detail 已追番 · 取消; follow tab observed 还没有追番 both immediately and final",
+      "followingCountAfter": 0,
+      "sourceHttpProxyAfter": "未设置 · 使用默认网络, screenshot visually inspected",
+      "wifi_onAfter": "1",
+      "mobile_dataAfter": "1",
+      "activeDefaultNetworkAfter": "108",
+      "inventoryTransientFiltersAfter": "Restored original 中文 (zh), 97/1500 and empty search, no download/enable/trust actions",
+      "finalScreen": "Discovery anime / 热门推荐; default network cover placeholders visible after temporary proxy removal; not claimed as successful default-network image load",
+      "originalLibraryAndTrustChanged": false
+    }
+  },
+  "P6": {
+    "status": "capability_boundary_observed; no_real_related_recommendation_list_success_claimed",
+    "implementationContractRead": {
+      "consumer": "lib/features/detail/manga_related_section.dart",
+      "path": "Only real MihonSource.related consumers call relatedInfo; unsupported returns explicit message rather than combining websites",
+      "nativeDeclaration": "supportsRelatedMangas && !disableRelatedMangas in MihonHost relatedInfo; no reflection/injection/unsupported-operation bypass"
+    },
+    "emulator5558": {
+      "sourceRowsObserved": 8,
+      "onlyMangaSource": "MangaDex 漫画（开放 API）, built-in rule; not treated as recommendation success",
+      "inventoryLookups": [
+        {
+          "name": "Webtoons.com",
+          "status": "尚未下载 APK"
+        },
+        {
+          "name": "xkcd",
+          "status": "尚未下载 APK"
+        },
+        {
+          "name": "Asura Scans",
+          "status": "尚未下载 APK"
+        },
+        {
+          "name": "CopyManga",
+          "status": "尚未下载 APK"
+        }
+      ],
+      "action": "No new APK installation or trust changes; switched to parent-authorized original 5554 for already-installed real adapters"
+    },
+    "emulator5554": {
+      "settingsChanges": [],
+      "actualAdapterChecks": [
+        {
+          "source": "Webtoons.com",
+          "work": "Space Boy from existing reading history",
+          "action": "Normal detail → 查看本站相关作品",
+          "catalogObserved": 389,
+          "result": "这个来源没有提供相关作品，不生成或拼接其他网站的推荐。",
+          "interpretation": "Real adapter declared unsupported; not a recommendation-list success"
+        },
+        {
+          "source": "禁漫天堂 / existing Jinman APK v106059",
+          "work": "An existing public feed card; title, artwork and content deliberately omitted",
+          "action": "Existing feed → normal detail → 查看本站相关作品",
+          "result": "这个来源没有提供相关作品，不生成或拼接其他网站的推荐。",
+          "interpretation": "Real adapter declared unsupported; not a recommendation-list success",
+          "evidenceRedaction": "Only recommendation capability message preserved; entire source title/artwork/content area removed"
+        }
+      ],
+      "manualFallback": "Normal 手动搜索相关作品 opened search route with visible 仅在漫画来源中搜索; no returned recommendation success inferred",
+      "temporaryFeedDialog": "Inspected source chooser and attempted self-owned probe name; no self-owned feed was observed in final Feed排序 traversal. Observed feed-label categories match the original built-in MangaDex/Jinman/APK MangaDex feeds; no exact full feed-row count claimed because duplicate labels were de-duplicated during collection. Order was never dragged or changed",
+      "originalFeedsObserved": [
+        "MangaDex 漫画（开放 API） · 最近更新",
+        "MangaDex 漫画（开放 API） · 热门",
+        "禁漫天堂 · 热门",
+        "禁漫天堂 · 最新",
+        "MangaDex · 热门",
+        "MangaDex · 最新"
+      ],
+      "noReaderOpened": true,
+      "noShelfOrFollowMutation": true,
+      "noNewAPKOrTrustMutation": true,
+      "finalNetwork": {
+        "wifi": "1",
+        "data": "1",
+        "network": "Active default network: 100"
+      },
+      "finalScreen": "Discovery anime; no new settings to restore"
+    },
+    "remainingBoundary": "No examined installed real adapter declared related support, so no successful real recommendation results, item click-through, or recommendation caching claimed. This is exact no-account capability evidence, not a passed recommendation-list acceptance."
+  },
+  "evidenceHandling": {
+    "screenshotsCapturedFrom": "ADB screencap -p of actual installed application; selected paths read with image tool for visual inspection",
+    "comments": "Public comment text redacted from retained screenshot; no credentials or account bodies captured",
+    "jinman": "No adult-source artwork/body/title retained in final capability screenshot",
+    "nonEvidenceScreenshotsRemoved": 50,
+    "throwawayHostScriptsCreated": false,
+    "remoteUIAndScreenshotTemps": "Own temporary /sdcard XML/screenshot removed after each operation",
+    "permanentSourceEdits": [],
+    "checksRun": []
+  },
+  "screenshots": [
+    {
+      "path": "_tools/C149-p5-final-api35-restored.png",
+      "sha256": "458900361a03fa369010a0365e8e1ad34a2dcb04d1453104e2efc1dac7404daa",
+      "bytes": 83533
+    },
+    {
+      "path": "_tools/C149-p5-final-follow-empty.png",
+      "sha256": "f11db6d101fa949a4743894be7a19b2397f40c68502b61c475125c1844256eb4",
+      "bytes": 92230
+    },
+    {
+      "path": "_tools/C149-p5-initial.png",
+      "sha256": "6e5c4b4d3e960b56802f0e7860d1d8373a4c4d78329caa771dee8cae31c3c0d0",
+      "bytes": 2284815
+    },
+    {
+      "path": "_tools/C149-p5-inventory-filter-restored.png",
+      "sha256": "315a2a0119ed0c8dc1138c564794df34852d4a16520295bac8cc45cf0105fba4",
+      "bytes": 259730
+    },
+    {
+      "path": "_tools/C149-p5-medalist-episodes-retry.png",
+      "sha256": "81f005fbaedda01bc8e0ffe7a6c48e031efd590edcca0cf5605ec86d8959fc4a",
+      "bytes": 62859
+    },
+    {
+      "path": "_tools/C149-p5-medalist-relations.png",
+      "sha256": "b71944d5d3fe4a1a5212322cd13eccc41d418d65a7f585843da7cdfd44e398aa",
+      "bytes": 168560
+    },
+    {
+      "path": "_tools/C149-p5-medalist-settled-characters.png",
+      "sha256": "549541445a157fc3547bf382a049bdd45cd965b1120c50c6cffaa464ab9bc7a3",
+      "bytes": 287713
+    },
+    {
+      "path": "_tools/C149-p5-medalist-settled-staff.png",
+      "sha256": "0e6593d1bf778e9e2df164f6830845e46a3d77ae7e8a42b61910e1577e1891ad",
+      "bytes": 118173
+    },
+    {
+      "path": "_tools/C149-p5-mihon-webtoons-installed.png",
+      "sha256": "16a3e4522ea581d3ddd2cbbae5942a52696f2719fd4668689922a6e4b0dc884f",
+      "bytes": 251031
+    },
+    {
+      "path": "_tools/C149-p5-offline-cold-characters.png",
+      "sha256": "3616bd8a6a19b82eaba59f6efdfa49f040775e48466b2cd05517923eae42e333",
+      "bytes": 405462
+    },
+    {
+      "path": "_tools/C149-p5-offline-cold-comments.png",
+      "sha256": "6477b57c71a1c2be0529e3227996303e79d721adb7f47ed45f4cb7e468f706fc",
+      "bytes": 49817
+    },
+    {
+      "path": "_tools/C149-p5-offline-cold-discovery.png",
+      "sha256": "e1fcf09b187284bca0941ca8c8ee36f0e7327c495c4e3f01082737fe7f9370b1",
+      "bytes": 79682
+    },
+    {
+      "path": "_tools/C149-p5-offline-cold-episodes.png",
+      "sha256": "8d6c8acf71498524899e744cd68127a8039936bf27d55eeb0e4573e08429e7f1",
+      "bytes": 463906
+    },
+    {
+      "path": "_tools/C149-p5-offline-cold-info.png",
+      "sha256": "cfec68858cc19571b717e3e1cae8a7de8a551797cd839ee583dbb0cffdb5e5ca",
+      "bytes": 197418
+    },
+    {
+      "path": "_tools/C149-p5-offline-cold-relations.png",
+      "sha256": "6faf60a27c9667ddfe8817d4cc721a65d29ee9e39b00d75692ad7d13db777553",
+      "bytes": 138739
+    },
+    {
+      "path": "_tools/C149-p5-offline-cold-staff.png",
+      "sha256": "bbcc03a16571569abdc366dae8b13c1580b9c7d506f6a24fc2f9ccf3550fb7fc",
+      "bytes": 150787
+    },
+    {
+      "path": "_tools/C149-p5-online-characters.png",
+      "sha256": "9dd1275461be9b1333cd22558dabc4370f462c58beb9f677728b196ef0e5ecd5",
+      "bytes": 408479
+    },
+    {
+      "path": "_tools/C149-p5-online-episodes.png",
+      "sha256": "b42725978e2d91e57681c62e1da2d0c9ac4c876cbee4814e091fd8931f97338f",
+      "bytes": 484227
+    },
+    {
+      "path": "_tools/C149-p5-online-relations.png",
+      "sha256": "7e70a5bbcb3482546514aa65c2ff9c9bd4412504b05aeaf5dadd4ce7b7d79837",
+      "bytes": 126998
+    },
+    {
+      "path": "_tools/C149-p5-online-staff.png",
+      "sha256": "6142a16b07de17349e3b6f187e0d26cc6862b774a2173fcd578c065e3704b6b7",
+      "bytes": 141635
+    },
+    {
+      "path": "_tools/C149-p5-owned-follow-removed.png",
+      "sha256": "fe4337b8a8278619b4e5118bd8a360db8438bc6226cae230e6c82f625b4f9aaf",
+      "bytes": 106216
+    },
+    {
+      "path": "_tools/C149-p5-p6-api5554-final-restored.png",
+      "sha256": "0208dc479f94fc5d0c3b954f349ec90ada8808bd9b5076f8f4a256ed52d94341",
+      "bytes": 64075
+    },
+    {
+      "path": "_tools/C149-p5-p6-jinman-related-capability.png",
+      "sha256": "69a442e0b58ed4bb5fb8499ec6e64ba6ac5c870ac68947a25b0768a7b3172759",
+      "bytes": 60445
+    },
+    {
+      "path": "_tools/C149-p5-p6-webtoons-related-result.png",
+      "sha256": "05b508195fd4ee232bbac3f79bae4db84d1782948779cf7e1465c1736c9196a5",
+      "bytes": 209204
+    },
+    {
+      "path": "_tools/C149-p5-proxy-restored-final.png",
+      "sha256": "daeaf0015917e4b814094d6249db5b0ed4778f7d2938ec2dbcc8d9cf5144989f",
+      "bytes": 269188
+    },
+    {
+      "path": "_tools/C149-p5-tabs-online.png",
+      "sha256": "2245184b219c51cc971efd93d10ab264aae54b8ea88a20bf7cd4d4337f8018e4",
+      "bytes": 189234
+    }
+  ],
+  "notClaimed": [
+    "Full-site/source compatibility",
+    "A passed P6 related-list success when adapters explicitly declare unsupported",
+    "Cached offline discovery list",
+    "Medalist episode endpoint success",
+    "Any test-suite/build output as UI evidence",
+    "Playback or paid/account-required content"
+  ]
+}

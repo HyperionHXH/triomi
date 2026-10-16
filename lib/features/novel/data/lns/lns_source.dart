@@ -1,4 +1,4 @@
-import 'package:flutter/services.dart';
+import 'dart:convert';
 
 import '../../../../core/models/chapter.dart';
 import '../../../../core/models/media_item.dart';
@@ -7,6 +7,7 @@ import '../../../../core/models/source_descriptor.dart';
 import '../../../../core/models/source_exception.dart';
 import '../../../../core/source/http_client.dart';
 import '../../../../core/source/source_api.dart';
+import '../../reader/chapter_font.dart';
 import 'lns_auth.dart';
 import 'lns_gateway.dart';
 import 'lns_hub_connection.dart';
@@ -37,6 +38,10 @@ class LnsSource
   final LnsGateway gateway;
   final LnsAuth auth;
   final LnsFontChannel? fontChannel;
+  // Permissions may change with the session or uploader's settings. Never
+  // cache a full chapter directory merely to display the download notice.
+  Future<LnsBookDetail> officialDownloadPermission(MediaItem item) =>
+      gateway.getBookDetail(_idOf(item));
 
   @override
   SourceDescriptor get descriptor => const SourceDescriptor(
@@ -173,7 +178,14 @@ class LnsSource
     // 也绝不把混淆正文当成正常内容渲染。
     final fontUrl = detail.fontUrl;
     String? fontFamily;
-    if (fontUrl != null && fontUrl.isNotEmpty && fontChannel != null) {
+    if (fontUrl != null && fontUrl.isNotEmpty) {
+      if (fontChannel == null) {
+        throw const SourceException(
+          sourceId: id,
+          type: SourceErrorType.parse,
+          message: '轻书架正文需要专用字体，字体通道不可用',
+        );
+      }
       await fontChannel!.ensure(fontUrl);
       // 字体注册好后把 family 交给阅读器：站点替换过字形，
       // 不用这个字体渲染出来就是乱码。
@@ -182,6 +194,7 @@ class LnsSource
     return ChapterContent(
       html: detail.html.isNotEmpty ? detail.html : null,
       fontFamily: fontFamily,
+      fontData: fontUrl == null ? null : fontChannel?.dataFor(fontUrl),
     );
   }
 
@@ -238,6 +251,10 @@ class LnsSource
     }
     return items;
   }
+
+  /// LNS does not expose the LK-style unread chapter snapshot endpoint.
+  @override
+  Future<Map<String, int>> remoteUnreadCounts() async => const <String, int>{};
 
   /// 站点收藏状态切换：读快照 → 增删 → 归一化顺序后整体保存。
   @override
@@ -383,8 +400,10 @@ class LnsFontChannel {
 
   /// fontUrl → 已注册的 fontFamily。
   final Map<String, String> _registered = <String, String>{};
+  final Map<String, String> _data = <String, String>{};
 
   String? familyFor(String fontUrl) => _registered[fontUrl];
+  String? dataFor(String fontUrl) => _data[fontUrl];
 
   /// 站点给的 `fontUrl` 形如 `/font/xxx.woff2`（相对路径），
   /// 直接丢给 HTTP 层会报 URI 错误——按 API 源站补全。
@@ -416,11 +435,11 @@ class LnsFontChannel {
       headers: const <String, String>{'Accept': '*/*'},
       method: 'GET',
     );
-    if (bytes.isEmpty) {
+    if (bytes.isEmpty || bytes.length > ChapterFont.maxBytes) {
       throw SourceException(
         sourceId: sourceId,
         type: SourceErrorType.parse,
-        message: '轻书架专用字体内容为空',
+        message: '轻书架专用字体为空或超过 8 MiB 限制',
       );
     }
     // 引擎只吃 TTF/OTF：拿到别的东西（HTML 错误页、未转换的 WOFF2）
@@ -432,14 +451,10 @@ class LnsFontChannel {
         message: '轻书架专用字体格式不受支持（需要 TTF/OTF）',
       );
     }
-    final family =
-        'triomi-lns-${fontUrl.hashCode.toUnsigned(32).toRadixString(16)}';
-    final loader = FontLoader(family)
-      ..addFont(
-        Future<ByteData>.value(ByteData.sublistView(Uint8List.fromList(bytes))),
-      );
+    final encoded = base64Encode(bytes);
+    final String family;
     try {
-      await loader.load();
+      family = await ChapterFont.register(encoded);
     } catch (error) {
       throw SourceException(
         sourceId: sourceId,
@@ -449,6 +464,7 @@ class LnsFontChannel {
       );
     }
     _registered[fontUrl] = family;
+    _data[fontUrl] = encoded;
   }
 
   /// TTF / TrueType / OTF 的 magic（与 Mixn 的判断一致）。

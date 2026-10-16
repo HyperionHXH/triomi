@@ -6,9 +6,12 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../../core/models/chapter.dart';
 import '../../../core/models/media_item.dart';
+import '../../../core/models/media_type.dart';
+import '../../../core/models/source_exception.dart';
 import '../../../core/platform/platform_channel.dart';
 import '../../../core/source/http_client.dart';
 import '../../../core/source/source_api.dart';
+import '../reader/chapter_font.dart';
 import 'epub_exporter.dart';
 import 'txt_exporter.dart';
 
@@ -32,6 +35,16 @@ class NovelExportResult {
 
 /// 小说整书导出：取数（跳过锁定章节）→ 打包 → 写入导出目录。
 abstract final class NovelExportService {
+  static void checkExportPermission(MediaItem item) {
+    if (item.sourceId == 'light-novel-shelf') {
+      throw const SourceException(
+        sourceId: 'light-novel-shelf',
+        type: SourceErrorType.permission,
+        message: '轻书架整书文件需由站点确认下载权限及金币费用，请在站点下载；已缓存正文仍可离线阅读。',
+      );
+    }
+  }
+
   /// EPUB 3：含目录、样式与封面/插图（抓取失败自动降级为外链）。
   ///
   /// [directoryUri] + [writeToTree]（D29）：用户授权目录（SAF）注入点，
@@ -43,9 +56,12 @@ abstract final class NovelExportService {
     required ContentProvider source,
     required SourceHttpClient http,
     required void Function(int completed, int total) onProgress,
+    Future<ChapterContent?> Function(Chapter chapter)? localContent,
     String? directoryUri,
     SafTreeWriter? writeToTree,
   }) async {
+    checkExportPermission(item);
+    final fonts = <String, Uint8List>{};
     final outcome = await EpubExporter.export(
       bookTitle: item.title,
       author: item.author ?? '',
@@ -54,8 +70,15 @@ abstract final class NovelExportService {
       coverUrl: item.coverUrl ?? '',
       chapters: chapters,
       resolve: (chapter) async {
-        final content = await source.content(chapter);
+        final content =
+            await localContent?.call(chapter) ?? await source.content(chapter);
         if (content.isEmpty) return null;
+        if (content.fontFamily != null && content.fontData == null) {
+          throw StateError('章节专用字体缺失，无法生成可读 EPUB');
+        }
+        if (content.fontData != null) {
+          fonts[chapter.remoteId] = ChapterFont.decode(content.fontData!);
+        }
         return (
           title: chapter.title,
           volumeTitle: chapter.volumeTitle ?? '',
@@ -64,6 +87,7 @@ abstract final class NovelExportService {
         );
       },
       onProgress: onProgress,
+      resolveFont: (chapter) async => fonts[chapter.remoteId],
       fetchImage: (url) async {
         try {
           final response = await http.fetchBytes(url, sourceId: item.sourceId);
@@ -93,16 +117,22 @@ abstract final class NovelExportService {
     required List<Chapter> chapters,
     required ContentProvider source,
     required void Function(int completed, int total) onProgress,
+    Future<ChapterContent?> Function(Chapter chapter)? localContent,
     String? directoryUri,
     SafTreeWriter? writeToTree,
   }) async {
+    checkExportPermission(item);
     final outcome = await TxtExporter.exportText(
       bookTitle: item.title,
       author: item.author ?? '',
       chapters: chapters,
       resolve: (chapter) async {
-        final content = await source.content(chapter);
+        final content =
+            await localContent?.call(chapter) ?? await source.content(chapter);
         if (content.isEmpty) return null;
+        if (content.fontFamily != null || content.fontData != null) {
+          throw StateError('章节使用站点专用字体，无法可靠导出 TXT；请导出含字体的 EPUB');
+        }
         return (bodyHtml: content.html ?? '', bodyText: content.text ?? '');
       },
       onProgress: onProgress,

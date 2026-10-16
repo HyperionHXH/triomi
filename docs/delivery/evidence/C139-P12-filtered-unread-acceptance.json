@@ -1,0 +1,9 @@
+{
+  "date":"2026-10-14",
+  "status":"partial",
+  "apk":{"path":"D:/noval_and_manga/_tools/Triomi-C139-P12-filtered-unread-acceptance.apk","bytes":127126376,"sha256":"40a51400e8d1ddb3eefb65fa2d433fb8e5b62dbf6fcfc97dacb58ee1e52912cd","devicesInstalledAndHashMatched":["emulator-5554","emulator-5556"],"v2Verified":true,"certificateSha256":"0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6"},
+  "verification":{"targetedLibraryPassed":57,"webdavLoopbackPassed":2,"fullSuitePassed":790,"analyze":"No issues found"},
+  "changes":["Mark-read action freezes current visible unread source/remote identities before confirmation; hidden entries and newly added matching entries excluded","Removed obsolete broad markAllRead API; migrated all repository consumers and contract tests","Versioned WebDAV rejects uploads above256MiB before remote requests, matching restore bound","Removed unused JS controller from Bangumi calendar background engine; it does not execute source JS"],
+  "actualApi35":{"scenario":"Existing library query no-match-c139 then Current-filter mark-read","result":"No unread message; scoped source/remote/unread/progress rows exactly unchanged; clear-filter restored original shelf","destructiveExistingDataMutation":false},
+  "limitations":["Actual positive clear on existing user shelf intentionally not performed; source-qualified mutation and confirmation-race covered by behavioral regression","Original C125 production-signed/Windows artifacts retained; same-source releases remain pending","P11 full media/rule recovery and remaining P12 modules remain partial"]
+}

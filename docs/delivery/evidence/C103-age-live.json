@@ -1,0 +1,35 @@
+{
+  "listCount": 20,
+  "search": [
+    {
+      "sourceId": "age-anime",
+      "remoteId": "20260029",
+      "type": "anime",
+      "title": "葬送的芙莉莲 第二季",
+      "url": "https://www.agedm.io/detail/20260029",
+      "coverUrl": "https://gimg4.baidu.com/gimg/app=2001&n=0&g=0n&fmt=jpeg&src=https%3A%2F%2Fcdn.aqdstatic.com%3A966%2Fage%2Fcovers%2F20260029.jpg",
+      "author": null,
+      "description": null,
+      "tags": [],
+      "rating": null,
+      "status": null
+    },
+    {
+      "sourceId": "age-anime",
+      "remoteId": "20230207",
+      "type": "anime",
+      "title": "葬送的芙莉莲",
+      "url": "https://www.agedm.io/detail/20230207",
+      "coverUrl": "https://gimg2.baidu.com/gimg/app=2001&n=0&g=0n&fmt=jpeg&src=https%3A%2F%2Fcdn.aqdstatic.com%3A966%2Fage%2Fcovers%2F20230207.jpg",
+      "author": null,
+      "description": null,
+      "tags": [],
+      "rating": null,
+      "status": null
+    }
+  ],
+  "chapterCount": 168,
+  "firstEpisode": "线路 1 · 第01集",
+  "playerHost": "jx.wuzhoupai.com",
+  "status": "passed"
+}

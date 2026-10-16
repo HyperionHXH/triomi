@@ -1,0 +1,25 @@
+python : ............................C:\Python314\Lib\tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPErr
+or 401: 'Unauthorized'>
+所在位置 行:4 字符: 1
++ python -m unittest discover -s tools -p 'test_*.py' *> "$env:TEMP\tri ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (..................'Unauthorized'>:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  _warnings.warn(self.warn_message, ResourceWarning)
+[dandanplay] comment sent to episode 9001: 'contract' @ 1.5s
+[fixture] video sample.mp4 range=None -> 0-562486 (562487B)
+..C:\Python314\Lib\tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 416: 'Range Not Satisfiable'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+[fixture] video sample.mp4 range=bytes=0-9 -> 0-9 (10B)
+[fixture] video sample.mp4 range=bytes=0-99 -> 0-99 (100B)
+[fixture] video sample.mp4 range=bytes=-50 -> 562437-562486 (50B)
+[fixture] video sample.mp4 range=bytes=562477-563486 -> 562477-562486 (10B)
+...C:\Python314\Lib\tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 404: 'Not Found'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+..................................................
+----------------------------------------------------------------------
+Ran 83 tests in 1.629s
+
+OK
+[mov,mp4,m4a,3gp,3g2,mj2 @ 00000232a5720040] moov atom not found

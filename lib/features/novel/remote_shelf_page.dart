@@ -12,6 +12,8 @@ import '../../core/source/source_registry.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../../core/widgets/source_network_image.dart';
+import '../library/data/library_providers.dart';
 
 /// 远端书架：聚合各来源站点收藏的入口。
 ///
@@ -55,6 +57,21 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
     }
     try {
       final books = await provider.remoteShelf();
+      // LK-style sources may include an unread chapter snapshot. The shelf
+      // itself remains usable if the optional unread refresh fails; in that
+      // case the local value is left untouched.
+      try {
+        final counts = await provider.remoteUnreadCounts();
+        await ref
+            .read(libraryRepositoryProvider)
+            .applyRemoteUnreadCounts(
+              sourceId: entry.descriptor.id,
+              counts: counts,
+            );
+      } catch (_) {
+        // A failed optional refresh must not turn a successful shelf response
+        // into an empty/error shelf or overwrite the previous local count.
+      }
       // 结果已过期（用户切了来源），丢弃这次响应。
       if (seq != _requestSeq) return const _ShelfResult();
       return _ShelfResult(books: books);
@@ -105,7 +122,7 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
         title: '还没有可用的远端书架来源',
         message: '启用带「远端书架」能力的来源并登录后，站点收藏会显示在这里。',
         action: FilledButton.icon(
-          onPressed: () => context.push(AppRoutes.sources),
+          onPressed: () => context.push('${AppRoutes.sources}?type=novel'),
           icon: const Icon(Icons.extension_outlined, size: 18),
           label: const Text('管理来源'),
         ),
@@ -148,7 +165,8 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
                   title: '还没有登录${entry.descriptor.name}',
                   message: '到「我的 → 来源与规则管理」登录后即可看到站点书架。',
                   action: FilledButton.icon(
-                    onPressed: () => context.push(AppRoutes.sources),
+                    onPressed: () =>
+                        context.push('${AppRoutes.sources}?type=novel'),
                     icon: const Icon(Icons.login, size: 18),
                     label: const Text('去登录'),
                   ),
@@ -280,14 +298,14 @@ class _SourceChipBar extends StatelessWidget {
   }
 }
 
-class _ShelfCard extends StatelessWidget {
+class _ShelfCard extends ConsumerWidget {
   const _ShelfCard({required this.book, required this.onTap});
 
   final MediaItem book;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -302,8 +320,12 @@ class _ShelfCard extends StatelessWidget {
                       color: Color(0x11000000),
                       child: Icon(Icons.menu_book_outlined),
                     )
-                  : Image.network(
-                      book.coverUrl!,
+                  : Image(
+                      image: SourceNetworkImage(
+                        book.coverUrl!,
+                        http: ref.watch(sourceHttpClientProvider),
+                        sourceId: book.sourceId,
+                      ),
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stack) => const ColoredBox(
                         color: Color(0x11000000),

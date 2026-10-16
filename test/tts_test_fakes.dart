@@ -47,6 +47,5 @@ class FakeTtsEngine implements TtsEngine {
   Future<void> applySpeechSettings({double? rate, TtsVoiceInfo? voice}) async {}
 
   @override
-  Future<List<TtsVoiceInfo>> availableVoices() async =>
-      const <TtsVoiceInfo>[];
+  Future<List<TtsVoiceInfo>> availableVoices() async => const <TtsVoiceInfo>[];
 }

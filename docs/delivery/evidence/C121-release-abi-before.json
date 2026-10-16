@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-09T13:54:00.388589+00:00",
+  "api": 35,
+  "variant": "release",
+  "settingsFailure": "NoSuchMethodError; androidx.preference members renamed by R8",
+  "settingsFirstFix": "real plugin PreferenceScreen opened after keep ABI",
+  "readingFailure": "ART SIGABRT: JNI initialization ClassNotFoundException com.squareup.zstd.ZstdCompressor",
+  "codec": "zstd-kmp 0.4.0; dependency AAR has no consumer rules",
+  "regressionBeforeFix": "framework-only test APK inspecting installed production release: FAILED release ABI: ClassNotFoundException",
+  "fixtureScope": "deterministic Zstandard raw-block frame tests native decompression only; real reading verified separately",
+  "credentialsCaptured": false
+}

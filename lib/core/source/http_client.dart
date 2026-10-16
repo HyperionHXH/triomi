@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../models/media_type.dart';
 import '../models/source_exception.dart';
+import 'http_adapter_stub.dart' if (dart.library.io) 'http_adapter_io.dart';
 
 /// 请求体类型。
 enum RequestBodyType {
@@ -25,6 +26,8 @@ class SourceRequest {
     this.headers = const <String, String>{},
     this.body,
     this.bodyType = RequestBodyType.none,
+    this.followRedirects = true,
+    this.checkStatus = true,
   });
 
   final String url;
@@ -35,6 +38,8 @@ class SourceRequest {
   final String? body;
 
   final RequestBodyType bodyType;
+  final bool followRedirects;
+  final bool checkStatus;
 }
 
 /// 来源响应。
@@ -60,12 +65,16 @@ class SourceByteStream {
     required this.stream,
     required this.url,
     this.contentLength,
+    this.statusCode = 200,
+    this.headers = const {},
   });
 
   final Stream<List<int>> stream;
 
   /// 响应头里的总长度；服务端没给（如分块传输）时为 null。
   final int? contentLength;
+  final int statusCode;
+  final Map<String, String> headers;
 
   /// 真实请求地址（跟随重定向后）。
   final String url;
@@ -94,6 +103,7 @@ abstract class SourceHttpClient {
     String url, {
     required String sourceId,
     Map<String, String> headers,
+    bool followRedirects = true,
   });
 
   /// 上传二进制内容（WebDAV PUT / 备份上传）。失败抛 [SourceException]。
@@ -109,9 +119,18 @@ abstract class SourceHttpClient {
 }
 
 /// 基于 dio 的实现。
-class DioSourceHttpClient implements SourceHttpClient {
+abstract interface class SecureRuleDownloadClient {
+  Future<SourceByteStream> downloadRuleBytes(
+    String url, {
+    required String sourceId,
+  });
+}
+
+class DioSourceHttpClient
+    implements SourceHttpClient, SecureRuleDownloadClient {
   DioSourceHttpClient({
     Dio? dio,
+    String proxy = '',
     this.defaultUserAgent = 'Triomi/0.1.0',
     this.timeout = const Duration(seconds: 20),
   }) : _dio =
@@ -123,11 +142,63 @@ class DioSourceHttpClient implements SourceHttpClient {
                validateStatus: (_) => true,
                receiveDataWhenStatusError: true,
              ),
-           );
+           ) {
+    if (dio == null) configureSourceHttpAdapter(_dio, proxy: proxy);
+  }
 
   final Dio _dio;
   final String defaultUserAgent;
   final Duration timeout;
+
+  /// Check each redirect before issuing the next request, so HTTPS rules can
+  /// never be fetched over HTTP (including an intermediate downgrade).
+  @override
+  Future<SourceByteStream> downloadRuleBytes(
+    String url, {
+    required String sourceId,
+  }) async {
+    var uri = Uri.parse(url);
+    for (var hop = 0; hop <= 5; hop++) {
+      if (uri.scheme != 'https' ||
+          uri.host.isEmpty ||
+          uri.userInfo.isNotEmpty) {
+        throw StateError('规则下载只允许无账号信息的 HTTPS 地址');
+      }
+      final response = await _dio.get<ResponseBody>(
+        uri.toString(),
+        options: Options(
+          followRedirects: false,
+          validateStatus: (_) => true,
+          responseType: ResponseType.stream,
+          headers: {'User-Agent': defaultUserAgent},
+          connectTimeout: timeout,
+          sendTimeout: timeout,
+          receiveTimeout: timeout,
+        ),
+      );
+      final body = response.data;
+      final status = response.statusCode ?? 0;
+      if ([301, 302, 303, 307, 308].contains(status)) {
+        await body?.stream.listen(null).cancel();
+        final target = response.headers.value('location');
+        if (target == null || hop == 5) throw StateError('规则重定向无效或次数过多');
+        uri = uri.resolve(target);
+        continue;
+      }
+      if (status < 200 || status >= 300 || body == null) {
+        await body?.stream.listen(null).cancel();
+        throw StateError('规则下载失败：HTTP $status');
+      }
+      return SourceByteStream(
+        stream: body.stream,
+        url: uri.toString(),
+        contentLength: int.tryParse(
+          response.headers.value(Headers.contentLengthHeader) ?? '',
+        ),
+      );
+    }
+    throw StateError('规则重定向次数过多');
+  }
 
   @override
   Future<SourceResponse> send(
@@ -140,6 +211,7 @@ class DioSourceHttpClient implements SourceHttpClient {
         data: request.bodyType == RequestBodyType.none ? null : request.body,
         options: Options(
           method: request.method.toUpperCase(),
+          followRedirects: request.followRedirects,
           headers: <String, String>{
             'User-Agent': defaultUserAgent,
             ...request.headers,
@@ -166,7 +238,7 @@ class DioSourceHttpClient implements SourceHttpClient {
         },
       );
 
-      if (!result.isSuccess) {
+      if (request.checkStatus && !result.isSuccess) {
         throw SourceException(
           sourceId: sourceId,
           type: _classifyStatus(result.statusCode),
@@ -244,11 +316,13 @@ class DioSourceHttpClient implements SourceHttpClient {
     String url, {
     required String sourceId,
     Map<String, String> headers = const <String, String>{},
+    bool followRedirects = true,
   }) async {
     try {
       final response = await _dio.get<ResponseBody>(
         url,
         options: Options(
+          followRedirects: followRedirects,
           headers: <String, String>{'User-Agent': defaultUserAgent, ...headers},
           responseType: ResponseType.stream,
           connectTimeout: timeout,
@@ -274,9 +348,14 @@ class DioSourceHttpClient implements SourceHttpClient {
       }
       final length = response.headers.value(Headers.contentLengthHeader);
       return SourceByteStream(
-        stream: body.stream.map((chunk) => chunk.toList(growable: false)),
+        stream: body.stream,
         contentLength: length == null ? null : int.tryParse(length),
         url: response.realUri.toString(),
+        statusCode: status,
+        headers: {
+          for (final e in response.headers.map.entries)
+            e.key.toLowerCase(): e.value.join(','),
+        },
       );
     } on SourceException {
       rethrow;

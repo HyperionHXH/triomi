@@ -1,0 +1,51 @@
+{
+  "recordedAt": "2026-10-05T08:52:04.506023Z",
+  "environment": "Windows host; production adapters; anonymous; real HTTPS/WebSocket",
+  "results": {
+    "lk": {
+      "stage": "content",
+      "listCount": 20,
+      "item": {
+        "sourceId": "light-novel-kingdom",
+        "remoteId": "33139",
+        "type": "novel",
+        "title": "只有颜值是优点的同学，以猛烈攻势向我扑来的百合故事。",
+        "url": null,
+        "coverUrl": "https://api.lightnovel.fun/upload-files/images/260910/371429dc59497af44c4a9729112d6fd5.jpg?m=tMEuFcpr43tPgsHmOAE6jg&t=1789824496",
+        "author": "能代リョウ",
+        "description": "她的优点可不止“颜值”！？（※先动心的人是我）\n\n我是只想度过平凡高中生活的——海道律。\n本想顺着氛围往前走，把初吻献给并不喜欢的男友……结果初吻竟然被班里那个特立独行、除了颜值以外一无是处的女生·矢来同学给抢走了！？\n而且自从那个吻之后，我就一直被矢来同学耍得团团转！\n和矢来同学一起过夜的时候，不仅一起泡了澡，甚至还被她钻进了被窝！？\n长得好看就可以为所欲为吗？可是——\n\n「果然，海道同学其实并不讨厌吧？」\n\n矢来同学展开攻势的时候，不知为何我的心跳开始加速！\n不知不觉间已经坠入爱河的、少女遇见少女的爱情喜剧，开幕！",
+        "tags": [
+          "百合",
+          "恋爱",
+          "校园",
+          "青春"
+        ],
+        "rating": null,
+        "status": null
+      },
+      "detailTitle": "只有颜值是优点的同学，以猛烈攻势向我扑来的百合故事。",
+      "chapterCount": 22,
+      "firstChapterTitles": [
+        "制作信息",
+        "彩页",
+        "第一话 我才不会输给矢来同学呢。",
+        "第二话 我就不行吗？",
+        "第三话 海道同学，你喜欢这样吗？",
+        "第四话 请和我约会吧。",
+        "第五话 矢来同学，我喜欢你。",
+        "后记"
+      ],
+      "chapterTitle": "第一话 我才不会输给矢来同学呢。",
+      "htmlLength": 48977,
+      "textLength": 0,
+      "plainTextLength": 11870,
+      "textSample": "昨天，也就是暑假最后一天，我把头发剪了。\n一直留到腰间的黑发，被我一口气剪掉了。因为原本只是随便留着而已，所以也谈不上有什么特别的留恋。\n夏天的时候，头发会被汗",
+      "status": "passed"
+    },
+    "lns": {
+      "stage": "discover",
+      "status": "failed",
+      "error": "SourceException(light-novel-shelf, auth): Failed to invoke 'GetBookList' because user is unauthorized"
+    }
+  }
+}

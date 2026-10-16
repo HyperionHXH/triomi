@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +14,7 @@ import '../../core/widgets/page_scaffold.dart';
 import '../library/data/library_providers.dart';
 import 'data/download_providers.dart';
 import 'data/download_repository.dart';
+import 'data/video_downloader.dart';
 
 /// 下载管理：按作品分组展示队列与已完成内容。
 class DownloadsPage extends ConsumerStatefulWidget {
@@ -34,12 +36,24 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final groups = ref.watch(downloadsProvider);
+    final groups = ref.watch(downloadGroupsProvider);
     final wifiOnly = ref.watch(downloadWifiOnlyProvider);
 
     return PageScaffold(
       title: '下载管理',
       actions: <Widget>[
+        IconButton(
+          tooltip: '暂停队列',
+          onPressed: () =>
+              unawaited(ref.read(downloadsProvider.notifier).pauseAll()),
+          icon: const Icon(Icons.pause),
+        ),
+        IconButton(
+          tooltip: '恢复暂停任务',
+          onPressed: () =>
+              unawaited(ref.read(downloadsProvider.notifier).resumePaused()),
+          icon: const Icon(Icons.play_arrow),
+        ),
         IconButton(
           tooltip: '重试失败项',
           onPressed: () =>
@@ -147,7 +161,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清理已完成记录'),
-        content: const Text('只删除下载记录，离线内容保留在本地（下次进入仍可离线阅读）。'),
+        content: const Text('仅清理不含离线文件路径的已完成记录，缓存正文仍保留。漫画、视频和本地导入的文件索引会保留在列表中，确保仍可离线打开；需要删除文件时请移除该作品的下载。'),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -193,9 +207,13 @@ class _DownloadGroupCard extends StatelessWidget {
         .where((entry) => entry.status == DownloadStatus.running)
         .firstOrNull;
 
-    // 失败必须说得清原因：取第一条失败任务的错误说明展示（重试后会被清空）。
+    final paused = group.entries
+        .where((entry) => entry.status == DownloadStatus.paused)
+        .length;
+    // Paused browser jobs explain the foreground/unlock/source action needed.
     final failedReason = group.entries
-        .where((entry) => entry.status == DownloadStatus.failed)
+        .where((entry) => entry.status == DownloadStatus.failed ||
+            entry.status == DownloadStatus.paused)
         .map((entry) => entry.row.errorMessage?.trim())
         .whereType<String>()
         .where((message) => message.isNotEmpty)
@@ -252,17 +270,30 @@ class _DownloadGroupCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.xs),
           Text(
             running != null
-                ? '正在下载：${running.chapterTitle}'
-                : '已完成 $done / $total 章${failed > 0 ? '（$failed 章失败）' : ''}',
+                ? '正在下载：${running.chapterTitle} · ${(running.row.progress * 100).round()}%'
+                : '已完成 $done / $total 章${failed > 0 ? '（$failed 章失败）' : ''}${paused > 0 ? ' · $paused 已暂停' : ''}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: AppSpacing.xs),
           ClipRRect(
             borderRadius: const BorderRadius.all(Radius.circular(4)),
             child: LinearProgressIndicator(
-              value: total == 0 ? 0 : done / total,
+              value: total == 0
+                  ? 0
+                  : group.entries.fold<double>(
+                          0,
+                          (sum, entry) => sum + entry.row.progress,
+                        ) /
+                        total,
               minHeight: 6,
             ),
+          ),
+          _DownloadSize(
+            paths: group.entries
+                .map((e) => e.row.path)
+                .whereType<String>()
+                .toSet(),
+            revision: Object.hashAll(group.entries.map((e) => e.row.status)),
           ),
           if (failed > 0) ...<Widget>[
             if (failedReason != null)
@@ -298,6 +329,52 @@ class _DownloadGroupCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DownloadSize extends StatefulWidget {
+  const _DownloadSize({required this.paths, required this.revision});
+  final Set<String> paths;
+  final int revision;
+  @override
+  State<_DownloadSize> createState() => _DownloadSizeState();
+}
+
+class _DownloadSizeState extends State<_DownloadSize> {
+  late Future<int> _bytes = _load();
+  Future<int> _load() async {
+    var bytes = 0;
+    final directories = <String>{};
+    for (final path in widget.paths) {
+      final file = File(path);
+      final directory = await FileSystemEntity.isDirectory(path)
+          ? path
+          : file.parent.path;
+      if (!directories.add(directory)) continue;
+      bytes += await VideoDownloader.occupiedBytes(directory);
+    }
+    return bytes;
+  }
+
+  @override
+  void didUpdateWidget(_DownloadSize oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.revision != widget.revision ||
+        oldWidget.paths.length != widget.paths.length ||
+        !oldWidget.paths.containsAll(widget.paths)) {
+      _bytes = _load();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<int>(
+    future: _bytes,
+    builder: (context, snapshot) => snapshot.hasData
+        ? Text(
+            '本地占用 ${(snapshot.data! / 1048576).toStringAsFixed(1)} MiB',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        : const SizedBox.shrink(),
+  );
 }
 
 class _EmptyDownloads extends StatelessWidget {

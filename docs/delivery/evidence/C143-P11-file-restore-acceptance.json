@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-14",
+  "status": "partial",
+  "change": "Local preview/import use private copied ZIP snapshots, disk-backed entry extraction with generated paths, streamed CRC/SHA and central-header validation. Import verifies the reviewed SHA256 before mutations; WebDAV byte path remains unchanged.",
+  "verification": {"targetedPassed": 18, "fullSuitePassed": 796, "fullSuiteLog": "artifact://879", "analyze": "No issues found", "regressions": ["file replaced after preview rejects before settings/SQL mutation", "fresh preview imports replacement", "4MiB entry SHA and traversal-name generated-path isolation", "CRC and duplicate central headers reject in file and bytes paths"]},
+  "actualApi35": {"input": "C142 foreground SAF ZIP 50ded9c7, system picker", "preview": "0 incoming / 6 local / 0 equal timestamp conflicts", "completion": "作品0、书架0、历史0、目录0、封面0、设置0", "shelfUnreadProgressExactlyUnchanged": true, "privateSnapshotAndPickerInputCleaned": true},
+  "artifacts": {
+    "acceptance": {"path": "D:/noval_and_manga/_tools/Triomi-C143-P11-file-restore-acceptance.apk", "bytes": 127355752, "sha256": "b68fa68fa85ea46ec8ecf1ac00322185b0ef3ae2812393db7c4e41832e2c57e4", "v2Verified": true, "certificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6", "installedHashMatched": ["emulator-5554", "emulator-5556"]},
+    "production": {"path": "D:/noval_and_manga/_tools/Triomi-C143-android-signed.apk", "bytes": 127355752, "sha256": "429d1a4cdc915cb9a4a803b6c1282ddaec06cc898ae1b4b40c4c072c1499aa0f", "v2Verified": true, "rsaBits": 4096, "certificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077", "installedHashMatched": "emulator-5558", "dataCounts": "0 library / 44 chapters / 7 histories"},
+    "windows": {"path": "D:/noval_and_manga/_tools/Triomi-C143-windows-release.zip", "bytes": 37754722, "sha256": "14c98cdf7186f4872051bbc6568d2852b20dcfa3e409e4da73910989ac7e4358", "members": 50, "zipIntegrity": true, "exactMemberBytesMatchRelease": true, "actualUi": "not-run; existing computer session closed"}
+  },
+  "secretScan": "C143-delivery-secret-scan.json: zero exact secret/private-name/debug-file hits",
+  "limitations": ["Metadata JSON and each restored cover still materialize separately; no whole ZIP buffer for local path", "Disk snapshots need temporary storage; process death can leave unused temp files", "Downloaded media/source definitions/desktop schedule and full-platform/visual acceptance remain incomplete; no remote write"]
+}

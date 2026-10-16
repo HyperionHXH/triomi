@@ -2802,8 +2802,38 @@ class $CategoriesTable extends Categories
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _hiddenMeta = const VerificationMeta('hidden');
   @override
-  List<GeneratedColumn> get $columns => [id, name, sortIndex];
+  late final GeneratedColumn<bool> hidden = GeneratedColumn<bool>(
+    'hidden',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("hidden" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _rulesJsonMeta = const VerificationMeta(
+    'rulesJson',
+  );
+  @override
+  late final GeneratedColumn<String> rulesJson = GeneratedColumn<String>(
+    'rules_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    sortIndex,
+    hidden,
+    rulesJson,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -2833,6 +2863,18 @@ class $CategoriesTable extends Categories
         sortIndex.isAcceptableOrUnknown(data['sort_index']!, _sortIndexMeta),
       );
     }
+    if (data.containsKey('hidden')) {
+      context.handle(
+        _hiddenMeta,
+        hidden.isAcceptableOrUnknown(data['hidden']!, _hiddenMeta),
+      );
+    }
+    if (data.containsKey('rules_json')) {
+      context.handle(
+        _rulesJsonMeta,
+        rulesJson.isAcceptableOrUnknown(data['rules_json']!, _rulesJsonMeta),
+      );
+    }
     return context;
   }
 
@@ -2854,6 +2896,14 @@ class $CategoriesTable extends Categories
         DriftSqlType.int,
         data['${effectivePrefix}sort_index'],
       )!,
+      hidden: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}hidden'],
+      )!,
+      rulesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}rules_json'],
+      ),
     );
   }
 
@@ -2867,10 +2917,16 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
   final int id;
   final String name;
   final int sortIndex;
+  final bool hidden;
+
+  /// null 为手动分类；非空为版本化的本地筛选规则。
+  final String? rulesJson;
   const CategoryRow({
     required this.id,
     required this.name,
     required this.sortIndex,
+    required this.hidden,
+    this.rulesJson,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2878,6 +2934,10 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
     map['sort_index'] = Variable<int>(sortIndex);
+    map['hidden'] = Variable<bool>(hidden);
+    if (!nullToAbsent || rulesJson != null) {
+      map['rules_json'] = Variable<String>(rulesJson);
+    }
     return map;
   }
 
@@ -2886,6 +2946,10 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
       id: Value(id),
       name: Value(name),
       sortIndex: Value(sortIndex),
+      hidden: Value(hidden),
+      rulesJson: rulesJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rulesJson),
     );
   }
 
@@ -2898,6 +2962,8 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       sortIndex: serializer.fromJson<int>(json['sortIndex']),
+      hidden: serializer.fromJson<bool>(json['hidden']),
+      rulesJson: serializer.fromJson<String?>(json['rulesJson']),
     );
   }
   @override
@@ -2907,19 +2973,31 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
       'sortIndex': serializer.toJson<int>(sortIndex),
+      'hidden': serializer.toJson<bool>(hidden),
+      'rulesJson': serializer.toJson<String?>(rulesJson),
     };
   }
 
-  CategoryRow copyWith({int? id, String? name, int? sortIndex}) => CategoryRow(
+  CategoryRow copyWith({
+    int? id,
+    String? name,
+    int? sortIndex,
+    bool? hidden,
+    Value<String?> rulesJson = const Value.absent(),
+  }) => CategoryRow(
     id: id ?? this.id,
     name: name ?? this.name,
     sortIndex: sortIndex ?? this.sortIndex,
+    hidden: hidden ?? this.hidden,
+    rulesJson: rulesJson.present ? rulesJson.value : this.rulesJson,
   );
   CategoryRow copyWithCompanion(CategoriesCompanion data) {
     return CategoryRow(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       sortIndex: data.sortIndex.present ? data.sortIndex.value : this.sortIndex,
+      hidden: data.hidden.present ? data.hidden.value : this.hidden,
+      rulesJson: data.rulesJson.present ? data.rulesJson.value : this.rulesJson,
     );
   }
 
@@ -2928,45 +3006,59 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
     return (StringBuffer('CategoryRow(')
           ..write('id: $id, ')
           ..write('name: $name, ')
-          ..write('sortIndex: $sortIndex')
+          ..write('sortIndex: $sortIndex, ')
+          ..write('hidden: $hidden, ')
+          ..write('rulesJson: $rulesJson')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, sortIndex);
+  int get hashCode => Object.hash(id, name, sortIndex, hidden, rulesJson);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is CategoryRow &&
           other.id == this.id &&
           other.name == this.name &&
-          other.sortIndex == this.sortIndex);
+          other.sortIndex == this.sortIndex &&
+          other.hidden == this.hidden &&
+          other.rulesJson == this.rulesJson);
 }
 
 class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
   final Value<int> id;
   final Value<String> name;
   final Value<int> sortIndex;
+  final Value<bool> hidden;
+  final Value<String?> rulesJson;
   const CategoriesCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.sortIndex = const Value.absent(),
+    this.hidden = const Value.absent(),
+    this.rulesJson = const Value.absent(),
   });
   CategoriesCompanion.insert({
     this.id = const Value.absent(),
     required String name,
     this.sortIndex = const Value.absent(),
+    this.hidden = const Value.absent(),
+    this.rulesJson = const Value.absent(),
   }) : name = Value(name);
   static Insertable<CategoryRow> custom({
     Expression<int>? id,
     Expression<String>? name,
     Expression<int>? sortIndex,
+    Expression<bool>? hidden,
+    Expression<String>? rulesJson,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (sortIndex != null) 'sort_index': sortIndex,
+      if (hidden != null) 'hidden': hidden,
+      if (rulesJson != null) 'rules_json': rulesJson,
     });
   }
 
@@ -2974,11 +3066,15 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
     Value<int>? id,
     Value<String>? name,
     Value<int>? sortIndex,
+    Value<bool>? hidden,
+    Value<String?>? rulesJson,
   }) {
     return CategoriesCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
       sortIndex: sortIndex ?? this.sortIndex,
+      hidden: hidden ?? this.hidden,
+      rulesJson: rulesJson ?? this.rulesJson,
     );
   }
 
@@ -2994,6 +3090,12 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
     if (sortIndex.present) {
       map['sort_index'] = Variable<int>(sortIndex.value);
     }
+    if (hidden.present) {
+      map['hidden'] = Variable<bool>(hidden.value);
+    }
+    if (rulesJson.present) {
+      map['rules_json'] = Variable<String>(rulesJson.value);
+    }
     return map;
   }
 
@@ -3002,7 +3104,9 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
     return (StringBuffer('CategoriesCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
-          ..write('sortIndex: $sortIndex')
+          ..write('sortIndex: $sortIndex, ')
+          ..write('hidden: $hidden, ')
+          ..write('rulesJson: $rulesJson')
           ..write(')'))
         .toString();
   }
@@ -4883,6 +4987,2718 @@ class TrackBindsCompanion extends UpdateCompanion<TrackBindRow> {
   }
 }
 
+class $BackupImportJournalsTable extends BackupImportJournals
+    with TableInfo<$BackupImportJournalsTable, BackupImportJournal> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BackupImportJournalsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _previousValuesJsonMeta =
+      const VerificationMeta('previousValuesJson');
+  @override
+  late final GeneratedColumn<String> previousValuesJson =
+      GeneratedColumn<String>(
+        'previous_values_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _missingKeysJsonMeta = const VerificationMeta(
+    'missingKeysJson',
+  );
+  @override
+  late final GeneratedColumn<String> missingKeysJson = GeneratedColumn<String>(
+    'missing_keys_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    previousValuesJson,
+    missingKeysJson,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'backup_import_journals';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<BackupImportJournal> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('previous_values_json')) {
+      context.handle(
+        _previousValuesJsonMeta,
+        previousValuesJson.isAcceptableOrUnknown(
+          data['previous_values_json']!,
+          _previousValuesJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_previousValuesJsonMeta);
+    }
+    if (data.containsKey('missing_keys_json')) {
+      context.handle(
+        _missingKeysJsonMeta,
+        missingKeysJson.isAcceptableOrUnknown(
+          data['missing_keys_json']!,
+          _missingKeysJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_missingKeysJsonMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  BackupImportJournal map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BackupImportJournal(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      previousValuesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}previous_values_json'],
+      )!,
+      missingKeysJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}missing_keys_json'],
+      )!,
+    );
+  }
+
+  @override
+  $BackupImportJournalsTable createAlias(String alias) {
+    return $BackupImportJournalsTable(attachedDatabase, alias);
+  }
+}
+
+class BackupImportJournal extends DataClass
+    implements Insertable<BackupImportJournal> {
+  final int id;
+  final String previousValuesJson;
+  final String missingKeysJson;
+  const BackupImportJournal({
+    required this.id,
+    required this.previousValuesJson,
+    required this.missingKeysJson,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['previous_values_json'] = Variable<String>(previousValuesJson);
+    map['missing_keys_json'] = Variable<String>(missingKeysJson);
+    return map;
+  }
+
+  BackupImportJournalsCompanion toCompanion(bool nullToAbsent) {
+    return BackupImportJournalsCompanion(
+      id: Value(id),
+      previousValuesJson: Value(previousValuesJson),
+      missingKeysJson: Value(missingKeysJson),
+    );
+  }
+
+  factory BackupImportJournal.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BackupImportJournal(
+      id: serializer.fromJson<int>(json['id']),
+      previousValuesJson: serializer.fromJson<String>(
+        json['previousValuesJson'],
+      ),
+      missingKeysJson: serializer.fromJson<String>(json['missingKeysJson']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'previousValuesJson': serializer.toJson<String>(previousValuesJson),
+      'missingKeysJson': serializer.toJson<String>(missingKeysJson),
+    };
+  }
+
+  BackupImportJournal copyWith({
+    int? id,
+    String? previousValuesJson,
+    String? missingKeysJson,
+  }) => BackupImportJournal(
+    id: id ?? this.id,
+    previousValuesJson: previousValuesJson ?? this.previousValuesJson,
+    missingKeysJson: missingKeysJson ?? this.missingKeysJson,
+  );
+  BackupImportJournal copyWithCompanion(BackupImportJournalsCompanion data) {
+    return BackupImportJournal(
+      id: data.id.present ? data.id.value : this.id,
+      previousValuesJson: data.previousValuesJson.present
+          ? data.previousValuesJson.value
+          : this.previousValuesJson,
+      missingKeysJson: data.missingKeysJson.present
+          ? data.missingKeysJson.value
+          : this.missingKeysJson,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BackupImportJournal(')
+          ..write('id: $id, ')
+          ..write('previousValuesJson: $previousValuesJson, ')
+          ..write('missingKeysJson: $missingKeysJson')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, previousValuesJson, missingKeysJson);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BackupImportJournal &&
+          other.id == this.id &&
+          other.previousValuesJson == this.previousValuesJson &&
+          other.missingKeysJson == this.missingKeysJson);
+}
+
+class BackupImportJournalsCompanion
+    extends UpdateCompanion<BackupImportJournal> {
+  final Value<int> id;
+  final Value<String> previousValuesJson;
+  final Value<String> missingKeysJson;
+  const BackupImportJournalsCompanion({
+    this.id = const Value.absent(),
+    this.previousValuesJson = const Value.absent(),
+    this.missingKeysJson = const Value.absent(),
+  });
+  BackupImportJournalsCompanion.insert({
+    this.id = const Value.absent(),
+    required String previousValuesJson,
+    required String missingKeysJson,
+  }) : previousValuesJson = Value(previousValuesJson),
+       missingKeysJson = Value(missingKeysJson);
+  static Insertable<BackupImportJournal> custom({
+    Expression<int>? id,
+    Expression<String>? previousValuesJson,
+    Expression<String>? missingKeysJson,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (previousValuesJson != null)
+        'previous_values_json': previousValuesJson,
+      if (missingKeysJson != null) 'missing_keys_json': missingKeysJson,
+    });
+  }
+
+  BackupImportJournalsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? previousValuesJson,
+    Value<String>? missingKeysJson,
+  }) {
+    return BackupImportJournalsCompanion(
+      id: id ?? this.id,
+      previousValuesJson: previousValuesJson ?? this.previousValuesJson,
+      missingKeysJson: missingKeysJson ?? this.missingKeysJson,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (previousValuesJson.present) {
+      map['previous_values_json'] = Variable<String>(previousValuesJson.value);
+    }
+    if (missingKeysJson.present) {
+      map['missing_keys_json'] = Variable<String>(missingKeysJson.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BackupImportJournalsCompanion(')
+          ..write('id: $id, ')
+          ..write('previousValuesJson: $previousValuesJson, ')
+          ..write('missingKeysJson: $missingKeysJson')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AnimeSourceLinksTable extends AnimeSourceLinks
+    with TableInfo<$AnimeSourceLinksTable, AnimeSourceLinkRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AnimeSourceLinksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _subjectSourceIdMeta = const VerificationMeta(
+    'subjectSourceId',
+  );
+  @override
+  late final GeneratedColumn<String> subjectSourceId = GeneratedColumn<String>(
+    'subject_source_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _subjectRemoteIdMeta = const VerificationMeta(
+    'subjectRemoteId',
+  );
+  @override
+  late final GeneratedColumn<String> subjectRemoteId = GeneratedColumn<String>(
+    'subject_remote_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceIdMeta = const VerificationMeta(
+    'sourceId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceId = GeneratedColumn<String>(
+    'source_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _remoteIdMeta = const VerificationMeta(
+    'remoteId',
+  );
+  @override
+  late final GeneratedColumn<String> remoteId = GeneratedColumn<String>(
+    'remote_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _aliasMeta = const VerificationMeta('alias');
+  @override
+  late final GeneratedColumn<String> alias = GeneratedColumn<String>(
+    'alias',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _lastChapterIdMeta = const VerificationMeta(
+    'lastChapterId',
+  );
+  @override
+  late final GeneratedColumn<String> lastChapterId = GeneratedColumn<String>(
+    'last_chapter_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _selectedAtMeta = const VerificationMeta(
+    'selectedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> selectedAt = GeneratedColumn<DateTime>(
+    'selected_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    subjectSourceId,
+    subjectRemoteId,
+    sourceId,
+    remoteId,
+    alias,
+    lastChapterId,
+    selectedAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'anime_source_links';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AnimeSourceLinkRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('subject_source_id')) {
+      context.handle(
+        _subjectSourceIdMeta,
+        subjectSourceId.isAcceptableOrUnknown(
+          data['subject_source_id']!,
+          _subjectSourceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_subjectSourceIdMeta);
+    }
+    if (data.containsKey('subject_remote_id')) {
+      context.handle(
+        _subjectRemoteIdMeta,
+        subjectRemoteId.isAcceptableOrUnknown(
+          data['subject_remote_id']!,
+          _subjectRemoteIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_subjectRemoteIdMeta);
+    }
+    if (data.containsKey('source_id')) {
+      context.handle(
+        _sourceIdMeta,
+        sourceId.isAcceptableOrUnknown(data['source_id']!, _sourceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceIdMeta);
+    }
+    if (data.containsKey('remote_id')) {
+      context.handle(
+        _remoteIdMeta,
+        remoteId.isAcceptableOrUnknown(data['remote_id']!, _remoteIdMeta),
+      );
+    }
+    if (data.containsKey('alias')) {
+      context.handle(
+        _aliasMeta,
+        alias.isAcceptableOrUnknown(data['alias']!, _aliasMeta),
+      );
+    }
+    if (data.containsKey('last_chapter_id')) {
+      context.handle(
+        _lastChapterIdMeta,
+        lastChapterId.isAcceptableOrUnknown(
+          data['last_chapter_id']!,
+          _lastChapterIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('selected_at')) {
+      context.handle(
+        _selectedAtMeta,
+        selectedAt.isAcceptableOrUnknown(data['selected_at']!, _selectedAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {
+    subjectSourceId,
+    subjectRemoteId,
+    sourceId,
+  };
+  @override
+  AnimeSourceLinkRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AnimeSourceLinkRow(
+      subjectSourceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}subject_source_id'],
+      )!,
+      subjectRemoteId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}subject_remote_id'],
+      )!,
+      sourceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_id'],
+      )!,
+      remoteId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_id'],
+      ),
+      alias: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}alias'],
+      )!,
+      lastChapterId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_chapter_id'],
+      ),
+      selectedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}selected_at'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AnimeSourceLinksTable createAlias(String alias) {
+    return $AnimeSourceLinksTable(attachedDatabase, alias);
+  }
+}
+
+class AnimeSourceLinkRow extends DataClass
+    implements Insertable<AnimeSourceLinkRow> {
+  final String subjectSourceId;
+  final String subjectRemoteId;
+  final String sourceId;
+  final String? remoteId;
+  final String alias;
+  final String? lastChapterId;
+  final DateTime? selectedAt;
+  final DateTime updatedAt;
+  const AnimeSourceLinkRow({
+    required this.subjectSourceId,
+    required this.subjectRemoteId,
+    required this.sourceId,
+    this.remoteId,
+    required this.alias,
+    this.lastChapterId,
+    this.selectedAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['subject_source_id'] = Variable<String>(subjectSourceId);
+    map['subject_remote_id'] = Variable<String>(subjectRemoteId);
+    map['source_id'] = Variable<String>(sourceId);
+    if (!nullToAbsent || remoteId != null) {
+      map['remote_id'] = Variable<String>(remoteId);
+    }
+    map['alias'] = Variable<String>(alias);
+    if (!nullToAbsent || lastChapterId != null) {
+      map['last_chapter_id'] = Variable<String>(lastChapterId);
+    }
+    if (!nullToAbsent || selectedAt != null) {
+      map['selected_at'] = Variable<DateTime>(selectedAt);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  AnimeSourceLinksCompanion toCompanion(bool nullToAbsent) {
+    return AnimeSourceLinksCompanion(
+      subjectSourceId: Value(subjectSourceId),
+      subjectRemoteId: Value(subjectRemoteId),
+      sourceId: Value(sourceId),
+      remoteId: remoteId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(remoteId),
+      alias: Value(alias),
+      lastChapterId: lastChapterId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastChapterId),
+      selectedAt: selectedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(selectedAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory AnimeSourceLinkRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AnimeSourceLinkRow(
+      subjectSourceId: serializer.fromJson<String>(json['subjectSourceId']),
+      subjectRemoteId: serializer.fromJson<String>(json['subjectRemoteId']),
+      sourceId: serializer.fromJson<String>(json['sourceId']),
+      remoteId: serializer.fromJson<String?>(json['remoteId']),
+      alias: serializer.fromJson<String>(json['alias']),
+      lastChapterId: serializer.fromJson<String?>(json['lastChapterId']),
+      selectedAt: serializer.fromJson<DateTime?>(json['selectedAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'subjectSourceId': serializer.toJson<String>(subjectSourceId),
+      'subjectRemoteId': serializer.toJson<String>(subjectRemoteId),
+      'sourceId': serializer.toJson<String>(sourceId),
+      'remoteId': serializer.toJson<String?>(remoteId),
+      'alias': serializer.toJson<String>(alias),
+      'lastChapterId': serializer.toJson<String?>(lastChapterId),
+      'selectedAt': serializer.toJson<DateTime?>(selectedAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  AnimeSourceLinkRow copyWith({
+    String? subjectSourceId,
+    String? subjectRemoteId,
+    String? sourceId,
+    Value<String?> remoteId = const Value.absent(),
+    String? alias,
+    Value<String?> lastChapterId = const Value.absent(),
+    Value<DateTime?> selectedAt = const Value.absent(),
+    DateTime? updatedAt,
+  }) => AnimeSourceLinkRow(
+    subjectSourceId: subjectSourceId ?? this.subjectSourceId,
+    subjectRemoteId: subjectRemoteId ?? this.subjectRemoteId,
+    sourceId: sourceId ?? this.sourceId,
+    remoteId: remoteId.present ? remoteId.value : this.remoteId,
+    alias: alias ?? this.alias,
+    lastChapterId: lastChapterId.present
+        ? lastChapterId.value
+        : this.lastChapterId,
+    selectedAt: selectedAt.present ? selectedAt.value : this.selectedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  AnimeSourceLinkRow copyWithCompanion(AnimeSourceLinksCompanion data) {
+    return AnimeSourceLinkRow(
+      subjectSourceId: data.subjectSourceId.present
+          ? data.subjectSourceId.value
+          : this.subjectSourceId,
+      subjectRemoteId: data.subjectRemoteId.present
+          ? data.subjectRemoteId.value
+          : this.subjectRemoteId,
+      sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
+      remoteId: data.remoteId.present ? data.remoteId.value : this.remoteId,
+      alias: data.alias.present ? data.alias.value : this.alias,
+      lastChapterId: data.lastChapterId.present
+          ? data.lastChapterId.value
+          : this.lastChapterId,
+      selectedAt: data.selectedAt.present
+          ? data.selectedAt.value
+          : this.selectedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AnimeSourceLinkRow(')
+          ..write('subjectSourceId: $subjectSourceId, ')
+          ..write('subjectRemoteId: $subjectRemoteId, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('remoteId: $remoteId, ')
+          ..write('alias: $alias, ')
+          ..write('lastChapterId: $lastChapterId, ')
+          ..write('selectedAt: $selectedAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    subjectSourceId,
+    subjectRemoteId,
+    sourceId,
+    remoteId,
+    alias,
+    lastChapterId,
+    selectedAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AnimeSourceLinkRow &&
+          other.subjectSourceId == this.subjectSourceId &&
+          other.subjectRemoteId == this.subjectRemoteId &&
+          other.sourceId == this.sourceId &&
+          other.remoteId == this.remoteId &&
+          other.alias == this.alias &&
+          other.lastChapterId == this.lastChapterId &&
+          other.selectedAt == this.selectedAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class AnimeSourceLinksCompanion extends UpdateCompanion<AnimeSourceLinkRow> {
+  final Value<String> subjectSourceId;
+  final Value<String> subjectRemoteId;
+  final Value<String> sourceId;
+  final Value<String?> remoteId;
+  final Value<String> alias;
+  final Value<String?> lastChapterId;
+  final Value<DateTime?> selectedAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const AnimeSourceLinksCompanion({
+    this.subjectSourceId = const Value.absent(),
+    this.subjectRemoteId = const Value.absent(),
+    this.sourceId = const Value.absent(),
+    this.remoteId = const Value.absent(),
+    this.alias = const Value.absent(),
+    this.lastChapterId = const Value.absent(),
+    this.selectedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AnimeSourceLinksCompanion.insert({
+    required String subjectSourceId,
+    required String subjectRemoteId,
+    required String sourceId,
+    this.remoteId = const Value.absent(),
+    this.alias = const Value.absent(),
+    this.lastChapterId = const Value.absent(),
+    this.selectedAt = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : subjectSourceId = Value(subjectSourceId),
+       subjectRemoteId = Value(subjectRemoteId),
+       sourceId = Value(sourceId),
+       updatedAt = Value(updatedAt);
+  static Insertable<AnimeSourceLinkRow> custom({
+    Expression<String>? subjectSourceId,
+    Expression<String>? subjectRemoteId,
+    Expression<String>? sourceId,
+    Expression<String>? remoteId,
+    Expression<String>? alias,
+    Expression<String>? lastChapterId,
+    Expression<DateTime>? selectedAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (subjectSourceId != null) 'subject_source_id': subjectSourceId,
+      if (subjectRemoteId != null) 'subject_remote_id': subjectRemoteId,
+      if (sourceId != null) 'source_id': sourceId,
+      if (remoteId != null) 'remote_id': remoteId,
+      if (alias != null) 'alias': alias,
+      if (lastChapterId != null) 'last_chapter_id': lastChapterId,
+      if (selectedAt != null) 'selected_at': selectedAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AnimeSourceLinksCompanion copyWith({
+    Value<String>? subjectSourceId,
+    Value<String>? subjectRemoteId,
+    Value<String>? sourceId,
+    Value<String?>? remoteId,
+    Value<String>? alias,
+    Value<String?>? lastChapterId,
+    Value<DateTime?>? selectedAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return AnimeSourceLinksCompanion(
+      subjectSourceId: subjectSourceId ?? this.subjectSourceId,
+      subjectRemoteId: subjectRemoteId ?? this.subjectRemoteId,
+      sourceId: sourceId ?? this.sourceId,
+      remoteId: remoteId ?? this.remoteId,
+      alias: alias ?? this.alias,
+      lastChapterId: lastChapterId ?? this.lastChapterId,
+      selectedAt: selectedAt ?? this.selectedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (subjectSourceId.present) {
+      map['subject_source_id'] = Variable<String>(subjectSourceId.value);
+    }
+    if (subjectRemoteId.present) {
+      map['subject_remote_id'] = Variable<String>(subjectRemoteId.value);
+    }
+    if (sourceId.present) {
+      map['source_id'] = Variable<String>(sourceId.value);
+    }
+    if (remoteId.present) {
+      map['remote_id'] = Variable<String>(remoteId.value);
+    }
+    if (alias.present) {
+      map['alias'] = Variable<String>(alias.value);
+    }
+    if (lastChapterId.present) {
+      map['last_chapter_id'] = Variable<String>(lastChapterId.value);
+    }
+    if (selectedAt.present) {
+      map['selected_at'] = Variable<DateTime>(selectedAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AnimeSourceLinksCompanion(')
+          ..write('subjectSourceId: $subjectSourceId, ')
+          ..write('subjectRemoteId: $subjectRemoteId, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('remoteId: $remoteId, ')
+          ..write('alias: $alias, ')
+          ..write('lastChapterId: $lastChapterId, ')
+          ..write('selectedAt: $selectedAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MangaFeedsTable extends MangaFeeds
+    with TableInfo<$MangaFeedsTable, MangaFeedRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MangaFeedsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceIdMeta = const VerificationMeta(
+    'sourceId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceId = GeneratedColumn<String>(
+    'source_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _feedIdMeta = const VerificationMeta('feedId');
+  @override
+  late final GeneratedColumn<String> feedId = GeneratedColumn<String>(
+    'feed_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('popular'),
+  );
+  static const VerificationMeta _queryMeta = const VerificationMeta('query');
+  @override
+  late final GeneratedColumn<String> query = GeneratedColumn<String>(
+    'query',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _filtersJsonMeta = const VerificationMeta(
+    'filtersJson',
+  );
+  @override
+  late final GeneratedColumn<String> filtersJson = GeneratedColumn<String>(
+    'filters_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _hiddenMeta = const VerificationMeta('hidden');
+  @override
+  late final GeneratedColumn<bool> hidden = GeneratedColumn<bool>(
+    'hidden',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("hidden" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<int> position = GeneratedColumn<int>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sourceId,
+    name,
+    kind,
+    feedId,
+    query,
+    filtersJson,
+    hidden,
+    position,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'manga_feeds';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MangaFeedRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('source_id')) {
+      context.handle(
+        _sourceIdMeta,
+        sourceId.isAcceptableOrUnknown(data['source_id']!, _sourceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('feed_id')) {
+      context.handle(
+        _feedIdMeta,
+        feedId.isAcceptableOrUnknown(data['feed_id']!, _feedIdMeta),
+      );
+    }
+    if (data.containsKey('query')) {
+      context.handle(
+        _queryMeta,
+        query.isAcceptableOrUnknown(data['query']!, _queryMeta),
+      );
+    }
+    if (data.containsKey('filters_json')) {
+      context.handle(
+        _filtersJsonMeta,
+        filtersJson.isAcceptableOrUnknown(
+          data['filters_json']!,
+          _filtersJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('hidden')) {
+      context.handle(
+        _hiddenMeta,
+        hidden.isAcceptableOrUnknown(data['hidden']!, _hiddenMeta),
+      );
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  MangaFeedRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MangaFeedRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      sourceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      feedId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}feed_id'],
+      )!,
+      query: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}query'],
+      )!,
+      filtersJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}filters_json'],
+      )!,
+      hidden: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}hidden'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MangaFeedsTable createAlias(String alias) {
+    return $MangaFeedsTable(attachedDatabase, alias);
+  }
+}
+
+class MangaFeedRow extends DataClass implements Insertable<MangaFeedRow> {
+  final String id;
+  final String sourceId;
+  final String name;
+  final String kind;
+  final String feedId;
+  final String query;
+  final String filtersJson;
+  final bool hidden;
+  final int position;
+  final DateTime updatedAt;
+  const MangaFeedRow({
+    required this.id,
+    required this.sourceId,
+    required this.name,
+    required this.kind,
+    required this.feedId,
+    required this.query,
+    required this.filtersJson,
+    required this.hidden,
+    required this.position,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['source_id'] = Variable<String>(sourceId);
+    map['name'] = Variable<String>(name);
+    map['kind'] = Variable<String>(kind);
+    map['feed_id'] = Variable<String>(feedId);
+    map['query'] = Variable<String>(query);
+    map['filters_json'] = Variable<String>(filtersJson);
+    map['hidden'] = Variable<bool>(hidden);
+    map['position'] = Variable<int>(position);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  MangaFeedsCompanion toCompanion(bool nullToAbsent) {
+    return MangaFeedsCompanion(
+      id: Value(id),
+      sourceId: Value(sourceId),
+      name: Value(name),
+      kind: Value(kind),
+      feedId: Value(feedId),
+      query: Value(query),
+      filtersJson: Value(filtersJson),
+      hidden: Value(hidden),
+      position: Value(position),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory MangaFeedRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MangaFeedRow(
+      id: serializer.fromJson<String>(json['id']),
+      sourceId: serializer.fromJson<String>(json['sourceId']),
+      name: serializer.fromJson<String>(json['name']),
+      kind: serializer.fromJson<String>(json['kind']),
+      feedId: serializer.fromJson<String>(json['feedId']),
+      query: serializer.fromJson<String>(json['query']),
+      filtersJson: serializer.fromJson<String>(json['filtersJson']),
+      hidden: serializer.fromJson<bool>(json['hidden']),
+      position: serializer.fromJson<int>(json['position']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'sourceId': serializer.toJson<String>(sourceId),
+      'name': serializer.toJson<String>(name),
+      'kind': serializer.toJson<String>(kind),
+      'feedId': serializer.toJson<String>(feedId),
+      'query': serializer.toJson<String>(query),
+      'filtersJson': serializer.toJson<String>(filtersJson),
+      'hidden': serializer.toJson<bool>(hidden),
+      'position': serializer.toJson<int>(position),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  MangaFeedRow copyWith({
+    String? id,
+    String? sourceId,
+    String? name,
+    String? kind,
+    String? feedId,
+    String? query,
+    String? filtersJson,
+    bool? hidden,
+    int? position,
+    DateTime? updatedAt,
+  }) => MangaFeedRow(
+    id: id ?? this.id,
+    sourceId: sourceId ?? this.sourceId,
+    name: name ?? this.name,
+    kind: kind ?? this.kind,
+    feedId: feedId ?? this.feedId,
+    query: query ?? this.query,
+    filtersJson: filtersJson ?? this.filtersJson,
+    hidden: hidden ?? this.hidden,
+    position: position ?? this.position,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  MangaFeedRow copyWithCompanion(MangaFeedsCompanion data) {
+    return MangaFeedRow(
+      id: data.id.present ? data.id.value : this.id,
+      sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
+      name: data.name.present ? data.name.value : this.name,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      feedId: data.feedId.present ? data.feedId.value : this.feedId,
+      query: data.query.present ? data.query.value : this.query,
+      filtersJson: data.filtersJson.present
+          ? data.filtersJson.value
+          : this.filtersJson,
+      hidden: data.hidden.present ? data.hidden.value : this.hidden,
+      position: data.position.present ? data.position.value : this.position,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MangaFeedRow(')
+          ..write('id: $id, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('name: $name, ')
+          ..write('kind: $kind, ')
+          ..write('feedId: $feedId, ')
+          ..write('query: $query, ')
+          ..write('filtersJson: $filtersJson, ')
+          ..write('hidden: $hidden, ')
+          ..write('position: $position, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sourceId,
+    name,
+    kind,
+    feedId,
+    query,
+    filtersJson,
+    hidden,
+    position,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MangaFeedRow &&
+          other.id == this.id &&
+          other.sourceId == this.sourceId &&
+          other.name == this.name &&
+          other.kind == this.kind &&
+          other.feedId == this.feedId &&
+          other.query == this.query &&
+          other.filtersJson == this.filtersJson &&
+          other.hidden == this.hidden &&
+          other.position == this.position &&
+          other.updatedAt == this.updatedAt);
+}
+
+class MangaFeedsCompanion extends UpdateCompanion<MangaFeedRow> {
+  final Value<String> id;
+  final Value<String> sourceId;
+  final Value<String> name;
+  final Value<String> kind;
+  final Value<String> feedId;
+  final Value<String> query;
+  final Value<String> filtersJson;
+  final Value<bool> hidden;
+  final Value<int> position;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const MangaFeedsCompanion({
+    this.id = const Value.absent(),
+    this.sourceId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.feedId = const Value.absent(),
+    this.query = const Value.absent(),
+    this.filtersJson = const Value.absent(),
+    this.hidden = const Value.absent(),
+    this.position = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MangaFeedsCompanion.insert({
+    required String id,
+    required String sourceId,
+    required String name,
+    required String kind,
+    this.feedId = const Value.absent(),
+    this.query = const Value.absent(),
+    this.filtersJson = const Value.absent(),
+    this.hidden = const Value.absent(),
+    required int position,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       sourceId = Value(sourceId),
+       name = Value(name),
+       kind = Value(kind),
+       position = Value(position),
+       updatedAt = Value(updatedAt);
+  static Insertable<MangaFeedRow> custom({
+    Expression<String>? id,
+    Expression<String>? sourceId,
+    Expression<String>? name,
+    Expression<String>? kind,
+    Expression<String>? feedId,
+    Expression<String>? query,
+    Expression<String>? filtersJson,
+    Expression<bool>? hidden,
+    Expression<int>? position,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sourceId != null) 'source_id': sourceId,
+      if (name != null) 'name': name,
+      if (kind != null) 'kind': kind,
+      if (feedId != null) 'feed_id': feedId,
+      if (query != null) 'query': query,
+      if (filtersJson != null) 'filters_json': filtersJson,
+      if (hidden != null) 'hidden': hidden,
+      if (position != null) 'position': position,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MangaFeedsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? sourceId,
+    Value<String>? name,
+    Value<String>? kind,
+    Value<String>? feedId,
+    Value<String>? query,
+    Value<String>? filtersJson,
+    Value<bool>? hidden,
+    Value<int>? position,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return MangaFeedsCompanion(
+      id: id ?? this.id,
+      sourceId: sourceId ?? this.sourceId,
+      name: name ?? this.name,
+      kind: kind ?? this.kind,
+      feedId: feedId ?? this.feedId,
+      query: query ?? this.query,
+      filtersJson: filtersJson ?? this.filtersJson,
+      hidden: hidden ?? this.hidden,
+      position: position ?? this.position,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (sourceId.present) {
+      map['source_id'] = Variable<String>(sourceId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (feedId.present) {
+      map['feed_id'] = Variable<String>(feedId.value);
+    }
+    if (query.present) {
+      map['query'] = Variable<String>(query.value);
+    }
+    if (filtersJson.present) {
+      map['filters_json'] = Variable<String>(filtersJson.value);
+    }
+    if (hidden.present) {
+      map['hidden'] = Variable<bool>(hidden.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<int>(position.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MangaFeedsCompanion(')
+          ..write('id: $id, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('name: $name, ')
+          ..write('kind: $kind, ')
+          ..write('feedId: $feedId, ')
+          ..write('query: $query, ')
+          ..write('filtersJson: $filtersJson, ')
+          ..write('hidden: $hidden, ')
+          ..write('position: $position, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MangaUpdatesTable extends MangaUpdates
+    with TableInfo<$MangaUpdatesTable, MangaUpdateRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MangaUpdatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _sourceIdMeta = const VerificationMeta(
+    'sourceId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceId = GeneratedColumn<String>(
+    'source_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _remoteIdMeta = const VerificationMeta(
+    'remoteId',
+  );
+  @override
+  late final GeneratedColumn<String> remoteId = GeneratedColumn<String>(
+    'remote_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('queued'),
+  );
+  static const VerificationMeta _errorMeta = const VerificationMeta('error');
+  @override
+  late final GeneratedColumn<String> error = GeneratedColumn<String>(
+    'error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _addedMeta = const VerificationMeta('added');
+  @override
+  late final GeneratedColumn<int> added = GeneratedColumn<int>(
+    'added',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _generationMeta = const VerificationMeta(
+    'generation',
+  );
+  @override
+  late final GeneratedColumn<int> generation = GeneratedColumn<int>(
+    'generation',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _notifiedGenerationMeta =
+      const VerificationMeta('notifiedGeneration');
+  @override
+  late final GeneratedColumn<int> notifiedGeneration = GeneratedColumn<int>(
+    'notified_generation',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _checkedAtMeta = const VerificationMeta(
+    'checkedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> checkedAt = GeneratedColumn<DateTime>(
+    'checked_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _notifiedAtMeta = const VerificationMeta(
+    'notifiedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> notifiedAt = GeneratedColumn<DateTime>(
+    'notified_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    sourceId,
+    remoteId,
+    status,
+    error,
+    added,
+    generation,
+    notifiedGeneration,
+    checkedAt,
+    notifiedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'manga_updates';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MangaUpdateRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('source_id')) {
+      context.handle(
+        _sourceIdMeta,
+        sourceId.isAcceptableOrUnknown(data['source_id']!, _sourceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceIdMeta);
+    }
+    if (data.containsKey('remote_id')) {
+      context.handle(
+        _remoteIdMeta,
+        remoteId.isAcceptableOrUnknown(data['remote_id']!, _remoteIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_remoteIdMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('error')) {
+      context.handle(
+        _errorMeta,
+        error.isAcceptableOrUnknown(data['error']!, _errorMeta),
+      );
+    }
+    if (data.containsKey('added')) {
+      context.handle(
+        _addedMeta,
+        added.isAcceptableOrUnknown(data['added']!, _addedMeta),
+      );
+    }
+    if (data.containsKey('generation')) {
+      context.handle(
+        _generationMeta,
+        generation.isAcceptableOrUnknown(data['generation']!, _generationMeta),
+      );
+    }
+    if (data.containsKey('notified_generation')) {
+      context.handle(
+        _notifiedGenerationMeta,
+        notifiedGeneration.isAcceptableOrUnknown(
+          data['notified_generation']!,
+          _notifiedGenerationMeta,
+        ),
+      );
+    }
+    if (data.containsKey('checked_at')) {
+      context.handle(
+        _checkedAtMeta,
+        checkedAt.isAcceptableOrUnknown(data['checked_at']!, _checkedAtMeta),
+      );
+    }
+    if (data.containsKey('notified_at')) {
+      context.handle(
+        _notifiedAtMeta,
+        notifiedAt.isAcceptableOrUnknown(data['notified_at']!, _notifiedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {sourceId, remoteId};
+  @override
+  MangaUpdateRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MangaUpdateRow(
+      sourceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_id'],
+      )!,
+      remoteId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_id'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      error: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}error'],
+      ),
+      added: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}added'],
+      )!,
+      generation: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}generation'],
+      )!,
+      notifiedGeneration: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}notified_generation'],
+      )!,
+      checkedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}checked_at'],
+      ),
+      notifiedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}notified_at'],
+      ),
+    );
+  }
+
+  @override
+  $MangaUpdatesTable createAlias(String alias) {
+    return $MangaUpdatesTable(attachedDatabase, alias);
+  }
+}
+
+class MangaUpdateRow extends DataClass implements Insertable<MangaUpdateRow> {
+  final String sourceId;
+  final String remoteId;
+  final String status;
+  final String? error;
+  final int added;
+  final int generation;
+  final int notifiedGeneration;
+  final DateTime? checkedAt;
+  final DateTime? notifiedAt;
+  const MangaUpdateRow({
+    required this.sourceId,
+    required this.remoteId,
+    required this.status,
+    this.error,
+    required this.added,
+    required this.generation,
+    required this.notifiedGeneration,
+    this.checkedAt,
+    this.notifiedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['source_id'] = Variable<String>(sourceId);
+    map['remote_id'] = Variable<String>(remoteId);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || error != null) {
+      map['error'] = Variable<String>(error);
+    }
+    map['added'] = Variable<int>(added);
+    map['generation'] = Variable<int>(generation);
+    map['notified_generation'] = Variable<int>(notifiedGeneration);
+    if (!nullToAbsent || checkedAt != null) {
+      map['checked_at'] = Variable<DateTime>(checkedAt);
+    }
+    if (!nullToAbsent || notifiedAt != null) {
+      map['notified_at'] = Variable<DateTime>(notifiedAt);
+    }
+    return map;
+  }
+
+  MangaUpdatesCompanion toCompanion(bool nullToAbsent) {
+    return MangaUpdatesCompanion(
+      sourceId: Value(sourceId),
+      remoteId: Value(remoteId),
+      status: Value(status),
+      error: error == null && nullToAbsent
+          ? const Value.absent()
+          : Value(error),
+      added: Value(added),
+      generation: Value(generation),
+      notifiedGeneration: Value(notifiedGeneration),
+      checkedAt: checkedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(checkedAt),
+      notifiedAt: notifiedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notifiedAt),
+    );
+  }
+
+  factory MangaUpdateRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MangaUpdateRow(
+      sourceId: serializer.fromJson<String>(json['sourceId']),
+      remoteId: serializer.fromJson<String>(json['remoteId']),
+      status: serializer.fromJson<String>(json['status']),
+      error: serializer.fromJson<String?>(json['error']),
+      added: serializer.fromJson<int>(json['added']),
+      generation: serializer.fromJson<int>(json['generation']),
+      notifiedGeneration: serializer.fromJson<int>(json['notifiedGeneration']),
+      checkedAt: serializer.fromJson<DateTime?>(json['checkedAt']),
+      notifiedAt: serializer.fromJson<DateTime?>(json['notifiedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'sourceId': serializer.toJson<String>(sourceId),
+      'remoteId': serializer.toJson<String>(remoteId),
+      'status': serializer.toJson<String>(status),
+      'error': serializer.toJson<String?>(error),
+      'added': serializer.toJson<int>(added),
+      'generation': serializer.toJson<int>(generation),
+      'notifiedGeneration': serializer.toJson<int>(notifiedGeneration),
+      'checkedAt': serializer.toJson<DateTime?>(checkedAt),
+      'notifiedAt': serializer.toJson<DateTime?>(notifiedAt),
+    };
+  }
+
+  MangaUpdateRow copyWith({
+    String? sourceId,
+    String? remoteId,
+    String? status,
+    Value<String?> error = const Value.absent(),
+    int? added,
+    int? generation,
+    int? notifiedGeneration,
+    Value<DateTime?> checkedAt = const Value.absent(),
+    Value<DateTime?> notifiedAt = const Value.absent(),
+  }) => MangaUpdateRow(
+    sourceId: sourceId ?? this.sourceId,
+    remoteId: remoteId ?? this.remoteId,
+    status: status ?? this.status,
+    error: error.present ? error.value : this.error,
+    added: added ?? this.added,
+    generation: generation ?? this.generation,
+    notifiedGeneration: notifiedGeneration ?? this.notifiedGeneration,
+    checkedAt: checkedAt.present ? checkedAt.value : this.checkedAt,
+    notifiedAt: notifiedAt.present ? notifiedAt.value : this.notifiedAt,
+  );
+  MangaUpdateRow copyWithCompanion(MangaUpdatesCompanion data) {
+    return MangaUpdateRow(
+      sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
+      remoteId: data.remoteId.present ? data.remoteId.value : this.remoteId,
+      status: data.status.present ? data.status.value : this.status,
+      error: data.error.present ? data.error.value : this.error,
+      added: data.added.present ? data.added.value : this.added,
+      generation: data.generation.present
+          ? data.generation.value
+          : this.generation,
+      notifiedGeneration: data.notifiedGeneration.present
+          ? data.notifiedGeneration.value
+          : this.notifiedGeneration,
+      checkedAt: data.checkedAt.present ? data.checkedAt.value : this.checkedAt,
+      notifiedAt: data.notifiedAt.present
+          ? data.notifiedAt.value
+          : this.notifiedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MangaUpdateRow(')
+          ..write('sourceId: $sourceId, ')
+          ..write('remoteId: $remoteId, ')
+          ..write('status: $status, ')
+          ..write('error: $error, ')
+          ..write('added: $added, ')
+          ..write('generation: $generation, ')
+          ..write('notifiedGeneration: $notifiedGeneration, ')
+          ..write('checkedAt: $checkedAt, ')
+          ..write('notifiedAt: $notifiedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    sourceId,
+    remoteId,
+    status,
+    error,
+    added,
+    generation,
+    notifiedGeneration,
+    checkedAt,
+    notifiedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MangaUpdateRow &&
+          other.sourceId == this.sourceId &&
+          other.remoteId == this.remoteId &&
+          other.status == this.status &&
+          other.error == this.error &&
+          other.added == this.added &&
+          other.generation == this.generation &&
+          other.notifiedGeneration == this.notifiedGeneration &&
+          other.checkedAt == this.checkedAt &&
+          other.notifiedAt == this.notifiedAt);
+}
+
+class MangaUpdatesCompanion extends UpdateCompanion<MangaUpdateRow> {
+  final Value<String> sourceId;
+  final Value<String> remoteId;
+  final Value<String> status;
+  final Value<String?> error;
+  final Value<int> added;
+  final Value<int> generation;
+  final Value<int> notifiedGeneration;
+  final Value<DateTime?> checkedAt;
+  final Value<DateTime?> notifiedAt;
+  final Value<int> rowid;
+  const MangaUpdatesCompanion({
+    this.sourceId = const Value.absent(),
+    this.remoteId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.error = const Value.absent(),
+    this.added = const Value.absent(),
+    this.generation = const Value.absent(),
+    this.notifiedGeneration = const Value.absent(),
+    this.checkedAt = const Value.absent(),
+    this.notifiedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MangaUpdatesCompanion.insert({
+    required String sourceId,
+    required String remoteId,
+    this.status = const Value.absent(),
+    this.error = const Value.absent(),
+    this.added = const Value.absent(),
+    this.generation = const Value.absent(),
+    this.notifiedGeneration = const Value.absent(),
+    this.checkedAt = const Value.absent(),
+    this.notifiedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : sourceId = Value(sourceId),
+       remoteId = Value(remoteId);
+  static Insertable<MangaUpdateRow> custom({
+    Expression<String>? sourceId,
+    Expression<String>? remoteId,
+    Expression<String>? status,
+    Expression<String>? error,
+    Expression<int>? added,
+    Expression<int>? generation,
+    Expression<int>? notifiedGeneration,
+    Expression<DateTime>? checkedAt,
+    Expression<DateTime>? notifiedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (sourceId != null) 'source_id': sourceId,
+      if (remoteId != null) 'remote_id': remoteId,
+      if (status != null) 'status': status,
+      if (error != null) 'error': error,
+      if (added != null) 'added': added,
+      if (generation != null) 'generation': generation,
+      if (notifiedGeneration != null) 'notified_generation': notifiedGeneration,
+      if (checkedAt != null) 'checked_at': checkedAt,
+      if (notifiedAt != null) 'notified_at': notifiedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MangaUpdatesCompanion copyWith({
+    Value<String>? sourceId,
+    Value<String>? remoteId,
+    Value<String>? status,
+    Value<String?>? error,
+    Value<int>? added,
+    Value<int>? generation,
+    Value<int>? notifiedGeneration,
+    Value<DateTime?>? checkedAt,
+    Value<DateTime?>? notifiedAt,
+    Value<int>? rowid,
+  }) {
+    return MangaUpdatesCompanion(
+      sourceId: sourceId ?? this.sourceId,
+      remoteId: remoteId ?? this.remoteId,
+      status: status ?? this.status,
+      error: error ?? this.error,
+      added: added ?? this.added,
+      generation: generation ?? this.generation,
+      notifiedGeneration: notifiedGeneration ?? this.notifiedGeneration,
+      checkedAt: checkedAt ?? this.checkedAt,
+      notifiedAt: notifiedAt ?? this.notifiedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (sourceId.present) {
+      map['source_id'] = Variable<String>(sourceId.value);
+    }
+    if (remoteId.present) {
+      map['remote_id'] = Variable<String>(remoteId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (error.present) {
+      map['error'] = Variable<String>(error.value);
+    }
+    if (added.present) {
+      map['added'] = Variable<int>(added.value);
+    }
+    if (generation.present) {
+      map['generation'] = Variable<int>(generation.value);
+    }
+    if (notifiedGeneration.present) {
+      map['notified_generation'] = Variable<int>(notifiedGeneration.value);
+    }
+    if (checkedAt.present) {
+      map['checked_at'] = Variable<DateTime>(checkedAt.value);
+    }
+    if (notifiedAt.present) {
+      map['notified_at'] = Variable<DateTime>(notifiedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MangaUpdatesCompanion(')
+          ..write('sourceId: $sourceId, ')
+          ..write('remoteId: $remoteId, ')
+          ..write('status: $status, ')
+          ..write('error: $error, ')
+          ..write('added: $added, ')
+          ..write('generation: $generation, ')
+          ..write('notifiedGeneration: $notifiedGeneration, ')
+          ..write('checkedAt: $checkedAt, ')
+          ..write('notifiedAt: $notifiedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MigrationPlansTable extends MigrationPlans
+    with TableInfo<$MigrationPlansTable, MigrationPlanRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MigrationPlansTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _payloadMeta = const VerificationMeta(
+    'payload',
+  );
+  @override
+  late final GeneratedColumn<String> payload = GeneratedColumn<String>(
+    'payload',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('ready'),
+  );
+  static const VerificationMeta _errorMeta = const VerificationMeta('error');
+  @override
+  late final GeneratedColumn<String> error = GeneratedColumn<String>(
+    'error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, payload, status, error, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'migration_plans';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MigrationPlanRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('payload')) {
+      context.handle(
+        _payloadMeta,
+        payload.isAcceptableOrUnknown(data['payload']!, _payloadMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_payloadMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('error')) {
+      context.handle(
+        _errorMeta,
+        error.isAcceptableOrUnknown(data['error']!, _errorMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  MigrationPlanRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MigrationPlanRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      payload: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      error: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}error'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MigrationPlansTable createAlias(String alias) {
+    return $MigrationPlansTable(attachedDatabase, alias);
+  }
+}
+
+class MigrationPlanRow extends DataClass
+    implements Insertable<MigrationPlanRow> {
+  final String id;
+  final String payload;
+  final String status;
+  final String? error;
+  final DateTime createdAt;
+  const MigrationPlanRow({
+    required this.id,
+    required this.payload,
+    required this.status,
+    this.error,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['payload'] = Variable<String>(payload);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || error != null) {
+      map['error'] = Variable<String>(error);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  MigrationPlansCompanion toCompanion(bool nullToAbsent) {
+    return MigrationPlansCompanion(
+      id: Value(id),
+      payload: Value(payload),
+      status: Value(status),
+      error: error == null && nullToAbsent
+          ? const Value.absent()
+          : Value(error),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory MigrationPlanRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MigrationPlanRow(
+      id: serializer.fromJson<String>(json['id']),
+      payload: serializer.fromJson<String>(json['payload']),
+      status: serializer.fromJson<String>(json['status']),
+      error: serializer.fromJson<String?>(json['error']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'payload': serializer.toJson<String>(payload),
+      'status': serializer.toJson<String>(status),
+      'error': serializer.toJson<String?>(error),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  MigrationPlanRow copyWith({
+    String? id,
+    String? payload,
+    String? status,
+    Value<String?> error = const Value.absent(),
+    DateTime? createdAt,
+  }) => MigrationPlanRow(
+    id: id ?? this.id,
+    payload: payload ?? this.payload,
+    status: status ?? this.status,
+    error: error.present ? error.value : this.error,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  MigrationPlanRow copyWithCompanion(MigrationPlansCompanion data) {
+    return MigrationPlanRow(
+      id: data.id.present ? data.id.value : this.id,
+      payload: data.payload.present ? data.payload.value : this.payload,
+      status: data.status.present ? data.status.value : this.status,
+      error: data.error.present ? data.error.value : this.error,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MigrationPlanRow(')
+          ..write('id: $id, ')
+          ..write('payload: $payload, ')
+          ..write('status: $status, ')
+          ..write('error: $error, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, payload, status, error, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MigrationPlanRow &&
+          other.id == this.id &&
+          other.payload == this.payload &&
+          other.status == this.status &&
+          other.error == this.error &&
+          other.createdAt == this.createdAt);
+}
+
+class MigrationPlansCompanion extends UpdateCompanion<MigrationPlanRow> {
+  final Value<String> id;
+  final Value<String> payload;
+  final Value<String> status;
+  final Value<String?> error;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const MigrationPlansCompanion({
+    this.id = const Value.absent(),
+    this.payload = const Value.absent(),
+    this.status = const Value.absent(),
+    this.error = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MigrationPlansCompanion.insert({
+    required String id,
+    required String payload,
+    this.status = const Value.absent(),
+    this.error = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       payload = Value(payload),
+       createdAt = Value(createdAt);
+  static Insertable<MigrationPlanRow> custom({
+    Expression<String>? id,
+    Expression<String>? payload,
+    Expression<String>? status,
+    Expression<String>? error,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (payload != null) 'payload': payload,
+      if (status != null) 'status': status,
+      if (error != null) 'error': error,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MigrationPlansCompanion copyWith({
+    Value<String>? id,
+    Value<String>? payload,
+    Value<String>? status,
+    Value<String?>? error,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return MigrationPlansCompanion(
+      id: id ?? this.id,
+      payload: payload ?? this.payload,
+      status: status ?? this.status,
+      error: error ?? this.error,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (payload.present) {
+      map['payload'] = Variable<String>(payload.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (error.present) {
+      map['error'] = Variable<String>(error.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MigrationPlansCompanion(')
+          ..write('id: $id, ')
+          ..write('payload: $payload, ')
+          ..write('status: $status, ')
+          ..write('error: $error, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MergedMangaReferencesTable extends MergedMangaReferences
+    with TableInfo<$MergedMangaReferencesTable, MergedMangaReferenceRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MergedMangaReferencesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _sourceIdMeta = const VerificationMeta(
+    'sourceId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceId = GeneratedColumn<String>(
+    'source_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _remoteIdMeta = const VerificationMeta(
+    'remoteId',
+  );
+  @override
+  late final GeneratedColumn<String> remoteId = GeneratedColumn<String>(
+    'remote_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _membersJsonMeta = const VerificationMeta(
+    'membersJson',
+  );
+  @override
+  late final GeneratedColumn<String> membersJson = GeneratedColumn<String>(
+    'members_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _chapterGroupsJsonMeta = const VerificationMeta(
+    'chapterGroupsJson',
+  );
+  @override
+  late final GeneratedColumn<String> chapterGroupsJson =
+      GeneratedColumn<String>(
+        'chapter_groups_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    sourceId,
+    remoteId,
+    membersJson,
+    chapterGroupsJson,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'merged_manga_references';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MergedMangaReferenceRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('source_id')) {
+      context.handle(
+        _sourceIdMeta,
+        sourceId.isAcceptableOrUnknown(data['source_id']!, _sourceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceIdMeta);
+    }
+    if (data.containsKey('remote_id')) {
+      context.handle(
+        _remoteIdMeta,
+        remoteId.isAcceptableOrUnknown(data['remote_id']!, _remoteIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_remoteIdMeta);
+    }
+    if (data.containsKey('members_json')) {
+      context.handle(
+        _membersJsonMeta,
+        membersJson.isAcceptableOrUnknown(
+          data['members_json']!,
+          _membersJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_membersJsonMeta);
+    }
+    if (data.containsKey('chapter_groups_json')) {
+      context.handle(
+        _chapterGroupsJsonMeta,
+        chapterGroupsJson.isAcceptableOrUnknown(
+          data['chapter_groups_json']!,
+          _chapterGroupsJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_chapterGroupsJsonMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {sourceId, remoteId};
+  @override
+  MergedMangaReferenceRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MergedMangaReferenceRow(
+      sourceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_id'],
+      )!,
+      remoteId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_id'],
+      )!,
+      membersJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}members_json'],
+      )!,
+      chapterGroupsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}chapter_groups_json'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MergedMangaReferencesTable createAlias(String alias) {
+    return $MergedMangaReferencesTable(attachedDatabase, alias);
+  }
+}
+
+class MergedMangaReferenceRow extends DataClass
+    implements Insertable<MergedMangaReferenceRow> {
+  final String sourceId;
+  final String remoteId;
+  final String membersJson;
+  final String chapterGroupsJson;
+  final DateTime updatedAt;
+  const MergedMangaReferenceRow({
+    required this.sourceId,
+    required this.remoteId,
+    required this.membersJson,
+    required this.chapterGroupsJson,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['source_id'] = Variable<String>(sourceId);
+    map['remote_id'] = Variable<String>(remoteId);
+    map['members_json'] = Variable<String>(membersJson);
+    map['chapter_groups_json'] = Variable<String>(chapterGroupsJson);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  MergedMangaReferencesCompanion toCompanion(bool nullToAbsent) {
+    return MergedMangaReferencesCompanion(
+      sourceId: Value(sourceId),
+      remoteId: Value(remoteId),
+      membersJson: Value(membersJson),
+      chapterGroupsJson: Value(chapterGroupsJson),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory MergedMangaReferenceRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MergedMangaReferenceRow(
+      sourceId: serializer.fromJson<String>(json['sourceId']),
+      remoteId: serializer.fromJson<String>(json['remoteId']),
+      membersJson: serializer.fromJson<String>(json['membersJson']),
+      chapterGroupsJson: serializer.fromJson<String>(json['chapterGroupsJson']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'sourceId': serializer.toJson<String>(sourceId),
+      'remoteId': serializer.toJson<String>(remoteId),
+      'membersJson': serializer.toJson<String>(membersJson),
+      'chapterGroupsJson': serializer.toJson<String>(chapterGroupsJson),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  MergedMangaReferenceRow copyWith({
+    String? sourceId,
+    String? remoteId,
+    String? membersJson,
+    String? chapterGroupsJson,
+    DateTime? updatedAt,
+  }) => MergedMangaReferenceRow(
+    sourceId: sourceId ?? this.sourceId,
+    remoteId: remoteId ?? this.remoteId,
+    membersJson: membersJson ?? this.membersJson,
+    chapterGroupsJson: chapterGroupsJson ?? this.chapterGroupsJson,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  MergedMangaReferenceRow copyWithCompanion(
+    MergedMangaReferencesCompanion data,
+  ) {
+    return MergedMangaReferenceRow(
+      sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
+      remoteId: data.remoteId.present ? data.remoteId.value : this.remoteId,
+      membersJson: data.membersJson.present
+          ? data.membersJson.value
+          : this.membersJson,
+      chapterGroupsJson: data.chapterGroupsJson.present
+          ? data.chapterGroupsJson.value
+          : this.chapterGroupsJson,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MergedMangaReferenceRow(')
+          ..write('sourceId: $sourceId, ')
+          ..write('remoteId: $remoteId, ')
+          ..write('membersJson: $membersJson, ')
+          ..write('chapterGroupsJson: $chapterGroupsJson, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    sourceId,
+    remoteId,
+    membersJson,
+    chapterGroupsJson,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MergedMangaReferenceRow &&
+          other.sourceId == this.sourceId &&
+          other.remoteId == this.remoteId &&
+          other.membersJson == this.membersJson &&
+          other.chapterGroupsJson == this.chapterGroupsJson &&
+          other.updatedAt == this.updatedAt);
+}
+
+class MergedMangaReferencesCompanion
+    extends UpdateCompanion<MergedMangaReferenceRow> {
+  final Value<String> sourceId;
+  final Value<String> remoteId;
+  final Value<String> membersJson;
+  final Value<String> chapterGroupsJson;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const MergedMangaReferencesCompanion({
+    this.sourceId = const Value.absent(),
+    this.remoteId = const Value.absent(),
+    this.membersJson = const Value.absent(),
+    this.chapterGroupsJson = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MergedMangaReferencesCompanion.insert({
+    required String sourceId,
+    required String remoteId,
+    required String membersJson,
+    required String chapterGroupsJson,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : sourceId = Value(sourceId),
+       remoteId = Value(remoteId),
+       membersJson = Value(membersJson),
+       chapterGroupsJson = Value(chapterGroupsJson),
+       updatedAt = Value(updatedAt);
+  static Insertable<MergedMangaReferenceRow> custom({
+    Expression<String>? sourceId,
+    Expression<String>? remoteId,
+    Expression<String>? membersJson,
+    Expression<String>? chapterGroupsJson,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (sourceId != null) 'source_id': sourceId,
+      if (remoteId != null) 'remote_id': remoteId,
+      if (membersJson != null) 'members_json': membersJson,
+      if (chapterGroupsJson != null) 'chapter_groups_json': chapterGroupsJson,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MergedMangaReferencesCompanion copyWith({
+    Value<String>? sourceId,
+    Value<String>? remoteId,
+    Value<String>? membersJson,
+    Value<String>? chapterGroupsJson,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return MergedMangaReferencesCompanion(
+      sourceId: sourceId ?? this.sourceId,
+      remoteId: remoteId ?? this.remoteId,
+      membersJson: membersJson ?? this.membersJson,
+      chapterGroupsJson: chapterGroupsJson ?? this.chapterGroupsJson,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (sourceId.present) {
+      map['source_id'] = Variable<String>(sourceId.value);
+    }
+    if (remoteId.present) {
+      map['remote_id'] = Variable<String>(remoteId.value);
+    }
+    if (membersJson.present) {
+      map['members_json'] = Variable<String>(membersJson.value);
+    }
+    if (chapterGroupsJson.present) {
+      map['chapter_groups_json'] = Variable<String>(chapterGroupsJson.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MergedMangaReferencesCompanion(')
+          ..write('sourceId: $sourceId, ')
+          ..write('remoteId: $remoteId, ')
+          ..write('membersJson: $membersJson, ')
+          ..write('chapterGroupsJson: $chapterGroupsJson, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4896,6 +7712,16 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $HistoriesTable histories = $HistoriesTable(this);
   late final $DownloadsTable downloads = $DownloadsTable(this);
   late final $TrackBindsTable trackBinds = $TrackBindsTable(this);
+  late final $BackupImportJournalsTable backupImportJournals =
+      $BackupImportJournalsTable(this);
+  late final $AnimeSourceLinksTable animeSourceLinks = $AnimeSourceLinksTable(
+    this,
+  );
+  late final $MangaFeedsTable mangaFeeds = $MangaFeedsTable(this);
+  late final $MangaUpdatesTable mangaUpdates = $MangaUpdatesTable(this);
+  late final $MigrationPlansTable migrationPlans = $MigrationPlansTable(this);
+  late final $MergedMangaReferencesTable mergedMangaReferences =
+      $MergedMangaReferencesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4910,6 +7736,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     histories,
     downloads,
     trackBinds,
+    backupImportJournals,
+    animeSourceLinks,
+    mangaFeeds,
+    mangaUpdates,
+    migrationPlans,
+    mergedMangaReferences,
   ];
 }
 
@@ -6239,11 +9071,15 @@ typedef $$CategoriesTableCreateCompanionBuilder = CategoriesCompanion Function({
   Value<int> id,
   required String name,
   Value<int> sortIndex,
+  Value<bool> hidden,
+  Value<String?> rulesJson,
 });
 typedef $$CategoriesTableUpdateCompanionBuilder = CategoriesCompanion Function({
   Value<int> id,
   Value<String> name,
   Value<int> sortIndex,
+  Value<bool> hidden,
+  Value<String?> rulesJson,
 });
 
 class $$CategoriesTableFilterComposer
@@ -6267,6 +9103,16 @@ class $$CategoriesTableFilterComposer
 
   ColumnFilters<int> get sortIndex => $composableBuilder(
     column: $table.sortIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get hidden => $composableBuilder(
+    column: $table.hidden,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rulesJson => $composableBuilder(
+    column: $table.rulesJson,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -6294,6 +9140,16 @@ class $$CategoriesTableOrderingComposer
     column: $table.sortIndex,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get hidden => $composableBuilder(
+    column: $table.hidden,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get rulesJson => $composableBuilder(
+    column: $table.rulesJson,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$CategoriesTableAnnotationComposer
@@ -6313,6 +9169,12 @@ class $$CategoriesTableAnnotationComposer
 
   GeneratedColumn<int> get sortIndex =>
       $composableBuilder(column: $table.sortIndex, builder: (column) => column);
+
+  GeneratedColumn<bool> get hidden =>
+      $composableBuilder(column: $table.hidden, builder: (column) => column);
+
+  GeneratedColumn<String> get rulesJson =>
+      $composableBuilder(column: $table.rulesJson, builder: (column) => column);
 }
 
 class $$CategoriesTableTableManager
@@ -6344,20 +9206,33 @@ class $$CategoriesTableTableManager
               $$CategoriesTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$CategoriesTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<String> name = const Value.absent(),
-            Value<int> sortIndex = const Value.absent(),
-          }) => CategoriesCompanion(id: id, name: name, sortIndex: sortIndex),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> sortIndex = const Value.absent(),
+                Value<bool> hidden = const Value.absent(),
+                Value<String?> rulesJson = const Value.absent(),
+              }) => CategoriesCompanion(
+                id: id,
+                name: name,
+                sortIndex: sortIndex,
+                hidden: hidden,
+                rulesJson: rulesJson,
+              ),
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
                 required String name,
                 Value<int> sortIndex = const Value.absent(),
+                Value<bool> hidden = const Value.absent(),
+                Value<String?> rulesJson = const Value.absent(),
               }) => CategoriesCompanion.insert(
                 id: id,
                 name: name,
                 sortIndex: sortIndex,
+                hidden: hidden,
+                rulesJson: rulesJson,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -7395,6 +10270,1524 @@ typedef $$TrackBindsTableProcessedTableManager =
       TrackBindRow,
       PrefetchHooks Function()
     >;
+typedef $$BackupImportJournalsTableCreateCompanionBuilder =
+    BackupImportJournalsCompanion Function({
+      Value<int> id,
+      required String previousValuesJson,
+      required String missingKeysJson,
+    });
+typedef $$BackupImportJournalsTableUpdateCompanionBuilder =
+    BackupImportJournalsCompanion Function({
+      Value<int> id,
+      Value<String> previousValuesJson,
+      Value<String> missingKeysJson,
+    });
+
+class $$BackupImportJournalsTableFilterComposer
+    extends Composer<_$AppDatabase, $BackupImportJournalsTable> {
+  $$BackupImportJournalsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get previousValuesJson => $composableBuilder(
+    column: $table.previousValuesJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get missingKeysJson => $composableBuilder(
+    column: $table.missingKeysJson,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$BackupImportJournalsTableOrderingComposer
+    extends Composer<_$AppDatabase, $BackupImportJournalsTable> {
+  $$BackupImportJournalsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get previousValuesJson => $composableBuilder(
+    column: $table.previousValuesJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get missingKeysJson => $composableBuilder(
+    column: $table.missingKeysJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$BackupImportJournalsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $BackupImportJournalsTable> {
+  $$BackupImportJournalsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get previousValuesJson => $composableBuilder(
+    column: $table.previousValuesJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get missingKeysJson => $composableBuilder(
+    column: $table.missingKeysJson,
+    builder: (column) => column,
+  );
+}
+
+class $$BackupImportJournalsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $BackupImportJournalsTable,
+          BackupImportJournal,
+          $$BackupImportJournalsTableFilterComposer,
+          $$BackupImportJournalsTableOrderingComposer,
+          $$BackupImportJournalsTableAnnotationComposer,
+          $$BackupImportJournalsTableCreateCompanionBuilder,
+          $$BackupImportJournalsTableUpdateCompanionBuilder,
+          (
+            BackupImportJournal,
+            BaseReferences<
+              _$AppDatabase,
+              $BackupImportJournalsTable,
+              BackupImportJournal
+            >,
+          ),
+          BackupImportJournal,
+          PrefetchHooks Function()
+        > {
+  $$BackupImportJournalsTableTableManager(
+    _$AppDatabase db,
+    $BackupImportJournalsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BackupImportJournalsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BackupImportJournalsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$BackupImportJournalsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> previousValuesJson = const Value.absent(),
+                Value<String> missingKeysJson = const Value.absent(),
+              }) => BackupImportJournalsCompanion(
+                id: id,
+                previousValuesJson: previousValuesJson,
+                missingKeysJson: missingKeysJson,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String previousValuesJson,
+                required String missingKeysJson,
+              }) => BackupImportJournalsCompanion.insert(
+                id: id,
+                previousValuesJson: previousValuesJson,
+                missingKeysJson: missingKeysJson,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$BackupImportJournalsTable, BackupImportJournal>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $BackupImportJournalsTable,
+                    BackupImportJournal
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$BackupImportJournalsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $BackupImportJournalsTable,
+      BackupImportJournal,
+      $$BackupImportJournalsTableFilterComposer,
+      $$BackupImportJournalsTableOrderingComposer,
+      $$BackupImportJournalsTableAnnotationComposer,
+      $$BackupImportJournalsTableCreateCompanionBuilder,
+      $$BackupImportJournalsTableUpdateCompanionBuilder,
+      (
+        BackupImportJournal,
+        BaseReferences<
+          _$AppDatabase,
+          $BackupImportJournalsTable,
+          BackupImportJournal
+        >,
+      ),
+      BackupImportJournal,
+      PrefetchHooks Function()
+    >;
+typedef $$AnimeSourceLinksTableCreateCompanionBuilder =
+    AnimeSourceLinksCompanion Function({
+      required String subjectSourceId,
+      required String subjectRemoteId,
+      required String sourceId,
+      Value<String?> remoteId,
+      Value<String> alias,
+      Value<String?> lastChapterId,
+      Value<DateTime?> selectedAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$AnimeSourceLinksTableUpdateCompanionBuilder =
+    AnimeSourceLinksCompanion Function({
+      Value<String> subjectSourceId,
+      Value<String> subjectRemoteId,
+      Value<String> sourceId,
+      Value<String?> remoteId,
+      Value<String> alias,
+      Value<String?> lastChapterId,
+      Value<DateTime?> selectedAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$AnimeSourceLinksTableFilterComposer
+    extends Composer<_$AppDatabase, $AnimeSourceLinksTable> {
+  $$AnimeSourceLinksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get subjectSourceId => $composableBuilder(
+    column: $table.subjectSourceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get subjectRemoteId => $composableBuilder(
+    column: $table.subjectRemoteId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remoteId => $composableBuilder(
+    column: $table.remoteId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get alias => $composableBuilder(
+    column: $table.alias,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastChapterId => $composableBuilder(
+    column: $table.lastChapterId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get selectedAt => $composableBuilder(
+    column: $table.selectedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AnimeSourceLinksTableOrderingComposer
+    extends Composer<_$AppDatabase, $AnimeSourceLinksTable> {
+  $$AnimeSourceLinksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get subjectSourceId => $composableBuilder(
+    column: $table.subjectSourceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get subjectRemoteId => $composableBuilder(
+    column: $table.subjectRemoteId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get remoteId => $composableBuilder(
+    column: $table.remoteId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get alias => $composableBuilder(
+    column: $table.alias,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastChapterId => $composableBuilder(
+    column: $table.lastChapterId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get selectedAt => $composableBuilder(
+    column: $table.selectedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AnimeSourceLinksTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AnimeSourceLinksTable> {
+  $$AnimeSourceLinksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get subjectSourceId => $composableBuilder(
+    column: $table.subjectSourceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get subjectRemoteId => $composableBuilder(
+    column: $table.subjectRemoteId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceId =>
+      $composableBuilder(column: $table.sourceId, builder: (column) => column);
+
+  GeneratedColumn<String> get remoteId =>
+      $composableBuilder(column: $table.remoteId, builder: (column) => column);
+
+  GeneratedColumn<String> get alias =>
+      $composableBuilder(column: $table.alias, builder: (column) => column);
+
+  GeneratedColumn<String> get lastChapterId => $composableBuilder(
+    column: $table.lastChapterId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get selectedAt => $composableBuilder(
+    column: $table.selectedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$AnimeSourceLinksTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AnimeSourceLinksTable,
+          AnimeSourceLinkRow,
+          $$AnimeSourceLinksTableFilterComposer,
+          $$AnimeSourceLinksTableOrderingComposer,
+          $$AnimeSourceLinksTableAnnotationComposer,
+          $$AnimeSourceLinksTableCreateCompanionBuilder,
+          $$AnimeSourceLinksTableUpdateCompanionBuilder,
+          (
+            AnimeSourceLinkRow,
+            BaseReferences<
+              _$AppDatabase,
+              $AnimeSourceLinksTable,
+              AnimeSourceLinkRow
+            >,
+          ),
+          AnimeSourceLinkRow,
+          PrefetchHooks Function()
+        > {
+  $$AnimeSourceLinksTableTableManager(
+    _$AppDatabase db,
+    $AnimeSourceLinksTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AnimeSourceLinksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AnimeSourceLinksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AnimeSourceLinksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> subjectSourceId = const Value.absent(),
+                Value<String> subjectRemoteId = const Value.absent(),
+                Value<String> sourceId = const Value.absent(),
+                Value<String?> remoteId = const Value.absent(),
+                Value<String> alias = const Value.absent(),
+                Value<String?> lastChapterId = const Value.absent(),
+                Value<DateTime?> selectedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AnimeSourceLinksCompanion(
+                subjectSourceId: subjectSourceId,
+                subjectRemoteId: subjectRemoteId,
+                sourceId: sourceId,
+                remoteId: remoteId,
+                alias: alias,
+                lastChapterId: lastChapterId,
+                selectedAt: selectedAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String subjectSourceId,
+                required String subjectRemoteId,
+                required String sourceId,
+                Value<String?> remoteId = const Value.absent(),
+                Value<String> alias = const Value.absent(),
+                Value<String?> lastChapterId = const Value.absent(),
+                Value<DateTime?> selectedAt = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => AnimeSourceLinksCompanion.insert(
+                subjectSourceId: subjectSourceId,
+                subjectRemoteId: subjectRemoteId,
+                sourceId: sourceId,
+                remoteId: remoteId,
+                alias: alias,
+                lastChapterId: lastChapterId,
+                selectedAt: selectedAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$AnimeSourceLinksTable, AnimeSourceLinkRow>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AnimeSourceLinksTable,
+                    AnimeSourceLinkRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AnimeSourceLinksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AnimeSourceLinksTable,
+      AnimeSourceLinkRow,
+      $$AnimeSourceLinksTableFilterComposer,
+      $$AnimeSourceLinksTableOrderingComposer,
+      $$AnimeSourceLinksTableAnnotationComposer,
+      $$AnimeSourceLinksTableCreateCompanionBuilder,
+      $$AnimeSourceLinksTableUpdateCompanionBuilder,
+      (
+        AnimeSourceLinkRow,
+        BaseReferences<
+          _$AppDatabase,
+          $AnimeSourceLinksTable,
+          AnimeSourceLinkRow
+        >,
+      ),
+      AnimeSourceLinkRow,
+      PrefetchHooks Function()
+    >;
+typedef $$MangaFeedsTableCreateCompanionBuilder = MangaFeedsCompanion Function({
+  required String id,
+  required String sourceId,
+  required String name,
+  required String kind,
+  Value<String> feedId,
+  Value<String> query,
+  Value<String> filtersJson,
+  Value<bool> hidden,
+  required int position,
+  required DateTime updatedAt,
+  Value<int> rowid,
+});
+typedef $$MangaFeedsTableUpdateCompanionBuilder = MangaFeedsCompanion Function({
+  Value<String> id,
+  Value<String> sourceId,
+  Value<String> name,
+  Value<String> kind,
+  Value<String> feedId,
+  Value<String> query,
+  Value<String> filtersJson,
+  Value<bool> hidden,
+  Value<int> position,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$MangaFeedsTableFilterComposer
+    extends Composer<_$AppDatabase, $MangaFeedsTable> {
+  $$MangaFeedsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get feedId => $composableBuilder(
+    column: $table.feedId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get query => $composableBuilder(
+    column: $table.query,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get filtersJson => $composableBuilder(
+    column: $table.filtersJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get hidden => $composableBuilder(
+    column: $table.hidden,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MangaFeedsTableOrderingComposer
+    extends Composer<_$AppDatabase, $MangaFeedsTable> {
+  $$MangaFeedsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get feedId => $composableBuilder(
+    column: $table.feedId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get query => $composableBuilder(
+    column: $table.query,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get filtersJson => $composableBuilder(
+    column: $table.filtersJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get hidden => $composableBuilder(
+    column: $table.hidden,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MangaFeedsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MangaFeedsTable> {
+  $$MangaFeedsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceId =>
+      $composableBuilder(column: $table.sourceId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get feedId =>
+      $composableBuilder(column: $table.feedId, builder: (column) => column);
+
+  GeneratedColumn<String> get query =>
+      $composableBuilder(column: $table.query, builder: (column) => column);
+
+  GeneratedColumn<String> get filtersJson => $composableBuilder(
+    column: $table.filtersJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get hidden =>
+      $composableBuilder(column: $table.hidden, builder: (column) => column);
+
+  GeneratedColumn<int> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$MangaFeedsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MangaFeedsTable,
+          MangaFeedRow,
+          $$MangaFeedsTableFilterComposer,
+          $$MangaFeedsTableOrderingComposer,
+          $$MangaFeedsTableAnnotationComposer,
+          $$MangaFeedsTableCreateCompanionBuilder,
+          $$MangaFeedsTableUpdateCompanionBuilder,
+          (
+            MangaFeedRow,
+            BaseReferences<_$AppDatabase, $MangaFeedsTable, MangaFeedRow>,
+          ),
+          MangaFeedRow,
+          PrefetchHooks Function()
+        > {
+  $$MangaFeedsTableTableManager(_$AppDatabase db, $MangaFeedsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MangaFeedsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MangaFeedsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MangaFeedsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> sourceId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> feedId = const Value.absent(),
+                Value<String> query = const Value.absent(),
+                Value<String> filtersJson = const Value.absent(),
+                Value<bool> hidden = const Value.absent(),
+                Value<int> position = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MangaFeedsCompanion(
+                id: id,
+                sourceId: sourceId,
+                name: name,
+                kind: kind,
+                feedId: feedId,
+                query: query,
+                filtersJson: filtersJson,
+                hidden: hidden,
+                position: position,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String sourceId,
+                required String name,
+                required String kind,
+                Value<String> feedId = const Value.absent(),
+                Value<String> query = const Value.absent(),
+                Value<String> filtersJson = const Value.absent(),
+                Value<bool> hidden = const Value.absent(),
+                required int position,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => MangaFeedsCompanion.insert(
+                id: id,
+                sourceId: sourceId,
+                name: name,
+                kind: kind,
+                feedId: feedId,
+                query: query,
+                filtersJson: filtersJson,
+                hidden: hidden,
+                position: position,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$MangaFeedsTable, MangaFeedRow>(table),
+                  BaseReferences<_$AppDatabase, $MangaFeedsTable, MangaFeedRow>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MangaFeedsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MangaFeedsTable,
+      MangaFeedRow,
+      $$MangaFeedsTableFilterComposer,
+      $$MangaFeedsTableOrderingComposer,
+      $$MangaFeedsTableAnnotationComposer,
+      $$MangaFeedsTableCreateCompanionBuilder,
+      $$MangaFeedsTableUpdateCompanionBuilder,
+      (
+        MangaFeedRow,
+        BaseReferences<_$AppDatabase, $MangaFeedsTable, MangaFeedRow>,
+      ),
+      MangaFeedRow,
+      PrefetchHooks Function()
+    >;
+typedef $$MangaUpdatesTableCreateCompanionBuilder =
+    MangaUpdatesCompanion Function({
+      required String sourceId,
+      required String remoteId,
+      Value<String> status,
+      Value<String?> error,
+      Value<int> added,
+      Value<int> generation,
+      Value<int> notifiedGeneration,
+      Value<DateTime?> checkedAt,
+      Value<DateTime?> notifiedAt,
+      Value<int> rowid,
+    });
+typedef $$MangaUpdatesTableUpdateCompanionBuilder =
+    MangaUpdatesCompanion Function({
+      Value<String> sourceId,
+      Value<String> remoteId,
+      Value<String> status,
+      Value<String?> error,
+      Value<int> added,
+      Value<int> generation,
+      Value<int> notifiedGeneration,
+      Value<DateTime?> checkedAt,
+      Value<DateTime?> notifiedAt,
+      Value<int> rowid,
+    });
+
+class $$MangaUpdatesTableFilterComposer
+    extends Composer<_$AppDatabase, $MangaUpdatesTable> {
+  $$MangaUpdatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remoteId => $composableBuilder(
+    column: $table.remoteId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get error => $composableBuilder(
+    column: $table.error,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get added => $composableBuilder(
+    column: $table.added,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get generation => $composableBuilder(
+    column: $table.generation,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get notifiedGeneration => $composableBuilder(
+    column: $table.notifiedGeneration,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get checkedAt => $composableBuilder(
+    column: $table.checkedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get notifiedAt => $composableBuilder(
+    column: $table.notifiedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MangaUpdatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $MangaUpdatesTable> {
+  $$MangaUpdatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get remoteId => $composableBuilder(
+    column: $table.remoteId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get error => $composableBuilder(
+    column: $table.error,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get added => $composableBuilder(
+    column: $table.added,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get generation => $composableBuilder(
+    column: $table.generation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get notifiedGeneration => $composableBuilder(
+    column: $table.notifiedGeneration,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get checkedAt => $composableBuilder(
+    column: $table.checkedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get notifiedAt => $composableBuilder(
+    column: $table.notifiedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MangaUpdatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MangaUpdatesTable> {
+  $$MangaUpdatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get sourceId =>
+      $composableBuilder(column: $table.sourceId, builder: (column) => column);
+
+  GeneratedColumn<String> get remoteId =>
+      $composableBuilder(column: $table.remoteId, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get error =>
+      $composableBuilder(column: $table.error, builder: (column) => column);
+
+  GeneratedColumn<int> get added =>
+      $composableBuilder(column: $table.added, builder: (column) => column);
+
+  GeneratedColumn<int> get generation => $composableBuilder(
+    column: $table.generation,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get notifiedGeneration => $composableBuilder(
+    column: $table.notifiedGeneration,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get checkedAt =>
+      $composableBuilder(column: $table.checkedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get notifiedAt => $composableBuilder(
+    column: $table.notifiedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$MangaUpdatesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MangaUpdatesTable,
+          MangaUpdateRow,
+          $$MangaUpdatesTableFilterComposer,
+          $$MangaUpdatesTableOrderingComposer,
+          $$MangaUpdatesTableAnnotationComposer,
+          $$MangaUpdatesTableCreateCompanionBuilder,
+          $$MangaUpdatesTableUpdateCompanionBuilder,
+          (
+            MangaUpdateRow,
+            BaseReferences<_$AppDatabase, $MangaUpdatesTable, MangaUpdateRow>,
+          ),
+          MangaUpdateRow,
+          PrefetchHooks Function()
+        > {
+  $$MangaUpdatesTableTableManager(_$AppDatabase db, $MangaUpdatesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MangaUpdatesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MangaUpdatesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MangaUpdatesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> sourceId = const Value.absent(),
+                Value<String> remoteId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> error = const Value.absent(),
+                Value<int> added = const Value.absent(),
+                Value<int> generation = const Value.absent(),
+                Value<int> notifiedGeneration = const Value.absent(),
+                Value<DateTime?> checkedAt = const Value.absent(),
+                Value<DateTime?> notifiedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MangaUpdatesCompanion(
+                sourceId: sourceId,
+                remoteId: remoteId,
+                status: status,
+                error: error,
+                added: added,
+                generation: generation,
+                notifiedGeneration: notifiedGeneration,
+                checkedAt: checkedAt,
+                notifiedAt: notifiedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String sourceId,
+                required String remoteId,
+                Value<String> status = const Value.absent(),
+                Value<String?> error = const Value.absent(),
+                Value<int> added = const Value.absent(),
+                Value<int> generation = const Value.absent(),
+                Value<int> notifiedGeneration = const Value.absent(),
+                Value<DateTime?> checkedAt = const Value.absent(),
+                Value<DateTime?> notifiedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MangaUpdatesCompanion.insert(
+                sourceId: sourceId,
+                remoteId: remoteId,
+                status: status,
+                error: error,
+                added: added,
+                generation: generation,
+                notifiedGeneration: notifiedGeneration,
+                checkedAt: checkedAt,
+                notifiedAt: notifiedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$MangaUpdatesTable, MangaUpdateRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $MangaUpdatesTable,
+                    MangaUpdateRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MangaUpdatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MangaUpdatesTable,
+      MangaUpdateRow,
+      $$MangaUpdatesTableFilterComposer,
+      $$MangaUpdatesTableOrderingComposer,
+      $$MangaUpdatesTableAnnotationComposer,
+      $$MangaUpdatesTableCreateCompanionBuilder,
+      $$MangaUpdatesTableUpdateCompanionBuilder,
+      (
+        MangaUpdateRow,
+        BaseReferences<_$AppDatabase, $MangaUpdatesTable, MangaUpdateRow>,
+      ),
+      MangaUpdateRow,
+      PrefetchHooks Function()
+    >;
+typedef $$MigrationPlansTableCreateCompanionBuilder =
+    MigrationPlansCompanion Function({
+      required String id,
+      required String payload,
+      Value<String> status,
+      Value<String?> error,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$MigrationPlansTableUpdateCompanionBuilder =
+    MigrationPlansCompanion Function({
+      Value<String> id,
+      Value<String> payload,
+      Value<String> status,
+      Value<String?> error,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$MigrationPlansTableFilterComposer
+    extends Composer<_$AppDatabase, $MigrationPlansTable> {
+  $$MigrationPlansTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get error => $composableBuilder(
+    column: $table.error,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MigrationPlansTableOrderingComposer
+    extends Composer<_$AppDatabase, $MigrationPlansTable> {
+  $$MigrationPlansTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get error => $composableBuilder(
+    column: $table.error,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MigrationPlansTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MigrationPlansTable> {
+  $$MigrationPlansTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get payload =>
+      $composableBuilder(column: $table.payload, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get error =>
+      $composableBuilder(column: $table.error, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$MigrationPlansTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MigrationPlansTable,
+          MigrationPlanRow,
+          $$MigrationPlansTableFilterComposer,
+          $$MigrationPlansTableOrderingComposer,
+          $$MigrationPlansTableAnnotationComposer,
+          $$MigrationPlansTableCreateCompanionBuilder,
+          $$MigrationPlansTableUpdateCompanionBuilder,
+          (
+            MigrationPlanRow,
+            BaseReferences<
+              _$AppDatabase,
+              $MigrationPlansTable,
+              MigrationPlanRow
+            >,
+          ),
+          MigrationPlanRow,
+          PrefetchHooks Function()
+        > {
+  $$MigrationPlansTableTableManager(
+    _$AppDatabase db,
+    $MigrationPlansTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MigrationPlansTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MigrationPlansTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MigrationPlansTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> payload = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> error = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MigrationPlansCompanion(
+                id: id,
+                payload: payload,
+                status: status,
+                error: error,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String payload,
+                Value<String> status = const Value.absent(),
+                Value<String?> error = const Value.absent(),
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => MigrationPlansCompanion.insert(
+                id: id,
+                payload: payload,
+                status: status,
+                error: error,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$MigrationPlansTable, MigrationPlanRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $MigrationPlansTable,
+                    MigrationPlanRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MigrationPlansTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MigrationPlansTable,
+      MigrationPlanRow,
+      $$MigrationPlansTableFilterComposer,
+      $$MigrationPlansTableOrderingComposer,
+      $$MigrationPlansTableAnnotationComposer,
+      $$MigrationPlansTableCreateCompanionBuilder,
+      $$MigrationPlansTableUpdateCompanionBuilder,
+      (
+        MigrationPlanRow,
+        BaseReferences<_$AppDatabase, $MigrationPlansTable, MigrationPlanRow>,
+      ),
+      MigrationPlanRow,
+      PrefetchHooks Function()
+    >;
+typedef $$MergedMangaReferencesTableCreateCompanionBuilder =
+    MergedMangaReferencesCompanion Function({
+      required String sourceId,
+      required String remoteId,
+      required String membersJson,
+      required String chapterGroupsJson,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$MergedMangaReferencesTableUpdateCompanionBuilder =
+    MergedMangaReferencesCompanion Function({
+      Value<String> sourceId,
+      Value<String> remoteId,
+      Value<String> membersJson,
+      Value<String> chapterGroupsJson,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$MergedMangaReferencesTableFilterComposer
+    extends Composer<_$AppDatabase, $MergedMangaReferencesTable> {
+  $$MergedMangaReferencesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remoteId => $composableBuilder(
+    column: $table.remoteId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get membersJson => $composableBuilder(
+    column: $table.membersJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get chapterGroupsJson => $composableBuilder(
+    column: $table.chapterGroupsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MergedMangaReferencesTableOrderingComposer
+    extends Composer<_$AppDatabase, $MergedMangaReferencesTable> {
+  $$MergedMangaReferencesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get remoteId => $composableBuilder(
+    column: $table.remoteId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get membersJson => $composableBuilder(
+    column: $table.membersJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get chapterGroupsJson => $composableBuilder(
+    column: $table.chapterGroupsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MergedMangaReferencesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MergedMangaReferencesTable> {
+  $$MergedMangaReferencesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get sourceId =>
+      $composableBuilder(column: $table.sourceId, builder: (column) => column);
+
+  GeneratedColumn<String> get remoteId =>
+      $composableBuilder(column: $table.remoteId, builder: (column) => column);
+
+  GeneratedColumn<String> get membersJson => $composableBuilder(
+    column: $table.membersJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get chapterGroupsJson => $composableBuilder(
+    column: $table.chapterGroupsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$MergedMangaReferencesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MergedMangaReferencesTable,
+          MergedMangaReferenceRow,
+          $$MergedMangaReferencesTableFilterComposer,
+          $$MergedMangaReferencesTableOrderingComposer,
+          $$MergedMangaReferencesTableAnnotationComposer,
+          $$MergedMangaReferencesTableCreateCompanionBuilder,
+          $$MergedMangaReferencesTableUpdateCompanionBuilder,
+          (
+            MergedMangaReferenceRow,
+            BaseReferences<
+              _$AppDatabase,
+              $MergedMangaReferencesTable,
+              MergedMangaReferenceRow
+            >,
+          ),
+          MergedMangaReferenceRow,
+          PrefetchHooks Function()
+        > {
+  $$MergedMangaReferencesTableTableManager(
+    _$AppDatabase db,
+    $MergedMangaReferencesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MergedMangaReferencesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$MergedMangaReferencesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$MergedMangaReferencesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> sourceId = const Value.absent(),
+                Value<String> remoteId = const Value.absent(),
+                Value<String> membersJson = const Value.absent(),
+                Value<String> chapterGroupsJson = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MergedMangaReferencesCompanion(
+                sourceId: sourceId,
+                remoteId: remoteId,
+                membersJson: membersJson,
+                chapterGroupsJson: chapterGroupsJson,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String sourceId,
+                required String remoteId,
+                required String membersJson,
+                required String chapterGroupsJson,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => MergedMangaReferencesCompanion.insert(
+                sourceId: sourceId,
+                remoteId: remoteId,
+                membersJson: membersJson,
+                chapterGroupsJson: chapterGroupsJson,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<
+                    $MergedMangaReferencesTable,
+                    MergedMangaReferenceRow
+                  >(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $MergedMangaReferencesTable,
+                    MergedMangaReferenceRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MergedMangaReferencesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MergedMangaReferencesTable,
+      MergedMangaReferenceRow,
+      $$MergedMangaReferencesTableFilterComposer,
+      $$MergedMangaReferencesTableOrderingComposer,
+      $$MergedMangaReferencesTableAnnotationComposer,
+      $$MergedMangaReferencesTableCreateCompanionBuilder,
+      $$MergedMangaReferencesTableUpdateCompanionBuilder,
+      (
+        MergedMangaReferenceRow,
+        BaseReferences<
+          _$AppDatabase,
+          $MergedMangaReferencesTable,
+          MergedMangaReferenceRow
+        >,
+      ),
+      MergedMangaReferenceRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -7417,4 +11810,16 @@ class $AppDatabaseManager {
       $$DownloadsTableTableManager(_db, _db.downloads);
   $$TrackBindsTableTableManager get trackBinds =>
       $$TrackBindsTableTableManager(_db, _db.trackBinds);
+  $$BackupImportJournalsTableTableManager get backupImportJournals =>
+      $$BackupImportJournalsTableTableManager(_db, _db.backupImportJournals);
+  $$AnimeSourceLinksTableTableManager get animeSourceLinks =>
+      $$AnimeSourceLinksTableTableManager(_db, _db.animeSourceLinks);
+  $$MangaFeedsTableTableManager get mangaFeeds =>
+      $$MangaFeedsTableTableManager(_db, _db.mangaFeeds);
+  $$MangaUpdatesTableTableManager get mangaUpdates =>
+      $$MangaUpdatesTableTableManager(_db, _db.mangaUpdates);
+  $$MigrationPlansTableTableManager get migrationPlans =>
+      $$MigrationPlansTableTableManager(_db, _db.migrationPlans);
+  $$MergedMangaReferencesTableTableManager get mergedMangaReferences =>
+      $$MergedMangaReferencesTableTableManager(_db, _db.mergedMangaReferences);
 }

@@ -78,6 +78,12 @@ class LkSource
     return <MediaItem>[for (final book in books) _toItem(book)];
   }
 
+  /// 登录用户的发布管理列表，供账号页通过来源注册表调用。
+  Future<LkPublishedWorksPage> publishedWorks({
+    int page = 1,
+    int pageSize = 20,
+  }) => client.publishedWorks(page: page, pageSize: pageSize);
+
   // ---------------------------------------------------------------- 详情/目录
 
   @override
@@ -261,6 +267,16 @@ class LkSource
   Future<List<MediaItem>> remoteShelf() async {
     final books = await client.bookshelf();
     return <MediaItem>[for (final book in books) _toItem(book)];
+  }
+
+  @override
+  Future<Map<String, int>> remoteUnreadCounts() async {
+    final books = await client.bookshelf();
+    return <String, int>{
+      for (final book in books)
+        if (book.unreadChapterCount != null && book.unreadChapterCount! >= 0)
+          '${book.id}': book.unreadChapterCount!,
+    };
   }
 
   @override

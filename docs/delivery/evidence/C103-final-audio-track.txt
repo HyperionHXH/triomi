@@ -1,0 +1,7 @@
+﻿  Stream volumes in dB: 0:-inf, 1:-11, 2:-inf, 3:-33, 4:-inf, 5:-inf, 6:-inf, 7:-inf, 8:-inf, 9:0, 10:-inf, 11:-inf, 12:0, 13:0, 14:0
+  Normal mixer raw underrun counters: partial=0 empty=0
+  2 Tracks of which 1 are active
+    Type     Id Active Client Session Port Id S  Flags   Format Chn mask  SRate ST Usg CT  G db  L dB  R dB  VS dB   Server FrmCnt  FrmRdy F Underruns  Flushed BitPerfect InternalMute   Latency
+             61    yes  10915     329      21 A  0x000 00000001 00000003  44100  3   1  0   -33     0     0     0  00106589  22977   22977 A         0    14501      false        false  609.31 t
+       S     55     no    600     121      15 S  0x600 00000001 00000003  48000  1   d  4   -17    -6    -6     0  00060F00   4512       0 f         0        0      false        false   72.85 k
+  0 Effect Chains

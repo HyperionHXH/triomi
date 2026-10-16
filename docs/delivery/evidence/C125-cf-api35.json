@@ -1,0 +1,10 @@
+{
+  "phase": "challenge",
+  "at": "2026-10-10T02:38:58.996990Z",
+  "package": "eu.kanade.tachiyomi.extension.all.mangafire",
+  "fakeCookieUsed": false,
+  "errorType": "permission",
+  "challengeClassified": true,
+  "stage": "visibleWebViewAwaitingVerification",
+  "status": "visible-verification-not-completed"
+}

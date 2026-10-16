@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import 'media_type.dart';
 
 /// 来源层统一异常。
@@ -70,17 +72,31 @@ class SourceException implements Exception {
   }
 
   static SourceErrorType _classify(Object error) {
+    if (error is DioException) {
+      if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.receiveTimeout) {
+        return SourceErrorType.timeout;
+      }
+      return _httpStatusType(error.response?.statusCode);
+    }
     final text = error.toString().toLowerCase();
     if (text.contains('timeout') || text.contains('超时')) {
       return SourceErrorType.timeout;
     }
-    if (text.contains('401') || text.contains('403')) {
-      return SourceErrorType.auth;
-    }
-    if (text.contains('404')) return SourceErrorType.notFound;
-    if (text.contains('429')) return SourceErrorType.rateLimited;
+    final status = RegExp(
+      r'\b(?:http(?:/\d(?:\.\d)?)?|status(?:\s+code)?)\s*[:=]?\s*(401|403|404|429)\b',
+    ).firstMatch(text);
+    if (status != null) return _httpStatusType(int.parse(status[1]!));
     return SourceErrorType.network;
   }
+
+  static SourceErrorType _httpStatusType(int? status) => switch (status) {
+    401 || 403 => SourceErrorType.auth,
+    404 => SourceErrorType.notFound,
+    429 => SourceErrorType.rateLimited,
+    _ => SourceErrorType.network,
+  };
 
   @override
   String toString() => 'SourceException($sourceId, ${type.name}): $message';

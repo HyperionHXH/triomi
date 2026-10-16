@@ -31,11 +31,7 @@ void main() {
         throwsA(
           isA<SourceException>()
               .having((error) => error.type, 'type', SourceErrorType.network)
-              .having(
-                (error) => error.message,
-                'message',
-                contains('超时'),
-              ),
+              .having((error) => error.message, 'message', contains('超时')),
         ),
       );
       // 超时触发 reset：下一次调用重新建连（新 socket）。
@@ -43,8 +39,11 @@ void main() {
       final future = connection.invoke('GetMyInfo', const <String, Object?>{});
       await pumpEventQueue();
       final socket = connector.sockets.last;
-      expect(identical(connector.sockets.first, socket), isFalse,
-          reason: '超时后必须重建连接');
+      expect(
+        identical(connector.sockets.first, socket),
+        isFalse,
+        reason: '超时后必须重建连接',
+      );
       socket.emitText('{}\u001e');
       await pumpEventQueue();
       socket.emitText(
@@ -53,9 +52,7 @@ void main() {
       expect(await future, <Object?, Object?>{});
     });
 
-    test('reset/握手超时后旧 socket 未被 close（缺陷回归，当前失败）', () async {
-      // _failConnection 只取消订阅、从不调用 socket.close()：真实 WebSocket
-      // 会保持打开直到 GC，服务端侧连接悬挂。期望：重置时显式关闭旧 socket。
+    test('reset 后关闭旧 socket，避免连接悬挂', () async {
       final connector = RecordingConnector();
       final connection = SignalRLnsHubConnection(
         hubUrl: 'wss://example.test/hub/api',
@@ -88,9 +85,7 @@ void main() {
       // 第一次：握手帧回 error（未授权）→ auth。
       final first = connection.invoke('GetMyInfo', const <String, Object?>{});
       await pumpEventQueue();
-      connector.sockets.first.emitText(
-        '${ '{"error":"Unauthorized"}' }\u001e',
-      );
+      connector.sockets.first.emitText('${'{"error":"Unauthorized"}'}\u001e');
       await expectLater(
         first,
         throwsA(
@@ -134,11 +129,7 @@ void main() {
         throwsA(
           isA<SourceException>()
               .having((error) => error.type, 'type', SourceErrorType.network)
-              .having(
-                (error) => error.message,
-                'message',
-                contains('重置'),
-              ),
+              .having((error) => error.message, 'message', contains('重置')),
         ),
       );
 
@@ -302,7 +293,8 @@ void main() {
     });
 
     test('type 7 关闭帧：在途调用失败；unauthorized 归 auth，其余归 network', () async {
-      final connector = RecordingConnector()..handshakePlan.addAll(<bool>[true, false]);
+      final connector = RecordingConnector()
+        ..handshakePlan.addAll(<bool>[true, false]);
       final connection = SignalRLnsHubConnection(
         hubUrl: 'wss://example.test/hub/api',
         accessToken: () => 'token-abc',
@@ -331,7 +323,10 @@ void main() {
       final second = connection.invoke('Second', null);
       await pumpEventQueue();
       connector.sockets.last.emitText(
-        encodeFrame(<String, Object?>{'type': 7, 'error': 'server shutting down'}),
+        encodeFrame(<String, Object?>{
+          'type': 7,
+          'error': 'server shutting down',
+        }),
       );
       await expectLater(
         second,

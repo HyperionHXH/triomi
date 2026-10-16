@@ -1,0 +1,28 @@
+{
+  "visibleNodeCount": 19,
+  "pages": [
+    "3/32"
+  ],
+  "knownBooks": [],
+  "continueReading": false,
+  "offlineFallback": false,
+  "retry": false,
+  "catalog": [],
+  "chapterControls": [
+    "返回",
+    "目录",
+    "上一章",
+    "下一章"
+  ],
+  "resource": {
+    "running": true,
+    "pid": 12542,
+    "pssKiB": 133074,
+    "threads": 49,
+    "fileDescriptors": null,
+    "fdScope": "shell readable proc only; null means OS denied"
+  },
+  "serial": "emulator-5558",
+  "phase": "latest-production-release-update-resume",
+  "networkRetryRecovered": true
+}

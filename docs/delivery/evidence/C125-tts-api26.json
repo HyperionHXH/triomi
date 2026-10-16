@@ -1,0 +1,24 @@
+{
+  "at": "2026-10-10T02:28:43.122190Z",
+  "environment": "Android real system plugins and production calendar",
+  "results": {
+    "tts": {
+      "stage": "speak",
+      "voiceCount": 133,
+      "engine": "com.reecedunn.espeak",
+      "chineseVoiceAvailable": true,
+      "selectedVoiceOffline": true,
+      "naturalCompletion": true,
+      "stopDiscardedLateCompletion": true,
+      "realSynthesisDeadlineError": true,
+      "errorRecoveryNaturalCompletion": true,
+      "status": "passed"
+    },
+    "background": {
+      "status": "scheduled",
+      "realCalendarCount": 21,
+      "matchedCount": 1,
+      "actualNotification": "requires native JobScheduler trigger after test"
+    }
+  }
+}

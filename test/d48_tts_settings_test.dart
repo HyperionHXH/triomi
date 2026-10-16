@@ -205,8 +205,11 @@ void main() {
       await tester.tap(find.text('慢速 0.3'));
       await tester.pumpAndSettle();
 
-      expect(engine.stopCalled, greaterThan(stopsBefore),
-          reason: '选项变更先停止当前朗读');
+      expect(
+        engine.stopCalled,
+        greaterThan(stopsBefore),
+        reason: '选项变更先停止当前朗读',
+      );
       expect(find.byTooltip('朗读'), findsOneWidget, reason: '回到未播放态');
 
       // 本机设置即时落盘（重启可恢复的前提）。

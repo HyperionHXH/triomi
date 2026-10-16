@@ -1,0 +1,26 @@
+{
+  "recordedAt": "2026-10-10T02:12:01.010951+00:00",
+  "repositoryUrl": "https://raw.githubusercontent.com/HyperionHXH/Mihon-Extensions/main/repo/index.json",
+  "repositoryName": "Hyperion Mihon Extensions",
+  "indexBytes": 1539453,
+  "indexSha256": "20634c0ef9da8a38e3f937e97267246674ab670ae462ee46cd8b2f6dfde08b9b",
+  "extensionCount": 1481,
+  "sourceCount": 2497,
+  "chineseExtensionCount": 82,
+  "selectedExtension": "xkcd",
+  "packageName": "eu.kanade.tachiyomi.extension.all.xkcd",
+  "version": "1.6.0",
+  "extensionLib": "1.6",
+  "apkUrl": "https://github.com/keiyoushi/extensions/releases/download/bdcf84f/tachiyomi-all.xkcd-v1.6.0.apk",
+  "apkBytes": 82713,
+  "apkSha256": "c3eb9851d462b01b836c8a48a2d5ee6ef2ee55fcb9a83b81265bfbadb7580038",
+  "apkSignerSha256": "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2",
+  "repositorySigningKey": "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2",
+  "signerMatchesRepositoryKey": true,
+  "dexFiles": [
+    "classes.dex"
+  ],
+  "verification": "Verifies\nVerified using v1 scheme (JAR signing): false\nVerified using v2 scheme (APK Signature Scheme v2): true\nVerified using v3 scheme (APK Signature Scheme v3): false\nVerified using v3.1 scheme (APK Signature Scheme v3.1): false\nVerified using v4 scheme (APK Signature Scheme v4): false\nVerified for SourceStamp: false\nNumber of signers: 1\nSigner #1 certificate DN: CN=AntsyLich, O=WorkshopOfAntsyLich\nSigner #1 certificate SHA-256 digest: 9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2\nSigner #1 certificate SHA-1 digest: 76b61d8e8bf66f61077c780182f8fec20f75bdda\nSigner #1 certificate MD5 digest: f677b11e0dbe6d6b106873e136d8c39b\nSigner #1 key algorithm: RSA\nSigner #1 key size (bits): 2048\nSigner #1 public key SHA-256 digest: ba4fd56682a028350b8741ae72e286e5a13681db1493b50b934d545374369bbc\nSigner #1 public key SHA-1 digest: e84676e2d5714a2410aa1a8406349f4a746e60cf\nSigner #1 public key MD5 digest: d0386f5e869e907dd4bbe5f103e2b829\n",
+  "apkSignatureVerification": "passed",
+  "triomiApkExecution": "not tested by this metadata-only probe"
+}

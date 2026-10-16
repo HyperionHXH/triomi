@@ -1,0 +1,358 @@
+{
+  "round": "C150",
+  "date": "2026-10-16",
+  "status": "actual-normal-apk-export-and-explicit-scoped-restore-dex-acceptance-complete-cleaned",
+  "artifact": {
+    "acceptanceApk": "_tools/Triomi-C150-apk-backup-acceptance.apk",
+    "installedSha256BothDevices": "be424cdc123a0400d02f04f1b1a574f4db4e62530d93df9153399e7058ed1e11",
+    "bytes": 129094792,
+    "serials": [
+      "emulator-5554",
+      "emulator-5556"
+    ],
+    "deviceApis": {
+      "emulator-5554": 35,
+      "emulator-5556": 26
+    },
+    "buildInstallOwner": "Main; this worker did not build, install, lint, format or run tests"
+  },
+  "methods": {
+    "serialAlwaysExplicit": true,
+    "ordinaryProductionUiAndSaf": true,
+    "screenshotsListedActuallyOpened": true,
+    "unitTestsNotSubstitutedForActualAcceptance": true,
+    "noAccountCredentialOrSecureStorageRead": true,
+    "diagnosisStorageScope": "Temporary local settings.hive snapshot read with a Dart whitelist projection of mihon.hostStatus/installedPackages public APK identity fields only; raw snapshot and reader deleted. No Hive mutation or whole-store restore. Native XML inspected/changed only package pin identity metadata; no secret sharedpref output.",
+    "sqlite": "Read-only non-sensitive identities/state and aggregate counts; final DELETE limited exclusively to newly added Webtoons source prefix. No original rows changed."
+  },
+  "failureBefore": {
+    "installedC149Sha256": "96c0ace8c10712b0290215c98ecfdfd9cbb3a503ae97906548e62f9aad1b7159",
+    "normalUiExportFailure": "FormatException: APK 包身份或指纹无效",
+    "screenshot": "_tools/C149-apk-export-identity-invalid.png",
+    "rootCause": "Historical installed hostStatus omitted versionName for all five stored packages; Jinman and MangaDex also had no installedPackages name fallback. capture validated before static APK metadata inspection.",
+    "fix": "Recover only absent installed versionName from snapshot static signature verification after stored package/versionCode/hash/full signer pins all match; normal portable payload validation remains; no preference or trust migration. Single metadata inspection.",
+    "changedFiles": [
+      "lib/core/backup/apk_backup_files.dart",
+      "test/apk_backup_files_test.dart"
+    ],
+    "newRegressionExecutionByThisWorker": "not run, including no synthetic failing-before claim"
+  },
+  "normalExport": {
+    "uiChoice": "Explicitly enabled 同时备份APK包 then 导出精简备份（不含封面与离线内容）; all ordinary business metadata retained, no offline media/cover files",
+    "saf": true,
+    "auditArchive": "_tools/C150-apk-full-normal-export.zip",
+    "bytes": 729296,
+    "sha256": "875fa067dfb06dcff557cee84408aa5524be325bb5acbe23516bb1979af0e0d0",
+    "zipMembers": 7,
+    "manifestAllSizesAndSha256Matched": true,
+    "apkPackages": [
+      {
+        "packageName": "eu.kanade.tachiyomi.extension.zh.jinmantiantang",
+        "versionCode": 106059,
+        "versionName": "1.6.59",
+        "sha256": "baebb449741b28f110f88408ff5a7edf6fc76fae0d60134e4b71c15cb7c3d56a",
+        "signerSha256": "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2"
+      },
+      {
+        "packageName": "eu.kanade.tachiyomi.extension.all.mangadex",
+        "versionCode": 106000,
+        "versionName": "1.6.0",
+        "sha256": "12fde77601d48c8b231340694db8446fba5a555ced4109b231c9d2e3000915fb",
+        "signerSha256": "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2"
+      },
+      {
+        "packageName": "eu.kanade.tachiyomi.extension.all.xkcd",
+        "versionCode": 106000,
+        "versionName": "1.6.0",
+        "sha256": "c3eb9851d462b01b836c8a48a2d5ee6ef2ee55fcb9a83b81265bfbadb7580038",
+        "signerSha256": "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2"
+      },
+      {
+        "packageName": "eu.kanade.tachiyomi.extension.all.mangafire",
+        "versionCode": 106034,
+        "versionName": "1.6.34",
+        "sha256": "bc5d23a565f1e752cdb244788646bd2728363802ce0823c70b168e7f48e41fad",
+        "signerSha256": "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2"
+      },
+      {
+        "packageName": "eu.kanade.tachiyomi.extension.all.webtoons",
+        "versionCode": 106002,
+        "versionName": "1.6.2",
+        "sha256": "8a9842dc5db97f9d3939a35eb819b154d5805a5338f5e35706d62bd3f0476079",
+        "signerSha256": "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2"
+      }
+    ],
+    "businessCounts": {
+      "items": 22,
+      "library": 6,
+      "history": 19,
+      "chapters": 4081,
+      "covers": 0,
+      "settings": 27
+    },
+    "oldInstalledMetadataNotRewritten": true,
+    "originalArchiveKeptOnHost": true
+  },
+  "fullArchivePreviewOnly": {
+    "device": "emulator-5556",
+    "normalSafPicker": true,
+    "incomingNewerBusinessRows": 3,
+    "keptLocalBusinessRows": 3,
+    "equalTimestampConflicts": 0,
+    "incomingApks": 3,
+    "keptLocalApks": 2,
+    "apkStagingDefaultOff": true,
+    "action": "Canceled; did not merge full original archive into destination.",
+    "safetyReason": "Full original contains source-device business rows that would alter destination. UI has no APK-only business selector. Approved scoped transport used instead; not evidence of untrimmed whole-library cross-device restore."
+  },
+  "scopedTransport": {
+    "derivedFromNormalExportSha256": "875fa067dfb06dcff557cee84408aa5524be325bb5acbe23516bb1979af0e0d0",
+    "label": "C150-apk-only-scoped-Webtoons-transport.zip",
+    "sha256": "ae8ae200b8c1ee44247f3dd90bdb47ac6418544d517ec45c05ebfadb476d8661",
+    "bytes": 64376,
+    "construction": "Copied only the exact audited Webtoons APK and its portable identity; set every business array and all business summary counts to empty/zero, settingsValues empty; re-sealed data.json + exact APK with the production version1 size/SHA256 manifest. No APK bytes or publisher metadata changed.",
+    "businessArrays": {
+      "categories": 0,
+      "categoryLinks": 0,
+      "trackingBinds": 0,
+      "sourceRows": 0,
+      "downloadRows": 0,
+      "mediaItems": 0,
+      "libraryEntries": 0,
+      "histories": 0,
+      "chapterRows": 0,
+      "mangaFeeds": 0,
+      "mergedMangaReferences": 0,
+      "animeSourceLinks": 0,
+      "apkPackages": 1
+    },
+    "notAnUnmodifiedFullBackup": true,
+    "normalSafImportResult": "作品0、书架0、历史0、目录0、封面0、完整媒体0、部分下载0、规则0、APK1(待确认)、设置0"
+  },
+  "auditedApk": {
+    "packageName": "eu.kanade.tachiyomi.extension.all.webtoons",
+    "sourceOriginal": "_tools/C125-webtoons.apk",
+    "sha256": "8a9842dc5db97f9d3939a35eb819b154d5805a5338f5e35706d62bd3f0476079",
+    "bytes": 62811,
+    "versionCode": 106002,
+    "versionName": "1.6.2",
+    "signerSha256": "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2",
+    "hostApksigner": "Verified; v2 true; exactly one signer CN=AntsyLich, O=WorkshopOfAntsyLich, RSA2048",
+    "exportedApkEqualsAuditedOriginalBytes": true,
+    "originallyAbsentFromApi26NativePinsAndRuntime": true
+  },
+  "stateTransitions": [
+    {
+      "state": "normal SAF restore staging",
+      "result": "APK1 pending, all business counts0; original native pin map identical and business identity/state fingerprints identical"
+    },
+    {
+      "state": "force-stop and independent process reopen",
+      "result": "Pending1 retained; UI explicitly 停用待确认/未执行扩展代码"
+    },
+    {
+      "state": "核验并加载",
+      "result": "Visible actual package/version/full signer/full APK SHA256 dialog exactly matched audited original"
+    },
+    {
+      "state": "保持停用",
+      "result": "Declined first; pending retained and original native pins identical"
+    },
+    {
+      "state": "确认发布者并加载",
+      "result": "Explicit known-publisher acceptance; real DEX returned seven Webtoons language sources, all disabled; pending removed"
+    },
+    {
+      "state": "normal source toggle",
+      "result": "Explicitly enabled only newly accepted Webtoons package to request public discovery/detail"
+    }
+  ],
+  "actualDexReturn": {
+    "sources": 7,
+    "languages": [
+      "en",
+      "id",
+      "th",
+      "es",
+      "fr",
+      "zh-Hant",
+      "de"
+    ],
+    "uiDeclaredVersion": "106002",
+    "enabledImmediatelyAfterLoad": false,
+    "discoveryFeed": "C150-apk-Webtoons",
+    "englishSourceId": "mihon:eu.kanade.tachiyomi.extension.all.webtoons:2522335540328470744",
+    "realDiscoveryTitles": [
+      "Suitor Armor",
+      "Surviving the Game as a Barbarian",
+      "Goth Boy and the Jock"
+    ],
+    "detail": {
+      "title": "Suitor Armor",
+      "author": "Purpah",
+      "genre": "Fantasy",
+      "remoteId": "/en/fantasy/suitor-armor/list?title_no=2159",
+      "catalogChaptersReturnedAndCached": 169
+    },
+    "covers": "Placeholders visible; cover decoding NOT passed",
+    "notRead": "No chapter reader open, no favorite, no download, no account or tracking action"
+  },
+  "preservation": {
+    "baselineQualification": "API26 actual starting baseline was already 3859 chapters/8 histories, not prior C149 historical3689/6. Current starting state retained without guessing provenance or rolling back existing rows.",
+    "before": {
+      "emulator-5554": {
+        "sources": {
+          "rows": 14,
+          "identityAndStateSha256": "e20d8488bd2b40fbbcb82836bb9c6ac75642d9c31d9f9134f8bbd0f2bc74e65f"
+        },
+        "library": {
+          "rows": 6,
+          "identityAndStateSha256": "dff8ad67ebd16daf9904941edefcc3397ecb69b055ac0332418b2667e58e5469"
+        },
+        "chapters": {
+          "rows": 4081,
+          "identityAndStateSha256": "7a6f8fc4cf33da87e3184aca0c4b79f09446cdcfc9d4b0fd230e01891e16cccd"
+        },
+        "histories": {
+          "rows": 19,
+          "identityAndStateSha256": "eb4ee9192b75edcb59310387735530d14d77d52005ac8837e17fb846cb64bbdc"
+        },
+        "downloads": {
+          "rows": 6,
+          "identityAndStateSha256": "c0c9fe5f44814de3c73bbe12e6a016073ccad93ef550f1ef2633d743399d95b2"
+        }
+      },
+      "emulator-5556": {
+        "sources": {
+          "rows": 8,
+          "identityAndStateSha256": "fd1fe703ece4033f26073f58414bf8220267f1630bb2d1d63463a37d2044c39b"
+        },
+        "library": {
+          "rows": 4,
+          "identityAndStateSha256": "3a3e17e11aff3cfe206a23fe23bf43d9773572ec265d814c2b0a63cd3b9da23e"
+        },
+        "chapters": {
+          "rows": 3859,
+          "identityAndStateSha256": "30dab3631a1c2186acea21e1df3f012bbbf49507685a78ee1353ea0b0fb5fb48"
+        },
+        "histories": {
+          "rows": 8,
+          "identityAndStateSha256": "c836cdf3332b25e6094603e5934978f8036746b6f21afde361ae7ca0e1c89c4c"
+        },
+        "downloads": {
+          "rows": 3,
+          "identityAndStateSha256": "9ff3a95c9d2a8ceaf39e36d2219b5607e5ceb22d5f17c54f4783f20370ed2797"
+        }
+      }
+    },
+    "after": {
+      "emulator-5554": {
+        "sources": {
+          "rows": 14,
+          "identityAndStateSha256": "e20d8488bd2b40fbbcb82836bb9c6ac75642d9c31d9f9134f8bbd0f2bc74e65f"
+        },
+        "library": {
+          "rows": 6,
+          "identityAndStateSha256": "dff8ad67ebd16daf9904941edefcc3397ecb69b055ac0332418b2667e58e5469"
+        },
+        "chapters": {
+          "rows": 4081,
+          "identityAndStateSha256": "7a6f8fc4cf33da87e3184aca0c4b79f09446cdcfc9d4b0fd230e01891e16cccd"
+        },
+        "histories": {
+          "rows": 19,
+          "identityAndStateSha256": "eb4ee9192b75edcb59310387735530d14d77d52005ac8837e17fb846cb64bbdc"
+        },
+        "downloads": {
+          "rows": 6,
+          "identityAndStateSha256": "c0c9fe5f44814de3c73bbe12e6a016073ccad93ef550f1ef2633d743399d95b2"
+        }
+      },
+      "emulator-5556": {
+        "sources": {
+          "rows": 8,
+          "identityAndStateSha256": "fd1fe703ece4033f26073f58414bf8220267f1630bb2d1d63463a37d2044c39b"
+        },
+        "library": {
+          "rows": 4,
+          "identityAndStateSha256": "3a3e17e11aff3cfe206a23fe23bf43d9773572ec265d814c2b0a63cd3b9da23e"
+        },
+        "chapters": {
+          "rows": 3859,
+          "identityAndStateSha256": "30dab3631a1c2186acea21e1df3f012bbbf49507685a78ee1353ea0b0fb5fb48"
+        },
+        "histories": {
+          "rows": 8,
+          "identityAndStateSha256": "c836cdf3332b25e6094603e5934978f8036746b6f21afde361ae7ca0e1c89c4c"
+        },
+        "downloads": {
+          "rows": 3,
+          "identityAndStateSha256": "9ff3a95c9d2a8ceaf39e36d2219b5607e5ceb22d5f17c54f4783f20370ed2797"
+        }
+      }
+    },
+    "bothDevicesOriginalIdentityAndStateFingerprintsExactlyEqual": true,
+    "nativeOriginalPublicPinsExactlyEqualBothDevices": true,
+    "nativeOriginalApi26PinFields": 24,
+    "nativeAllUnownedFieldsUnchangedThroughExactCleanup": true
+  },
+  "cleanup": {
+    "normalUiFirst": [
+      "Removed own named C150-apk-Webtoons feed",
+      "Removed Webtoons source via confirmation; package enabled=false before file/pin cleanup"
+    ],
+    "ownSourcePrefix": "mihon:eu.kanade.tachiyomi.extension.all.webtoons:",
+    "ownMetadataBeforeDelete": {
+      "chapters": "169",
+      "manga_updates": "0",
+      "histories": "0",
+      "media_items": "1",
+      "manga_feeds": "15"
+    },
+    "ownMetadataAfterDelete": {
+      "chapters": 0,
+      "manga_updates": 0,
+      "histories": 0,
+      "media_items": 0,
+      "manga_feeds": 0
+    },
+    "libraryAndDownloadsCreated": 0,
+    "nativeOnlyNewPackageKeysRemoved": [
+      "apk.eu.kanade.tachiyomi.extension.all.webtoons",
+      "hash.eu.kanade.tachiyomi.extension.all.webtoons",
+      "signer.eu.kanade.tachiyomi.extension.all.webtoons",
+      "version.eu.kanade.tachiyomi.extension.all.webtoons",
+      "enabled.eu.kanade.tachiyomi.extension.all.webtoons"
+    ],
+    "nativeDeletionAuthorizedAndOriginallyAbsent": true,
+    "nativeStagedApkRemovedByExactHashPath": "/data/user/0/io.github.hyperionhxh.triomi/files/mihon-staging/eu.kanade.tachiyomi.extension.all.webtoons-8a9842dc5db97f9d3939a35eb819b154d5805a5338f5e35706d62bd3f0476079.apk",
+    "pendingFilesRemaining": 0,
+    "pickerImportTemporaryFilesRemaining": 0,
+    "deviceOriginalExportAndBothImportCopiesDeleted": true,
+    "derivedHostTransportDeleted": true,
+    "normalOriginalHostArchiveRetained": "_tools/C150-apk-full-normal-export.zip",
+    "originalSourceManagerFilterRestored": "normal sources: anime selected/no query/all languages; Mihon: Chinese zh/no query/all content",
+    "noNetworkBatteryNotificationPermissionOrOriginalTrustChanges": true,
+    "temporaryHostServerUsed": false
+  },
+  "screenshotsActuallyOpened": [
+    "_tools/C149-apk-export-identity-invalid.png",
+    "_tools/C150-apk-export-explicit-optin.png",
+    "_tools/C150-apk-export-five-success.png",
+    "_tools/C150-apk-full-original-preview-only.png",
+    "_tools/C150-apk-only-import-summary.png",
+    "_tools/C150-apk-restored-disabled-pending.png",
+    "_tools/C150-apk-actual-publisher-explicit-dialog.png",
+    "_tools/C150-apk-real-dex-seven-sources-disabled.png",
+    "_tools/C150-apk-own-webtoons-real-feed.png",
+    "_tools/C150-apk-webtoons-real-detail.png",
+    "_tools/C150-apk-cleanup-final-home.png",
+    "_tools/C150-apk-exporter-final-home.png"
+  ],
+  "limits": [
+    "Full normal archive was previewed then canceled; only clearly labeled APK-only derived archive was restored. No unmodified whole-library cross-device restore claim.",
+    "Actual public Webtoons metadata/discovery/catalog passed; cover images remained placeholders and were not accepted.",
+    "Repository index timed out during manager view; pending APK verification/explicit activation worked independently.",
+    "No new build/test/lint/format/install done by this worker; parent owns integrated verification and artifacts."
+  ]
+}

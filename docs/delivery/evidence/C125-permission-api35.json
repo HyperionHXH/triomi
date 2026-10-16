@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-10T02:16:51.675512Z",
+  "environment": "Android actual SignalR guest requests; no token supplied",
+  "permissionModel": "Official file downloads use CanDownload/DownloadCost; reading has no per-chapter purchase model in announcement 16",
+  "chargedDownloadCalled": false,
+  "guestShelf": "auth",
+  "guestContent": "auth",
+  "invalidSessionRejected": true,
+  "officialDownloadPermissionPresent": true,
+  "canDownload": false,
+  "downloadCost": 200,
+  "status": "passed"
+}

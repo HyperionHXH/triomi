@@ -29,6 +29,7 @@ class SourceDescriptor {
     required this.type,
     required this.kind,
     this.lang = 'zh',
+    this.nsfw,
     this.baseUrl,
     this.version,
     this.requireLogin = false,
@@ -41,6 +42,9 @@ class SourceDescriptor {
   final MediaType type;
   final SourceKind kind;
   final String lang;
+
+  /// Explicit content declaration; null means unknown, never implicitly safe.
+  final bool? nsfw;
   final String? baseUrl;
   final String? version;
 
@@ -63,6 +67,7 @@ class SourceDescriptor {
     type: type,
     kind: kind ?? this.kind,
     lang: lang,
+    nsfw: nsfw,
     baseUrl: baseUrl,
     version: version ?? this.version,
     requireLogin: requireLogin ?? this.requireLogin,

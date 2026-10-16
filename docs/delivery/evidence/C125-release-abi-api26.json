@@ -1,0 +1,11 @@
+{
+  "serial": "emulator-5556",
+  "status": "passed",
+  "checks": [
+    "Preference",
+    "native Zstd decode",
+    "Injekt Json and JSON/Okio StringSerializer"
+  ],
+  "targetLoader": "targetContext.classLoader",
+  "targetReplaced": false
+}

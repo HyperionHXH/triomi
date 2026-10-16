@@ -1,0 +1,27 @@
+{
+  "visibleNodeCount": 18,
+  "pages": [
+    "3 / 13"
+  ],
+  "knownBooks": [
+    "年度最垃圾伪圣女"
+  ],
+  "continueReading": false,
+  "offlineFallback": false,
+  "retry": false,
+  "catalog": [],
+  "chapterControls": [
+    "上一章",
+    "下一章"
+  ],
+  "resource": {
+    "running": true,
+    "pid": 14497,
+    "pssKiB": 302909,
+    "threads": 41,
+    "fileDescriptors": null,
+    "fdScope": "shell readable proc only; null means OS denied"
+  },
+  "serial": "emulator-5556",
+  "phase": "latest-release-preserved-cache-resume"
+}

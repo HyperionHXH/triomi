@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-14",
+  "status": "partial",
+  "change": "File export uses OutputFileStream to a .part, closes and atomically renames. Foreground and scheduled backup SAF adapters transport only sourcePath; shared native storage worker copies application-private files and deletes partial documents on failure. Existing byte-based novel export remains separate.",
+  "verification": {"targetedPassed": 33, "fullSuitePassed": 794, "fullSuiteLog": "artifact://874", "analyze": "No issues found", "safFailureContracts": "real closed ZIP validated before callback; exception/empty URI retain complete local backup; real renamed URI preserved; success removes local copy"},
+  "actualApi35": {
+    "foreground": {"bytes": 1772740, "sha256": "50ded9c73359f11bf14ddd1bd22c96308774083c3375c89ab35e40ff2e42f81e", "zipCRCAndPerFileManifestSha256Valid": true, "library": 6, "chapters": 4013, "history": 19, "realSafUriObserved": true},
+    "scheduled": {"job": 7501, "bytes": 1772736, "sha256": "299eb16922299c5daa1e2e0fbd8d1e8e53ff7cd9017bffe88743374d8e70d081", "zipCRCAndPerFileManifestSha256Valid": true, "library": 6, "chapters": 4013, "history": 19},
+    "localBackupsDirectoryEmptyAfterSuccessfulCopies": true,
+    "scheduledSwitchRestored": true,
+    "scheduledSwitchValueAfter": false
+  },
+  "artifacts": {
+    "acceptance": {"path": "D:/noval_and_manga/_tools/Triomi-C142-P11-streaming-backup-acceptance.apk", "bytes": 127159144, "sha256": "037d3842204825be4e3d133f8a0927bf93390bba1e40fcb4955a1f448444014f", "v2Verified": true, "certificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6", "installedHashMatched": ["emulator-5554", "emulator-5556"]},
+    "production": {"path": "D:/noval_and_manga/_tools/Triomi-C142-android-signed.apk", "bytes": 127159144, "sha256": "43c5da852af7d36a44c3a9be1a07ed19ae7391f1ccfa152b18e23bd308ae3881", "v2Verified": true, "rsaBits": 4096, "certificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077", "installedHashMatched": "emulator-5558", "dataCounts": "0 library / 44 chapters / 7 histories"},
+    "windows": {"path": "D:/noval_and_manga/_tools/Triomi-C142-windows-release.zip", "bytes": 37740519, "sha256": "ec59c8842821c88c44b742633487b2345545c660373f706530ef33b71549a662", "members": 50, "zipIntegrity": true, "exactMemberBytesMatchRelease": true, "actualUi": "not-run; existing computer session closed"}
+  },
+  "secretScan": "C142-delivery-secret-scan.json: zero exact secret/private-name/debug-file hits",
+  "limitations": ["Archive metadata and covers still collected in memory; no downloaded media files included yet", "Import and WebDAV remain byte-based; no large-media capacity claim", "No cloud upload or tracking write; current full-platform and visual acceptance remain partial"]
+}

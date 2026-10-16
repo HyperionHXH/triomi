@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/models/media_type.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
@@ -73,7 +74,11 @@ class HistoryPage extends ConsumerWidget {
                 subtitle: Text(
                   <String>[
                     entry.chapterTitle,
-                    if (entry.position > 0) '第 ${entry.position.round()} 页',
+                    if (item?.type == MediaType.manga)
+                      '第 ${entry.position.floor() + 1} 页',
+                    if (item?.type == MediaType.novel) '已保存阅读位置',
+                    if (item?.type == MediaType.anime)
+                      '已观看 ${entry.position.floor()} 秒',
                     _formatTime(entry.visitedAt),
                   ].join('  ·  '),
                   maxLines: 1,

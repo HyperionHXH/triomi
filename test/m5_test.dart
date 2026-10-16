@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -11,6 +12,7 @@ import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/source/http_client.dart';
+import 'package:triomi/core/storage/cover_store.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
@@ -158,6 +160,10 @@ void main() {
     tearDown(() => db.close());
 
     test('导出包含书架与历史；导入到空库后数据回来', () async {
+      final coverDir = await Directory.systemTemp.createTemp(
+        'triomi_m5_covers_',
+      );
+      addTearDown(() => coverDir.delete(recursive: true));
       final library = LibraryRepository(db);
       await library.addToLibrary(_item);
       await library.updateProgress(
@@ -185,6 +191,7 @@ void main() {
         database: db,
         preferences: preferences,
         http: http,
+        coverStore: CoverStore(Directory('${coverDir.path}/source')),
       );
       final exported = await service.exportToBytes();
 
@@ -217,6 +224,7 @@ void main() {
         database: targetDb,
         preferences: memoryPreferences(),
         http: http,
+        coverStore: CoverStore(Directory('${coverDir.path}/target')),
       );
       final summary = await target.importFromBytes(exported.bytes);
       expect(summary.items, 1);

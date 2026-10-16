@@ -74,12 +74,24 @@ class TtsEngineCallbacks {
 
 /// 系统音色（D48）：名称 + 语言区域，仅来自引擎实际返回的可用项。
 class TtsVoiceInfo {
-  const TtsVoiceInfo({required this.name, required this.locale});
+  const TtsVoiceInfo({
+    required this.name,
+    required this.locale,
+    this.networkRequired = false,
+    this.installed = true,
+  });
 
   final String name;
   final String locale;
+  final bool networkRequired;
+  final bool installed;
 
-  String get label => '$name（$locale）';
+  String get label =>
+      '$name（$locale）${!installed
+          ? ' · 需下载'
+          : networkRequired
+          ? ' · 需联网'
+          : ''}';
 
   @override
   bool operator ==(Object other) =>
@@ -118,8 +130,7 @@ abstract class TtsEngine {
 
   /// 系统可用音色列表（D48）。默认返回空 = 平台未提供或查询不可用，
   /// 调用方按「系统默认音色」降级，不伪造选项。
-  Future<List<TtsVoiceInfo>> availableVoices() async =>
-      const <TtsVoiceInfo>[];
+  Future<List<TtsVoiceInfo>> availableVoices() async => const <TtsVoiceInfo>[];
 }
 
 /// TTS 会话状态。
@@ -158,6 +169,7 @@ class TtsPlan {
         );
       }
     }
+
     for (var index = 0; index < blocks.length; index++) {
       final block = blocks[index];
       switch (block) {

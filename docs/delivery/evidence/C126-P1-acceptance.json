@@ -1,0 +1,42 @@
+{
+  "release": "C126-P1",
+  "status": "partial",
+  "artifact": {
+    "path": "D:\\noval_and_manga\\_tools\\Triomi-C126-P1-android-acceptance.apk",
+    "bytes": 123683428,
+    "sha256": "218e179b1aba40be4d9d9bf7940c169816d897b6bd750be7a5693ed0c0196216"
+  },
+  "devices": {
+    "emulator-5554": {
+      "installPreservedData": true,
+      "realOnlineQuery": "Kobayashi",
+      "subject": "小林家的龙女仆 (Bangumi TV, first season)",
+      "provider": "7sefun",
+      "manualConfirmationObserved": true,
+      "aliasSavedThroughUI": true,
+      "targetPlaylist": "播放列表 4",
+      "targetEpisode": "第01集",
+      "canonicalFollowPersisted": true,
+      "canonicalProgressAfterPlayback": 1,
+      "independentForceStopRestart": true,
+      "recentSelectionVisible": "最近来源 · 小林家的龙女仆 · 第01集",
+      "oldFollowRetained": "东京复仇者 三天战争篇",
+      "videoFrameVisualVerification": "not-completed",
+      "playerAccessibility": "uiautomator dump failed during video surface; no invented time/frame claim"
+    },
+    "emulator-5556": {
+      "installPreservedData": true,
+      "journey": "pending"
+    }
+  },
+  "tests": {
+    "allFlutterTests": 761,
+    "passed": true,
+    "analyze": "No issues found"
+  },
+  "images": [
+    "C126-P1-api35-player.png",
+    "C126-P1-api35-restart-subject.png"
+  ],
+  "visualLimitation": "Image tool model unavailable; screenshot originals retained"
+}

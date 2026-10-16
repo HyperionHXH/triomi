@@ -1,0 +1,393 @@
+{
+  "checkedAt": "2026-10-15T04:11:54.680Z",
+  "scope": "No account/token/credential read or sent; public requests only. Workstation network not same as user handset; emulated Mixn isolated as described.",
+  "mixnInstalled": {
+    "serial": "emulator-5554",
+    "versionName": "1.21.3",
+    "versionCode": 34
+  },
+  "lns": {
+    "transport": "Direct wss /hub/api, skip negotiation, json protocol version 1, GetBookList params Page1 Size1 Orderlatest IgnoreJapanese/AI true, UseGzip true",
+    "first": [
+      {
+        "host": "api.lightnovel.life",
+        "phase": "invoke",
+        "openedMs": 206,
+        "handshakeMs": 268,
+        "totalMs": 330,
+        "frames": [
+          {},
+          {
+            "type": 1,
+            "target": "OnMessage",
+            "arguments": [
+              "由于有人尝试攻击本站，但本人又没空处理，所以干脆关停了几天，现在已经恢复，同时给所有9号登陆过的用户发放了5张补签卡。"
+            ]
+          },
+          {
+            "type": 3,
+            "invocationId": "1",
+            "error": "Failed to invoke 'GetBookList' because user is unauthorized",
+            "resultType": "undefined"
+          }
+        ],
+        "outcome": "completion"
+      },
+      {
+        "host": "cf-api.lightnovel.life",
+        "phase": "invoke",
+        "openedMs": 581,
+        "handshakeMs": 763,
+        "totalMs": 947,
+        "frames": [
+          {},
+          {
+            "type": 1,
+            "target": "OnMessage",
+            "arguments": [
+              "由于有人尝试攻击本站，但本人又没空处理，所以干脆关停了几天，现在已经恢复，同时给所有9号登陆过的用户发放了5张补签卡。"
+            ]
+          },
+          {
+            "type": 3,
+            "invocationId": "1",
+            "error": "Failed to invoke 'GetBookList' because user is unauthorized",
+            "resultType": "undefined"
+          }
+        ],
+        "outcome": "completion"
+      }
+    ],
+    "repeat": [
+      {
+        "host": "api.lightnovel.life",
+        "phase": "invoke",
+        "openedMs": 2108,
+        "handshakeMs": 2176,
+        "totalMs": 2253,
+        "frames": [
+          {},
+          {
+            "type": 1,
+            "target": "OnMessage",
+            "arguments": [
+              "由于有人尝试攻击本站，但本人又没空处理，所以干脆关停了几天，现在已经恢复，同时给所有9号登陆过的用户发放了5张补签卡。"
+            ]
+          },
+          {
+            "type": 3,
+            "invocationId": "1",
+            "error": "Failed to invoke 'GetBookList' because user is unauthorized",
+            "resultType": "undefined"
+          }
+        ],
+        "outcome": "completion"
+      },
+      {
+        "host": "cf-api.lightnovel.life",
+        "phase": "invoke",
+        "openedMs": 1392,
+        "handshakeMs": 1607,
+        "totalMs": 1824,
+        "frames": [
+          {},
+          {
+            "type": 1,
+            "target": "OnMessage",
+            "arguments": [
+              "由于有人尝试攻击本站，但本人又没空处理，所以干脆关停了几天，现在已经恢复，同时给所有9号登陆过的用户发放了5张补签卡。"
+            ]
+          },
+          {
+            "type": 3,
+            "invocationId": "1",
+            "error": "Failed to invoke 'GetBookList' because user is unauthorized",
+            "resultType": "undefined"
+          }
+        ],
+        "outcome": "completion"
+      }
+    ],
+    "conclusion": "Both hubs alive and invocation dispatched. Guest is unauthorized as expected. Server notice states temporary shutdown due attack and now restored. No logged-in content or expired session was exercised."
+  },
+  "device": {
+    "wifiBefore": "1",
+    "dataBefore": "1",
+    "version": "1.21.3 (34)",
+    "network": [
+      "Active default network: none\r"
+    ],
+    "lkAtSeconds": 12,
+    "lk": [
+      {
+        "text": "发现",
+        "desc": "",
+        "bounds": "[43,299][157,381]"
+      },
+      {
+        "text": "",
+        "desc": "搜索",
+        "bounds": "[975,309][1038,372]"
+      },
+      {
+        "text": "轻之国度",
+        "desc": "",
+        "bounds": "[71,460][217,513]"
+      },
+      {
+        "text": "轻书架",
+        "desc": "",
+        "bounds": "[325,460][435,513]"
+      },
+      {
+        "text": "热门",
+        "desc": "",
+        "bounds": "[107,586][181,639]"
+      },
+      {
+        "text": "日榜",
+        "desc": "",
+        "bounds": "[343,586][417,639]"
+      },
+      {
+        "text": "周榜",
+        "desc": "",
+        "bounds": "[579,586][653,639]"
+      },
+      {
+        "text": "新书",
+        "desc": "",
+        "bounds": "[815,586][889,639]"
+      },
+      {
+        "text": "原创",
+        "desc": "",
+        "bounds": "[1051,586][1080,639]"
+      },
+      {
+        "text": "轻之国度",
+        "desc": "",
+        "bounds": "[42,728][1038,791]"
+      },
+      {
+        "text": "网络连接失败：Exception in CronetUrlRequest: net::ERR_INTERNET_DISCONNECTED, ErrorCode=2, InternalErrorCode=-106, Retryable=false",
+        "desc": "",
+        "bounds": "[42,833][1038,1085]"
+      },
+      {
+        "text": "发现",
+        "desc": "",
+        "bounds": "[140,2251][205,2297]"
+      },
+      {
+        "text": "书架",
+        "desc": "",
+        "bounds": "[507,2251][572,2297]"
+      },
+      {
+        "text": "我的",
+        "desc": "",
+        "bounds": "[874,2251][939,2297]"
+      }
+    ],
+    "lns": [
+      {
+        "text": "发现",
+        "desc": "",
+        "bounds": "[43,299][157,381]"
+      },
+      {
+        "text": "",
+        "desc": "搜索",
+        "bounds": "[975,309][1038,372]"
+      },
+      {
+        "text": "轻之国度",
+        "desc": "",
+        "bounds": "[71,460][217,513]"
+      },
+      {
+        "text": "轻书架",
+        "desc": "",
+        "bounds": "[325,460][435,513]"
+      },
+      {
+        "text": "热门",
+        "desc": "",
+        "bounds": "[107,586][181,639]"
+      },
+      {
+        "text": "最近更新",
+        "desc": "",
+        "bounds": "[307,586][453,639]"
+      },
+      {
+        "text": "新书",
+        "desc": "",
+        "bounds": "[579,586][653,639]"
+      },
+      {
+        "text": "日榜",
+        "desc": "",
+        "bounds": "[815,586][889,639]"
+      },
+      {
+        "text": "周榜",
+        "desc": "",
+        "bounds": "[1051,586][1080,639]"
+      },
+      {
+        "text": "轻书架",
+        "desc": "",
+        "bounds": "[42,728][1038,791]"
+      },
+      {
+        "text": "网络连接失败，请检查网络",
+        "desc": "",
+        "bounds": "[42,833][562,896]"
+      },
+      {
+        "text": "发现",
+        "desc": "",
+        "bounds": "[140,2251][205,2297]"
+      },
+      {
+        "text": "书架",
+        "desc": "",
+        "bounds": "[507,2251][572,2297]"
+      },
+      {
+        "text": "我的",
+        "desc": "",
+        "bounds": "[874,2251][939,2297]"
+      }
+    ],
+    "wifiAfter": "1",
+    "dataAfter": "1"
+  },
+  "lk": {
+    "coldRequests": [
+      {
+        "name": "home1",
+        "dnsSeconds": 6.644032,
+        "totalSeconds": 9.7181,
+        "http": 200
+      },
+      {
+        "name": "home2",
+        "dnsSeconds": 6.64397,
+        "totalSeconds": 8.767831,
+        "curlExit": 28
+      },
+      {
+        "name": "feed1",
+        "dnsSeconds": 6.644015,
+        "totalSeconds": 9.625787,
+        "http": 200,
+        "apiCode": 0
+      },
+      {
+        "name": "feed2",
+        "dnsSeconds": 6.638698,
+        "totalSeconds": 9.515279,
+        "http": 200,
+        "apiCode": 0
+      },
+      {
+        "name": "feed3",
+        "dnsSeconds": 6.644033,
+        "totalSeconds": 9.638146,
+        "http": 200,
+        "apiCode": 0
+      }
+    ],
+    "warmRequests": [
+      {
+        "dnsSeconds": 6.605182,
+        "totalSeconds": 8.572583,
+        "http": 200
+      },
+      {
+        "totalSeconds": 8.011795,
+        "curlExit": 28,
+        "error": "Resolving timed out"
+      },
+      {
+        "dnsSeconds": 1.952491,
+        "totalSeconds": 3.828745,
+        "http": 200
+      }
+    ],
+    "fixedDnsRequests": [
+      {
+        "ip": "38.76.171.242",
+        "totalSeconds": 2.099262,
+        "firstByteSeconds": 1.400286,
+        "http": 200
+      },
+      {
+        "ip": "38.76.171.242",
+        "totalSeconds": 2.037955,
+        "firstByteSeconds": 1.388485,
+        "http": 200
+      },
+      {
+        "ip": "172.67.73.171",
+        "totalSeconds": 2.192037,
+        "firstByteSeconds": 1.916961,
+        "http": 200
+      },
+      {
+        "ip": "172.67.73.171",
+        "totalSeconds": 1.981968,
+        "firstByteSeconds": 1.590932,
+        "http": 200
+      }
+    ],
+    "oldPinnedHomeRoutes": [
+      {
+        "ip": "104.26.6.43",
+        "totalSeconds": 3.01379,
+        "http": 200,
+        "tlsVerified": true
+      },
+      {
+        "ip": "104.26.7.43",
+        "totalSeconds": 3.346969,
+        "http": 200,
+        "tlsVerified": true
+      },
+      {
+        "ip": "172.67.73.171",
+        "totalSeconds": 1.676381,
+        "http": 200,
+        "tlsVerified": true
+      }
+    ],
+    "clientSource": {
+      "routeOrder": [
+        "system DNS",
+        "104.26.6.43",
+        "104.26.7.43",
+        "172.67.73.171"
+      ],
+      "perRouteTimeoutSeconds": 12,
+      "stickySuccessfulRoute": false,
+      "quicEnabled": true
+    },
+    "conclusion": "Host DNS/routing instability measured; bypassing resolution with retained Host/SNI and TLS validation lowered equivalent directory request to ~2s. Website/BFF is alive but itself adds ~1-2s response. Mixn serial 12s route fallback may amplify bad routes, not proven on networkless emulator. Old pinned IP failure hypothesis disproven here; do not recommend hardcoding workstation IPs."
+  },
+  "sources": [
+    "https://www.lightnovel.fun/",
+    "https://www.lightnovel.fun/api/pc-proxy/api/bff/home-feed-v1",
+    "https://www.lightnovel.life/",
+    "https://github.com/HyperionHXH/lightnovel-android-aggregator/blob/v1.21.3/app/src/main/java/io/github/jiangyuyi/lightnovel/core/network/CronetHttpTransport.kt",
+    "https://github.com/LightNovelShelf/Flutter/blob/main/lib/core/network/signalr_connection.dart"
+  ],
+  "unverified": [
+    "User physical handset network/DNS/proxy and installed build",
+    "Logged-in LNS content and current session validity",
+    "Cronet protocol-specific QUIC timings on connected Android device",
+    "Website browser full render versus API time"
+  ]
+}

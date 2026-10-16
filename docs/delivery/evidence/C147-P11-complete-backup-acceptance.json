@@ -1,0 +1,189 @@
+{
+  "date": "2026-10-14",
+  "status": "implemented-local-verified-external-acceptance-partial",
+  "verification": {
+    "fullSuitePassed": 847,
+    "skipped": 1,
+    "fullSuiteLog": "artifact://1149",
+    "analyze": "No issues found",
+    "skipReason": "Windows denied symlink creation for actual-file test",
+    "finalTargetedPassed": 41,
+    "finalTargetedSkipped": 1,
+    "secretScan": "_tools/C147-delivery-secret-scan.json: 1223 source files and all three release artifacts, zero credential/signing/private-name/debug hits"
+  },
+  "actual": {
+    "api35Partial": {
+      "systemPicker": true,
+      "restoredPartial": 2,
+      "restoredRulesDisabled": 2,
+      "summary": "作品2、书架2、目录2、完整媒体0、部分下载2（暂停）",
+      "resume": {
+        "comicRequestedOnlySecondPage": true,
+        "hlsPreservedFirst3Fragments": true,
+        "hlsFetchedMissing61Fragments": true,
+        "completeBoth": true
+      }
+    },
+    "api26Partial": {
+      "systemPicker": true,
+      "restoredPartial": 2,
+      "rulesDisabled": true,
+      "explicitEnable": true,
+      "forceStoppedDuringHls": true,
+      "afterIndependentRestartCompleted": true,
+      "limits": "Original request arrays lost only after eval kernel timeout; console output retained in parent transcript"
+    },
+    "cleanup": {
+      "device": "emulator-5554",
+      "orphanSnapshotRemoved": true,
+      "orphanGeneratedMediaRemoved": true,
+      "unreferencedImportedCoverRemoved": true,
+      "pendingApkOrphanRemoved": true,
+      "committedMangaAndHlsDirectoriesRetained": true,
+      "fixes": [
+        "Android /data/data and /data/user/0 exact system-prefix mapping in either direction; app-child aliases remain rejected",
+        "strict generated temp names also swept under Android picker cache"
+      ]
+    },
+    "apk": {
+      "device": "emulator-5556",
+      "original": "_tools/C125-webtoons.apk",
+      "packageName": "eu.kanade.tachiyomi.extension.all.webtoons",
+      "versionCode": 106002,
+      "versionName": "1.6.2",
+      "signerSha256": "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2",
+      "sha256": "8a9842dc5db97f9d3939a35eb819b154d5805a5338f5e35706d62bd3f0476079",
+      "bytes": 62811,
+      "staticPreview": true,
+      "explicitPendingImport": true,
+      "strongStopPendingRetainedHashMatches": true,
+      "actualIdentityDialog": [
+        "关闭",
+        "确认恢复 APK 的实际发布者",
+        "以下信息已从本机 APK 静态验证。备份中的信任不会迁移；确认后才会首次执行扩展代码。请仅接受你认识的发布者。",
+        "实际包名",
+        "eu.kanade.tachiyomi.extension.all.webtoons",
+        "实际版本：1.6.2 (106002)",
+        "实际发布者 SHA-256",
+        "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2",
+        "实际 APK SHA-256",
+        "8a9842dc5db97f9d3939a35eb819b154d5805a5338f5e35706d62bd3f0476079",
+        "保持停用",
+        "确认发布者并加载"
+      ],
+      "cancelRetainsDisabled": true,
+      "DEXActivated": false
+    },
+    "api35FullExport": {
+      "SAF": true,
+      "filename": "triomi-2026-10-14T15-26-08.101512-CDRLIW.zip",
+      "bytes": 522643549,
+      "library": 8,
+      "histories": 19,
+      "chapters": 4015,
+      "covers": 1,
+      "completeMedia": 6,
+      "partialMedia": 0,
+      "rules": 0,
+      "apks": 0
+    },
+    "windows": {
+      "releaseBuilt": true,
+      "hiddenMetadataWorkerActualExit": 0,
+      "appCrashFixedByExplicitWindowDestroyBeforeMemberAndCOMTeardown": true,
+      "TaskSchedulerRegistrationActual": "not-run; computer session closed",
+      "uiActual": "not-run; computer session closed"
+    },
+    "api26CompletedRepeat": {
+      "systemPickerActualApi35CompletedSubset": true,
+      "subsetBytes": 22577013,
+      "summary": [
+        "返回\n返回",
+        "备份与恢复",
+        "导出备份\n打包书架、阅读进度、历史、目录缓存与设置，并带上封面图。凭据类设置（密码 / token）不会写入备份。\n导出到应用私有目录\n选择后备份包会写入该目录",
+        "导出精简备份（不含封面与离线内容）",
+        "导出含完整/部分下载媒体备份（需额外磁盘空间）",
+        "每日自动本地备份\nAndroid 约每日执行，电量不足延后；不联网取封面、不上传。授权目录不可用时回退私有目录；旧备份保留。",
+        "后台检查更新\n联网检查追番更新并通知；默认关闭，开启后需要通知权限，仅在 WiFi 下检查。",
+        "选择备份 ZIP 恢复",
+        "本地备份文件\n还没有本地备份",
+        "导入完成：作品 0、书架 0、历史 0、目录 0、封面 0、完整媒体 0、部分下载 0（暂停）、规则 0（停用）、APK 0（待确认）、设置 0"
+      ],
+      "existingPathsPreserved": true,
+      "offlineReaderOpened": "Juice / Dogcatcher 1/2",
+      "pageTurnActual": false,
+      "visual": false,
+      "localMangaHashes": [
+        "d571e513d94f76a160adbf0a3d7f6322dabc4ee041d1607263d0f20ea7d0a8e8",
+        "5d8ef0ad8eb4cadb10c6ed7d6e2e26c81c37c8d818847b3832c924d1e0237b54"
+      ],
+      "restoredHlsBytes": 22429732,
+      "localPlaylistNoHttp": true,
+      "ffmpegNoNetworkTenSecondsExit": 0
+    },
+    "productionPreserved": {
+      "device": "emulator-5558",
+      "library": 0,
+      "chapters": 44,
+      "histories": 7
+    },
+    "cleanupAfterAcceptance": {
+      "taskCreatedRuleMediaIdentityRemoved": true,
+      "taskCreatedPendingApkRemoved": true,
+      "relayAndAdbReverseRemoved": true,
+      "api35Counts": "6 library /4013 chapters /19 histories /6 downloads",
+      "api26Counts": "4 library /3648 chapters /6 histories /3 downloads",
+      "originalApi26CompletedPublicVideoRetained": true,
+      "finalThreeDeviceHomeSemanticSmoke": true,
+      "actualFullZipCrcAndManifestSha256FilesVerified": 138
+    },
+    "finalWebDavUi": {
+      "device": "emulator-5554",
+      "actualMediaRangeToggleVisible": true,
+      "actualMetadataAndCoverDefaultVisible": true,
+      "codeApkExclusionVisible": true,
+      "existingLoopbackConfigurationNotReplaced": true,
+      "noUploadPerformed": true,
+      "remoteStatObservedNetworkUnreachable": true
+    }
+  },
+  "artifact": {
+    "bytes": 127781776,
+    "sha256": "ac09b41cd15c80b3f7703ae18e00b0a3626c2fff77a2b283236b70ad115fa789"
+  },
+  "limitations": [
+    "No external cloud target/authorization; loopback tests are not cloud-account acceptance",
+    "Computer session closed; desktop native UI cannot be driven",
+    "Pixel image/video visual review unavailable; no visual success claimed",
+    "Windows hidden worker exits29 before lifecycle fix, APPCRASH in flutter_windows.dll; retain failure",
+    "Windows registration/cancellation and enabled daily task not exercised: computer session closed; actual hidden worker only disabled no-op, exit0"
+  ],
+  "artifacts": [
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C147-P11-complete-backup-acceptance.apk",
+      "bytes": 127781776,
+      "sha256": "ac09b41cd15c80b3f7703ae18e00b0a3626c2fff77a2b283236b70ad115fa789",
+      "v2": true,
+      "cert": [
+        "Signer #1 certificate SHA-256 digest: 0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6"
+      ]
+    },
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C147-P11-android-signed.apk",
+      "bytes": 127781776,
+      "sha256": "58a8231e883226d8d79cc1176fe2f3fe21951cf3981098d7b117a37ba48d3bc4",
+      "v2": true,
+      "cert": [
+        "Signer #1 certificate SHA-256 digest: 9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077"
+      ]
+    },
+    {
+      "path": "D:/noval_and_manga/_tools/Triomi-C147-windows-release.zip",
+      "bytes": 37847895,
+      "sha256": "0c4c8b4d4acde92c15ddff2c2986ed8b23088371b4f041f9de35df6e3e05bc54",
+      "members": 50,
+      "exactReleaseMatch": true,
+      "hiddenWorkerSmokeExit": 0
+    }
+  ]
+}

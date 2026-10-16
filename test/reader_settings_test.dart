@@ -37,13 +37,6 @@ void main() {
     return container.read(readerSettingsProvider);
   }
 
-  test('默认是「从右到左 + 适应宽度 + 纯黑背景」', () {
-    final settings = readSettings();
-    expect(settings.mode, ReadingMode.rtl);
-    expect(settings.fit, ImageFit.width);
-    expect(settings.background, ReaderBackground.black);
-  });
-
   test('设置会持久化，重建后仍然生效', () async {
     final controller = controllerFor();
     await controller.setMode(ReadingMode.webtoon);

@@ -1,0 +1,22 @@
+{
+  "serial": "emulator-5556",
+  "status": "passed",
+  "artifactSha256": "307f2778a2fdc2015fd683ef13518a6d838ad02bd4ec756e57ac7a64980efd07",
+  "targetReplaced": false,
+  "networkControl": "ordinary Android Wi-Fi settings switch; svc data",
+  "noDefaultNetwork": true,
+  "detailOfflineFallback": true,
+  "restoredPages": [
+    "3 / 13"
+  ],
+  "knownBookVisible": true,
+  "independentRestart": true,
+  "screenshot": "C125-player-resume-api26-offline.png",
+  "wifiRestored": true,
+  "dataRestored": true,
+  "networkSettingsRestored": true,
+  "activeDefaultNetworkAfterRestore": [
+    "105"
+  ],
+  "visualReview": "Real Chinese body and dedicated font visually readable at3/13 while no default network"
+}

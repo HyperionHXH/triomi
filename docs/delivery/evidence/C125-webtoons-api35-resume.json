@@ -1,0 +1,19 @@
+{
+  "phase": "resume",
+  "at": "2026-10-10T02:59:47.888147Z",
+  "sourceId": "mihon:eu.kanade.tachiyomi.extension.all.webtoons:2522335540328470744",
+  "popularCount": 30,
+  "keywordSearchCount": 15,
+  "selection": "search",
+  "title": "Space Boy",
+  "chapterCount": 389,
+  "chapterId": "/en/sf/space-boy/ep-1/viewer?title_no=400&episode_no=1",
+  "pageCount": 13,
+  "persistedPage": 3.0,
+  "imageBytes": 91538,
+  "imageWidth": 800,
+  "imageHeight": 1313,
+  "disabledRejected": true,
+  "failedUpdateKeptOldPlugin": true,
+  "status": "passed"
+}

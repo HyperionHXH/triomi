@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-10T15:04:39.938Z",
+  "serial": "emulator-5554",
+  "artifactSha256": "52c391bd5ecf25e03d74981718aaad8505af570b7f87067085960510919b28b3",
+  "status": "partial",
+  "lns": {
+    "cachedChapterResume": true,
+    "secondChapterNetworkLoad": "failed",
+    "ordinaryRetry": "still failed",
+    "errorClassification": "network",
+    "sourceSessionNotModified": true,
+    "purchaseOrUnlockCalled": false
+  },
+  "lk": {
+    "firstToSecondChapter": "passed",
+    "firstChapterPages": 17,
+    "secondChapterPages": 35,
+    "realBodyLoaded": true
+  },
+  "scope": "Real UI on final installed acceptance release; no target replacement"
+}

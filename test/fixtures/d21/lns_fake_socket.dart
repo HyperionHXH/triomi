@@ -80,5 +80,4 @@ Map<String, Object?> completionFrame(
   if (error != null) 'error': error else 'result': result,
 };
 
-String encodeFrame(Object? frame) =>
-    '${jsonEncode(frame)}$lnsRecordSeparator';
+String encodeFrame(Object? frame) => '${jsonEncode(frame)}$lnsRecordSeparator';

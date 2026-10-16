@@ -1,0 +1,25 @@
+{
+  "status": "passed",
+  "serial": "emulator-5558",
+  "artifactSha256": "acc302287b6f69468004ec608c0b2b89b8be6e6c244804d32726c660799944a9",
+  "scope": "Production-signed final APK, public anonymous LK novel; no test target replacement",
+  "discoverRealPublicContent": true,
+  "chapterCount": 10,
+  "downloadManagerCompleted": "10 / 10",
+  "downloadCompleteVisuallyVerified": true,
+  "chapterRead": {
+    "firstPages": 73,
+    "secondPages": 56,
+    "realChineseBodyVisuallyVerified": true,
+    "nonzeroPageSaved": "3 / 73",
+    "homeResumePage": "3 / 73",
+    "actualNoDefaultNetworkRestartPage": "3 / 73"
+  },
+  "networkSettingsRestored": true,
+  "evidence": [
+    "C125-signed-novel-before-restart.png",
+    "C125-signed-novel-offline-resume.json",
+    "C125-signed-novel-offline-resume.png",
+    "C125-signed-novel-download-complete.png"
+  ]
+}

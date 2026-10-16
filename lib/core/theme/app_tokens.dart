@@ -1,5 +1,89 @@
 import 'package:flutter/material.dart';
 
+/// Named, bounded accent choices. Material derives readable foreground pairs
+/// from each seed instead of accepting arbitrary user colors.
+enum AppAccentPalette {
+  blue('蓝色', Color(0xFF2465AE), Color(0xFF9BCBFF)),
+  teal('青色', Color(0xFF006B60), Color(0xFF80D5C7)),
+  violet('紫色', Color(0xFF7350A2), Color(0xFFD7BAFF)),
+  rose('玫瑰色', Color(0xFF9E405F), Color(0xFFFFB0C8));
+
+  const AppAccentPalette(this.label, this.light, this.dark);
+  final String label;
+  final Color light;
+  final Color dark;
+}
+
+enum CoverShape {
+  portrait('竖版 2:3'),
+  wide('宽版 16:9'),
+  auto('按内容类型');
+
+  const CoverShape(this.label);
+  final String label;
+}
+
+enum CoverLayout {
+  adaptive('自动布局'),
+  grid('网格'),
+  list('列表');
+
+  const CoverLayout(this.label);
+  final String label;
+}
+
+enum CoverDensity {
+  compact('紧凑'),
+  comfortable('舒适');
+
+  const CoverDensity(this.label);
+  final String label;
+}
+
+/// Shared presentation for collection, card and row; default preserves the
+/// portrait/adaptive UI. Individual covers still use the existing MediaCover.
+@immutable
+class CoverAppearance extends ThemeExtension<CoverAppearance> {
+  const CoverAppearance({
+    this.shape = CoverShape.portrait,
+    this.layout = CoverLayout.adaptive,
+    this.density = CoverDensity.compact,
+  });
+
+  final CoverShape shape;
+  final CoverLayout layout;
+  final CoverDensity density;
+
+  double ratio({required bool isAnime}) => switch (shape) {
+    CoverShape.portrait => 2 / 3,
+    CoverShape.wide => 16 / 9,
+    CoverShape.auto => isAnime ? 16 / 9 : 2 / 3,
+  };
+
+  double get gap => density == CoverDensity.compact ? 8 : 12;
+  double get minimumCardWidth =>
+      density == CoverDensity.compact ? 140 : 184;
+
+  static CoverAppearance of(BuildContext context) =>
+      Theme.of(context).extension<CoverAppearance>() ??
+      const CoverAppearance();
+
+  @override
+  CoverAppearance copyWith({
+    CoverShape? shape,
+    CoverLayout? layout,
+    CoverDensity? density,
+  }) => CoverAppearance(
+    shape: shape ?? this.shape,
+    layout: layout ?? this.layout,
+    density: density ?? this.density,
+  );
+
+  @override
+  CoverAppearance lerp(CoverAppearance? other, double t) =>
+      other == null || t < 0.5 ? this : other;
+}
+
 /// 全局设计令牌。
 ///
 /// 对齐 `PROJECT_SPEC.md` 第 6 章：视觉基准是 Komikku 的 GNOME / libadwaita 观感

@@ -62,7 +62,8 @@ void main() {
 
   /// 仓储没有按 id 取行的方法，测试直接查表。
   Future<DownloadRow?> rowById(int id) async {
-    final query = db.select(db.downloads)..where((table) => table.id.equals(id));
+    final query = db.select(db.downloads)
+      ..where((table) => table.id.equals(id));
     return query.getSingleOrNull();
   }
 
@@ -107,29 +108,68 @@ void main() {
       itemSourceId: sourceId,
       itemRemoteId: remoteId,
       chapters: <Chapter>[
-        Chapter(
-          sourceId: sourceId,
-          remoteId: chapterRemoteId,
-          title: '第 1 章',
-        ),
+        Chapter(sourceId: sourceId, remoteId: chapterRemoteId, title: '第 1 章'),
       ],
     );
   }
 
   group('run() 的任务状态机', () {
+    test('网页播放地址不能下载为假视频或标记完成', () async {
+      final row = await enqueueRow('anime', '1', 'ep1');
+      var requests = 0;
+      final service = DownloadService(
+        repository: repository,
+        http: FakeHttpClient((_) async {
+          requests++;
+          return const SourceResponse(
+            statusCode: 200,
+            body: '<html>player</html>',
+          );
+        }),
+        preferences: preferences,
+      );
+      await expectLater(
+        service.run(
+          row: row,
+          provider: providerOf(
+            const ChapterContent(
+              playSources: [
+                PlaySource(
+                  name: '站点播放列表',
+                  url: 'https://anime.test/watch/1',
+                  webPage: true,
+                ),
+              ],
+            ),
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      final after = await rowById(row.id);
+      expect(after!.status, DownloadStatus.failed.value);
+      expect(after.errorMessage, contains('网页解析'));
+      expect(after.path, isNull);
+      expect(await repository.doneChapterIds('anime', '1'), isEmpty);
+      expect(requests, 0);
+    });
     test('来源不可用：failed 且带可读原因', () async {
       final row = await enqueueRow('gone-source', '1', '1:1');
       await DownloadService(
         repository: repository,
-        http: FakeHttpClient((_) async => const SourceResponse(statusCode: 200, body: '')),
+        http: FakeHttpClient(
+          (_) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
         preferences: preferences,
       ).run(row: row, provider: null);
 
       final after = await rowById(row.id);
       expect(after!.status, DownloadStatus.failed.value);
       expect(after.errorMessage, contains('来源不可用'));
-      expect(await repository.doneChapterIds('gone-source', '1'), isEmpty,
-          reason: '失败不计入已下载');
+      expect(
+        await repository.doneChapterIds('gone-source', '1'),
+        isEmpty,
+        reason: '失败不计入已下载',
+      );
     });
 
     test('锁定章节：拒绝下载，正文不入库', () async {
@@ -146,18 +186,15 @@ void main() {
         itemSourceId: 'lk',
         itemRemoteId: '1',
         chapters: const <Chapter>[
-          Chapter(
-            sourceId: 'lk',
-            remoteId: '1:1',
-            title: '付费章',
-            locked: true,
-          ),
+          Chapter(sourceId: 'lk', remoteId: '1:1', title: '付费章', locked: true),
         ],
       );
       final row = await enqueueRow('lk', '1', '1:1');
       final service = DownloadService(
         repository: repository,
-        http: FakeHttpClient((_) async => const SourceResponse(statusCode: 200, body: '')),
+        http: FakeHttpClient(
+          (_) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
         preferences: preferences,
       );
 
@@ -168,15 +205,20 @@ void main() {
       final after = await rowById(row.id);
       expect(after!.status, DownloadStatus.failed.value);
       expect(after.errorMessage, contains('付费'));
-      expect(await repository.localChapterContent('lk', '1:1'), isNull,
-          reason: '锁定章节不缓存正文');
+      expect(
+        await repository.localChapterContent('lk', '1:1'),
+        isNull,
+        reason: '锁定章节不缓存正文',
+      );
     });
 
     test('空正文：failed 并说明原因，不算已下载', () async {
       final row = await enqueueRow('lk', '1', '1:1');
       final service = DownloadService(
         repository: repository,
-        http: FakeHttpClient((_) async => const SourceResponse(statusCode: 200, body: '')),
+        http: FakeHttpClient(
+          (_) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
         preferences: preferences,
       );
       await expectLater(
@@ -194,13 +236,13 @@ void main() {
       final row = await enqueueRow('lk', '1', '1:1');
       await DownloadService(
         repository: repository,
-        http: FakeHttpClient((_) async => const SourceResponse(statusCode: 200, body: '')),
+        http: FakeHttpClient(
+          (_) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
         preferences: preferences,
       ).run(
         row: row,
-        provider: providerOf(
-          const ChapterContent(text: '正文第一段。'),
-        ),
+        provider: providerOf(const ChapterContent(text: '正文第一段。')),
       );
       final after = await rowById(row.id);
       expect(after!.status, DownloadStatus.done.value);
@@ -214,11 +256,7 @@ void main() {
       final http = FakeHttpClient((request) async {
         calls += 1;
         if (calls == 1) {
-          return SourceResponse(
-            statusCode: 200,
-            body: '',
-            url: request.url,
-          );
+          return SourceResponse(statusCode: 200, body: '', url: request.url);
         }
         throw const SourceException(
           sourceId: 'manga-src',
@@ -235,7 +273,9 @@ void main() {
         service.run(
           row: row,
           provider: providerOf(
-            const ChapterContent(images: <String>['https://x/1.jpg', 'https://x/2.jpg']),
+            const ChapterContent(
+              images: <String>['https://x/1.jpg', 'https://x/2.jpg'],
+            ),
           ),
         ),
         throwsA(isA<Object>()),
@@ -282,16 +322,15 @@ void main() {
       // 来源恢复后重试成功。
       await DownloadService(
         repository: repository,
-        http: FakeHttpClient((_) async => const SourceResponse(statusCode: 200, body: '')),
+        http: FakeHttpClient(
+          (_) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
         preferences: preferences,
       ).run(
         row: (await rowById(row.id))!,
         provider: providerOf(const ChapterContent(text: '恢复后的正文')),
       );
-      expect(
-        (await rowById(row.id))!.status,
-        DownloadStatus.done.value,
-      );
+      expect((await rowById(row.id))!.status, DownloadStatus.done.value);
     });
 
     test('两来源相同章节 ID：任务与离线正文互不串源', () async {
@@ -303,7 +342,9 @@ void main() {
 
       final service = DownloadService(
         repository: repository,
-        http: FakeHttpClient((_) async => const SourceResponse(statusCode: 200, body: '')),
+        http: FakeHttpClient(
+          (_) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
         preferences: preferences,
       );
       await service.run(
@@ -315,7 +356,10 @@ void main() {
         provider: providerOf(const ChapterContent(text: 'LNS 的正文')),
       );
 
-      expect((await repository.localChapterContent('lk', '3001'))?.text, 'LK 的正文');
+      expect(
+        (await repository.localChapterContent('lk', '3001'))?.text,
+        'LK 的正文',
+      );
       expect(
         (await repository.localChapterContent('lns', '3001'))?.text,
         'LNS 的正文',
@@ -324,14 +368,14 @@ void main() {
       expect(await repository.doneChapterIds('lns', '1'), <String>{'3001'});
     });
 
-    test('目录缺失时 run 标 done 但正文静默丢失（缺陷回归，当前失败）', () async {
-      // run() 在 chapterOf 为 null 时合成章节继续执行并 markDone；
-      // 但 saveChapterContent 只 UPDATE 已有章节行 → 内容没落库，
-      // 任务却是「已完成」。期望：要么拒绝执行，要么落库可读。
+    test('目录快照缺失时仍保存可读正文，再标记完成', () async {
+      // 旧下载任务可能没有目录快照；允许继续下载，但正文必须可离线读取。
       final row = await enqueueRow('lk', 'no-catalog', '1:1');
       await DownloadService(
         repository: repository,
-        http: FakeHttpClient((_) async => const SourceResponse(statusCode: 200, body: '')),
+        http: FakeHttpClient(
+          (_) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
         preferences: preferences,
       ).run(
         row: row,
@@ -356,24 +400,29 @@ void main() {
       bogusDir.createSync(recursive: true);
       await repository.markDone(row.id, path: bogusDir.path);
 
-      expect(await DownloadManifest.read(bogusDir.path), isNull,
-          reason: '目录里没有 manifest');
+      expect(
+        await DownloadManifest.read(bogusDir.path),
+        isNull,
+        reason: '目录里没有 manifest',
+      );
 
       final manifest = File(
         '${bogusDir.path}${Platform.pathSeparator}${DownloadManifest.fileName}',
       );
       await manifest.writeAsString('{not-json');
-      expect(await DownloadManifest.read(bogusDir.path), isNull,
-          reason: '损坏的 manifest 不抛错，按不可读处理');
+      expect(
+        await DownloadManifest.read(bogusDir.path),
+        isNull,
+        reason: '损坏的 manifest 不抛错，按不可读处理',
+      );
     });
 
     test('removeFiles 只删传入行拥有的路径；空/不存在路径安全跳过', () async {
       final ownedDir = Directory(
         '${docsDir.path}${Platform.pathSeparator}owned',
       )..createSync(recursive: true);
-      File(
-        '${ownedDir.path}${Platform.pathSeparator}0001.jpg',
-      ).writeAsBytesSync(<int>[1]);
+      File('${ownedDir.path}${Platform.pathSeparator}0001.jpg')
+          .writeAsBytesSync(<int>[1]);
       final otherFile = File(
         '${docsDir.path}${Platform.pathSeparator}untouched.txt',
       )..writeAsStringSync('keep');
@@ -389,8 +438,7 @@ void main() {
       ]);
 
       expect(ownedDir.existsSync(), isFalse, reason: '本行拥有的目录被删除');
-      expect(otherFile.existsSync(), isTrue,
-          reason: '不在删除清单里的文件不受影响');
+      expect(otherFile.existsSync(), isTrue, reason: '不在删除清单里的文件不受影响');
       expect(
         (await rowById(row.id))!.path,
         ownedDir.path,
@@ -414,7 +462,9 @@ void main() {
       final row = await enqueueRow('lk', '1', '1:1');
       final service = DownloadService(
         repository: repository,
-        http: FakeHttpClient((_) async => const SourceResponse(statusCode: 200, body: '')),
+        http: FakeHttpClient(
+          (_) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
         preferences: preferences,
       );
       await service.setWifiOnly(false);
@@ -422,16 +472,15 @@ void main() {
         row: row,
         provider: providerOf(const ChapterContent(text: '正文')),
       );
-      expect(
-        (await rowById(row.id))!.status,
-        DownloadStatus.done.value,
-      );
+      expect((await rowById(row.id))!.status, DownloadStatus.done.value);
     });
 
     test('wifiOnly 默认关闭（降级语义：取不到设置不阻塞用户）', () {
       final service = DownloadService(
         repository: repository,
-        http: FakeHttpClient((_) async => const SourceResponse(statusCode: 200, body: '')),
+        http: FakeHttpClient(
+          (_) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
         preferences: preferences,
       );
       expect(service.wifiOnly, isFalse);

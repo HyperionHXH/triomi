@@ -1,0 +1,256 @@
+{
+  "date": "2026-10-15",
+  "status": "scoped-local-production-consumer-acceptance-complete-with-initial-host-transport-failure-retained",
+  "device": {
+    "serial": "emulator-5556",
+    "sdk": 26,
+    "package": "io.github.hyperionhxh.triomi",
+    "versionCode": 148,
+    "artifactScope": "Already-installed C148 acceptance package; no build, install or replacement performed by this assignment",
+    "installedSha256ObservedBeforeCleanup": "a07e899791f0713310effdc8c466299173a36d724a235021caeec96958341e0f",
+    "installedSha256AfterCleanup": "a07e899791f0713310effdc8c466299173a36d724a235021caeec96958341e0f"
+  },
+  "scope": {
+    "productionConsumers": [
+      "Ordinary 来源与规则 URL import",
+      "DeclarativeSource discover/detail/chapters/content",
+      "Normal favorite UI",
+      "MangaUpdateService persistent catalog comparison",
+      "Actual Android MangaUpdateJobService / Job7401",
+      "notifyMangaUpdates / Android notification with public HTTPS cover",
+      "Production background auto-download and normal manga reader"
+    ],
+    "syntheticComparisonOnly": true,
+    "notClaimed": "This explicitly named local loopback catalog is a controlled 1→2→3 chapter comparison, not evidence that a third-party manga site published a chapter or that every external site works.",
+    "sourceId": "c149-update-smoke",
+    "sourceName": "C149-update-smoke 本地更新验收（loopback）",
+    "workId": "c149-work",
+    "workTitle": "C149 本地更新验收作品",
+    "ruleImportUrl": "http://10.0.2.2:8765/rule.json",
+    "serverBind": "0.0.0.0:8765 on the host, reached through the Android emulator host-loopback alias 10.0.2.2",
+    "ruleFormat": "JSON declarative rule, HTML catalog/content responses; no fake callbacks and no direct catalog mutation",
+    "media": {
+      "publicUrl": "https://imgs.xkcd.com/comics/cat_proximity.png",
+      "author": "Randall Munroe / xkcd",
+      "bytes": 16573,
+      "sha256": "df32fbf0442d01b55fe3ad64bda5ad786ca47862d5307ee2f1f4f0aa5a62bc9d",
+      "use": "Exact public PNG fetched once by host and served as page.png. Cover remained the original public HTTPS URL because the production notification intentionally accepts only HTTPS cover URLs. No TLS bypass, trust change or replacement bytes."
+    },
+    "preRead": [
+      "lib/features/library/data/manga_update_service.dart",
+      "lib/features/library/data/manga_update_background.dart",
+      "lib/features/library/manga_updates_page.dart",
+      "android/app/src/main/kotlin/io/github/hyperionhxh/triomi/MangaUpdateJobService.kt",
+      "android/app/src/main/kotlin/io/github/hyperionhxh/triomi/MangaUpdatesRuntime.kt",
+      "lib/features/sources/sources_page.dart",
+      "assets/rules/local-fixture.json",
+      "docs/RULE_FORMAT.md"
+    ],
+    "forbiddenActionsNotPerformed": [
+      "No build, Flutter command, lint, test or formatter",
+      "No install, uninstall, data clear, database replacement or whole-database restore",
+      "No Hive or secure-storage reads/writes",
+      "No account, tracking, cloud, signature or publisher-trust changes",
+      "No edits to production files or shared documentation",
+      "No operation on emulator-5562 or other devices"
+    ]
+  },
+  "strategy": {
+    "original": {
+      "wifiOnly": true,
+      "batteryNotLow": true,
+      "skipCompleted": true,
+      "autoDownload": false,
+      "background": false,
+      "perSource": 1,
+      "categories": [],
+      "sources": []
+    },
+    "duringSmoke": {
+      "wifiOnly": true,
+      "batteryNotLow": true,
+      "skipCompleted": true,
+      "autoDownload": true,
+      "background": true,
+      "perSource": 1,
+      "categories": [],
+      "sources": ["c149-update-smoke"]
+    },
+    "restoredThroughNormalUi": true,
+    "restoredScreenshot": "_tools/C149-update-restored-strategy.png"
+  },
+  "actualNewChapterJourney": {
+    "baseline": {
+      "normalDetailChapterCount": 1,
+      "firstActualJobResult": "success",
+      "added": 0,
+      "generation": 1,
+      "notifiedGeneration": 0,
+      "screenshot": "_tools/C149-update-baseline-detail.png"
+    },
+    "firstNewEvent": {
+      "hostPhaseChange": "1→2; appended a new catalog identity c149-2 without deleting or altering the original chapter",
+      "trigger": "adb -s emulator-5556 shell cmd jobscheduler run -f io.github.hyperionhxh.triomi 7401",
+      "result": "success",
+      "added": 1,
+      "generation": 2,
+      "notifiedGeneration": 2,
+      "actualNotification": {
+        "title": "C149 本地更新验收作品",
+        "body": "发现 1 个新章节",
+        "channel": "triomi.manga-updates",
+        "androidLargeIcon": "BITMAP 225x219 observed in dumpsys; actual xkcd cover also visible in opened screenshot",
+        "screenshot": "_tools/C149-update-new-notification.png"
+      },
+      "automaticDownload": {
+        "id": 6,
+        "chapter": "c149-2",
+        "status": "failed",
+        "realRequests": ["/manga/c149-work", "/chapter/c149-2", "/page.png"],
+        "error": "SourceException(c149-update-smoke, network): HTTP page.png DioException / HttpException: Connection closed while receiving …",
+        "notCountedAsDownloadPass": true
+      }
+    },
+    "secondNewEvent": {
+      "hostChange": "Host transport changed from BaseHTTPRequestHandler HTTP/1.0 close to HTTP/1.1 keep-alive with explicit flush. Catalog then 2→3 by adding c149-3; original identities unchanged.",
+      "trigger": "Actual forced Job7401, no UI download/retry button",
+      "result": "success",
+      "added": 1,
+      "generation": 3,
+      "notifiedGeneration": 3,
+      "automaticDownload": {
+        "id": 7,
+        "chapter": "c149-3",
+        "status": "done",
+        "progress": 1.0,
+        "file": "/data/user/0/io.github.hyperionhxh.triomi/app_flutter/downloads/c149-update-smoke/c149-work/c149-3/0001.png",
+        "sha256": "df32fbf0442d01b55fe3ad64bda5ad786ca47862d5307ee2f1f4f0aa5a62bc9d",
+        "hostHashMatched": true,
+        "normalDownloadUi": "Completed 1/2 chapters, 1 failed: accurately retained the first transport failure while confirming second chapter completed",
+        "managementScreenshot": "_tools/C149-update-auto-download-result.png",
+        "readerScreenshot": "_tools/C149-update-auto-downloaded-offline-reader.png",
+        "independentReaderScreenshot": "_tools/C149-update-independent-offline-reader.png",
+        "visualResult": "Normal reader displayed the actual cat-proximity xkcd image, title c149 work, chapter3 and 1/1. Independent force-stop/new-process replay also displayed it.",
+        "offlineQualification": "Initial shell-UID wifi disable returned137 and was not treated as offline success. Root svc wifi disable subsequently returned successfully and wifi_on=0; mobile_data=0. Independent new-process reader image was opened while no default network was reported. Setting airplane_mode_on=1 alone failed its protected broadcast, so airplane-mode activation itself is NOT claimed."
+      },
+      "initialFailureCauseQualification": "Host transport change coincided with success for the same public bytes and production downloader. It is evidence of host HTTP/1.0 transport incompatibility in this scenario, not a proven production-code root-cause diagnosis. No production fix was applied."
+    },
+    "repeatNoNewChapter": {
+      "actualJobResult": "success",
+      "added": 0,
+      "generation": 4,
+      "notifiedGeneration": 3,
+      "notificationStats": "After two new events: numEnqueuedByApp=2 / numPostedByApp=1 / numUpdatedByApp=1. The following no-new job did not enqueue a third notification.",
+      "scope": "One actual repeated check, not a long-term or reboot deduplication claim"
+    }
+  },
+  "jobConstraints": {
+    "registered": {
+      "jobId": 7401,
+      "service": "MangaUpdateJobService",
+      "periodicHours": 12,
+      "persisted": true,
+      "requiresBatteryNotLow": true,
+      "networkType": "UNMETERED"
+    },
+    "lowBattery": {
+      "simulation": "dumpsys battery unplug; dumpsys battery set level 5",
+      "observed": "AC/USB/Wireless powered=false, level5/scale100",
+      "nativeNonForcedRun": "Rejected with exit22: functional constraints but --force not specified",
+      "nativeDumpUnsatisfied": ["BATTERY_NOT_LOW", "TIMING_DELAY", "DEADLINE"],
+      "forcedRealWorker": "deferred / 网络/电量条件不满足",
+      "catalogCountBeforeAfter": [3, 3],
+      "generationBeforeAfter": [5, 5],
+      "notifiedGenerationBeforeAfter": [3, 3],
+      "restore": "dumpsys battery reset; final updates no longer STOPPED, level100, all power flags match original false",
+      "uiQualification": "Foreground update-page screenshots were stale success rows during background checks; NOT used as visual proof of low-battery state. Native scheduler and read-only per-work DB observations are the evidence."
+    },
+    "noNetwork": {
+      "simulation": "Root svc wifi disable and svc data disable",
+      "nativeNonForcedRun": "Rejected with exit22: functional constraints but --force not specified",
+      "nativeDump": "Connectivity connected=false; UNMETERED unsatisfied, BATTERY_NOT_LOW satisfied",
+      "forcedRealWorker": "deferred / 网络/电量条件不满足",
+      "catalogCountBeforeAfter": [3, 3],
+      "generationBeforeAfter": [5, 5],
+      "notifiedGenerationBeforeAfter": [3, 3],
+      "restore": "Root svc wifi enable and svc data enable; final wifi_on=1/mobile_data=1/airplane_mode_on=0, matching baseline",
+      "limits": "No metered-but-connected cellular-specific journey; this is the real missing-network constraint and registered UNMETERED configuration."
+    },
+    "backgroundCancel": {
+      "setup": "Temporary host delayed only this work catalog response by8 seconds",
+      "trigger": "Actual Job7401 forced and observed running before tapping normal UI 取消更新",
+      "before": {"status": "running", "generation": 5, "notifiedGeneration": 3, "chapterCount": 3},
+      "afterLateResponse": {"status": "queued", "generation": 5, "notifiedGeneration": 3, "chapterCount": 3},
+      "jobAfter": "waiting",
+      "recovery": "Delay removed; actual retry Job7401 success, added0, generation6/notifiedGeneration3",
+      "visualQualification": "Cancel action used normal real UI. The foreground page did not live-refresh the background state; screenshots are not claimed as direct queued-state proof. Exact state was observed via read-only SQLite."
+    }
+  },
+  "cleanup": {
+    "normalUiActions": [
+      "Restored original manga update strategy, including auto-download/background off and no source selection",
+      "Removed own favorite with normal detail button",
+      "Deleted only own C149 download group through download manager; original3 downloads retained",
+      "Removed own displayed feed and own source through ordinary UI",
+      "Own notification no longer present; no all-notifications clear was used"
+    ],
+    "exactScopedMetadataCleanup": {
+      "reason": "Normal source/favorite/download removal intentionally retains cached metadata/history and a hidden default feed plus saved feed. Parent explicitly authorized cleanup of only this source's rows.",
+      "appStoppedBeforeTransaction": true,
+      "predicate": "source_id='c149-update-smoke'",
+      "sql": "BEGIN IMMEDIATE; DELETE FROM chapters WHERE source_id='c149-update-smoke'; DELETE FROM manga_updates WHERE source_id='c149-update-smoke'; DELETE FROM histories WHERE source_id='c149-update-smoke'; DELETE FROM media_items WHERE source_id='c149-update-smoke'; DELETE FROM manga_feeds WHERE source_id='c149-update-smoke'; COMMIT;",
+      "before": {"chapters": 3, "manga_updates": 1, "histories": 1, "media_items": 1, "manga_feeds": 2},
+      "after": {"chapters": 0, "manga_updates": 0, "histories": 0, "media_items": 0, "manga_feeds": 0},
+      "noOriginalRowsDeleted": true,
+      "noHiveOrWholeDatabaseRestore": true
+    },
+    "originalRowsExcludingSmoke": {
+      "before": {"sources": 8, "library_entries": 4, "chapters": 3689, "histories": 6, "downloads": 3},
+      "after": {"sources": 8, "library_entries": 4, "chapters": 3689, "histories": 6, "downloads": 3},
+      "qualification": "Counts sampled after creating the isolated smoke favorite but exclude that source; not a row-by-row integrity hash of all original metadata. No original catalog/data cleanup was performed."
+    },
+    "finalOwnSourceFavoriteDownloadsCounts": {"sources": 0, "library_entries": 0, "downloads": 0},
+    "files": "Normal download deletion removed own files; only empty exact downloads/c149-update-smoke/c149-work and parent directory were rmdir'd. Final exact-name find returned no matching directory.",
+    "job7401": "Absent after restoring background=false; cmd jobscheduler get-job-state returned unknown(u0a77/jid7401)",
+    "originalJob7301": "Still waiting, same enabled scheduling scope as baseline",
+    "notificationPermission": "Existing API26 notification authorization used and never changed",
+    "hostStopped": true,
+    "hostStoppedEvidence": "Host Popen terminated; final 127.0.0.1:8765 connect_ex=10061 (connection refused)",
+    "temporaryHostScriptRemoved": true,
+    "temporaryPngRemoved": true,
+    "temporaryDeviceUiXmlRemoved": true,
+    "evidenceOnlyRetained": true,
+    "deviceReleased": "emulator-5556 left available to parent; C148 installed hash unchanged"
+  },
+  "evidence": {
+    "basePath": "D:/noval_and_manga",
+    "openedAndVisuallyReviewedSuccessScreenshots": [
+      "_tools/C149-update-baseline-detail.png",
+      "_tools/C149-update-original-strategy.png",
+      "_tools/C149-update-new-notification.png",
+      "_tools/C149-update-auto-download-result.png",
+      "_tools/C149-update-auto-downloaded-offline-reader.png",
+      "_tools/C149-update-independent-offline-reader.png",
+      "_tools/C149-update-restored-strategy.png"
+    ],
+    "hostRouteLogsNoCredentialsOrBodies": [
+      "_tools/c149-update-host.log",
+      "_tools/c149-update-host-http11.log",
+      "_tools/c149-update-host-final.log"
+    ],
+    "notSuccessProof": [
+      "_tools/C149-update-low-battery-deferred.png",
+      "_tools/C149-update-low-battery-refreshed.png",
+      "_tools/C149-update-background-cancel.png"
+    ],
+    "notSuccessProofReason": "Opened page screenshots retained stale success0 row; actual constraints and queued transition grounded in native scheduler/DB observations, not these screenshots."
+  },
+  "didNotHappenOrRemainUnclaimed": [
+    "No real external site newly published a chapter during this assignment; this is an explicitly labeled local dynamic comparison through real production consumers.",
+    "The first new chapter auto-download failed; only the subsequent HTTP1.1-hosted new chapter completed automatically. Both outcomes are retained.",
+    "No real reboot, 12-hour wait, deadline/power-doze timing or long-running notification repetition journey.",
+    "No metered-connected cellular-only network trial or all-platform P8 completion claim.",
+    "No claim that stale foreground background-update rows visually reflected deferred/queued state.",
+    "No C149 artifact revalidation here: this assignment stayed on the original installed C148 package as instructed."
+  ]
+}

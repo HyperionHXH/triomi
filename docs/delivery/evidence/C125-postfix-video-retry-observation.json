@@ -1,0 +1,13 @@
+{
+  "serial": "emulator-5558",
+  "status": "passed",
+  "artifactSha256": "8c913420a174e1efe2b3588213e0cac95311107481ca7e51d8f58267b56bb246",
+  "realFailure": "MediaPlayer1/-1004",
+  "ordinaryVisibleRetry": true,
+  "retryRecoveredRealFrame": "10:36/24:17",
+  "screenshots": [
+    "C125-postfix-signed-video-soak-20.png",
+    "C125-postfix-signed-video-retry.png"
+  ],
+  "longRunLimitation": "Long run was interrupted by actual media I/O failure; not uninterrupted playback claim"
+}

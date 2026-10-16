@@ -1,307 +1,319 @@
 package io.github.hyperionhxh.triomi
 
 import android.content.Context
-import android.content.pm.ApplicationInfo
+import android.content.Intent
 import android.graphics.Color
-import android.media.MediaPlayer
-import android.os.Build
+import android.graphics.Matrix
+import android.graphics.SurfaceTexture
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
-import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import android.widget.FrameLayout
-import android.net.Uri
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.VideoSize
+import androidx.media3.common.text.CueGroup
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.SubtitleView
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 
-/**
- * TextureView + MediaPlayer playback path for Android.
- *
- * API35 x86_64 testing showed that a VideoView/SurfaceView embedded in Flutter
- * can lose its buffers, and VideoView's Context+Uri overload can reject the
- * HTTP fixture with "No content provider". MediaPlayer.setDataSource(String)
- * plus a TextureView avoids both issues while keeping the player in Flutter.
- */
-class NativeVideoViewFactory(
-    private val messenger: BinaryMessenger,
-) : PlatformViewFactory(io.flutter.plugin.common.StandardMessageCodec.INSTANCE) {
+interface NativeVideoLifecycleOwner {
+    fun onBackground(allowAudio: Boolean)
+    fun onForeground()
+    fun onPipChanged(inPip: Boolean)
+}
+object NativeVideoLifecycle {
+    var active: NativeVideoLifecycleOwner? = null
+    var inPip = false
+}
+class NativeVideoViewFactory(private val messenger: BinaryMessenger) :
+    PlatformViewFactory(io.flutter.plugin.common.StandardMessageCodec.INSTANCE) {
     override fun create(context: Context, viewId: Int, args: Any?): PlatformView =
-        NativeVideoPlatformView(context, viewId, messenger, args)
+        NativeVideoPlatformView(context, viewId, messenger)
 }
 
+/** Media3 with the already verified hybrid-composition TextureView surface. */
+@UnstableApi
 private class NativeVideoPlatformView(
-    context: Context,
+    private val context: Context,
     viewId: Int,
     messenger: BinaryMessenger,
-    args: Any?,
-) : PlatformView, MethodChannel.MethodCallHandler, TextureView.SurfaceTextureListener {
-    private val tag = "TriomiNativeVideo"
-    private val debugLogging =
-        (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+) : PlatformView, MethodChannel.MethodCallHandler, TextureView.SurfaceTextureListener, NativeVideoLifecycleOwner {
     private val root = FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
     private val texture = TextureView(context).apply {
         surfaceTextureListener = this@NativeVideoPlatformView
-        layoutParams = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT,
-        )
+        layoutParams = FrameLayout.LayoutParams(-1, -1)
+    }
+    private val subtitles = SubtitleView(context).apply {
+        layoutParams = FrameLayout.LayoutParams(-1, -1)
+        setUserDefaultStyle()
+        setUserDefaultTextSize()
     }
     private val channel = MethodChannel(messenger, "triomi/native-video/$viewId")
     private val handler = Handler(Looper.getMainLooper())
+    @Volatile private var currentUrl: String? = null
+    @Volatile private var currentHeaders: Map<String, String> = emptyMap()
+    private var surface: Surface? = null
     private var disposed = false
-    private var currentUrl: String? = null
-    private var player: MediaPlayer? = null
-    private var outputSurface: Surface? = null
-    private var prepared = false
-    private var shouldPlay = true
-    private var playbackRate = 1f
-    // TextureView can be destroyed/recreated during rotation, backgrounding,
-    // or hybrid-composition relayout. Keep the last position independently of
-    // MediaPlayer so the replacement instance can resume deterministically.
-    private var resumePositionMs = 0L
-    private var lastDurationMs = 0L
-    private var lastLoggedPositionMs = -1000L
-
-    private val progressRunnable = object : Runnable {
+    private var announcedReady = false
+    private var resumeAfterSurface = false
+    private var backgroundAudio = false
+    private var fit = "contain"
+    private var videoWidth = 0
+    private var videoHeight = 0
+    private val dataSource = ResolvingDataSource.Factory(
+        DefaultDataSource.Factory(context, DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(false)),
+    ) { spec ->
+        val origin = currentUrl?.let(Uri::parse)
+        val sameOrigin = origin != null && origin.scheme == spec.uri.scheme && origin.authority == spec.uri.authority
+        val headers = currentHeaders.filterKeys {
+            sameOrigin || it.lowercase() !in listOf("cookie", "authorization")
+        }
+        spec.withRequestHeaders(headers)
+    }
+    private val player = ExoPlayer.Builder(context)
+        .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource))
+        .setAudioAttributes(AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
+        .setHandleAudioBecomingNoisy(true)
+        .build()
+    private val ticker = object : Runnable {
         override fun run() {
             if (disposed) return
             emitState()
-            val position = player?.let { lastPositionFrom(it) } ?: resumePositionMs
-            if (position - lastLoggedPositionMs >= 1000L || position < lastLoggedPositionMs) {
-                lastLoggedPositionMs = position
-                debug("state url=${safeUrl(currentUrl)} prepared=$prepared playing=${stateMap()["playing"]} position=$position duration=$lastDurationMs")
-            }
-            handler.postDelayed(this, 250L)
+            handler.postDelayed(this, 500)
         }
     }
 
     init {
+        NativeVideoLifecycle.active = this
         root.addView(texture)
+        root.addView(subtitles)
         channel.setMethodCallHandler(this)
-        handler.post(progressRunnable)
-        val initialUrl = (args as? Map<*, *>)?.get("url")?.toString()
-        if (!initialUrl.isNullOrBlank()) { currentUrl = initialUrl }
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (disposed) return
+                if (state == Player.STATE_READY && !announcedReady) {
+                    announcedReady = true
+                    emit("prepared", stateMap())
+                    updateBackgroundService()
+                }
+                if (state == Player.STATE_ENDED) {
+                    emit("completed", stateMap())
+                }
+                emitState()
+            }
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                emitState()
+            }
+            override fun onPlayerError(error: PlaybackException) {
+                // Never include media URLs, query tokens, headers or upstream bodies.
+                emit("error", mapOf("message" to "Media3 ${error.errorCodeName}",
+                    "what" to error.errorCode, "extra" to 0))
+                stopBackgroundService()
+            }
+            override fun onVideoSizeChanged(size: VideoSize) {
+                videoWidth = (size.width * size.pixelWidthHeightRatio).toInt()
+                videoHeight = size.height
+                fitVideo()
+            }
+            override fun onCues(cueGroup: CueGroup) {
+                subtitles.setCues(cueGroup.cues)
+            }
+        })
+        handler.post(ticker)
     }
 
     override fun getView(): View = root
-    override fun onFlutterViewAttached(flutterView: android.view.View) = Unit
+    override fun onFlutterViewAttached(flutterView: View) = Unit
     override fun onFlutterViewDetached() = Unit
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         try {
             when (call.method) {
                 "setUrl" -> {
-                    val url = call.argument<String>("url")
-                    if (url.isNullOrBlank()) result.error("invalid_url", "url is required", null)
-                    else { setUrl(url); result.success(null) }
+                    val url = requireNotNull(call.argument<String>("url"))
+                    val uri = Uri.parse(url)
+                    require(uri.scheme in listOf("http", "https", "file", "content"))
+                    require(uri.userInfo == null)
+                    currentUrl = url
+                    currentHeaders = call.argument<Map<String, String>>("headers") ?: emptyMap()
+                    announcedReady = false
+                    resumeOnForeground = false
+                    resumeAfterSurface = false
+                    val position = (call.argument<Number>("startMilliseconds")?.toLong() ?: 0L).coerceAtLeast(0)
+                    player.setMediaItem(MediaItem.Builder().setUri(uri)
+                        .setMediaMetadata(MediaMetadata.Builder()
+                            .setTitle(call.argument<String>("title") ?: "Triomi").build())
+                        .build(), position)
+                    player.prepare()
+                    player.playWhenReady = true
+                    result.success(null)
                 }
-                "play" -> {
-                    shouldPlay = true
-                    if (prepared) player?.start()
-                    emitState(); result.success(null)
-                }
-                "pause" -> {
-                    shouldPlay = false
-                    if (prepared && player?.isPlaying == true) player?.pause()
-                    emitState(); result.success(null)
-                }
+                "play" -> { player.play(); updateBackgroundService(); result.success(null) }
+                "pause" -> { player.pause(); result.success(null) }
                 "seek" -> {
-                    val ms = call.argument<Number>("milliseconds")?.toInt() ?: 0
-                    if (prepared) player?.seekTo(ms.coerceAtLeast(0))
+                    val duration = player.duration
+                    val target = (call.argument<Number>("milliseconds")?.toLong() ?: 0L).coerceAtLeast(0)
+                    player.seekTo(if (duration > 0) target.coerceAtMost(duration) else target)
                     result.success(null)
                 }
                 "setRate" -> {
-                    playbackRate = (call.argument<Number>("rate")?.toFloat() ?: 1f).coerceIn(0.25f, 4f)
-                    applyPlaybackRate(); result.success(null)
+                    player.setPlaybackSpeed((call.argument<Number>("rate")?.toFloat() ?: 1f).coerceIn(.5f, 3f))
+                    result.success(null)
+                }
+                "setVolume" -> {
+                    player.volume = (call.argument<Number>("volume")?.toFloat() ?: 1f).coerceIn(0f, 1f)
+                    result.success(null)
+                }
+                "setFit" -> {
+                    val value = call.argument<String>("fit") ?: "contain"
+                    require(value in listOf("contain", "cover", "fill"))
+                    fit = value; fitVideo(); result.success(null)
+                }
+                "setBackgroundAudio" -> {
+                    backgroundAudio = call.argument<Boolean>("enabled") == true
+                    if (backgroundAudio) updateBackgroundService() else stopBackgroundService()
+                    result.success(null)
+                }
+                "subtitleTracks" -> result.success(subtitleTracks())
+                "selectSubtitle" -> {
+                    val id = call.argument<String>("id")
+                    val builder = player.trackSelectionParameters.buildUpon()
+                        .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, id == null)
+                    if (id != null) {
+                        val parts = id.split(':').map(String::toInt)
+                        require(parts.size == 2)
+                        val group = player.currentTracks.groups[parts[0]].mediaTrackGroup
+                        require(group.type == C.TRACK_TYPE_TEXT)
+                        builder.addOverride(TrackSelectionOverride(group, parts[1]))
+                    }
+                    player.trackSelectionParameters = builder.build()
+                    result.success(null)
                 }
                 "getState" -> result.success(stateMap())
                 else -> result.notImplemented()
             }
-        } catch (error: Throwable) {
-            result.error("native_video_error", error.message, null)
+        } catch (_: Exception) {
+            result.error("native_video_error", "Media3 operation failed", null)
         }
     }
 
-    private fun setUrl(url: String) {
-        debug("setUrl url=${safeUrl(url)} surface=${outputSurface != null}")
-        currentUrl = url
-        shouldPlay = true
-        resumePositionMs = 0L
-        lastDurationMs = 0L
-        releasePlayer()
-        prepareIfPossible()
-    }
-
-    private fun prepareIfPossible() {
-        val url = currentUrl ?: return
-        val surface = outputSurface ?: return
-        if (disposed || player != null) return
-        val mediaPlayer = MediaPlayer()
-        player = mediaPlayer
-        try {
-            // `setDataSource(String)` expects a filesystem path for local media.
-            // Dart's offline-first path passes `file:///...`; normalize that URI
-            // here while leaving HTTP(S) URLs untouched.
-            mediaPlayer.setDataSource(normalizeDataSource(url))
-            mediaPlayer.setSurface(surface)
-            mediaPlayer.setOnPreparedListener { p ->
-                if (disposed || p !== player) {
-                    try { p.release() } catch (_: Throwable) {}
-                    return@setOnPreparedListener
+    private fun subtitleTracks(): List<Map<String, Any>> = buildList {
+        player.currentTracks.groups.forEachIndexed { groupIndex, group ->
+            if (group.type == C.TRACK_TYPE_TEXT) {
+                for (track in 0 until group.length) {
+                    if (!group.isTrackSupported(track)) continue
+                    val format = group.getTrackFormat(track)
+                    add(mapOf("id" to "$groupIndex:$track",
+                        "title" to (format.label ?: format.language ?: "字幕 ${track + 1}"),
+                        "selected" to group.isTrackSelected(track)))
                 }
-                prepared = true
-                lastDurationMs = p.duration.toLong().coerceAtLeast(0L)
-                debug("prepared duration=$lastDurationMs url=${safeUrl(url)} shouldPlay=$shouldPlay")
-                val resume = if (lastDurationMs > 0L) {
-                    resumePositionMs.coerceIn(0L, lastDurationMs)
-                } else {
-                    resumePositionMs.coerceIn(0L, Int.MAX_VALUE.toLong())
-                }
-                if (resume > 0L) {
-                    try { p.seekTo(resume.toInt()) } catch (_: Throwable) {}
-                }
-                applyPlaybackRate()
-                if (shouldPlay) p.start()
-                emit(
-                    "prepared",
-                    mapOf("duration" to lastDurationMs, "position" to resume),
-                )
-                emitState()
             }
-            mediaPlayer.setOnCompletionListener { p ->
-                if (p !== player) return@setOnCompletionListener
-                lastPositionFrom(p)?.let { resumePositionMs = it }
-                debug("completed position=$resumePositionMs duration=$lastDurationMs url=${safeUrl(url)}")
-                shouldPlay = false; emit("completed", null); emitState()
-            }
-            mediaPlayer.setOnErrorListener { p, what, extra ->
-                if (p !== player) return@setOnErrorListener true
-                lastPositionFrom(p)?.let { resumePositionMs = it }
-                prepared = false; shouldPlay = false
-                Log.e(tag, "error what=$what extra=$extra position=$resumePositionMs duration=$lastDurationMs")
-                emit(
-                    "error",
-                    mapOf(
-                        "what" to what,
-                        "extra" to extra,
-                        "message" to "MediaPlayer error $what/$extra",
-                    ),
-                )
-                emitState(); true
-            }
-            mediaPlayer.prepareAsync()
-        } catch (error: Throwable) {
-            prepared = false
-            if (debugLogging) Log.e(tag, "prepare exception url=${safeUrl(url)}", error)
-            emit("error", mapOf("message" to (error.message ?: "prepare failed")))
-            try { mediaPlayer.release() } catch (_: Throwable) {}
-            if (player === mediaPlayer) player = null
         }
     }
 
-    private fun applyPlaybackRate() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || !prepared) return
-        val p = player ?: return
-        try {
-            // Nonzero playbackParams can start MediaPlayer, including after
-            // a paused Surface rebuild. Restore the explicit pause intent.
-            p.playbackParams = p.playbackParams.setSpeed(playbackRate)
-            if (!shouldPlay && p.isPlaying) p.pause()
-        } catch (_: Throwable) {}
-    }
-
-    private fun normalizeDataSource(url: String): String =
-        if (url.startsWith("file://", ignoreCase = true)) {
-            Uri.parse(url).path ?: url
-        } else {
-            url
-        }
-
-    private fun stateMap(): Map<String, Any> {
-        val p = player
-        val pos = if (prepared && p != null) lastPositionFrom(p) ?: resumePositionMs else resumePositionMs
-        val dur = if (prepared && p != null) {
-            try { p.duration.toLong().coerceAtLeast(0L) } catch (_: Throwable) { lastDurationMs }
-        } else {
-            lastDurationMs
-        }
-        val playing = if (prepared && p != null) try { p.isPlaying } catch (_: Throwable) { false } else false
-        return mapOf("position" to pos, "duration" to dur, "playing" to playing, "url" to (currentUrl ?: ""))
-    }
-
+    private fun stateMap(): Map<String, Any> = mapOf(
+        "position" to player.currentPosition.coerceAtLeast(0),
+        "duration" to player.duration.coerceAtLeast(0),
+        "playing" to player.isPlaying,
+    )
     private fun emitState() = emit("state", stateMap())
-    private fun emit(method: String, args: Any?) { if (!disposed) channel.invokeMethod(method, args) }
-
-    private fun lastPositionFrom(mediaPlayer: MediaPlayer): Long? =
-        try { mediaPlayer.currentPosition.toLong().coerceAtLeast(0L) } catch (_: Throwable) { null }
-
-    private fun releasePlayer(preservePosition: Boolean = false) {
-        val old = player; player = null; prepared = false
-        if (preservePosition && old != null) {
-            lastPositionFrom(old)?.let { resumePositionMs = it }
-            try {
-                lastDurationMs = old.duration.toLong().coerceAtLeast(0L)
-            } catch (_: Throwable) {
-            }
-        }
-        if (old != null) { try { old.reset() } catch (_: Throwable) {}; try { old.release() } catch (_: Throwable) {} }
+    private fun emit(method: String, args: Any?) {
+        if (!disposed) channel.invokeMethod(method, args)
     }
 
-    override fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
-        debug("surface available ${width}x$height")
-        outputSurface?.release()
-        outputSurface = Surface(surfaceTexture)
-        prepareIfPossible()
+    private fun updateBackgroundService() {
+        if (!backgroundAudio || !announcedReady || !player.playWhenReady) return
+        BackgroundPlaybackService.player = player
+        context.startService(Intent(context, BackgroundPlaybackService::class.java))
     }
-    override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = Unit
-    override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-        debug("surface destroyed prepared=$prepared position=${stateMap()["position"]}")
-        if (!disposed) {
-            // Capture both the current position and whether playback was active
-            // before releasing the old player. A new SurfaceTexture will create
-            // a fresh MediaPlayer and seek back to this point.
-            player?.let { mediaPlayer ->
-                if (prepared) {
-                    lastPositionFrom(mediaPlayer)?.let { resumePositionMs = it }
-                    shouldPlay = try { mediaPlayer.isPlaying } catch (_: Throwable) { shouldPlay }
-                }
-            }
-            releasePlayer(preservePosition = true)
-        } else {
-            releasePlayer()
+    private fun stopBackgroundService() {
+        if (BackgroundPlaybackService.player !== player) return
+        context.stopService(Intent(context, BackgroundPlaybackService::class.java))
+        BackgroundPlaybackService.detach(player)
+    }
+
+    private var resumeOnForeground = false
+    override fun onBackground(allowAudio: Boolean) {
+        if (allowAudio) return
+        resumeOnForeground = player.playWhenReady
+        player.pause()
+    }
+    override fun onForeground() {
+        if (resumeOnForeground) {
+            resumeOnForeground = false
+            player.play()
         }
-        outputSurface?.release()
-        outputSurface = null
+    }
+    override fun onPipChanged(inPip: Boolean) {
+        emit("pip", mapOf("enabled" to inPip))
+        if (inPip && resumeOnForeground) {
+            resumeOnForeground = false
+            player.play()
+        }
+    }
+
+    override fun onSurfaceTextureAvailable(value: SurfaceTexture, width: Int, height: Int) {
+        surface?.release()
+        surface = Surface(value)
+        player.setVideoSurface(surface)
+        if (resumeAfterSurface) {
+            resumeAfterSurface = false
+            player.play()
+        }
+        fitVideo()
+    }
+    override fun onSurfaceTextureSizeChanged(value: SurfaceTexture, width: Int, height: Int) = fitVideo()
+    override fun onSurfaceTextureDestroyed(value: SurfaceTexture): Boolean {
+        player.clearVideoSurface()
+        if (!backgroundAudio && !NativeVideoLifecycle.inPip) {
+            resumeAfterSurface = player.playWhenReady || resumeOnForeground
+            player.pause()
+        }
+        surface?.release(); surface = null
         return true
     }
-    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
-
-    private fun debug(message: String) {
-        if (debugLogging) Log.d(tag, message)
-    }
-
-    private fun safeUrl(url: String?): String {
-        if (url.isNullOrBlank()) return "<none>"
-        return try {
-            val parsed = Uri.parse(url)
-            buildString {
-                if (!parsed.scheme.isNullOrBlank()) append(parsed.scheme).append("://")
-                if (!parsed.host.isNullOrBlank()) append(parsed.host)
-                append(parsed.path ?: "")
+    override fun onSurfaceTextureUpdated(value: SurfaceTexture) = Unit
+    private fun fitVideo() {
+        val width = texture.width.toFloat(); val height = texture.height.toFloat()
+        if (videoWidth <= 0 || videoHeight <= 0 || width <= 0 || height <= 0) return
+        val scale = if (fit == "cover") maxOf(width / videoWidth, height / videoHeight)
+            else minOf(width / videoWidth, height / videoHeight)
+        texture.setTransform(Matrix().apply {
+            if (fit != "fill") {
+                setScale(videoWidth * scale / width, videoHeight * scale / height, width / 2, height / 2)
             }
-        } catch (_: Throwable) {
-            "<invalid-url>"
-        }
+        })
     }
-
     override fun dispose() {
         if (disposed) return
-        disposed = true; handler.removeCallbacks(progressRunnable); channel.setMethodCallHandler(null)
-        releasePlayer(); outputSurface?.release(); outputSurface = null; root.removeAllViews()
+        disposed = true
+        if (NativeVideoLifecycle.active === this) NativeVideoLifecycle.active = null
+        handler.removeCallbacks(ticker)
+        channel.setMethodCallHandler(null)
+        stopBackgroundService()
+        player.release()
+        surface?.release(); surface = null
+        root.removeAllViews()
     }
 }

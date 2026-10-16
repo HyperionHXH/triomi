@@ -481,20 +481,25 @@ void main() {
       </div>
     ''';
 
-    test('selectRows 按字段表提取对象数组并补全地址', () {
-      final rows = bridge.selectRows(html, '.list .item', <Object?, Object?>{
-        'title': 'a.title',
-        'url': <Object?, Object?>{
-          'selector': 'a.title',
-          'attr': 'href',
-          'absolute': true,
+    test('selectRows 按字段表提取对象数组并补全地址', () async {
+      final rows = await bridge.selectRows(
+        html,
+        '.list .item',
+        <Object?, Object?>{
+          'title': 'a.title',
+          'url': <Object?, Object?>{
+            'selector': 'a.title',
+            'attr': 'href',
+            'absolute': true,
+          },
+          'coverUrl': <Object?, Object?>{
+            'selector': 'img.cover',
+            'attr': 'data-src',
+            'absolute': true,
+          },
         },
-        'coverUrl': <Object?, Object?>{
-          'selector': 'img.cover',
-          'attr': 'data-src',
-          'absolute': true,
-        },
-      }, 'https://example.com');
+        'https://example.com',
+      );
 
       expect(rows, hasLength(2));
       expect(rows[0]['title'], '第一条');
@@ -503,22 +508,32 @@ void main() {
       expect(rows[1]['title'], '第二条');
     });
 
-    test('不给字段表时回退为文本', () {
-      final rows = bridge.selectRows(html, '.list .item .author', null, null);
+    test('不给字段表时回退为文本', () async {
+      final rows = await bridge.selectRows(
+        html,
+        '.list .item .author',
+        null,
+        null,
+      );
       expect(rows.map((row) => row['text']).toList(), <String>['作者甲', '作者乙']);
     });
 
-    test('selectValue / selectValues 支持 XPath 与属性', () {
+    test('selectValue / selectValues 支持 XPath 与属性', () async {
       expect(
-        bridge.selectValue(html, '.list .item a.title', 'text', null),
+        await bridge.selectValue(html, '.list .item a.title', 'text', null),
         '第一条',
       );
       expect(
-        bridge.selectValues(html, '//a[@class="title"]/@href', 'text', null),
+        await bridge.selectValues(
+          html,
+          '//a[@class="title"]/@href',
+          'text',
+          null,
+        ),
         <String>['/manga/12', '/manga/13'],
       );
       expect(
-        bridge.selectValues(
+        await bridge.selectValues(
           html,
           '.list .item img.cover',
           'data-src',

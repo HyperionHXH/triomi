@@ -115,7 +115,7 @@ class _LkMessagesPageState extends ConsumerState<LkMessagesPage> {
         title: '还没有登录轻之国度',
         message: '登录后可以查看回复、点赞、私信等未读情况。',
         action: FilledButton.icon(
-          onPressed: () => context.push(AppRoutes.sources),
+          onPressed: () => context.push('${AppRoutes.sources}?type=novel'),
           icon: const Icon(Icons.login, size: 18),
           label: const Text('去登录'),
         ),

@@ -1,0 +1,163 @@
+{
+  "samples": [
+    {
+      "elapsedSeconds": 30.7,
+      "pssKiB": 321964,
+      "threads": 35
+    },
+    {
+      "elapsedSeconds": 41.0,
+      "pssKiB": 445228,
+      "threads": 68
+    },
+    {
+      "elapsedSeconds": 51.2,
+      "pssKiB": 451087,
+      "threads": 70
+    },
+    {
+      "elapsedSeconds": 61.4,
+      "pssKiB": 443264,
+      "threads": 54
+    },
+    {
+      "elapsedSeconds": 71.6,
+      "pssKiB": 456626,
+      "threads": 57
+    },
+    {
+      "elapsedSeconds": 81.8,
+      "pssKiB": 454634,
+      "threads": 54
+    },
+    {
+      "elapsedSeconds": 92.0,
+      "pssKiB": 460465,
+      "threads": 53
+    },
+    {
+      "elapsedSeconds": 102.2,
+      "pssKiB": 451813,
+      "threads": 53
+    },
+    {
+      "elapsedSeconds": 112.5,
+      "pssKiB": 490829,
+      "threads": 54
+    },
+    {
+      "elapsedSeconds": 122.7,
+      "pssKiB": 456031,
+      "threads": 50
+    },
+    {
+      "elapsedSeconds": 135.1,
+      "pssKiB": 456275,
+      "threads": 54
+    },
+    {
+      "elapsedSeconds": 145.3,
+      "pssKiB": 453899,
+      "threads": 52
+    },
+    {
+      "elapsedSeconds": 155.5,
+      "pssKiB": 466727,
+      "threads": 53
+    },
+    {
+      "elapsedSeconds": 165.7,
+      "pssKiB": 464051,
+      "threads": 53
+    },
+    {
+      "elapsedSeconds": 175.9,
+      "pssKiB": 474099,
+      "threads": 56
+    },
+    {
+      "elapsedSeconds": 186.1,
+      "pssKiB": 452107,
+      "threads": 51
+    },
+    {
+      "elapsedSeconds": 196.3,
+      "pssKiB": 459303,
+      "threads": 53
+    },
+    {
+      "elapsedSeconds": 206.6,
+      "pssKiB": 467255,
+      "threads": 54
+    },
+    {
+      "elapsedSeconds": 216.8,
+      "pssKiB": 466503,
+      "threads": 52
+    },
+    {
+      "elapsedSeconds": 227.0,
+      "pssKiB": 457522,
+      "threads": 54
+    },
+    {
+      "elapsedSeconds": 239.3,
+      "pssKiB": 456265,
+      "threads": 53
+    },
+    {
+      "elapsedSeconds": 249.5,
+      "pssKiB": 468596,
+      "threads": 55
+    },
+    {
+      "elapsedSeconds": 259.7,
+      "pssKiB": 464480,
+      "threads": 53
+    },
+    {
+      "elapsedSeconds": 269.9,
+      "pssKiB": 455108,
+      "threads": 55
+    },
+    {
+      "elapsedSeconds": 280.1,
+      "pssKiB": 455620,
+      "threads": 52
+    },
+    {
+      "elapsedSeconds": 290.3,
+      "pssKiB": 469056,
+      "threads": 54
+    },
+    {
+      "elapsedSeconds": 300.6,
+      "pssKiB": 468036,
+      "threads": 53
+    },
+    {
+      "elapsedSeconds": 310.8,
+      "pssKiB": 460292,
+      "threads": 54
+    },
+    {
+      "elapsedSeconds": 321.0,
+      "pssKiB": 460256,
+      "threads": 52
+    },
+    {
+      "elapsedSeconds": 331.3,
+      "pssKiB": 471630,
+      "threads": 55
+    },
+    {
+      "elapsedSeconds": 343.6,
+      "pssKiB": 465846,
+      "threads": 53
+    }
+  ],
+  "homeResumeCycles": 3,
+  "elapsedSeconds": 413.9,
+  "triomiCrashMarkers": 0,
+  "crashScope": "current emulator crash buffer, raw text not saved"
+}

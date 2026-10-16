@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-09T13:58:05.221758+00:00",
+  "api": 26,
+  "variant": "final release after ABI fixes",
+  "jobId": 7301,
+  "notificationId": 7302,
+  "notificationPresent": true,
+  "publicExtras": [
+    "android.title=String (追番更新提醒)",
+    "android.text=String (今天有 1 部追番更新：《东京复仇者 三天战争篇》)"
+  ],
+  "jobState": "waiting"
+}

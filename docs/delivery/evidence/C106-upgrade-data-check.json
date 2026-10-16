@@ -1,0 +1,49 @@
+{
+  "method": "Read-only copy; no app data cleared or source records modified",
+  "sources": [
+    {
+      "id": "age-anime",
+      "version": "1.0.1",
+      "enabled": 1
+    },
+    {
+      "id": "mangadex",
+      "version": "1.0.2",
+      "enabled": 1
+    }
+  ],
+  "readingHistories": [
+    {
+      "source_id": "mangadex",
+      "remote_id": "77bee52c-d2d6-44ad-a33a-1734c1fe696a",
+      "chapter_remote_id": "de75b745-d4c2-43dd-9c69-c650b206e015",
+      "position": 1.0
+    },
+    {
+      "source_id": "mangadex",
+      "remote_id": "77bee52c-d2d6-44ad-a33a-1734c1fe696a",
+      "chapter_remote_id": "81f5d624-a888-46dc-88e0-78c7dc4df632",
+      "position": 7.0
+    },
+    {
+      "source_id": "light-novel-kingdom",
+      "remote_id": "33139",
+      "chapter_remote_id": "33139:323385",
+      "position": 58.666666666666664
+    }
+  ],
+  "library": [
+    {
+      "source_id": "mangadex",
+      "remote_id": "77bee52c-d2d6-44ad-a33a-1734c1fe696a",
+      "type": "manga",
+      "progress": 76.2
+    },
+    {
+      "source_id": "light-novel-kingdom",
+      "remote_id": "33139",
+      "type": "novel",
+      "progress": 3.0
+    }
+  ]
+}

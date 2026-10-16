@@ -1,0 +1,18 @@
+{
+  "id": "archive-animation",
+  "name": "Internet Archive 动画馆藏",
+  "type": "anime",
+  "engine": "js",
+  "lang": "zh",
+  "version": "1.0.1",
+  "baseUrl": "https://archive.org",
+  "requireLogin": false,
+  "feeds": [
+    {
+      "id": "animation",
+      "name": "动画馆藏",
+      "url": "/advancedsearch.php?q=mediatype%3Amovies+AND+collection%3Aanimation&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=description&rows=20&page={page}&output=json"
+    }
+  ],
+  "script": "function text(value) { return value == null ? '' : String(value); }\nfunction resultItem(doc) { var id = text(doc.identifier); return { remoteId: id, title: text(doc.title) || id, url: '/details/' + id, coverUrl: 'https://archive.org/services/img/' + id, description: text(doc.description) }; }\nasync function api(path) { var res = await triomi.fetch(/^https?:\\/\\//i.test(path) ? path : triomi.baseUrl + path); if (res.status < 200 || res.status >= 300) throw new Error('Internet Archive HTTP ' + res.status); return JSON.parse(res.body); }\nasync function list(path) { var data = await api(path); var docs = (data.response && data.response.docs) || []; var out = []; for (var i = 0; i < docs.length; i++) { var item = resultItem(docs[i]); if (item.remoteId) out.push(item); } return out; }\nasync function discover(url, page) { return list(url); }\nasync function search(keyword, page) { return list('/advancedsearch.php?q=mediatype%3Amovies+AND+collection%3Aanimation+AND+title%3A' + encodeURIComponent(keyword) + '&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=description&rows=20&page=' + page + '&output=json'); }\nasync function detail(url, item) { var id = item.remoteId || url.split('/').pop(); var data = await api('/metadata/' + id); var meta = data.metadata || {}; var files = data.files || []; var chapters = []; for (var i = 0; i < files.length; i++) { var f = files[i]; var name = text(f.name); var format = text(f.format).toLowerCase(); if (!name || (format.indexOf('mpeg4') < 0 && format.indexOf('mp4') < 0 && name.toLowerCase().indexOf('.mp4') < 0)) continue; chapters.push({ remoteId: id + '|' + name, title: name, url: 'https://archive.org/download/' + id + '/' + encodeURIComponent(name) }); } return { item: { title: text(meta.title) || item.title, description: text(meta.description) || item.description, coverUrl: 'https://archive.org/services/img/' + id }, chapters: chapters }; }\nasync function content(url, chapter) { return { playSources: [{ name: 'Internet Archive MP4', url: url }] }; }"
+}

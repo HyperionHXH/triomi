@@ -103,6 +103,9 @@ class FakeRemoteShelf implements RemoteShelfProvider {
   Future<List<MediaItem>> remoteShelf() async => const <MediaItem>[];
 
   @override
+  Future<Map<String, int>> remoteUnreadCounts() async => const <String, int>{};
+
+  @override
   Future<void> setInRemoteShelf(MediaItem item, bool add) async {
     if (failure != null) throw failure!;
     writes.add((remoteId: item.remoteId, add: add));
@@ -273,12 +276,21 @@ void main() {
 
     testWidgets('footer 分隔条渲染且只出现一次', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: MediaItemCollection(
-              items: <MediaItem>[_item('1'), _item('2')],
-              sourceName: '测试源',
-              footer: const Text('已经到底了'),
+        ProviderScope(
+          overrides: [
+            sourceHttpClientProvider.overrideWithValue(
+              FakeHttpClient(
+                (_) async => const SourceResponse(statusCode: 200, body: ''),
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: MediaItemCollection(
+                items: <MediaItem>[_item('1'), _item('2')],
+                sourceName: '测试源',
+                footer: const Text('已经到底了'),
+              ),
             ),
           ),
         ),
@@ -325,72 +337,102 @@ void main() {
     });
   });
 
-  group('T7-4 导出目录与回退', () {
-    test('SAF 写入成功：返回授权目录路径，不落本地', () async {
-      final db = openTestDatabase();
-      addTearDown(db.close);
-      final service = BackupService(
-        database: db,
-        preferences: memoryPreferences(),
-        http: FakeHttpClient(
-          (request) async => const SourceResponse(statusCode: 200, body: ''),
-        ),
-      );
-
-      final written = <String>[];
-      final result = await service.exportToFile(
-        directoryUri: 'content://com.android.externalstorage/tree/primary',
-        writeToTree: (uri, fileName, bytes) async {
-          written.add('$uri/$fileName');
-          // D49：返回系统真实 document URI（可能被系统改名）。
-          return 'content://com.android.externalstorage/document/primary/renamed-$fileName';
-        },
-      );
-
-      expect(written, hasLength(1));
-      expect(
-        result.path,
-        startsWith('content://com.android.externalstorage/document/primary/renamed-'),
-      );
-      expect(result.path, endsWith('.zip'));
-    });
-
-    test('SAF 写入失败：回退应用私有目录', () async {
-      final db = openTestDatabase();
-      addTearDown(db.close);
-      final service = BackupService(
-        database: db,
-        preferences: memoryPreferences(),
-        http: FakeHttpClient(
-          (request) async => const SourceResponse(statusCode: 200, body: ''),
-        ),
-      );
-
-      // 单测里没有 path_provider 插件，用假通道提供文档目录。
-      final docsDir = Directory.systemTemp.createTempSync('triomi_backup_');
-      const channel = MethodChannel('plugins.flutter.io/path_provider');
+  group('T7-4 流式备份、真实URI与回退', () {
+    late Directory docsDir;
+    const channel = MethodChannel('plugins.flutter.io/path_provider');
+    setUp(() {
+      docsDir = Directory.systemTemp.createTempSync('triomi_backup_');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
             return call.method == 'getApplicationDocumentsDirectory'
                 ? docsDir.path
                 : null;
           });
-      addTearDown(() {
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(channel, null);
-        if (docsDir.existsSync()) docsDir.deleteSync(recursive: true);
-      });
+    });
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+      docsDir.deleteSync(recursive: true);
+    });
 
+    test('SAF读取已关闭的完整ZIP，返回真实改名URI并清理本机副本', () async {
+      final db = openTestDatabase();
+      addTearDown(db.close);
+      final prefs = memoryPreferences();
+      await prefs.set('reader.fontSize', 22);
+      final service = BackupService(
+        database: db,
+        preferences: prefs,
+        http: FakeHttpClient(
+          (request) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
+      );
+      late String stagingPath;
       final result = await service.exportToFile(
-        directoryUri: 'content://broken/tree',
-        writeToTree: (uri, fileName, bytes) async {
-          throw StateError('SAF 写入失败');
+        includeCovers: false,
+        directoryUri: 'content://authorized/tree',
+        writeToTree: (uri, fileName, path) async {
+          stagingPath = path;
+          final payload = BackupService.validatedPayload(
+            await File(path).readAsBytes(),
+          );
+          expect(payload['settingsValues'], {'reader.fontSize': 22});
+          expect(File('$path.part').existsSync(), isFalse);
+          return 'content://authorized/document/system-renamed.zip';
         },
       );
+      expect(result.path, 'content://authorized/document/system-renamed.zip');
+      expect(result.summary.savedToSaf, isTrue);
+      expect(File(stagingPath).existsSync(), isFalse);
+      expect(await BackupService.localBackups(), isEmpty);
+    });
 
-      expect(result.path, isNot(startsWith('content://')));
-      expect(result.path, contains('backups'));
-      expect(File(result.path).existsSync(), isTrue);
+    test('权限失败或空URI保留完整本机ZIP而不发布部分文件', () async {
+      final db = openTestDatabase();
+      addTearDown(db.close);
+      final prefs = memoryPreferences();
+      final service = BackupService(
+        database: db,
+        preferences: prefs,
+        http: FakeHttpClient(
+          (request) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
+      );
+      for (final failWithException in [true, false]) {
+        await prefs.set('reader.fontSize', failWithException ? 20 : 24);
+        final result = await service.exportToFile(
+          includeCovers: false,
+          directoryUri: 'content://broken/tree',
+          writeToTree: (_, _, _) async {
+            if (failWithException) throw StateError('权限被回收');
+            return '';
+          },
+        );
+        expect(result.summary.savedToSaf, isFalse);
+        final payload = BackupService.validatedPayload(
+          await File(result.path).readAsBytes(),
+        );
+        expect(payload['settingsValues'], {
+          'reader.fontSize': failWithException ? 20 : 24,
+        });
+      }
+      final backups = await BackupService.localBackups();
+      expect(
+        [
+          for (final file in backups)
+            (BackupService.validatedPayload(
+                  await file.readAsBytes(),
+                )['settingsValues']
+                as Map)['reader.fontSize'],
+        ]..sort(),
+        [20, 24],
+      );
+      expect(
+        Directory('${docsDir.path}/backups')
+            .listSync()
+            .where((file) => file.path.endsWith('.part')),
+        isEmpty,
+      );
     });
   });
 

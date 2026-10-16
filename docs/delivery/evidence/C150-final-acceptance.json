@@ -1,0 +1,172 @@
+{
+  "round": "C150",
+  "status": "N18-fixed; original-normal-export-and-scoped-restore-explicit-accept-DEX-passed-cleaned; broad-gates-partial",
+  "fix": {
+    "id": "N18",
+    "file": "lib/core/backup/apk_backup_files.dart",
+    "symptom": "Explicit installed APK backup rejected old hostStatus missing versionName",
+    "rootCause": "Historical package/code/hash/signer pins existed but versionName and some installedPackages display fallback absent",
+    "decision": "Only absent historical installed versionName recovered from private snapshot static inspection after exact pinned bytes/package/code/full signer match; no DEX/config/trust mutation; one inspect",
+    "failingBefore": "C14996c0 original API35 normal UI FormatException APK 包身份或指纹无效; unit fail-before not run"
+  },
+  "verification": {
+    "targeted": {
+      "passed": 25,
+      "exit": 0,
+      "log": "_tools/C150-apk-backup-targeted.log"
+    },
+    "flutterSuite": {
+      "passed": 967,
+      "skipped": 3,
+      "exit": 0,
+      "log": "_tools/C150-flutter-suite.log"
+    },
+    "analyze": {
+      "exit": 0,
+      "result": "No issues found",
+      "log": "_tools/C150-analyze.log"
+    }
+  },
+  "artifacts": [
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C150-apk-backup-acceptance.apk",
+      "bytes": 129094792,
+      "sha256": "be424cdc123a0400d02f04f1b1a574f4db4e62530d93df9153399e7058ed1e11",
+      "v2Verified": true,
+      "signerCertificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6",
+      "signerCount": "1"
+    },
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C150-apk-backup-android-signed.apk",
+      "bytes": 129094792,
+      "sha256": "681e8d8b91592357b1030402968581fbdde9a31dcc09e2fa95bc08f3af2402c8",
+      "v2Verified": true,
+      "signerCertificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077",
+      "signerCount": "1"
+    },
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C150-apk-backup-windows-release.zip",
+      "bytes": 38102068,
+      "sha256": "1a0bd51e71a741ad640e6728f5db17efdfc2088bc551dd2860f9b8edc63df73f",
+      "members": 50,
+      "exactMatchRelease": true
+    }
+  ],
+  "installations": [
+    {
+      "serial": "emulator-5554",
+      "preserveDataInstallR": true,
+      "installedSha256": "be424cdc123a0400d02f04f1b1a574f4db4e62530d93df9153399e7058ed1e11"
+    },
+    {
+      "serial": "emulator-5556",
+      "preserveDataInstallR": true,
+      "installedSha256": "be424cdc123a0400d02f04f1b1a574f4db4e62530d93df9153399e7058ed1e11"
+    },
+    {
+      "serial": "emulator-5558",
+      "preserveDataInstallR": true,
+      "installedSha256": "681e8d8b91592357b1030402968581fbdde9a31dcc09e2fa95bc08f3af2402c8"
+    }
+  ],
+  "signingSecretMaterialScan": {
+    "filesScanned": 1285,
+    "filesWithCredentialOrSigningSecret": 0,
+    "artifacts": [
+      {
+        "path": "D:\\noval_and_manga\\_tools\\Triomi-C150-apk-backup-acceptance.apk",
+        "membersScanned": 601,
+        "membersWithSecret": 0,
+        "privateMaterialNames": 0,
+        "debugFiles": 0
+      },
+      {
+        "path": "D:\\noval_and_manga\\_tools\\Triomi-C150-apk-backup-android-signed.apk",
+        "membersScanned": 601,
+        "membersWithSecret": 0,
+        "privateMaterialNames": 0,
+        "debugFiles": 0
+      },
+      {
+        "path": "D:\\noval_and_manga\\_tools\\Triomi-C150-apk-backup-windows-release.zip",
+        "membersScanned": 50,
+        "membersWithSecret": 0,
+        "privateMaterialNames": 0,
+        "debugFiles": 0
+      },
+      {
+        "path": "D:\\noval_and_manga\\triomi\\build\\windows\\x64\\runner\\Release",
+        "membersScanned": 50,
+        "membersWithSecret": 0,
+        "privateMaterialNames": 0,
+        "debugFiles": 0
+      }
+    ],
+    "status": "passed",
+    "scope": "Exact signing secrets/private-material/debug names only; account files deliberately not read; no exact account-secret scan claim",
+    "accountsRead": false
+  },
+  "priorEvidenceBoundary": "All C149 crop/cache/reboot/media journeys retain C149-byte scope; not relabeled C150. C150 only APK backup fix, no native playback/privacy changes. C149/C125 artifacts untouched.",
+  "originalExportReported": {
+    "device": "emulator-5554",
+    "normalUI": true,
+    "apkPackages": 5,
+    "bytes": 729296,
+    "sha256": "875fa067dfb06dcff557cee84408aa5524be325bb5acbe23516bb1979af0e0d0",
+    "fullOriginalWillNotBeMergedIntoSecondDevice": true
+  },
+  "limits": [
+    "No P10 or P11 external writes authorized/performed",
+    "CF remains waived and actual verification not-completed",
+    "Broad multi-platform/native-window/endurance matrices remain partial"
+  ],
+  "formalSmoke": {
+    "device": "emulator-5558",
+    "actualAppStarted": true,
+    "originalHistoryVisible": true,
+    "originalNovelRead": true,
+    "position": "3/37",
+    "screenshot": "_tools/C150-signed-novel-smoke.png",
+    "actualImageOpened": true,
+    "limit": "Ordinary existing novel consumer smoke, not full formal-device APK transfer/media/privacy matrix"
+  },
+  "apkRestoreActual": {
+    "evidence": "C150-apk-restore-final-journey.json",
+    "scope": "Full original normal export5APKs; whole original only previewed/canceled. Explicitly labeled derived APK-only Webtoons transport restored, not untouched full-library merge.",
+    "pendingColdStart": true,
+    "declinedFirstThenExplicitFullFingerprintAcceptance": true,
+    "realDexLanguageSources": 7,
+    "actualPublicDetail": "Suitor Armor / Purpah / Fantasy;169chapters",
+    "covers": "placeholder;not passed",
+    "originalNativePinsUnchanged": true,
+    "bothDevicesOriginalIdentityStateExactlyEqual": true,
+    "cleanup": "Only own new feed/source169chapters/media/pins/hash-path APK/picker files removed; original audit ZIP retained",
+    "parentOpenedScreenshots": [
+      "C150-apk-export-five-success.png",
+      "C150-apk-actual-publisher-explicit-dialog.png",
+      "C150-apk-webtoons-real-detail.png"
+    ],
+    "parentIndependentlyVerifiedOriginalZipCRCAndApkByteEquality": true
+  },
+  "desktopSmoke": {
+    "artifact": "Triomi-C150-apk-backup-windows-release.zip",
+    "actualJourney": "Normal launch -> real cover discovery grid -> settings -> My -> Backup and Restore -> Back -> normal exit0",
+    "exeSha256": "b6c3954b1b00dde89a9b8de299ce95c2deac776291aaa28dba5d7d9f2d6a4920",
+    "appSoSha256": "ea10e99f60112734276f04285e74d2345f60aa0d39675ef2cf526a7b98d7238b",
+    "switchesObservedOff": [
+      "source definitions",
+      "APK packages",
+      "daily backup"
+    ],
+    "noSwitchesToggledOrExportPerformed": true,
+    "screenshotsParentActuallyOpened": [
+      "C150-windows-home-restored.png",
+      "C150-windows-settings.png",
+      "C150-windows-backup-page.png"
+    ],
+    "exitCode": 0,
+    "ownExtractedCopyRemoved": true,
+    "originalDataSettingsChanged": false,
+    "limits": "Entry-surface smoke, not Windows APK execution/backup new acceptance or C149 TLS/PIN/media journey repeated"
+  }
+}

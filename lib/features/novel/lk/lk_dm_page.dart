@@ -7,9 +7,11 @@ import 'package:go_router/go_router.dart';
 import '../../../core/models/lk_account.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/source/source_api.dart';
+import '../../../core/source/source_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/widgets/page_scaffold.dart';
+import '../../../core/widgets/source_network_image.dart';
 import 'lk_access.dart';
 
 /// 私信会话列表。点进去是只读线程。
@@ -141,7 +143,7 @@ class _LkDmConversationsPageState extends ConsumerState<LkDmConversationsPage> {
         title: '还没有登录轻之国度',
         message: '登录后可以查看私信会话。',
         action: FilledButton.icon(
-          onPressed: () => context.push(AppRoutes.sources),
+          onPressed: () => context.push('${AppRoutes.sources}?type=novel'),
           icon: const Icon(Icons.login, size: 18),
           label: const Text('去登录'),
         ),
@@ -190,7 +192,11 @@ class _LkDmConversationsPageState extends ConsumerState<LkDmConversationsPage> {
         backgroundColor: context.palette.coverPlaceholder,
         foregroundImage: conversation.peer.avatarUrl == null
             ? null
-            : NetworkImage(conversation.peer.avatarUrl!),
+            : SourceNetworkImage(
+                conversation.peer.avatarUrl!,
+                http: ref.watch(sourceHttpClientProvider),
+                sourceId: 'light-novel-kingdom',
+              ),
         child: conversation.peer.avatarUrl == null
             ? const Icon(Icons.person_outline, size: 20)
             : null,

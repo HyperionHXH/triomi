@@ -1,0 +1,9 @@
+{
+  "date":"2026-10-14",
+  "status":"partial",
+  "apk":{"path":"D:/noval_and_manga/_tools/Triomi-C137-P12-incognito-acceptance.apk","bytes":127126340,"sha256":"14f76510139788c709e1f4a547ad61cf98af611ca83dc3b10b111d2a8096a54e","devicesInstalledAndHashMatched":["emulator-5554","emulator-5556"],"v2Verified":true,"certificateSha256":"0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6"},
+  "verification":{"readerPlayerTargetedPassed":4,"fullSuitePassed":788,"fullSuiteLog":"artifact://735","analyze":"No issues found"},
+  "implementation":["Explicit privacy switch applies to subsequently opened manga, novel and player sessions","Each session captures setting before lifecycle/dispose callbacks; suppresses new library progress/history/automatic tracking/site progress/last-anime-selection writes","Old progress/history/caches remain available; not network anonymity, cache erasure or app lock"],
+  "actualApi35":{"switch":"enabled then restored original disabled","novel":"Existing cached LNS first chapter opened and exited; scoped history rows exactly unchanged; no successful page movement claimed","manga":"Existing public rule reader rejected source removed before content; failure retained, not counted as successful read","visual":"not-completed"},
+  "limitations":["Real manga/player successful no-write lifecycle and API26/signed/Windows journey still pending","Cache/source requests remain allowed and described explicitly","P12 app lock, hidden/dynamic categories, local media library, cache governance, production updater and release acceptance remain outstanding"]
+}

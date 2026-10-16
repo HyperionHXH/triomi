@@ -1,0 +1,29 @@
+{
+  "stage": "complete",
+  "hostOutOfOrder": true,
+  "topLevel": {
+    "timeoutMs": 3934,
+    "hostHeartbeats": 79,
+    "otherSessionRecovered": true
+  },
+  "function": {
+    "timeoutMs": 3808,
+    "hostHeartbeats": 76,
+    "otherSessionRecovered": true
+  },
+  "allocationLoop": {
+    "timeoutMs": 1999,
+    "hostHeartbeats": 39,
+    "otherSessionRecovered": true
+  },
+  "afterAwait": {
+    "timeoutMs": 3871,
+    "hostHeartbeats": 77,
+    "otherSessionRecovered": true
+  },
+  "recursionRecovered": true,
+  "allocationAndOversizedResultRecovered": true,
+  "cancelAndLateHostResponseRecovered": true,
+  "finalRestart": true,
+  "status": "passed"
+}

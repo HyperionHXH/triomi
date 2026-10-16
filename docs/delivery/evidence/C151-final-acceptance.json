@@ -1,0 +1,154 @@
+{
+  "round": "C151",
+  "version": "0.1.0+151",
+  "releaseTag": "v0.1.0-test.151",
+  "status": "verified-local; ready-to-publish-v0.1.0-test.151",
+  "changes": [
+    "SourcesPage distinct anime/manga/novel tabs and per-category filters/catalog",
+    "Contextual source entry from discovery/anime selection/novel account pages",
+    "Type-specific add-source chooser and secondary row operations menu",
+    "Mihon local Installed / Browse / Repositories; local installed state independent of repository network",
+    "Serialized package toggles with pending disabled; UI fixture metadata not active in release"
+  ],
+  "review": {
+    "performed": true,
+    "fixed": [
+      "category catalog filters leaked across categories",
+      "hidden type counted as removable filter",
+      "package enable writes raced on rapid clicks",
+      "old development fixture rows displayed in production UI",
+      "obsolete toolbar clipboard helper unused",
+      "CI acceptance flag forwarded unreliably; use Gradle project environment",
+      "tag push would rebuild/overwrite locally verified assets without remote signing secrets; release now explicit manual tag"
+    ]
+  },
+  "verification": {
+    "flutter": {
+      "passed": 968,
+      "skipped": 3,
+      "exit": 0,
+      "log": "_tools/C151-flutter-suite-release.log"
+    },
+    "python": {
+      "passed": 85,
+      "exit": 0,
+      "log": "_tools/C151-python-suite.log"
+    },
+    "analyze": {
+      "exit": 0,
+      "result": "No issues found",
+      "log": "_tools/C151-analyze-reviewed.log"
+    },
+    "encodingErrors": 0,
+    "deliveryConsistencyErrors": 0
+  },
+  "artifacts": [
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C151-sources-acceptance.apk",
+      "bytes": 129176824,
+      "sha256": "22c827b7bbab937128edea6b4706e5f217bde8027e16e9e773bdd6e71616b371",
+      "v2Verified": true,
+      "signerCertificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6",
+      "signerCount": "1"
+    },
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C151-sources-android-signed.apk",
+      "bytes": 129176824,
+      "sha256": "b628ba3b3043e0d56424524b691176fca4429bdbd281645bb4f2f7d299ec0bc0",
+      "v2Verified": true,
+      "signerCertificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077",
+      "signerCount": "1"
+    },
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C151-windows-release.zip",
+      "bytes": 38112011,
+      "sha256": "7c47dd9aacabd45d837b04b75720524e21b63ff7b92eded3647704966e9e152e",
+      "members": 50,
+      "exactMatchesRelease": true
+    }
+  ],
+  "deviceInstallations": [
+    {
+      "serial": "emulator-5554",
+      "installR": true,
+      "sha256": "22c827b7bbab937128edea6b4706e5f217bde8027e16e9e773bdd6e71616b371"
+    },
+    {
+      "serial": "emulator-5556",
+      "installR": true,
+      "sha256": "22c827b7bbab937128edea6b4706e5f217bde8027e16e9e773bdd6e71616b371"
+    },
+    {
+      "serial": "emulator-5558",
+      "installR": true,
+      "sha256": "b628ba3b3043e0d56424524b691176fca4429bdbd281645bb4f2f7d299ec0bc0"
+    }
+  ],
+  "actualUI": {
+    "api35": "Anime repository; manga own installed5 packages/network-independent list; repository add dialog canceled; novel source account state; xkcd disable then reenable original state restored",
+    "api26": "Final classified manga source page actually visited",
+    "productionApi35": "Final novel category two builtin sites/account controls visually observed; no account credentials accessed",
+    "windows": "Final build actual launch -> classified source page -> normal exit0; earlier same-feature build exercised all3 category add UI",
+    "screenshotsActuallyRead": true,
+    "noSourceRepositoryTrustOrPersonalDataDeleted": true
+  },
+  "operationalIssues": [
+    "Original three AVDs disappeared before UI; relaunched only original AVD names/ports without wipe",
+    "Concurrent full suite held sqlite3 native DLL during Windows build; rebuilt successfully after suite ended",
+    "Asynchronous native channel fixture missing in one widget test; supply actual success response and await completion, final full suite passed"
+  ],
+  "signingScan": {
+    "filesScanned": 1286,
+    "filesWithCredentialOrSigningSecret": 0,
+    "artifacts": [
+      {
+        "path": "D:\\noval_and_manga\\_tools\\Triomi-C151-sources-acceptance.apk",
+        "membersScanned": 601,
+        "membersWithSecret": 0,
+        "privateMaterialNames": 0,
+        "debugFiles": 0
+      },
+      {
+        "path": "D:\\noval_and_manga\\_tools\\Triomi-C151-sources-android-signed.apk",
+        "membersScanned": 601,
+        "membersWithSecret": 0,
+        "privateMaterialNames": 0,
+        "debugFiles": 0
+      },
+      {
+        "path": "D:\\noval_and_manga\\_tools\\Triomi-C151-windows-release.zip",
+        "membersScanned": 50,
+        "membersWithSecret": 0,
+        "privateMaterialNames": 0,
+        "debugFiles": 0
+      },
+      {
+        "path": "D:\\noval_and_manga\\triomi\\build\\windows\\x64\\runner\\Release",
+        "membersScanned": 50,
+        "membersWithSecret": 0,
+        "privateMaterialNames": 0,
+        "debugFiles": 0
+      }
+    ],
+    "status": "passed",
+    "scope": "Exact signing secrets/private material names/debug files; no account input read; literal credential/private-key shape review also clean"
+  },
+  "limits": [
+    "No full APK repository compatibility or full media lifecycle claim",
+    "No remote tracking or external cloud writes authorized",
+    "CF waived; actual challenge not-completed",
+    "Historical C125-C150 evidence retains original artifact scope"
+  ],
+  "publication": {
+    "repository": "https://github.com/HyperionHXH/triomi",
+    "tag": "v0.1.0-test.151",
+    "plannedReleaseUrl": "https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.151",
+    "publicAssets": [
+      "triomi-android.apk",
+      "triomi-windows.zip",
+      "triomi-windows.update.json",
+      "SHA256SUMS.txt"
+    ],
+    "fullOriginalWorktreePreservedAndIncludedAfterSafetyReview": true
+  }
+}

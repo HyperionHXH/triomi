@@ -35,11 +35,19 @@ class JsSource
         SearchProvider,
         DetailProvider,
         ContentProvider {
-  JsSource({required this.rule, required this.runtime, required this.http});
+  JsSource({
+    required this.rule,
+    required this.runtime,
+    required this.http,
+    this.contentOptions,
+  });
 
   final SourceRule rule;
   final JsRuntime runtime;
   final SourceHttpClient http;
+
+  /// Read at each content request so preference changes do not restart workers.
+  final Map<String, Object?> Function()? contentOptions;
 
   final Set<SourceCapability> _capabilities = <SourceCapability>{};
   final Map<String, _JsDetail> _detailCache = <String, _JsDetail>{};
@@ -93,6 +101,7 @@ class JsSource
   }
 
   void dispose() {
+    _ready = false;
     _detailCache.clear();
     runtime.dispose();
   }
@@ -140,6 +149,7 @@ class JsSource
         'number': chapter.number,
         'volumeTitle': chapter.volumeTitle,
       },
+      if (contentOptions != null) contentOptions!(),
     ]);
     return _toContent(raw, chapterUrl: url);
   }
@@ -307,6 +317,17 @@ class JsSource
           PlaySource(
             name: name == null || name.isEmpty ? '线路' : name,
             url: url,
+            headers: {
+              if (node['headers'] is Map)
+                for (final e in (node['headers'] as Map).entries)
+                  e.key.toString(): e.value.toString(),
+            },
+            webPage: node['webPage'] == true,
+            unavailableVideoUrls: [
+              for (final url
+                  in (node['unavailableVideoUrls'] as List?) ?? const [])
+                if (url is String) url,
+            ],
           ),
         );
       }

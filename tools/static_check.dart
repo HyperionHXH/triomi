@@ -5,8 +5,7 @@ import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
-import 'package:analyzer/error/error.dart'
-    show DiagnosticType;
+import 'package:analyzer/error/error.dart' show DiagnosticType;
 
 Future<void> main(List<String> args) async {
   final root = args.isNotEmpty ? args[0] : Directory.current.path;
@@ -20,9 +19,7 @@ Future<void> main(List<String> args) async {
       if (!path.endsWith('.dart')) continue;
       final result = await context.currentSession.getResolvedUnit(path);
       if (result case final AnalysisResultWithDiagnostics diagnostics) {
-        final relative = path
-            .substring(root.length + 1)
-            .replaceAll('\\', '/');
+        final relative = path.substring(root.length + 1).replaceAll('\\', '/');
         final lineInfo = diagnostics.lineInfo;
         for (final diagnostic in diagnostics.diagnostics) {
           final code = diagnostic.diagnosticCode;

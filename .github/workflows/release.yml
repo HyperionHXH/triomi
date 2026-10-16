@@ -1,9 +1,12 @@
 name: release
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing version tag to publish (leave empty to build artifacts only)'
+        required: false
+        type: string
 
 env:
   FLUTTER_VERSION: '3.47.5'
@@ -23,7 +26,25 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Prepare existing production signing identity
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.TRIOMI_RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.TRIOMI_RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.TRIOMI_RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.TRIOMI_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -eu
+          test -n "$KEYSTORE_BASE64" && test -n "$STORE_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$KEY_PASSWORD" || { echo 'Existing production signing secrets are required; no fallback identity.'; exit 1; }
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/triomi-release.p12"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$RUNNER_TEMP/triomi-release.p12" "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > "$RUNNER_TEMP/triomi-signing.properties"
+          printf 'TRIOMI_SIGNING_PROPERTIES=%s\n' "$RUNNER_TEMP/triomi-signing.properties" >> "$GITHUB_ENV"
       - run: flutter build apk --release
+      - name: Remove temporary signing files
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/triomi-release.p12" "$RUNNER_TEMP/triomi-signing.properties"
       - uses: actions/upload-artifact@v4
         with:
           name: triomi-android-release
@@ -42,13 +63,21 @@ jobs:
       - run: flutter build windows --release
       - shell: pwsh
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath triomi-windows.zip
+      - name: Generate verified Windows update manifest
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*(.+)$').Matches[0].Groups[1].Value.Trim()
+          $parts = $version.Split('+')
+          python tools/build_update_manifest.py --bundle triomi-windows.zip --version $parts[0] --version-code $parts[1] --output triomi-windows.update.json
       - uses: actions/upload-artifact@v4
         with:
           name: triomi-windows-release
-          path: triomi-windows.zip
+          path: |
+            triomi-windows.zip
+            triomi-windows.update.json
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: inputs.tag != ''
     needs: [android, windows]
     runs-on: ubuntu-latest
     permissions:
@@ -60,8 +89,10 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          tag_name: ${{ inputs.tag }}
+          prerelease: ${{ contains(inputs.tag, '-') }}
           generate_release_notes: true
           files: |
             artifacts/app-release.apk
             artifacts/triomi-windows.zip
+            artifacts/triomi-windows.update.json

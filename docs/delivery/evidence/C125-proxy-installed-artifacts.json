@@ -1,0 +1,21 @@
+{
+  "status": "passed",
+  "preserveData": true,
+  "devices": [
+    {
+      "serial": "emulator-5554",
+      "installedSha256": "b9a8912fcfff02fc078e635e341a662a2113fde24ba115d9d699ac7adc83d35c",
+      "matches": true
+    },
+    {
+      "serial": "emulator-5556",
+      "installedSha256": "b9a8912fcfff02fc078e635e341a662a2113fde24ba115d9d699ac7adc83d35c",
+      "matches": true
+    },
+    {
+      "serial": "emulator-5558",
+      "installedSha256": "96cb09bd33435b3b038de7122bbc0f12198e85ec4d219d7ad76ac1ce68770d5d",
+      "matches": true
+    }
+  ]
+}

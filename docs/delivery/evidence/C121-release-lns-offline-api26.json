@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-09T13:56:19.661220+00:00",
+  "api": 26,
+  "variant": "final release after Preference/Zstd fixes",
+  "source": "LNS real-account persisted chapter",
+  "network": "Wi-Fi and data disabled before opening history/detail/continue",
+  "pageIndicators": [
+    "2 / 13"
+  ],
+  "fontVisuallyDecoded": true,
+  "restoredPosition": true,
+  "screenshot": "C121-release-lns-offline-api26.png"
+}

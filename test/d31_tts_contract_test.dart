@@ -5,28 +5,30 @@ import 'package:triomi/features/novel/tts/tts_controller.dart';
 import 'tts_test_fakes.dart';
 
 List<ReaderBlock> sampleBlocks() => const <ReaderBlock>[
-      HeadingBlock('Chapter one'),
-      ParagraphBlock('A short paragraph.'),
-      IllustrationBlock('https://example.com/image.png'),
-      ParagraphBlock('The final paragraph.'),
-    ];
+  HeadingBlock('Chapter one'),
+  ParagraphBlock('A short paragraph.'),
+  IllustrationBlock('https://example.com/image.png'),
+  ParagraphBlock('The final paragraph.'),
+];
 
 void main() {
   group('TtsPlan', () {
-    test('creates heading, paragraph, placeholder and paragraph utterances', () {
-      final plan = TtsPlan.of(sampleBlocks());
-      expect(plan.utterances, hasLength(4));
-      expect(plan.utterances[0].blockIndex, 0);
-      expect(plan.utterances[0].pauseAfterMs, greaterThan(0));
-      expect(plan.utterances[2].isPlaceholder, isTrue);
-      expect(plan.utterances[2].blockIndex, 2);
-    });
+    test(
+      'creates heading, paragraph, placeholder and paragraph utterances',
+      () {
+        final plan = TtsPlan.of(sampleBlocks());
+        expect(plan.utterances, hasLength(4));
+        expect(plan.utterances[0].blockIndex, 0);
+        expect(plan.utterances[0].pauseAfterMs, greaterThan(0));
+        expect(plan.utterances[2].isPlaceholder, isTrue);
+        expect(plan.utterances[2].blockIndex, 2);
+      },
+    );
 
     test('splits long text while preserving the block anchor', () {
-      final plan = TtsPlan.of(
-        const <ReaderBlock>[ParagraphBlock('abcdefghij klmnopqrst uvwxyz')],
-        maxCharacters: 10,
-      );
+      final plan = TtsPlan.of(const <ReaderBlock>[
+        ParagraphBlock('abcdefghij klmnopqrst uvwxyz'),
+      ], maxCharacters: 10);
       expect(plan.utterances, hasLength(3));
       expect(plan.utterances.every((item) => item.text.length <= 10), isTrue);
       expect(plan.utterances.map((item) => item.blockIndex), everyElement(0));

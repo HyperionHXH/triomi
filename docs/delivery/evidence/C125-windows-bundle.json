@@ -1,0 +1,17 @@
+{
+  "status": "passed",
+  "bundleFiles": 50,
+  "bundleBytes": 87631081,
+  "exe": {
+    "path": "D:\\noval_and_manga\\triomi\\build\\windows\\x64\\runner\\Release\\triomi.exe",
+    "bytes": 94208,
+    "sha256": "f5620d365954c1f227a3e78bf8ae3ff9fb64799387a51643074c116066d94927"
+  },
+  "zip": {
+    "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-windows-release.zip",
+    "bytes": 37322677,
+    "sha256": "3ac7d53d76f8fc1ca1d65b71b5ae0ed932472eb7c3261fdb4fe9cab251b18d89"
+  },
+  "nativeWebviewPlugin": true,
+  "includesDataAndDlls": true
+}

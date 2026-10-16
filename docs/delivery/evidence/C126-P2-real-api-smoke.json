@@ -1,0 +1,16 @@
+{
+  "kind": "real-public-api",
+  "noFixture": true,
+  "source": "sorani",
+  "resultCount": 50,
+  "publicItem": {
+    "id": "2698",
+    "title": "机巧少女不会受伤 特典"
+  },
+  "chapterCount": 6,
+  "playlists": [
+    "播放列表 1"
+  ],
+  "firstPlaybackUrl": "https://www.sorani.net/anime/mal/2698/episode/1.0",
+  "status": "search-directory-passed"
+}

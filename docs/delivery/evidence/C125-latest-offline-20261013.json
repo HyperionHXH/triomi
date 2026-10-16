@@ -1,0 +1,45 @@
+{
+  "emulator-5554": {
+    "originalNetwork": {
+      "wifi": "1",
+      "data": "1"
+    },
+    "status": "passed-ui-observation",
+    "defaultNetworkAfterDisable": "none",
+    "defaultNetworkRestored": "102",
+    "originalNetworkValuesRestored": true,
+    "noDefaultNetworkVerified": true,
+    "cachedNovelRestoredPages": [
+      "2 / 10"
+    ]
+  },
+  "emulator-5558": {
+    "originalNetwork": {
+      "wifi": "1",
+      "data": "1"
+    },
+    "status": "passed-ui-observation",
+    "defaultNetworkAfterDisable": "none",
+    "defaultNetworkRestored": "105",
+    "originalNetworkValuesRestored": true,
+    "noDefaultNetworkVerified": true,
+    "cachedNovelRestoredPages": [
+      "1 / 37"
+    ]
+  },
+  "emulator-5556": {
+    "originalNetwork": {
+      "wifi": "1",
+      "data": "1"
+    },
+    "defaultNetworkAfterDisable": "none",
+    "status": "passed-ui-observation",
+    "method": "normal Android Wi-Fi settings UI; svc data only",
+    "cachedNovelRestoredPages": [
+      "3 / 13"
+    ],
+    "defaultNetworkRestored": "102",
+    "wifiRestored": true,
+    "dataRestored": true
+  }
+}

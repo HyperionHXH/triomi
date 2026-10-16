@@ -56,3 +56,11 @@ tools/_dav/
 # flutter_js 的 Windows 原生库（宿主测试用）：
 # 从 pub cache 复制，见 tools/setup_quickjs_dll.py
 quickjs_c_bridge.dll
+.flutter_tool_state
+
+# Private release signing material must never enter the repository.
+*.jks
+*.keystore
+*.p12
+key.properties
+signing.properties

@@ -1,0 +1,124 @@
+{
+  "date": "2026-10-13",
+  "status": "partial",
+  "device": "emulator-5554",
+  "installedApk": {
+    "path": "D:/noval_and_manga/_tools/Triomi-C128-P4-android-acceptance.apk",
+    "bytes": 124618848,
+    "sha256": "d1d3b2979d4e068d2834736605dcb25a90a1dc25912e9d1d975a1f63e5db266f"
+  },
+  "actual": {
+    "download": [
+      "返回",
+      "下载管理",
+      "暂停队列",
+      "恢复暂停任务",
+      "重试失败项",
+      "清理已完成记录",
+      "仅 WiFi 下载\n移动网络下队列会暂停，回到 WiFi 自动继续",
+      "100, 小林家的龙女仆\n已完成 1 / 1 章\n本地占用 474.1 MiB",
+      "删除下载",
+      "100, 負債兩千萬的班級偶像，被邊緣人的我買下來了\n已完成 1 / 1 章\n本地占用 0.0 MiB",
+      "删除下载",
+      "100, 年度最垃圾伪圣女\n已完成 1 / 1 章\n本地占用 0.0 MiB",
+      "删除下载",
+      "100, 夹具番剧 51\n已完成 3 / 3 章\n本地占用 1.1 MiB",
+      "删除下载"
+    ],
+    "offlineNetwork": [
+      "Active default network: none"
+    ],
+    "offlineNetworkEnd": [
+      "Active default network: none"
+    ],
+    "independentRestart": true,
+    "playerStart": [
+      "返回",
+      "关闭弹幕",
+      "弹幕设置",
+      "搜索弹幕",
+      "小林家的龙女仆 · 第01集",
+      "发送弹幕",
+      "剧集",
+      "1.5x",
+      "播放设置",
+      "21:43 / 25:11",
+      "86%",
+      "全屏",
+      "上一集",
+      "下一集",
+      "字幕",
+      "画中画"
+    ],
+    "playerEnd": [
+      "返回",
+      "关闭弹幕",
+      "弹幕设置",
+      "搜索弹幕",
+      "小林家的龙女仆 · 第01集",
+      "发送弹幕",
+      "剧集",
+      "1.5x",
+      "播放设置",
+      "22:25 / 25:11",
+      "89%",
+      "全屏",
+      "上一集",
+      "下一集",
+      "字幕",
+      "画中画"
+    ],
+    "restoredNetworkSettings": {
+      "wifi": "1",
+      "data": "1"
+    },
+    "automaticNextRestored": true
+  },
+  "publicHlsEvidence": [
+    "C128-P4-real-hls-pause.json",
+    "C128-P4-real-hls-resume.json",
+    "C128-P4-real-hls-offline-decode.json"
+  ],
+  "verification": {
+    "downloadTargetedPassed": 36,
+    "additionalBoundaryPassed": 9,
+    "analyze": "No issues found (before latest deletion fix)",
+    "deletionFailureReproducedBeforeFix": true,
+    "deletionAfterFixPassed": true
+  },
+  "limitations": [
+    "Screenshot saved, not visually reviewed: computer session closed",
+    "API26/official-signature/Windows final P4 journeys pending",
+    "Latest progress/deletion source changes not covered by this installed APK"
+  ],
+  "screenshot": "C128-P4-api35-offline.png",
+  "latestInstalledApk": {
+    "path": "D:/noval_and_manga/_tools/Triomi-C128-P4-live-progress-acceptance.apk",
+    "bytes": 124684384,
+    "sha256": "c863735e44fdb90a0705dee1a559001142835bab25fccdeb95973a3929aceb05"
+  },
+  "latestUiSmoke": {
+    "device": "emulator-5554",
+    "afterIndependentRestart": [
+      "返回",
+      "下载管理",
+      "暂停队列",
+      "恢复暂停任务",
+      "重试失败项",
+      "清理已完成记录",
+      "仅 WiFi 下载\n移动网络下队列会暂停，回到 WiFi 自动继续",
+      "100, 小林家的龙女仆\n已完成 1 / 1 章\n本地占用 474.1 MiB",
+      "删除下载",
+      "100, 負債兩千萬的班級偶像，被邊緣人的我買下來了\n已完成 1 / 1 章\n本地占用 0.0 MiB",
+      "删除下载",
+      "100, 年度最垃圾伪圣女\n已完成 1 / 1 章\n本地占用 0.0 MiB",
+      "删除下载",
+      "100, 夹具番剧 51\n已完成 3 / 3 章\n本地占用 1.1 MiB",
+      "删除下载"
+    ]
+  },
+  "installedHashMatchedDevices": [
+    "emulator-5554",
+    "emulator-5556"
+  ]
+}

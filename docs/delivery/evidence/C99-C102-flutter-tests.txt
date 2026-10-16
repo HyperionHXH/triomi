@@ -1,0 +1,1493 @@
+00:00 +0: loading D:/noval_and_manga/triomi/test/anime_follow_repository_test.dart
+00:00 +0: D:/noval_and_manga/triomi/test/anime_follow_repository_test.dart: 旧动画无需迁移即进入追番，复合键隔离阅读书架
+00:00 +1: D:/noval_and_manga/triomi/test/anime_follow_repository_test.dart: 重复加入保留进度、未读数、加入时间和观看历史
+00:00 +2: D:/noval_and_manga/triomi/test/anime_follow_repository_test.dart: 取消追番保留观看历史、缓存目录和作品快照
+00:00 +3: D:/noval_and_manga/triomi/test/anime_follow_repository_test.dart: 书架全部已读限定阅读类型，不清动画未读
+00:00 +4: D:/noval_and_manga/triomi/test/anime_follow_repository_test.dart: 阅读作品不得加入追番
+00:00 +5: D:/noval_and_manga/triomi/test/anime_follow_repository_test.dart: 数据库监听在进度变化与取消追番后更新
+00:08 +6: D:/noval_and_manga/triomi/test/app_shell_test.dart: (setUpAll)
+00:08 +6: D:/noval_and_manga/triomi/test/app_shell_test.dart: 主题装配 浅色与深色主题都注入了语义色板
+00:08 +7: D:/noval_and_manga/triomi/test/app_shell_test.dart: 主题装配 深色主题不输出投影，浅色主题保留极淡投影
+00:08 +8: D:/noval_and_manga/triomi/test/app_shell_test.dart: 主题装配 断点分类符合规范
+00:08 +9: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:08 +10: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:08 +11: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:08 +12: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +13: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +14: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +15: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +15: D:/noval_and_manga/triomi/test/backup_import_boundary_test.dart: 离线内容与设置 includeOfflineContent 往返：关 → contentJson 不进包也不还原
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      openTestDatabase (file:///D:/noval_and_manga/triomi/test/fixtures/test_database.dart:9:17)
+#6      main.<anonymous closure>.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/backup_import_boundary_test.dart:373:28)
+<asynchronous suspension>
+#7      Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:253:15)
+<asynchronous suspension>
+#8      Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:11)
+<asynchronous suspension>
+#9      Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:9)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      openTestDatabase (file:///D:/noval_and_manga/triomi/test/fixtures/test_database.dart:9:17)
+#6      main.<anonymous closure>.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/backup_import_boundary_test.dart:375:28)
+<asynchronous suspension>
+#7      Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:253:15)
+<asynchronous suspension>
+#8      Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:11)
+<asynchronous suspension>
+#9      Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:9)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:09 +16: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +17: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +17: D:/noval_and_manga/triomi/test/backup_import_boundary_test.dart: 离线内容与设置 设置导入抛错：库不提交、设置保持原状（D35 补偿契约）
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      openTestDatabase (file:///D:/noval_and_manga/triomi/test/fixtures/test_database.dart:9:17)
+#6      main.<anonymous closure>.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/backup_import_boundary_test.dart:431:22)
+#7      Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:253:25)
+<asynchronous suspension>
+#8      Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:11)
+<asynchronous suspension>
+#9      Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:9)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:09 +18: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +19: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +20: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +21: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +22: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +23: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +24: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +25: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +26: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +27: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +28: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +29: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +30: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +31: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +32: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +33: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +34: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +35: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +35: D:/noval_and_manga/triomi/test/d10_release_audit_test.dart: 备份不带走凭据（F1） securityKey / token / password / secret 变体键都不进包
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      openTestDatabase (file:///D:/noval_and_manga/triomi/test/fixtures/test_database.dart:9:17)
+#6      main.<anonymous closure>.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/d10_release_audit_test.dart:75:19)
+<asynchronous suspension>
+#7      Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:253:15)
+<asynchronous suspension>
+#8      Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:11)
+<asynchronous suspension>
+#9      Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:9)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:09 +36: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +37: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +38: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +39: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +40: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +41: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +42: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +43: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +44: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +45: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +46: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +47: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +48: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +49: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +50: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +51: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +52: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +53: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +54: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +55: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +56: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +57: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +58: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 四栏导航顺序固定为发现/书架/追番/我的（手机底栏）
+00:09 +59: D:/noval_and_manga/triomi/test/catalog_update_test.dart: transactional update: delete
+00:09 +60: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 启动路由是发现页，发现处于选中态
+00:10 +61: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 启动路由是发现页，发现处于选中态
+00:10 +62: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 启动路由是发现页，发现处于选中态
+00:10 +63: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 启动路由是发现页，发现处于选中态
+00:10 +64: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 启动路由是发现页，发现处于选中态
+00:10 +65: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 启动路由是发现页，发现处于选中态
+00:10 +66: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 启动路由是发现页，发现处于选中态
+00:10 +67: D:/noval_and_manga/triomi/test/d33_backup_reliability_test.dart: 缺时间戳 → 最旧策略（审计补测） histories 缺 visitedAt：本机较新保留，不被伪装的新记录覆盖
+00:10 +68: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 中屏 rail 与桌面侧栏保持同一导航顺序
+00:10 +69: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 中屏 rail 与桌面侧栏保持同一导航顺序
+00:10 +70: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 中屏 rail 与桌面侧栏保持同一导航顺序
+00:10 +71: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 中屏 rail 与桌面侧栏保持同一导航顺序
+00:10 +72: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 中屏 rail 与桌面侧栏保持同一导航顺序
+00:10 +73: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 中屏 rail 与桌面侧栏保持同一导航顺序
+00:10 +74: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 中屏 rail 与桌面侧栏保持同一导航顺序
+00:10 +75: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 中屏 rail 与桌面侧栏保持同一导航顺序
+00:10 +76: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 中屏 rail 与桌面侧栏保持同一导航顺序
+00:10 +77: D:/noval_and_manga/triomi/test/app_shell_test.dart: 自适应外壳 中屏 rail 与桌面侧栏保持同一导航顺序
+00:10 +78: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: FlutterTtsEngine：语音选项与音色查询（插件 mock） 未设置选项时初始化仍带默认语速 0.5
+00:10 +79: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +80: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +81: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +82: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +83: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +84: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +85: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +86: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +87: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +88: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +89: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +90: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +91: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +92: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +93: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +94: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +95: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +96: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +97: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:10 +98: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +99: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +100: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +101: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +102: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +103: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +104: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +105: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +106: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +107: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +108: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +109: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +110: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +111: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +112: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +113: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +114: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +115: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +116: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +117: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +118: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +119: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +120: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +121: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +122: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +123: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +124: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +125: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +126: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +127: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +128: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +129: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +130: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +131: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:11 +132: D:/noval_and_manga/triomi/test/d48_tts_settings_test.dart: 阅读器朗读设置面板（widget） 面板展示三档语速与系统音色；选慢速即停当前朗读并落盘
+00:12 +133: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +134: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +135: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +136: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +137: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +138: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +139: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +140: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +141: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +142: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +143: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +144: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +145: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +146: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +147: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +148: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +149: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +150: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +151: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +152: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +153: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +154: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +155: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +156: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +157: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +158: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +159: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +160: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +161: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +162: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +163: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +164: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:12 +165: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +166: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +167: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +168: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +169: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +170: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +171: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +172: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +173: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +174: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +174: D:/noval_and_manga/triomi/test/discover_empty_filter_test.dart: 仅资料源（没有 discover/search 能力）：提示启用带榜单的来源
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.harness (file:///D:/noval_and_manga/triomi/test/discover_empty_filter_test.dart:26:21)
+#6      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/discover_empty_filter_test.dart:54:7)
+#7      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#8      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#9      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:13 +175: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +176: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +177: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +178: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +179: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +180: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +180: D:/noval_and_manga/triomi/test/discover_empty_filter_test.dart: 多来源切换：来源 chip 切换后重新加载对应榜单
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.harness (file:///D:/noval_and_manga/triomi/test/discover_empty_filter_test.dart:26:21)
+#6      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/discover_empty_filter_test.dart:64:7)
+#7      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#8      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#9      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:13 +181: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +182: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +183: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +184: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +185: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:13 +186: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:14 +187: D:/noval_and_manga/triomi/test/detail_anime_shelf_boundary_test.dart: 番剧详情加入追番后真实本地列表可见，取消时保留缓存
+00:14 +188: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +189: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +190: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +191: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +192: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +193: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +194: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +195: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +195: D:/noval_and_manga/triomi/test/discover_empty_filter_test.dart: 类型过滤：多类型并存时出现类型 chips，过滤后来源与榜单跟着收窄
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.harness (file:///D:/noval_and_manga/triomi/test/discover_empty_filter_test.dart:26:21)
+#6      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/discover_empty_filter_test.dart:96:7)
+#7      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#8      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#9      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:14 +195: D:/noval_and_manga/triomi/test/js_engine_probe_test.dart: flutter_js 原生库探测
+PROBE_RESULT: OK string=2
+00:14 +196: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +197: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +198: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +199: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +200: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +201: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +202: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +203: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +204: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +205: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +206: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: SAF 目录选择取消：回退私有目录，不调用 writeToTree
+00:14 +207: D:/noval_and_manga/triomi/test/discover_empty_filter_test.dart: 类型过滤：多类型并存时出现类型 chips，过滤后来源与榜单跟着收窄
+00:14 +208: D:/noval_and_manga/triomi/test/discover_empty_filter_test.dart: 类型过滤：多类型并存时出现类型 chips，过滤后来源与榜单跟着收窄
+00:14 +209: D:/noval_and_manga/triomi/test/discover_empty_filter_test.dart: 类型过滤：多类型并存时出现类型 chips，过滤后来源与榜单跟着收窄
+00:14 +210: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:14 +211: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:14 +211: D:/noval_and_manga/triomi/test/discover_empty_filter_test.dart: 来源页：空态与能力标签（资料源不含「正文」= 无播放能力可见）
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/discover_empty_filter_test.dart:134:25)
+#6      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#7      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#8      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:15 +211: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.pumpDetail (file:///D:/noval_and_manga/triomi/test/detail_export_page_test.dart:100:25)
+#6      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/detail_export_page_test.dart:165:11)
+#7      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#8      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#9      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:15 +212: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +213: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +214: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +215: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +216: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +217: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +218: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +219: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +220: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +221: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +222: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +223: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +224: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +225: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +226: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +227: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +228: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +229: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +230: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +231: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +232: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +233: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +234: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +235: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +236: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +237: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:15 +238: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: EPUB 导出：writeToTree 收到 application/epub+zip
+00:16 +239: D:/noval_and_manga/triomi/test/library_page_test.dart: 空书架显示空状态与去发现的入口
+00:16 +240: D:/noval_and_manga/triomi/test/library_page_test.dart: 空书架显示空状态与去发现的入口
+00:16 +241: D:/noval_and_manga/triomi/test/library_page_test.dart: 空书架显示空状态与去发现的入口
+00:16 +242: D:/noval_and_manga/triomi/test/library_page_test.dart: 空书架显示空状态与去发现的入口
+00:16 +243: D:/noval_and_manga/triomi/test/library_page_test.dart: 空书架显示空状态与去发现的入口
+00:16 +244: D:/noval_and_manga/triomi/test/library_page_test.dart: 空书架显示空状态与去发现的入口
+00:16 +245: D:/noval_and_manga/triomi/test/library_page_test.dart: 空书架显示空状态与去发现的入口
+00:16 +246: D:/noval_and_manga/triomi/test/library_page_test.dart: 空书架显示空状态与去发现的入口
+00:16 +247: D:/noval_and_manga/triomi/test/library_page_test.dart: 空书架显示空状态与去发现的入口
+00:16 +248: D:/noval_and_manga/triomi/test/library_page_test.dart: 空书架显示空状态与去发现的入口
+00:16 +248: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: TXT 导出：writeToTree 收到 text/plain
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+00:16 +249: D:/noval_and_manga/triomi/test/library_page_test.dart: 空书架显示空状态与去发现的入口
+00:16 +249: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: TXT 导出：writeToTree 收到 text/plain
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.pumpDetail (file:///D:/noval_and_manga/triomi/test/detail_export_page_test.dart:100:25)
+#6      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/detail_export_page_test.dart:185:11)
+#7      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#8      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#9      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:16 +250: D:/noval_and_manga/triomi/test/lk_pages_test.dart: W6 轻之国度资料页 已登录：渲染资料、统计与七日签到格子
+00:16 +251: D:/noval_and_manga/triomi/test/lk_pages_test.dart: W6 轻之国度资料页 已登录：渲染资料、统计与七日签到格子
+00:16 +252: D:/noval_and_manga/triomi/test/lk_pages_test.dart: W6 轻之国度资料页 已登录：渲染资料、统计与七日签到格子
+00:16 +253: D:/noval_and_manga/triomi/test/lk_pages_test.dart: W6 轻之国度资料页 已登录：渲染资料、统计与七日签到格子
+00:16 +254: D:/noval_and_manga/triomi/test/lk_pages_test.dart: W6 轻之国度资料页 已登录：渲染资料、统计与七日签到格子
+00:16 +255: D:/noval_and_manga/triomi/test/lk_pages_test.dart: W6 轻之国度资料页 已登录：渲染资料、统计与七日签到格子
+00:16 +256: D:/noval_and_manga/triomi/test/lk_pages_test.dart: W6 轻之国度资料页 已登录：渲染资料、统计与七日签到格子
+00:16 +257: D:/noval_and_manga/triomi/test/lk_pages_test.dart: W6 轻之国度资料页 已登录：渲染资料、统计与七日签到格子
+00:16 +258: D:/noval_and_manga/triomi/test/lk_pages_test.dart: W6 轻之国度资料页 已登录：渲染资料、统计与七日签到格子
+00:16 +259: D:/noval_and_manga/triomi/test/lk_pages_test.dart: W6 轻之国度资料页 已登录：渲染资料、统计与七日签到格子
+00:17 +260: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: TXT 导出：writeToTree 收到 text/plain
+00:17 +261: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: TXT 导出：writeToTree 收到 text/plain
+00:17 +262: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: TXT 导出：writeToTree 收到 text/plain
+00:17 +263: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: TXT 导出：writeToTree 收到 text/plain
+00:17 +264: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +265: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +266: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +267: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +268: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +269: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +270: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +271: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +272: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +273: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +274: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +275: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +275: D:/noval_and_manga/triomi/test/detail_export_page_test.dart: 授权目录写入失败：回退私有目录并在 snackbar 提示回退路径
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.pumpDetail (file:///D:/noval_and_manga/triomi/test/detail_export_page_test.dart:100:25)
+#6      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/detail_export_page_test.dart:199:11)
+#7      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#8      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+#9      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:17 +276: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +277: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +278: D:/noval_and_manga/triomi/test/lns_pages_test.dart: 远端书架页 单来源已登录：渲染站点收藏，不显示切换条
+00:17 +279: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:17 +280: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:17 +281: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:17 +282: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:17 +283: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:17 +284: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:17 +285: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:17 +286: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:17 +287: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:17 +288: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:17 +289: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:17 +290: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +291: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +292: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +293: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +294: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +295: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +296: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +297: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +298: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +299: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +300: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +301: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +302: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +303: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +304: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +305: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +306: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +307: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +308: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +309: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +310: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +311: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +312: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +313: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +314: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +314: D:/noval_and_manga/triomi/test/m5_test.dart: 备份导出 / 导入 导出包含书架与历史；导入到空库后数据回来
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      openTestDatabase (file:///D:/noval_and_manga/triomi/test/fixtures/test_database.dart:9:17)
+#6      main.<anonymous closure>.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/m5_test.dart:214:24)
+<asynchronous suspension>
+#7      Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:253:15)
+<asynchronous suspension>
+#8      Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:11)
+<asynchronous suspension>
+#9      Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:9)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:18 +315: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +316: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +317: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +318: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +319: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +320: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +321: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +322: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +323: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +324: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +325: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +326: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +327: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +328: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +329: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +330: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +331: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +332: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +333: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +334: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +335: D:/noval_and_manga/triomi/test/m4b_reader_zh_test.dart: 阅读设置里切换繁简后，正文当场重转换
+00:18 +336: D:/noval_and_manga/triomi/test/manga_reader_loading_test.dart: 正文加载与失败时零张图片不使页码滑杆越界
+00:19 +337: D:/noval_and_manga/triomi/test/manga_reader_loading_test.dart: 正文加载与失败时零张图片不使页码滑杆越界
+00:19 +338: D:/noval_and_manga/triomi/test/manga_reader_loading_test.dart: 正文加载与失败时零张图片不使页码滑杆越界
+00:19 +339: D:/noval_and_manga/triomi/test/manga_reader_loading_test.dart: 正文加载与失败时零张图片不使页码滑杆越界
+00:19 +340: D:/noval_and_manga/triomi/test/manga_reader_loading_test.dart: 正文加载与失败时零张图片不使页码滑杆越界
+00:19 +341: D:/noval_and_manga/triomi/test/manga_reader_loading_test.dart: 正文加载与失败时零张图片不使页码滑杆越界
+00:19 +342: D:/noval_and_manga/triomi/test/manga_reader_loading_test.dart: 正文加载与失败时零张图片不使页码滑杆越界
+00:19 +343: D:/noval_and_manga/triomi/test/manga_reader_loading_test.dart: 正文加载与失败时零张图片不使页码滑杆越界
+00:19 +344: D:/noval_and_manga/triomi/test/manga_reader_loading_test.dart: 正文加载与失败时零张图片不使页码滑杆越界
+00:19 +345: D:/noval_and_manga/triomi/test/manga_reader_loading_test.dart: 正文加载与失败时零张图片不使页码滑杆越界
+00:19 +346: D:/noval_and_manga/triomi/test/manga_reader_loading_test.dart: 正文加载与失败时零张图片不使页码滑杆越界
+00:19 +347: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:19 +348: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +349: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +350: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +351: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +352: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +353: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +354: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +355: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +356: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +357: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +358: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +359: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +360: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +361: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +362: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +363: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +363: D:/noval_and_manga/triomi/test/reader_resume_boundary_test.dart: 续读位置隔离（保存/恢复） 同书不同章：各自的位置都保留，续读取最近一次
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure>.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/reader_resume_boundary_test.dart:246:24)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+<asynchronous suspension>
+#19     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:15)
+<asynchronous suspension>
+#20     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:11)
+<asynchronous suspension>
+#21     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:9)
+00:20 +364: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +364: D:/noval_and_manga/triomi/test/reader_resume_boundary_test.dart: 续读位置隔离（保存/恢复） 同书不同章：各自的位置都保留，续读取最近一次
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:20 +365: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +366: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +367: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +368: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +369: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +370: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +371: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +372: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +373: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +374: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +375: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +376: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +377: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +378: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +379: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +380: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:20 +381: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:21 +382: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:21 +383: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:21 +384: D:/noval_and_manga/triomi/test/novel_reader_tts_lifecycle_test.dart: 换章停止朗读：引擎收到 stop，控制回到「朗读」
+00:21 +385: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:21 +386: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:21 +387: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:21 +388: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:21 +389: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:21 +390: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:21 +391: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:21 +392: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:21 +393: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:21 +393: D:/noval_and_manga/triomi/test/reader_resume_boundary_test.dart: 续读位置隔离（保存/恢复） 「全部标为已读」只清本地未读提示，不触碰远端阅读历史
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure>.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/reader_resume_boundary_test.dart:246:24)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+<asynchronous suspension>
+#19     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:15)
+<asynchronous suspension>
+#20     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:11)
+<asynchronous suspension>
+#21     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:9)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:21 +394: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:21 +395: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:21 +396: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:21 +396: D:/noval_and_manga/triomi/test/scheduler_wifi_test.dart: 1 条 pending + wifiOnly + 非 WiFi：泵必须停住而不是自旋（缺陷回归）
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/scheduler_wifi_test.dart:37:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#20     _rootRun (dart:async/zone_root.dart:35:13)
+#21     _CustomZone.run (dart:async/zone.dart:810:35)
+#22     _runZoned (dart:async/zone_api.dart:165:6)
+#23     runZoned (dart:async/zone_api.dart:91:10)
+#24     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#25     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#26     _rootRun (dart:async/zone_root.dart:35:13)
+#27     _CustomZone.run (dart:async/zone.dart:810:35)
+#28     _runZoned (dart:async/zone_api.dart:165:6)
+#29     runZoned (dart:async/zone_api.dart:91:10)
+#30     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#31     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:21 +397: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:21 +398: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +399: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +399: D:/noval_and_manga/triomi/test/scheduler_wifi_test.dart: 多条 pending + wifiOnly + WiFi：全部执行到 done
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/scheduler_wifi_test.dart:37:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#20     _rootRun (dart:async/zone_root.dart:35:13)
+#21     _CustomZone.run (dart:async/zone.dart:810:35)
+#22     _runZoned (dart:async/zone_api.dart:165:6)
+#23     runZoned (dart:async/zone_api.dart:91:10)
+#24     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#25     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#26     _rootRun (dart:async/zone_root.dart:35:13)
+#27     _CustomZone.run (dart:async/zone.dart:810:35)
+#28     _runZoned (dart:async/zone_api.dart:165:6)
+#29     runZoned (dart:async/zone_api.dart:91:10)
+#30     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#31     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:22 +400: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +400: D:/noval_and_manga/triomi/test/scheduler_wifi_test.dart: 1 条 pending + wifiOnly + WiFi：执行到 done，泵自然结束
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/scheduler_wifi_test.dart:37:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#20     _rootRun (dart:async/zone_root.dart:35:13)
+#21     _CustomZone.run (dart:async/zone.dart:810:35)
+#22     _runZoned (dart:async/zone_api.dart:165:6)
+#23     runZoned (dart:async/zone_api.dart:91:10)
+#24     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#25     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#26     _rootRun (dart:async/zone_root.dart:35:13)
+#27     _CustomZone.run (dart:async/zone.dart:810:35)
+#28     _runZoned (dart:async/zone_api.dart:165:6)
+#29     runZoned (dart:async/zone_api.dart:91:10)
+#30     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#31     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:22 +401: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +402: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +402: D:/noval_and_manga/triomi/test/scheduler_wifi_test.dart: wifiOnly 开关关闭后：明确 resume() 恢复队列，非 WiFi 也执行
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/scheduler_wifi_test.dart:37:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#20     _rootRun (dart:async/zone_root.dart:35:13)
+#21     _CustomZone.run (dart:async/zone.dart:810:35)
+#22     _runZoned (dart:async/zone_api.dart:165:6)
+#23     runZoned (dart:async/zone_api.dart:91:10)
+#24     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#25     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#26     _rootRun (dart:async/zone_root.dart:35:13)
+#27     _CustomZone.run (dart:async/zone.dart:810:35)
+#28     _runZoned (dart:async/zone_api.dart:165:6)
+#29     runZoned (dart:async/zone_api.dart:91:10)
+#30     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#31     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:22 +403: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +404: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +405: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +406: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +407: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +408: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +409: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +410: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +411: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +412: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +413: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +414: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +415: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +416: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +417: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +418: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +419: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +420: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +421: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +422: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +423: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +424: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +425: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +426: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +427: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +428: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +429: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +430: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +431: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +432: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +433: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +434: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +435: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +436: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +437: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +438: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +439: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +440: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +441: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +442: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +442: D:/noval_and_manga/triomi/test/scheduler_wifi_test.dart: 停泵后切回 WiFi：resume() 恢复执行剩余任务
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/scheduler_wifi_test.dart:37:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#20     _rootRun (dart:async/zone_root.dart:35:13)
+#21     _CustomZone.run (dart:async/zone.dart:810:35)
+#22     _runZoned (dart:async/zone_api.dart:165:6)
+#23     runZoned (dart:async/zone_api.dart:91:10)
+#24     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#25     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#26     _rootRun (dart:async/zone_root.dart:35:13)
+#27     _CustomZone.run (dart:async/zone.dart:810:35)
+#28     _runZoned (dart:async/zone_api.dart:165:6)
+#29     runZoned (dart:async/zone_api.dart:91:10)
+#30     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#31     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:22 +443: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +444: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +445: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +446: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +447: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +448: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +449: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +450: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:22 +451: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +452: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +453: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +454: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +455: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +456: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +457: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +458: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +459: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +460: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +461: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +462: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +463: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +464: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +465: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +466: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +467: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.manga reconstructs the reader at its saved page, not page one
+00:23 +468: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +469: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +470: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +471: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +472: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +473: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +474: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +475: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +476: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +477: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +478: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +479: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +480: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +481: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +482: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +483: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） asset:// 安装：不发起任何网络请求且规则入库
+00:23 +484: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:23 +485: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:23 +486: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:23 +487: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:23 +488: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:23 +489: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:23 +490: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:23 +491: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:23 +492: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:23 +493: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:23 +494: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:23 +495: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:23 +496: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:24 +497: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:24 +498: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:24 +499: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:24 +500: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:24 +501: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:24 +502: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:24 +503: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:24 +504: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 升级 UI 成功
+00:24 +505: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +506: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +507: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +508: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +509: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +510: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +511: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +512: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +513: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +514: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +515: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +516: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +517: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +518: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +519: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +520: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +521: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +522: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +523: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +524: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +525: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +526: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +527: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +528: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +529: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +530: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +531: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +532: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +533: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +534: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +535: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +536: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +537: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +538: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +539: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +540: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +541: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +542: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +543: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +544: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +545: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +546: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +547: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +548: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +549: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +550: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +551: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +552: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +553: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +554: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +555: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +556: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +557: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +558: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +559: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +560: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +561: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +562: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +563: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +564: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +565: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +566: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +567: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +568: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:24 +569: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +570: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +570: D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart: 并发时序 进度连发：每次 PATCH 只包含不大于本地进度的集，且互不回退
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart:26:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:432:40)
+#20     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#21     _rootRun (dart:async/zone_root.dart:35:13)
+#22     _CustomZone.run (dart:async/zone.dart:810:35)
+#23     _runZoned (dart:async/zone_api.dart:165:6)
+#24     runZoned (dart:async/zone_api.dart:91:10)
+#25     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#26     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#27     _rootRun (dart:async/zone_root.dart:35:13)
+#28     _CustomZone.run (dart:async/zone.dart:810:35)
+#29     _runZoned (dart:async/zone_api.dart:165:6)
+#30     runZoned (dart:async/zone_api.dart:91:10)
+#31     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#32     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:25 +571: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +571: D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart: 并发时序 一服务成功另一服务失败：逐项结果互不阻断，标记各写各的
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart:26:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:432:40)
+#20     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#21     _rootRun (dart:async/zone_root.dart:35:13)
+#22     _CustomZone.run (dart:async/zone.dart:810:35)
+#23     _runZoned (dart:async/zone_api.dart:165:6)
+#24     runZoned (dart:async/zone_api.dart:91:10)
+#25     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#26     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#27     _rootRun (dart:async/zone_root.dart:35:13)
+#28     _CustomZone.run (dart:async/zone.dart:810:35)
+#29     _runZoned (dart:async/zone_api.dart:165:6)
+#30     runZoned (dart:async/zone_api.dart:91:10)
+#31     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#32     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:25 +572: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +572: D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart: markSynced 时机 401 后不能 markSynced；重试成功才更新
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart:26:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:432:40)
+#20     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#21     _rootRun (dart:async/zone_root.dart:35:13)
+#22     _CustomZone.run (dart:async/zone.dart:810:35)
+#23     _runZoned (dart:async/zone_api.dart:165:6)
+#24     runZoned (dart:async/zone_api.dart:91:10)
+#25     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#26     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#27     _rootRun (dart:async/zone_root.dart:35:13)
+#28     _CustomZone.run (dart:async/zone.dart:810:35)
+#29     _runZoned (dart:async/zone_api.dart:165:6)
+#30     runZoned (dart:async/zone_api.dart:91:10)
+#31     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#32     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:25 +573: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +573: D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart: markSynced 时机 429 后不能 markSynced；重试成功才更新
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart:26:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:432:40)
+#20     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#21     _rootRun (dart:async/zone_root.dart:35:13)
+#22     _CustomZone.run (dart:async/zone.dart:810:35)
+#23     _runZoned (dart:async/zone_api.dart:165:6)
+#24     runZoned (dart:async/zone_api.dart:91:10)
+#25     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#26     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#27     _rootRun (dart:async/zone_root.dart:35:13)
+#28     _CustomZone.run (dart:async/zone.dart:810:35)
+#29     _runZoned (dart:async/zone_api.dart:165:6)
+#30     runZoned (dart:async/zone_api.dart:91:10)
+#31     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#32     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:25 +574: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +575: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +575: D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart: markSynced 时机 超时 后不能 markSynced；重试成功才更新
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart:26:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:432:40)
+#20     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#21     _rootRun (dart:async/zone_root.dart:35:13)
+#22     _CustomZone.run (dart:async/zone.dart:810:35)
+#23     _runZoned (dart:async/zone_api.dart:165:6)
+#24     runZoned (dart:async/zone_api.dart:91:10)
+#25     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#26     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#27     _rootRun (dart:async/zone_root.dart:35:13)
+#28     _CustomZone.run (dart:async/zone.dart:810:35)
+#29     _runZoned (dart:async/zone_api.dart:165:6)
+#30     runZoned (dart:async/zone_api.dart:91:10)
+#31     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#32     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:25 +576: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +577: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +578: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +578: D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart: 解绑与凭据竞态 在途上报期间解绑：旧回执不重建记录
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart:26:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+00:25 +579: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +579: D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart: 解绑与凭据竞态 在途上报期间解绑：旧回执不重建记录
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:432:40)
+#20     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#21     _rootRun (dart:async/zone_root.dart:35:13)
+#22     _CustomZone.run (dart:async/zone.dart:810:35)
+#23     _runZoned (dart:async/zone_api.dart:165:6)
+#24     runZoned (dart:async/zone_api.dart:91:10)
+#25     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#26     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#27     _rootRun (dart:async/zone_root.dart:35:13)
+#28     _CustomZone.run (dart:async/zone.dart:810:35)
+#29     _runZoned (dart:async/zone_api.dart:165:6)
+#30     runZoned (dart:async/zone_api.dart:91:10)
+#31     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#32     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:25 +580: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +581: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +581: D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart: 解绑与凭据竞态 在途上报期间清 token：本次照常完成，下次明确失败，不泄漏凭据
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart:26:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+00:25 +582: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +582: D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart: 解绑与凭据竞态 在途上报期间清 token：本次照常完成，下次明确失败，不泄漏凭据
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:432:40)
+#20     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#21     _rootRun (dart:async/zone_root.dart:35:13)
+#22     _CustomZone.run (dart:async/zone.dart:810:35)
+#23     _runZoned (dart:async/zone_api.dart:165:6)
+#24     runZoned (dart:async/zone_api.dart:91:10)
+#25     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#26     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#27     _rootRun (dart:async/zone_root.dart:35:13)
+#28     _CustomZone.run (dart:async/zone.dart:810:35)
+#29     _runZoned (dart:async/zone_api.dart:165:6)
+#30     runZoned (dart:async/zone_api.dart:91:10)
+#31     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#32     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:25 +583: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +584: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +584: D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart: 进度映射 番剧小数进度取 floor；远端进度更高时跳过推送
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+00:25 +585: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +585: D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart: 进度映射 番剧小数进度取 floor；远端进度更高时跳过推送
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart:26:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:432:40)
+#20     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#21     _rootRun (dart:async/zone_root.dart:35:13)
+#22     _CustomZone.run (dart:async/zone.dart:810:35)
+#23     _runZoned (dart:async/zone_api.dart:165:6)
+#24     runZoned (dart:async/zone_api.dart:91:10)
+#25     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#26     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#27     _rootRun (dart:async/zone_root.dart:35:13)
+#28     _CustomZone.run (dart:async/zone.dart:810:35)
+#29     _runZoned (dart:async/zone_api.dart:165:6)
+#30     runZoned (dart:async/zone_api.dart:91:10)
+#31     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#32     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:25 +586: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +587: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +588: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +588: D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart: 进度映射 剧集目录缺 ep 时按顺序补号参与映射（服务层结果）
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart:26:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+00:25 +589: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +589: D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart: 进度映射 剧集目录缺 ep 时按顺序补号参与映射（服务层结果）
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:432:40)
+#20     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#21     _rootRun (dart:async/zone_root.dart:35:13)
+#22     _CustomZone.run (dart:async/zone.dart:810:35)
+#23     _runZoned (dart:async/zone_api.dart:165:6)
+#24     runZoned (dart:async/zone_api.dart:91:10)
+#25     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#26     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#27     _rootRun (dart:async/zone_root.dart:35:13)
+#28     _CustomZone.run (dart:async/zone.dart:810:35)
+#29     _runZoned (dart:async/zone_api.dart:165:6)
+#30     runZoned (dart:async/zone_api.dart:91:10)
+#31     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#32     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:25 +590: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +590: D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart: 进度映射 两来源相同 remoteId：上报只更新本来源的同步标记
+WARNING (drift): It looks like you've created the database class AppDatabase multiple times. When these two databases use the same QueryExecutor, race conditions will occur and might corrupt the database. 
+Try to follow the advice at https://drift.simonbinder.eu/faq/#using-the-database or, if you know what you're doing, set driftRuntimeOptions.dontWarnAboutMultipleDatabases = true
+Here is the stacktrace from when the database was opened a second time:
+#0      GeneratedDatabase._handleInstantiated (package:drift/src/runtime/api/db_base.dart:96:30)
+#1      GeneratedDatabase._whenConstructed (package:drift/src/runtime/api/db_base.dart:73:12)
+#2      new GeneratedDatabase (package:drift/src/runtime/api/db_base.dart:64:5)
+#3      new _$AppDatabase (package:triomi/core/db/app_database.g.dart:4887:36)
+#4      new AppDatabase.forTesting (package:triomi/core/db/app_database.dart)
+#5      main.<anonymous closure> (file:///D:/noval_and_manga/triomi/test/tracking_concurrency_test.dart:26:22)
+#6      Declarer._runSetUps.<anonymous closure> (package:test_api/src/backend/declarer.dart:434:61)
+#7      Future.forEach.<anonymous closure> (dart:async/future.dart:695:26)
+#8      Future.doWhile.<anonymous closure> (dart:async/future.dart:753:26)
+#9      StackZoneSpecification._registerUnaryCallback.<anonymous closure>.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:36)
+#10     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#11     StackZoneSpecification._registerUnaryCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:127:24)
+#12     _rootRunUnary (dart:async/zone_root.dart:48:47)
+#13     _CustomZone.runUnary (dart:async/zone.dart:816:35)
+#14     _CustomZone.runUnaryGuarded (dart:async/zone.dart:710:7)
+#15     _CustomZone.bindUnaryCallbackGuarded.<anonymous closure> (dart:async/zone.dart:748:26)
+#16     Future.doWhile (dart:async/future.dart:770:18)
+#17     Future.forEach (dart:async/future.dart:693:12)
+#18     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:434:18)
+#19     Declarer._runSetUps (package:test_api/src/backend/declarer.dart:432:40)
+#20     Declarer.test.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/declarer.dart:252:21)
+#21     _rootRun (dart:async/zone_root.dart:35:13)
+#22     _CustomZone.run (dart:async/zone.dart:810:35)
+#23     _runZoned (dart:async/zone_api.dart:165:6)
+#24     runZoned (dart:async/zone_api.dart:91:10)
+#25     Declarer.test.<anonymous closure> (package:test_api/src/backend/declarer.dart:250:17)
+#26     Invoker._waitForOutstandingCallbacks.<anonymous closure> (package:test_api/src/backend/invoker.dart:318:17)
+#27     _rootRun (dart:async/zone_root.dart:35:13)
+#28     _CustomZone.run (dart:async/zone.dart:810:35)
+#29     _runZoned (dart:async/zone_api.dart:165:6)
+#30     runZoned (dart:async/zone_api.dart:91:10)
+#31     Invoker._waitForOutstandingCallbacks (package:test_api/src/backend/invoker.dart:314:5)
+#32     Invoker._onRun.<anonymous closure>.<anonymous closure>.<anonymous closure> (package:test_api/src/backend/invoker.dart:457:21)
+<asynchronous suspension>
+This warning will only appear on debug builds.
+00:25 +591: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +592: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +593: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +594: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +595: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +596: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +597: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +598: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +599: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +600: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +601: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +602: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +603: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +604: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +605: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +606: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +607: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +608: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +609: D:/noval_and_manga/triomi/test/reader_restart_test.dart: MediaType.novel reconstructs the reader at its saved page, not page one
+00:25 +610: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 安装失败：具体原因可见，可重试
+00:25 +611: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 安装失败：具体原因可见，可重试
+00:25 +612: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 安装失败：具体原因可见，可重试
+00:25 +613: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 安装失败：具体原因可见，可重试
+00:25 +614: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 安装失败：具体原因可见，可重试
+00:25 +615: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 安装失败：具体原因可见，可重试
+00:25 +616: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 安装失败：具体原因可见，可重试
+00:25 +617: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 安装失败：具体原因可见，可重试
+00:26 +618: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） 已安装条目只读展示，重复点击不产生新请求
+00:26 +619: D:/noval_and_manga/triomi/test/source_catalog_page_test.dart: 目录加载失败可重试；空目录有明确提示
+00:26 +620: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） 安装失败后重试可成功
+00:26 +621: D:/noval_and_manga/triomi/test/source_catalog_d86_test.dart: 安装安全回归（widget） 安装失败后重试可成功
+00:27 +622: All tests passed!

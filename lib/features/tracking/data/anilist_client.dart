@@ -11,6 +11,7 @@ class AniListEntry {
     required this.entryId,
     required this.status,
     required this.progress,
+    this.score,
   });
 
   final int entryId;
@@ -20,6 +21,7 @@ class AniListEntry {
 
   /// 已看集数。
   final int progress;
+  final double? score;
 
   String get localStatus => TrackStatusMap.anilistToLocal(status);
 }
@@ -84,7 +86,7 @@ class AniListClient {
   Future<AniListEntry?> entry(int mediaId, {required String token}) async {
     final data = await _query(
       r'query ($id: Int) { Media(id: $id) { mediaListEntry '
-      r'{ id status progress } } }',
+      r'{ id status progress score(format: POINT_10) } } }',
       token: token,
       variables: <String, Object?>{'id': mediaId},
     );
@@ -94,6 +96,7 @@ class AniListClient {
       entryId: _int(entry['id']) ?? 0,
       status: _string(entry['status']),
       progress: _int(entry['progress']) ?? 0,
+      score: double.tryParse('${entry['score']}'),
     );
   }
 
@@ -120,6 +123,33 @@ class AniListClient {
         sourceId: sourceId,
         type: SourceErrorType.parse,
         message: 'AniList 未返回保存结果',
+      );
+    }
+  }
+
+  Future<void> saveSnapshot({
+    required int mediaId,
+    required String token,
+    required String status,
+    required int progress,
+    double? score,
+  }) async {
+    final data = await _query(
+      r'mutation ($mediaId: Int, $status: MediaListStatus, $progress: Int, $score: Float) '
+      r'{ SaveMediaListEntry(mediaId: $mediaId, status: $status, progress: $progress, score: $score) { id } }',
+      token: token,
+      variables: {
+        'mediaId': mediaId,
+        'status': TrackStatusMap.anilistStatusOf(status),
+        'progress': progress,
+        'score': ?score,
+      },
+    );
+    if (_asMapOrNull(_asMap(data)['SaveMediaListEntry']) == null) {
+      throw const SourceException(
+        sourceId: sourceId,
+        type: SourceErrorType.parse,
+        message: 'AniList未返回保存结果',
       );
     }
   }

@@ -1,0 +1,63 @@
+{
+  "release": "C126-P2",
+  "status": "partial",
+  "artifact": {
+    "path": "D:\\noval_and_manga\\_tools\\Triomi-C126-P2-android-acceptance.apk",
+    "bytes": 123814708,
+    "sha256": "210a19cdfef895f04e35b4ff5df094aacc1712fd5d66e7c2769b9d0eeecc5f0d"
+  },
+  "preserveDataInstalledDevices": [
+    "emulator-5554",
+    "emulator-5556"
+  ],
+  "realApi": {
+    "source": "sorani",
+    "repositoryCompatibilityInspectedThroughUi": "API搜索 / API目录 · 兼容",
+    "installedThroughUi": true,
+    "independentRestartRegistration": true,
+    "searchContext": "小林家的龙女仆",
+    "realMatchingCandidates": [
+      "小林家的龙女仆S",
+      "小林家的龙女仆",
+      "小林家的龙女仆 怕寂寞的龙"
+    ],
+    "manuallyConfirmedFirstSeason": true,
+    "realDirectoryCount": 14,
+    "playlists": [
+      "播放列表 1"
+    ],
+    "stableFollow": "已追番 · 取消",
+    "realApiScriptEvidence": "C126-P2-real-api-smoke.json"
+  },
+  "visibleVerificationBrowser": {
+    "emulator-5554": {
+      "host": "www.7sefun.top",
+      "visibleControls": [
+        "返回",
+        "刷新",
+        "保存会话"
+      ],
+      "openedThroughSourceRulesUi": true,
+      "returnedToRules": true
+    },
+    "emulator-5556": {
+      "host": "www.7sefun.top",
+      "visibleControls": [
+        "返回",
+        "刷新",
+        "保存会话"
+      ],
+      "openedThroughSourceRulesUi": true,
+      "returnedToRules": true
+    }
+  },
+  "captchaSolved": "not-completed; no captcha interaction or script run",
+  "cf": "userWaived; actual not-completed",
+  "images": [
+    "C126-P2-api35-visible-source-browser.png",
+    "C126-P2-api26-visible-source-browser.png",
+    "C126-P2-api35-real-api-directory.png"
+  ],
+  "visualStatus": "not-completed: configured image model unavailable",
+  "productionSignedAndWindowsArtifacts": "C125 refresh artifacts unchanged; P1/P2 source ahead"
+}

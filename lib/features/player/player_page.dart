@@ -14,21 +14,29 @@ import '../../core/models/chapter.dart';
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/models/source_exception.dart';
+import '../../core/models/video_resolve_cancellation.dart';
 import '../../core/router/app_router.dart';
 import '../../core/source/http_client.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
 import '../../core/storage/preferences.dart';
+import '../../core/storage/privacy.dart';
 import '../../core/storage/secure_store.dart';
 import '../../core/theme/app_tokens.dart';
+import '../detail/anime_source_sheet.dart';
 import '../downloads/data/download_providers.dart';
+import '../library/data/anime_identity_repository.dart';
 import '../library/data/library_providers.dart';
 import '../library/data/library_repository.dart';
+import '../settings/privacy_lock_controller.dart';
 import '../tracking/data/tracking_providers.dart';
 import 'data/dandanplay_client.dart';
 import 'data/danmaku_overlay.dart';
 import 'data/danmaku_settings.dart';
+import 'data/player_settings.dart';
+import 'episode_selector.dart';
+import 'windows_video_resolver.dart';
 
 /// 播放器入参：作品 + 目录 + 从第几集开始。
 class PlayerArgs {
@@ -53,7 +61,8 @@ class PlayerPage extends ConsumerStatefulWidget {
   ConsumerState<PlayerPage> createState() => _PlayerPageState();
 }
 
-class _PlayerPageState extends ConsumerState<PlayerPage> {
+class _PlayerPageState extends ConsumerState<PlayerPage>
+    with WidgetsBindingObserver {
   late final Player _player;
   VideoController? _videoController;
   late final _NativeAndroidVideoController _nativeVideoController;
@@ -66,8 +75,12 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
 
   /// 同上：dispose 里不能用 ref，进度上报器也提前握住。
   ProgressReporter? _trackingReporter;
+  AnimeIdentityRepository? _animeIdentity;
+  bool _resetCrossSitePosition = false;
 
   late final Preferences _preferences;
+  late final PrivacyLockController _privacyLock;
+  bool _privacyPausePending = false;
   late final DanmakuController _danmaku;
   late DanmakuSettings _danmakuSettings;
 
@@ -75,11 +88,22 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
   StreamSubscription<Duration>? _durationSub;
   StreamSubscription<bool>? _playingSub;
   Timer? _progressTimer;
+  StreamSubscription<bool>? _completedSub;
+  late PlayerSettings _settings;
+  bool _advancing = false;
+  bool _inPip = false;
+  double _brightness = .5;
+  bool _holdingSpeed = false;
 
   late int _chapterIndex;
 
+  int _loadSeq = 0;
+  int _resolveSeq = 0;
+  final String _resolverOwner = UniqueKey().toString();
+  VideoResolveCancellation? _desktopResolve;
   bool _loading = true;
   String? _error;
+  bool _awaitingPlaybackStart = true;
 
   List<PlaySource> _lines = const <PlaySource>[];
   int _lineIndex = 0;
@@ -94,10 +118,12 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   bool _playing = false;
+  late final bool _incognito;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _chapterIndex = widget.args.initialIndex.clamp(
       0,
       widget.args.chapters.length - 1,
@@ -106,18 +132,33 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     // dispose() 里不能用 ref（Riverpod 3 会在卸载时封禁），
     // 退出播放器时还要写最后一次进度，所以提前把仓储握在手里。
     _libraryRepository = ref.read(libraryRepositoryProvider);
+    _animeIdentity = ref.read(animeIdentityRepositoryProvider);
     _preferences = ref.read(preferencesProvider);
+    _privacyLock = ref.read(privacyLockProvider);
+    _privacyLock.addListener(_onPrivacyLockChanged);
+    _incognito = _preferences.get<bool>(incognitoPreferenceKey) ?? false;
+    _settings = PlayerSettings.load(_preferences);
+    _speed = _settings.speed;
     _trackingReporter = ref.read(progressReporterProvider);
     _danmakuSettings = DanmakuSettings.load(_preferences);
     _danmaku = DanmakuController(settings: _danmakuSettings);
     _danmakuOn = _danmakuSettings.enabled;
 
-    _player = Player();
     _nativeVideoController = _NativeAndroidVideoController(
       onState: _onNativeVideoState,
+      onPrepared: (state) {
+        _awaitingPlaybackStart = false;
+        _onNativeVideoState(state);
+        unawaited(_applyControls());
+      },
       onError: _onNativeVideoError,
+      onCompleted: () => unawaited(_onCompleted()),
+      onPip: (enabled) {
+        if (mounted) setState(() => _inPip = enabled);
+      },
     );
     if (!_useNativeAndroidVideo) {
+      _player = Player();
       // Android uses a native SurfaceView because API35 x86_64 emulators
       // render media_kit's Flutter external texture as black. Desktop keeps
       // the media_kit/libmpv path.
@@ -133,13 +174,17 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
         if (mounted) setState(() => _duration = duration);
       });
       _playingSub = _player.stream.playing.listen((playing) {
+        if (_privacyLock.blocksAccess && playing) _onPrivacyLockChanged();
         if (mounted) setState(() => _playing = playing);
+      });
+      _completedSub = _player.stream.completed.listen((completed) {
+        if (completed) unawaited(_onCompleted());
       });
     }
 
     _progressTimer = Timer.periodic(
       const Duration(seconds: 5),
-      (_) => _persistProgress(),
+      (_) { if (!_privacyLock.blocksAccess) unawaited(_persistProgress()); },
     );
 
     unawaited(_load());
@@ -150,12 +195,18 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
   Chapter get _chapter => _chapters[_chapterIndex];
 
   void _onPosition(Duration position) {
+    if (_awaitingPlaybackStart || _privacyLock.blocksAccess) return;
     _position = position;
     _danmaku.update(position, playing: _playing);
     if (mounted) setState(() {});
   }
 
   void _onNativeVideoState(_NativeVideoState state) {
+    if (_awaitingPlaybackStart) return;
+    if (_privacyLock.blocksAccess && state.playing) {
+      _onPrivacyLockChanged();
+      return;
+    }
     _position = state.position;
     _duration = state.duration;
     _playing = state.playing;
@@ -179,6 +230,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
   // ---------------------------------------------------------------- 加载
 
   Future<void> _load() async {
+    final seq = ++_loadSeq;
+    ++_resolveSeq;
+    final chapter = _chapter;
+    _awaitingPlaybackStart = true;
     setState(() {
       _loading = true;
       _error = null;
@@ -187,14 +242,41 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     });
 
     try {
+      if (_useNativeAndroidVideo) {
+        await _nativeVideoController.pause();
+      } else {
+        await _player.pause();
+      }
+      if (!mounted || seq != _loadSeq) return;
+      final savedSeconds = await _libraryRepository?.chapterPositionOf(
+        _item.sourceId,
+        _item.remoteId,
+        chapter.remoteId,
+      );
+      if (!mounted || seq != _loadSeq) return;
+      final resetCrossSite =
+          await _animeIdentity?.shouldResetPosition(_item) ?? false;
+      _resetCrossSitePosition = _resetCrossSitePosition || resetCrossSite;
+      if (!mounted || seq != _loadSeq) return;
+      final startPosition =
+          !_resetCrossSitePosition &&
+              savedSeconds != null &&
+              savedSeconds.isFinite &&
+              savedSeconds > 0
+          ? Duration(milliseconds: (savedSeconds * 1000).round())
+          : Duration.zero;
       // 离线优先：已下载到本地就直接播文件，不依赖来源与网络。
       final localPath = await ref
           .read(downloadRepositoryProvider)
-          .localVideoPath(_item.sourceId, _chapter.remoteId);
+          .localVideoPath(_item.sourceId, chapter.remoteId);
+      if (!mounted || seq != _loadSeq) return;
       if (localPath != null) {
         _lines = const <PlaySource>[];
-        await _openLine(Uri.file(localPath).toString());
-        if (mounted) {
+        await _openLine(
+          Uri.file(localPath).toString(),
+          startPosition: startPosition,
+        );
+        if (mounted && seq == _loadSeq) {
           setState(() {
             _loading = false;
             _chromeVisible = true;
@@ -207,7 +289,15 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
       final entry = snapshot.entries
           .where((candidate) => candidate.descriptor.id == _item.sourceId)
           .firstOrNull;
-      final provider = entry?.source;
+      if (!mounted || seq != _loadSeq) return;
+      if (entry == null || !entry.enabled) {
+        throw SourceException(
+          sourceId: _item.sourceId,
+          type: SourceErrorType.permission,
+          message: '播放来源已停用或移除，请更换来源',
+        );
+      }
+      final provider = entry.source;
       if (provider is! ContentProvider) {
         throw SourceException(
           sourceId: _item.sourceId,
@@ -216,7 +306,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
         );
       }
 
-      final content = await provider.content(_chapter);
+      final content = await provider.content(chapter);
+      if (!mounted || seq != _loadSeq) return;
       if (content.playSources.isEmpty) {
         throw SourceException(
           sourceId: _item.sourceId,
@@ -226,41 +317,170 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
       }
 
       _lines = content.playSources;
-      await _openLine(_lines.first.url);
-
+      await _openLine(
+        _lines.first.url,
+        line: _lines.first,
+        startPosition: startPosition,
+      );
+      if (!mounted || seq != _loadSeq) return;
       unawaited(_loadDanmaku(content.danmakuUrl));
 
-      if (mounted) {
+      if (mounted && seq == _loadSeq) {
         setState(() {
           _loading = false;
           _chromeVisible = true;
         });
       }
     } on SourceException catch (error) {
-      if (mounted) {
+      if (mounted && seq == _loadSeq) {
         setState(() {
           _loading = false;
           _error = SourceRegistry.describeError(error, _item.sourceId);
         });
       }
     } catch (error) {
-      if (mounted) {
+      if (mounted && seq == _loadSeq) {
         setState(() {
           _loading = false;
-          _error = '$error';
+          _error = error is PlatformException
+              ? (error.message ?? '播放暂不可用，请重试或更换播放来源')
+              : '$error'.replaceFirst('Bad state: ', '');
         });
       }
     }
   }
 
-  Future<void> _openLine(String url) async {
-    _danmaku.seek(Duration.zero);
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) unawaited(_persistProgress());
+    if (state == AppLifecycleState.resumed && _privacyLock.blocksAccess) _onPrivacyLockChanged();
+  }
+
+  void _onPrivacyLockChanged() {
+    if (!_privacyLock.blocksAccess || _privacyPausePending) return;
+    _privacyPausePending = true;
+    // Pausing, not disposing or seeking, preserves the reader's true position.
+    unawaited((_useNativeAndroidVideo ? _nativeVideoController.pause() : _player.pause())
+        .catchError((Object _) {})
+        .whenComplete(() => _privacyPausePending = false));
+  }
+
+  Future<void> _onCompleted() async {
+    if (_privacyLock.blocksAccess || _loading || _error != null || _awaitingPlaybackStart || _advancing) {
+      return;
+    }
+    _advancing = true;
+    try {
+      if (_duration > Duration.zero) _position = _duration;
+      await _persistProgress();
+      if (!mounted || !_settings.autoNext) return;
+      final target = adjacentEpisodeIndex(_chapters, _chapterIndex, 1);
+      if (target == null) return;
+      setState(() => _chapterIndex = target);
+      await _load();
+    } finally {
+      _advancing = false;
+    }
+  }
+
+  Future<void> _applyControls() async {
     if (_useNativeAndroidVideo) {
-      await _nativeVideoController.setUrl(url);
+      await _nativeVideoController.setRate(_speed);
+      await _nativeVideoController.setVolume(_settings.volume);
+      await _nativeVideoController.setFit(_settings.fit);
+      await _nativeVideoController.setBackgroundAudio(
+        _settings.backgroundAudio,
+      );
+      await const MethodChannel('triomi/platform')
+          .invokeMethod<void>('videoPolicy', {
+            'owner': _resolverOwner,
+            'active': true,
+            'pip': true,
+            'backgroundAudio': _settings.backgroundAudio,
+          });
     } else {
-      await _player.open(Media(url));
+      await _player.setRate(_speed);
+      await _player.setVolume(_settings.volume * 100);
+    }
+  }
+
+  Future<void> _openLine(
+    String url, {
+    PlaySource? line,
+    Duration startPosition = Duration.zero,
+  }) async {
+    _awaitingPlaybackStart = true;
+    final seq = ++_resolveSeq;
+    _desktopResolve?.cancel('已切换播放线路');
+    _desktopResolve = null;
+    var headers = line?.headers ?? const <String, String>{};
+    if (line?.webPage == true) {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+        final owner = _desktopResolve = VideoResolveCancellation();
+        late final ResolvedDesktopVideo result;
+        try {
+          result = await resolveWindowsVideo(
+            context,
+            line!,
+            cancellation: owner,
+            privacyLock: _privacyLock,
+          );
+        } finally {
+          if (identical(_desktopResolve, owner)) _desktopResolve = null;
+          owner.dispose();
+        }
+        if (!mounted || seq != _resolveSeq) return;
+        url = result.url;
+        headers = result.headers;
+      } else if (!_useNativeAndroidVideo) {
+        throw StateError('此来源的网页播放解析目前支持 Android，请选择直链来源');
+      } else {
+        final result = await const MethodChannel('triomi/platform')
+            .invokeMapMethod<String, Object?>('resolveVideo', {
+              'url': url,
+              'requestId': _resolverOwner,
+              'headers': headers,
+              'unavailableVideoUrls': line!.unavailableVideoUrls,
+            });
+        if (!mounted || seq != _resolveSeq) return;
+        final resolved = result?['url']?.toString();
+        if (resolved == null || resolved.isEmpty) {
+          throw StateError('播放页未解析到视频地址');
+        }
+        url = resolved;
+        final rawHeaders = result?['headers'];
+        headers = {
+          if (rawHeaders is Map)
+            for (final e in rawHeaders.entries)
+              e.key.toString(): e.value.toString(),
+        };
+      }
+    }
+    if (!mounted || seq != _resolveSeq) return;
+    _position = startPosition;
+    _duration = Duration.zero;
+    _danmaku.seek(startPosition);
+    if (_useNativeAndroidVideo) {
+      await _nativeVideoController.setUrl(
+        url,
+        headers: headers,
+        startPosition: startPosition,
+        title: '${_item.title} · ${_chapter.title}',
+      );
+    } else {
+      await _player.open(
+        Media(url, httpHeaders: headers, start: startPosition),
+      );
+      _awaitingPlaybackStart = false;
+      if (!mounted || seq != _resolveSeq) return;
+      if (_privacyLock.blocksAccess) {
+        await _player.pause();
+        return;
+      }
       await _player.play();
     }
+    await _applyControls();
+    if (_privacyLock.blocksAccess) _onPrivacyLockChanged();
   }
 
   Future<void> _loadDanmaku(String? danmakuUrl) async {
@@ -279,28 +499,41 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
   // ---------------------------------------------------------------- 进度
 
   Future<void> _persistProgress() async {
-    if (_loading || _error != null) return;
+    if (_incognito) return;
+    if (_loading || _error != null || _awaitingPlaybackStart) return;
     final repository = _libraryRepository;
     if (repository == null) return;
+    final chapter = _chapter;
+    final position = _position;
     try {
+      await _animeIdentity?.recordSelection(_item, chapter);
+      final subject = await _animeIdentity?.subjectFor(_item);
+      if (subject != null && subject.sourceId != _item.sourceId) {
+        await repository.updateProgress(
+          sourceId: subject.sourceId,
+          remoteId: subject.remoteId,
+          chapterNumber: chapter.number ?? (chapter.sortIndex + 1).toDouble(),
+        );
+      }
       await repository.updateProgress(
         sourceId: _item.sourceId,
         remoteId: _item.remoteId,
-        chapterNumber: _chapter.number ?? (_chapter.sortIndex + 1).toDouble(),
+        chapterNumber: chapter.number ?? (chapter.sortIndex + 1).toDouble(),
       );
       await repository.recordHistory(
         sourceId: _item.sourceId,
         remoteId: _item.remoteId,
-        chapter: _chapter,
-        position: _position.inSeconds.toDouble(),
+        chapter: chapter,
+        position: position.inSeconds.toDouble(),
       );
+      _resetCrossSitePosition = false;
       // 进度上报（追踪服务）：尽力而为，失败不影响播放。
       unawaited(
         _trackingReporter?.report(
-              sourceId: _item.sourceId,
-              remoteId: _item.remoteId,
+              sourceId: subject?.sourceId ?? _item.sourceId,
+              remoteId: subject?.remoteId ?? _item.remoteId,
               chapterNumber:
-                  _chapter.number ?? (_chapter.sortIndex + 1).toDouble(),
+                  chapter.number ?? (chapter.sortIndex + 1).toDouble(),
               type: MediaType.anime,
             ) ??
             Future<void>.value(),
@@ -319,11 +552,13 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
   // ---------------------------------------------------------------- 章节切换
 
   Future<void> _switchChapter(int delta) async {
-    final target = _chapterIndex + delta;
-    if (target < 0 || target >= _chapters.length) {
+    final target = adjacentEpisodeIndex(_chapters, _chapterIndex, delta);
+    if (target == null) {
       _toast(delta > 0 ? '已经是最后一集' : '已经是第一集');
       return;
     }
+    await _persistProgress();
+    if (!mounted) return;
     setState(() => _chapterIndex = target);
     await _load();
   }
@@ -374,14 +609,26 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
               _VideoArea(
                 controller: _videoController,
                 nativeController: _nativeVideoController,
+                fit: _settings.fit,
+                backgroundAudio: _settings.backgroundAudio,
                 loading: _loading,
                 error: _error,
                 onRetry: _load,
+                onEpisodes: _showEpisodes,
               ),
               if (!_loading && _error == null)
                 DanmakuOverlay(controller: _danmaku),
-              if (!_loading && _error == null) _buildGestureArea(),
-              if (!_loading && _error == null && _chromeVisible) _buildChrome(),
+              if (!_loading && _error == null && !_inPip) _buildGestureArea(),
+              if (_holdingSpeed && !_inPip)
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: Text(
+                    '长按 ${_settings.holdSpeed}x',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              if (!_loading && _error == null && _chromeVisible && !_inPip)
+                _buildChrome(),
             ],
           ),
         ),
@@ -399,12 +646,18 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
             Expanded(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                onLongPressStart: (_) => _holdSpeed(true),
+                onLongPressEnd: (_) => _holdSpeed(false),
+                onVerticalDragUpdate: (details) =>
+                    _adjustBrightness(details.delta.dy, constraints.maxHeight),
                 onTap: () => _skip(-10),
                 onDoubleTap: _togglePlay,
               ),
             ),
             GestureDetector(
               behavior: HitTestBehavior.opaque,
+              onLongPressStart: (_) => _holdSpeed(true),
+              onLongPressEnd: (_) => _holdSpeed(false),
               onTap: () => setState(() => _chromeVisible = !_chromeVisible),
               onDoubleTap: _togglePlay,
               child: SizedBox(width: width * 0.34),
@@ -412,6 +665,12 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
             Expanded(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                onLongPressStart: (_) => _holdSpeed(true),
+                onLongPressEnd: (_) => _holdSpeed(false),
+                onVerticalDragUpdate: (details) =>
+                    _adjustVolume(details.delta.dy, constraints.maxHeight),
+                onVerticalDragEnd: (_) =>
+                    unawaited(_settings.save(_preferences)),
                 onTap: () => _skip(10),
                 onDoubleTap: _togglePlay,
               ),
@@ -588,6 +847,14 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
                           ),
                         ),
                         IconButton(
+                          tooltip: '播放设置',
+                          onPressed: _controlsSheet,
+                          icon: const Icon(
+                            Icons.settings_outlined,
+                            color: Colors.white,
+                          ),
+                        ),
+                        IconButton(
                           tooltip: '全屏',
                           onPressed: () => _setFullscreen(!_fullscreen),
                           icon: const Icon(
@@ -641,6 +908,26 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
                         ),
                       ],
                     ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: _pickSubtitles,
+                          child: const Text(
+                            '字幕',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                        ),
+                        if (_useNativeAndroidVideo)
+                          TextButton(
+                            onPressed: _enterPip,
+                            child: const Text(
+                              '画中画',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -685,38 +972,75 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
         ),
       ),
     );
-    if (selected == null || selected == _lineIndex) return;
-    setState(() => _lineIndex = selected);
-    await _openLine(_lines[selected].url);
+    if (!mounted || selected == null || selected == _lineIndex) return;
+    final seq = _loadSeq;
+    setState(() {
+      _lineIndex = selected;
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await _openLine(_lines[selected].url, line: _lines[selected]);
+      if (mounted && seq == _loadSeq) setState(() => _loading = false);
+    } catch (error) {
+      if (mounted && seq == _loadSeq) {
+        setState(() {
+          _loading = false;
+          _error = '$error';
+        });
+      }
+    }
   }
 
   Future<void> _showEpisodes() async {
-    final selected = await showModalBottomSheet<int>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: _chapters.length,
-          itemBuilder: (context, index) => ListTile(
-            leading: index == _chapterIndex
-                ? const Icon(Icons.play_circle_fill_rounded)
-                : const Icon(Icons.play_circle_outline),
-            title: Text(
-              _chapters[index].title,
-              style: index == _chapterIndex
-                  ? TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: AppTypography.medium,
-                    )
-                  : null,
+    final selection =
+        await showModalBottomSheet<({int? index, bool changeSource})>(
+          context: context,
+          showDragHandle: true,
+          builder: (context) => SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        Navigator.of(context)
+                            .pop((index: null, changeSource: true)),
+                    icon: const Icon(Icons.travel_explore),
+                    label: const Text('更换播放来源'),
+                  ),
+                  EpisodeSelector(
+                    chapters: _chapters,
+                    currentIndex: _chapterIndex,
+                    onSelected: (index) =>
+                        Navigator.of(context)
+                            .pop((index: index, changeSource: false)),
+                  ),
+                ],
+              ),
             ),
-            onTap: () => Navigator.of(context).pop(index),
           ),
-        ),
-      ),
-    );
+        );
+    if (!mounted || selection == null) return;
+    if (selection.changeSource) {
+      await _persistProgress();
+      if (_useNativeAndroidVideo) {
+        await _nativeVideoController.pause();
+      } else {
+        await _player.pause();
+      }
+      if (_fullscreen) await _setFullscreen(false);
+      if (!mounted) return;
+      setState(() => _playing = false);
+      await showAnimeSources(context, _item, replacePlayer: true);
+      return;
+    }
+    final selected = selection.index;
     if (selected == null || selected == _chapterIndex) return;
+    await _persistProgress();
+    if (!mounted) return;
     setState(() => _chapterIndex = selected);
     await _load();
   }
@@ -774,6 +1098,202 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
       await _player.setRate(selected);
     }
     if (mounted) setState(() => _speed = selected);
+    _settings = _settings.copyWith(speed: selected);
+    await _settings.save(_preferences);
+  }
+
+  Future<void> _holdSpeed(bool enabled) async {
+    if (_holdingSpeed == enabled) return;
+    _holdingSpeed = enabled;
+    final speed = enabled ? _settings.holdSpeed : _speed;
+    if (_useNativeAndroidVideo) {
+      await _nativeVideoController.setRate(speed);
+    } else {
+      await _player.setRate(speed);
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _adjustVolume(double delta, double height) async {
+    final volume = (_settings.volume - delta / height).clamp(0.0, 1.0);
+    _settings = _settings.copyWith(volume: volume);
+    if (_useNativeAndroidVideo) {
+      await _nativeVideoController.setVolume(volume);
+    } else {
+      await _player.setVolume(volume * 100);
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _adjustBrightness(double delta, double height) async {
+    if (!_useNativeAndroidVideo) return;
+    _brightness = (_brightness - delta / height).clamp(.05, 1.0);
+    await const MethodChannel('triomi/platform')
+        .invokeMethod<void>('videoPolicy', {
+          'owner': _resolverOwner,
+          'active': true,
+          'pip': true,
+          'backgroundAudio': _settings.backgroundAudio,
+          'brightness': _brightness,
+        });
+  }
+
+  Future<void> _enterPip() async {
+    if (_privacyLock.enabled) {
+      _toast('应用隐私锁开启时禁止画中画，请先验证 PIN 并关闭隐私锁');
+      return;
+    }
+    final result = await const MethodChannel('triomi/platform')
+        .invokeMethod<bool>('enterVideoPip');
+    if (result != true) _toast('此设备不支持画中画');
+  }
+
+  Future<void> _controlsSheet() async {
+    var settings = _settings;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, update) => SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const ListTile(title: Text('播放设置')),
+                SwitchListTile(
+                  title: const Text('同列表自动播放下一集'),
+                  value: settings.autoNext,
+                  onChanged: (value) => update(
+                    () => settings = settings.copyWith(autoNext: value),
+                  ),
+                ),
+                SwitchListTile(
+                  title: const Text('后台音频'),
+                  subtitle: Text(
+                    _useNativeAndroidVideo
+                        ? '系统媒体通知与锁屏控制；退出播放器后停止'
+                        : '最小化时继续音频；退出播放器后停止',
+                  ),
+                  value: settings.backgroundAudio,
+                  onChanged: (value) => update(
+                    () => settings = settings.copyWith(backgroundAudio: value),
+                  ),
+                ),
+                ListTile(
+                  title: const Text('画面比例'),
+                  trailing: DropdownButton<String>(
+                    value: settings.fit,
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'contain',
+                        child: Text('原比例完整显示'),
+                      ),
+                      DropdownMenuItem(value: 'cover', child: Text('填满并裁边')),
+                      DropdownMenuItem(value: 'fill', child: Text('拉伸')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        update(() => settings = settings.copyWith(fit: value));
+                      }
+                    },
+                  ),
+                ),
+                ListTile(
+                  title: const Text('长按倍速'),
+                  trailing: DropdownButton<double>(
+                    value: settings.holdSpeed,
+                    items: [
+                      for (final speed in [1.0, 1.5, 2.0, 2.5, 3.0])
+                        DropdownMenuItem(
+                          value: speed,
+                          child: Text('${speed}x'),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        update(
+                          () => settings = settings.copyWith(holdSpeed: value),
+                        );
+                      }
+                    },
+                  ),
+                ),
+                ListTile(title: Text('音量 ${(settings.volume * 100).round()}%')),
+                Slider(
+                  value: settings.volume,
+                  onChanged: (value) =>
+                      update(() => settings = settings.copyWith(volume: value)),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('应用设置'),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    _settings = settings;
+    await _settings.save(_preferences);
+    await _applyControls();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _pickSubtitles() async {
+    final native = _useNativeAndroidVideo
+        ? await _nativeVideoController.subtitleTracks()
+        : null;
+    if (!mounted) return;
+    final desktop = _useNativeAndroidVideo
+        ? <SubtitleTrack>[]
+        : _player.state.tracks.subtitle
+              .where((t) => t.id != 'no' && t.id != 'auto')
+              .toList();
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(title: Text('字幕轨道')),
+            ListTile(
+              title: const Text('关闭字幕'),
+              onTap: () => Navigator.pop(context, 'no'),
+            ),
+            if ((native?.isEmpty ?? desktop.isEmpty))
+              const ListTile(title: Text('当前媒体没有可用字幕轨道')),
+            if (native != null)
+              for (final track in native)
+                ListTile(
+                  title: Text('${track['title']}'),
+                  onTap: () => Navigator.pop(context, '${track['id']}'),
+                )
+            else
+              for (final track in desktop)
+                ListTile(
+                  title: Text(track.title ?? track.language ?? track.id),
+                  onTap: () => Navigator.pop(context, track.id),
+                ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || selected == null) return;
+    if (_useNativeAndroidVideo) {
+      await _nativeVideoController.selectSubtitle(
+        selected == 'no' ? null : selected,
+      );
+    } else {
+      await _player.setSubtitleTrack(
+        selected == 'no'
+            ? SubtitleTrack.no()
+            : desktop.firstWhere((t) => t.id == selected),
+      );
+    }
   }
 
   // ---------------------------------------------------------------- 弹幕设置
@@ -999,13 +1519,39 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
 
   @override
   void dispose() {
+    _desktopResolve?.cancel('播放器已关闭');
+    WidgetsBinding.instance.removeObserver(this);
+    _privacyLock.removeListener(_onPrivacyLockChanged);
+    _completedSub?.cancel();
+    if (_useNativeAndroidVideo) {
+      unawaited(
+        const MethodChannel('triomi/platform')
+            .invokeMethod<void>('videoPolicy', {
+              'owner': _resolverOwner,
+              'active': false,
+              'pip': false,
+              'backgroundAudio': false,
+              'brightness': -1,
+            }),
+      );
+    }
     unawaited(_persistProgress());
     _progressTimer?.cancel();
     _positionSub?.cancel();
     _durationSub?.cancel();
     _playingSub?.cancel();
+    ++_loadSeq;
+    ++_resolveSeq;
+    if (_useNativeAndroidVideo) {
+      unawaited(
+        const MethodChannel('triomi/platform').invokeMethod<void>(
+          'cancelVideoResolve',
+          {'requestId': _resolverOwner},
+        ),
+      );
+    }
     _nativeVideoController.dispose();
-    _player.dispose();
+    if (!_useNativeAndroidVideo) _player.dispose();
     _danmaku.dispose();
     if (_fullscreen) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -1021,16 +1567,22 @@ class _VideoArea extends StatelessWidget {
   const _VideoArea({
     required this.controller,
     required this.nativeController,
+    required this.fit,
+    required this.backgroundAudio,
     required this.loading,
     required this.error,
     required this.onRetry,
+    required this.onEpisodes,
   });
 
   final VideoController? controller;
   final _NativeAndroidVideoController nativeController;
   final bool loading;
+  final String fit;
+  final bool backgroundAudio;
   final String? error;
   final VoidCallback onRetry;
+  final VoidCallback onEpisodes;
 
   @override
   Widget build(BuildContext context) {
@@ -1061,6 +1613,14 @@ class _VideoArea extends StatelessWidget {
                 icon: const Icon(Icons.refresh, size: 18),
                 label: const Text('重试'),
               ),
+              TextButton.icon(
+                onPressed: onEpisodes,
+                icon: const Icon(Icons.list, color: Colors.white70),
+                label: const Text(
+                  '选择其他集数 / 线路',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ),
             ],
           ),
         ),
@@ -1074,7 +1634,17 @@ class _VideoArea extends StatelessWidget {
         if (loading)
           const Center(child: CircularProgressIndicator(color: Colors.white)),
         if (controller != null)
-          Video(controller: controller!)
+          Video(
+            controller: controller!,
+            controls: null,
+            fit: switch (fit) {
+              'cover' => BoxFit.cover,
+              'fill' => BoxFit.fill,
+              _ => BoxFit.contain,
+            },
+            pauseUponEnteringBackgroundMode: !backgroundAudio,
+            resumeUponEnteringForegroundMode: !backgroundAudio,
+          )
         else
           _NativeAndroidVideoView(controller: nativeController),
       ],
@@ -1095,16 +1665,31 @@ class _NativeVideoState {
 }
 
 class _NativeAndroidVideoController {
-  _NativeAndroidVideoController({required this.onState, required this.onError});
+  _NativeAndroidVideoController({
+    required this.onState,
+    required this.onPrepared,
+    required this.onError,
+    required this.onCompleted,
+    required this.onPip,
+  });
 
   final void Function(_NativeVideoState state) onState;
+  final void Function(_NativeVideoState state) onPrepared;
   final void Function(String message) onError;
+  final VoidCallback onCompleted;
+  String _pendingTitle = 'Triomi';
+  final void Function(bool enabled) onPip;
   MethodChannel? _channel;
+  int? _viewId;
   String? _pendingUrl;
+  Map<String, String> _pendingHeaders = const {};
+  Duration _pendingStartPosition = Duration.zero;
   bool _disposed = false;
 
   void attach(int id) {
     if (_disposed) return;
+    _channel?.setMethodCallHandler(null);
+    _viewId = id;
     final channel = MethodChannel('triomi/native-video/$id');
     _channel = channel;
     channel.setMethodCallHandler((call) async {
@@ -1115,9 +1700,12 @@ class _NativeAndroidVideoController {
         case 'state':
           onState(_stateFrom(args));
         case 'prepared':
-          onState(_stateFrom(args));
+          onPrepared(_stateFrom(args));
         case 'completed':
           onState(_stateFrom(args));
+          onCompleted();
+        case 'pip':
+          onPip(args['enabled'] == true);
         case 'error':
           final details = args['message']?.toString().trim();
           final code = '${args['what'] ?? ''}/${args['extra'] ?? ''}';
@@ -1131,7 +1719,14 @@ class _NativeAndroidVideoController {
     final url = _pendingUrl;
     if (url != null) {
       _pendingUrl = null;
-      unawaited(setUrl(url));
+      unawaited(
+        setUrl(
+          url,
+          headers: _pendingHeaders,
+          startPosition: _pendingStartPosition,
+          title: _pendingTitle,
+        ),
+      );
     }
   }
 
@@ -1144,14 +1739,27 @@ class _NativeAndroidVideoController {
     );
   }
 
-  Future<void> setUrl(String url) async {
+  Future<void> setUrl(
+    String url, {
+    Map<String, String> headers = const {},
+    Duration startPosition = Duration.zero,
+    String title = 'Triomi',
+  }) async {
     if (_disposed) return;
     final channel = _channel;
     if (channel == null) {
       _pendingUrl = url;
+      _pendingHeaders = headers;
+      _pendingStartPosition = startPosition;
+      _pendingTitle = title;
       return;
     }
-    await channel.invokeMethod<void>('setUrl', <String, Object?>{'url': url});
+    await channel.invokeMethod<void>('setUrl', <String, Object?>{
+      'url': url,
+      'headers': headers,
+      'startMilliseconds': startPosition.inMilliseconds,
+      'title': title,
+    });
   }
 
   Future<void> play() async => _invoke('play');
@@ -1164,10 +1772,34 @@ class _NativeAndroidVideoController {
   Future<void> setRate(double rate) =>
       _invoke('setRate', <String, Object?>{'rate': rate});
 
+  Future<void> setVolume(double volume) =>
+      _invoke('setVolume', {'volume': volume});
+  Future<void> setFit(String fit) => _invoke('setFit', {'fit': fit});
+  Future<void> setBackgroundAudio(bool enabled) =>
+      _invoke('setBackgroundAudio', {'enabled': enabled});
+  Future<List<Map<Object?, Object?>>> subtitleTracks() async {
+    final raw =
+        await _channel?.invokeListMethod<Object?>('subtitleTracks') ?? [];
+    return [
+      for (final row in raw)
+        if (row is Map) Map<Object?, Object?>.from(row),
+    ];
+  }
+
+  Future<void> selectSubtitle(String? id) =>
+      _invoke('selectSubtitle', {'id': id});
+
   Future<void> _invoke(String method, [Map<String, Object?>? args]) async {
     final channel = _channel;
     if (_disposed || channel == null) return;
     await channel.invokeMethod<void>(method, args);
+  }
+
+  void detach(int id) {
+    if (_viewId != id) return;
+    _channel?.setMethodCallHandler(null);
+    _channel = null;
+    _viewId = null;
   }
 
   void dispose() {
@@ -1188,6 +1820,14 @@ class _NativeAndroidVideoView extends StatefulWidget {
 }
 
 class _NativeAndroidVideoViewState extends State<_NativeAndroidVideoView> {
+  int? _viewId;
+  @override
+  void dispose() {
+    final id = _viewId;
+    if (id != null) widget.controller.detach(id);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     // SurfaceAndroidViewController lets Flutter select the hybrid-composition
@@ -1215,6 +1855,8 @@ class _NativeAndroidVideoViewState extends State<_NativeAndroidVideoView> {
           creationParamsCodec: const StandardMessageCodec(),
         );
         controller.addOnPlatformViewCreatedListener((id) {
+          if (!mounted) return;
+          _viewId = id;
           widget.controller.attach(id);
           params.onPlatformViewCreated(id);
         });

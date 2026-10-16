@@ -9,7 +9,6 @@ import 'package:triomi/core/source/js/js_source.dart';
 import 'package:triomi/core/source/js/runtime/js_runtime_factory_io.dart';
 import 'package:triomi/core/source/rule_schema.dart';
 
-
 /// D22：宿主桥边界的真实路径验证（quickjs + _JsHttpBridge 全链路）。
 ///
 /// `t2_js_source_test.dart` 的宿主桥组直接调用桥方法验证选择器；本文件从
@@ -35,7 +34,10 @@ class RecordingHttp implements SourceHttpClient {
   Object? nextResponse = '';
 
   @override
-  Future<SourceResponse> send(SourceRequest request, {required String sourceId}) async {
+  Future<SourceResponse> send(
+    SourceRequest request, {
+    required String sourceId,
+  }) async {
     requests.add(request);
     final value = nextResponse;
     if (value is SourceException) throw value;
@@ -59,6 +61,7 @@ class RecordingHttp implements SourceHttpClient {
     String url, {
     required String sourceId,
     Map<String, String> headers = const <String, String>{},
+    bool followRedirects = true,
   }) => throw UnimplementedError();
 
   @override
@@ -76,7 +79,7 @@ class RecordingHttp implements SourceHttpClient {
 
 bool engineAvailable() {
   try {
-    final runtime = createFlutterJsRuntime();
+    final runtime = FlutterJsRuntime();
     runtime.dispose();
     return true;
   } catch (_) {
@@ -121,7 +124,7 @@ async function search(keyword, page) {
       );
       final source = JsSource(
         rule: rule,
-        runtime: createFlutterJsRuntime(),
+        runtime: FlutterJsRuntime(),
         http: http,
       );
       addTearDown(source.dispose);
@@ -129,8 +132,11 @@ async function search(keyword, page) {
       await source.search('x');
 
       final headers = http.requests.single.headers;
-      expect(headers['Referer'], 'https://override.example.com',
-          reason: '单次请求的头覆盖规则头');
+      expect(
+        headers['Referer'],
+        'https://override.example.com',
+        reason: '单次请求的头覆盖规则头',
+      );
       expect(headers['X-Rule-Only'], 'from-rule', reason: '规则头照常铺底');
       expect(headers['X-Per-Call'], 'from-js');
     });
@@ -159,7 +165,7 @@ async function search(keyword, page) {
       );
       final source = JsSource(
         rule: rule,
-        runtime: createFlutterJsRuntime(),
+        runtime: FlutterJsRuntime(),
         http: http,
       );
       addTearDown(source.dispose);
@@ -194,15 +200,18 @@ async function search(keyword, page) {
       );
       final source = JsSource(
         rule: rule,
-        runtime: createFlutterJsRuntime(),
+        runtime: FlutterJsRuntime(),
         http: http,
       );
       addTearDown(source.dispose);
       await source.initialize();
 
       final items = await source.search('x');
-      expect(items.single.title, 'rows=1,0,0',
-          reason: '坏选择器/空文档返回空集，不把解析错误抛成调用失败');
+      expect(
+        items.single.title,
+        'rows=1,0,0',
+        reason: '坏选择器/空文档返回空集，不把解析错误抛成调用失败',
+      );
     });
 
     test('fetch 非对象响应（坏 JSON）以 parse 类别失败并带 sourceId', () async {
@@ -221,7 +230,7 @@ async function search(keyword, page) {
       );
       final source = JsSource(
         rule: rule,
-        runtime: createFlutterJsRuntime(),
+        runtime: FlutterJsRuntime(),
         http: http,
       );
       addTearDown(source.dispose);
@@ -232,7 +241,11 @@ async function search(keyword, page) {
         throwsA(
           isA<SourceException>()
               .having((error) => error.type, 'type', SourceErrorType.parse)
-              .having((error) => error.sourceId, 'sourceId', 'd22-bridge-badjson'),
+              .having(
+                (error) => error.sourceId,
+                'sourceId',
+                'd22-bridge-badjson',
+              ),
         ),
       );
     });
@@ -256,7 +269,7 @@ async function content(url, chapter) {
       );
       final source = JsSource(
         rule: rule,
-        runtime: createFlutterJsRuntime(),
+        runtime: FlutterJsRuntime(),
         http: http,
       );
       addTearDown(source.dispose);
@@ -270,8 +283,11 @@ async function content(url, chapter) {
           url: 'https://example.com/ch/7',
         ),
       );
-      expect(content.images.single, 'https://example.com/p1.jpg',
-          reason: '相对图片地址按章节 url 补全（章节 url 来自详情页，恒有值）');
+      expect(
+        content.images.single,
+        'https://example.com/p1.jpg',
+        reason: '相对图片地址按章节 url 补全（章节 url 来自详情页，恒有值）',
+      );
       expect(
         http.requests.single.url,
         'https://example.com/c?r=1:7',

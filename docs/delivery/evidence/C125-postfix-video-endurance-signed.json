@@ -1,0 +1,547 @@
+{
+  "serial": "emulator-5558",
+  "status": "awaiting-final-lifecycle-and-visual-review",
+  "targetSeconds": 1800,
+  "scope": "real production-signed summer Natsume season3 episode1 playback; resource sampling, screenshots manually reviewed; no input count claims",
+  "artifactSha256": "8c913420a174e1efe2b3588213e0cac95311107481ca7e51d8f58267b56bb246",
+  "samples": [
+    {
+      "elapsedSeconds": 0.1,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207666,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 31.6,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 209910,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 62.7,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 208102,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 93.9,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 208146,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 125.0,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 208214,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 156.3,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 210094,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 187.2,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 208122,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 218.6,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207678,
+      "threads": 61,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 248.9,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207252,
+      "threads": 61,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 279.2,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 309.5,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 340.3,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 371.2,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 401.9,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 432.5,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 463.2,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 493.5,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 524.0,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 554.5,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 585.2,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 616.3,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 647.2,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 677.9,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 708.6,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 739.3,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 770.1,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 800.5,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 830.9,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 862.9,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 893.3,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 923.6,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 953.9,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207124,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 984.3,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 209744,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1015.7,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 208292,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1047.1,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207796,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1078.5,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207880,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1109.8,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207868,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1141.2,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 206252,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1172.7,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207936,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1204.1,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207656,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1237.5,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207924,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1269.1,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207472,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1300.4,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 208088,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1331.5,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207548,
+      "threads": 64,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1362.6,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 209288,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1394.3,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207932,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1425.4,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207944,
+      "threads": 64,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1456.3,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207556,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1487.3,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207980,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1519.3,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 208120,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1550.8,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207964,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1581.8,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 209772,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1613.1,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207460,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1644.3,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207948,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1675.3,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207950,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1705.6,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207946,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1735.9,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207826,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1766.3,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207822,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1796.6,
+      "running": true,
+      "pid": 18829,
+      "pssKiB": 207822,
+      "threads": 62,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    }
+  ],
+  "screenshots": [
+    "C125-postfix-signed-video-start.png",
+    "C125-postfix-signed-video-soak-20.png",
+    "C125-postfix-signed-video-soak-40.png"
+  ],
+  "elapsedSeconds": 1827.0,
+  "newCrashMarkers": 0
+}

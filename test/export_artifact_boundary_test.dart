@@ -38,7 +38,18 @@ Chapter chapterOf(
 
 /// PNG 魔数开头的假图片字节（让扩展名/media-type 判定走 png 分支）。
 Uint8List pngBytes() => Uint8List.fromList(<int>[
-  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4,
+  0x89,
+  0x50,
+  0x4E,
+  0x47,
+  0x0D,
+  0x0A,
+  0x1A,
+  0x0A,
+  1,
+  2,
+  3,
+  4,
 ]);
 
 void main() {
@@ -108,11 +119,12 @@ void main() {
           bodyText: '',
         ),
         onProgress: (_, _) {},
-        fetchImage: images == null
-            ? null
-            : (url) async => images[url]?.call(),
+        fetchImage: images == null ? null : (url) async => images[url]?.call(),
       );
-      return (archive: EpubExporter.decode(outcome.bytes), result: outcome.result);
+      return (
+        archive: EpubExporter.decode(outcome.bytes),
+        result: outcome.result,
+      );
     }
 
     test('mimetype 是第一个条目、未压缩、内容精确', () async {
@@ -134,12 +146,18 @@ void main() {
       expect(result.skippedChapters, 1);
 
       final container = utf8.decode(
-        archive.files.firstWhere((file) => file.name == 'META-INF/container.xml').content as List<int>,
+        archive.files
+                .firstWhere((file) => file.name == 'META-INF/container.xml')
+                .content
+            as List<int>,
       );
       expect(container, contains('OEBPS/content.opf'));
 
       final opf = utf8.decode(
-        archive.files.firstWhere((file) => file.name == 'OEBPS/content.opf').content as List<int>,
+        archive.files
+                .firstWhere((file) => file.name == 'OEBPS/content.opf')
+                .content
+            as List<int>,
       );
       // manifest 里的每个 href 都必须相对 OPF 所在目录（OEBPS/）且真实存在
       // （EPUB 规范）；章节 href 带了 OEBPS/ 前缀会双重拼路径（D24-1）。
@@ -152,35 +170,45 @@ void main() {
         );
       }
       // spine 与章节文件一一对应。
-      final spineRefs = RegExp(
-        r'<itemref idref="chapter-(\d+)"/>',
-      ).allMatches(opf).length;
+      final spineRefs = RegExp(r'<itemref idref="chapter-(\d+)"/>')
+          .allMatches(opf)
+          .length;
       expect(spineRefs, 2);
       expect(names.contains('OEBPS/chapter-0001.xhtml'), isTrue);
       expect(names.contains('OEBPS/chapter-0002.xhtml'), isTrue);
-      expect(names.contains('OEBPS/chapter-0003.xhtml'), isFalse,
-          reason: '锁定章不进包');
+      expect(
+        names.contains('OEBPS/chapter-0003.xhtml'),
+        isFalse,
+        reason: '锁定章不进包',
+      );
 
       // nav 的每个链接都指向真实章节文件，且按顺序。
       final nav = utf8.decode(
-        archive.files.firstWhere((file) => file.name == 'OEBPS/nav.xhtml').content as List<int>,
+        archive.files
+                .firstWhere((file) => file.name == 'OEBPS/nav.xhtml')
+                .content
+            as List<int>,
       );
-      final navLinks = RegExp(
-        r'<a href="chapter-(\d+)\.xhtml">',
-      ).allMatches(nav).toList();
-      expect(navLinks.map((match) => match.group(1)).toList(), <String>['0001', '0002']);
+      final navLinks = RegExp(r'<a href="chapter-(\d+)\.xhtml">')
+          .allMatches(nav)
+          .toList();
+      expect(navLinks.map((match) => match.group(1)).toList(), <String>[
+        '0001',
+        '0002',
+      ]);
     });
 
     test('封面：下载成功进 assets 且 OPF 标 cover-image', () async {
       final outcomeCover = await exportStandard(
         coverUrl: 'https://x/cover.jpg',
-        images: <String, Uint8List Function()>{
-          'https://x/cover.jpg': pngBytes,
-        },
+        images: <String, Uint8List Function()>{'https://x/cover.jpg': pngBytes},
       );
       final archive = outcomeCover.archive;
       final opf = utf8.decode(
-        archive.files.firstWhere((file) => file.name == 'OEBPS/content.opf').content as List<int>,
+        archive.files
+                .firstWhere((file) => file.name == 'OEBPS/content.opf')
+                .content
+            as List<int>,
       );
       expect(opf, contains('properties="cover-image"'));
       expect(
@@ -192,9 +220,7 @@ void main() {
 
     test('同一张图在多章出现：资产去重为一份，两章引用同一文件', () async {
       final outcomeDedup = await exportStandard(
-        images: <String, Uint8List Function()>{
-          'https://x/same.jpg': pngBytes,
-        },
+        images: <String, Uint8List Function()>{'https://x/same.jpg': pngBytes},
       );
       final archive = outcomeDedup.archive;
       final assetNames = archive.files
@@ -204,10 +230,16 @@ void main() {
       expect(assetNames, hasLength(1), reason: '按内容哈希去重');
 
       final chapter1 = utf8.decode(
-        archive.files.firstWhere((file) => file.name == 'OEBPS/chapter-0001.xhtml').content as List<int>,
+        archive.files
+                .firstWhere((file) => file.name == 'OEBPS/chapter-0001.xhtml')
+                .content
+            as List<int>,
       );
       final chapter2 = utf8.decode(
-        archive.files.firstWhere((file) => file.name == 'OEBPS/chapter-0002.xhtml').content as List<int>,
+        archive.files
+                .firstWhere((file) => file.name == 'OEBPS/chapter-0002.xhtml')
+                .content
+            as List<int>,
       );
       expect(chapter1, contains(assetNames.single.split('/').last));
       expect(chapter2, contains(assetNames.single.split('/').last));
@@ -229,7 +261,10 @@ void main() {
       final result = outcomeFail.result;
       expect(result.exportedChapters, 2, reason: '抓取失败不阻塞导出');
       final chapter1 = utf8.decode(
-        archive.files.firstWhere((file) => file.name == 'OEBPS/chapter-0001.xhtml').content as List<int>,
+        archive.files
+                .firstWhere((file) => file.name == 'OEBPS/chapter-0001.xhtml')
+                .content
+            as List<int>,
       );
       expect(chapter1, contains('https://x/same.jpg'), reason: '失败保留原外链');
       expect(
@@ -238,7 +273,10 @@ void main() {
         reason: '空字节封面不入包',
       );
       final opf = utf8.decode(
-        archive.files.firstWhere((file) => file.name == 'OEBPS/content.opf').content as List<int>,
+        archive.files
+                .firstWhere((file) => file.name == 'OEBPS/content.opf')
+                .content
+            as List<int>,
       );
       expect(opf, isNot(contains('cover-image')));
     });
@@ -247,17 +285,26 @@ void main() {
       final outcomeXml = await exportStandard();
       final archive = outcomeXml.archive;
       final chapter1 = utf8.decode(
-        archive.files.firstWhere((file) => file.name == 'OEBPS/chapter-0001.xhtml').content as List<int>,
+        archive.files
+                .firstWhere((file) => file.name == 'OEBPS/chapter-0001.xhtml')
+                .content
+            as List<int>,
       );
       // 原始尖括号必须被转义，不能成为 XML 标签。
       expect(chapter1, contains('第一章 &lt;上&gt;&amp;&quot;'));
       expect(chapter1, isNot(contains('<上>')));
       final opf = utf8.decode(
-        archive.files.firstWhere((file) => file.name == 'OEBPS/content.opf').content as List<int>,
+        archive.files
+                .firstWhere((file) => file.name == 'OEBPS/content.opf')
+                .content
+            as List<int>,
       );
       expect(opf, contains('书&lt;名&gt;&amp;&quot;引&quot;'));
       final nav = utf8.decode(
-        archive.files.firstWhere((file) => file.name == 'OEBPS/nav.xhtml').content as List<int>,
+        archive.files
+                .firstWhere((file) => file.name == 'OEBPS/nav.xhtml')
+                .content
+            as List<int>,
       );
       expect(nav, contains('第二章 📚'), reason: 'Unicode 章名保留');
       // nav.xhtml 是 XML：含 emoji 的标题解析回来仍是同一字符。
@@ -342,14 +389,19 @@ void main() {
           item: item,
           chapters: <Chapter>[chapterOf('1', title: '章', locked: true)],
           source: providerOf(const <String, String>{}),
-          http: FakeHttpClient((_) async => const SourceResponse(statusCode: 200, body: '')),
+          http: FakeHttpClient(
+            (_) async => const SourceResponse(statusCode: 200, body: ''),
+          ),
           onProgress: (_, _) {},
         ),
         throwsA(isA<StateError>()),
       );
       final dir = await NovelExportService.exportDirectory();
-      expect(dir.existsSync() ? dir.listSync() : <FileSystemEntity>[],
-          isEmpty, reason: '失败导出不留半截产物');
+      expect(
+        dir.existsSync() ? dir.listSync() : <FileSystemEntity>[],
+        isEmpty,
+        reason: '失败导出不留半截产物',
+      );
     });
 
     test('TXT 落盘字节是 UTF-8（磁盘文件可直接解码）', () async {

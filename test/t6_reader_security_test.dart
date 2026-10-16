@@ -145,12 +145,16 @@ void main() {
           );
     }
 
-    test('全量清空：只清有未读的行，返回清掉的数量', () async {
+    test('确认集合：只清有未读的行，返回清掉的数量', () async {
       await seedEntry('a', '1', unread: 2);
       await seedEntry('b', '2', unread: 0);
       await seedEntry('c', '3', unread: 5);
 
-      final cleared = await repository.markAllRead();
+      final cleared = await repository.markEntriesRead({
+        ('a', '1'),
+        ('b', '2'),
+        ('c', '3'),
+      });
 
       expect(cleared, 2);
       final entries = await db.select(db.libraryEntries).get();
@@ -160,11 +164,11 @@ void main() {
       );
     });
 
-    test('按来源过滤：只清该来源', () async {
+    test('指定作品身份：只清该来源', () async {
       await seedEntry('a', '1', unread: 2);
       await seedEntry('b', '2', unread: 5);
 
-      final cleared = await repository.markAllRead(sourceId: 'a');
+      final cleared = await repository.markEntriesRead({('a', '1')});
 
       expect(cleared, 1);
       final rows = await db.select(db.libraryEntries).get();
@@ -174,7 +178,7 @@ void main() {
 
     test('没有未读时返回 0', () async {
       await seedEntry('a', '1');
-      expect(await repository.markAllRead(), 0);
+      expect(await repository.markEntriesRead({('a', '1')}), 0);
     });
   });
 

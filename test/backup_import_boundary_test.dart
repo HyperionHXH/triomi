@@ -40,7 +40,11 @@ void main() {
       BackupService(
         database: db,
         preferences: prefs ?? preferences,
-        http: http ?? FakeHttpClient((_) async => const SourceResponse(statusCode: 200, body: '')),
+        http:
+            http ??
+            FakeHttpClient(
+              (_) async => const SourceResponse(statusCode: 200, body: ''),
+            ),
       );
 
   /// 手工构造备份包字节（绕过导出，精确控制每行内容）。
@@ -79,7 +83,9 @@ void main() {
   };
 
   Future<int> countOf(String table) async {
-    final rows = await db.customSelect('SELECT COUNT(*) AS n FROM $table').get();
+    final rows = await db
+        .customSelect('SELECT COUNT(*) AS n FROM $table')
+        .get();
     return rows.first.data['n'] as int;
   }
 
@@ -106,8 +112,8 @@ void main() {
     });
 
     test('缺 data.json / 非对象 JSON / 版本超限：分别拒绝', () async {
-      final noPayload =
-          Archive()..addFile(ArchiveFile.bytes('other.txt', Uint8List(4)));
+      final noPayload = Archive()
+        ..addFile(ArchiveFile.bytes('other.txt', Uint8List(4)));
       await expectLater(
         serviceOf().importFromBytes(
           Uint8List.fromList(ZipEncoder().encode(noPayload)),
@@ -115,14 +121,13 @@ void main() {
         throwsA(isA<StateError>()),
       );
 
-      final arrayPayload =
-          Archive()
-            ..addFile(
-              ArchiveFile.bytes(
-                BackupService.dataFileName,
-                Uint8List.fromList(utf8.encode('[1, 2]')),
-              ),
-            );
+      final arrayPayload = Archive()
+        ..addFile(
+          ArchiveFile.bytes(
+            BackupService.dataFileName,
+            Uint8List.fromList(utf8.encode('[1, 2]')),
+          ),
+        );
       await expectLater(
         serviceOf().importFromBytes(
           Uint8List.fromList(ZipEncoder().encode(arrayPayload)),
@@ -182,8 +187,18 @@ void main() {
             },
           ],
           libraryEntries: <Map<String, Object?>>[
-            libraryRow('lk', '1001', progress: 3, updatedAt: '2026-09-10T00:00:00.000'),
-            libraryRow('lns', '1001', progress: 8, updatedAt: '2026-09-11T00:00:00.000'),
+            libraryRow(
+              'lk',
+              '1001',
+              progress: 3,
+              updatedAt: '2026-09-10T00:00:00.000',
+            ),
+            libraryRow(
+              'lns',
+              '1001',
+              progress: 8,
+              updatedAt: '2026-09-11T00:00:00.000',
+            ),
           ],
           chapterRows: <Map<String, Object?>>[
             {
@@ -226,10 +241,10 @@ void main() {
       expect(summary.items, 2);
       final entries = await LibraryRepository(db).listLibrary();
       expect(entries, hasLength(2));
-      expect(
-        entries.map((view) => view.item.title).toSet(),
-        <String>{'轻之书甲', '轻书架甲'},
-      );
+      expect(entries.map((view) => view.item.title).toSet(), <String>{
+        '轻之书甲',
+        '轻书架甲',
+      });
       expect(await countOf('chapters'), 2);
       expect(await countOf('histories'), 2);
     });
@@ -241,7 +256,12 @@ void main() {
             {'sourceId': 'lk', 'remoteId': '1', 'type': 'novel', 'title': '书'},
           ],
           libraryEntries: <Map<String, Object?>>[
-            libraryRow('lk', '1', progress: 2, updatedAt: '2026-09-10T00:00:00.000'),
+            libraryRow(
+              'lk',
+              '1',
+              progress: 2,
+              updatedAt: '2026-09-10T00:00:00.000',
+            ),
           ],
           histories: <Map<String, Object?>>[
             {
@@ -260,7 +280,11 @@ void main() {
       expect(await countOf('histories'), 1);
       await service.importFromBytes(bytes);
 
-      expect(await countOf('media_items'), 1, reason: 'insertOnConflictUpdate 不倍增');
+      expect(
+        await countOf('media_items'),
+        1,
+        reason: 'insertOnConflictUpdate 不倍增',
+      );
       expect(await countOf('library_entries'), 1);
       expect(await countOf('chapters'), 0);
       // 期望：同章历史不倍增（当前实现时间相等时再 INSERT 一行 → 2）。
@@ -338,7 +362,6 @@ void main() {
       );
       entries = await LibraryRepository(db).listLibrary();
       expect(entries.single.entry.progress, 8);
-
     });
   });
 
@@ -361,10 +384,9 @@ void main() {
       final http = FakeHttpClient(
         (_) async => const SourceResponse(statusCode: 200, body: ''),
       );
-      final full = (await serviceOf(http: http).exportToBytes(
-        includeCovers: false,
-        includeOfflineContent: true,
-      )).bytes;
+      final full = (await serviceOf(
+        http: http,
+      ).exportToBytes(includeCovers: false, includeOfflineContent: true)).bytes;
       final slim = (await serviceOf(http: http).exportToBytes(
         includeCovers: false,
         includeOfflineContent: false,
@@ -386,16 +408,20 @@ void main() {
         http: http,
       ).importFromBytes(slim);
 
-      Future<int> chapterCount(AppDatabase target) async => (await target
-              .customSelect('SELECT COUNT(*) AS n FROM chapters')
-              .get())
-          .first
-          .data['n'] as int;
-      Future<String?> contentOf(AppDatabase target) async => (await target
-              .customSelect('SELECT content_json FROM chapters LIMIT 1')
-              .get())
-          .first
-          .data['content_json'] as String?;
+      Future<int> chapterCount(AppDatabase target) async =>
+          (await target
+                      .customSelect('SELECT COUNT(*) AS n FROM chapters')
+                      .get())
+                  .first
+                  .data['n']
+              as int;
+      Future<String?> contentOf(AppDatabase target) async =>
+          (await target
+                      .customSelect('SELECT content_json FROM chapters LIMIT 1')
+                      .get())
+                  .first
+                  .data['content_json']
+              as String?;
 
       expect(await chapterCount(restoredFull), 1);
       expect(await contentOf(restoredFull), isNotNull, reason: '全量包还原离线正文');
@@ -442,7 +468,12 @@ void main() {
           zipOf(
             payloadOf(
               mediaItems: <Map<String, Object?>>[
-                {'sourceId': 'lk', 'remoteId': '1', 'type': 'novel', 'title': '书'},
+                {
+                  'sourceId': 'lk',
+                  'remoteId': '1',
+                  'type': 'novel',
+                  'title': '书',
+                },
               ],
               settings: <String, Object?>{'appearance.themeMode': 'dark'},
             ),
@@ -450,11 +481,13 @@ void main() {
         ),
         throwsA(isA<Object>()),
       );
-      final rows = (await target
-              .customSelect('SELECT COUNT(*) AS n FROM media_items')
-              .get())
-          .first
-          .data['n'] as int;
+      final rows =
+          (await target
+                      .customSelect('SELECT COUNT(*) AS n FROM media_items')
+                      .get())
+                  .first
+                  .data['n']
+              as int;
       expect(rows, 0, reason: '设置失败时数据库不得部分提交（D35 补偿）');
       expect(
         throwingPrefs.exportAll().containsKey('appearance.themeMode'),
@@ -468,11 +501,7 @@ void main() {
       final id = await repo.enqueue(
         sourceId: 'lk',
         remoteId: '1',
-        chapter: const Chapter(
-          sourceId: 'lk',
-          remoteId: '1:1',
-          title: '第 1 章',
-        ),
+        chapter: const Chapter(sourceId: 'lk', remoteId: '1:1', title: '第 1 章'),
       );
       final missing = '${Directory.systemTemp.path}/triomi_d18_missing_dir';
       await repo.markDone(id, path: missing);
@@ -527,25 +556,29 @@ void webdavTests() {
 
   test('download：404 视为不存在返回 null；超时如实抛出', () async {
     // download 走 fetchBytes（二进制路径），真实层异常通过 bytesHandler 注入。
-    final missing = FakeHttpClient(
-      (_) async => const SourceResponse(statusCode: 404, body: ''),
-    )..bytesHandler = (_) => throw const SourceException(
-      sourceId: 'webdav',
-      type: SourceErrorType.notFound,
-      message: 'HTTP 404',
-    );
+    final missing =
+        FakeHttpClient(
+            (_) async => const SourceResponse(statusCode: 404, body: ''),
+          )
+          ..bytesHandler = (_) => throw const SourceException(
+            sourceId: 'webdav',
+            type: SourceErrorType.notFound,
+            message: 'HTTP 404',
+          );
     expect(
       await WebDavClient(http: missing).download(configFor('dav.test')),
       isNull,
     );
 
-    final timeout = FakeHttpClient(
-      (_) async => const SourceResponse(statusCode: 200, body: ''),
-    )..bytesHandler = (_) => throw const SourceException(
-      sourceId: 'webdav',
-      type: SourceErrorType.timeout,
-      message: '连接超时',
-    );
+    final timeout =
+        FakeHttpClient(
+            (_) async => const SourceResponse(statusCode: 200, body: ''),
+          )
+          ..bytesHandler = (_) => throw const SourceException(
+            sourceId: 'webdav',
+            type: SourceErrorType.timeout,
+            message: '连接超时',
+          );
     await expectLater(
       WebDavClient(http: timeout).download(configFor('dav.test')),
       throwsA(
@@ -567,9 +600,8 @@ void webdavTests() {
       ),
       (_) => const SourceResponse(statusCode: 404, body: ''),
     );
-    final missingInfo = await WebDavClient(http: missing).stat(
-      configFor('dav.test'),
-    );
+    final missingInfo = await WebDavClient(http: missing)
+        .stat(configFor('dav.test'));
     expect(missingInfo.exists, isFalse);
 
     final boom = realLike(
@@ -593,7 +625,8 @@ void webdavTests() {
 
     final garbage = realLike(
       (_) => null,
-      (request) => const SourceResponse(statusCode: 200, body: 'not-xml at all'),
+      (request) =>
+          const SourceResponse(statusCode: 200, body: 'not-xml at all'),
     );
     final info = await WebDavClient(http: garbage).stat(configFor('dav.test'));
     expect(info.exists, isTrue, reason: '服务器给了 2xx：文件在，只是解析不出元数据');

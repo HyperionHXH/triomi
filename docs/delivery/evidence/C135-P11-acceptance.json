@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-14",
+  "status": "partial",
+  "apk": {
+    "path": "D:/noval_and_manga/_tools/Triomi-C135-P11-verified-acceptance.apk",
+    "bytes": 127109868,
+    "sha256": "6e8c1e532e9b6d705b09c06e622816c4dd8c9878a750cda7e39a471975d44ded",
+    "devicesInstalledAndHashMatched": ["emulator-5554", "emulator-5556"],
+    "v2Verified": true,
+    "singleSigner": true,
+    "certificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6"
+  },
+  "verification": {
+    "backupAndProtocolTargetedPassed": 46,
+    "fullSuitePassed": 787,
+    "fullSuiteLog": "artifact://679",
+    "analyze": "No issues found",
+    "remoteAccountUploadActual": "not-completed; no real remote credential or target authorization used"
+  },
+  "actualApi35": {
+    "scheduledJob": 7501,
+    "scheduledBackupPath": "/sdcard/Download/triomi-export/triomi-2026-10-14T05-40-29.zip",
+    "scheduledBackupBytes": 1773830,
+    "scheduledJobFinished": true,
+    "restore": "Android system ZIP picker opened existing SAF backup; preview incoming0/local6/conflict0; keep local settings and tracking; confirmed merge completed without changing counts",
+    "before": {"library":6,"chapters":4013,"histories":19,"downloads":6},
+    "after": {"library":6,"chapters":4013,"histories":19,"downloads":6,"journals":0},
+    "temporaryImportFilesRemaining": 0,
+    "scheduleRestoredToOriginalDisabled": true
+  },
+  "protocolScope": "Real loopback HTTP/WebDAV fixture via production Dio client: immutable revisions, content chunks reuse, stale ETag412 rejection, corrupt chunk rejection; not a real remote account server",
+  "implementation": [
+    "Legacy ZIP import retained; new ZIPs have version1 per-file size/SHA256 manifest verified before mutation",
+    "Categories, tracking identity, disabled unavailable source metadata, paused download index and existing Feed/anime links/merged references/reader settings recover with existing SQL/Hive compensation",
+    "Timestamped rows keep newer local and same-time local; chapter rows without timestamps keep local catalogue and only fill absent offline text",
+    "Settings replacement and tracking-conflict policies are explicitly selected in one shared restore dialog",
+    "WebDAV validates target segments and strong ETag, snapshots UI target, conditional create/overwrite, stores1MiB chunks and immutable revision manifests before conditional head publication",
+    "Android daily Job7501 exports local/SAF metadata and cached text without network or remote uploads, retains prior backups, supports disabled restoration"
+  ],
+  "limitations": [
+    "Download media files and source executable definitions are not included; paused indexes require explicit redownload, unavailable sources remain disabled",
+    "No scheduled desktop OS task implementation; Android-only schedule is displayed explicitly",
+    "API26/signed/Windows full recovery journeys and visual review pending",
+    "Content chunks deduplicate identical ZIP spans; not entity-level incremental sync or remote CAS transaction over all objects",
+    "Original C125 production/signed and Windows artifacts unchanged; P12 remains outstanding"
+  ]
+}

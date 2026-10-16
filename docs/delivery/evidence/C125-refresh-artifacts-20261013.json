@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-13",
+  "status": "passed-build-signature-install-bundle",
+  "fix": "detail refresh callback returns void; generic history navigation",
+  "artifacts": {
+    "androidAcceptance": {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-android-acceptance.apk",
+      "bytes": 123568652,
+      "sha256": "46df9ad224470947e9443decb6e0367d19a65f97f2061bb64d063135f1677eac",
+      "certificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6",
+      "v2": true,
+      "singleSigner": true,
+      "zipIntegrity": true,
+      "members": 530
+    },
+    "androidProduction": {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-android-signed.apk",
+      "bytes": 123572748,
+      "sha256": "8c5cf8c94a5a5ca939472f83287959dfa3c65790cf861e954d2c246b95a40f82",
+      "certificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077",
+      "v2": true,
+      "singleSigner": true,
+      "zipIntegrity": true,
+      "members": 530
+    },
+    "windowsZip": {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-windows-release.zip",
+      "bytes": 37322972,
+      "sha256": "4bfde8458f2364ad1af40fc1c9ca20bf585e8a0aea686a0937c2afba92506638",
+      "zipIntegrity": true,
+      "members": 50,
+      "bundleBytes": 87647557,
+      "membersMatchRelease": true
+    }
+  },
+  "installed": [
+    {
+      "serial": "emulator-5554",
+      "installedSha256": "46df9ad224470947e9443decb6e0367d19a65f97f2061bb64d063135f1677eac",
+      "preserveData": true,
+      "matches": true
+    },
+    {
+      "serial": "emulator-5556",
+      "installedSha256": "46df9ad224470947e9443decb6e0367d19a65f97f2061bb64d063135f1677eac",
+      "preserveData": true,
+      "matches": true
+    },
+    {
+      "serial": "emulator-5558",
+      "installedSha256": "8c5cf8c94a5a5ca939472f83287959dfa3c65790cf861e954d2c246b95a40f82",
+      "preserveData": true,
+      "matches": true
+    }
+  ],
+  "previousBehaviorEvidence": "C125-latest-windows-20261013.json / latest-lifecycle / latest-offline describe pre-refresh bytes"
+}

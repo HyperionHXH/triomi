@@ -1,0 +1,573 @@
+{
+  "schemaVersion": 1,
+  "release": "C125",
+  "updatedAt": "2026-10-13T00:00:00.000Z",
+  "status": "partial",
+  "gate": {
+    "requiredChecks": 9,
+    "allSatisfied": false,
+    "roadmapP1ToP12Advanced": true,
+    "policy": "CF remains explicitly waived; user confirms LNS server outage (Mixn also unavailable), excludes its current online reachability from delivery gate. Continue independent P1-P12 implementation per follow-up; remaining actual media/visual criteria not fabricated as passed."
+  },
+  "artifacts": {
+    "androidAcceptance": {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-android-acceptance.apk",
+      "bytes": 123568652,
+      "sha256": "46df9ad224470947e9443decb6e0367d19a65f97f2061bb64d063135f1677eac",
+      "zipIntegrity": true,
+      "members": 530,
+      "purpose": "release-mode package with old debug certificate; preserve-data update for emulator-5554/5556",
+      "certificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6"
+    },
+    "androidProduction": {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-android-signed.apk",
+      "bytes": 123572748,
+      "sha256": "8c5cf8c94a5a5ca939472f83287959dfa3c65790cf861e954d2c246b95a40f82",
+      "zipIntegrity": true,
+      "members": 530,
+      "purpose": "production certificate package on dedicated emulator-5558; cannot replace old debug-signed installs",
+      "certificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077",
+      "publicKeySha256": "c288d6b0b5cdb3320311db1acb20721eaa674d197d8bb2f563c0325d7169cce0",
+      "rsaBits": 4096
+    },
+    "windowsZip": {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-windows-release.zip",
+      "bytes": 37322972,
+      "sha256": "4bfde8458f2364ad1af40fc1c9ca20bf585e8a0aea686a0937c2afba92506638",
+      "zipIntegrity": true,
+      "members": 50,
+      "bundleFiles": 50,
+      "bundleBytes": 87647557,
+      "includesDllsAndData": true,
+      "nativeWebviewPlugin": true,
+      "exactMemberBytesMatchRelease": true,
+      "behaviorEvidenceScope": "Current refresh-fix bundle integrity verified; actual desktop journey belongs to pre-refresh49550404 ZIP preserved under _tools. Current desktop UI smoke unavailable after computer session closure."
+    },
+    "windowsExe": {
+      "path": "D:\\noval_and_manga\\triomi\\build\\windows\\x64\\runner\\Release\\triomi.exe",
+      "bytes": 94208,
+      "sha256": "1d1a0c49b292fbd0d324e65ced8a7f37990ebd9ba656828f0d3f0ec682abbe10"
+    }
+  },
+  "verification": {
+    "artifactAndInstalledHash": "C125-refresh-artifacts-20261013.json",
+    "allThreeInstalledHashesMatch": false,
+    "apkV2SignaturesVerified": true,
+    "singleSignerPerApk": true,
+    "currentSignatureEvidence": "C125-refresh-artifacts-20261013.json",
+    "windowsZipIntegrity": true,
+    "latestSourceChangesRebuilt": false,
+    "buildLogs": [
+      "D:\\noval_and_manga\\_tools\\C125-refresh-acceptance-build-20261013.log",
+      "D:\\noval_and_manga\\_tools\\C125-refresh-signed-build-20261013.log",
+      "D:\\noval_and_manga\\_tools\\C125-refresh-windows-build-20261013.log"
+    ],
+    "postBuildChanges": "Production detail refresh void callback fixed; three releases rebuilt, verified before install-r; seven targeted regressions and three actual preserved-device refresh/novel smokes passed; no later production edits",
+    "previousArtifactEvidence": "C125-pre-video-resume-release.json",
+    "currentInstalledScope": "Original C125 refresh evidence retained; emulator-5554/5556 now C127 P3 service-fix acceptance, emulator-5558 retains C125 refresh production signed."
+  },
+  "acceptance": [
+    {
+      "id": "lk_account_unread",
+      "status": "passed",
+      "scope": "Real own-account login/unread/shelf merge, real reading/export and independent resume on API35/API26; prior C125 build",
+      "evidence": [
+        "C125-account-api35-login.json",
+        "C125-account-api35-resume.json",
+        "C125-account-api26-login.json",
+        "C125-account-api26-resume.json"
+      ]
+    },
+    {
+      "id": "lns_official_permissions",
+      "status": "passed",
+      "scope": "Official whole-book download model; no per-chapter purchase fiction; guest/invalid session reject; own-account body/font/cache; repack export reject; no charged call",
+      "officialReference": "https://www.lightnovel.life/announcement/detail/16",
+      "evidence": [
+        "C125-permission-api35.json",
+        "C125-lns-offline-api26.json"
+      ]
+    },
+    {
+      "id": "api26_chinese_tts",
+      "status": "passed",
+      "scope": "Verified official eSpeak engine; real offline natural synthesis, stop late-event rejection, deadline failure and natural retry completion",
+      "evidence": [
+        "C125-tts-api26.json"
+      ]
+    },
+    {
+      "id": "js_os_process_isolation",
+      "status": "passed",
+      "scope": "Android API35/API26 and Windows production workers, real external watchdog for malicious loops/allocation and recovery; fault isolation, not full permission sandbox",
+      "evidence": [
+        "C125-js-api35.json",
+        "C125-js-api26.json",
+        "C125-js-windows.json"
+      ]
+    },
+    {
+      "id": "representative_mihon_apks",
+      "status": "passed",
+      "scope": "Original verified xkcd/Webtoons plus retained MangaDex/Copymanga/Jinman evidence; not entire repository compatibility",
+      "evidence": [
+        "C125-webtoons-api35-install.json",
+        "C125-webtoons-api35-resume.json",
+        "C125-xkcd-api35-install.json",
+        "C125-xkcd-api35-resume.json",
+        "C125-xkcd-api26-install.json",
+        "C125-xkcd-api26-resume.json"
+      ]
+    },
+    {
+      "id": "real_cloudflare_success",
+      "status": "waived",
+      "scope": "Real MangaFire challenge detection and visible WebView observed; API35 blocked, API26 not completed",
+      "missing": [
+        "legitimate verification success",
+        "original request recovery",
+        "session reuse",
+        "restart session recovery"
+      ],
+      "noClearanceForged": true,
+      "evidence": [
+        "C125-cf-api35.json",
+        "C125-cf-api26.json",
+        "C125-cf-api35-webview.png",
+        "C125-cf-api26-webview.png"
+      ],
+      "additionalCandidate": {
+        "source": "Asura1.6.69 on final API26 release",
+        "result": "real popular/detail119chapters; chapter request Refresh Chapter List; no challenge observed",
+        "evidence": "C125-asura-api26.json"
+      },
+      "userWaived": true,
+      "waiverReason": "User explicitly instructed CF算过了不管了 on 2026-10-11; original real verification failures retained",
+      "actualVerificationStatus": "not-completed"
+    },
+    {
+      "id": "android_final_release",
+      "status": "partial",
+      "passed": [
+        "Distinct final acceptance/production certificate and hashes verified",
+        "install -r preserved data and target packages remain installed",
+        "API35/API26 targetContext.classLoader release ABI checks without replacing target",
+        "latest LNS cache/font resume 2/10 and 3/13",
+        "production MangaDex resume 3/32; ordinary network retry recovered",
+        "Latest API26 release actual no-default-network independent restart, LNS3/13 body/font visually verified; original network settings restored",
+        "Production-signed APK LK public10-chapter download complete, real novel3/73 page HOME/resume and actual offline independent restart, second chapter1/56",
+        "Post-video-fix release preserve-data update and three installed hashes match",
+        "Post-fix API35 manga6/13 and API26 LNS3/13 read",
+        "Production saved267 seconds independent restart resumes real frame4:32/24:17; acceptance saved580 seconds resumes9:39/23:40",
+        "Post-video-fix API26 actual offline force-stop independent process LNS3/13 body/font visually readable and original network restored",
+        "2026-10-13 all three original devices recovered on fixed serials without data clear; acceptance/production installed hashes match current artifacts",
+        "2026-10-13 three novels nonzero pages, HOME and force-stop restart restored 2/17, 2/46 and 2/56; generic history helper fixed and smoked on three original devices",
+        "latest manga page/HOME/independent restart observations restored7/13,2/2,2/32; pixels not visually reviewed",
+        "latest genuine no-default-network force-stop cached LNS2/10/API35, LNS3/13/API26 and publicLK1/37/production; original Wi-Fi/data values restored",
+        "latest LK own-account remote shelves both returned2 real entries; LNS ordinary retries failed with authentic network error"
+      ],
+      "missing": [
+        "complete latest-package online account and all-content lifecycle journey",
+        "latest package complete video lifecycle and visual frame review"
+      ],
+      "evidence": [
+        "C125-recovery-20261013.json",
+        "C125-latest-lifecycle-20261013.json",
+        "C125-latest-offline-20261013.json",
+        "C125-history-helper-20261013.json",
+        "C125-release-installed-api35.json",
+        "C125-release-installed-api26.json",
+        "C125-release-installed-signed.json",
+        "C125-release-abi-api35.json",
+        "C125-release-abi-api26.json",
+        "C125-release-api35-resume.json",
+        "C125-release-api26-resume.json",
+        "C125-release-signed-reader-resume.json",
+        "C125-release-api26-offline-final.json",
+        "C125-signed-novel-final-journey.json",
+        "C125-player-resume-final.json",
+        "C125-player-resume-artifacts.json",
+        "C125-player-resume-api26-offline.json",
+        "C125-refresh-artifacts-20261013.json",
+        "C125-refresh-smoke-20261013.json"
+      ],
+      "productionDeviceDebugInstrumentationRun": false,
+      "priorEvidenceScope": "All earlier journeys in passed list retain original artifact scope; latest refresh build covered by separate real smoke, not all-media proof",
+      "latestRefreshSmoke": {
+        "evidence": "C125-refresh-smoke-20261013.json",
+        "currentPackagePages": [
+          "2/10",
+          "3/13",
+          "1/37"
+        ],
+        "allThreeOriginalDataPreserved": true,
+        "completeAllMedia": false
+      }
+    },
+    {
+      "id": "windows_full_media_journey",
+      "status": "partial",
+      "passed": [
+        "Current ZIP 49550404 verified with 50 files and exact Release member bytes",
+        "search secondary page -> desktop Back -> recommendation executed",
+        "latest AX/UI observed MangaDex 211 chapters, 8/88 -> 9/88 and independent new-process restore at 9/88",
+        "public LK download manager visibly reported 10/10 complete",
+        "app-only unavailable HTTP proxy 127.0.0.1:49391 failed closed; cached novel detail/body remained readable after independent restart; proxy cleared and ordinary online reload recovered",
+        "latest 7sefun player AX observed 2:56/23:40; exit saved193 seconds; independent new process restored 3:13/23:40; screenshot visual review remains uncompleted",
+        "prior legitimate TXT/EPUB evidence retained"
+      ],
+      "missing": [
+        "visual screenshot review for latest manga, direction setting and restored video frame",
+        "new package complete media/export journey",
+        "current4bfde845 desktop launch/reload smoke; computer session closed, re-open refused"
+      ],
+      "evidence": [
+        "C125-latest-windows-20261013.json",
+        "C125-windows-final-behavior.json",
+        "C125-windows-bundle.json",
+        "C125-windows-exports.json",
+        "C125-system-windows.json",
+        "C125-player-resume-windows-bundle.json"
+      ],
+      "toolBlocker": "Visual image-question route unavailable: configured gpt-5.6-luna unsupported by all accounts; five PNG review calls failed. Native computer controls work",
+      "visualReviewBoundary": "computer screenshots were captured but current model cannot consume image input; AX progress is not claimed as pixel proof",
+      "priorEvidenceScope": "All2026-10-13 actual desktop journeys were on49550404, preserved pre-refresh ZIP; current4bfde845 rebuilt after void refresh fix; not same-byte UI acceptance"
+    },
+    {
+      "id": "longer_endurance",
+      "status": "partial",
+      "completedRunStatus": "passed",
+      "elapsedSeconds": 1841.8,
+      "readerCycles": 29,
+      "inputActions": 116,
+      "homeResume": 6,
+      "independentRestarts": 3,
+      "newCrashMarkers": 0,
+      "pssKiBRange": [
+        193003,
+        228461
+      ],
+      "firstLastTenPssMedianKiB": [
+        206337,
+        210546
+      ],
+      "fileDescriptors": null,
+      "testedArtifact": {
+        "role": "playback-restored acceptance, before proxy/navigation",
+        "sha256": "307f2778a2fdc2015fd683ef13518a6d838ad02bd4ec756e57ac7a64980efd07",
+        "isFinalApk": false
+      },
+      "limits": [
+        "Valid long-run manga transitions supersede earlier vertical-swipe partial for current reader endurance scope, not history",
+        "Not every image decode or hour-scale leak-free proof",
+        "FD denied; null unknown",
+        "Current proxy/navigation build requires its targeted journeys; not same-byte endurance",
+        "Video 1827s run included actual MediaPlayer1/-1004; not uninterrupted playback"
+      ],
+      "evidence": [
+        "C125-postfix-endurance-api35.json",
+        "C125-postfix-video-endurance-signed.json",
+        "C125-postfix-video-retry-observation.json"
+      ],
+      "historicalRun": {
+        "status": "partial",
+        "elapsedSeconds": 1819.5,
+        "readerCycles": 38,
+        "inputActions": 152,
+        "novelPageChanges": 104,
+        "mangaChangesProved": false,
+        "testedSha256": "52c391bd5ecf25e03d74981718aaad8505af570b7f87067085960510919b28b3",
+        "evidence": "C125-release-endurance-final-api35.json"
+      },
+      "observedPageChanges": 114,
+      "observedMangaPageChanges": 34,
+      "chapterSwitches": 10,
+      "actualOutages": 2,
+      "video": {
+        "elapsedSeconds": 1827,
+        "newCrashMarkers": 0,
+        "artifactSha256": "8c913420a174e1efe2b3588213e0cac95311107481ca7e51d8f58267b56bb246",
+        "status": "awaiting-final-lifecycle-and-visual-review",
+        "actualFailure": "MediaPlayer1/-1004 at sample20",
+        "visibleOrdinaryRetryRecovered": "10:36/24:17",
+        "uninterruptedPlaybackClaimed": false,
+        "sample60ScreenshotClaimed": false
+      }
+    }
+  ],
+  "checks": {
+    "flutterTestBatches": [
+      {
+        "scope": "final detail refresh fix/source proxy/desktop back/disabled-source regressions",
+        "passed": 7,
+        "evidence": "2026-10-13 tool output; failing-before regression caught setState Future assertion"
+      },
+      {
+        "scope": "latest existing full suite; proxy/navigation and disabled source",
+        "passed": 758,
+        "log": "D:/noval_and_manga/_tools/C125-network-navigation-full-tests.log"
+      },
+      {
+        "scope": "2026-10-13 source proxy/desktop back/disabled source targeted regression",
+        "passed": 6,
+        "evidence": "session bg_4",
+        "nonFatalWarning": "Drift multiple database instance debug warning; no suppression added"
+      },
+      {
+        "scope": "earlier full suite",
+        "passed": 748,
+        "log": "D:/noval_and_manga/_tools/C125-full-tests-final.log"
+      },
+      {
+        "scope": "later targeted regressions",
+        "passed": 24,
+        "log": "D:/noval_and_manga/_tools/C125-targeted-final.log"
+      },
+      {
+        "scope": "desktop resolver and download safety",
+        "passed": 21,
+        "log": "D:/noval_and_manga/_tools/C125-desktop-resolver-tests.log"
+      },
+      {
+        "scope": "latest desktop parent navigation",
+        "passed": 4,
+        "log": "D:/noval_and_manga/_tools/C125-desktop-navigation-regression.log"
+      },
+      {
+        "scope": "playback restore and related source/resolver/download safety",
+        "passed": 14,
+        "log": "D:/noval_and_manga/_tools/C125-player-resume-green-final4.log"
+      }
+    ],
+    "countsNotAdded": true,
+    "flutterAnalyze": {
+      "status": "passed",
+      "date": "2026-10-13",
+      "command": "flutter analyze --no-pub",
+      "result": "No issues found! (ran in12.5s)",
+      "evidence": "session bg_8 after refresh fix; earlier bg_2 retained"
+    },
+    "format": {
+      "status": "passed",
+      "filesChecked": 258,
+      "formatOnlyFilesCorrected": 31,
+      "productionFilesFormatted": [
+        "lib/features/downloads/data/download_repository.dart"
+      ],
+      "scope": "Previous format-only changes retained; new functional playback fix separately tested and rebuilt",
+      "log": "D:/noval_and_manga/_tools/C125-player-resume-format-final.log",
+      "latestChangedFiles": [
+        "lib/features/player/player_page.dart",
+        "test/player_resume_test.dart"
+      ],
+      "previousFormattingScope": "Dart formatter whitespace and optional comma normalization only; retained existing uncommitted logic",
+      "latestStatus": "passed",
+      "latestDate": "2026-10-13",
+      "latestFilesChecked": 10,
+      "latestFilesChanged": 0
+    },
+    "pythonSyntax": {
+      "status": "passed",
+      "files": [
+        "tools/prepare_windows_plugins.py",
+        "tools/release_device_acceptance.py",
+        "tools/scan_delivery_secrets.py",
+        "D:/noval_and_manga/_tools/C125-player-resume-api26-offline.py"
+      ]
+    },
+    "encoding": {
+      "status": "passed",
+      "evidence": "C125-encoding-final.json",
+      "pathsScanned": 884
+    },
+    "gitDiffCheck": {
+      "status": "passed"
+    },
+    "temporaryDiagnostics": {
+      "status": "passed",
+      "scope": "desktop resolver/native resolver and changed tools inspected; only count/safe summary output"
+    },
+    "secrets": {
+      "status": "passed",
+      "evidence": "C125-delivery-secret-scan-final.json",
+      "scope": "Exact supplied account/password and signing password representations; rebuilt46df9ad2/8c5cf8c9 APKs530 members each and complete4bfde845 Windows bundle/ZIP50 each; no all-token guarantee",
+      "filesScanned": 1115
+    }
+  },
+  "constraints": {
+    "branch": "master",
+    "uncommittedWorkPreserved": true,
+    "autoCommit": false,
+    "referencesReadOnly": true,
+    "noUninstallOrDataClear": true,
+    "noPurchaseOrRemoteAccountMutation": true,
+    "noSecurityOrChallengeBypass": true
+  },
+  "signing": {
+    "privateDirectory": "C:/Users/MiunaH/.triomi/signing",
+    "privateMaterialOutsideRepository": true,
+    "backupRequired": true
+  },
+  "documentsUpdated": [
+    "docs/CURRENT_STATUS.md",
+    "docs/ROADMAP.md",
+    "docs/SOURCE_CAPABILITY_MATRIX.md",
+    "docs/adr/ADR-2026-10-05-core-playback-resume-upgrade.md"
+  ],
+  "summary": {
+    "passed": 5,
+    "partial": 3,
+    "blocked": 0,
+    "waived": 1
+  },
+  "externalLimitations": {
+    "lnsServerOutage": {
+      "userConfirmed": true,
+      "userObservation": "LNS服务器故障，Mixn也打不开；无需继续处理",
+      "blocksDelivery": false,
+      "retryStopped": true,
+      "actualOnlineVerificationStatus": "failed-network-retained",
+      "offlineAndPermissionEvidenceRetained": true
+    },
+    "mixnUnavailable": {
+      "userConfirmed": true,
+      "blocksDelivery": false,
+      "retryStopped": true
+    }
+  },
+  "sourceAheadOfArtifacts": {
+    "status": true,
+    "reason": "True relative to historical C125 artifacts only. Current C150 same-source acceptance/production APKs and Windows ZIP are built/verified in C150-final-acceptance.json; C149 actual crop/cache/reboot/media and C150 original APK export evidence retain explicit byte scopes. C125 artifacts and the mainlineProgress section below are historical snapshots, not current implementation or installed-device claims. Current remaining acceptance is maintained only in CURRENT_STATUS.md; P10/P11 external writes remain unauthorized and broad gates partial."
+  },
+  "deviceInstalledOverrides": {
+    "emulator-5554": {
+      "path": "D:/noval_and_manga/_tools/Triomi-C150-apk-backup-acceptance.apk",
+      "bytes": 129094792,
+      "sha256": "be424cdc123a0400d02f04f1b1a574f4db4e62530d93df9153399e7058ed1e11"
+    },
+    "emulator-5556": {
+      "path": "D:/noval_and_manga/_tools/Triomi-C150-apk-backup-acceptance.apk",
+      "bytes": 129094792,
+      "sha256": "be424cdc123a0400d02f04f1b1a574f4db4e62530d93df9153399e7058ed1e11"
+    },
+    "emulator-5558": {
+      "path": "D:/noval_and_manga/_tools/Triomi-C150-apk-backup-android-signed.apk",
+      "bytes": 129094792,
+      "sha256": "681e8d8b91592357b1030402968581fbdde9a31dcc09e2fa95bc08f3af2402c8"
+    }
+  },
+  "mainlineProgress": {
+    "P1": {
+      "implementation": "implemented",
+      "actualPlatformAcceptance": "partial",
+      "evidence": "C126-P1-acceptance.json",
+      "fullSuitePassedBeforeFinalReactiveRefinement": 761,
+      "finalRefinementTargetedPassed": 9,
+      "latestUiRefinementNotYetRebuilt": true
+    },
+    "P2": {
+      "implementation": "implemented-Android-public-api-and-visible-session",
+      "actualPlatformAcceptance": "partial",
+      "evidence": "C126-P2-acceptance.json",
+      "actualApiDirectory": 14
+    },
+    "P3": {
+      "implementation": "Media3-controls-system-media-service-implemented",
+      "actualPlatformAcceptance": "partial",
+      "evidence": "C127-P3-acceptance.json",
+      "fullSuitePassed": 755,
+      "analyze": "No issues found",
+      "actualServiceCrashFixed": true
+    },
+    "P4": {
+      "implementation": "resumable-HLS-progressive-and-realtime-download-UI",
+      "actualPlatformAcceptance": "partial",
+      "evidence": "C128-P4-acceptance.json",
+      "api35CompleteDownloadMiB": 474.1,
+      "api35OfflineIndependentRestart": true,
+      "visualVerification": "not-completed",
+      "fullSuiteBeforeNetworkClassificationFix": {
+        "passed": 756,
+        "failed": 1
+      },
+      "networkClassificationAfterFixTargetedPassed": 11,
+      "fullSuiteAfterNetworkClassificationFixPassed": 758
+    },
+    "P5": {
+      "implementation": "public-filters-historical-season-and-info-sections-SQLite-cache",
+      "actualPlatformAcceptance": "partial",
+      "evidence": "C129-P5-acceptance.json",
+      "fullSuitePassed": 761,
+      "analyze": "No issues found after style fixes",
+      "api35ActualPublicInfo": true,
+      "api35OfflineIndependentRestart": true
+    },
+    "P6": {
+      "implementation": "SQLite-v5-multi-source-feed-saved-search-APK-filter-bridge-related-capability",
+      "actualPlatformAcceptance": "partial",
+      "evidence": "C130-P6-acceptance.json",
+      "api35OriginalFiltersPersisted": true,
+      "api35DragOrderIndependentRestart": true
+    },
+    "P7": {
+      "implementation": "per-work-reader-settings-bounded-images-trim-double-page-filters-autoscroll",
+      "actualPlatformAcceptance": "partial",
+      "evidence": "C131-P7-acceptance.json",
+      "fullSuitePassedAtP7": 766,
+      "modeAndDoublePageAnchorRegressionPassed": 2,
+      "api35SettingsIndependentRestart": true,
+      "api35DoublePageSwipe": "1/14 -> 3/14",
+      "api35IndependentRestartAfterOrdinaryRetry": "3/14",
+      "dualApiInstalledHashesVerified": true
+    },
+    "P8": {
+      "implementation": "persistent-manga-update-errors-strategy-concurrency-native-job-notification-generations-auto-download",
+      "actualPlatformAcceptance": "partial",
+      "evidence": "C132-P8-acceptance.json",
+      "fullSuitePassed": 773,
+      "analyze": "No issues found",
+      "api35RealPublicAndApkBackgroundJob": 7401,
+      "api35RealNewChapterCount": 0,
+      "newChapterNotificationAndDownloadActualAcceptance": "not-completed",
+      "dualApiInstalledHashesVerified": true
+    },
+    "P9": {
+      "implementation": "persistent-scope-migration-hash-copy-explicit-target-merge-multi-source-original-chapter-owner",
+      "actualPlatformAcceptance": "partial",
+      "evidence": "C133-P9-acceptance.json",
+      "fullSuitePassed": 779,
+      "analyze": "No issues found",
+      "api35SavedPlanForceStopResume": "ready -> completed",
+      "api35MergedReader": "public 3/14; APK independently 1/14",
+      "dualApiInstalledHashesVerified": true
+    },
+    "P10": {
+      "implementation": "explicit-bidirectional-tracking-preview-conflict-undo-canonical-identity",
+      "actualPlatformAcceptance": "partial",
+      "evidence": "C134-P10-acceptance.json",
+      "targetedPassed": 4,
+      "existingTrackingContractPassed": 45,
+      "analyze": "No issues found",
+      "remoteWriteActual": "not-completed-without-authorized-account"
+    },
+    "P11": {
+      "implementation": "integrity-manifest-conflict-preview-Android-daily-backup-versioned-conditional-WebDAV; actual-local-cover-restore-and-offline-reexport; original-central-header-duplicate-size-CRC-validation; streaming-local-ZIP-and-private-file-SAF-copy; disk-snapshot-restore-with-reviewed-hash; completed-downloaded-media-portability",
+      "actualPlatformAcceptance": "partial",
+      "evidence": ["C135-P11-acceptance.json", "C140-P11-cover-restore-acceptance.json", "C141-P11-zip-integrity-acceptance.json", "C142-P11-streaming-backup-acceptance.json", "C143-P11-file-restore-acceptance.json", "C144-P11-download-media-acceptance.json"],
+      "targetedPassed": 36,
+      "fullSuitePassed": 799,
+      "api35ScheduledJob": 7501,
+      "api35SafAndSystemZipRestore": true,
+      "remoteUploadActual": "not-completed-without-authorized-target"
+    },
+    "P12": {
+      "implementation": "library-query-source-unread-sort-preference-batch-pin-remove; session-incognito; foreground-background-native-worker-ownership",
+      "actualPlatformAcceptance": "partial",
+      "evidence": ["C136-P12-library-acceptance.json", "C137-P12-incognito-acceptance.json", "C138-P12-worker-ownership-acceptance.json", "C139-P12-filtered-unread-acceptance.json"],
+      "targetedPassed": 57,
+      "fullSuitePassed": 790,
+      "analyze": "No issues found",
+      "api35PinForceStopRestore": true
+    }
+  }
+}

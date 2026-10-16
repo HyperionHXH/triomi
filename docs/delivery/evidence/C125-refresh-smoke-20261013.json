@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-13",
+  "artifacts": {
+    "androidAcceptance": "46df9ad224470947e9443decb6e0367d19a65f97f2061bb64d063135f1677eac",
+    "androidProduction": "8c5cf8c94a5a5ca939472f83287959dfa3c65790cf861e954d2c246b95a40f82",
+    "windowsZip": "4bfde8458f2364ad1af40fc1c9ca20bf585e8a0aea686a0937c2afba92506638"
+  },
+  "devices": [
+    {
+      "serial": "emulator-5554",
+      "expectedHistoryPreserved": true,
+      "reloadExecuted": true,
+      "realNovelReaderPages": [
+        "2 / 10"
+      ],
+      "visualReview": false
+    },
+    {
+      "serial": "emulator-5556",
+      "expectedHistoryPreserved": true,
+      "reloadExecuted": true,
+      "realNovelReaderPages": [
+        "3 / 13"
+      ],
+      "visualReview": false
+    },
+    {
+      "serial": "emulator-5558",
+      "expectedHistoryPreserved": true,
+      "reloadExecuted": true,
+      "realNovelReaderPages": [
+        "1 / 37"
+      ],
+      "visualReview": false
+    }
+  ],
+  "status": "passed-ui-observation"
+}

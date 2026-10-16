@@ -1,0 +1,95 @@
+{
+  "date": "2026-10-13",
+  "status": "partial",
+  "apk": {
+    "path": "D:/noval_and_manga/_tools/Triomi-C130-P6-sort-acceptance.apk",
+    "bytes": 125618428,
+    "sha256": "f4215db155dc6de459e35eacf2dd98104e9cf4c78b7c0c0c12f5b4a4e3cf9e72"
+  },
+  "previousUiApk": {
+    "path": "D:/noval_and_manga/_tools/Triomi-C130-P6-android-acceptance.apk",
+    "bytes": 125602004,
+    "sha256": "ebc0e779db0dfe9e233287ee7f62aed041e4e8be3c93c615f7df4fbfbd9c54d7"
+  },
+  "devicesInstalled": [
+    "emulator-5554",
+    "emulator-5556"
+  ],
+  "actual": {
+    "device": "emulator-5554",
+    "ruleFeedReturnedRealWorks": true,
+    "apkOriginalFilters": [
+      "关闭",
+      "网站筛选",
+      "Has available chapters",
+      "已收起",
+      "Original language, 已收起",
+      "已收起",
+      "Content rating, 已收起",
+      "已收起",
+      "Publication demographic, 已收起",
+      "已收起",
+      "Status, 已收起",
+      "Sort\nRelevance",
+      "升序",
+      "Created within last\nAny",
+      "已收起",
+      "Tags mode, 已收起",
+      "已收起",
+      "Content, 已收起",
+      "取消",
+      "重置筛选",
+      "应用网站筛选"
+    ],
+    "changedHasAvailableChapters": true,
+    "independentRestartPreservedFilter": true,
+    "savedFilteredResults": [
+      "关闭",
+      "P6_saved_search\nMangaDex · zh-Hans",
+      "显示菜单",
+      "保存搜索：",
+      "Prince Aoihiko\nMangaDex · 0",
+      "向一个赞生成一只哥布林的洞窟进攻的新人冒险者\nMangaDex · 0",
+      "夜空中的光\nMangaDex · 0",
+      "加载更多本站作品",
+      "纱罩",
+      "已选中发现\n发现\n第 1 个标签，共 4 个",
+      "切换到书架\n书架\n第 2 个标签，共 4 个",
+      "切换到追番\n追番\n第 3 个标签，共 4 个",
+      "切换到我的\n我的\n第 4 个标签，共 4 个"
+    ],
+    "firstBerserkSearch": "empty, preserved as actual empty response",
+    "paginationActionExecuted": true,
+    "fullPaginationRowsNotObserved": true,
+    "relatedSupport": "source reported unsupported; manual search available",
+    "dragSorting": {
+      "before": [
+        "关闭",
+        "MangaDex 漫画（开放 API） · 热门\nmangadex",
+        "MangaDex 漫画（开放 API） · 最近更新\nmangadex"
+      ],
+      "after": [
+        "关闭",
+        "MangaDex 漫画（开放 API） · 最近更新\nmangadex",
+        "MangaDex 漫画（开放 API） · 热门\nmangadex"
+      ],
+      "independentRestart": [
+        "关闭",
+        "MangaDex 漫画（开放 API） · 最近更新\nmangadex",
+        "MangaDex 漫画（开放 API） · 热门\nmangadex"
+      ]
+    }
+  },
+  "verification": {
+    "migrationAndFeedPassed": 8,
+    "resetConsumerPassed": 3,
+    "discoverConsumerPassed": 8,
+    "analyze": "No issues found",
+    "fullSuitePassed": 765
+  },
+  "limitations": [
+    "Real supported-related source not yet verified",
+    "API26/official-signature/Windows full P6 journeys pending",
+    "AX is not visual proof; computer session closed"
+  ]
+}

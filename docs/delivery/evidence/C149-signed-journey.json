@@ -1,0 +1,272 @@
+{
+  "checkedAt": "2026-10-15",
+  "status": "C148-production-signed-actual-UI-journeys; scoped-partial-acceptance",
+  "device": {
+    "serial": "emulator-5558",
+    "sdk": 35,
+    "package": "io.github.hyperionhxh.triomi",
+    "artifactScope": "C148 production signed installed package, not future C149 artifact",
+    "installedSha256Before": "40317556999d0e36c7a8022af2e43004e353ffe42c7de0f715e0ef63f9770060",
+    "installedSha256After": "40317556999d0e36c7a8022af2e43004e353ffe42c7de0f715e0ef63f9770060"
+  },
+  "methods": {
+    "adbSerialAlwaysExplicit": true,
+    "screenshotsActuallyOpenedForVisualInspection": true,
+    "buildLintTestFormatterRun": false,
+    "installOrDataClearRun": false,
+    "accountSecretsRead": false,
+    "sourceTrustChanged": false,
+    "trackingOrCloudWrites": false,
+    "sqliteScope": "Read-only local snapshots; schema, title/type/work identities, four table counts and download paths only; no Hive or secure storage"
+  },
+  "beforeCounts": {
+    "library_entries": 0,
+    "chapters": 44,
+    "histories": 7,
+    "downloads": 10
+  },
+  "coverage": [
+    {
+      "id": "P1",
+      "status": "partial-actual",
+      "facts": [
+        "Existing reading-history entries reopen associated novel, MangaDex manga and 7sefun anime details with original titles/source identities",
+        "Anime existing source remains selected as playback list 2 with 13 episodes; no replacement APK or trust mutation"
+      ],
+      "limits": [
+        "No cross-account/tracking migration or remote association writes",
+        "No claim that all P1 association-recovery acceptance criteria are closed"
+      ],
+      "screenshots": [
+        "_tools/C149-signed-anime-detail.png",
+        "_tools/C149-signed-novel-detail.png",
+        "_tools/C149-signed-manga-detail.png"
+      ]
+    },
+    {
+      "id": "P3",
+      "status": "actual-public-video-lifecycle-pass-for-observed-paths",
+      "work": "夏目友人帐第三季 第01集",
+      "facts": [
+        "Actual decoded video at 21:38 / 24:17; paused at 22:12",
+        "Paused seek to 7:54; resumed playback",
+        "Explicit 画中画 opened launcher PiP containing decoded animation; later PiP frame visibly changed; full app resumed at 8:40",
+        "Paused checkpoint 9:09 / 24:17; independent am force-stop: PID 3360 -> absent -> new PID 4364",
+        "History/detail reopening restored 9:09; first cold screenshot duration 0:00 and no decoded frame; later real decoded frame observed at 9:43 / 24:17"
+      ],
+      "limits": [
+        "Public remote playback, not offline video: baseline downloads contain only ten novel rows",
+        "No audible-output claim; no source-switch or fullscreen rotation claim",
+        "PiP with privacy lock enabled not attempted"
+      ],
+      "screenshots": [
+        "_tools/C149-signed-video-open.png",
+        "_tools/C149-signed-video-paused.png",
+        "_tools/C149-signed-video-seek.png",
+        "_tools/C149-signed-video-pip.png",
+        "_tools/C149-signed-video-pip-later.png",
+        "_tools/C149-signed-video-home-resume.png",
+        "_tools/C149-signed-video-pre-force-stop.png",
+        "_tools/C149-signed-video-force-stop-resume.png",
+        "_tools/C149-signed-video-cold-decoded.png"
+      ]
+    },
+    {
+      "id": "P5",
+      "status": "actual-filter-and-warm-offline-profile-cache",
+      "facts": [
+        "Normal discover filter changed all years/all seasons to 2025 first quarter; real distinct result titles including BanG Dream! Ave Mujica and 金牌得主",
+        "金牌得主 full profile rendered TV / 2025-01-04 / 13 episodes and metadata",
+        "Character/voice panel rendered public names/descriptions; related-work panel rendered entries including 金牌得主 第二季",
+        "After airplane-mode enabled from original 0, opening already-fetched character panel visibly displayed 离线缓存资料 with cached names/descriptions and airplane status icon"
+      ],
+      "limits": [
+        "Filtered result covers were placeholder boxes in observed screenshot",
+        "Final offline force-stop capture was Flutter splash, not proof of cold offline profile/discover restoration",
+        "Staff/comments/episode tabs not exercised"
+      ],
+      "screenshots": [
+        "_tools/C149-signed-discover-filter.png",
+        "_tools/C149-signed-discover-filtered.png",
+        "_tools/C149-signed-anime-profile.png",
+        "_tools/C149-signed-anime-profile-characters.png",
+        "_tools/C149-signed-anime-profile-relations.png",
+        "_tools/C149-signed-anime-profile-offline.png",
+        "_tools/C149-signed-discover-offline-cold.png"
+      ]
+    },
+    {
+      "id": "P7-novel",
+      "status": "actual-cached-reader-navigation-and-lifecycle",
+      "work": "团地恋人 等待你的温柔时光 第三话",
+      "facts": [
+        "Rendered real previously cached Chinese novel body at 1 / 37",
+        "After dismissing reader controls, right taps advanced to visibly different text at 3 / 37",
+        "Home resume retained 3 / 37; independent force-stop/history/detail/continue restored 3 / 37",
+        "Changed pagination to scroll and parchment to night; selection and dark reader behind settings visibly observed; restored pagination/parchment",
+        "Original font18, line1.7, margin20 not modified"
+      ],
+      "limits": [
+        "Novel consumer exercised while network available; not a forced-outage novel read claim",
+        "Several early captures named next-page/swipe remained 1 / 37 because controls consumed gestures; only page-advanced screenshot proves navigation",
+        "No actual scroll-position or TTS/audio acceptance claim"
+      ],
+      "screenshots": [
+        "_tools/C149-signed-novel-reader.png",
+        "_tools/C149-signed-novel-settings.png",
+        "_tools/C149-signed-novel-settings-current.png",
+        "_tools/C149-signed-novel-restored-settings.png",
+        "_tools/C149-signed-novel-page-advanced.png",
+        "_tools/C149-signed-novel-home-resume.png",
+        "_tools/C149-signed-novel-cold-resume.png"
+      ]
+    },
+    {
+      "id": "P7-existing-manga",
+      "status": "actual-real-source-image-decoded",
+      "work": "Kage no Jitsuryokusha ni Naritakute! 第75话 繁中",
+      "facts": [
+        "History reopened original MangaDex detail and persisted 2/32",
+        "First screenshot showed loading spinner; delayed screenshot visibly decoded full real Chinese manga page at 2/32"
+      ],
+      "limits": [
+        "No existing completed MangaDex download in baseline; no forced-offline or real-site manga-download claim",
+        "No real manga next-page/lifecycle claim"
+      ],
+      "screenshots": [
+        "_tools/C149-signed-manga-detail.png",
+        "_tools/C149-signed-manga-reader.png",
+        "_tools/C149-signed-manga-delayed.png"
+      ]
+    },
+    {
+      "id": "P12-local-import",
+      "status": "actual-synthetic-import-read-remove",
+      "facts": [
+        "Baseline local library visibly empty; SQLite media index had no synthetic same-title entry",
+        "Copied existing assistant fixture C148-local-comic-smoke.cbz to own Download/C149-signed-synthetic-comic.cbz",
+        "System picker import with required name C149-signed-synthetic-comic and explicit final copy-scope confirmation",
+        "Actual first and second different fixture images decoded at 1/2 and 2/2 via slider; Home resumed first page",
+        "Exact remove confirmation identity 9a1bf7f3843bfcb24665802041b5f37f6a84c15478108c8f2b0f0c5dad2e2029; only own import removed",
+        "Final local library visibly empty; only own Download fixture copy removed via exact path"
+      ],
+      "limits": [
+        "Synthetic local acceptance, not actual public-site manga download",
+        "Early captures labelled page2/second-actual remained page1; only page2-slider proves second image"
+      ],
+      "screenshots": [
+        "_tools/C149-signed-local-before-empty.png",
+        "_tools/C149-signed-local-import-confirmation.png",
+        "_tools/C149-signed-local-detail.png",
+        "_tools/C149-signed-local-page1.png",
+        "_tools/C149-signed-local-page2-slider.png",
+        "_tools/C149-signed-local-home.png",
+        "_tools/C149-signed-local-remove-confirm.png",
+        "_tools/C149-signed-local-removed.png"
+      ]
+    },
+    {
+      "id": "P12-privacy",
+      "status": "actual-enable-home-cold-authenticated-disable",
+      "facts": [
+        "Initial UI 隐私锁未开启",
+        "Random eight-digit PIN generated only in memory; never printed or saved to evidence; no secure storage read",
+        "Home resume UI hierarchy 应用已锁定; Back remained locked; independent force-stop cold start also locked",
+        "Secure-window Home/cold screenshots actually viewed and fully black; no false visual approval of hidden gate",
+        "Correct retained PIN unlocked through normal UI",
+        "Authenticated disable ended visibly 隐私锁未开启 / 操作已完成",
+        "Independent disabled cold start subsequently loaded real discover UI without lock gate; PIN variable discarded"
+      ],
+      "limits": [
+        "Lock gate label observations are UI hierarchy, not screenshot pixels because FLAG_SECURE correctly blacks capture",
+        "No wrong-PIN/rate-limit or privacy-enabled PiP attempt"
+      ],
+      "screenshots": [
+        "_tools/C149-signed-privacy-initial.png",
+        "_tools/C149-signed-privacy-home-locked.png",
+        "_tools/C149-signed-privacy-cold-locked.png",
+        "_tools/C149-signed-privacy-disabled.png",
+        "_tools/C149-signed-privacy-disabled-cold-loaded.png"
+      ]
+    },
+    {
+      "id": "P12-appearance",
+      "status": "actual-dark-and-restore",
+      "facts": [
+        "Original follow-system theme, standard UI font and large-icons off visibly recorded",
+        "Selected dark theme and inspected real dark rendered settings",
+        "Restored follow-system; later privacy/discover UI visibly light"
+      ],
+      "limits": [
+        "Cover appearance, font import and all density/accent variants not exercised"
+      ],
+      "screenshots": [
+        "_tools/C149-signed-appearance-original.png",
+        "_tools/C149-signed-appearance-dark.png",
+        "_tools/C149-signed-privacy-disabled.png"
+      ]
+    },
+    {
+      "id": "P12-cache-cancel",
+      "status": "not-exercised",
+      "facts": [],
+      "limits": [
+        "No new download/cache queue started or cancellation claimed; original completed downloads must remain untouched"
+      ]
+    }
+  ],
+  "restoration": {
+    "privacyLock": "disabled and independent cold-loaded UI observed",
+    "reader": "original pagination/parchment restored; font18/line1.7/margin20 unchanged",
+    "appearance": "follow-system restored; standard UI font and large-icons off unchanged",
+    "sourceProxy": "never changed; original UI 未设置 使用默认网络",
+    "syntheticImport": "removed by exact identity; own Download copy removed",
+    "network": {
+      "originalAirplaneMode": 0,
+      "temporaryOfflineAirplaneMode": 1,
+      "finalAirplaneMode": 0,
+      "finalWifiOn": 1,
+      "finalMobileData": 1,
+      "notes": "Only airplane-mode disable issued during final restoration; this automatically restored wifi_on 3 (airplane-held state) to 1. No independent wifi/mobile_data changes during journey. Original Wi-Fi/data raw numeric values were not captured before offline transition; baseline screenshots show Wi-Fi enabled."
+    },
+    "publicFilter": "Final normal filter UI inspected: 全部年代 / 全年 / 全部类型 / 热度; original defaults restored after cold relaunch; canceled dialog without applying changes.",
+    "finalScreenshots": [
+      "_tools/C149-signed-final-restored-ui.png",
+      "_tools/C149-signed-final-filter-restored.png"
+    ]
+  },
+  "remainingLimits": [
+    "No account credentials, paid reads, sign-in, tracking sync, external-cloud writes or installer actions",
+    "Evidence applies only installed C148 production SHA, not later C149 artifacts",
+    "No build/lint/tests/formatter run"
+  ],
+  "afterCounts": {
+    "library_entries": 0,
+    "chapters": 71,
+    "histories": 7,
+    "downloads": 10
+  },
+  "preservation": {
+    "originalMediaWorkKeysRetained": true,
+    "originalChapterKeysRetained": true,
+    "originalDownloadIdsRetained": true,
+    "originalHistoryWorkChapterKeysRetained": true,
+    "historyRowIdsUnchanged": false,
+    "historyNote": "Normal consumer navigation updates/replaces history rows; do not require unchanged row IDs. Four-table history count stays seven.",
+    "chapterDelta": {
+      "added": 27,
+      "source": "bangumi-anime",
+      "originalSourceCountsUnchanged": true,
+      "reason": "Normal public anime details/profile viewing populated chapter metadata; no direct DB writes"
+    },
+    "syntheticMediaRowsFinal": 0,
+    "ownDownloadFixtureFinal": "absent",
+    "sqliteCopies": [
+      "../_tools/C149-signed-before.sqlite",
+      "../_tools/C149-signed-after.sqlite"
+    ]
+  },
+  "interruptions": [
+    "Host continuation lost eval kernel and original three AVDs went offline. Did not operate replacement emulator-5562. Parent restarted original API35 AVD on explicit emulator-5558; restored temporary airplane0, rechecked original installed SHA and final counts. No previous scenarios repeated."
+  ]
+}

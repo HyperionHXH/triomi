@@ -1,0 +1,109 @@
+{
+  "at": "2026-10-10T14:45:59.006Z",
+  "status": "partial",
+  "artifact": {
+    "exeSha256": "f5620d365954c1f227a3e78bf8ae3ff9fb64799387a51643074c116066d94927",
+    "zipSha256": "3ac7d53d76f8fc1ca1d65b71b5ae0ed932472eb7c3261fdb4fe9cab251b18d89",
+    "bundleFiles": 50
+  },
+  "observationProvenance": "Real desktop UI observed in the preceding part of this same task; screenshots retained. Closeout additionally verifies artifacts and SQLite with mode=ro. UI was not repeated after the Sky RPC became unavailable.",
+  "video": {
+    "status": "passed",
+    "source": "Kazumi 7sefun",
+    "journey": "recommendation -> Re fourth season -> real site search -> playlist 4 episode 01 -> visible WebView2 resolver -> media_kit native player",
+    "candidateCount": 9,
+    "playlistEpisodeCounts": [
+      19,
+      11
+    ],
+    "observedPosition": "0:17",
+    "observedDuration": "23:40",
+    "evidence": [
+      "C125-windows-native-video.png",
+      "C125-windows-webview-video-before-relay.png"
+    ],
+    "resume": {
+      "status": "partial",
+      "persistedSeconds": 58,
+      "observedContinueAfterNormalRestart": true,
+      "actualSeekAfterRestartVerified": false
+    }
+  },
+  "manga": {
+    "status": "passed",
+    "source": "MangaDex JS/API; not Android APK",
+    "chapterCount": 211,
+    "savedPage": "8/88",
+    "restoredPage": "8/88",
+    "normalCloseAndRestart": true,
+    "realImageObserved": true,
+    "evidence": [
+      "C125-windows-manga-before-restart.png",
+      "C125-windows-manga-resume-final.png"
+    ]
+  },
+  "settings": {
+    "status": "passed",
+    "immediateLTRToRTLSelectionObserved": true,
+    "evidence": [
+      "C125-windows-settings-final.png"
+    ]
+  },
+  "novelDownload": {
+    "status": "passed",
+    "source": "LK public anonymous content",
+    "bookTitle": "团地恋人　等待你的温柔时光",
+    "chapters": 10,
+    "done": 10,
+    "nonemptyContentJson": 10,
+    "contentJsonBytes": 370355,
+    "readOnlyDatabaseRecheck": {
+      "chapters": 10,
+      "nonemptyCachedChapters": 10,
+      "contentJsonBytes": 370355,
+      "downloadStatuses": [
+        [
+          "done",
+          10
+        ]
+      ],
+      "recentMediaHistoryPositions": [
+        [
+          "manga",
+          7
+        ],
+        [
+          "anime",
+          58
+        ],
+        [
+          "manga",
+          0
+        ]
+      ]
+    },
+    "realFirstChapterRead": true,
+    "downloadManagerTenOfTenUIVerified": false
+  },
+  "novelExport": {
+    "status": "passed",
+    "evidence": [
+      "C125-windows-exports.json"
+    ],
+    "txtAndEpubOnDisk": true
+  },
+  "offline": {
+    "status": "partial",
+    "persistedNonemptyCacheVerified": true,
+    "forcedNetworkOutageReadVerified": false,
+    "restartDownloadedNovelReadVerified": false,
+    "sourceDisabledReadVerified": false
+  },
+  "limits": [
+    "Dedicated Windows UI tool unavailable at closeout: Trusted RPC service is not configured: sky",
+    "No final desktop forced-offline read or actual video seek after restart evidence",
+    "Authentication-specific headers are rejected; media Cookie forwarding is not implemented",
+    "Webpage video download remains rejected; no full-site or AGE-specific success claim",
+    "Default TLS and visible browser remain in force; no security or challenge bypass"
+  ]
+}

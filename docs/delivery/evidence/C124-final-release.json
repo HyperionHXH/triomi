@@ -1,0 +1,140 @@
+{
+  "at": "2026-10-09T17:35:44.755823+00:00",
+  "variant": "release",
+  "apk": "D:\\noval_and_manga\\triomi\\build\\app\\outputs\\flutter-apk\\app-release.apk",
+  "bytes": 123666468,
+  "sha256": "d9834f03df6f9d681f9d1fbde8f15f09bf55f8ae1a37df556dddfe3b6c9602fd",
+  "signatureVerified": true,
+  "signerSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6",
+  "signer": "Android Debug; production keystore not configured",
+  "flutterTests": 735,
+  "flutterAnalyze": "No issues found",
+  "pythonTests": "Not rerun; no production Python change; prior 83 are historical",
+  "checks": {
+    "allProjectTextEncodingErrors": 0,
+    "credentialValueCandidates": 3,
+    "credentialValueScanMatches": 0,
+    "gitDiffCheckExit": 0
+  },
+  "logs": [
+    "D:/noval_and_manga/_tools/C124-flutter-tests-verified.log",
+    "D:/noval_and_manga/_tools/C124-analyze-verified.log",
+    "D:/noval_and_manga/_tools/C124-release-verified.log",
+    "D:/noval_and_manga/_tools/C124-focused-verified.log"
+  ],
+  "referenceApps": [
+    {
+      "name": "Kazumi",
+      "version": "2.3.8 (203082)",
+      "sourceCommit": "02afdabf72af7eee04a7403786ee60236701086c",
+      "officialUrl": "https://github.com/Predidit/Kazumi/releases/download/2.3.8/Kazumi_android_2.3.8.apk",
+      "bytes": 32907746,
+      "sha256": "8ae509af8ec6be5f6f1a2b2ab0b6b68ce66264c4ee359c17f86118283abb79a8",
+      "sourceAndApkMayDiffer": true
+    },
+    {
+      "name": "Komikku",
+      "version": "1.14.1 (81)",
+      "sourceCommit": "64aeb48f31a211e734dafe6c838ae2c712ae69e2",
+      "officialUrl": "https://github.com/komikku-app/komikku/releases/download/v1.14.1/Komikku-x86_64-v1.14.1.apk",
+      "bytes": 44372938,
+      "sha256": "d6c532e060e895466b9f3aced24d76c52b6a984cd739cd3d0285d738229d6894",
+      "sourceAndApkMayDiffer": true
+    }
+  ],
+  "rulesSnapshot": {
+    "commit": "fce5e15a2e6b57500912d41b3f1c65bb3eb7d392",
+    "ruleFiles": 86,
+    "deprecated": 70,
+    "activeIndex": 16,
+    "activeApiMode": 2,
+    "activeCaptcha": 4
+  },
+  "desktopLiveNetwork": "C124-kazumi-live-network.json; 2 x 24 recommendations; three sites search/chapter/page URL only, not device video",
+  "deviceChecks": {
+    "35": {
+      "serial": "emulator-5554",
+      "installedSha256": "d9834f03df6f9d681f9d1fbde8f15f09bf55f8ae1a37df556dddfe3b6c9602fd",
+      "matchesBuild": true,
+      "installedWithDataPreserved": true,
+      "releaseLaunchedAfterForceStop": true,
+      "realRecommendationCovers": true,
+      "recommendationPaging": "Final build: 8 upward swipes from top, later recommendation rows with real covers visible; returned to top and pull-to-refresh spinner completed, original top rows retained with covers",
+      "sourceSearch": {
+        "7sefun": "9 results",
+        "AGE": "8 results",
+        "MXdm": "12 results",
+        "DM84": "network failure; other sources remain usable"
+      },
+      "episodeLists": "7sefun fourth season: road 2 has 19 episodes; road 4 has 11",
+      "video": "Final build road 4 episode 01 actual frame, 0:05 / 23:40; road 2 resolve_timeout preserved",
+      "playerChangeSourceAfterError": "resolve_timeout -> episodes -> change source -> cross-site candidates visible after native view detach fix",
+      "repository": "GitCode real index; installed aafun 1.2 and retained after force-stop/rebuild; GitHub repo disabled, verified after force-stop, then re-enabled",
+      "existingData": "install -r; no uninstall, clear data or account changes"
+    },
+    "26": {
+      "serial": "emulator-5556",
+      "installedSha256": "d9834f03df6f9d681f9d1fbde8f15f09bf55f8ae1a37df556dddfe3b6c9602fd",
+      "matchesBuild": true,
+      "installedWithDataPreserved": true,
+      "releaseLaunchedAfterForceStop": true,
+      "realRecommendationCovers": true,
+      "episodeLists": "7sefun fourth season: independently selected 19 / 11 episode lists",
+      "video": "Final build road 4 episode 01 actual frame, 1:57 / 23:40; road 2 timeout preserved",
+      "earlierSameSessionVideo": "Before native detach patch, road 4 episode 01 actual frame 0:24 / 23:40; road 2 resolve_timeout",
+      "existingData": "install -r; no uninstall, clear data or account changes"
+    }
+  },
+  "limitations": [
+    "Kazumi XPath subset; API/captcha/legacy behavior and all repository entries not fully supported",
+    "Source search/chapter listing does not prove all site video playback; DM84 fails on device network",
+    "Metadata detail official API times out; public api.bgmapi mirror returned HTTP403 and was not wired as reliable fallback",
+    "Recommendations can page until real upstream exhaustion; no fabricated infinite items",
+    "Web-page video offline download rejected; existing direct file/plain HLS only; resumable segment storage not done",
+    "No full reference-App settings/cloud/merge audit, physical-device testing or Windows playback acceptance",
+    "Stable metadata-to-site association and full Komikku parity remain ROADMAP P1-P12; S1-S9 remaining boundaries preserved",
+    "Player episode-sheet accessibility tree and selection actions verified; C124-final-api35-player-episodes.png captures native video instead of sheet, so not accepted as visual sheet evidence; detail episode image is accepted"
+  ],
+  "screenshots": [
+    "C124-api26-playback-pre-final.png",
+    "C124-before-discover-api35.png",
+    "C124-final-api26-episodes.png",
+    "C124-final-api26-home.png",
+    "C124-final-api26-playback-attempt.png",
+    "C124-final-api26-playback-list4.png",
+    "C124-final-api26-player-episodes.png",
+    "C124-final-api35-episodes.png",
+    "C124-final-api35-home.png",
+    "C124-final-api35-list4.png",
+    "C124-final-api35-other-sources.png",
+    "C124-final-api35-playback-list4.png",
+    "C124-final-api35-playback.png",
+    "C124-final-api35-player-change-source.png",
+    "C124-final-api35-player-episodes.png",
+    "C124-final-api35-recommendation-paging.png",
+    "C124-final-api35-recommendation-refreshed.png",
+    "C124-final-api35-repository.png",
+    "C124-final-api35-sources.png",
+    "C124-final-ui-overview.png",
+    "C124-kazumi-01-home.png",
+    "C124-kazumi-02-sources.png",
+    "C124-kazumi-03-episodes.png",
+    "C124-komikku-01-library.png",
+    "C124-komikku-02-browse.png",
+    "C124-komikku-03-repositories.png",
+    "C124-komikku-04-detail.png",
+    "C124-komikku-05-reader.png",
+    "C124-komikku-06-reader-settings.png",
+    "C124-repository-before-polish.png",
+    "C124-repository-installed-aafun.png",
+    "C124-triomi-api26-home.png",
+    "C124-triomi-api35-home.png",
+    "C124-triomi-api35-source-search.png",
+    "C124-triomi-before-final-episodes.png"
+  ],
+  "reports": [
+    "docs/delivery/C124_KAZUMI_KOMIKKU_RESEARCH.md",
+    "docs/ROADMAP.md",
+    "docs/CURRENT_STATUS.md"
+  ]
+}

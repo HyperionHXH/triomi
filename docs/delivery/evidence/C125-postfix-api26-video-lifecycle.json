@@ -1,0 +1,20 @@
+{
+  "serial": "emulator-5556",
+  "status": "passed",
+  "artifactSha256": "307f2778a2fdc2015fd683ef13518a6d838ad02bd4ec756e57ac7a64980efd07",
+  "source": "7sefun real Re season4 list4 episode1",
+  "priorSavedSeconds": 473,
+  "firstRealFrame": "8:11/23:40",
+  "homeResumeRealFrame": "9:52/23:40",
+  "independentForceStopRestart": true,
+  "restartRealFrame": "12:32/23:40",
+  "screenshots": [
+    "C125-postfix-api26-video-after-wait.png",
+    "C125-postfix-api26-video-home.png",
+    "C125-postfix-api26-video-cold.png"
+  ],
+  "limits": [
+    "Screenshots sampled after continuing playback; exact seek tolerance already covered by production widget regression and API35 evidence"
+  ],
+  "finalReturnedToHistory": true
+}

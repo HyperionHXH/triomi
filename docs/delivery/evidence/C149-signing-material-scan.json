@@ -1,0 +1,37 @@
+{
+  "filesScanned": 1283,
+  "filesWithCredentialOrSigningSecret": 0,
+  "artifacts": [
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C149-postfix-acceptance.apk",
+      "membersScanned": 601,
+      "membersWithSecret": 0,
+      "privateMaterialNames": 0,
+      "debugFiles": 0
+    },
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C149-postfix-android-signed.apk",
+      "membersScanned": 601,
+      "membersWithSecret": 0,
+      "privateMaterialNames": 0,
+      "debugFiles": 0
+    },
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C149-windows-release.zip",
+      "membersScanned": 50,
+      "membersWithSecret": 0,
+      "privateMaterialNames": 0,
+      "debugFiles": 0
+    },
+    {
+      "path": "D:\\noval_and_manga\\triomi\\build\\windows\\x64\\runner\\Release",
+      "membersScanned": 50,
+      "membersWithSecret": 0,
+      "privateMaterialNames": 0,
+      "debugFiles": 0
+    }
+  ],
+  "status": "passed",
+  "scope": "Exact signing secrets only; account input deliberately not read. Private/debug artifact member names also checked.",
+  "accountInputsRead": false
+}

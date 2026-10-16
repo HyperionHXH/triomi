@@ -1,0 +1,46 @@
+{
+  "round": "C145",
+  "scope": "P11 N1: disabled JS registry loading and engine ownership",
+  "status": "implemented-and-verified; packaged Android release pending",
+  "reproduction": {
+    "disabledTopLevelExceptionBeforeFix": "SourceRegistry.load returned SourceFailure for a disabled rule with a top-level load error",
+    "disableBeforeFix": "cached runtime was not disposed at the return boundary",
+    "regressionFile": "test/source_registry_engine_lifecycle_test.dart"
+  },
+  "behavior": {
+    "disabledRegistryLoad": "metadata-only ContentSource, not ready, no executable providers or probed capabilities",
+    "enable": "initialize and probe runtime capabilities",
+    "disable": "remove ownership immediately and dispose active/pending instance after persisted state change",
+    "lateInitialization": "ownership mismatch rejects publication",
+    "reenable": "fresh runtime/session",
+    "catalogInstall": "explicit install still performs executable capability validation; this is not a blanket ban on all JS validation",
+    "descriptorRetention": "dispose clears readiness/cache, retains descriptor capability metadata used by installer after candidate disposal"
+  },
+  "verification": {
+    "targetedLatest": {"passed": 15, "files": ["test/source_catalog_d86_test.dart", "test/source_registry_engine_lifecycle_test.dart"]},
+    "earlierRelatedSuite": {"passed": 38, "scope": "registry lifecycle, JsSource, first launch, real native bundled-rule behavior"},
+    "fullSuite": {"passed": 802, "failed": 0, "output": "artifact://944"},
+    "analyze": "No issues found (5.5s)",
+    "realProcessSmoke": {
+      "exitCode": 0,
+      "runtime": "production ProcessJsRuntime / real Windows OS worker",
+      "disabledTopLevelRequests": 0,
+      "httpRequests": ["/boot", "/search", "/boot", "/search"],
+      "staleSourceRejected": true,
+      "freshSourceReady": true,
+      "database": "isolated in-memory; no user profile opened",
+      "externalNetwork": "none; loopback only",
+      "visualAcceptance": false,
+      "outputFile": "D:/noval_and_manga/_tools/C145-N1-live-smoke.json",
+      "boundary": "Smoke preceded final descriptor-metadata retention correction; execution gating unchanged. Final metadata correction verified by real-native-engine asset installation and final full suite."
+    }
+  },
+  "intermediateFailures": [
+    "Throwaway smoke initially used incorrect triomi.fetch argument shape; corrected to fetch(url), then actual scenario passed.",
+    "Initial disposal cleared a shared capability set used by CatalogInstaller after candidate disposal, breaking asset install. Retained metadata while clearing readiness; final installation and full suite pass.",
+    "Event-driven widget install wait initially ended before unawaited source refresh; awaited sourcesProvider.future before teardown. Final suite clean."
+  ],
+  "cleanup": "throwaway root-entry script removed; no diagnostic logging retained",
+  "artifacts": "C144 acceptance APK, signed APK and Windows release ZIP unchanged; no Android install, account mutation or cloud upload performed",
+  "remaining": ["P11 executable source-definition backups", "N2 strong-stop file cleanup", "N3 partial-download portability", "N4 cloud media boundary", "N5 real manga/HLS cross-device acceptance", "desktop scheduling", "remaining P1-P12 acceptance and implementation list"]
+}

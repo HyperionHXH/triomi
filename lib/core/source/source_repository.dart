@@ -66,6 +66,37 @@ class SourceRepository {
     );
   }
 
+  /// Atomic replacement: an intervening edit/removal must never be overwritten.
+  Future<void> replaceRule({
+    required SourceRow? expected,
+    required String id,
+    required String name,
+    required MediaType type,
+    required String lang,
+    required String version,
+    required String ruleText,
+    required String repoUrl,
+  }) => _db.transaction(() async {
+    final current = await byId(id);
+    if (current != expected) {
+      throw StateError('来源在更新期间发生了变更，请刷新后重试');
+    }
+    if (current != null && (current.type != type || current.ruleText == null)) {
+      throw StateError('不能替换内置适配器或改变来源类型');
+    }
+    await upsert(
+      id: id,
+      name: name,
+      type: type,
+      kind: current?.kind ?? SourceKind.plugin,
+      lang: lang,
+      version: version,
+      ruleText: ruleText,
+      repoUrl: repoUrl,
+      enabled: current?.enabled ?? true,
+    );
+  });
+
   Future<void> remove(String id) {
     final statement = _db.delete(_db.sources)
       ..where((table) => table.id.equals(id));

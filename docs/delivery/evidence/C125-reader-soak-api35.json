@@ -1,0 +1,13 @@
+{
+  "elapsedMs": 312857,
+  "readerEntries": 14,
+  "pageActions": 112,
+  "sourceSuccess": 14,
+  "sourceFailures": 0,
+  "sources": [
+    "lk",
+    "lns"
+  ],
+  "status": "passed",
+  "scope": "five-minute smoke soak; not hours-long endurance"
+}

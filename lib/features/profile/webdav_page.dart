@@ -1,14 +1,20 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/backup/backup_artifact_recovery.dart';
+import '../../core/backup/backup_restore_preview.dart';
+import '../../core/backup/versioned_webdav_backup.dart';
 import '../../core/backup/webdav_client.dart';
+import '../../core/db/database_provider.dart';
+import '../../core/source/source_providers.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../library/data/library_providers.dart';
+import 'backup_restore_dialog.dart';
 import 'data/sync_providers.dart';
 
 /// WebDAV 同步：上传本机备份、拉取远端备份并合并（多设备零服务器方案）。
@@ -24,9 +30,11 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _pathController = TextEditingController();
+  final TextEditingController _fileController = TextEditingController();
 
   bool _initialized = false;
   bool _busy = false;
+  bool _includeDownloadedMedia = false;
   String? _status;
   RemoteBackupInfo? _remote;
 
@@ -38,6 +46,7 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
     _userController.text = config.username;
     _passwordController.text = config.password;
     _pathController.text = config.remotePath;
+    _fileController.text = config.fileName;
     _initialized = true;
     if (config.isConfigured) unawaited(_checkRemote());
   }
@@ -48,6 +57,7 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
     _userController.dispose();
     _passwordController.dispose();
     _pathController.dispose();
+    _fileController.dispose();
     super.dispose();
   }
 
@@ -58,6 +68,7 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
     remotePath: _pathController.text.trim().isEmpty
         ? 'triomi'
         : _pathController.text.trim(),
+    fileName: _fileController.text.trim(),
   );
 
   @override
@@ -82,7 +93,7 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
                 const SizedBox(height: AppSpacing.sm),
                 TextField(
                   controller: _urlController,
-                  enabled: _initialized,
+                  enabled: _initialized && !_busy,
                   decoration: const InputDecoration(
                     labelText: '服务器地址',
                     hintText: 'https://dav.example.com/dav/',
@@ -90,21 +101,29 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
                 ),
                 TextField(
                   controller: _userController,
-                  enabled: _initialized,
+                  enabled: _initialized && !_busy,
                   decoration: const InputDecoration(labelText: '用户名'),
                 ),
                 TextField(
                   controller: _passwordController,
-                  enabled: _initialized,
+                  enabled: _initialized && !_busy,
                   obscureText: true,
                   decoration: const InputDecoration(labelText: '密码 / 应用密码'),
                 ),
                 TextField(
                   controller: _pathController,
-                  enabled: _initialized,
+                  enabled: _initialized && !_busy,
                   decoration: const InputDecoration(
                     labelText: '远端目录',
                     hintText: 'triomi',
+                  ),
+                ),
+                TextField(
+                  controller: _fileController,
+                  enabled: _initialized && !_busy,
+                  decoration: const InputDecoration(
+                    labelText: '备份文件名',
+                    hintText: 'backup.zip',
                   ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
@@ -122,6 +141,19 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
                   ],
                 ),
               ],
+            ),
+          ),
+          _card(
+            child: SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _includeDownloadedMedia,
+              onChanged: _busy
+                  ? null
+                  : (value) => setState(() => _includeDownloadedMedia = value),
+              title: const Text('包含已完成/部分下载媒体'),
+              subtitle: const Text(
+                '默认仅备份元数据和封面；启用后云端仍不包含来源代码或 APK。',
+              ),
             ),
           ),
           _card(
@@ -199,7 +231,8 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
   }
 
   Future<void> _checkRemote() async {
-    if (!_config.isConfigured) {
+    final config = _config;
+    if (!config.isConfigured) {
       setState(() => _status = '请先填写服务器地址与用户名');
       return;
     }
@@ -208,7 +241,10 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
       _status = '正在检测远端…';
     });
     try {
-      final info = await ref.read(webDavClientProvider).stat(_config);
+      final client = ref.read(webDavClientProvider);
+      final info = await client.stat(
+        VersionedWebDavBackup(client).head(config),
+      );
       if (!mounted) return;
       setState(() {
         _remote = info;
@@ -222,68 +258,146 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
   }
 
   Future<void> _upload() async {
-    if (!_config.isConfigured) {
+    final config = _config;
+    if (!config.isConfigured) {
       setState(() => _status = '请先填写服务器地址与用户名');
       return;
     }
     setState(() {
       _busy = true;
-      _status = '正在打包并上传…';
+      _status = '正在读取远端状态…';
     });
+    String? ownedPath;
     try {
-      final backup = await ref
-          .read(backupServiceProvider)
-          .exportToBytes(includeCovers: true);
-      await ref.read(webDavClientProvider).upload(_config, backup.bytes);
-      await ref.read(webDavConfigProvider.notifier).update(_config);
+      final client = ref.read(webDavClientProvider);
+      final store = VersionedWebDavBackup(client);
+      final expected = await client.stat(store.head(config));
+      if (!mounted) return;
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(expected.exists ? '确认覆盖远端备份' : '确认首次上传远端备份'),
+          content: Text(
+            '目标：${store.head(config).fileUrl}\n'
+            '范围：元数据、设置、封面${_includeDownloadedMedia ? '、已完成/部分下载媒体' : ''}。\n'
+            '不包含来源代码、APK 或发布者信任。上传会创建不可变内容块和版本清单；远端变化会拒绝覆盖。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消（不上传）'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('确认上传'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) return;
+      setState(() => _status = '正在打包并上传（磁盘流式）…');
+      final backup = await ref.read(backupServiceProvider).exportToFile(
+        includeCovers: true,
+        includeDownloadedMedia: _includeDownloadedMedia,
+        includeSourceRules: false,
+        includeApkPackages: false,
+      );
+      ownedPath = backup.path;
+      await store.uploadFile(config, backup.path, expected);
+      await ref.read(webDavConfigProvider.notifier).update(config);
       if (!mounted) return;
       setState(() {
         _status =
-            '上传完成：${(backup.bytes.length / 1024).toStringAsFixed(1)} KB'
-            '（书架 ${backup.summary.libraryEntries} 条）';
+            '上传完成：${(backup.summary.downloadedMedia)} 个媒体，'
+            '书架 ${backup.summary.libraryEntries} 条';
       });
       await _checkRemote();
     } catch (error) {
       if (mounted) setState(() => _status = '上传失败：$error');
     } finally {
+      if (ownedPath != null) {
+        try {
+          final file = File(ownedPath);
+          if (await file.exists()) await file.delete();
+        } on FileSystemException {
+          // Keep a completed export if the platform temporarily denies cleanup.
+        }
+      }
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _download() async {
-    if (!_config.isConfigured) {
+    final config = _config;
+    if (!config.isConfigured) {
       setState(() => _status = '请先填写服务器地址与用户名');
       return;
     }
     setState(() {
       _busy = true;
-      _status = '正在拉取远端备份…';
+      _status = '正在拉取远端备份（磁盘流式校验）…';
     });
+    Directory? operation;
+    BackupArtifactLease? guard;
     try {
-      final bytes = await ref.read(webDavClientProvider).download(_config);
-      if (bytes == null) {
-        if (mounted) setState(() => _status = '远端没有备份文件，先在一台设备上上传');
-        return;
+      guard = await BackupArtifactGuard.acquireOperation();
+      final client = ref.read(webDavClientProvider);
+      operation = await Directory.systemTemp.createTemp('triomi-media-input-');
+      final destination = File('${operation.path}${Platform.pathSeparator}backup.zip');
+      final store = VersionedWebDavBackup(client);
+      final downloaded = await store.downloadToFile(config, destination);
+      if (downloaded == null) {
+        final legacy = await client.downloadToFile(
+          config,
+          destination,
+          maxBytes: VersionedWebDavBackup.maxFileSize,
+        );
+        if (legacy == null) {
+          if (mounted) setState(() => _status = '远端没有备份文件，先在一台设备上上传');
+          return;
+        }
       }
-      final summary = await ref
-          .read(backupServiceProvider)
-          .importFromBytes(
-            bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
-          );
-      // 合并写的是数据库，书架/历史是内存里的 AsyncNotifier：不刷新就要
-      // 重启才看得到（双设备验证时实测到）。
+      final preview = await previewBackupRestoreFile(
+        ref.read(databaseProvider),
+        destination.path,
+        apkFiles: await ref.read(backupServiceProvider).openApkFiles(),
+      );
+      if (!mounted) return;
+      final options = await confirmBackupRestore(
+        context,
+        preview,
+        target: config.fileUrl,
+      );
+      if (options == null || !mounted) return;
+      final summary = await ref.read(backupServiceProvider).importFromFile(
+        destination.path,
+        options: options,
+        expectedHash: preview.byteHash,
+      );
       ref.invalidate(libraryProvider);
       ref.invalidate(historyProvider);
+      ref.invalidate(sourcesProvider);
       if (!mounted) return;
       setState(() {
         _status =
             '合并完成：作品 ${summary.items}、书架 ${summary.libraryEntries}、'
-            '历史 ${summary.historyEntries}、目录 ${summary.cachedChapters}';
+            '历史 ${summary.historyEntries}、目录 ${summary.cachedChapters}、'
+            '规则 ${summary.sourceRules}（停用）';
       });
     } catch (error) {
       if (mounted) setState(() => _status = '拉取失败：$error');
     } finally {
+      try {
+        await operation?.delete(recursive: true);
+      } on FileSystemException {
+        // A failed cleanup must not replace the transfer/import result.
+      }
       if (mounted) setState(() => _busy = false);
-    }
+      try {
+        await guard?.release();
+      } catch (_) {
+        // Preserve the transfer/import result if lease release is delayed.
+      }
   }
+}
 }

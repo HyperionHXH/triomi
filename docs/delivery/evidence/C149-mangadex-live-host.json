@@ -1,0 +1,56 @@
+{
+  "recordedAt": "2026-10-16T02:03:45.569756Z",
+  "environment": "Windows host; shipped JsSource + QuickJS + real HTTPS",
+  "version": "1.0.4",
+  "listCount": 20,
+  "searchCount": 1,
+  "item": {
+    "sourceId": "mangadex",
+    "remoteId": "801513ba-a712-498c-8f57-cae55b38cc92",
+    "type": "manga",
+    "title": "烙印勇士",
+    "url": "https://api.mangadex.org/manga/801513ba-a712-498c-8f57-cae55b38cc92",
+    "coverUrl": "https://uploads.mangadex.org/covers/801513ba-a712-498c-8f57-cae55b38cc92/81e1c82d-6672-400c-8c58-4ff9bfb89031.jpg.256.jpg",
+    "author": null,
+    "description": "Guts, known as the Black Swordsman, seeks sanctuary from the demonic forces attracted to him and his woman because of a demonic mark on their necks, and also vengeance against the man who branded him as an unholy sacrifice. Aided only by his titanic strength gained from a harsh childhood lived with mercenaries, a gigantic sword, and an iron prosthetic left hand, Guts must struggle against his bleak destiny, all the while fighting with a rage that might strip him of his humanity.\n___\nWon the 6th Osamu Tezuka Cultural Prize Excellence Award in 2002.\n\nNote: Following Miura Kentarou's death in 2021, the series has been taken over by Kouji Mori, who supervises the series with art done by Studio Gaga.",
+    "tags": [],
+    "rating": null,
+    "status": "ongoing"
+  },
+  "officialChineseAliasSearches": [
+    {
+      "keyword": "烙印勇士",
+      "ids": [
+        "801513ba-a712-498c-8f57-cae55b38cc92"
+      ]
+    },
+    {
+      "keyword": "劍風傳奇",
+      "ids": [
+        "801513ba-a712-498c-8f57-cae55b38cc92"
+      ]
+    }
+  ],
+  "absentSimplifiedSpellingCount": 0,
+  "chapterCount": 211,
+  "lastChapter": "第 386 话",
+  "readableChapters": [
+    {
+      "chapter": "第 0.01 话 · 繁中",
+      "dataSaver": false,
+      "id": "b21939fc-f404-4aa3-930e-c2bfea0a7576",
+      "imageCount": 88,
+      "firstImageBytes": 1113232,
+      "firstImageUrl": "https://cmdxd98sb0x3yprd.mangadex.network/data/457ae77609224c6a717d386e61ca70db/1-827e0933c2d7eba3251fc45cc64cd39a5dca6963b2ca1fa5d2d2dd99a750c1e0.jpg"
+    },
+    {
+      "chapter": "第 0.01 话 · 繁中",
+      "dataSaver": true,
+      "id": "b21939fc-f404-4aa3-930e-c2bfea0a7576",
+      "imageCount": 88,
+      "firstImageBytes": 575519,
+      "firstImageUrl": "https://cmdxd98sb0x3yprd.mangadex.network/data-saver/457ae77609224c6a717d386e61ca70db/1-9b0f30ebe6e7a882079857ba066aa43a909a47fbd5f55235985862c3f7d595e8.jpg"
+    }
+  ],
+  "status": "passed"
+}

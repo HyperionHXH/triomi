@@ -1,194 +1,397 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+
+import 'package:crypto/crypto.dart';
 
 import '../../../core/models/media_type.dart';
 import '../../../core/models/source_exception.dart';
 import '../../../core/source/http_client.dart';
 import 'hls_playlist.dart';
 
-/// 视频离线下载：渐进式（mp4 / mkv 等）与 HLS（m3u8）两条路径。
-///
-/// 规格 4.8 的二期项；边界与「不绕过付费/加密」一致：
-/// - **只下明文流**：HLS 出现 `#EXT-X-KEY`（METHOD 非 NONE）直接报错，
-///   不下载密文、不做解密；
-/// - 只取一条线路（调用方给地址），不做多线路回退与断点续传；
-/// - 边下边写盘，不把整个视频读进内存。
-class VideoDownloader {
-  VideoDownloader({required this.http, required this.sourceId});
+class DownloadPaused implements Exception {
+  const DownloadPaused();
+}
 
+/// Real bytes only. Complete HLS fragments survive interruptions; manifests
+/// contain hashes and local filenames, never source URLs or credential headers.
+class VideoDownloader {
+  VideoDownloader({
+    required this.http,
+    required this.sourceId,
+    this.headers = const {},
+    this.shouldContinue,
+    this.concurrency = 3,
+    this.availableBytes,
+    this.cookieForUrl,
+  });
   final SourceHttpClient http;
   final String sourceId;
+  final Map<String, String> headers;
+  final bool Function()? shouldContinue;
+  final int concurrency;
+  final Future<int?> Function(String directory)? availableBytes;
+  /// Exact URL lookup preserves native cookie domain/path/secure scoping.
+  final Future<String?> Function(String url)? cookieForUrl;
+  static const fileNameStem = 'video';
 
-  /// 落盘文件名（不含扩展名）。
-  static const String fileNameStem = 'video';
-
-  /// 下载 [url] 到 [directory]，返回落盘文件的完整路径。
   Future<String> download({
     required String url,
     required String directory,
-    void Function(double progress)? onProgress,
+    FutureOr<void> Function(double progress)? onProgress,
   }) async {
+    final uri = _uri(url);
     final dir = Directory(directory);
-    if (!dir.existsSync()) dir.createSync(recursive: true);
+    await dir.create(recursive: true);
     return isHlsUrl(url)
-        ? _downloadHls(url, dir, onProgress)
-        : _downloadProgressive(url, dir, onProgress);
+        ? _hls(uri, dir, onProgress)
+        : _progressive(uri, dir, onProgress);
   }
 
-  /// HLS 判定：只看地址后缀（`index.m3u8?token=...` 也算）。
   static bool isHlsUrl(String url) {
     final path = (Uri.tryParse(url)?.path ?? url).toLowerCase();
     return path.endsWith('.m3u8') || path.endsWith('.m3u');
   }
 
-  // ---------------------------------------------------------------- 渐进式
+  Future<void> _check() async {
+    if (shouldContinue != null && !shouldContinue!()) {
+      throw const DownloadPaused();
+    }
+  }
 
-  Future<String> _downloadProgressive(
-    String url,
-    Directory directory,
-    void Function(double progress)? onProgress,
-  ) async {
-    final file = File(
-      _join(directory.path, '$fileNameStem${_extensionOf(url)}'),
-    );
+  Future<void> _space(Directory directory, SourceByteStream response) async {
+    final expected = response.contentLength;
+    if (availableBytes == null || expected == null || expected <= 0) return;
     try {
-      final received = await _writeFrom(
-        file: file,
-        url: url,
-        progressOfChunk: (received, total) =>
-            onProgress?.call(total <= 0 ? 0 : (received / total).clamp(0, 1)),
-      );
-      if (received == 0) throw _empty(sourceId);
+      final free = await availableBytes!(directory.path);
+      if (free != null && free < expected) {
+        throw _error('磁盘可用空间不足，未标记下载完成', type: SourceErrorType.permission);
+      }
     } catch (_) {
-      // 失败（含半截文件）不留垃圾：残缺视频播不了，重试会重新下。
-      await _deleteQuietly(file);
+      await response.stream.listen(null).cancel();
       rethrow;
     }
-    onProgress?.call(1);
-    return file.path;
   }
 
-  // ---------------------------------------------------------------- HLS
-
-  Future<String> _downloadHls(
-    String url,
-    Directory directory,
-    void Function(double progress)? onProgress,
-  ) async {
-    final playlist = await _resolvePlaylist(Uri.parse(url));
-    final file = File(
-      _join(
-        directory.path,
-        '$fileNameStem${playlist.isFragmentedMp4 ? '.mp4' : '.ts'}',
-      ),
-    );
-    final parts = <Uri>[?playlist.initSegment, ...playlist.segments];
-
-    var written = 0;
-    try {
-      final sink = file.openWrite();
-      try {
-        for (var index = 0; index < parts.length; index++) {
-          final stream = await http.downloadBytes(
-            parts[index].toString(),
-            sourceId: sourceId,
-          );
-          await for (final chunk in stream.stream) {
-            sink.add(chunk);
-            written += chunk.length;
-          }
-          onProgress?.call((index + 1) / parts.length);
-        }
-        await sink.flush();
-      } finally {
-        await sink.close();
-      }
-      if (written == 0) throw _empty(sourceId);
-    } catch (_) {
-      // 任一分段失败都不留半截文件，重试会整条重下。
-      await _deleteQuietly(file);
-      rethrow;
+  Uri _uri(String url, {Uri? base}) {
+    final uri = base == null ? Uri.parse(url) : base.resolve(url);
+    if (!['http', 'https'].contains(uri.scheme) ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        (base?.scheme == 'https' && uri.scheme != 'https')) {
+      throw _error('视频地址无效或发生 HTTPS 降级');
     }
-    onProgress?.call(1);
-    return file.path;
+    return uri;
   }
 
-  /// 主列表 → 挑最高带宽变体再取一次（最多两跳，防自引用）。
-  Future<HlsPlaylist> _resolvePlaylist(Uri uri, {int depth = 0}) async {
-    if (depth > 2) throw _parse(sourceId, 'HLS 播放列表层级过深（疑似自引用）');
-    final body = await _fetchText(uri.toString());
-    final playlist = HlsPlaylist.parse(body, uri, sourceId: sourceId);
-    if (!playlist.isMaster) {
-      if (playlist.encrypted) {
-        throw _parse(sourceId, '这条线路是加密流（EXT-X-KEY），不提供下载');
-      }
-      return playlist;
+  Future<Map<String, String>> _headers(Uri url, Uri origin) async {
+    final result = <String, String>{
+      for (final entry in headers.entries)
+        if (!(cookieForUrl != null && entry.key.toLowerCase() == 'cookie') &&
+            (url.origin == origin.origin ||
+                !['authorization', 'cookie'].contains(entry.key.toLowerCase())))
+          entry.key: entry.value,
+    };
+    if (cookieForUrl != null) {
+      final cookie = await cookieForUrl!(url.toString());
+      await _check();
+      if (cookie != null && cookie.isNotEmpty) result['Cookie'] = cookie;
     }
-    final variant = playlist.bestVariant;
-    if (variant == null) throw _parse(sourceId, 'HLS 主列表里没有可用码率变体');
-    return _resolvePlaylist(variant, depth: depth + 1);
+    return result;
   }
 
-  // ---------------------------------------------------------------- 工具
+  static bool _redirect(int status) =>
+      const [301, 302, 303, 307, 308].contains(status);
 
-  /// 流式写盘；返回写入的字节数。
-  ///
-  /// 响应头给了长度就必须一字不差：少字节说明连接被提前掐断，
-  /// 这时要报错（并让调用方删掉半截文件），绝不能当成功。
-  Future<int> _writeFrom({
-    required File file,
-    required String url,
-    required void Function(int received, int total) progressOfChunk,
+  Future<SourceByteStream> _bytes(
+    Uri uri,
+    Uri origin, {
+    Map<String, String> extra = const {},
   }) async {
-    final stream = await http.downloadBytes(url, sourceId: sourceId);
-    final total = stream.contentLength ?? 0;
-    final sink = file.openWrite();
-    var received = 0;
+    for (var hop = 0; hop <= 5; hop++) {
+      await _check();
+      final response = await http.downloadBytes(
+        uri.toString(),
+        sourceId: sourceId,
+        followRedirects: false,
+        headers: {...await _headers(uri, origin), ...extra},
+      );
+      if (!_redirect(response.statusCode)) {
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          await response.stream.listen(null).cancel();
+          throw _error('视频请求 HTTP ${response.statusCode}');
+        }
+        return response;
+      }
+      await response.stream.listen(null).cancel();
+      final target = response.headers['location'];
+      if (target == null || hop == 5) throw _error('视频重定向无效或次数过多');
+      uri = _uri(target, base: uri);
+    }
+    throw _error('视频重定向次数过多');
+  }
+  String _hash(String text) => sha256.convert(utf8.encode(text)).toString();
+  Future<String> _fileHash(File file) async =>
+      (await sha256.bind(file.openRead()).first).toString();
+  Future<Map<String, dynamic>> _state(File file) async {
+    if (!await file.exists()) return {};
     try {
-      await for (final chunk in stream.stream) {
+      final value = jsonDecode(await file.readAsString());
+      return value is Map<String, dynamic> ? value : {};
+    } on FormatException {
+      return {};
+    }
+  }
+
+  Future<void> _json(File file, Map<String, Object?> data) async {
+    final temporary = File('${file.path}.tmp');
+    await temporary.writeAsString(jsonEncode(data), flush: true);
+    await _replace(temporary, file);
+  }
+
+  Future<void> _replace(File temporary, File destination) async {
+    if (await destination.exists()) await destination.delete();
+    await temporary.rename(destination.path);
+  }
+
+  Future<String> _progressive(
+    Uri url,
+    Directory directory,
+    FutureOr<void> Function(double)? progress,
+  ) async {
+    final suffix = _extension(url);
+    final destination = File('${directory.path}/video$suffix');
+    final partial = File('${destination.path}.part');
+    final journal = File('${destination.path}.resume.json');
+    final state = await _state(journal);
+    final identity = _hash(url.toString());
+    var offset = await partial.exists() ? await partial.length() : 0;
+    final etag = state['etag'] as String?;
+    // Without a strong validator, resuming changed content would corrupt output.
+    if (state['identity'] != identity ||
+        etag == null ||
+        etag.startsWith('W/')) {
+      offset = 0;
+    }
+    await _check();
+    final response = await _bytes(
+      url,
+      url,
+      extra: {
+        if (offset > 0) 'Range': 'bytes=$offset-',
+        if (offset > 0) 'If-Range': etag!,
+      },
+    );
+    int? total;
+    if (response.statusCode == 206) {
+      final range = RegExp(r'^bytes (\d+)-(\d+)/(\d+)$')
+          .firstMatch(response.headers['content-range'] ?? '');
+      if (range == null || int.parse(range[1]!) != offset) {
+        await response.stream.listen(null).cancel();
+        throw _error('服务器断点响应范围不匹配');
+      }
+      total = int.parse(range[3]!);
+    } else {
+      offset = 0;
+      total = response.contentLength;
+    }
+    await _space(directory, response);
+    await _json(journal, {
+      'identity': identity,
+      'etag': response.headers['etag'],
+      'total': total,
+    });
+    final sink = partial.openWrite(
+      mode: offset == 0 ? FileMode.write : FileMode.append,
+    );
+    var received = 0;
+    var notifiedProgress = -1.0;
+    try {
+      await for (final chunk in response.stream) {
+        await _check();
         sink.add(chunk);
         received += chunk.length;
-        progressOfChunk(received, total);
+        if (progress != null) {
+          final value = total == null || total <= 0
+              ? 0.0
+              : ((offset + received) / total).clamp(0.0, .999).toDouble();
+          if (value - notifiedProgress >= .01) {
+            notifiedProgress = value;
+            await progress(value);
+          }
+        }
       }
       await sink.flush();
     } finally {
       await sink.close();
     }
-    if (total > 0 && received != total) {
-      throw SourceException(
+    if (received == 0 ||
+        (response.contentLength != null &&
+            received != response.contentLength) ||
+        (total != null && offset + received != total)) {
+      throw _error('下载不完整（收到 $received 字节）', type: SourceErrorType.network);
+    }
+    await _check();
+    await _replace(partial, destination);
+    await journal.delete();
+    if (progress != null) await progress(1);
+    return destination.path;
+  }
+
+  Future<HlsPlaylist> _playlist(Uri uri, Uri origin, Set<Uri> visited) async {
+    await _check();
+    if (visited.length >= 8 || !visited.add(uri)) throw _error('HLS 列表循环或层级过深');
+    SourceResponse? loaded;
+    for (var hop = 0; hop <= 5; hop++) {
+      await _check();
+      final response = await http.send(
+        SourceRequest(
+          url: uri.toString(),
+          headers: await _headers(uri, origin),
+          followRedirects: false,
+          checkStatus: false,
+        ),
         sourceId: sourceId,
-        type: SourceErrorType.network,
-        message: '下载不完整（收到 $received / $total 字节）',
       );
+      if (_redirect(response.statusCode)) {
+        final target = response.headers['location'];
+        if (target == null || hop == 5) throw _error('HLS 重定向无效或次数过多');
+        uri = _uri(target, base: uri);
+        continue;
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw _error('HLS 列表 HTTP ${response.statusCode}',
+            type: SourceErrorType.network);
+      }
+      loaded = response;
+      break;
     }
-    return received;
-  }
-
-  Future<String> _fetchText(String url) async {
-    final response = await http.send(
-      SourceRequest(url: url, headers: const <String, String>{'Accept': '*/*'}),
-      sourceId: sourceId,
-    );
-    return response.body;
-  }
-
-  static Future<void> _deleteQuietly(File file) async {
-    try {
-      if (file.existsSync()) await file.delete();
-    } catch (_) {
-      // 清理失败不影响错误上抛。
+    final response = loaded!;
+    final base = response.url.isEmpty ? uri : _uri(response.url, base: uri);
+    final playlist = HlsPlaylist.parse(response.body, base, sourceId: sourceId);
+    if (playlist.encrypted) throw _error('这条线路是加密流（EXT-X-KEY），不提供下载');
+    if (playlist.isMaster) {
+      if (playlist.externalRenditions) {
+        throw _error('此HLS需要外置音轨/字幕，不能下载为无声或不完整视频');
+      }
+      return _playlist(playlist.bestVariant!, origin, visited);
     }
+    if (!playlist.complete) throw _error('此HLS仍是直播/未结束列表，不能标为完整离线视频');
+    return playlist;
   }
 
-  static String _join(String directory, String name) =>
-      '$directory${Platform.pathSeparator}$name';
+  Future<String> _hls(
+    Uri url,
+    Directory directory,
+    FutureOr<void> Function(double)? progress,
+  ) async {
+    final playlist = await _playlist(url, url, <Uri>{});
+    final unique = {
+      for (final resource in playlist.resources) resource.identity: resource,
+    };
+    final names = {
+      for (final resource in unique.values)
+        resource.identity:
+            'part-${_hash(resource.identity)}${_extension(resource.uri)}',
+    };
+    final queue = unique.values.toList();
+    var next = 0, completed = 0;
+    var failed = false;
+    Future<void> worker() async {
+      try {
+        while (!failed && next < queue.length) {
+          final resource = queue[next++];
+          await _check();
+          final file = File('${directory.path}/${names[resource.identity]}');
+          final checksumFile = File('${file.path}.json');
+          final cached = await _state(checksumFile);
+          final valid =
+              await file.exists() &&
+              cached['bytes'] == await file.length() &&
+              cached['sha256'] == await _fileHash(file);
+          if (!valid) {
+            final temporary = File('${file.path}.part');
+            final response = await _bytes(
+              resource.uri,
+              url,
+              extra: {
+                if (resource.length != null)
+                  'Range':
+                      'bytes=${resource.offset}-${resource.offset! + resource.length! - 1}',
+              },
+            );
+            if (resource.length != null &&
+                (response.statusCode != 206 ||
+                    !RegExp(
+                      '^bytes ${resource.offset}-${resource.offset! + resource.length! - 1}/',
+                    ).hasMatch(response.headers['content-range'] ?? ''))) {
+              await response.stream.listen(null).cancel();
+              throw _error('HLS BYTERANGE 响应不匹配');
+            }
+            await _space(directory, response);
+            final sink = temporary.openWrite();
+            var received = 0;
+            try {
+              await for (final chunk in response.stream) {
+                await _check();
+                if (failed) throw const DownloadPaused();
+                sink.add(chunk);
+                received += chunk.length;
+              }
+              await sink.flush();
+            } finally {
+              await sink.close();
+            }
+            if (received == 0 ||
+                (response.contentLength != null &&
+                    received != response.contentLength) ||
+                (resource.length != null && received != resource.length)) {
+              throw _error('HLS 分段下载不完整', type: SourceErrorType.network);
+            }
+            await _check();
+            await _replace(temporary, file);
+            await _json(checksumFile, {
+              'bytes': received,
+              'sha256': await _fileHash(file),
+            });
+          }
+          completed++;
+          if (progress != null) {
+            await progress((completed / unique.length).clamp(0, .999));
+          }
+        }
+      } catch (_) {
+        failed = true;
+        rethrow;
+      }
+    }
 
-  /// 渐进式文件扩展名：按地址推断，认不出按 `.mp4`。
-  static String _extensionOf(String url) {
-    final path = Uri.tryParse(url)?.path ?? url;
-    final dot = path.lastIndexOf('.');
-    if (dot < 0 || dot < path.length - 6) return '.mp4';
-    final ext = path.substring(dot).toLowerCase();
-    const allowed = <String>{
+    await Future.wait(List.generate(concurrency.clamp(1, 4), (_) => worker()));
+    await _check();
+    final output = File('${directory.path}/video.m3u8');
+    final temporary = File('${output.path}.part');
+    await temporary.writeAsString(playlist.offline(names), flush: true);
+    await _replace(temporary, output);
+    if (progress != null) await progress(1);
+    return output.path;
+  }
+
+  static Future<int> occupiedBytes(String path) async {
+    final directory = Directory(path);
+    if (!await directory.exists()) return 0;
+    var bytes = 0;
+    await for (final entry in directory.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      if (entry is File) bytes += await entry.length();
+    }
+    return bytes;
+  }
+
+  static String _extension(Uri uri) {
+    final path = uri.path.toLowerCase();
+    for (final suffix in [
       '.mp4',
       '.mkv',
       '.webm',
@@ -196,20 +399,16 @@ class VideoDownloader {
       '.mov',
       '.m4v',
       '.ts',
-    };
-    return allowed.contains(ext) ? ext : '.mp4';
+      '.m4s',
+      '.aac',
+    ]) {
+      if (path.endsWith(suffix)) return suffix;
+    }
+    return '.mp4';
   }
 
-  static SourceException _empty(String sourceId) => SourceException(
-    sourceId: sourceId,
-    type: SourceErrorType.parse,
-    message: '视频内容为空（地址可能已失效或被拦截）',
-  );
-
-  static SourceException _parse(String sourceId, String message) =>
-      SourceException(
-        sourceId: sourceId,
-        type: SourceErrorType.parse,
-        message: message,
-      );
+  SourceException _error(
+    String text, {
+    SourceErrorType type = SourceErrorType.parse,
+  }) => SourceException(sourceId: sourceId, type: type, message: text);
 }

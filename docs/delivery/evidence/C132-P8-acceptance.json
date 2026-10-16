@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-14",
+  "status": "partial",
+  "apk": {
+    "path": "D:/noval_and_manga/_tools/Triomi-C132-P8-verified-acceptance.apk",
+    "bytes": 126159164,
+    "sha256": "efd0fd727f5a73b1aad856c035a6a18fff5fd362a92fefc1ca126b511560bbeb",
+    "certificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6",
+    "devicesInstalledAndHashMatched": ["emulator-5554", "emulator-5556"]
+  },
+  "verification": {
+    "fullSuitePassed": 773,
+    "analyze": "No issues found",
+    "updateAndMigrationTargetedPassed": 13,
+    "downloadSchedulerAndSourceLifecycleAfterHostPlatformFixPassed": 10,
+    "priorFailureRetained": "766 passed / 7 failed: added native lease was incorrectly gated by defaultTargetPlatform in non-Android test hosts; fixed to Platform.isAndroid, not suppressed"
+  },
+  "actualApi35": {
+    "sources": ["MangaDex public API", "MangaDex Mihon zh-Hans APK"],
+    "networkConstraint": "Both deferred when current network did not satisfy non-metered constraint; both success after explicitly allowing current network",
+    "verifiedApkForeground": "2 / 2 success, zero new chapters",
+    "jobId": 7401,
+    "job": "MangaUpdateJobService",
+    "verifiedApkBackground": {
+      "before": [{"source": "public", "checkedAt": 1791946393, "generation": 3}, {"source": "APK", "checkedAt": 1791946393, "generation": 4}],
+      "after": [{"source": "public", "checkedAt": 1791946412, "generation": 4}, {"source": "APK", "checkedAt": 1791946412, "generation": 5}],
+      "bothStatus": "success",
+      "added": 0,
+      "schedulerFinish": "app called jobFinished"
+    },
+    "previousFinalApkForegroundBackgroundMutualExclusion": "已有更新任务在执行，请稍后重试",
+    "previousFinalApkBackgroundCancellation": "both running -> queued; generation and checkedAt unchanged",
+    "v6ToV7OnOriginalDatabase": {"userVersion": 7, "chapters": 4013, "histories": 19}
+  },
+  "api26": "Original API26 installed/hash matched and actual update page opened; no manga collection in that original shelf, not counted as catalog/background acceptance",
+  "implementation": [
+    "Persistent per-work queue and errors; current library/category/source/completed filters also apply to recovered rows",
+    "At most three source groups; one to three lanes per source",
+    "Current enabled registry read before request and commit; empty/conflicting catalogs rejected without clearing existing data",
+    "Cancellation rejects late catalogs; network/battery constraints checked before request and commit",
+    "Android process-owner leases for update and download engines; desktop file lock for updates",
+    "Separate persisted 12-hour JobScheduler task, real Mihon/JS host bridges and durable auto-download queue",
+    "Notification reservation uses integer generation; no repeated notification after container reopen",
+    "Optional streamed cover <=2MiB, failed cover does not prevent text notification; notification permission is never bypassed",
+    "Auto-download failure does not undo successful directory; internal download IDs excluded from backup"
+  ],
+  "limitations": [
+    "No actual new chapters during public-source smoke; no real cover notification or auto-download claim",
+    "Notification deduplication consumer regression passed; actual new-event notification still pending",
+    "System reboot/battery-low and full API26/signed/Windows journeys pending",
+    "True pixel visual review unavailable; AX and database evidence are not visual acceptance",
+    "Original C125 signed and Windows release artifacts remain unchanged"
+  ]
+}

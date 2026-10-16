@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../../core/models/chapter.dart';
 import '../../../core/models/media_item.dart';
@@ -11,16 +12,20 @@ import '../../../core/platform/platform_channel.dart';
 import '../../../core/source/source_api.dart';
 import '../../../core/source/source_providers.dart';
 import '../../../core/storage/preferences.dart';
+import '../../../core/storage/privacy.dart';
 import '../../../core/text/zh_converter.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/widgets/image_viewer.dart';
+import '../../../core/widgets/source_network_image.dart';
 import '../../downloads/data/download_providers.dart';
 import '../../library/data/library_providers.dart';
 import '../../library/data/library_repository.dart';
+import '../../settings/privacy_lock_controller.dart';
 import '../../tracking/data/tracking_providers.dart';
 import '../data/lk/lk_source.dart';
 import '../tts/flutter_tts_engine.dart';
 import '../tts/tts_controller.dart';
+import 'chapter_font.dart';
 import 'novel_blocks.dart';
 import 'novel_reader_settings.dart';
 import 'user_font_store.dart';
@@ -72,14 +77,21 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   ({String html, String text})? _rawContent;
 
   int _pageIndex = 0;
-  final ScrollController _scrollController = ScrollController();
-  final List<GlobalKey> _blockKeys = <GlobalKey>[];
+  final ItemScrollController _itemScroll = ItemScrollController();
+  final ItemPositionsListener _positions = ItemPositionsListener.create();
+  int _requestSeq = 0;
+  double? _resumePosition;
+  bool _restoring = true;
+  bool _disposing = false;
+  Future<void> _saveQueue = Future<void>.value();
 
   bool _chromeVisible = true;
   Timer? _saveDebounce;
   bool _keepScreenOn = false;
   TtsController? _tts;
   bool _ttsBusy = false;
+  late final bool _incognito;
+  late final PrivacyLockController _privacyLock;
 
   MediaItem get _item => widget.args.item;
   List<Chapter> get _chapters => widget.args.chapters;
@@ -90,6 +102,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _libraryRepository = ref.read(libraryRepositoryProvider);
+    _privacyLock = ref.read(privacyLockProvider);
+    _privacyLock.addListener(_onPrivacyLockChanged);
+    _incognito =
+        ref.read(preferencesProvider).get<bool>(incognitoPreferenceKey) ??
+        false;
     _trackingReporter = ref.read(progressReporterProvider);
     _chapterIndex = widget.args.initialIndex.clamp(
       0,
@@ -110,6 +127,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   @override
   void dispose() {
+    _disposing = true;
+    _privacyLock.removeListener(_onPrivacyLockChanged);
     WidgetsBinding.instance.removeObserver(this);
     _releaseTts();
     _saveDebounce?.cancel();
@@ -119,16 +138,22 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       unawaited(platformChannel.setKeepScreenOn(false));
     }
     unawaited(SystemChrome.setPreferredOrientations(<DeviceOrientation>[]));
-    _scrollController.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) {
+      unawaited(_persistProgress(commit: true));
       _releaseTts();
       if (mounted) setState(() {});
     }
+  }
+
+  void _onPrivacyLockChanged() {
+    if (!_privacyLock.blocksAccess) return;
+    _releaseTts();
+    if (mounted) setState(() {});
   }
 
   void _releaseTts() {
@@ -138,7 +163,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   void _onTtsChanged() {
-    if (!mounted) return;
+    if (!mounted || _privacyLock.blocksAccess) return;
     final anchor = _tts?.progress?.anchor;
     if (anchor != null && _settings.mode == NovelReadingMode.paged) {
       final index = _pages.indexWhere(
@@ -154,22 +179,19 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   void _scrollToBlock(int blockIndex) {
-    if (blockIndex < 0 || blockIndex >= _blockKeys.length) return;
+    if (blockIndex < 0 || blockIndex >= _blocks.length) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final target = _blockKeys[blockIndex].currentContext;
-      if (target == null) return;
-      Scrollable.ensureVisible(
-        target,
-        alignment: 0.18,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-      );
+      if (!mounted || _privacyLock.blocksAccess) return;
+      if (_itemScroll.isAttached) _itemScroll.jumpTo(index: blockIndex);
     });
   }
 
   Future<void> _toggleTts() async {
-    if (_ttsBusy || _locked || _loading || _error != null || _blocks.isEmpty) {
+    if (_privacyLock.blocksAccess || _ttsBusy || _locked || _loading || _error != null || _blocks.isEmpty) {
+      return;
+    }
+    if (_sourceFont != null) {
+      _toast('本章使用站点专用字形，系统语音无法可靠朗读');
       return;
     }
     setState(() => _ttsBusy = true);
@@ -188,6 +210,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           rate: _settings.ttsRate,
           voice: _settings.ttsVoice,
         );
+        if (!mounted || _privacyLock.blocksAccess) {
+          await engine.stop();
+          return;
+        }
         final controller = TtsController(engine: engine, blocks: _blocks);
         _tts = controller;
         controller.addListener(_onTtsChanged);
@@ -244,11 +270,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   Future<void> _load() async {
+    final seq = ++_requestSeq;
+    final chapter = _chapter;
+    _saveDebounce?.cancel();
+    _restoring = true;
+    _resumePosition = null;
     _releaseTts();
     setState(() {
       _loading = true;
       _error = null;
-      _locked = _chapter.locked;
+      _locked = chapter.locked;
       _blocks = const <ReaderBlock>[];
       _pages = const <ReaderPage>[];
       _layoutKey = null;
@@ -264,28 +295,51 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     try {
       // 离线优先：下载过的章节直接读本地正文（不依赖来源可用）。
       final downloadRepository = ref.read(downloadRepositoryProvider);
-      final local = await downloadRepository.localChapterContent(
-        _chapter.sourceId,
-        _chapter.remoteId,
+      final saved = await _libraryRepository.chapterPositionOf(
+        _item.sourceId,
+        _item.remoteId,
+        chapter.remoteId,
       );
+      if (!mounted || seq != _requestSeq) return;
+      final local = await downloadRepository.localChapterContent(
+        chapter.sourceId,
+        chapter.remoteId,
+      );
+      if (!mounted || seq != _requestSeq) return;
       final ChapterContent content;
       if (local != null && !local.isEmpty) {
         content = local;
       } else {
         final snapshot = await ref.read(sourcesProvider.future);
+        if (!mounted || seq != _requestSeq) return;
         final entry = snapshot.entries
             .where((candidate) => candidate.descriptor.id == _item.sourceId)
             .firstOrNull;
-        final provider = entry?.source;
+        if (entry == null || !entry.enabled) {
+          throw StateError('来源已停用或移除，本章没有本地缓存');
+        }
+        final provider = entry.source;
         if (provider is! ContentProvider) {
           throw StateError('来源没有提供正文能力');
         }
-        content = await provider.content(_chapter);
+        content = await provider.content(chapter);
       }
+      if (!mounted || seq != _requestSeq) return;
       final raw = (html: content.html ?? '', text: content.text ?? '');
+      if (raw.html.trim().isEmpty && raw.text.trim().isEmpty) {
+        throw StateError('本章没有取到正文，请重试或切换来源');
+      }
       _rawContent = raw;
-      _sourceFont = content.fontFamily;
+      if (content.fontFamily != null &&
+          content.fontData == null &&
+          local != null) {
+        throw StateError('旧下载缺少章节专用字体，请联网重新下载后阅读');
+      }
+      _sourceFont = content.fontData == null
+          ? content.fontFamily
+          : await ChapterFont.register(content.fontData!);
       _zh ??= await ZhConverter.instance();
+      if (!mounted || seq != _requestSeq) return;
       final blocks = ReaderContentParser.parse(
         bodyHtml: _localized(raw.html),
         bodyText: _localized(raw.text),
@@ -293,13 +347,17 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       if (mounted) {
         setState(() {
           _blocks = blocks;
+          _resumePosition = saved ?? 0;
           _loading = false;
         });
       }
       // 章节打开即记历史；进度回传（登录来源）尽力而为。
-      unawaited(_persistProgress(commit: true));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || seq != _requestSeq) return;
+        _finishRestore(seq);
+      });
     } catch (error) {
-      if (mounted) {
+      if (mounted && seq == _requestSeq) {
         setState(() {
           _loading = false;
           _error = '$error';
@@ -310,6 +368,35 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   /// 正文样式：来源要求专用字体时（轻书架 B7）覆盖用户选的字体——
   /// 站点替换过字形，用别的字体渲染出来是乱码。
+  void _finishRestore(int seq) {
+    if (!mounted || seq != _requestSeq) return;
+    if (_settings.mode == NovelReadingMode.scroll &&
+        _resumePosition != null &&
+        _blocks.isNotEmpty) {
+      final saved = _resumePosition!;
+      final index = saved.floor().clamp(0, _blocks.length - 1);
+      final item = _positions.itemPositions.value
+          .where((p) => p.index == index)
+          .firstOrNull;
+      if (_itemScroll.isAttached && item != null) {
+        final fraction = (saved - saved.floor()).clamp(0.0, 0.999999);
+        _itemScroll.jumpTo(
+          index: index,
+          alignment: -fraction * (item.itemTrailingEdge - item.itemLeadingEdge),
+        );
+      }
+      _resumePosition = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || seq != _requestSeq) return;
+        _restoring = false;
+        unawaited(_persistProgress(commit: false));
+      });
+    } else {
+      _restoring = false;
+      unawaited(_persistProgress(commit: true));
+    }
+  }
+
   TextStyle _paragraphStyle(BuildContext context) =>
       _withSourceFont(_settings.paragraphStyle(context));
 
@@ -345,61 +432,105 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   // ---------------------------------------------------------------- 进度
 
   void _scheduleSave() {
+    unawaited(_persistProgress(commit: false));
     _saveDebounce?.cancel();
     _saveDebounce = Timer(const Duration(seconds: 3), () {
       unawaited(_persistProgress(commit: false));
     });
   }
 
-  Future<void> _persistProgress({required bool commit}) async {
-    if (_loading || _error != null || _locked) return;
-    final percent = _percent.clamp(0, 100);
-    try {
-      await _libraryRepository.updateProgress(
-        sourceId: _item.sourceId,
-        remoteId: _item.remoteId,
-        chapterNumber: _chapter.number ?? (_chapter.sortIndex + 1).toDouble(),
-      );
-      await _libraryRepository.recordHistory(
-        sourceId: _item.sourceId,
-        remoteId: _item.remoteId,
-        chapter: _chapter,
-        position: _progressParagraph.toDouble(),
-      );
-      // 进度上报（追踪服务）：尽力而为，失败不影响阅读。
-      unawaited(
-        _trackingReporter?.report(
-              sourceId: _item.sourceId,
-              remoteId: _item.remoteId,
-              chapterNumber:
-                  _chapter.number ?? (_chapter.sortIndex + 1).toDouble(),
-              type: MediaType.novel,
-            ) ??
-            Future<void>.value(),
-      );
-      if (mounted) {
-        ref.invalidate(libraryProvider);
-        ref.invalidate(historyProvider);
-      }
-      // 登录来源（如轻之国度）同步进度到站点。
-      if (commit) {
-        final snapshot = await ref.read(sourcesProvider.future);
-        final entry = snapshot.entries
-            .where((candidate) => candidate.descriptor.id == _item.sourceId)
-            .firstOrNull;
-        final provider = entry?.source;
-        if (provider is LkSource && provider.isLoggedIn) {
-          await provider.syncProgress(
-            item: _item,
-            chapter: _chapter,
-            paragraphIndex: _progressParagraph,
-            percent: percent,
-          );
-        }
-      }
-    } catch (_) {
-      // 进度写失败不打断阅读。
+  Future<void> _persistProgress({required bool commit}) {
+    if (_incognito) return Future<void>.value();
+    if (_loading ||
+        _error != null ||
+        _locked ||
+        _restoring ||
+        _blocks.isEmpty) {
+      return Future<void>.value();
     }
+    final percent = _percent.clamp(0, 100);
+    final chapter = _chapter;
+    final position = _readingPosition;
+    final paragraph = _progressParagraph;
+    final sourceFuture = commit && mounted && !_disposing
+        ? ref.read(sourcesProvider.future)
+        : null;
+    return _saveQueue = _saveQueue.then((_) async {
+      try {
+        await _libraryRepository.updateProgress(
+          sourceId: _item.sourceId,
+          remoteId: _item.remoteId,
+          chapterNumber: chapter.number ?? (chapter.sortIndex + 1).toDouble(),
+        );
+        await _libraryRepository.recordHistory(
+          sourceId: _item.sourceId,
+          remoteId: _item.remoteId,
+          chapter: chapter,
+          position: position,
+        );
+        // 进度上报（追踪服务）：尽力而为，失败不影响阅读。
+        unawaited(
+          _trackingReporter?.report(
+                sourceId: _item.sourceId,
+                remoteId: _item.remoteId,
+                chapterNumber:
+                    chapter.number ?? (chapter.sortIndex + 1).toDouble(),
+                type: MediaType.novel,
+              ) ??
+              Future<void>.value(),
+        );
+        if (mounted) {
+          ref.invalidate(libraryProvider);
+          ref.invalidate(historyProvider);
+        }
+        // 登录来源（如轻之国度）同步进度到站点。
+        if (sourceFuture != null) {
+          unawaited(() async {
+            try {
+              final snapshot = await sourceFuture;
+              final provider = snapshot.entries
+                  .where((e) => e.descriptor.id == _item.sourceId)
+                  .firstOrNull
+                  ?.source;
+              if (provider is LkSource && provider.isLoggedIn) {
+                await provider.syncProgress(
+                  item: _item,
+                  chapter: chapter,
+                  paragraphIndex: paragraph,
+                  percent: percent,
+                );
+              }
+            } catch (_) {
+              /* Remote sync must not block local persistence. */
+            }
+          }());
+        }
+      } catch (_) {
+        // 进度写失败不打断阅读。
+      }
+    });
+  }
+
+  double get _readingPosition {
+    if (_settings.mode == NovelReadingMode.scroll) {
+      final visible =
+          _positions.itemPositions.value
+              .where((p) => p.itemTrailingEdge > 0 && p.itemLeadingEdge < 1)
+              .toList()
+            ..sort((a, b) => a.index.compareTo(b.index));
+      if (visible.isEmpty) return _resumePosition ?? 0;
+      final p = visible.first;
+      final height = p.itemTrailingEdge - p.itemLeadingEdge;
+      final fraction = height <= 0
+          ? 0.0
+          : (-p.itemLeadingEdge / height).clamp(0.0, 0.999999);
+      return p.index + fraction;
+    }
+    if (_pages.isEmpty) return _resumePosition ?? 0;
+    final page = _pages[_pageIndex.clamp(0, _pages.length - 1)];
+    return page.elements.isEmpty
+        ? 0
+        : readerElementPosition(page.elements.first, _blocks);
   }
 
   /// 当前读到第几个排版块（进度回传用段落下标）。
@@ -408,16 +539,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       final anchor = _tts?.progress?.anchor;
       if (anchor != null) return anchor;
     }
+    if (_blocks.isEmpty) return 0;
     if (_settings.mode == NovelReadingMode.scroll) {
-      if (!_scrollController.hasClients) return 0;
-      final position = _scrollController.offset;
-      final viewport = _scrollController.position.viewportDimension;
-      final total = _scrollController.position.maxScrollExtent + viewport;
-      if (total <= 0) return 0;
-      return (_blocks.length * (position / total)).floor().clamp(
-        0,
-        _blocks.length - 1,
-      );
+      return _readingPosition.floor().clamp(0, _blocks.length - 1);
     }
     if (_pages.isEmpty) return 0;
     final page = _pages[_pageIndex.clamp(0, _pages.length - 1)];
@@ -426,11 +550,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   int get _percent {
     if (_settings.mode == NovelReadingMode.scroll) {
-      if (!_scrollController.hasClients) return 0;
-      final viewport = _scrollController.position.viewportDimension;
-      final total = _scrollController.position.maxScrollExtent + viewport;
-      if (total <= 0) return 0;
-      return (_scrollController.offset / total * 100).round().clamp(0, 100);
+      return _blocks.isEmpty
+          ? 0
+          : (_readingPosition / _blocks.length * 100).round().clamp(0, 100);
     }
     if (_pages.isEmpty) return 100;
     return ((_pageIndex + 1) / _pages.length * 100).round().clamp(0, 100);
@@ -459,6 +581,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       _toast(delta > 0 ? '已经是最后一章' : '已经是第一章');
       return;
     }
+    await _persistProgress(commit: false);
+    if (!mounted) return;
     setState(() => _chapterIndex = target);
     await _load();
   }
@@ -528,11 +652,22 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       builder: (context) => _SettingsSheet(settings: _settings),
     );
     if (updated == null || updated == _settings) return;
+    final anchor = _readingPosition;
+    final modeChanged = updated.mode != _settings.mode;
     final zhChanged = updated.zhMode != _settings.zhMode;
     if (updated.orientation != _settings.orientation) {
       unawaited(_applyOrientation(updated.orientation));
     }
-    setState(() => _settings = updated);
+    setState(() {
+      _resumePosition = anchor;
+      _settings = updated;
+      _layoutKey = null;
+      _restoring = true;
+    });
+    if (modeChanged && updated.mode == NovelReadingMode.scroll) _pageIndex = 0;
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _finishRestore(_requestSeq),
+    );
     // 先重转换再落盘：设置变更立即生效，持久化是尽力而为的收尾。
     if (zhChanged) await _reconvert();
     unawaited(updated.save(ref.read(preferencesProvider)));
@@ -575,6 +710,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         onUnlock: _unlock,
       );
     }
+    if (_blocks.isEmpty) {
+      return const Center(child: Text('本章没有内容'));
+    }
     if (_settings.mode == NovelReadingMode.scroll) {
       return _buildScrollView();
     }
@@ -600,6 +738,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             '${_sourceFont ?? 'default'}|'
             '${contentWidth.round()}x${contentHeight.round()}';
         if (_layoutKey != layoutKey) {
+          final anchor = _resumePosition ?? _readingPosition;
           _layoutKey = layoutKey;
           _pages = paginateReaderBlocks(
             _blocks,
@@ -611,6 +750,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               spacing: _settings.fontSize * 0.8,
             ),
           );
+          _pageIndex = readerPageForPosition(_pages, _blocks, anchor);
+          _resumePosition = null;
           if (_pageIndex >= _pages.length) {
             _pageIndex = _pages.isEmpty ? 0 : _pages.length - 1;
           }
@@ -669,12 +810,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   Widget _buildScrollView() {
-    while (_blockKeys.length < _blocks.length) {
-      _blockKeys.add(GlobalKey());
-    }
-    if (_blockKeys.length > _blocks.length) {
-      _blockKeys.removeRange(_blocks.length, _blockKeys.length);
-    }
     return Stack(
       children: <Widget>[
         NotificationListener<ScrollNotification>(
@@ -682,8 +817,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             if (notification is ScrollEndNotification) _scheduleSave();
             return false;
           },
-          child: ListView.separated(
-            controller: _scrollController,
+          child: ScrollablePositionedList.separated(
+            key: ValueKey('$_chapterIndex:$_requestSeq'),
+            itemScrollController: _itemScroll,
+            itemPositionsListener: _positions,
+            initialScrollIndex: (_resumePosition ?? 0).floor().clamp(
+              0,
+              _blocks.length - 1,
+            ),
             padding: EdgeInsets.symmetric(
               horizontal: _settings.pageMargin + 8,
               vertical: _settings.pageMargin,
@@ -691,14 +832,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             itemCount: _blocks.length,
             separatorBuilder: (context, index) =>
                 SizedBox(height: _settings.fontSize * 0.5),
-            itemBuilder: (context, index) => KeyedSubtree(
-              key: _blockKeys[index],
-              child: _BlockView(
-                block: _blocks[index],
-                settings: _settings,
-                sourceId: _item.sourceId,
-                sourceFont: _sourceFont,
-              ),
+            itemBuilder: (context, index) => _BlockView(
+              block: _blocks[index],
+              settings: _settings,
+              sourceId: _item.sourceId,
+              sourceFont: _sourceFont,
             ),
           ),
         ),
@@ -812,8 +950,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                             0,
                             double.infinity,
                           ),
-                          onChanged: (value) =>
-                              setState(() => _pageIndex = value.round()),
+                          onChanged: (value) {
+                            setState(() => _pageIndex = value.round());
+                            _scheduleSave();
+                          },
                         ),
                       ),
                     Row(
@@ -860,7 +1000,7 @@ TextStyle readerTextStyle(TextStyle base, String? sourceFont) =>
         .copyWith(inherit: false);
 
 /// 一页内容：文本片段与插图的纵向排布。
-class _PageContent extends StatelessWidget {
+class _PageContent extends ConsumerWidget {
   const _PageContent({
     required this.page,
     required this.settings,
@@ -877,7 +1017,8 @@ class _PageContent extends StatelessWidget {
   TextStyle _style(TextStyle base) => readerTextStyle(base, sourceFont);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final http = ref.watch(sourceHttpClientProvider);
     final children = <Widget>[];
     for (var index = 0; index < page.elements.length; index++) {
       final element = page.elements[index];
@@ -913,8 +1054,12 @@ class _PageContent extends StatelessWidget {
                 child: SizedBox(
                   width: double.infinity,
                   height: heightPx,
-                  child: Image.network(
-                    block.url,
+                  child: Image(
+                    image: SourceNetworkImage(
+                      block.url,
+                      http: http,
+                      sourceId: sourceId,
+                    ),
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stack) => Container(
                       color: settings.theme.background.withValues(alpha: 0.5),
@@ -959,7 +1104,7 @@ class _PageContent extends StatelessWidget {
 }
 
 /// 滚动模式的一个排版块。
-class _BlockView extends StatelessWidget {
+class _BlockView extends ConsumerWidget {
   const _BlockView({
     required this.block,
     required this.settings,
@@ -977,7 +1122,7 @@ class _BlockView extends StatelessWidget {
   TextStyle _style(TextStyle base) => readerTextStyle(base, sourceFont);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return switch (block) {
       HeadingBlock(:final text) => Text(
         text,
@@ -995,8 +1140,12 @@ class _BlockView extends StatelessWidget {
           ),
           child: AspectRatio(
             aspectRatio: aspectRatio,
-            child: Image.network(
-              url,
+            child: Image(
+              image: SourceNetworkImage(
+                url,
+                http: ref.watch(sourceHttpClientProvider),
+                sourceId: sourceId,
+              ),
               fit: BoxFit.cover,
               errorBuilder: (context, error, stack) => Container(
                 color: settings.theme.background.withValues(alpha: 0.5),
@@ -1339,7 +1488,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   }
 }
 
-
 /// TTS 语音选项小面板（D48）：语速三档 + 系统音色（仅列引擎返回的可用项）。
 ///
 /// 变更即通过 [onSettingsChanged] 提交（阅读器负责停止当前朗读并落盘）。
@@ -1389,10 +1537,7 @@ class _TtsSettingsSheet extends StatelessWidget {
             Text('音色', style: theme.textTheme.titleSmall),
             const SizedBox(height: AppSpacing.xs),
             if (voices.isEmpty)
-              Text(
-                '系统未返回可用音色，将使用系统默认音色',
-                style: theme.textTheme.bodySmall,
-              )
+              Text('系统未返回可用音色，将使用系统默认音色', style: theme.textTheme.bodySmall)
             else
               Builder(
                 builder: (context) {

@@ -9,9 +9,21 @@ import 'http_client.dart';
 import 'js/js_runtime.dart';
 import 'js/js_source.dart';
 import 'js/runtime/js_runtime_factory.dart';
+import 'kazumi_source.dart';
+import 'mihon_source.dart';
 import 'rule_schema.dart';
 import 'source_api.dart';
 import 'source_repository.dart';
+
+/// Fixture browsing is explicit opt-in, including on debug APKs handed to users.
+const developmentSourcesEnabled =
+    kDebugMode && bool.fromEnvironment('TRIOMI_DEV_FIXTURES');
+const developmentSourceIds = <String>{
+  'local-fixture',
+  'local-fixture-js',
+  'local-fixture-anime',
+  'local-fixture-novel',
+};
 
 /// 一个可用的来源：描述信息 + 执行实现。
 class SourceEntry {
@@ -43,11 +55,17 @@ class SourceFailure {
     required this.id,
     required this.name,
     required this.message,
+    this.lang = '',
+    this.type,
+    this.nsfw,
   });
 
   final String id;
   final String name;
   final String message;
+  final String lang;
+  final MediaType? type;
+  final bool? nsfw;
 }
 
 /// 一次注册表加载的完整结果。
@@ -59,7 +77,10 @@ class SourceRegistrySnapshot {
 
   List<SourceEntry> get enabledEntries => <SourceEntry>[
     for (final entry in entries)
-      if (entry.enabled) entry,
+      if (entry.enabled &&
+          (developmentSourcesEnabled ||
+              !developmentSourceIds.contains(entry.descriptor.id)))
+        entry,
   ];
 
   /// 具备某能力的已启用来源。
@@ -67,6 +88,17 @@ class SourceRegistrySnapshot {
     for (final entry in enabledEntries)
       if (entry.supports(capability)) entry,
   ];
+}
+
+/// Disabled scripts expose metadata only; discovering capabilities executes JS.
+class _DisabledScriptSource implements ContentSource {
+  const _DisabledScriptSource(this.descriptor);
+
+  @override
+  final SourceDescriptor descriptor;
+
+  @override
+  bool get isReady => false;
 }
 
 /// 来源注册表：负责「从数据库 / 内置资产里把规则变成可用来源」。
@@ -80,7 +112,10 @@ class SourceRegistry {
     required this.http,
     this.builtinAdapters = const <String, ContentSource>{},
     this.defaultDisabledBuiltins = const <String>{},
+    this.mihonAdapters = const <MihonSource>[],
+    this.metadataFailures = const <SourceFailure>[],
     this.jsRuntimeFactory,
+    this.jsContentOptions,
     AssetBundle? assetBundle,
   }) : _bundle = assetBundle ?? rootBundle;
 
@@ -97,11 +132,64 @@ class SourceRegistry {
   /// 用户可在来源管理页手动启用，联调通过后从该集合移除。
   final Set<String> defaultDisabledBuiltins;
 
+  /// Executable Mihon sources restored from the Android host status store.
+  /// They are deliberately kept outside the rule database because an APK is
+  /// not a JSON rule and its enabled state belongs to the native host.
+  final List<MihonSource> mihonAdapters;
+  final List<SourceFailure> metadataFailures;
+
   /// JS 规则用的引擎工厂；为 null 时用 flutter_js（Web 上不可用）。
   /// 测试注入替身走这里。
   final JsRuntime Function()? jsRuntimeFactory;
 
+  final Map<String, Object?> Function(String sourceId)? jsContentOptions;
+
   final AssetBundle _bundle;
+  final Map<String, ({String text, JsSource instance, Future<JsSource> source})>
+  _scripts = {};
+  bool _disposed = false;
+
+  /// Own JS engines for the lifetime of this registry. Refreshes reuse an
+  /// unchanged script; replacements/removals cancel only the affected engine.
+  void dispose() {
+    _disposed = true;
+    for (final cached in _scripts.values) {
+      cached.instance.dispose();
+    }
+    _scripts.clear();
+  }
+
+  Future<JsSource> _script(String id, String text, SourceRule rule) {
+    if (_disposed) throw StateError('来源注册表已关闭');
+    final previous = _scripts[id];
+    if (previous?.text == text) return previous!.source;
+    previous?.instance.dispose();
+    final source = JsSource(
+      rule: rule,
+      runtime: (jsRuntimeFactory ?? createFlutterJsRuntime)(),
+      http: http,
+      contentOptions: jsContentOptions == null
+          ? null
+          : () => jsContentOptions!(id),
+    );
+    late final Future<JsSource> future;
+    future = () async {
+      try {
+        await source.initialize();
+        if (_disposed) throw StateError('来源注册表已关闭');
+        if (!identical(_scripts[id]?.source, future)) {
+          throw StateError('来源已停用、移除或替换');
+        }
+        return source;
+      } catch (_) {
+        if (identical(_scripts[id]?.source, future)) _scripts.remove(id);
+        source.dispose();
+        rethrow;
+      }
+    }();
+    _scripts[id] = (text: text, instance: source, source: future);
+    return future;
+  }
 
   /// 随包分发的示例规则。用户删掉后不会自动复活（[seedBuiltins] 只补没记录过的）。
   ///
@@ -109,7 +197,12 @@ class SourceRegistry {
   /// 用它指向宿主上的 `tools/dev_fixture_server.py` 就能验证规则引擎全链路。
   static List<String> get builtinRuleAssets => <String>[
     'assets/rules/bangumi-anime.json',
-    if (kDebugMode) ...<String>[
+    'assets/rules/age-anime-js.json',
+    'assets/rules/kazumi-7sefun.json',
+    'assets/rules/kazumi-MXdm.json',
+    'assets/rules/kazumi-DM84.json',
+    'assets/rules/mangadex-api-js.json',
+    if (developmentSourcesEnabled) ...<String>[
       'assets/rules/local-fixture.json',
       'assets/rules/local-fixture-anime.json',
       'assets/rules/local-fixture-novel.json',
@@ -120,8 +213,25 @@ class SourceRegistry {
 
   Future<SourceRegistrySnapshot> load() async {
     final rows = await repository.all();
+    if (_disposed) throw StateError('来源注册表已关闭');
+    final ids = <String>{};
+    for (final row in rows) {
+      if (!row.enabled) continue;
+      final text = row.ruleText;
+      if (text == null) continue;
+      try {
+        if (KazumiRule.recognizes(text)) continue;
+        if (SourceRule.parseJson(text).isScript) ids.add(row.id);
+      } on RuleFormatException {
+        // Invalid/replaced rules no longer own their previous JS engine.
+      }
+    }
+    for (final removed
+        in _scripts.keys.where((id) => !ids.contains(id)).toList()) {
+      _scripts.remove(removed)!.instance.dispose();
+    }
     final entries = <SourceEntry>[];
-    final failures = <SourceFailure>[];
+    final failures = <SourceFailure>[...metadataFailures];
 
     for (final row in rows) {
       final text = row.ruleText;
@@ -141,6 +251,8 @@ class SourceRegistry {
           SourceFailure(
             id: row.id,
             name: row.name,
+            lang: row.lang,
+            type: row.type,
             // 这句话会显示在来源管理页（前缀「规则无法加载：」）。旧文案是
             // 「内置适配器尚未实现（M4 落地 LK / LNS）」——M4 早已落地，留着只会
             // 误导用户，这里改说真实原因：这行记录既没有规则文本，也不是内置来源。
@@ -149,16 +261,35 @@ class SourceRegistry {
         );
         continue;
       }
+      SourceDescriptor? metadata;
       try {
-        final rule = SourceRule.parseJson(text);
-        if (rule.isScript) {
-          // JS 规则：加载脚本 + 探测能力，任一步失败都记成可见的失败项。
-          final source = JsSource(
-            rule: rule,
-            runtime: (jsRuntimeFactory ?? createFlutterJsRuntime)(),
-            http: http,
+        if (KazumiRule.recognizes(text)) {
+          final rule = KazumiRule.parse(text);
+          metadata = rule.descriptor;
+          if (rule.descriptor.id != row.id) {
+            throw const RuleFormatException('Kazumi 规则标识与保存的来源不一致');
+          }
+          entries.add(
+            SourceEntry(
+              descriptor: rule.descriptor.copyWith(kind: row.kind),
+              source: KazumiSource(rule: rule, http: http),
+              enabled: row.enabled,
+              ruleText: text,
+              repoUrl: row.repoUrl,
+            ),
           );
-          await source.initialize();
+          continue;
+        }
+        final rule = SourceRule.parseJson(text);
+        metadata = rule.descriptor;
+        if (rule.isScript) {
+          final ContentSource source = row.enabled
+              ? await _script(row.id, text, rule)
+              : _DisabledScriptSource(
+                  rule.descriptor.copyWith(
+                    capabilities: const <SourceCapability>{},
+                  ),
+                );
           entries.add(
             SourceEntry(
               descriptor: source.descriptor.copyWith(kind: row.kind),
@@ -181,17 +312,27 @@ class SourceRegistry {
         );
       } on RuleFormatException catch (error) {
         failures.add(
-          SourceFailure(id: row.id, name: row.name, message: error.message),
+          SourceFailure(id: row.id, name: row.name, message: error.message, lang: metadata?.lang ?? row.lang, type: row.type, nsfw: metadata?.nsfw),
         );
       } on SourceException catch (error) {
         failures.add(
-          SourceFailure(id: row.id, name: row.name, message: error.userMessage),
+          SourceFailure(id: row.id, name: row.name, message: error.userMessage, lang: metadata?.lang ?? row.lang, type: row.type, nsfw: metadata?.nsfw),
         );
       } catch (error) {
         failures.add(
-          SourceFailure(id: row.id, name: row.name, message: '$error'),
+          SourceFailure(id: row.id, name: row.name, message: '$error', lang: metadata?.lang ?? row.lang, type: row.type, nsfw: metadata?.nsfw),
         );
       }
+    }
+
+    for (final source in mihonAdapters) {
+      entries.add(
+        SourceEntry(
+          descriptor: source.descriptor,
+          source: source,
+          enabled: source.isReady,
+        ),
+      );
     }
 
     return SourceRegistrySnapshot(entries: entries, failures: failures);
@@ -225,15 +366,23 @@ class SourceRegistry {
       if (alreadySeeded.contains(asset)) continue;
       try {
         final text = await _bundle.loadString(asset);
-        final rule = SourceRule.parseJson(text);
+        final descriptor = KazumiRule.recognizes(text)
+            ? KazumiRule.parse(text).descriptor
+            : SourceRule.parseJson(text).descriptor;
+        // Adding a packaged source must not overwrite a previously installed,
+        // edited or disabled source. Upgrades use the catalog CAS installer.
+        if (await repository.byId(descriptor.id) != null) {
+          seededNow.add(asset);
+          continue;
+        }
         await repository.upsert(
-          id: rule.descriptor.id,
-          name: rule.descriptor.name,
-          type: rule.descriptor.type,
+          id: descriptor.id,
+          name: descriptor.name,
+          type: descriptor.type,
           kind: SourceKind.builtin,
           ruleText: text,
-          lang: rule.descriptor.lang,
-          version: rule.descriptor.version,
+          lang: descriptor.lang,
+          version: descriptor.version,
         );
         seededNow.add(asset);
       } on RuleFormatException {
@@ -254,6 +403,27 @@ class SourceRegistry {
     if (text.trim().isEmpty) {
       throw const RuleFormatException('规则内容为空');
     }
+    if (KazumiRule.recognizes(text)) {
+      final rule = KazumiRule.parse(text);
+      final old = await repository.byId(rule.descriptor.id);
+      if (old != null && old.ruleText != text) {
+        throw const RuleFormatException('已有同名 Kazumi 来源，请从番剧规则仓库安全更新');
+      }
+      await repository.replaceRule(
+        expected: old,
+        id: rule.descriptor.id,
+        name: rule.descriptor.name,
+        type: rule.descriptor.type,
+        lang: rule.descriptor.lang,
+        version: rule.descriptor.version!,
+        ruleText: text,
+        repoUrl: repoUrl ?? 'manual',
+      );
+      if (old == null && !enabled) {
+        await repository.setEnabled(rule.descriptor.id, enabled: false);
+      }
+      return rule.descriptor;
+    }
     final rule = SourceRule.parseJson(text);
     await repository.upsert(
       id: rule.descriptor.id,
@@ -269,8 +439,10 @@ class SourceRegistry {
     return rule.descriptor;
   }
 
-  Future<void> setEnabled(String id, {required bool enabled}) =>
-      repository.setEnabled(id, enabled: enabled);
+  Future<void> setEnabled(String id, {required bool enabled}) async {
+    await repository.setEnabled(id, enabled: enabled);
+    if (!enabled) _scripts.remove(id)?.instance.dispose();
+  }
 
   Future<void> remove(String id) => repository.remove(id);
 

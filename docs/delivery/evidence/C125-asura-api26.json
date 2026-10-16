@@ -1,0 +1,26 @@
+{
+  "at": "2026-10-10T15:13:50.223Z",
+  "serial": "emulator-5556",
+  "artifactSha256": "52c391bd5ecf25e03d74981718aaad8505af570b7f87067085960510919b28b3",
+  "status": "partial",
+  "package": "eu.kanade.tachiyomi.extension.en.asurascans",
+  "version": "1.6.69",
+  "origin": "https://github.com/keiyoushi/extensions/releases/download/4217666-0/tachiyomi-en.asurascans-v1.6.69.apk",
+  "hostValidatedAndLoaded": true,
+  "enabledAfterIndependentRestart": true,
+  "popularRealCoversVisuallyVerified": true,
+  "chapterCount": 119,
+  "chapterAttempt": "Chapter107",
+  "chapterResult": "network error: Refresh Chapter List",
+  "ordinaryRetryStillFailed": true,
+  "challengeObserved": false,
+  "cloudflareGateSatisfied": false,
+  "clearanceForged": false,
+  "evidence": [
+    "C125-asura-api26-discover.png",
+    "C125-asura-api26-detail.png"
+  ],
+  "directoryRefreshAttempted": true,
+  "afterDirectoryRefreshChapterStillRejected": true,
+  "chapterErrorStill": "Refresh Chapter List"
+}

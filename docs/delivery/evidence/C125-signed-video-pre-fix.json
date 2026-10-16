@@ -1,0 +1,21 @@
+{
+  "serial": "emulator-5558",
+  "status": "partial",
+  "artifactSha256": "acc302287b6f69468004ec608c0b2b89b8be6e6c244804d32726c660799944a9",
+  "source": "7sefun",
+  "item": "夏目友人帐第三季",
+  "playlist": "播放列表4",
+  "episode": "第01集",
+  "realFrame": "3:14/24:17",
+  "networkFailure": "MediaPlayer1/-1004",
+  "ordinaryRetry": "real frame0:08/24:17",
+  "historyAfterIndependentRestartSeconds": 71,
+  "actualRestartPlayback": "0:30/24:17; restarted from beginning",
+  "finding": "No chapter position query; native setUrl clears resume",
+  "screenshots": [
+    "C125-continue-emulator-5558.png",
+    "C125-signed-video-retry.png",
+    "C125-signed-video-restart.png"
+  ],
+  "fixAcceptancePending": true
+}

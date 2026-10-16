@@ -1,0 +1,346 @@
+{
+  "release": "C127-P3",
+  "status": "partial",
+  "artifact": {
+    "path": "D:\\noval_and_manga\\_tools\\Triomi-C127-P3-service-fixed-acceptance.apk",
+    "bytes": 124356704,
+    "sha256": "3a3757c3607ff7960dd629a7fac7504dd0c01d12db800be593a6f6208a1f949a"
+  },
+  "devices": [
+    "emulator-5554",
+    "emulator-5556"
+  ],
+  "preserveDataUpgrade": true,
+  "stages": [
+    {
+      "stage": "倍速菜单",
+      "serial": "emulator-5554",
+      "nodes": [
+        "纱罩",
+        "关闭",
+        "播放倍速",
+        "0.5x",
+        "0.75x",
+        "1.0x",
+        "1.25x",
+        "1.5x",
+        "2.0x",
+        "3.0x"
+      ]
+    },
+    {
+      "stage": "实际1.5倍速播放",
+      "serial": "emulator-5554",
+      "nodes": [
+        "返回",
+        "关闭弹幕",
+        "弹幕设置",
+        "搜索弹幕",
+        "小林家的龙女仆 · 第01集",
+        "发送弹幕",
+        "剧集",
+        "1.5x",
+        "播放设置",
+        "7:40 / 25:11",
+        "30%",
+        "全屏",
+        "上一集",
+        "下一集",
+        "字幕",
+        "画中画"
+      ]
+    },
+    {
+      "stage": "播放器设置",
+      "serial": "emulator-5554",
+      "nodes": [
+        "关闭",
+        "播放设置",
+        "同列表自动播放下一集",
+        "后台音频\n系统媒体通知与锁屏控制；退出播放器后停止",
+        "画面比例\n原比例完整显示",
+        "长按倍速\n2.0x",
+        "音量 100%",
+        "100%",
+        "应用设置",
+        "纱罩"
+      ]
+    },
+    {
+      "stage": "画面比例选择",
+      "serial": "emulator-5554",
+      "nodes": [
+        "关闭",
+        "播放设置",
+        "同列表自动播放下一集",
+        "后台音频\n系统媒体通知与锁屏控制；退出播放器后停止",
+        "画面比例\n原比例完整显示",
+        "长按倍速\n2.0x",
+        "音量 100%",
+        "100%",
+        "应用设置",
+        "纱罩"
+      ]
+    },
+    {
+      "stage": "比例语义打开",
+      "serial": "emulator-5554",
+      "nodes": [
+        "关闭",
+        "原比例完整显示",
+        "填满并裁边",
+        "拉伸"
+      ]
+    },
+    {
+      "stage": "后台音频与比例设置应用",
+      "serial": "emulator-5554",
+      "nodes": [
+        "返回",
+        "关闭弹幕",
+        "弹幕设置",
+        "搜索弹幕",
+        "小林家的龙女仆 · 第01集",
+        "发送弹幕",
+        "剧集",
+        "1.5x",
+        "播放设置",
+        "15:01 / 25:11",
+        "60%",
+        "全屏",
+        "上一集",
+        "下一集",
+        "字幕",
+        "画中画"
+      ]
+    },
+    {
+      "stage": "真实媒体字幕列表",
+      "serial": "emulator-5554",
+      "nodes": [
+        "发现",
+        "搜索",
+        "来源与规则",
+        "番剧",
+        "漫画",
+        "小说",
+        "7.0\nFX战士久留美",
+        "7.4\n学生会也有洞！",
+        "7.5\n飙马野郎 JOJO的奇妙冒险 第二&第三赛段",
+        "7.3\n药屋少女的呢喃 第三季",
+        "7.0\n某暗部的少女共栖",
+        "7.0\n被放逐的作弊赋予魔术师享受随心所欲的第二人生。",
+        "7.2\n赛博朋克：边缘行者 2",
+        "6.7\n乱世千金倪亚‧利斯顿转生为娇弱千金的弑神武人华丽无双录",
+        "7.5\n尼古喵喵",
+        "已选中发现\n发现\n第 1 个标签，共 4 个",
+        "切换到书架\n书架\n第 2 个标签，共 4 个",
+        "切换到追番\n追番\n第 3 个标签，共 4 个",
+        "切换到我的\n我的\n第 4 个标签，共 4 个"
+      ]
+    },
+    {
+      "stage": "服务修复实际续播",
+      "serial": "emulator-5554",
+      "nodes": [
+        "返回",
+        "关闭弹幕",
+        "弹幕设置",
+        "搜索弹幕",
+        "小林家的龙女仆 · 第01集",
+        "发送弹幕",
+        "剧集",
+        "1.5x",
+        "播放设置",
+        "15:48 / 25:11",
+        "63%",
+        "全屏",
+        "上一集",
+        "下一集",
+        "字幕",
+        "画中画"
+      ]
+    },
+    {
+      "stage": "修复后HOME恢复同一播放器",
+      "serial": "emulator-5554",
+      "nodes": [
+        "返回",
+        "关闭弹幕",
+        "弹幕设置",
+        "搜索弹幕",
+        "小林家的龙女仆 · 第01集",
+        "发送弹幕",
+        "剧集",
+        "1.5x",
+        "播放设置",
+        "17:10 / 25:11",
+        "68%",
+        "全屏",
+        "上一集",
+        "下一集",
+        "字幕",
+        "画中画"
+      ]
+    },
+    {
+      "stage": "真实媒体字幕",
+      "serial": "emulator-5554",
+      "nodes": [
+        "纱罩",
+        "关闭",
+        "字幕轨道",
+        "关闭字幕",
+        "当前媒体没有可用字幕轨道"
+      ]
+    },
+    {
+      "stage": "播放器实际退出",
+      "serial": "emulator-5554",
+      "nodes": [
+        "返回",
+        "小林家的龙女仆",
+        "打开站点人工验证",
+        "下载全部章节",
+        "追踪",
+        "导出",
+        "重新加载",
+        "小林家的龙女仆\n7sefun",
+        "已追番 · 取消",
+        "继续观看 · 第01集",
+        "更换播放来源",
+        "选集 · 21 集",
+        "切换倒序",
+        "播放列表 2 · 21",
+        "播放列表 4 · 21",
+        "第01集",
+        "第02集",
+        "第03集",
+        "第04集",
+        "第05集",
+        "第06集",
+        "第07集",
+        "第08集",
+        "第09集",
+        "第10集",
+        "第11集",
+        "第12集",
+        "第13集",
+        "第14集",
+        "SP1",
+        "SP2",
+        "SP3",
+        "SP4",
+        "SP5",
+        "SP6",
+        "SP7"
+      ]
+    },
+    {
+      "stage": "独立重启倍速和非零时间恢复",
+      "serial": "emulator-5554",
+      "nodes": [
+        "返回",
+        "关闭弹幕",
+        "弹幕设置",
+        "搜索弹幕",
+        "小林家的龙女仆 · 第01集",
+        "发送弹幕",
+        "剧集",
+        "1.5x",
+        "播放设置",
+        "18:14 / 25:11",
+        "72%",
+        "全屏",
+        "上一集",
+        "下一集",
+        "字幕",
+        "画中画"
+      ]
+    },
+    {
+      "stage": "API26原目录非零Media3续播",
+      "serial": "emulator-5556",
+      "nodes": [
+        "返回\n返回",
+        "\n关闭弹幕",
+        "\n弹幕设置",
+        "\n搜索弹幕",
+        "Re：从零开始的异世界生活第四季 · 第01集",
+        "\n发送弹幕",
+        "剧集",
+        "1.0x",
+        "\n播放设置",
+        "18:31 / 23:40",
+        "78%",
+        "\n全屏",
+        "上一集",
+        "下一集",
+        "字幕",
+        "画中画"
+      ]
+    },
+    {
+      "stage": "API26 HOME恢复",
+      "serial": "emulator-5556",
+      "nodes": [
+        "返回\n返回",
+        "\n关闭弹幕",
+        "\n弹幕设置",
+        "\n搜索弹幕",
+        "Re：从零开始的异世界生活第四季 · 第01集",
+        "\n发送弹幕",
+        "剧集",
+        "1.0x",
+        "\n播放设置",
+        "19:13 / 23:40",
+        "81%",
+        "\n全屏",
+        "上一集",
+        "下一集",
+        "字幕",
+        "画中画"
+      ]
+    },
+    {
+      "stage": "API26强停独立Media3续播",
+      "serial": "emulator-5556",
+      "nodes": [
+        "返回\n返回",
+        "\n关闭弹幕",
+        "\n弹幕设置",
+        "\n搜索弹幕",
+        "Re：从零开始的异世界生活第四季 · 第01集",
+        "\n发送弹幕",
+        "剧集",
+        "1.0x",
+        "\n播放设置",
+        "19:20 / 23:40",
+        "82%",
+        "\n全屏",
+        "上一集",
+        "下一集",
+        "字幕",
+        "画中画"
+      ]
+    }
+  ],
+  "serviceFix": {
+    "reproduced": "ForegroundServiceDidNotStartInTimeException after actual background-audio/PiP path",
+    "cause": "Direct-started MediaSessionService session was not added to service notification manager",
+    "fix": "addSession plus ordinary local startService; Media3 notification manager promotes foreground on playing",
+    "verifiedActualHomeSamePid": true,
+    "foregroundServiceObserved": true,
+    "activePlayingMediaSessionObserved": true,
+    "playerExitRemovesService": true
+  },
+  "api35Pip": true,
+  "api26Pip": "not-confirmed",
+  "subtitleTrackObservation": "Actual 7sefun media reports no available subtitle tracks; embedded subtitle rendering not claimed tested",
+  "fullFlutterSuite": {
+    "passed": 755,
+    "analyze": "No issues found"
+  },
+  "visual": "not-completed; image tool model unavailable",
+  "productionAndWindows": "C125 refresh artifacts unchanged; final rebuild pending"
+}

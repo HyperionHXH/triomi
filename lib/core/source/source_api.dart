@@ -70,6 +70,12 @@ abstract class RemoteShelfProvider implements AccountProvider {
   /// 站点收藏列表。
   Future<List<MediaItem>> remoteShelf();
 
+  /// 可选的站点未读章节快照。
+  ///
+  /// 默认来源没有这项能力；实现来源只在远端书架请求成功后返回值，
+  /// 调用方失败时不得覆盖本地未读状态。
+  Future<Map<String, int>> remoteUnreadCounts() async => const <String, int>{};
+
   /// 加入 / 移出站点收藏。
   Future<void> setInRemoteShelf(MediaItem item, bool add);
 }

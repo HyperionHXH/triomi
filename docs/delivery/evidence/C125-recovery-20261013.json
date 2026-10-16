@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-13",
+  "status": "passed",
+  "preserveData": true,
+  "devices": [
+    {
+      "serial": "emulator-5554",
+      "bootCompleted": true,
+      "avd": "noval_api35",
+      "api": "35",
+      "installedSha256": "b9a8912fcfff02fc078e635e341a662a2113fde24ba115d9d699ac7adc83d35c"
+    },
+    {
+      "serial": "emulator-5556",
+      "bootCompleted": true,
+      "avd": "triomi_api26_acceptance",
+      "api": "26",
+      "installedSha256": "b9a8912fcfff02fc078e635e341a662a2113fde24ba115d9d699ac7adc83d35c"
+    },
+    {
+      "serial": "emulator-5558",
+      "bootCompleted": true,
+      "avd": "triomi_c125_signed",
+      "api": "35",
+      "installedSha256": "96cb09bd33435b3b038de7122bbc0f12198e85ec4d219d7ad76ac1ce68770d5d"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-android-acceptance.apk",
+      "bytes": 123568652,
+      "sha256": "b9a8912fcfff02fc078e635e341a662a2113fde24ba115d9d699ac7adc83d35c",
+      "members": 530,
+      "zipIntegrity": true,
+      "membersMatchRelease": null
+    },
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-android-signed.apk",
+      "bytes": 123572748,
+      "sha256": "96cb09bd33435b3b038de7122bbc0f12198e85ec4d219d7ad76ac1ce68770d5d",
+      "members": 530,
+      "zipIntegrity": true,
+      "membersMatchRelease": null
+    },
+    {
+      "path": "D:\\noval_and_manga\\_tools\\Triomi-C125-windows-release.zip",
+      "bytes": 37322775,
+      "sha256": "495504041c01f31fd27797d1937567d35b7b03311f8c53e1e64727cc6ee5c992",
+      "members": 50,
+      "zipIntegrity": true,
+      "membersMatchRelease": true
+    }
+  ],
+  "windowsUiInterface": "computer win32 capture/input/AX available; latest bundle launched",
+  "constraints": {
+    "newAvdCreated": false,
+    "installedApkReplaced": false,
+    "uninstallOrDataClear": false
+  }
+}

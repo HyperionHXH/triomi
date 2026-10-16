@@ -1,0 +1,10 @@
+{
+  "date":"2026-10-14",
+  "status":"partial",
+  "source":"C140 cover restore and local cover consumer",
+  "acceptanceApk":{"path":"D:/noval_and_manga/_tools/Triomi-C140-P11-cover-restore-acceptance.apk","bytes":127142760,"sha256":"5542c2dc9e1daf9f6bd4c9c3f674330a9152c7cfda98cb2a2d75e9fe8fa1eb6b","v2Verified":true,"certificateSha256":"0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6","installedHashMatched":["emulator-5554","emulator-5556"]},
+  "productionApk":{"path":"D:/noval_and_manga/_tools/Triomi-C140-android-signed.apk","bytes":127142760,"sha256":"0447f9660676bb08d362ba3232f77bc3135299961921a85e1b979b897e34c772","v2Verified":true,"certificateSha256":"9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077","rsaBits":4096,"installedHashMatched":"emulator-5558","dataCountsUnchanged":"0 library / 44 chapters / 7 histories"},
+  "windows":{"path":"D:/noval_and_manga/_tools/Triomi-C140-windows-release.zip","bytes":37734956,"sha256":"bb19be8966e0f296e2f3d7d9896180b14f16f230cdd0f5b0078fe0de3904d275","members":50,"zipIntegrity":true,"exactMemberBytesMatchRelease":true,"actualUi":"not-run; existing computer session closed"},
+  "verification":{"fullSuitePassed":792,"fullSuiteLog":"artifact://823","analyze":"No issues found","secretScan":"C140-delivery-secret-scan.json: zero exact private-value/artifact/private-name/debug-file hits","actualCoverRestore":"C140-P11-cover-restore-acceptance.json","throwawayCoverOnlyZipAndSourceFilesRemoved":true},
+  "limitations":["Full current-platform media journeys/visual proof and P11 downloaded media/source definitions/desktop scheduling remain partial","No real cloud upload or tracking write; historical C125/C139 artifacts preserved"]
+}

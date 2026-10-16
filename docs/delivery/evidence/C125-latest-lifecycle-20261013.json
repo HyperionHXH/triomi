@@ -1,0 +1,253 @@
+{
+  "date": "2026-10-13",
+  "artifactByDevice": {
+    "emulator-5554": "b9a8912fcfff02fc078e635e341a662a2113fde24ba115d9d699ac7adc83d35c",
+    "emulator-5556": "b9a8912fcfff02fc078e635e341a662a2113fde24ba115d9d699ac7adc83d35c",
+    "emulator-5558": "96cb09bd33435b3b038de7122bbc0f12198e85ec4d219d7ad76ac1ce68770d5d"
+  },
+  "status": "partial",
+  "devices": {
+    "emulator-5554": {
+      "novelInitial": {
+        "visibleNodeCount": 17,
+        "pages": [
+          "1 / 17"
+        ],
+        "knownBooks": [
+          "負債兩千萬的班級偶像，被邊緣人的我買下來了"
+        ],
+        "continueReading": false,
+        "offlineFallback": false,
+        "retry": false,
+        "catalog": [],
+        "chapterControls": [
+          "返回",
+          "上一章",
+          "下一章"
+        ],
+        "resource": {
+          "running": true,
+          "pid": 3624,
+          "pssKiB": 180567,
+          "threads": 54,
+          "fileDescriptors": null,
+          "fdScope": "shell readable proc only; null means OS denied"
+        }
+      },
+      "novelBeforePage": [
+        "1 / 17"
+      ],
+      "novelAfterPage": [
+        "2 / 17"
+      ],
+      "novelHomeResume": [
+        "2 / 17"
+      ],
+      "novelChapterChange": [
+        "2 / 17"
+      ],
+      "novelChapterLoaded": [
+        "2 / 17"
+      ],
+      "novelIndependentRestart": [
+        "2 / 17"
+      ],
+      "novelNextChapterAction": false,
+      "mangaInitial": [
+        "6/13"
+      ],
+      "mangaBefore": [
+        "6/13"
+      ],
+      "mangaAfter": [
+        "7/13"
+      ],
+      "mangaHomeResume": [
+        "7/13"
+      ],
+      "mangaIndependentRestartObserved": [
+        "7/13"
+      ],
+      "videoInitialTimes": [
+        "10:15 / 0:00"
+      ],
+      "videoPreparedFailure": "RuntimeError",
+      "nextChapterTappedWithFreshUi": true,
+      "novelAfterFreshChapterTap": [
+        "1 / 35"
+      ],
+      "latestRemoteShelf": {
+        "source": "LK",
+        "realOwnShelfEntries": 2,
+        "networkSucceeded": true,
+        "fixture": false
+      },
+      "latestLnsShelfSafeState": [],
+      "latestLnsShelf": {
+        "status": "external-network-failure",
+        "safeErrors": [
+          "书架加载失败",
+          "轻书架：网络异常：连接轻书架失败"
+        ],
+        "ordinaryRetryAttempted": true
+      }
+    },
+    "emulator-5556": {
+      "novelInitial": {
+        "visibleNodeCount": 13,
+        "pages": [],
+        "knownBooks": [
+          "負債兩千萬的班級偶像，被邊緣人的我買下來了"
+        ],
+        "continueReading": false,
+        "offlineFallback": false,
+        "retry": false,
+        "catalog": [],
+        "chapterControls": [
+          "上一章",
+          "下一章"
+        ],
+        "resource": {
+          "running": true,
+          "pid": 4312,
+          "pssKiB": 251515,
+          "threads": 40,
+          "fileDescriptors": null,
+          "fdScope": "shell readable proc only; null means OS denied"
+        }
+      },
+      "novelBeforePage": [
+        "1 / 46"
+      ],
+      "novelAfterPage": [
+        "2 / 46"
+      ],
+      "novelHomeResume": [
+        "2 / 46"
+      ],
+      "novelChapterChange": [
+        "2 / 46"
+      ],
+      "novelChapterLoaded": [
+        "2 / 46"
+      ],
+      "novelIndependentRestart": [
+        "2 / 46"
+      ],
+      "novelNextChapterAction": false,
+      "mangaInitial": [
+        "1/2"
+      ],
+      "mangaBefore": [
+        "1/2"
+      ],
+      "mangaAfter": [
+        "2/2"
+      ],
+      "mangaHomeResume": [
+        "2/2"
+      ],
+      "mangaIndependentRestartObserved": [
+        "2/2"
+      ],
+      "videoInitialTimes": [
+        "14:35 / 0:00"
+      ],
+      "videoPreparedFailure": "RuntimeError",
+      "nextChapterTappedWithFreshUi": true,
+      "novelAfterFreshChapterTap": [
+        "5/24",
+        "6/9"
+      ],
+      "latestRemoteShelf": {
+        "source": "LK",
+        "realOwnShelfEntries": 2,
+        "networkSucceeded": true,
+        "fixture": false
+      },
+      "latestLnsShelfSafeState": [],
+      "latestLnsShelf": {
+        "status": "external-network-failure",
+        "safeErrors": [
+          "书架加载失败",
+          "轻书架：网络异常：连接轻书架失败"
+        ],
+        "ordinaryRetryAttempted": true
+      }
+    },
+    "emulator-5558": {
+      "novelInitial": {
+        "visibleNodeCount": 17,
+        "pages": [
+          "1 / 56"
+        ],
+        "knownBooks": [],
+        "continueReading": false,
+        "offlineFallback": false,
+        "retry": false,
+        "catalog": [],
+        "chapterControls": [
+          "返回",
+          "上一章",
+          "下一章"
+        ],
+        "resource": {
+          "running": true,
+          "pid": 3605,
+          "pssKiB": 151140,
+          "threads": 51,
+          "fileDescriptors": null,
+          "fdScope": "shell readable proc only; null means OS denied"
+        }
+      },
+      "novelBeforePage": [
+        "1 / 56"
+      ],
+      "novelAfterPage": [
+        "2 / 56"
+      ],
+      "novelHomeResume": [
+        "2 / 56"
+      ],
+      "novelChapterChange": [
+        "2 / 56"
+      ],
+      "novelChapterLoaded": [
+        "2 / 56"
+      ],
+      "novelIndependentRestart": [
+        "2 / 56"
+      ],
+      "novelNextChapterAction": false,
+      "mangaInitial": [],
+      "mangaBefore": [
+        "3/32"
+      ],
+      "mangaAfter": [
+        "2/32"
+      ],
+      "mangaHomeResume": [
+        "2/32"
+      ],
+      "mangaIndependentRestartObserved": [
+        "2/32"
+      ],
+      "videoInitialTimes": [
+        "18:46 / 0:00"
+      ],
+      "videoPreparedFailure": "RuntimeError",
+      "videoRealFailure": "MediaPlayer error 1/-1004",
+      "videoOrdinaryRetry": true,
+      "nextChapterTappedWithFreshUi": true,
+      "novelAfterFreshChapterTap": [
+        "1 / 37"
+      ]
+    }
+  },
+  "visualReview": {
+    "status": "not-completed",
+    "reason": "current model cannot consume image input; preserved screenshots not visual proof"
+  },
+  "offlineEvidence": "C125-latest-offline-20261013.json",
+  "allOriginalNetworkRestored": true
+}

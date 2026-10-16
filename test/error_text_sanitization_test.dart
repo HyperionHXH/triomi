@@ -10,6 +10,21 @@ import 'package:triomi/core/source/http_client.dart';
 /// 统一在拼 URL 前脱敏（D22-1 修复）；本文件把「导出 / 备份 / WebDAV」三处
 /// 错误入口的脱敏行为固化成网络层契约。
 void main() {
+  test('传输错误中的端口或资源编号不冒充HTTP状态码', () {
+    for (final code in [401, 403, 404, 429]) {
+      final error = SourceException.wrap(
+        Exception(
+          'SocketException: Connection refused, address = 127.0.0.1, port = ${code}12',
+        ),
+        sourceId: 's',
+      );
+      expect(error.type, SourceErrorType.network);
+    }
+    expect(
+      SourceException.wrap(Exception('HTTP 429'), sourceId: 's').type,
+      SourceErrorType.rateLimited,
+    );
+  });
   group('SourceException.wrap：URL 脱敏', () {
     SourceException wrapOf(String url) => SourceException.wrap(
       Exception('connection refused'),

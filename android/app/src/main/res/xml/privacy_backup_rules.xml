@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- OS-keystore-bound secrets and the device-local lock marker must not
+         migrate independently. Portable Triomi backup handles safe settings. -->
+    <!-- Dynamic extension preferences can contain credentials; CookieJar also
+         writes mihon.cookies.xml. Exclude the complete native preference domain. -->
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="root" path="app_flutter/settings.hive" />
+    <exclude domain="root" path="app_flutter/settings.hivec" />
+    <exclude domain="root" path="app_flutter/settings.lock" />
+</full-backup-content>

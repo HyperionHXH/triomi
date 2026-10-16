@@ -1,0 +1,131 @@
+{
+  "date": "2026-10-15",
+  "status": "partial-api26-final-player-actual-journey-cleanup-complete-after-original-device-recovery",
+  "device": {
+    "serial": "emulator-5556",
+    "sdk": 26,
+    "package": "io.github.hyperionhxh.triomi",
+    "artifactScope": "Parent-installed C149 acceptance package before Windows-only postfix; parent reported hash prefix8b7757d4. This worker performed no build or install and did not independently sample full C149 APK hash.",
+    "notLatestPostfixArtifactAcceptance": true
+  },
+  "methods": {
+    "adbSerialAlwaysExplicit": true,
+    "normalUiOnlyForLockSettingsAndMediaNavigation": true,
+    "readOnlyScopedSqliteMetadataQueries": true,
+    "noHiveOrSecureStorageRead": true,
+    "temporaryPinNotLoggedOrPersistedInEvidence": true,
+    "noAccountCredentialsReadOrChanged": true,
+    "noBuildLintTestFormatterOrInstall": true,
+    "secureScreenshotNotBypassed": true,
+    "noUserSourceTrustOrSignatureChanges": true
+  },
+  "privacyLock": {
+    "originalState": "隐私锁未开启, normal settings UI",
+    "temporarySetup": "Random8-digit PIN retained only in Python memory; entered into ordinary obscured PIN fields and enabled through normal button. No PIN or protected record is included in evidence.",
+    "actualEnableObserved": "隐私锁已开启",
+    "firstNavigationCorrection": "The first secure playback attempt selected SP02 because actual playlist4 order includes7 specials before episode1. This was not treated as original local497MiB playback proof. Once unlocked, screenshots exposed the real playlist ordering, and episode1 was selected explicitly.",
+    "actualOriginalEpisode": {
+      "downloadId": 3,
+      "title": "小林家的龙女仆 / 第01集 / 播放列表4",
+      "retainedFile": "/data/user/0/io.github.hyperionhxh.triomi/app_flutter/downloads/restore-15e8f8ecf021cf475721dd52915fe2dea0da5fbdb286f9dd8a7ece3162c1533b-OQYALC.complete/video.mp4",
+      "bytes": "Existing497133814-byte file per prior API26 journey; this continuation queried exact retained path/id but did not rehash or restat bytes",
+      "unlockedVisualPlayback": "Actual animation frame at17:35/25:11 visually opened; not black frame or accessibility-only proof",
+      "unlockedScreenshot": "_tools/C149-update-final-original-local-episode1.png",
+      "lockEnabledPlayback": "Normal known-PIN unlock and continue-watching episode1 route; Android PlaybackActivityMonitor AudioTrack ID111 uid10077/pid9644 observed state:started before HOME",
+      "afterHome": "Same AudioTrack ID111 observed state:paused after HOME; no BackgroundPlaybackService in the package service dump",
+      "returnGate": "Ordinary launch after HOME exposed actual normal unlock screen: 应用已锁定 / 解锁 / no bypass path",
+      "knownPinUnlock": "Known temporary PIN ordinary unlock succeeded; returning from player restored normal detail navigation"
+    },
+    "pip": {
+      "actualAttempt": "Tapped player PiP coordinates mapped from actual unlocked screenshot while lock enabled",
+      "observed": "Native activity dumps before/after did not show picture-in-picture=true; HOME yielded launcher and later lock gate",
+      "notClaimed": "Could not visually see secure-player denial toast or prove this tap hit the live PiP button. This is NOT counted as full PiP-denial visual acceptance.",
+      "secureBoundary": "Secure-player screencap returned zero bytes and UI automation dump returned empty/stale tree. No attempt to disable security flags, bypass lock or circumvent capture restrictions. Empty capture artifact deleted."
+    },
+    "restore": {
+      "normalKnownPinDisable": true,
+      "finalUiObserved": "隐私锁未开启 / 操作已完成",
+      "screenshot": "_tools/C149-update-final-lock-restored-disabled.png",
+      "temporaryPinForgottenAfterDisable": true,
+      "enabledDisabledCycles": 2,
+      "reasonForSecondCycle": "Target exact original episode1 after visually correcting playlist ordering",
+      "noWrongPinOrRateLimitJourneyClaim": true
+    },
+    "limits": "No audible recording/listening evidence, exact native playback-position freeze, background-audio-enabled combination, screen-recording/security-pixel guarantee or full TalkBack claim. Audio pause claim is native PlaybackActivityMonitor state, not subjective silence."
+  },
+  "subtitles": {
+    "originalVideo": {
+      "actualPickerOpened": true,
+      "visible": "字幕轨道 / 关闭字幕 / 当前媒体没有可用字幕轨道",
+      "screenshot": "_tools/C149-update-final-original-subtitle-tracks.png",
+      "qualification": "Chinese text visible in the video is burned-in image text; not selectable embedded subtitle evidence. Original media has no available embedded track according to actual picker."
+    },
+    "localEmbeddedFixtureAttempt": {
+      "sourceId": "c149-player-smoke",
+      "sourceName": "C149-player-smoke 本地字幕夹具",
+      "ruleImport": "Normal 来源与规则 URL import http://10.0.2.2:8766/rule.json",
+      "syntheticOnly": true,
+      "generatedMedia": "FFmpeg30-second640x360 moving test pattern/H264 + real AAC440Hz audio + mov_text embedded English subtitle, not fake callback or external-site media",
+      "initialError": "Fixture playSources list erroneously selected anchor itself while fields expected descendant anchor, yielding real visible 这一集没有解析到播放地址. This is a local rule mistake, not a production subtitle failure.",
+      "initialErrorScreenshot": "_tools/C149-update-real-subtitle-tracks.png",
+      "correctedFixtureRule": "Changed only temporary host fixture selector .media a→.media; reimported via ordinary normal source UI",
+      "actualRequests": ["/rule.json", "/list", "/work", "/chapter"],
+      "playbackOrSubtitleOnOffNotReached": true,
+      "blocker": "Original adb devices disappeared during corrected-source navigation; adb devices returned an empty list, preventing further playback or device-side cleanup. Parent then requested closeout rather than forcing fixture acceptance.",
+      "notClaimed": "No real embedded subtitle track selection/rendering/on-off pass, and no screenshot of generated test pattern or its subtitle is claimed."
+    }
+  },
+  "p11ApkAcceptance": {
+    "notPerformed": true,
+    "reason": "No safely attributable pending APK staging identity/hash was established in this continuation. Did not accept unknown user staging or alter existing publisher trust/installed packages. Parent allowed only this round's independently attributable package; device vanished before safe existing backup-stage investigation.",
+    "noFakePass": true
+  },
+  "cleanup": {
+    "privacyLockRestoredDisabledBeforeDeviceLoss": true,
+    "temporaryPinNotRetained": true,
+    "subtitleHostStopped": true,
+    "hostStoppedEvidence": "Popen terminated;127.0.0.1:8766 connect_ex10061 connection refused",
+    "temporaryHostScriptRemoved": true,
+    "temporaryGeneratedMp4Removed": true,
+    "temporarySrtRemoved": true,
+    "zeroByteCaptureArtifactsRemoved": true,
+    "deviceSideRemainingAtLoss": {
+      "sourceId": "c149-player-smoke",
+      "sourceRule": "Own imported isolated source only",
+      "favoriteCreated": false,
+      "downloadCreated": false,
+      "cachedWork": "c149-subtitle-work",
+      "cachedChapter": "c149-subtitle-ch1",
+      "historyPossible": "Player error navigation may have written own scoped metadata; not yet inspected after device loss",
+      "mustNotRemoveOriginalRows": true
+    },
+    "deviceRecoveryNeededForExactOwnSourceCleanup": false,
+    "postRecoveryCleanup": {
+      "recovery": "Parent restarted original API26 AVD without wipe; original emulator-5556 was device and sys.boot_completed=1. Host-wide qemu process loss is not treated as a Triomi crash.",
+      "sourceRemovedThroughNormalUi": true,
+      "sourceId": "c149-player-smoke",
+      "exactMetadataSql": "BEGIN IMMEDIATE; DELETE FROM chapters WHERE source_id='c149-player-smoke'; DELETE FROM manga_updates WHERE source_id='c149-player-smoke'; DELETE FROM histories WHERE source_id='c149-player-smoke'; DELETE FROM media_items WHERE source_id='c149-player-smoke'; DELETE FROM manga_feeds WHERE source_id='c149-player-smoke'; COMMIT;",
+      "before": {"chapters": 1, "manga_updates": 0, "histories": 0, "media_items": 1, "manga_feeds": 0},
+      "after": {"chapters": 0, "manga_updates": 0, "histories": 0, "media_items": 0, "manga_feeds": 0},
+      "originalBeforeAndAfter": {"sources": 8, "library_entries": 4, "downloads": 3},
+      "appStoppedBeforeScopedTransaction": true,
+      "noOriginalCatalogOrHiveMutation": true,
+      "temporaryDeviceXmlRemoved": true,
+      "deviceReleasedToParent": true,
+      "subtitleFixtureContinuation": "Own source already at normal removal confirmation when parent offered further subtitle continuation; completed cleanup and released rather than recreating deleted temporary host/media. Embedded subtitle rendering remains unclaimed in this evidence."
+    },
+    "deviceLossReportedToParent": true,
+    "originalVideoDownloadNotDeletedOrReplaced": true,
+    "otherSettings": "No network/battery/notification/source-trust settings changed during this continuation; incognito remained off. Existing playback progress naturally advanced, including initial SP02 selection; no metadata rollback performed."
+  },
+  "screenshotsActuallyOpened": [
+    "_tools/C149-update-final-episode1-open.png",
+    "_tools/C149-update-final-episode-picker.png",
+    "_tools/C149-update-final-original-local-episode1.png",
+    "_tools/C149-update-final-original-subtitle-tracks.png",
+    "_tools/C149-update-final-lock-restored-disabled.png",
+    "_tools/C149-update-subtitle-fixture-opened.png",
+    "_tools/C149-update-real-subtitle-tracks.png"
+  ],
+  "evidenceQualification": "Native secure playback and HOME/locked-gate facts are from actual UI/native state, not a unit test. Capture was unavailable while secure player active. Supporting unlocked movie screenshots are opened real frames; fixture error screenshot is explicitly failure. This is a partial journey, not all P3/P11 acceptance."
+}

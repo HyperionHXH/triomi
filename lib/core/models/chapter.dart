@@ -1,9 +1,22 @@
 /// 播放线路（番剧多线路，对齐 Kazumi 的多视频源）。
 class PlaySource {
-  const PlaySource({required this.name, required this.url});
+  const PlaySource({
+    required this.name,
+    required this.url,
+    this.headers = const {},
+    this.webPage = false,
+    this.unavailableVideoUrls = const [],
+  });
 
   final String name;
   final String url;
+  final Map<String, String> headers;
+
+  /// 动态网页由隔离 WebView 解析，不能把 HTML 直接交给解码器。
+  final bool webPage;
+
+  /// 来源声明的错误占位视频；命中时提示换线路，不冒充正片。
+  final List<String> unavailableVideoUrls;
 }
 
 /// 章节正文内容：按内容形态取其中一种。
@@ -15,6 +28,7 @@ class ChapterContent {
     this.playSources = const <PlaySource>[],
     this.danmakuUrl,
     this.fontFamily,
+    this.fontData,
   });
 
   /// 漫画：图片地址列表。
@@ -37,6 +51,10 @@ class ChapterContent {
   /// 有值时阅读器必须用它渲染——站点把字形做了替换，用系统字体会显示乱码。
   final String? fontFamily;
 
+  /// Base64 TTF/OTF required to render substituted glyphs after a restart.
+  /// Stored with chapter content so offline downloads and backups are portable.
+  final String? fontData;
+
   bool get isEmpty =>
       images.isEmpty &&
       (text == null || text!.isEmpty) &&
@@ -51,10 +69,17 @@ class ChapterContent {
     'html': html,
     'play': <Object?>[
       for (final source in playSources)
-        <String, Object?>{'name': source.name, 'url': source.url},
+        <String, Object?>{
+          'name': source.name,
+          'url': source.url,
+          'headers': source.headers,
+          'webPage': source.webPage,
+          'unavailableVideoUrls': source.unavailableVideoUrls,
+        },
     ],
     'danmaku': danmakuUrl,
     'font': fontFamily,
+    'fontData': fontData,
   };
 
   /// 反序列化；内容为空或格式不对时返回 null。
@@ -73,10 +98,22 @@ class ChapterContent {
             PlaySource(
               name: '${source['name'] ?? '线路'}',
               url: '${source['url'] ?? ''}',
+              headers: {
+                if (source['headers'] is Map)
+                  for (final e in (source['headers'] as Map).entries)
+                    e.key.toString(): e.value.toString(),
+              },
+              webPage: source['webPage'] == true,
+              unavailableVideoUrls: [
+                for (final url
+                    in (source['unavailableVideoUrls'] as List?) ?? const [])
+                  if (url is String) url,
+              ],
             ),
       ],
       danmakuUrl: raw['danmaku'] as String?,
       fontFamily: raw['font'] as String?,
+      fontData: raw['fontData'] as String?,
     );
     return content.isEmpty ? null : content;
   }

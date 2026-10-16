@@ -1,0 +1,29 @@
+{
+  "at": "2026-10-09T13:57:42.277107+00:00",
+  "api": 35,
+  "variant": "final release after Preference/Zstd fixes",
+  "source": "actual Jinman 1.6.59 APK",
+  "pageIndicators": [
+    "4/14",
+    "4/14"
+  ],
+  "expectedResumePage": 4,
+  "savedVia": "production reading history/detail/continue",
+  "network": "actual plugin mirror and image processing; no fixtures",
+  "verified": true,
+  "screenshot": "C121-release-manga-api35.png",
+  "imageComparison": {
+    "reference": "C116-jinman-resume.png",
+    "region": "reader body excluding status and toolbars",
+    "meanAbsoluteRgbDifference": [
+      1.0908738425925926,
+      1.0908738425925926,
+      1.0908738425925926
+    ]
+  },
+  "forceStopResumeIndicators": [
+    "4/14",
+    "4/14"
+  ],
+  "forceStopResumeVerified": true
+}

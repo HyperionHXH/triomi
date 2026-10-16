@@ -80,13 +80,103 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    testWidgets('四栏导航顺序固定为发现/书架/追番/我的（手机底栏）', (tester) async {
+      await pumpApp(tester, const Size(400, 800));
+
+      final labels = tester
+          .widgetList<NavigationDestination>(find.byType(NavigationDestination))
+          .map((destination) => destination.label)
+          .toList();
+      expect(labels, <String>[
+        '发现',
+        '书架',
+        '追番',
+        '我的',
+      ], reason: '导航顺序见 ADR-2026-10-05');
+    });
+
+    testWidgets('启动路由是发现页，发现处于选中态', (tester) async {
+      await pumpApp(tester, const Size(400, 800));
+
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        0,
+        reason: '发现是默认首屏（ADR-2026-10-05）',
+      );
+      // 空注册表下发现页给出「去管理来源」空状态——证明首屏渲染的是发现页。
+      expect(find.text('还没有可用的来源'), findsOneWidget);
+    });
+
+    testWidgets('中屏 rail 与桌面侧栏保持同一导航顺序', (tester) async {
+      await pumpApp(tester, const Size(800, 1000));
+      final railLabels = tester
+          .widget<NavigationRail>(find.byType(NavigationRail))
+          .destinations
+          .map((destination) => (destination.label as Text).data!)
+          .toList();
+      expect(railLabels, <String>['发现', '书架', '追番', '我的']);
+
+      await pumpApp(tester, const Size(1600, 1000));
+      // 侧栏是 Row 的第一个子级，其标签先于页面内容出现；
+      // 用首次出现位置断言四项导航的相对顺序，并在「设置」入口之前。
+      final texts = tester
+          .widgetList<Text>(find.byType(Text))
+          .map((widget) => widget.data ?? '')
+          .toList();
+      int positionOf(String label) => texts.indexOf(label);
+      expect(positionOf('发现'), lessThan(positionOf('书架')));
+      expect(positionOf('书架'), lessThan(positionOf('追番')));
+      expect(positionOf('追番'), lessThan(positionOf('我的')));
+      expect(positionOf('我的'), lessThan(positionOf('设置')));
+    });
+
+    testWidgets('分支切换更新选中态，重复点击当前分支回到该分支根页面', (tester) async {
+      await pumpApp(tester, const Size(400, 800));
+      Finder destinationLabel(String label) => find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text(label),
+      );
+
+      await tester.tap(destinationLabel('书架'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        1,
+      );
+
+      await tester.tap(destinationLabel('发现'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        0,
+      );
+
+      // 重复点击当前分支：回到该分支根页面（发现页空状态仍在，无崩溃）。
+      await tester.tap(destinationLabel('发现'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        0,
+      );
+      expect(find.text('还没有可用的来源'), findsOneWidget);
+      // The visited shelf subscribes to local source metadata. Dispose the
+      // scope and drain drift's deferred cancellation before fake-time checks.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
     testWidgets('窄屏使用底部导航，可切换到发现页', (tester) async {
       await pumpApp(tester, const Size(400, 800));
 
       expect(find.byType(NavigationBar), findsOneWidget);
       expect(find.byType(NavigationRail), findsNothing);
 
-      await tester.tap(find.text('发现'));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('发现'),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // 发现页在「没有任何来源」时应给出空状态与去管理来源的入口

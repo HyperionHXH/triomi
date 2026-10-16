@@ -1,0 +1,9 @@
+{
+  "date":"2026-10-14",
+  "status":"partial",
+  "apk":{"path":"D:/noval_and_manga/_tools/Triomi-C141-P11-zip-integrity-acceptance.apk","bytes":127142760,"sha256":"f32bd4660c0daabe3d38b0b8aad1d0add429f0f005139718543e018a584e82a1","v2Verified":true,"certificateSha256":"0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6"},
+  "fix":"Archive 4.3.0 ignores verify:true and coalesces duplicate names; restore now inspects original central-directory headers, rejects duplicate names, validates advertised uncompressed size/CRC and rejects symlinks before settings, cover cache, SQL or Hive mutation.",
+  "regression":{"targetedPassed":16,"fullSuitePassed":794,"fullSuiteLog":"artifact://855","cases":["legacy central-directory CRC corruption rejected before mutation","duplicate central-directory data.json name rejected","cover restore/offline re-export","existing backup boundary tests"],"analyze":"No issues found"},
+  "actualApi35":{"corruptZip":"system picker selected tampered 184-byte ZIP; UI reported FormatException 备份ZIP校验失败；未修改本机数据","shelfSourceRemoteUnreadProgress":"exactly unchanged","temporaryInputRemoved":true},
+  "limitations":["Downloaded media archive portability and executable source definitions remain incomplete; no real cloud upload","Same-source C141 three artifacts refreshed; see C141-release-artifacts.json. Current image visual proof and full-platform journeys remain partial."]
+}

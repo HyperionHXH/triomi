@@ -1,0 +1,47 @@
+{
+  "recordedAt": "2026-10-08T03:58:28Z",
+  "device": "emulator-5554",
+  "api": 35,
+  "build": {
+    "variant": "release",
+    "apk": "build/app/outputs/flutter-apk/app-release.apk",
+    "r8InjektKeepFix": true,
+    "startup": "passed"
+  },
+  "extension": {
+    "packageName": "eu.kanade.tachiyomi.extension.zh.copymanga",
+    "versionName": "1.4.85",
+    "sourceName": "拷贝漫画"
+  },
+  "reading": {
+    "discover": "passed",
+    "detail": "笨蛋天使與廢柴人類",
+    "chapter": "第11话",
+    "pageCount": 16,
+    "image": "decoded and visible in release APK"
+  },
+  "screenshot": "docs/delivery/evidence/C114-release-reading.png",
+  "regression": {
+    "flutterTests": 683,
+    "pythonTests": 83,
+    "flutterAnalyze": "No issues found",
+    "androidCookieAbiTestsPerProcess": 6,
+    "androidTestProcesses": 2,
+    "liveCopyResume": "build/mihon-session-copy-keyword-reading.log"
+  },
+  "androidSystem": {
+    "notificationPermissionPrompt": "observed and granted",
+    "backgroundJob": "7301, PERIODIC 12h, PERSISTED, NOT_METERED",
+    "backgroundJobDisabled": "removed after switch off; stayed removed after restart",
+    "privateBackup": "13.4 KB ZIP, 2 history entries, 410 cached chapters",
+    "safExport": "13871 byte ZIP in Documents/TriomiAcceptance",
+    "safRestartExport": "second 13871 byte ZIP after force-stop and restart",
+    "safScreenshot": "docs/delivery/evidence/C114-release-saf.png"
+  },
+  "limits": [
+    "No real Cloudflare challenge completion demonstrated",
+    "API 26 and physical-device release checks pending",
+    "Release still uses debug signing"
+  ],
+  "evidenceLevel": "release APK on Android emulator; real plugin request and image response"
+}

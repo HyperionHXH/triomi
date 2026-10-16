@@ -19,17 +19,15 @@ void main() {
   }) async {
     final runtime = FlutterJsRuntime(callTimeout: callTimeout);
     try {
-      await runtime.load(
-        _commonScript,
-        name: 'd54.js',
-        bridge: _Bridge(),
-      );
+      await runtime.load(_commonScript, name: 'd54.js', bridge: _Bridge());
       await body(runtime);
     } on JsRuntimeError catch (error) {
       if (error.message.contains('JS 引擎不可用')) {
         // ignore: avoid_print
-        print('SKIP: 原生 JS 宿主不可用（$error）；'
-            '证据链见 js_engine_probe_test 与 ADR 001');
+        print(
+          'SKIP: 原生 JS 宿主不可用（$error）；'
+          '证据链见 js_engine_probe_test 与 ADR 001',
+        );
         return;
       }
       rethrow;
@@ -52,26 +50,23 @@ void main() {
   });
 
   test('一个调用超时、另一个成功：互不影响且运行器可用', () async {
-    await withRuntime(
-      (runtime) async {
-        final hanging = expectLater(
-          runtime.call('hang', <Object?>[]),
-          throwsA(
-            isA<JsRuntimeError>().having(
-              (e) => e.message,
-              'message',
-              contains('超时'),
-            ),
+    await withRuntime((runtime) async {
+      final hanging = expectLater(
+        runtime.call('hang', <Object?>[]),
+        throwsA(
+          isA<JsRuntimeError>().having(
+            (e) => e.message,
+            'message',
+            contains('超时'),
           ),
-        );
-        // 挂起期间发起的健康调用照常完成。
-        expect(await runtime.call('fastValue', <Object?>[]), 'fast-done');
-        await hanging;
-        // 超时之后运行器仍可用。
-        expect(await runtime.call('fastValue', <Object?>[]), 'fast-done');
-      },
-      callTimeout: const Duration(milliseconds: 150),
-    );
+        ),
+      );
+      // 挂起期间发起的健康调用照常完成。
+      expect(await runtime.call('fastValue', <Object?>[]), 'fast-done');
+      await hanging;
+      // 超时之后运行器仍可用。
+      expect(await runtime.call('fastValue', <Object?>[]), 'fast-done');
+    }, callTimeout: const Duration(milliseconds: 150));
   });
 
   test('JSON 不可序列化参数：报错清晰且运行器不受影响', () async {
@@ -103,11 +98,13 @@ void main() {
         name: 'b.js',
         bridge: _Bridge(),
       );
-      expect(await runtime.hasFunction('onlyA'), isFalse,
-          reason: '旧脚本的导出不应残留');
+      expect(await runtime.hasFunction('onlyA'), isFalse, reason: '旧脚本的导出不应残留');
       expect(await runtime.hasFunction('getCounter'), isTrue);
-      expect(await runtime.call('getCounter', <Object?>[]), 999,
-          reason: '计数器是新脚本写入的值，而不是旧状态累加');
+      expect(
+        await runtime.call('getCounter', <Object?>[]),
+        999,
+        reason: '计数器是新脚本写入的值，而不是旧状态累加',
+      );
     });
   });
 }

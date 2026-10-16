@@ -7,6 +7,7 @@ import '../../core/models/media_item.dart';
 import '../../core/theme/app_tokens.dart';
 import 'data/tracking_models.dart';
 import 'data/tracking_providers.dart';
+import 'tracking_sync_page.dart';
 
 /// 打开「追踪绑定」面板：选服务 → 搜条目 → 绑定，或解绑已有绑定。
 Future<void> showTrackingBindSheet(BuildContext context, MediaItem item) {
@@ -234,25 +235,38 @@ class _TrackingBindSheetState extends ConsumerState<_TrackingBindSheet> {
       _busy = true;
       _message = null;
     });
-    final service = ref.read(trackingServiceProvider);
     try {
-      final result = await service.bind(
-        sourceId: widget.item.sourceId,
-        remoteId: widget.item.remoteId,
-        kind: _kind,
-        remoteTrackId: candidate.remoteTrackId,
-        type: widget.item.type,
-        status: 'doing',
-      );
+      final canonical = await ref
+          .read(trackingSyncProvider)
+          .canonical(widget.item);
+      await ref
+          .read(trackingRepositoryProvider)
+          .bind(
+            sourceId: canonical.sourceId,
+            remoteId: canonical.remoteId,
+            kind: _kind,
+            remoteTrackId: candidate.remoteTrackId,
+          );
+      await ref
+          .read(trackingServiceProvider)
+          .preferences
+          .set(
+            'tracking.manualOnly.${canonical.sourceId}\u0000${canonical.remoteId}',
+            true,
+          );
       if (!mounted) return;
-      final key = '${widget.item.sourceId}\u0000${widget.item.remoteId}';
+      final key = '${canonical.sourceId}\u0000${canonical.remoteId}';
       ref.invalidate(trackingBindingsProvider(key));
       ref.invalidate(allTrackingBindingsProvider);
       setState(() {
-        _message = result.ok
-            ? '已绑定「${candidate.title}」'
-            : '已绑定，但首次同步失败：${result.message}';
+        _message = '已建立本地绑定「${candidate.title}」；远端尚未写入。请预览后确认同步。';
       });
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => TrackingSyncPage(item: canonical, kind: _kind),
+        ),
+      );
     } catch (error) {
       if (mounted) setState(() => _message = '绑定失败：$error');
     } finally {

@@ -7,9 +7,11 @@ import '../../core/db/app_database.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../library/data/library_providers.dart';
 import 'data/tracking_models.dart';
 import 'data/tracking_providers.dart';
 import 'data/tracking_service.dart';
+import 'tracking_sync_page.dart';
 
 /// 追踪账号：配置 Bangumi / AniList 的 access token，查看已绑定作品。
 ///
@@ -122,6 +124,20 @@ class _TrackingPageState extends ConsumerState<TrackingPage> {
         '${kind?.label ?? row.service} · 远端条目 ${row.remoteTrackId}'
         '${row.syncedAt == null ? '' : ' · 最近同步 ${_formatTime(row.syncedAt!)}'}',
       ),
+      onTap: kind == null
+          ? null
+          : () async {
+              final item = await ref
+                  .read(libraryRepositoryProvider)
+                  .itemByKey(row.sourceId, row.remoteId);
+              if (!context.mounted || item == null) return;
+              await Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => TrackingSyncPage(item: item, kind: kind),
+                ),
+              );
+            },
       trailing: IconButton(
         tooltip: '解绑',
         icon: const Icon(Icons.link_off, size: 20),

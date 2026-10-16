@@ -11,6 +11,7 @@ import '../../../core/source/source_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/source_network_image.dart';
 import 'lk_access.dart';
 
 /// 详情页评论区：列表（最热 / 最新）、分页、星级、发表、点赞。
@@ -476,8 +477,12 @@ class _BookCommentsSectionState extends ConsumerState<BookCommentsSection> {
               for (final url in comment.imageUrls.take(3))
                 ClipRRect(
                   borderRadius: AppRadius.controlRadius,
-                  child: Image.network(
-                    url,
+                  child: Image(
+                    image: SourceNetworkImage(
+                      url,
+                      http: ref.watch(sourceHttpClientProvider),
+                      sourceId: widget.item.sourceId,
+                    ),
                     width: 72,
                     height: 72,
                     fit: BoxFit.cover,

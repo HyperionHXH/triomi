@@ -64,9 +64,10 @@ class FakeHttpClient implements SourceHttpClient {
     String url, {
     required String sourceId,
     Map<String, String> headers = const <String, String>{},
+    bool followRedirects = true,
   }) async {
     requests.add(
-      SourceRequest(url: url, headers: headers, bodyType: RequestBodyType.none),
+      SourceRequest(url: url, headers: headers, followRedirects: followRedirects),
     );
     final bytes = bytesHandler?.call(url);
     if (bytes == null) {
@@ -80,6 +81,8 @@ class FakeHttpClient implements SourceHttpClient {
       return SourceByteStream(
         stream: Stream<List<int>>.fromIterable(<List<int>>[encoded]),
         contentLength: encoded.length,
+        statusCode: response.statusCode,
+        headers: response.headers,
         url: url,
       );
     }

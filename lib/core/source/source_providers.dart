@@ -8,24 +8,36 @@ import '../../features/novel/data/lns/lns_hub_connection.dart';
 import '../../features/novel/data/lns/lns_source.dart';
 import '../db/database_provider.dart';
 import '../models/media_item.dart';
+import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
 import '../models/source_exception.dart';
+import '../platform/platform_channel.dart';
 import '../storage/preferences.dart';
 import '../storage/secure_store.dart';
 import 'http_client.dart';
+import 'js/js_runtime.dart';
+import 'js/runtime/js_runtime_factory.dart';
+import 'mangadex_preferences.dart';
+import 'mihon_source.dart';
+import 'network_proxy.dart';
 import 'source_api.dart';
+import 'source_filters.dart';
 import 'source_registry.dart';
 import 'source_repository.dart';
 
 /// 来源网络层（全应用共用一个连接池）。
 final sourceHttpClientProvider = Provider<SourceHttpClient>((ref) {
-  final client = DioSourceHttpClient();
+  final client = DioSourceHttpClient(proxy: ref.watch(sourceProxyProvider));
   ref.onDispose(client.close);
   return client;
 });
 
 final sourceRepositoryProvider = Provider<SourceRepository>(
   (ref) => SourceRepository(ref.watch(databaseProvider)),
+);
+
+final sourceJsRuntimeFactoryProvider = Provider<JsRuntime Function()>(
+  (ref) => createFlutterJsRuntime,
 );
 
 /// 轻书架（LNS）：Hub 连接 + 账号 + 网关（SignalR 协议层见 lns_hub_connection）。
@@ -61,9 +73,69 @@ final lnsSourceProvider = Provider<LnsSource>((ref) {
 
 final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
   final preferences = ref.watch(preferencesProvider);
-  return SourceRegistry(
+  final mihonAdapters = <MihonSource>[];
+  final metadataFailures = <SourceFailure>[];
+  final enabledPackages = {
+    for (final value
+        in preferences.get<List<Object?>>('mihon.enabledPackages') ??
+            const <Object?>[])
+      '$value',
+  };
+  final rawHostStatus = preferences.get<Map<dynamic, dynamic>>(
+    'mihon.hostStatus',
+  );
+  for (final entry
+      in rawHostStatus?.entries ?? const <MapEntry<dynamic, dynamic>>[]) {
+    final packageName = '${entry.key}';
+    final status = entry.value;
+    if (status is! Map) {
+      continue;
+    }
+    final sources = status['sources'];
+    if (sources is! List || sources.isEmpty) {
+      metadataFailures.add(SourceFailure(
+        id: 'mihon:$packageName', name: '${status['name'] ?? packageName}',
+        message: '${status['hostError'] ?? status['error'] ?? 'APK 来源暂不可用；保留已安装记录'}',
+        lang: '${status['lang'] ?? ''}', nsfw: sourceNsfwFlag(status['nsfw']),
+      ));
+      continue;
+    }
+    for (final raw in sources) {
+      if (raw is! Map) continue;
+      final sourceId = '${raw['id'] ?? ''}';
+      if (sourceId.isEmpty) continue;
+      if (status['ok'] != true) {
+        metadataFailures.add(SourceFailure(
+          id: 'mihon:$packageName:$sourceId', name: '${raw['name'] ?? packageName}',
+          message: '${status['hostError'] ?? status['error'] ?? 'APK 宿主暂不可用'}',
+          lang: '${raw['lang'] ?? ''}', type: MediaType.manga,
+          nsfw: sourceNsfwFlag(raw['nsfw']) ?? sourceNsfwFlag(status['nsfw']),
+        ));
+        continue;
+      }
+      mihonAdapters.add(
+        MihonSource(
+          packageName: packageName,
+          hostSourceId: sourceId,
+          name: '${raw['name'] ?? packageName}',
+          lang: '${raw['lang'] ?? ''}',
+          nsfw: sourceNsfwFlag(raw['nsfw']) ?? sourceNsfwFlag(status['nsfw']),
+          enabled: status['ok'] == true && enabledPackages.contains(packageName),
+          apkPath: status['stagedPath']?.toString(),
+          versionCode: int.tryParse('${status['versionCode']}'),
+          signerSha256: status['signerSha256']?.toString(),
+          supportsLatest: raw['supportsLatest'] == true,
+        ),
+      );
+    }
+  }
+  final registry = SourceRegistry(
     repository: ref.watch(sourceRepositoryProvider),
     http: ref.watch(sourceHttpClientProvider),
+    jsRuntimeFactory: ref.watch(sourceJsRuntimeFactoryProvider),
+    jsContentOptions: (id) => id == 'mangadex'
+        ? mangaDexContentOptions(preferences)
+        : const <String, Object?>{},
     builtinAdapters: <String, ContentSource>{
       LkSource.id: LkSource(
         client: LkClient(
@@ -76,8 +148,12 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
       ),
       LnsSource.id: ref.watch(lnsSourceProvider),
     },
+    mihonAdapters: mihonAdapters,
+    metadataFailures: metadataFailures,
     // 轻书架已用真实账号端到端联调通过（发现/详情/正文/远端书架/签到），默认启用。
   );
+  ref.onDispose(registry.dispose);
+  return registry;
 });
 
 /// LK 的 base 覆盖（调试用）：
@@ -127,11 +203,51 @@ class SourceRegistryController extends AsyncNotifier<SourceRegistrySnapshot> {
   }
 
   Future<void> setEnabled(String id, {required bool enabled}) async {
+    if (id.startsWith('mihon:')) {
+      final packageName = id.split(':')[1];
+      if (!await platformChannel.setMihonEnabled(packageName, enabled)) {
+        throw StateError('Mihon 宿主未接受启用状态变更');
+      }
+      final preferences = ref.read(preferencesProvider);
+      final packages = <String>{
+        ...?preferences
+            .get<List<Object?>>('mihon.enabledPackages')
+            ?.map((e) => '$e'),
+      };
+      if (enabled) {
+        packages.add(packageName);
+      } else {
+        packages.remove(packageName);
+      }
+      await preferences.set('mihon.enabledPackages', packages.toList());
+      ref.invalidate(sourceRegistryProvider);
+      await refresh();
+      return;
+    }
     await ref.read(sourceRegistryProvider).setEnabled(id, enabled: enabled);
     await refresh();
   }
 
   Future<void> remove(String id) async {
+    if (id.startsWith('mihon:')) {
+      await setEnabled(id, enabled: false);
+      final preferences = ref.read(preferencesProvider);
+      final statuses = <String, Object?>{
+        ...?preferences
+            .get<Map<dynamic, dynamic>>('mihon.hostStatus')
+            ?.map((k, v) => MapEntry('$k', v)),
+      }..remove(id.split(':')[1]);
+      await preferences.set('mihon.hostStatus', statuses);
+      final installed = <String, Object?>{
+        ...?preferences
+            .get<Map<dynamic, dynamic>>('mihon.installedPackages')
+            ?.map((k, v) => MapEntry('$k', v)),
+      }..remove(id.split(':')[1]);
+      await preferences.set('mihon.installedPackages', installed);
+      ref.invalidate(sourceRegistryProvider);
+      await refresh();
+      return;
+    }
     await ref.read(sourceRegistryProvider).remove(id);
     await refresh();
   }

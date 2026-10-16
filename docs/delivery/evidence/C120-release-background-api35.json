@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-09T13:35:02.556123+00:00",
+  "api": 35,
+  "variant": "release",
+  "jobId": 7301,
+  "trigger": "cmd jobscheduler run -f; real persisted anime follow and Bangumi calendar",
+  "notificationId": 7302,
+  "notificationPresent": true,
+  "extras": {
+    "title": "追番更新提醒",
+    "text": "今天有 1 部追番更新：《东京复仇者 三天战争篇》"
+  },
+  "jobState": "waiting"
+}

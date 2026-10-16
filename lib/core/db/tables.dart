@@ -161,6 +161,11 @@ class Categories extends Table {
   TextColumn get name => text()();
 
   IntColumn get sortIndex => integer().withDefault(const Constant(0))();
+
+  BoolColumn get hidden => boolean().withDefault(const Constant(false))();
+
+  /// null 为手动分类；非空为版本化的本地筛选规则。
+  TextColumn get rulesJson => text().nullable()();
 }
 
 /// 书架条目 ↔ 分类 多对多。
@@ -252,4 +257,88 @@ class TrackBinds extends Table {
     remoteId,
     service,
   };
+}
+
+/// Durable compensation record; deleted in the same transaction as imported
+/// database rows. Its presence means Hive settings must be restored on startup.
+class BackupImportJournals extends Table {
+  IntColumn get id => integer()();
+  TextColumn get previousValuesJson => text()();
+  TextColumn get missingKeysJson => text()();
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// 人工确认的资料作品与播放站映射；不通过标题自动合并。
+@DataClassName('AnimeSourceLinkRow')
+class AnimeSourceLinks extends Table {
+  TextColumn get subjectSourceId => text()();
+  TextColumn get subjectRemoteId => text()();
+  TextColumn get sourceId => text()();
+  TextColumn get remoteId => text().nullable()();
+  TextColumn get alias => text().withDefault(const Constant(''))();
+  TextColumn get lastChapterId => text().nullable()();
+  DateTimeColumn get selectedAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {
+    subjectSourceId,
+    subjectRemoteId,
+    sourceId,
+  };
+}
+
+@DataClassName('MangaFeedRow')
+class MangaFeeds extends Table {
+  TextColumn get id => text()();
+  TextColumn get sourceId => text()();
+  TextColumn get name => text()();
+  TextColumn get kind => text()();
+  TextColumn get feedId => text().withDefault(const Constant('popular'))();
+  TextColumn get query => text().withDefault(const Constant(''))();
+  TextColumn get filtersJson => text().withDefault(const Constant('[]'))();
+  BoolColumn get hidden => boolean().withDefault(const Constant(false))();
+  IntColumn get position => integer()();
+  DateTimeColumn get updatedAt => dateTime()();
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+@DataClassName('MangaUpdateRow')
+class MangaUpdates extends Table {
+  TextColumn get sourceId => text()();
+  TextColumn get remoteId => text()();
+  TextColumn get status => text().withDefault(const Constant('queued'))();
+  TextColumn get error => text().nullable()();
+  IntColumn get added => integer().withDefault(const Constant(0))();
+  IntColumn get generation => integer().withDefault(const Constant(0))();
+  IntColumn get notifiedGeneration =>
+      integer().withDefault(const Constant(0))();
+  DateTimeColumn get checkedAt => dateTime().nullable()();
+  DateTimeColumn get notifiedAt => dateTime().nullable()();
+  @override
+  Set<Column<Object>> get primaryKey => {sourceId, remoteId};
+}
+
+@DataClassName('MigrationPlanRow')
+class MigrationPlans extends Table {
+  TextColumn get id => text()();
+  TextColumn get payload => text()();
+  TextColumn get status => text().withDefault(const Constant('ready'))();
+  TextColumn get error => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+@DataClassName('MergedMangaReferenceRow')
+class MergedMangaReferences extends Table {
+  TextColumn get sourceId => text()();
+  TextColumn get remoteId => text()();
+  TextColumn get membersJson => text()();
+  TextColumn get chapterGroupsJson => text()();
+  DateTimeColumn get updatedAt => dateTime()();
+  @override
+  Set<Column<Object>> get primaryKey => {sourceId, remoteId};
 }

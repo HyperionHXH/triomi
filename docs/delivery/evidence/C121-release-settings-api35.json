@@ -1,0 +1,9 @@
+{
+  "at": "2026-10-09T14:02:01.182878+00:00",
+  "api": 35,
+  "variant": "final release after Preference/Zstd fixes",
+  "actualPluginSettings": true,
+  "mirrorPersisted": true,
+  "noPluginAccountConfigured": true,
+  "screenshot": "C121-release-settings-api35.png"
+}

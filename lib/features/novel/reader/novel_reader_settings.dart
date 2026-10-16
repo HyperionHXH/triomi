@@ -81,8 +81,7 @@ class NovelReaderSettings {
   static const List<double> ttsRateChoices = <double>[0.3, 0.5, 0.7];
 
   /// 音色选择值（名称+区域都存在才有效）；null = 系统默认音色。
-  TtsVoiceInfo? get ttsVoice =>
-      (ttsVoiceName != null && ttsVoiceLocale != null)
+  TtsVoiceInfo? get ttsVoice => (ttsVoiceName != null && ttsVoiceLocale != null)
       ? TtsVoiceInfo(name: ttsVoiceName!, locale: ttsVoiceLocale!)
       : null;
 

@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-14",
+  "status": "partial",
+  "apk": {
+    "path": "D:/noval_and_manga/_tools/Triomi-C134-P10-android-acceptance.apk",
+    "bytes": 126798476,
+    "sha256": "7e4cee55650938d4cdf4c240148cf4c72417055a8f06628f8325e09ca77abbec",
+    "devicesInstalledAndHashMatched": ["emulator-5554", "emulator-5556"],
+    "actualApi35Smoke": "Detail opened bidirectional tracking menu and unbound Bangumi preview displayed guarded network/auth failure; no remote write attempted"
+  },
+  "verification": {
+    "trackingSyncTargetedPassed": 4,
+    "existingTrackingContractPassed": 45,
+    "analyze": "No issues found",
+    "remoteWriteActual": "not-completed; no account credential or remote target authorization used"
+  },
+  "implementation": [
+    "Canonical identity resolves confirmed anime source links and confirmed manga merged members before preview/bind",
+    "Preview reads local/remote status, progress, score and binding; preview performs no remote write",
+    "Push requires explicit UI confirmation of service, target, status, score and progress; rereads remote and local binding before write, rate-limits per service, writes idempotently, rereads to confirm, and never logs out on failure",
+    "Pull rejects missing remote collection and stale remote changes, keeps max progress, preserves a local undo snapshot, and refuses undo after later local edits",
+    "Existing passive reader/player reporting remains best-effort; manually confirmed bindings are marked manual-only so background progress cannot silently write remote state",
+    "Bangumi episode progress uses its existing episode PATCH path; book/manga progress uses ep_status; AniList reads/writes status, progress and score",
+    "All API credentials remain SecureStore-first and excluded from backup; binding remote writes are not performed without the explicit confirmation flag"
+  ],
+  "limitations": [
+    "No real Bangumi/AniList account write or message was attempted without concrete user authorization",
+    "Actual remote conflict and post-write reread were exercised with deterministic protocol fixtures only",
+    "API26/signed/Windows complete journey and visual review pending"
+  ]
+}

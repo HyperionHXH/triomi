@@ -80,6 +80,8 @@ class LnsBookDetail {
     this.tags = const <String>[],
     this.favoriteCount = 0,
     this.chapters = const <LnsChapter>[],
+    this.canDownload,
+    this.downloadCost,
   });
 
   final int id;
@@ -90,6 +92,11 @@ class LnsBookDetail {
   final List<String> tags;
   final int favoriteCount;
   final List<LnsChapter> chapters;
+
+  /// Official file-download permission, distinct from reading access.
+  /// Null means the actual response did not provide this field.
+  final bool? canDownload;
+  final int? downloadCost;
 }
 
 /// 章节正文。
@@ -336,6 +343,8 @@ class LnsGateway {
       tags: classTags.isNotEmpty ? classTags : bookTags,
       favoriteCount: favorite < 0 ? 0 : favorite,
       chapters: chapters,
+      canDownload: boolOf(book, const ['CanDownload', 'canDownload']),
+      downloadCost: intOf(book, const ['DownloadCost', 'downloadCost']),
     );
   }
 

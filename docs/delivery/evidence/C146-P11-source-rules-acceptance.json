@@ -1,0 +1,138 @@
+{
+  "round": "C146",
+  "date": "2026-10-14",
+  "status": "local-source-rule-feature-implemented",
+  "scope": {
+    "formats": [
+      "declarative JSON",
+      "JS JSON",
+      "Kazumi JSON"
+    ],
+    "localExportOptIn": true,
+    "automaticAndWebDavExportRules": false,
+    "restoreOptIn": true,
+    "restoredEnabled": false,
+    "overwriteExistingRules": false,
+    "fillMetadataOnlyPluginRows": true,
+    "overwriteNativeBuiltinIdentity": false,
+    "apkPackageOrPublisherTrustMigration": false,
+    "staticValidationOnly": true,
+    "arbitraryCodeSecretScrubbingGuaranteed": false
+  },
+  "tests": {
+    "targetedPassed": 20,
+    "fullSuitePassed": 808,
+    "finalSourceRuleRegressionPassed": 6,
+    "analyze": "No issues found",
+    "redBeforeImplementation": "Expected 3 rule definitions; actual 0",
+    "regressions": [
+      "three formats roundtrip without JS initialization",
+      "metadata-only plugin fill",
+      "local rule and enabled state preserved",
+      "identity and duplicate rejection",
+      "explicit credential key and URL rejection before writes",
+      "builtin identity protected",
+      "later SQL failure rolls back rule writes and settings"
+    ]
+  },
+  "android": {
+    "serial": "emulator-5554",
+    "api": 35,
+    "install": "install -r; no clear or uninstall",
+    "apkBytes": 127404944,
+    "apkSha256": "1ede08a1558cf49a87e687a6d923a63bdc49f9e1fec626bf95e20f10ca326889",
+    "installedSha256": "1ede08a1558cf49a87e687a6d923a63bdc49f9e1fec626bf95e20f10ca326889",
+    "signers": 1,
+    "v2": true,
+    "certificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6",
+    "preview": {
+      "newRules": 1,
+      "protectedRules": 0,
+      "restoreChecked": false
+    },
+    "restoreMessage": "作品 0、书架 0、历史 0、目录 0、封面 0、下载媒体 0、规则 1（停用）、设置 0",
+    "disabledAfterIndependentRestart": true,
+    "disabledTopLevelLoopbackRequests": 0,
+    "manualEnableHttpRequests": [
+      "/boot",
+      "/search"
+    ],
+    "searchResult": "C146 restored rule works / C146 规则恢复验收",
+    "repeatPreview": {
+      "newRules": 0,
+      "protectedRules": 1,
+      "restoreToggleEnabled": false
+    },
+    "repeatImportRuleCount": 0,
+    "enabledSearchCapabilityRetainedAfterRepeat": true,
+    "visualProof": false,
+    "evidenceType": "fresh native semantic UI + actual production JS worker HTTP"
+  },
+  "export": {
+    "saf": true,
+    "explicitTargetConfirmed": true,
+    "bytes": 183972,
+    "sha256": "cdf3c50989cf5d0e2b6801d47b8186335f74e8e271c9696d58a24d5eead727e0",
+    "rules": 13,
+    "libraryEntries": 6,
+    "historyEntries": 19,
+    "cachedChapters": 4013,
+    "covers": 0,
+    "downloadedMedia": 0,
+    "zipCrcValid": true,
+    "manifestSha256AndSizeValid": true,
+    "sourceMetadataAllDisabled": true,
+    "syntheticRuleSha256": "eb51b647467f17aa1777a1ab921561ef79cf11e5699d9f17d49bf44faa11469b"
+  },
+  "observations": [
+    {
+      "kind": "fixture-correction",
+      "detail": "JS HTTP bridge requires absolute URL; fixed synthetic script, no production special case"
+    },
+    {
+      "kind": "environment",
+      "detail": "API35 had no active default network; temporary adb reverse carried loopback smoke; network settings not changed"
+    },
+    {
+      "kind": "N6",
+      "detail": "Existing source switch has no label; native android.widget.Switch NAF=true; backlog P12 accessibility"
+    },
+    {
+      "kind": "build-invocation",
+      "detail": "Gradle environment property was not applied; explicit --android-project-arg=triomiAcceptanceSigning=true built successfully"
+    }
+  ],
+  "cleanup": {
+    "syntheticSourceRemoved": true,
+    "deviceSyntheticInputsRemoved": true,
+    "newSafExportCopiesRemoved": true,
+    "adbReverseRemoved": true,
+    "hostLoopbackServerStopped": true
+  },
+  "unchangedArtifacts": {
+    "api26": "C144",
+    "productionAndroid": "C144",
+    "windowsZip": "C144"
+  },
+  "secretScan": {
+    "status": "passed",
+    "repositoryAndHistoricalFilesScanned": 1211,
+    "repositoryAndHistoricalFilesWithSecret": 0,
+    "apkMembersScanned": 598,
+    "rawBackupMembersScanned": 2,
+    "artifactMembersWithKnownCredentialOrSigningSecret": 0,
+    "privateMaterialNames": 0,
+    "scope": "Exact known account and signing secret values; not proof arbitrary JS contains no private data"
+  },
+  "remaining": [
+    "N2 process-death file cleanup",
+    "N3 partial download byte/ETag/fragment portability",
+    "N4 cloud media scope",
+    "N5 real manga/HLS cross-device restoration",
+    "APK package/signature/trust portability",
+    "desktop backup scheduling",
+    "authorized real cloud two-device conflict acceptance",
+    "N6 and P12 remaining modules",
+    "affected platform and visual acceptance"
+  ]
+}

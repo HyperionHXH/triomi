@@ -115,9 +115,5 @@ class TrackingGateway {
   }
 
   SourceResponse _json(Map<String, Object?> payload, String url) =>
-      SourceResponse(
-        statusCode: 200,
-        url: url,
-        body: jsonEncode(payload),
-      );
+      SourceResponse(statusCode: 200, url: url, body: jsonEncode(payload));
 }

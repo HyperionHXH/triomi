@@ -9,6 +9,7 @@ import '../platform/platform_channel.dart';
 import '../source/http_client.dart';
 import '../source/source_providers.dart';
 import '../theme/app_tokens.dart';
+import 'source_network_image.dart';
 
 /// 全屏图片查看器：缩放拖动、系统返回退出、长按保存到相册。
 ///
@@ -31,17 +32,17 @@ Future<void> showImageViewer(
   );
 }
 
-class _ImageViewerPage extends StatefulWidget {
+class _ImageViewerPage extends ConsumerStatefulWidget {
   const _ImageViewerPage({required this.imageUrl, required this.sourceId});
 
   final String imageUrl;
   final String sourceId;
 
   @override
-  State<_ImageViewerPage> createState() => _ImageViewerPageState();
+  ConsumerState<_ImageViewerPage> createState() => _ImageViewerPageState();
 }
 
-class _ImageViewerPageState extends State<_ImageViewerPage> {
+class _ImageViewerPageState extends ConsumerState<_ImageViewerPage> {
   final TransformationController _transform = TransformationController();
 
   @override
@@ -63,8 +64,16 @@ class _ImageViewerPageState extends State<_ImageViewerPage> {
                 transformationController: _transform,
                 maxScale: 5.0,
                 child: Center(
-                  child: Image.network(
-                    widget.imageUrl,
+                  child: Image(
+                    image: widget.imageUrl.startsWith('file:')
+                        ? FileImage(File.fromUri(Uri.parse(widget.imageUrl)))
+                        : !widget.imageUrl.contains('://')
+                        ? FileImage(File(widget.imageUrl))
+                        : SourceNetworkImage(
+                            widget.imageUrl,
+                            http: ref.watch(sourceHttpClientProvider),
+                            sourceId: widget.sourceId,
+                          ),
                     fit: BoxFit.contain,
                     loadingBuilder: (context, child, progress) {
                       if (progress == null) return child;
@@ -155,7 +164,15 @@ Future<Uint8List?> loadImageBytes(
     }
   }
   try {
-    final file = File(url);
+    final windowsPath = RegExp(r'^[A-Za-z]:[\\/]').hasMatch(url);
+    final hasScheme = RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*:').hasMatch(url);
+    final uri = hasScheme && !windowsPath ? Uri.parse(url) : null;
+    if (uri != null && (uri.scheme != 'file' ||
+        uri.host.isNotEmpty || uri.hasQuery || uri.hasFragment ||
+        !uri.path.startsWith('/'))) {
+      return null;
+    }
+    final file = uri == null ? File(url) : File.fromUri(uri);
     return await file.exists() ? await file.readAsBytes() : null;
   } catch (_) {
     return null;

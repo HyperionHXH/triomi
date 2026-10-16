@@ -1,0 +1,168 @@
+{
+  "date": "2026-10-15",
+  "serial": "emulator-5556",
+  "sdk": 26,
+  "installedSha256": "a07e899791f0713310effdc8c466299173a36d724a235021caeec96958341e0f",
+  "status": "partial-native-journey-complete-for-reachable-existing-content",
+  "scope": "Installed C148 final acceptance package only; ordinary UI plus explicitly serial-scoped ADB. No build, install, lint, tests, data clear, login, credential reads, source trust changes, tracking writes or cloud writes. This is not complete P1-P12 acceptance.",
+  "sqlite": {
+    "path": "/data/data/io.github.hyperionhxh.triomi/app_flutter/triomi.sqlite",
+    "access": "Root SQLite PRAGMA query_only=ON; table/column indexes, aggregate counts and existing media file paths only; no Hive or secure storage read",
+    "fourCountsBeforeUiJourney": {
+      "library_entries": 4,
+      "histories": 6,
+      "downloads": 3,
+      "media_items": 10
+    },
+    "fourCountsAfterUiJourney": {
+      "library_entries": 4,
+      "histories": 6,
+      "downloads": 3,
+      "media_items": 10
+    },
+    "countsBeforeAndAfterBackupCancellation": {
+      "library_entries": 4,
+      "histories": 6,
+      "downloads": 3,
+      "media_items": 10
+    },
+    "supplementalCurrentChapterCount": 3689,
+    "supplementalChapterCountLimitation": "Not sampled before this journey; no unchanged chapter-count claim. Normal detail navigation can refresh catalog metadata.",
+    "cachedChapterContentCounts": {
+      "light-novel-kingdom": 1,
+      "light-novel-shelf": 1,
+      "xkcd": 0,
+      "asurascans": 0
+    }
+  },
+  "video": {
+    "item": "小林家的龙女仆 / 第01集",
+    "existingDownloadId": 3,
+    "status": "done",
+    "path": "/data/user/0/io.github.hyperionhxh.triomi/app_flutter/downloads/restore-15e8f8ecf021cf475721dd52915fe2dea0da5fbdb286f9dd8a7ece3162c1533b-OQYALC.complete/video.mp4",
+    "bytesBeforeAndAfter": 497133814,
+    "localPlayback": "passed: real animation frames visually reviewed, local video.mp4 descriptor observed before offline exercise; independent force-stop replay also decoded with WiFi/mobile data disabled",
+    "initialVisibleTime": "2:03 / 25:11",
+    "seekVisibleTime": "12:45 / 25:11",
+    "homeReturnOfflineVisibleTime": "15:27 / 25:11",
+    "beforeForceStopVisibleTime": "15:47 / 25:11",
+    "independentForceStopResumeOfflineVisibleTime": "15:45 / 25:11",
+    "resumeObservation": "Near previous saved position, approximately 2 seconds earlier in sampled screenshot; not an exact seek-tolerance measurement",
+    "pip": "passed: normal 画中画 button produced native small video over Android launcher; two visually reviewed screenshots show different real frames while offline",
+    "pipTimeLimitation": "PiP hides the time label; last full-player sample before PiP was 15:45, final persisted history after PiP return was 979 seconds. PiP frame progression, not exact timestamp, is directly visible.",
+    "finalPersistedHistorySeconds": 1054,
+    "evidence": [
+      "_tools/C149-api26-local-video-playing.png",
+      "_tools/C149-api26-local-video-seek.png",
+      "_tools/C149-api26-local-video-home-resume.png",
+      "_tools/C149-api26-local-video-before-force-stop.png",
+      "_tools/C149-api26-local-video-force-stop-resume.png",
+      "_tools/C149-api26-local-video-pip.png",
+      "_tools/C149-api26-local-video-pip-progress.png",
+      "_tools/C149-api26-video-final-clock.png",
+      "_tools/C149-api26-final-history.png"
+    ],
+    "limitations": [
+      "No audio listening claim: evidence is actual visually decoded frames and time progression",
+      "uiautomator sometimes cannot dump native playback; screenshots rather than an absent accessibility tree establish frame success",
+      "Only existing downloaded episode exercised; no next-episode download or network-video claim"
+    ]
+  },
+  "novelsOffline": {
+    "network": "WiFi and mobile data disabled for offline reader exercise; both restored afterward",
+    "lns": {
+      "item": "年度最垃圾伪圣女 / 第一话 转生成了伪圣女",
+      "pageTurn": "passed: visually read 3 / 13 -> 4 / 13 with different Chinese page text",
+      "nextChapter": "not available offline: 第二话 (伪)圣女艾尔利洁 shows 章节加载失败 / 连接轻书架失败; only one cached chapter-content row exists",
+      "recovery": "上一章 returns to the existing cached first chapter",
+      "evidence": [
+        "_tools/C149-api26-lns-offline-before.png",
+        "_tools/C149-api26-lns-offline-after-page.png",
+        "_tools/C149-api26-lns-offline-next-chapter.png"
+      ]
+    },
+    "lk": {
+      "item": "負債兩千萬的班級偶像，被邊緣人的我買下來了 / 第一話 被買下來的偶像",
+      "pageTurn": "passed: visually read 20 / 22 -> 21 / 22 with different Traditional Chinese page text",
+      "secondChapter": "existing history 第二話 初夜 cannot load offline; screenshot shows LK DNS lookup failed. First chapter selected from existing cached catalog succeeds; only one cached chapter-content row exists",
+      "evidence": [
+        "_tools/C149-api26-lk-offline-before.png",
+        "_tools/C149-api26-lk-cached-first.png",
+        "_tools/C149-api26-lk-cached-page21.png"
+      ]
+    },
+    "crossChapterSuccessClaimed": false
+  },
+  "mangaOffline": {
+    "item": "xkcd / 1: Barrel - Part 1",
+    "status": "not available from original data",
+    "reason": "Existing history/catalog exists but chapter-content cache count is zero and no manga download path exists. Offline reader displays Unable to resolve host xkcd.com / 章节未加载. Original local manga library is empty. No image fixture or new import was substituted.",
+    "otherExistingSource": "AsuraScans has 119 indexed chapters and zero cached chapter-content rows; not claimed as readable offline",
+    "evidence": [
+      "_tools/C149-api26-manga-offline-resume.png",
+      "_tools/C149-api26-local-manga-inventory.png"
+    ],
+    "pageTurnOrChapterSuccessClaimed": false
+  },
+  "p7ReaderSettings": {
+    "largeNovelText": "passed: size 18 -> 29; actual large Chinese reading text visually reviewed, pagination reflow 4 / 13 -> 7 / 29 then 8 / 29; restored size 18, spacing 1.7, original paginated parchment mode unchanged",
+    "mangaOrientation": "passed reachable/native rotation: 跟随系统 -> 横屏, actual 1920x1080 landscape settings visually reviewed; restored 跟随系统 and portrait",
+    "cropAndDualPage": "passed control reachability/toggle only: both original off -> on in landscape -> restored off",
+    "pixelLimitation": "No original cached manga pixels on API26; cannot claim actual edge crop accuracy or rendered two-page layout. Settings UI success is not manga decoding acceptance.",
+    "evidence": [
+      "_tools/C149-api26-novel-settings-original.png",
+      "_tools/C149-api26-novel-settings-large-value.png",
+      "_tools/C149-api26-novel-large-reading.png",
+      "_tools/C149-api26-novel-settings-restored-value.png",
+      "_tools/C149-api26-manga-settings-original.png",
+      "_tools/C149-api26-manga-crop-double-landscape.png",
+      "_tools/C149-api26-manga-settings-restored.png"
+    ]
+  },
+  "p11Backup": {
+    "systemPicker": "passed: 选择备份 ZIP 恢复 opens Android DocumentsUI Downloads. Initially empty; no original backup file removed.",
+    "preview": "passed: exported own slim credential-free local backup using ordinary UI, copied only that temporary ZIP into Downloads, selected through real system picker; actual 恢复冲突预览 shows 0 added/newer, 4 local retained, 0 conflicts, no complete/partial media in this slim ZIP",
+    "cancellation": "passed: tapped 取消, never 确认合并当前备份; four SQLite counts identical immediately before/after cancellation",
+    "cleanup": "Only this run's own triomi-2026-10-15T10-57-18.052076-XRPOAO.zip and /sdcard/Download/C149-api26-own-preview.zip removed after preview; both absent afterward. App temporary import file no longer present. Original data/media untouched.",
+    "evidence": [
+      "_tools/C149-api26-backup-system-picker.png",
+      "_tools/C149-api26-backup-preview.png",
+      "_tools/C149-api26-backup-cancelled.png"
+    ]
+  },
+  "systemChineseTts": {
+    "status": "passed active engine lifecycle on existing LK Chinese chapter; audio listening not performed",
+    "lnsLimitation": "LNS chapter uses source-specific glyph/font path and did not enter playing state. No successful LNS speech claim.",
+    "lkPlayback": "Normal 朗读 action changes to 暂停朗读; real system AudioTrack state:started observed for UID10079/PID4228, while Chinese reader advances through content (visible 18 / 20 -> 19 / 20). Explicit 停止朗读 restores 朗读 icon and active track disappears.",
+    "voiceSettings": "Installed cmn(zh) voice discovered through ordinary voice list; original 系统默认 and rate 0.5 restored before final LK playback",
+    "limitations": "No recorded/subjectively heard Mandarin pronunciation or audio-quality claim; evidence proves engine playback/start-stop and reader progression rather than listening verification",
+    "evidence": [
+      "_tools/C149-api26-lk-tts-active.png",
+      "_tools/C149-api26-lk-tts-stopped.png",
+      "_tools/C149-api26-tts-restored-final.png"
+    ]
+  },
+  "restoration": {
+    "wifi_on": "1 -> 0 during offline exercise -> 1",
+    "mobile_data": "1 -> 0 during offline exercise -> 1",
+    "airplane_mode_on": "0 unchanged",
+    "httpProxy": "not changed",
+    "novelFont": "18 restored",
+    "novelLineSpacing": "1.7 unchanged",
+    "mangaScreenDirection": "跟随系统 restored",
+    "mangaCrop": "off restored",
+    "mangaDualPage": "off restored",
+    "ttsVoice": "系统默认 restored",
+    "ttsRate": "0.5 unchanged",
+    "finalLocation": "阅读历史; no media or speech running after leaving reader/player",
+    "originalRowsAndDownloadedMediaPreserved": true,
+    "normalProgressWrites": "Actual reading/playback updates existing progress/history timestamps; not rolled back or rewritten directly"
+  },
+  "evidenceReview": "Every success screenshot listed above was opened with read and visually inspected; accessibility labels and nonzero byte/frame counts alone were not treated as visual decoding proof. Screenshot paths are relative to D:/noval_and_manga, outside repository under _tools.",
+  "remaining": [
+    "Offline novel cross-chapter success requires another actual cached chapter; original data has one content chapter per LK/LNS",
+    "Offline manga turning/cross-chapter and crop/two-page pixel acceptance require actual original downloaded manga images; current API26 original local manga library is empty",
+    "Subjective Chinese TTS audio/pronunciation verification not performed",
+    "No claim of complete P1-P12 or account-dependent workflows"
+  ]
+}

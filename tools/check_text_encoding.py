@@ -4,13 +4,11 @@ from pathlib import Path
 import subprocess
 
 
-def main() -> int:
-    root = Path(__file__).resolve().parent.parent
-    paths = subprocess.check_output(
-        ["git", "ls-files", "-z"], cwd=root
-    ).decode("utf-8").split("\0")
+def find_encoding_errors(root: Path, paths: list[str]) -> list[str]:
+    """Scan the given repo-relative text files; returns human-readable errors."""
+
     suffixes = {".md", ".dart", ".json", ".py", ".ps1", ".yaml", ".yml", ".xml", ".kt"}
-    errors = []
+    errors: list[str] = []
     for name in paths:
         path = root / name
         if not name or not path.is_file() or path.suffix not in suffixes:
@@ -22,6 +20,18 @@ def main() -> int:
             continue
         if "\ufffd" in text:
             errors.append(f"{name}: contains Unicode replacement character")
+    return errors
+
+
+def tracked_paths(root: Path) -> list[str]:
+    return subprocess.check_output(
+        ["git", "ls-files", "-z"], cwd=root
+    ).decode("utf-8").split("\0")
+
+
+def main() -> int:
+    root = Path(__file__).resolve().parent.parent
+    errors = find_encoding_errors(root, tracked_paths(root))
     for error in errors:
         print(error)
     print(f"Encoding check: {len(errors)} errors")

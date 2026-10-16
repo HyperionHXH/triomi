@@ -1,0 +1,11 @@
+{
+  "phase": "pause",
+  "realPublicSample": true,
+  "noFixture": true,
+  "sourceUrl": "https://test-streams.mux.dev/x36xhzz/url_2/193039199_mp4_h264_aac_ld_7.m3u8",
+  "status": "paused-real-media",
+  "progress": 0.125,
+  "mediaRequests": 9,
+  "occupiedBytes": 2632360,
+  "cachedParts": 8
+}

@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-14",
+  "status": "partial",
+  "apk": {
+    "path": "D:/noval_and_manga/_tools/Triomi-C131-P7-android-acceptance.apk",
+    "bytes": 125929724,
+    "sha256": "a12f31b6f8c665b9bf72b91852a20f6d74a45be8e2c4f7cea0f0ca3c7974e898"
+  },
+  "devicesInstalled": [
+    "emulator-5554",
+    "emulator-5556"
+  ],
+  "actual": {
+    "device": "emulator-5554",
+    "source": "MangaDex开放规则",
+    "chapter": "76.2",
+    "initial": "4/14",
+    "workSettings": {
+      "mode": "webtoon",
+      "trim": true,
+      "filter": "grayscale",
+      "orientation": "landscape",
+      "doublePage": true
+    },
+    "independentRestartSettings": {
+      "mode": "webtoon",
+      "trim": true,
+      "filter": "grayscale"
+    },
+    "restartReader": "1/14 after stored setting path",
+    "horizontalSwipeAfterDoublePage": "3/14",
+    "restartAfterHorizontalSwipe": {
+      "initialFailure": "MangaDex receive timeout",
+      "action": "ordinary retry",
+      "restored": "3/14"
+    },
+    "positionPersisted": true
+  },
+  "implementation": {
+    "perWorkKey": "sourceId+remoteId",
+    "inheritGlobal": true,
+    "resetOverride": true,
+    "boundedImageCache": true,
+    "preloadBounded": true,
+    "trimUniformMarginsOnly": true,
+    "filterMatrix": true,
+    "autoScrollPausedWhenChromeOrBackground": true
+  },
+  "verification": {
+    "targetedReaderWorkSettingsPassed": 2,
+    "readerLoadingPassed": 1,
+    "fullSuitePassed": 766,
+    "analyze": "No issues found",
+    "modeAndDoublePageAnchorRegressionPassed": 2
+  },
+  "limitations": [
+    "Screenshot/true pixel visual review unavailable",
+    "API26, official signed, Windows final bytes and full reader journey pending",
+    "No claim of actual visual filter pixels from AX state"
+  ]
+}

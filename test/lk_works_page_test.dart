@@ -135,13 +135,13 @@ void main() {
     expect(find.text('还没有发布作品'), findsOneWidget);
   });
 
-  testWidgets('默认 seam（接口未接入）：可读错误而不是崩溃或假空列表', (tester) async {
+  testWidgets('默认生产适配器：未登录时显示可读错误而不是假空列表', (tester) async {
     await tester.pumpWidget(
       const ProviderScope(child: MaterialApp(home: LkWorksPage())),
     );
     await settle(tester);
-    expect(find.textContaining('尚未接入'), findsOneWidget);
     expect(find.text('重试'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   test('默认 seam 抛出来源解析错误（不是崩溃）', () async {

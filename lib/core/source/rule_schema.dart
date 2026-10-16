@@ -5,6 +5,7 @@ import '../models/source_descriptor.dart';
 import 'http_client.dart';
 import 'selector_engine.dart';
 import 'source_api.dart';
+import 'source_filters.dart';
 
 /// 规则格式错误：导入时要给出能看懂的原因，而不是抛一个泛化异常。
 class RuleFormatException implements Exception {
@@ -230,6 +231,9 @@ class SourceRule {
     if (type == null) {
       throw const RuleFormatException('type 必须是 anime / manga / novel 之一');
     }
+    if (map['nsfw'] != null && sourceNsfwFlag(map['nsfw']) == null) {
+      throw const RuleFormatException('nsfw 必须是 bool 或 0 / 1');
+    }
 
     final capabilities = <SourceCapability>{};
     for (final entry
@@ -279,7 +283,8 @@ class SourceRule {
         name: name,
         type: type,
         kind: SourceKind.plugin,
-        lang: map['lang']?.toString() ?? 'zh',
+        lang: map['lang']?.toString() ?? '',
+        nsfw: sourceNsfwFlag(map['nsfw']),
         baseUrl: map['baseUrl']?.toString(),
         version: map['version']?.toString(),
         requireLogin: map['requireLogin']?.toString() == 'true',

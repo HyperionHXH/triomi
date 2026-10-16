@@ -47,8 +47,8 @@ jobs:
       - run: python tools/delivery_consistency_scan.py --json
       - run: python tools/check_text_encoding.py
 
-  # Android APK（release）。项目里没配签名密钥，走的是 Flutter 模板默认的 debug 签名，
-  # 仅用于自用/测试安装；要发布请自行配置 keystore。
+  # CI acceptance APK uses explicit debug signing; production releases fail
+  # closed unless the existing publisher's private signing material is provided.
   android:
     runs-on: ubuntu-latest
     steps:
@@ -63,7 +63,10 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build apk --release
+      - name: Build acceptance APK without production signing
+        env:
+          ORG_GRADLE_PROJECT_triomiAcceptanceSigning: 'true'
+        run: flutter build apk --release
       - uses: actions/upload-artifact@v4
         with:
           name: triomi-android-apk

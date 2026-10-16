@@ -1,0 +1,174 @@
+{
+  "recordedAt": "2026-10-15T10:20:34.483Z",
+  "scope": "Public unauthenticated GET; actual packaged MangaDex JavaScript executed with a real HTTP host; not a Flutter UI acceptance",
+  "ruleVersion": "1.0.4",
+  "requests": [
+    {
+      "url": "https://api.mangadex.org/manga?limit=20&offset=0&includes[]=cover_art&availableTranslatedLanguage[]=zh&availableTranslatedLanguage[]=zh-hk&title=%E5%8A%8D%E9%A2%A8%E5%82%B3%E5%A5%87",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "https://api.mangadex.org/manga?limit=20&offset=0&includes[]=cover_art&availableTranslatedLanguage[]=zh&availableTranslatedLanguage[]=zh-hk&title=%E7%83%99%E5%8D%B0%E5%8B%87%E5%A3%AB",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "https://api.mangadex.org/manga?limit=20&offset=0&includes[]=cover_art&availableTranslatedLanguage[]=zh&availableTranslatedLanguage[]=zh-hk&title=%E5%89%91%E9%A3%8E%E4%BC%A0%E5%A5%87",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "https://api.mangadex.org/manga/801513ba-a712-498c-8f57-cae55b38cc92",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "https://api.mangadex.org/manga/801513ba-a712-498c-8f57-cae55b38cc92?includes[]=cover_art",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "https://api.mangadex.org/manga/801513ba-a712-498c-8f57-cae55b38cc92/feed?limit=100&offset=0&translatedLanguage[]=zh&translatedLanguage[]=zh-hk&includeExternalUrl=0&order[chapter]=asc&order[volume]=asc",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "https://api.mangadex.org/manga/801513ba-a712-498c-8f57-cae55b38cc92/feed?limit=100&offset=100&translatedLanguage[]=zh&translatedLanguage[]=zh-hk&includeExternalUrl=0&order[chapter]=asc&order[volume]=asc",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "https://api.mangadex.org/manga/801513ba-a712-498c-8f57-cae55b38cc92/feed?limit=100&offset=200&translatedLanguage[]=zh&translatedLanguage[]=zh-hk&includeExternalUrl=0&order[chapter]=asc&order[volume]=asc",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "https://api.mangadex.org/at-home/server/b21939fc-f404-4aa3-930e-c2bfea0a7576",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "https://api.mangadex.org/at-home/server/b21939fc-f404-4aa3-930e-c2bfea0a7576",
+      "method": "GET",
+      "status": 200
+    }
+  ],
+  "searches": [
+    {
+      "keyword": "劍風傳奇",
+      "count": 1,
+      "results": [
+        {
+          "id": "801513ba-a712-498c-8f57-cae55b38cc92",
+          "title": "烙印勇士"
+        }
+      ]
+    },
+    {
+      "keyword": "烙印勇士",
+      "count": 1,
+      "results": [
+        {
+          "id": "801513ba-a712-498c-8f57-cae55b38cc92",
+          "title": "烙印勇士"
+        }
+      ]
+    },
+    {
+      "keyword": "剑风传奇",
+      "count": 0,
+      "results": []
+    }
+  ],
+  "images": [
+    {
+      "dataSaver": false,
+      "url": "https://cmdxd98sb0x3yprd.mangadex.network/data/457ae77609224c6a717d386e61ca70db/1-827e0933c2d7eba3251fc45cc64cd39a5dca6963b2ca1fa5d2d2dd99a750c1e0.jpg",
+      "status": 200,
+      "contentType": "image/jpeg",
+      "pageCount": 88,
+      "bytes": 1113232,
+      "signatureHex": "ffd8ffe000104a4649460001"
+    },
+    {
+      "dataSaver": true,
+      "url": "https://cmdxd98sb0x3yprd.mangadex.network/data-saver/457ae77609224c6a717d386e61ca70db/1-9b0f30ebe6e7a882079857ba066aa43a909a47fbd5f55235985862c3f7d595e8.jpg",
+      "status": 200,
+      "contentType": "image/jpeg",
+      "pageCount": 88,
+      "bytes": 575519,
+      "signatureHex": "ffd8ffe000104a4649460001"
+    }
+  ],
+  "verification": {
+    "testsRun": false,
+    "buildsRun": false,
+    "reason": "Parent performs final validation after all edits"
+  },
+  "limitations": [
+    "Exact official Chinese altTitles are searchable through the existing title parameter; the absent simplified spelling 剑风传奇 returned zero. No promise of script normalization or every colloquial/local alias.",
+    "Public-network execution used Node vm with the actual packaged script and fetch host, not the production Flutter OS worker or rendered app.",
+    "Boundary/UI regression tests were written but intentionally not executed by this worker; only the parent can report final results."
+  ],
+  "officialTitles": {
+    "id": "801513ba-a712-498c-8f57-cae55b38cc92",
+    "title": {
+      "ja-ro": "Berserk"
+    },
+    "chineseAltTitles": [
+      {
+        "zh": "烙印勇士"
+      },
+      {
+        "zh-hk": "劍風傳奇"
+      }
+    ]
+  },
+  "catalog": {
+    "count": 211,
+    "firstId": "b21939fc-f404-4aa3-930e-c2bfea0a7576",
+    "lastId": "15c57efd-ec11-4cfd-a252-0e2a4b17b29f",
+    "requests": [
+      {
+        "url": "https://api.mangadex.org/manga/801513ba-a712-498c-8f57-cae55b38cc92/feed?limit=100&offset=0&translatedLanguage[]=zh&translatedLanguage[]=zh-hk&includeExternalUrl=0&order[chapter]=asc&order[volume]=asc",
+        "status": 200
+      },
+      {
+        "url": "https://api.mangadex.org/manga/801513ba-a712-498c-8f57-cae55b38cc92/feed?limit=100&offset=100&translatedLanguage[]=zh&translatedLanguage[]=zh-hk&includeExternalUrl=0&order[chapter]=asc&order[volume]=asc",
+        "status": 200
+      },
+      {
+        "url": "https://api.mangadex.org/manga/801513ba-a712-498c-8f57-cae55b38cc92/feed?limit=100&offset=200&translatedLanguage[]=zh&translatedLanguage[]=zh-hk&includeExternalUrl=0&order[chapter]=asc&order[volume]=asc",
+        "status": 200
+      }
+    ]
+  },
+  "officialApiContract": {
+    "documentation": "https://api.mangadex.org/docs/",
+    "schema": "https://api.mangadex.org/docs/static/api.yaml",
+    "operationId": "get-search-manga",
+    "query": "title",
+    "auth": "none"
+  },
+  "observedConclusion": "The existing official title query already returns exact Chinese altTitles. No local alias index or fake match was added. Both real image variants returned JPEG bytes.",
+  "uiAcceptance": {
+    "status": "not_exercised_in_this_worker",
+    "reason": "No builds/tests are permitted until parent final validation; the existing C148 binaries predate the new 1.0.4 preference. This network smoke is not real-UI evidence.",
+    "steps": [
+      "Final-build app: 来源与规则 → MangaDex. If installed rule is 1.0.3, use 来源目录 visible CAS update to 1.0.4; startup never overwrites existing/custom/disabled rules.",
+      "Open MangaDex 来源设置; original is default. Enable MangaDex 低流量图片; close and reopen sheet to observe persisted state.",
+      "Open an uncached online chapter: freshly loaded image URLs must use /data-saver/. Disable and load another uncached chapter: /data/. Existing cached/downloaded pages remain unchanged."
+    ],
+    "testFiles": [
+      "test/mangadex_readable_catalog_test.dart",
+      "test/mangadex_preferences_ui_test.dart",
+      "test/source_first_launch_test.dart",
+      "test/source_catalog_d86_test.dart",
+      "test/source_catalog_page_test.dart",
+      "test/source_registry_engine_lifecycle_test.dart"
+    ],
+    "repeatablePublicNetworkProbe": "flutter test --no-pub tools/live_mangadex_probe.dart",
+    "probeOutput": "docs/delivery/evidence/C149-mangadex-live-host.json"
+  }
+}

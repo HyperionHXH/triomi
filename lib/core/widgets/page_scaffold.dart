@@ -45,6 +45,10 @@ class PageScaffold extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
+                    if (Navigator.of(context).canPop()) ...[
+                      const BackButton(),
+                      const SizedBox(width: AppSpacing.sm),
+                    ],
                     Expanded(
                       child: Text(
                         title,

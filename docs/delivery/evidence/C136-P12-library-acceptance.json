@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-14",
+  "status": "partial",
+  "scope": "P12 library querying, sorting and batch selection; not complete P12 release acceptance",
+  "apk": {
+    "path": "D:/noval_and_manga/_tools/Triomi-C136-P12-library-verified-acceptance.apk",
+    "bytes": 127109956,
+    "sha256": "5191d23effd46f203922cc8b66f1188a0916dfa4f553c0ca7a5303a5471a9de7",
+    "devicesInstalledAndHashMatched": ["emulator-5554", "emulator-5556"],
+    "v2Verified": true,
+    "certificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6"
+  },
+  "verification": {"libraryTargetedPassed":27,"fullSuitePassed":788,"fullSuiteLog":"artifact://715","analyze":"No issues found"},
+  "implementation": [
+    "Offline title/author/tag query, source filter, unread filter and deterministic title/added/progress/update sorts",
+    "Sort preference persists in existing non-sensitive settings and backup",
+    "Long-press or selection action selects original source+remote identities; transactional batch pin/unpin and confirmed removal preserve downloads/history/catalogue/tracking",
+    "Pinned-first order and once-per-list identity map replace per-card linear badge scan",
+    "Filter no-match keeps library untouched and exposes clear-filters action"
+  ],
+  "actualApi35": {
+    "query": "No-match query displayed no matching collection and clear-filters restored both original versions on verified APK; author Sakano query isolated APK work on prior C136 APK",
+    "pin": "Selected original MangaDex APK collection, pinned only that source identity, force-stop/new process retained visible pinned badge and first position",
+    "restoredOriginalState": "Unpinned selected work through same UI; both original manga pinned0",
+    "destructiveRemovalActual": false
+  },
+  "limitations": [
+    "Not a large-library latency benchmark; no pixel visual claim",
+    "Dynamic/hidden categories, language/NSFW filtering, local media library, privacy lock/incognito, cover theme, cache governance and production updater still outstanding",
+    "API26/signed/Windows full journeys pending; original C125 production/Windows artifacts unchanged"
+  ]
+}

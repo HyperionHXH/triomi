@@ -1,19 +1,22 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
 import 'package:triomi/core/db/app_database.dart';
+import 'package:triomi/core/models/chapter.dart';
+import 'package:triomi/core/models/media_item.dart';
+import 'package:triomi/core/models/media_type.dart';
+import 'package:triomi/features/discover/manga_feed_repository.dart';
+import 'package:triomi/features/library/data/anime_identity_repository.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 
 import 'fixtures/migration/v1_schema.dart';
 
-/// D16：真实执行 v1 → v2 升级，证明既有用户数据不丢。
+/// 真实执行 v1 → 当前结构升级，证明既有用户数据不丢。
 ///
-/// 与既有 `library_repository_test` 的「新建库表结构断言」互补：那条只证明
-/// onCreate 建出的库正确，这里用历史 DDL + `user_version = 1` 走一遍真实
-/// `onUpgrade`。生产迁移代码在 `app_database.dart`，若它有问题，本文件留下
-/// 失败复现交 Codex 修，测试侧不改 schemaVersion、不改表。
+/// 历史 DDL + `user_version = 1` 真实走 `onUpgrade`，不改生产schema。
 void main() {
   late Directory tempDir;
   late File dbFile;
@@ -73,7 +76,9 @@ void main() {
           "('lns', '1001', 'lns', '1001:1', 'done', 1.0, '/offline/1001:1.txt', "
           '1727000500, 1727000555)',
         );
-        conn.execute("INSERT INTO categories (name, sort_index) VALUES ('在读', 1)");
+        conn.execute(
+          "INSERT INTO categories (name, sort_index) VALUES ('在读', 1)",
+        );
         conn.execute(
           'INSERT INTO library_category_links (source_id, remote_id, category_id) '
           "VALUES ('lk', '1001', 1)",
@@ -102,13 +107,13 @@ void main() {
     }
   });
 
-  test('v1 带数据升级到 v2：url 为空、复合键与全部关联数据保留', () async {
+  test('v1 升级保留正文与全部关联，可使用新结构', () async {
     createV1Database(seed: true);
 
     final db = AppDatabase.forTesting(NativeDatabase(dbFile));
     addTearDown(db.close);
 
-    expect(db.schemaVersion, 2, reason: '真实 onUpgrade 应把 user_version 推到 2');
+    expect(await db.select(db.backupImportJournals).get(), isEmpty);
 
     // 直接用生产仓储读：升级后的库必须能被真实代码原样读回。
     final library = LibraryRepository(db);
@@ -116,7 +121,8 @@ void main() {
     expect(entries, hasLength(2), reason: '两来源同 remoteId 是两条独立条目');
 
     final byKey = <String, LibraryItemView>{
-      for (final view in entries) '${view.item.sourceId}/${view.item.remoteId}': view,
+      for (final view in entries)
+        '${view.item.sourceId}/${view.item.remoteId}': view,
     };
     final lk = byKey['lk/1001']!;
     final lns = byKey['lns/1001']!;
@@ -168,24 +174,165 @@ void main() {
     raw.close();
   });
 
-  test('关闭再打开幂等：记录数不变、版本保持 2、不重复 ALTER', () async {
+  test('v8 category migration preserves manual links and content before hidden rules persist', () async {
+    createV1Database(seed: true);
+    var db = AppDatabase.forTesting(NativeDatabase(dbFile));
+    await LibraryRepository(db).listLibrary();
+    await db.close();
+    final old = openRaw();
+    old.execute('ALTER TABLE categories DROP COLUMN hidden');
+    old.execute('ALTER TABLE categories DROP COLUMN rules_json');
+    old.execute('PRAGMA user_version = 8');
+    old.close();
+    db = AppDatabase.forTesting(NativeDatabase(dbFile));
+    try {
+      final repo = LibraryRepository(db);
+      final category = (await repo.categorySnapshot()).categories.single;
+      expect(category.name, '在读');
+      expect(category.hidden, isFalse);
+      expect(category.rulesJson, isNull);
+      expect((await repo.listLibrary(categoryId: category.id)).single.item.sourceId, 'lk');
+      await repo.saveCategory(id: category.id, name: '在读隐藏', hidden: true);
+      expect((await repo.listLibrary()).single.item.sourceId, 'lns');
+      expect((await repo.listLibrary(categoryId: category.id)).single.entry.progress, 3);
+      expect((await repo.loadChapters('lk', '1001')).single.content, isNotNull);
+      await db.close();
+      db = AppDatabase.forTesting(NativeDatabase(dbFile));
+      expect((await LibraryRepository(db).categorySnapshot()).categories.single.hidden, isTrue);
+      expect((await LibraryRepository(db).listLibrary()).single.item.sourceId, 'lns');
+    } finally {
+      await db.close();
+    }
+  });
+
+  test('v3 用户库升级后可保存番剧关联且原正文和追番保留', () async {
+    createV1Database(seed: true);
+    final before = AppDatabase.forTesting(NativeDatabase(dbFile));
+    final library = LibraryRepository(before);
+    const subject = MediaItem(
+      sourceId: 'bangumi-anime',
+      remoteId: 's1',
+      type: MediaType.anime,
+      title: '第一季',
+    );
+    const site = MediaItem(
+      sourceId: 'site',
+      remoteId: 'a',
+      type: MediaType.anime,
+      title: '第一季站点',
+    );
+    const chapter = Chapter(
+      sourceId: 'site',
+      remoteId: 'ep1',
+      title: '第1集',
+      volumeTitle: '列表4',
+    );
+    await library.addAnimeFollow(subject);
+    await library.cacheItem(site);
+    await library.saveChapters(
+      itemSourceId: site.sourceId,
+      itemRemoteId: site.remoteId,
+      chapters: [chapter],
+    );
+    await before.close();
+    final old = openRaw();
+    old.execute('DROP TABLE anime_source_links');
+    old.execute('DROP TABLE manga_feeds');
+    old.execute('ALTER TABLE categories DROP COLUMN hidden');
+    old.execute('ALTER TABLE categories DROP COLUMN rules_json');
+    old.execute('PRAGMA user_version = 3');
+    old.close();
+    final upgraded = AppDatabase.forTesting(NativeDatabase(dbFile));
+    try {
+      final identity = AnimeIdentityRepository(upgraded);
+      await identity.confirm(subject, site);
+      await identity.recordSelection(site, chapter);
+      expect(
+        (await identity.lastSelection(subject))!.chapter!.volumeTitle,
+        '列表4',
+      );
+      expect(
+        (await LibraryRepository(
+          upgraded,
+        ).listAnimeFollows()).single.item.remoteId,
+        's1',
+      );
+      expect(
+        (await (upgraded.select(upgraded.chapters)..where(
+                  (t) => t.sourceId.equals('lk') & t.remoteId.equals('1001:1'),
+                ))
+                .getSingle())
+            .contentJson,
+        contains('正文甲'),
+      );
+    } finally {
+      await upgraded.close();
+    }
+  });
+
+  test('v4升级保存搜索和排序重开保留，原正文不丢', () async {
+    createV1Database(seed: true);
+    final before = AppDatabase.forTesting(NativeDatabase(dbFile));
+    await LibraryRepository(before).listLibrary();
+    await before.close();
+    final old = openRaw();
+    old.execute('DROP TABLE manga_feeds');
+    old.execute('ALTER TABLE categories DROP COLUMN hidden');
+    old.execute('ALTER TABLE categories DROP COLUMN rules_json');
+    old.execute('PRAGMA user_version = 4');
+    old.close();
+    final upgraded = AppDatabase.forTesting(NativeDatabase(dbFile));
+    final feeds = MangaFeedRepository(upgraded);
+    await feeds.save(
+      id: 'a',
+      sourceId: 'sourceA',
+      name: '保存搜索',
+      kind: 'search',
+      query: '作品',
+    );
+    await feeds.save(
+      id: 'b',
+      sourceId: 'sourceB',
+      name: '热门',
+      kind: 'discover',
+    );
+    await feeds.reorder(['b', 'a']);
+    await upgraded.close();
+    final reopened = AppDatabase.forTesting(NativeDatabase(dbFile));
+    try {
+      final saved = await MangaFeedRepository(reopened).list();
+      expect(saved.map((r) => r.id), ['b', 'a']);
+      expect(saved.last.query, '作品');
+      expect(
+        (await LibraryRepository(
+          reopened,
+        ).loadChapters('lk', '1001')).single.content!.html,
+        '正文甲',
+      );
+    } finally {
+      await reopened.close();
+    }
+  });
+
+  test('关闭再打开升级幂等：记录不丢且不重复 ALTER', () async {
     createV1Database(seed: true);
 
     // 第一次打开走完升级即关闭。
     final first = AppDatabase.forTesting(NativeDatabase(dbFile));
-    final firstRows =
-        await first.customSelect('SELECT COUNT(*) AS n FROM library_entries').get();
+    final firstRows = await first
+        .customSelect('SELECT COUNT(*) AS n FROM library_entries')
+        .get();
     expect(firstRows.first.data['n'], 2);
     await first.close();
 
-    // 第二次打开：user_version 已是 2，onUpgrade 不应再执行（重复
+    // 第二次打开：当前版本已落盘，onUpgrade 不应重复 ALTER。
     // ADD COLUMN 会直接抛 duplicate column，能正常读回就是幂等证据）。
     final second = AppDatabase.forTesting(NativeDatabase(dbFile));
     addTearDown(second.close);
     final library = LibraryRepository(second);
     final entries = await library.listLibrary();
     expect(entries, hasLength(2));
-    expect(second.schemaVersion, 2);
+    expect(await second.select(second.backupImportJournals).get(), isEmpty);
 
     final raw = openRaw();
     expect(countOf('media_items'), 2);
@@ -206,67 +353,10 @@ void main() {
     final db = AppDatabase.forTesting(NativeDatabase(dbFile));
     addTearDown(db.close);
 
-    expect(db.schemaVersion, 2);
+    expect(await db.select(db.backupImportJournals).get(), isEmpty);
     expect(countOf('media_items'), 0);
     expect(countOf('chapters'), 0);
     expect(countOf('histories'), 0);
   });
 
-  test('夹具列集合与 v2 结构一致（只差 url 两列）——防夹具漂移', () async {
-    // 交叉校验：本夹具的列集合必须等于真实 v2 建库的列集合减去 url。
-    // 这是防夹具随时间漂移的一致性检查；夹具本身的权威来源仍是 M1 提交
-    // de6bff6 的 tables.dart（见 fixtures/migration/v1_schema.dart 头注释）。
-    createV1Database(seed: false);
-
-    final v2 = AppDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(v2.close);
-    Future<Set<String>> columnsOf(AppDatabase db, String table) async =>
-        (await db.customSelect('PRAGMA table_info($table)').get())
-            .map((row) => row.data['name'] as String)
-            .toSet();
-
-    final raw = openRaw();
-    final v1ColumnsByName = <String, Set<String>>{
-      for (final table in const <String>[
-        'sources',
-        'media_items',
-        'chapters',
-        'library_entries',
-        'categories',
-        'library_category_links',
-        'histories',
-        'downloads',
-        'track_binds',
-      ])
-        table: raw
-            .select('PRAGMA table_info($table)')
-            .map((row) => row['name'] as String)
-            .toSet(),
-    };
-    raw.close();
-
-    for (final table in const <String>[
-      'sources',
-      'library_entries',
-      'categories',
-      'library_category_links',
-      'histories',
-      'downloads',
-      'track_binds',
-    ]) {
-      expect(
-        v1ColumnsByName[table],
-        await columnsOf(v2, table),
-        reason: '$table 在 v1 与 v2 之间不应有列差异',
-      );
-    }
-    expect(
-      v1ColumnsByName['media_items'],
-      await columnsOf(v2, 'media_items')..remove('url'),
-    );
-    expect(
-      v1ColumnsByName['chapters'],
-      await columnsOf(v2, 'chapters')..remove('url'),
-    );
-  });
 }

@@ -5,11 +5,16 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/router/app_router.dart';
+import '../../core/source/source_providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../../core/widgets/source_network_image.dart';
+import '../discover/widgets/media_item_card.dart';
+import '../library/data/library_providers.dart';
 import 'data/bangumi_schedule_client.dart';
 import 'data/schedule_providers.dart';
+import 'season_schedule.dart';
 
 /// 追番条目 → 内置 `bangumi-anime` 规则来源的作品。
 ///
@@ -26,7 +31,7 @@ MediaItem scheduleEntryToItem(ScheduleEntry entry) => MediaItem(
   coverUrl: resolveScheduleCover(entry.coverUrl),
 );
 
-/// 追番页：Bangumi 每日放送时间表。
+/// 追番页：本地收藏优先，放送表独立加载。
 ///
 /// 数据只是元数据展示；要看正片请从「发现」进入番剧源的作品详情页。
 class SchedulePage extends ConsumerWidget {
@@ -34,37 +39,184 @@ class SchedulePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    return DefaultTabController(
+      length: 2,
+      child: PageScaffold(
+        title: '追番',
+        child: const Column(
+          children: [
+            TabBar(
+              tabs: [
+                Tab(text: '我的追番'),
+                Tab(text: '放送表'),
+              ],
+            ),
+            Expanded(
+              child: TabBarView(
+                children: [_AnimeFollows(), _LazyWeeklySchedule()],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimeFollows extends ConsumerWidget {
+  const _AnimeFollows();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ref
+        .watch(animeFollowsProvider)
+        .when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) => EmptyStateView(
+            icon: Icons.error_outline,
+            title: '追番列表加载失败',
+            message: '$error',
+            action: TextButton(
+              onPressed: () => ref.invalidate(animeFollowsProvider),
+              child: const Text('重试'),
+            ),
+          ),
+          data: (entries) => entries.isEmpty
+              ? EmptyStateView(
+                  icon: Icons.live_tv_outlined,
+                  title: '还没有追番',
+                  message: '在动画详情里加入追番。收藏保存在本机，无需登录。',
+                  action: FilledButton.tonal(
+                    onPressed: () => context.go(AppRoutes.discover),
+                    child: const Text('去发现'),
+                  ),
+                )
+              : MediaItemCollection(
+                  items: [for (final entry in entries) entry.item],
+                  sourceName: '本地追番',
+                  badgeOf: (item) {
+                    final entry = entries.firstWhere(
+                      (entry) =>
+                          entry.item.sourceId == item.sourceId &&
+                          entry.item.remoteId == item.remoteId,
+                    );
+                    final progress = entry.entry.progress;
+                    return progress > 0
+                        ? '看到第 ${progress.toStringAsFixed(0)} 集'
+                        : null;
+                  },
+                  onLongPressItem: (item) => _remove(context, ref, item),
+                ),
+        );
+  }
+
+  Future<void> _remove(
+    BuildContext context,
+    WidgetRef ref,
+    MediaItem item,
+  ) async {
+    final repository = ref.read(libraryRepositoryProvider);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('取消追番'),
+        content: Text('取消追番「${item.title}」？观看记录与缓存目录会保留。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('保留'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('取消追番'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await repository.removeFromLibrary(item.sourceId, item.remoteId);
+      if (!context.mounted) return;
+      ref.invalidate(
+        inLibraryProvider((sourceId: item.sourceId, remoteId: item.remoteId)),
+      );
+      ref.invalidate(libraryProvider);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('取消追番失败：$error')));
+    }
+  }
+}
+
+class _LazyWeeklySchedule extends StatelessWidget {
+  const _LazyWeeklySchedule();
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = DefaultTabController.of(context);
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) => controller.index == 1
+          ? const _WeeklySchedule()
+          : const SizedBox.shrink(),
+    );
+  }
+}
+
+class _WeeklySchedule extends ConsumerWidget {
+  const _WeeklySchedule();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final weekly = ref.watch(weeklyScheduleProvider);
     // 数据实际来源：官方取不到时会回退到镜像，页面上要说清楚。
+    final historyButton = Padding(
+      padding: const EdgeInsets.all(8),
+      child: OutlinedButton.icon(
+        icon: const Icon(Icons.date_range),
+        label: const Text('历史季时间表'),
+        onPressed: () => showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          showDragHandle: true,
+          builder: (_) => const SeasonSchedule(),
+        ),
+      ),
+    );
     final client = ref.watch(scheduleClientProvider);
     final mirrorUsed = client.usedFallback;
 
-    return PageScaffold(
-      title: '追番',
-      child: weekly.when(
-        // 有备用地址时说明会等待/回退，避免「一直转圈不知道在干嘛」。
-        loading: () => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              const CircularProgressIndicator(),
-              if (client.fallbackBaseUrl != null) ...<Widget>[
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  '正在连接官方接口；不通会自动改用镜像',
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: context.palette.mutedForeground),
-                ),
-              ],
-            ],
+    return Column(
+      children: [
+        historyButton,
+        Expanded(
+          child: weekly.when(
+            // 有备用地址时说明会等待/回退，避免「一直转圈不知道在干嘛」。
+            loading: () => Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  const CircularProgressIndicator(),
+                  if (client.fallbackBaseUrl != null) ...<Widget>[
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      '正在连接官方接口；不通会自动改用镜像',
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: context.palette.mutedForeground),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            error: (error, _) => _ErrorView(
+              message: '$error',
+              onRetry: () => ref.invalidate(weeklyScheduleProvider),
+            ),
+            data: (days) => _ScheduleBody(days: days, mirrorUsed: mirrorUsed),
           ),
         ),
-        error: (error, _) => _ErrorView(
-          message: '$error',
-          onRetry: () => ref.invalidate(weeklyScheduleProvider),
-        ),
-        data: (days) => _ScheduleBody(days: days, mirrorUsed: mirrorUsed),
-      ),
+      ],
     );
   }
 }
@@ -299,13 +451,13 @@ class _ScheduleTile extends StatelessWidget {
   }
 }
 
-class _Cover extends StatelessWidget {
+class _Cover extends ConsumerWidget {
   const _Cover({required this.url});
 
   final String? url;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
     final placeholder = ColoredBox(
       color: palette.coverPlaceholder,
@@ -319,8 +471,12 @@ class _Cover extends StatelessWidget {
     final value = url;
     if (value == null || value.isEmpty) return placeholder;
 
-    return Image.network(
-      value,
+    return Image(
+      image: SourceNetworkImage(
+        value,
+        http: ref.watch(sourceHttpClientProvider),
+        sourceId: 'bangumi-anime',
+      ),
       fit: BoxFit.cover,
       errorBuilder: (context, error, stack) => placeholder,
       loadingBuilder: (context, child, progress) =>

@@ -1,0 +1,43 @@
+{
+  "recordedAt": "2026-10-08T02:32:55.055893Z",
+  "device": "emulator-5554",
+  "extension": {
+    "name": "CopyManga",
+    "packageName": "eu.kanade.tachiyomi.extension.zh.copymanga",
+    "versionName": "1.4.85",
+    "versionCode": 85,
+    "extensionLib": "1.4",
+    "apkSha256": "0a208f10b4f8fa3f3f0fae7704935e1a487c6ee342722c7e7818a02ad8c8dd6a",
+    "signerSha256": "896d1ca35175c42baf61b1a157e4354df9568beed4ccc82a03762d1167005e79",
+    "sourceId": "6696312508930833206",
+    "sourceName": "拷贝漫画",
+    "language": "zh"
+  },
+  "installPhase": {
+    "popularCount": 21,
+    "query": "海贼王",
+    "searchCount": 21,
+    "title": "海贼王",
+    "chapterCount": 399,
+    "chapterId": "haizeiwang/chapter/4bd05882-c7bc-11e8-881a-024352452ce0",
+    "pageCount": 209,
+    "imageBytes": 135795,
+    "imageWidth": 800,
+    "imageHeight": 1222,
+    "disabledRejected": true,
+    "failedUpdateKeptOldPlugin": true,
+    "status": "passed"
+  },
+  "resumePhase": {
+    "forceStoppedBeforeLaunch": true,
+    "searchCount": 21,
+    "chapterCount": 399,
+    "pageCount": 209,
+    "persistedPage": 3.0,
+    "imageBytes": 135795,
+    "imageWidth": 800,
+    "imageHeight": 1222,
+    "status": "passed"
+  },
+  "evidenceLevel": "real APK executed on Android emulator; live site requests and image bytes; no fixture or JS/API replacement"
+}

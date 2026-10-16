@@ -1,0 +1,44 @@
+{
+  "scope": "read-only host probe; not device challenge acceptance",
+  "results": [
+    {
+      "url": "https://mangafire.to",
+      "status": 403,
+      "cfMitigated": "challenge",
+      "challengeMarkers": [
+        "challenge-platform",
+        "just a moment"
+      ]
+    },
+    {
+      "url": "https://comick.io",
+      "status": 403,
+      "cfMitigated": "challenge",
+      "challengeMarkers": [
+        "challenge-platform",
+        "just a moment"
+      ]
+    },
+    {
+      "url": "https://bato.to",
+      "status": 200,
+      "cfMitigated": null,
+      "challengeMarkers": []
+    },
+    {
+      "url": "https://www.novelupdates.com",
+      "status": 403,
+      "cfMitigated": "challenge",
+      "challengeMarkers": [
+        "challenge-platform",
+        "just a moment"
+      ]
+    },
+    {
+      "url": "https://manganato.com",
+      "status": 403,
+      "cfMitigated": null,
+      "challengeMarkers": []
+    }
+  ]
+}

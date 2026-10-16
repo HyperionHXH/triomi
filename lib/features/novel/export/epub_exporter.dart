@@ -39,6 +39,7 @@ abstract final class EpubExporter {
     required ChapterContentResolver resolve,
     required void Function(int completed, int total) onProgress,
     Future<Uint8List?> Function(String url)? fetchImage,
+    Future<Uint8List?> Function(Chapter chapter)? resolveFont,
   }) async {
     final usable = chapters.where((chapter) => !chapter.locked).toList();
     final resolved = <({Chapter chapter, String bodyHtml, String bodyText})>[];
@@ -59,6 +60,24 @@ abstract final class EpubExporter {
     }
 
     final assets = <String, Uint8List>{};
+    final chapterFonts = <String, String>{};
+    final fontStyles = StringBuffer();
+    if (resolveFont != null) {
+      for (final entry in resolved) {
+        final bytes = await resolveFont(entry.chapter);
+        if (bytes == null) continue;
+        final digest = crypto.sha256.convert(bytes).toString();
+        final path = 'fonts/$digest.ttf';
+        final family = 'chapter-$digest';
+        if (!assets.containsKey(path)) {
+          assets[path] = bytes;
+          fontStyles.write(
+            "@font-face { font-family: '$family'; src: url('$path'); }\n",
+          );
+        }
+        chapterFonts[entry.chapter.remoteId] = family;
+      }
+    }
     final cover = coverUrl.isEmpty
         ? null
         : await _fetchImage(
@@ -83,7 +102,7 @@ abstract final class EpubExporter {
     final archive = Archive();
     _putStored(archive, 'mimetype', utf8Bytes('application/epub+zip'));
     _putText(archive, 'META-INF/container.xml', _containerXml());
-    _putText(archive, 'OEBPS/styles.css', _stylesheet);
+    _putText(archive, 'OEBPS/styles.css', '$_stylesheet$fontStyles');
     for (final entry in assets.entries) {
       _putBinary(archive, 'OEBPS/${entry.key}', entry.value);
     }
@@ -92,7 +111,12 @@ abstract final class EpubExporter {
       _putText(
         archive,
         _chapterPath(index),
-        _chapterXhtml(bookTitle, chapter.title, body),
+        _chapterXhtml(
+          bookTitle,
+          chapter.title,
+          body,
+          fontFamily: chapterFonts[chapter.remoteId],
+        ),
       );
     }
     _putText(archive, 'OEBPS/nav.xhtml', _navXhtml(bookTitle, rewritten));
@@ -147,6 +171,11 @@ abstract final class EpubExporter {
   };
 
   static String _mediaTypeOf(Uint8List bytes) {
+    if (bytes.length >= 4) {
+      final magic = ByteData.sublistView(bytes).getUint32(0);
+      if (magic == 0x00010000 || magic == 0x74727565) return 'font/ttf';
+      if (magic == 0x4f54544f) return 'font/otf';
+    }
     if (bytes.length >= 8 &&
         bytes[0] == 0x89 &&
         bytes[1] == 0x50 &&
@@ -236,15 +265,17 @@ abstract final class EpubExporter {
   static String _chapterXhtml(
     String bookTitle,
     String chapterTitle,
-    String body,
-  ) =>
+    String body, {
+    String? fontFamily,
+  }) =>
       '<?xml version="1.0" encoding="UTF-8"?>\n'
       '<!DOCTYPE html>\n'
       '<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN">\n'
       '<head><title>${escapeXml(chapterTitle)}</title>'
       '<link rel="stylesheet" type="text/css" href="styles.css"/></head>\n'
       '<body><h1>${escapeXml(bookTitle)}</h1>'
-      '<h2>${escapeXml(chapterTitle)}</h2>$body</body>\n'
+      '<h2>${escapeXml(chapterTitle)}</h2>'
+      '<div${fontFamily == null ? '' : ' style="font-family: $fontFamily"'}>$body</div></body>\n'
       '</html>\n';
 
   static String _navXhtml(String title, List<(Chapter, String)> chapters) {

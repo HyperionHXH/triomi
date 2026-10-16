@@ -1,0 +1,86 @@
+{
+  "checkedAt": "2026-10-15T05:40:52.624Z",
+  "artifact": {
+    "path": "D:/noval_and_manga/_tools/Triomi-C148-P12-working-acceptance.apk",
+    "bytes": 129111252,
+    "sha256": "44e1e137201199e21e0f4ed2dd83cefd47f5766feaeb05fa2d640a7310dd29f4",
+    "versionCode": 148,
+    "scope": "working P12 APK before final semantics/layout/Windows fixes; not final current artifact"
+  },
+  "device": "emulator-5554",
+  "before": {
+    "schema": 8,
+    "library": 6,
+    "chapters": 4013,
+    "histories": 19,
+    "downloads": 6,
+    "categories": 0
+  },
+  "network": "Active default network: none; wifi/data unchanged1/1",
+  "local": {
+    "systemPicker": true,
+    "cbzBytes": 54842,
+    "title": "C148-local-smoke",
+    "chapters": 1,
+    "pages": 2,
+    "initial": "1/2",
+    "afterSwipe": "2/2",
+    "afterIndependentForceStopResume": "2/2",
+    "imageSource": "prior public xkcd PNG bytes; source original retained, no network source compatibility claimed"
+  },
+  "hiddenCategory": {
+    "name": "C148-hidden-smoke",
+    "create": true,
+    "batchAssignedOnlyLocal": true,
+    "ordinaryShelfHides": true,
+    "forceStopStillHides": true,
+    "explicitRevealWorks": true,
+    "categoryDeletedAfterSmoke": true
+  },
+  "appearance": {
+    "changed": [
+      "wide16:9",
+      "grid"
+    ],
+    "afterForceStopBothSelected": true,
+    "restored": [
+      "portrait2:3",
+      "adaptive"
+    ]
+  },
+  "cache": {
+    "previewCovers": 1,
+    "coverSize": "60.9KiB",
+    "retainedOfflinePayloads": 2,
+    "retainedPayloadSize": "2.5MiB",
+    "explicitDeletePreview": true,
+    "cancelledWithoutDeleting": true
+  },
+  "sources": {
+    "namedNativeSwitch": "启用来源 7sefun",
+    "initialCount": "95 / 95",
+    "nsfwOnlyCount": "0 / 95",
+    "forceStopPreferenceRetained": true,
+    "clearedRestored95": true,
+    "enabledStateUnchanged": true
+  },
+  "update": {
+    "actualPackage": "io.github.hyperionhxh.triomi",
+    "actualCode": 148,
+    "actualSigner": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6",
+    "candidateCode": 1,
+    "candidateSha": "ac09b41cd15c80b3f7703ae18e00b0a3626c2fff77a2b283236b70ad115fa789",
+    "candidateSignerMatches": true,
+    "decision": "downgrade",
+    "installerLaunched": false,
+    "candidateDiscardedViaUI": true
+  },
+  "unverified": [
+    "PIN native lifecycle on final fixedAPK",
+    "actual image pixel/visual interpretation",
+    "API26/production final build",
+    "Windows new bridge build/UI",
+    "final fullsuite",
+    "local import cleanup pending until final smoke"
+  ]
+}

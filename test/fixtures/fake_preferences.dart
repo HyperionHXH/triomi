@@ -1,23 +1,39 @@
+import 'dart:async';
+
 import 'package:hive_ce/hive.dart';
 import 'package:triomi/core/storage/preferences.dart';
 
 /// 纯内存 Box：FakeAsync 区里不能有任何真实 IO（Hive 写盘会永久挂起）。
 class MemBox implements Box<dynamic> {
   final Map<dynamic, dynamic> _map = <dynamic, dynamic>{};
+  final _changes = StreamController<BoxEvent>.broadcast(sync: true);
 
   @override
   dynamic get(dynamic key, {dynamic defaultValue}) => _map[key] ?? defaultValue;
 
   @override
-  Future<void> put(dynamic key, dynamic value) async => _map[key] = value;
+  Future<void> put(dynamic key, dynamic value) async {
+    _map[key] = value;
+    _changes.add(BoxEvent(key, value, false));
+  }
 
   @override
-  Future<void> delete(dynamic key) async => _map.remove(key);
+  Future<void> delete(dynamic key) async {
+    _map.remove(key);
+    _changes.add(BoxEvent(key, null, true));
+  }
+
+  @override
+  Future<void> flush() async {}
 
   @override
   Future<int> clear() async {
     final count = _map.length;
+    final keys = _map.keys.toList();
     _map.clear();
+    for (final key in keys) {
+      _changes.add(BoxEvent(key, null, true));
+    }
     return count;
   }
 
@@ -40,7 +56,8 @@ class MemBox implements Box<dynamic> {
   String? get path => null;
 
   @override
-  Stream<BoxEvent> watch({dynamic key}) => const Stream<BoxEvent>.empty();
+  Stream<BoxEvent> watch({dynamic key}) =>
+      _changes.stream.where((event) => key == null || event.key == key);
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

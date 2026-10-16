@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-10T03:12:29.219443Z",
+  "environment": "windows real system plugins",
+  "results": {
+    "tts": {
+      "stage": "speak",
+      "voiceCount": 3,
+      "engine": "platform system voice",
+      "chineseVoiceAvailable": true,
+      "selectedVoiceOffline": true,
+      "naturalCompletion": true,
+      "stopDiscardedLateCompletion": true,
+      "realSynthesisDeadlineError": true,
+      "errorRecoveryNaturalCompletion": true,
+      "status": "passed"
+    },
+    "background": {
+      "status": "not-applicable: Android JobScheduler"
+    }
+  }
+}

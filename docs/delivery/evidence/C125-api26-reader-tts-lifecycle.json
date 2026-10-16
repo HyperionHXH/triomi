@@ -1,0 +1,14 @@
+{
+  "serial": "emulator-5556",
+  "status": "passed",
+  "scope": "actual novel reader LK Chinese TTS; installed real eSpeak",
+  "artifactSha256": "307f2778a2fdc2015fd683ef13518a6d838ad02bd4ec756e57ac7a64980efd07",
+  "naturalCompletion": true,
+  "restartedPlaying": true,
+  "backgroundStopped": true,
+  "chapterSwitchStopped": true,
+  "secondChapterHeading": true,
+  "secondChapterPages": [
+    "1 / 46"
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "phase": "copy",
+  "at": "2026-10-09T14:50:15.051976Z",
+  "environment": "actual Android storage, real rule/API and genuine APK; no fixtures",
+  "stage": "production-copy-ui",
+  "candidateCount": 20,
+  "examinedCandidates": [
+    {
+      "idHasUuid": true,
+      "targetExactUrlCount": 1,
+      "targetDirectoryCount": 2,
+      "originalDirectoryCount": 8
+    }
+  ],
+  "status": "passed",
+  "oldTitle": "Kage no Jitsuryokusha ni Naritakute!",
+  "targetTitle": "Kage no Jitsuryokusha ni Naritakute!",
+  "targetSource": "mihon:eu.kanade.tachiyomi.extension.all.mangadex:5148895169070562838",
+  "originalPosition": 3.0,
+  "targetPosition": 0,
+  "downloadsUnchanged": true
+}

@@ -1,0 +1,24 @@
+[
+  {
+    "file": "Triomi-C125-android-acceptance.apk",
+    "exitCode": 0,
+    "verification": [
+      "Verified using v2 scheme (APK Signature Scheme v2): true",
+      "Number of signers: 1",
+      "Signer #1 certificate SHA-256 digest: 0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6",
+      "Signer #1 key size (bits): 2048",
+      "Signer #1 public key SHA-256 digest: 6c38426d3f3d115475af3500079cccdd0731050b507df57da27959c4eecfa9c6"
+    ]
+  },
+  {
+    "file": "Triomi-C125-android-signed.apk",
+    "exitCode": 0,
+    "verification": [
+      "Verified using v2 scheme (APK Signature Scheme v2): true",
+      "Number of signers: 1",
+      "Signer #1 certificate SHA-256 digest: 9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077",
+      "Signer #1 key size (bits): 4096",
+      "Signer #1 public key SHA-256 digest: c288d6b0b5cdb3320311db1acb20721eaa674d197d8bb2f563c0325d7169cce0"
+    ]
+  }
+]

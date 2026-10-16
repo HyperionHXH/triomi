@@ -1,10 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../core/router/app_router.dart';
+import '../../core/source/network_proxy.dart';
+import '../../core/storage/preferences.dart';
+import '../../core/storage/privacy.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
+import 'app_update_page.dart';
+import 'cache_management_page.dart';
+import 'cover_appearance_settings_page.dart';
+import 'privacy_lock_settings_page.dart';
 import 'settings_controller.dart';
 
 /// 设置页：外观 / 内容与来源 / 关于三个分组。
@@ -95,34 +104,95 @@ class SettingsPage extends ConsumerWidget {
                   horizontal: AppSpacing.md,
                 ),
               ),
+              ListTile(
+                leading: const Icon(Icons.view_module_outlined),
+                title: const Text('封面与外观'),
+                subtitle: const Text('竖封面 / 宽封面、列表网格、密度与强调色'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(context, MaterialPageRoute<void>(
+                  builder: (_) => const CoverAppearanceSettingsPage(),
+                )),
+              ),
+            ],
+          ),
+          SettingsGroup(
+            title: '隐私',
+            children: [
+              SwitchListTile(
+                title: const Text('无痕阅读与播放'),
+                subtitle: const Text(
+                  '之后打开的阅读器/播放器不保存新进度或历史，不自动上报站点/追踪；不删除旧数据，不隐藏网络访问或缓存。',
+                ),
+                value:
+                    ref.watch(incognitoProvider).asData?.value ??
+                    ref
+                        .read(preferencesProvider)
+                        .get<bool>(incognitoPreferenceKey) ??
+                    false,
+                onChanged: (value) => ref
+                    .read(preferencesProvider)
+                    .set(incognitoPreferenceKey, value),
+              ),
+              ListTile(
+                leading: const Icon(Icons.lock_outline),
+                title: const Text('应用隐私锁'),
+                subtitle: const Text('本机 PIN 访问控制；不加密数据库或媒体文件'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(context, MaterialPageRoute<void>(
+                  builder: (_) => const PrivacyLockSettingsPage(),
+                )),
+              ),
             ],
           ),
           SettingsGroup(
             title: '内容与来源',
             children: <Widget>[
               ListTile(
+                leading: const Icon(Icons.wifi_outlined),
+                title: const Text('来源 HTTP 代理'),
+                subtitle: Text(
+                  ref.watch(sourceProxyProvider).isEmpty
+                      ? '未设置 · 使用默认网络'
+                      : ref.watch(sourceProxyProvider),
+                ),
+                onTap: () => _editProxy(context, ref),
+              ),
+              ListTile(
                 leading: const Icon(Icons.extension_outlined),
                 title: const Text('规则与扩展源'),
-                subtitle: const Text('M1 开放'),
-                enabled: false,
+                subtitle: const Text('来源语言与内容筛选、规则仓库和扩展管理'),
                 trailing: const Icon(Icons.chevron_right, size: 20),
+                onTap: () => context.push(AppRoutes.sources),
               ),
               ListTile(
                 leading: const Icon(Icons.download_outlined),
                 title: const Text('下载设置'),
-                subtitle: const Text('仅 Wi-Fi 下载、后台更新提醒（M5 开放）'),
-                enabled: false,
+                subtitle: const Text('下载队列、暂停与恢复'),
                 trailing: const Icon(Icons.chevron_right, size: 20),
+                onTap: () => context.push(AppRoutes.downloads),
+              ),
+              ListTile(
+                leading: const Icon(Icons.cleaning_services_outlined),
+                title: const Text('缓存与存储'),
+                subtitle: const Text('预览缓存占用；清理前确认，保留下载和进度'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(context, MaterialPageRoute<void>(
+                  builder: (_) => const CacheManagementPage(),
+                )),
               ),
             ],
           ),
           SettingsGroup(
             title: '关于',
             children: <Widget>[
-              const ListTile(
-                leading: Icon(Icons.info_outline),
-                title: Text('版本'),
-                trailing: Text('0.1.0 · M0'),
+              ListTile(
+                leading: const Icon(Icons.system_update_outlined),
+                title: const Text('版本与应用更新'),
+                subtitle: const Text('核验当前版本、签名和手动更新包'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(context, MaterialPageRoute<void>(
+                  builder: (_) => const AppUpdatePage(),
+                )),
               ),
               ListTile(
                 leading: const Icon(Icons.balance_outlined),
@@ -152,6 +222,61 @@ class SettingsPage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _editProxy(BuildContext context, WidgetRef ref) async {
+    final text = TextEditingController(text: ref.read(sourceProxyProvider));
+    String? error;
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('来源 HTTP 代理'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  '用于规则与轻之国度的 HTTP 请求。轻书架专用连接、APK 来源和原生视频不使用此设置。清空可恢复默认网络。',
+                ),
+                const SizedBox(height: AppSpacing.md),
+                TextField(
+                  controller: text,
+                  decoration: InputDecoration(
+                    labelText: '代理地址',
+                    hintText: 'http://127.0.0.1:7890',
+                    errorText: error,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  try {
+                    await ref
+                        .read(sourceProxyProvider.notifier)
+                        .setProxy(text.text);
+                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  } on FormatException catch (e) {
+                    setState(() => error = e.message);
+                  }
+                },
+                child: const Text('保存'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } finally {
+      // The closing route can still build the field during its exit animation.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      text.dispose();
+    }
   }
 }
 

@@ -1,0 +1,47 @@
+{
+  "environment": "Android real production adapters and secure storage",
+  "at": "2026-10-10T02:45:56.281150Z",
+  "records": {
+    "lk": {
+      "stage": "complete",
+      "phase": "resume",
+      "sessionAvailable": true,
+      "shelfCount": 2,
+      "unreadFieldCount": 2,
+      "nonzeroUnreadCount": 2,
+      "repeatMergeStable": true,
+      "discoverCount": 20,
+      "chapterCount": 20,
+      "lockedCount": 0,
+      "bodyLength": 19471,
+      "fontRegistered": false,
+      "fontBytes": 0,
+      "offlineBodyAndFont": true,
+      "epubChapters": 1,
+      "epubSkippedLocked": 0,
+      "epubFontAssets": 0,
+      "txtStatus": "passed",
+      "restoredAnchor": 7.0,
+      "restoredPage": "2 / 22",
+      "status": "passed"
+    },
+    "lns": {
+      "stage": "complete",
+      "phase": "resume",
+      "sessionAvailable": true,
+      "shelfCount": 0,
+      "discoverCount": 20,
+      "chapterCount": 169,
+      "lockedCount": 0,
+      "bodyLength": 4124,
+      "fontRegistered": true,
+      "fontBytes": 1900776,
+      "offlineBodyAndFont": true,
+      "officialDownloadOnly": true,
+      "chargedDownloadCalled": false,
+      "restoredAnchor": 21.0,
+      "restoredPage": "3 / 13",
+      "status": "passed"
+    }
+  }
+}

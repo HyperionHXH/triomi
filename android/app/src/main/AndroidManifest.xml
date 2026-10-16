@@ -9,11 +9,17 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <application
         android:label="Triomi"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:fullBackupContent="@xml/privacy_backup_rules"
+        android:dataExtractionRules="@xml/privacy_data_extraction_rules"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
@@ -23,6 +29,7 @@
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
+            android:supportsPictureInPicture="true"
             android:windowSoftInputMode="adjustResize">
             <!-- Specifies an Android theme to apply to this Activity as soon as
                  the Android process has started. This theme is visible to the user
@@ -38,10 +45,34 @@
             </intent-filter>
         </activity>
         <!-- 后台更新检查作业（JobScheduler 周期拉起 headless 引擎，见 T7-7）。 -->
+        <activity android:name=".MihonSettingsActivity" android:exported="false" />
+        <service android:name=".JsWorkerService" android:exported="false"
+            android:process=":js_worker" android:stopWithTask="true" />
+        <service android:name=".BackgroundJsWorkerService" android:exported="false"
+            android:process=":js_worker_background" android:stopWithTask="true" />
+        <service android:name=".BackgroundPlaybackService"
+            android:exported="false" android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="true">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService"/>
+            </intent-filter>
+        </service>
         <service
             android:name=".BackgroundUpdateCheckJobService"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name=".MangaUpdateJobService" android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <service android:name=".LocalBackupJobService" android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.app-update"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/app_update_paths"/>
+        </provider>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

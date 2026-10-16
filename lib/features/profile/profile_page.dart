@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../local/local_comic_library_page.dart';
 
 /// 我的：账号入口 + 通用设置。
 ///
@@ -134,6 +135,15 @@ class ProfilePage extends StatelessWidget {
               child: SettingsGroup(
                 title: '数据',
                 children: <Widget>[
+                  ListTile(
+                    leading: const Icon(Icons.folder_open_outlined),
+                    title: const Text('本地漫画库'),
+                    subtitle: const Text('导入 CBZ / ZIP 或图片目录，离线阅读'),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => Navigator.push(context, MaterialPageRoute<void>(
+                      builder: (_) => const LocalComicLibraryPage(),
+                    )),
+                  ),
                   ListTile(
                     leading: const Icon(Icons.bookmarks_outlined),
                     title: const Text('远端书架'),

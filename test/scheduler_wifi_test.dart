@@ -30,6 +30,7 @@ import 'fixtures/fake_preferences.dart';
 /// 切回 WiFi，让自旋的泵自行排空，测试才能终止并用调用数断言自旋是否存在
 /// （见该用例的注释）。多任务用例按停泵语义正常走窗口等待。
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late AppDatabase db;
   late Preferences preferences;
 

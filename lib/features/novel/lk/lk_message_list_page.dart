@@ -9,9 +9,11 @@ import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/source/source_api.dart';
+import '../../../core/source/source_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/widgets/page_scaffold.dart';
+import '../../../core/widgets/source_network_image.dart';
 import '../data/lk/lk_source.dart';
 import 'lk_access.dart';
 import 'lk_messages_page.dart';
@@ -203,7 +205,7 @@ class _LkMessageListPageState extends ConsumerState<LkMessageListPage> {
         title: '还没有登录轻之国度',
         message: '登录后可以查看站点的回复、点赞与通知。',
         action: FilledButton.icon(
-          onPressed: () => context.push(AppRoutes.sources),
+          onPressed: () => context.push('${AppRoutes.sources}?type=novel'),
           icon: const Icon(Icons.login, size: 18),
           label: const Text('去登录'),
         ),
@@ -281,7 +283,11 @@ class _LkMessageListPageState extends ConsumerState<LkMessageListPage> {
                 backgroundColor: context.palette.coverPlaceholder,
                 foregroundImage: sender?.avatarUrl == null
                     ? null
-                    : NetworkImage(sender!.avatarUrl!),
+                    : SourceNetworkImage(
+                        sender!.avatarUrl!,
+                        http: ref.watch(sourceHttpClientProvider),
+                        sourceId: 'light-novel-kingdom',
+                      ),
                 child: sender == null
                     ? Icon(
                         LkMessagesPage.categoryIcons[notification.category],

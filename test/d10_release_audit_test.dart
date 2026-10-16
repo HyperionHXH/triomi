@@ -112,7 +112,9 @@ void main() {
       await library.addToLibrary(itemA);
       await library.addToLibrary(itemB);
 
-      final entries = await library.listLibrary();
+      // D89 起书架默认列表只含漫画与小说；这里是复合键审计，需要看到
+      // 全部类型，用 includeAnime 的全量口径观察。
+      final entries = await library.listLibrary(includeAnime: true);
       expect(entries, hasLength(2));
       expect(
         entries.map((view) => view.item.title),
@@ -121,7 +123,7 @@ void main() {
 
       // 移除其中一个不影响另一个。
       await library.removeFromLibrary('source-a', '1');
-      final remaining = await library.listLibrary();
+      final remaining = await library.listLibrary(includeAnime: true);
       expect(remaining, hasLength(1));
       expect(remaining.single.item.title, itemB.title);
     });
@@ -146,8 +148,8 @@ void main() {
         position: 30,
       );
 
-      // B 的进度没被 A 的更新带走。
-      final entries = await library.listLibrary();
+      // B 的进度没被 A 的更新带走（复合键审计用 includeAnime 全量口径）。
+      final entries = await library.listLibrary(includeAnime: true);
       double progressOf(String sourceId) => entries
           .firstWhere((view) => view.item.sourceId == sourceId)
           .entry

@@ -18,9 +18,23 @@ class Preferences {
 
   T? get<T>(String key) => _box.get(key) as T?;
 
+  /// Local metadata changes, without loading or executing a source runtime.
+  Stream<Object?> watch(String key) => Stream<Object?>.multi((controller) {
+    final subscription = _box
+        .watch(key: key)
+        .listen(
+          (_) => controller.add(get<Object?>(key)),
+          onError: controller.addError,
+        );
+    controller.add(get<Object?>(key));
+    controller.onCancel = subscription.cancel;
+  });
+
   Future<void> set(String key, Object? value) => _box.put(key, value);
 
   Future<void> remove(String key) => _box.delete(key);
+
+  Future<void> flush() => _box.flush();
 
   Future<void> clear() => _box.clear();
 

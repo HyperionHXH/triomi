@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-13",
+  "artifactSha256": "495504041c01f31fd27797d1937567d35b7b03311f8c53e1e64727cc6ee5c992",
+  "status": "in-progress",
+  "interface": "computer win32",
+  "observed": {
+    "recommendationTitles": true,
+    "searchSecondaryBackReturnedHome": true,
+    "manga": {
+      "title": "烙印勇士",
+      "chapters": 211,
+      "before": "8/88",
+      "afterKeyboardRight": "9/88",
+      "normalCloseIndependentRelaunch": true,
+      "restored": "9/88",
+      "beforePid": 11844,
+      "afterPid": 8480,
+      "screenshot": "C125-latest-windows-manga-restored.png"
+    },
+    "publicCachedNovel": {
+      "title": "团地恋人　等待你的温柔时光",
+      "chapter": "第一话　鱼面包与用勺子吃的枫糖浆蛋糕",
+      "realBodyExposedByAX": true,
+      "keyboardRightChangedVisibleBody": true,
+      "progressSlider": "3%",
+      "independentRestartSameTextAnchor": true,
+      "downloadManager": "已完成 10 / 10 章",
+      "downloadScreenshot": "C125-latest-windows-lk-downloads.png",
+      "cacheRestartScreenshot": "C125-latest-windows-proxy-restart-reader.png"
+    },
+    "applicationHttpProxy": {
+      "original": "",
+      "tested": "http://127.0.0.1:49391",
+      "tcpListenerPresent": false,
+      "detailFailedIntoCache": true,
+      "cachedBodyReadable": true,
+      "normalExitIndependentRestartPid": 7156,
+      "persistedProxyAndBodyAnchorRecovered": true,
+      "clearedAfterward": true,
+      "ordinaryOnlineReloadRecovered": true,
+      "onlineDetailOfflineBannerAbsent": true,
+      "hostNetworkChanged": false,
+      "scope": "Rules and LK shared HTTP only; not LNS, APK or native video offline"
+    },
+    "video": {
+      "site": "7sefun",
+      "item": "Re：从零开始的异世界生活第四季",
+      "chapter": "第01集",
+      "actualPlayerAx": "2:56 / 23:40",
+      "persistedSecondsOnExit": 193,
+      "actualFrameReviewed": false,
+      "independentRestartSeekVerified": true,
+      "independentRestartPid": 8664,
+      "actualRestoredPlayerAx": "3:13 / 23:40",
+      "restoredSecondsMatchSaved": true,
+      "screenshot": "C125-latest-windows-video-restored.png"
+    }
+  },
+  "visualReview": {
+    "status": "not-completed",
+    "reason": "Current model cannot consume image input; screenshot capture is not visual proof. No image decode, checkmark or actual video-frame success claimed."
+  },
+  "remaining": ["manga screenshot visual review", "instant direction checkmark visual review", "latest restored video actual-frame visual review"]
+}

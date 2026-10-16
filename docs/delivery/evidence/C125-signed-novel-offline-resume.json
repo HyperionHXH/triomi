@@ -1,0 +1,22 @@
+{
+  "serial": "emulator-5558",
+  "status": "passed",
+  "artifactSha256": "acc302287b6f69468004ec608c0b2b89b8be6e6c244804d32726c660799944a9",
+  "targetReplaced": false,
+  "source": "LK public anonymous content",
+  "initialSavedPage": "3 / 73",
+  "homeResumePage": "3 / 73",
+  "stage": "reader-restoration",
+  "noDefaultNetwork": true,
+  "independentRestart": true,
+  "detailOfflineFallback": true,
+  "restoredPages": [
+    "3 / 73"
+  ],
+  "screenshot": "C125-signed-novel-offline-resume.png",
+  "networkRestored": true,
+  "wifiSettingRestored": true,
+  "dataSettingRestored": true,
+  "realChineseBodyVisuallyVerified": true,
+  "visualReviewAt": "2026-10-10T15:20:47.914Z"
+}

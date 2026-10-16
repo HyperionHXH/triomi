@@ -1,0 +1,10 @@
+{
+  "date":"2026-10-14",
+  "status":"partial",
+  "source":"C139 post-P12 changes",
+  "acceptanceApk":{"path":"D:/noval_and_manga/_tools/Triomi-C139-P12-filtered-unread-acceptance.apk","bytes":127126376,"sha256":"40a51400e8d1ddb3eefb65fa2d433fb8e5b62dbf6fcfc97dacb58ee1e52912cd","certificateSha256":"0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6","v2Verified":true,"installedHashMatched":["emulator-5554","emulator-5556"]},
+  "productionApk":{"path":"D:/noval_and_manga/_tools/Triomi-C139-android-signed.apk","bytes":127126376,"sha256":"1de406574e49f6621d9e5ce28c59b7d5bb7335bfe48d89a48372dd1f32f233e2","certificateSha256":"9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077","publicKeySha256":"c288d6b0b5cdb3320311db1acb20721eaa674d197d8bb2f563c0325d7169cce0","rsaBits":4096,"v2Verified":true,"installedOn":"emulator-5558","preUpgradeDbSummary":"0 library entries / 44 chapters / 7 histories","postUpgradeDbSummary":"0 library entries / 44 chapters / 7 histories","installedHashMatched":true},
+  "windows":{"zipPath":"D:/noval_and_manga/_tools/Triomi-C139-windows-release.zip","zipBytes":37728915,"zipSha256":"a27610d5958ad6dd3e93bf3d365d048481db5ab45032804d694ba4d140168228","members":50,"zipIntegrity":true,"exactMemberBytesMatchRelease":true,"build":"flutter build windows --release --no-pub succeeded","uiAcceptance":"not-run; prior desktop computer session is closed"},
+  "verification":{"fullSuitePassed":790,"analyze":"No issues found","secretScan":"C139-delivery-secret-scan.json: zero credential/signing hits, private filenames and debug files across current checkout/artifacts","sourceAheadOfHistoricalC125":true},
+  "limitations":["Production APK was installed with install-r and data counts remained unchanged; no destructive production reader mutation was performed","Windows build/package integrity is not desktop behavioral acceptance","P11 media/source-definition portability, remaining P12 modules and visual/full-platform journeys remain partial"]
+}

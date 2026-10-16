@@ -1,0 +1,132 @@
+{
+  "checkedAt": "2026-10-15",
+  "status": "implemented-and-local-verification-complete; cross-platform-acceptance-partial",
+  "flutter": {
+    "passed": 952,
+    "skipped": 3,
+    "failed": 0,
+    "log": "artifact://1473",
+    "analyze": "No issues found (12.8s)"
+  },
+  "artifacts": {
+    "acceptance": {
+      "file": "Triomi-C148-P12-final-acceptance.apk",
+      "bytes": 129094760,
+      "sha256": "a07e899791f0713310effdc8c466299173a36d724a235021caeec96958341e0f",
+      "signer": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6",
+      "v2": true
+    },
+    "production": {
+      "file": "Triomi-C148-P12-android-signed.apk",
+      "bytes": 129094760,
+      "sha256": "40317556999d0e36c7a8022af2e43004e353ffe42c7de0f715e0ef63f9770060",
+      "signer": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077",
+      "v2": true,
+      "rsaBits": 4096
+    },
+    "windows": {
+      "file": "Triomi-C148-windows-release.zip",
+      "bytes": 37178929,
+      "sha256": "aa605e184c74f179c70d954bcbdc18676d606355f6b830f483590b92c73d37ee",
+      "members": 50,
+      "directoryByteEquality": true,
+      "hiddenLocalBackupExit": 0,
+      "desktopUi": false
+    }
+  },
+  "devices": {
+    "emulator-5554": {
+      "installed": "acceptance",
+      "installedHashMatches": true,
+      "library": 6,
+      "chapters": 4013,
+      "history": 19,
+      "downloads": 6,
+      "categories": 0,
+      "scaleSynthetic": 0,
+      "finalOfflineReader": "C148-local-smoke 2/2; assistant-created item subsequently removed through exact local management confirmation"
+    },
+    "emulator-5556": {
+      "installed": "acceptance",
+      "installedHashMatches": true,
+      "library": 4,
+      "chapters": 3648,
+      "history": 6,
+      "downloads": 3,
+      "categories": 0,
+      "scaleSynthetic": 0
+    },
+    "emulator-5558": {
+      "installed": "production",
+      "installedHashMatches": true,
+      "library": 0,
+      "chapters": 44,
+      "history": 7,
+      "downloads": 10,
+      "categories": 0,
+      "scaleSynthetic": 0
+    }
+  },
+  "nativePrivacyWorkingBuild": {
+    "device": "emulator-5554",
+    "artifact": "Triomi-C148-P12-native-acceptance.apk",
+    "scope": "prior C148 native build, not final artifact bytes",
+    "enabledViaUi": true,
+    "homeResumeLocked": true,
+    "backCannotEscape": true,
+    "independentForceStopLocked": true,
+    "correctPinUnlock": true,
+    "authenticatedDisable": true,
+    "pinNeverLogged": true,
+    "disabledRestored": true
+  },
+  "actualScale": {
+    "device": "emulator-5554",
+    "isolatedTemporaryDatabase": true,
+    "seedMs": 2357,
+    "batchMs": 236,
+    "added": 1000,
+    "kept": 1000,
+    "shelf": 11000,
+    "catalog": 10000,
+    "exactQuery": "Scale 09999",
+    "volume": "Volume 9 · 1000章",
+    "range": "951–1000",
+    "firstVisible": "Chapter 09950",
+    "temporaryEntrypointRemoved": true,
+    "temporaryDeviceDataAbsent": true,
+    "originalEntryRestored": true
+  },
+  "regressions": {
+    "localMedia": "file-backed completed indexes retained; off-shelf import management/removal; repeat shelf restoration; local file URI save bytes",
+    "backup": "later full media fills only restored pathless placeholders; bounded actual ZIP inflate including 503MiB media; CRC/SHA and no-mutation cleanup",
+    "privacy": "late disable/change background rejection; pending-disable cold start; overlay/semantics; durable write failure",
+    "windowsDownload": "owned cancel routes; native close barrier; exact native Cookie; delayed cookie cancel; HTTPS redirects/auth strip; disabled in-flight chapter contract",
+    "catalog": "volume/range transitions open original chapter111 index, no source initialization"
+  },
+  "secretScan": {
+    "files": 1269,
+    "credentialOrSigningSecretMatches": 0,
+    "apkMembersEach": 601,
+    "windowsMembersEach": 50,
+    "privateMaterialOrDebugFiles": 0
+  },
+  "remaining": [
+    "Windows real visible Save/Cancel/HTTPOnly profile-sharing/cold restart/webpage media download needs unavailable desktop session",
+    "API26/production complete PIN/native-window/PiP/installer lifecycle not exercised this round",
+    "actual visual pixel approval and full P1–P9 journeys remain as current status",
+    "P10 exact remote-write authorization and P11 actual external WebDAV target/write authorization absent",
+    "No actual full 16GiB extraction, all Mihon repository compatibility, or new long endurance claim"
+  ],
+  "mixnDiagnostics": "C148-Mixn-public-diagnostics.json; LK DNS plus sequential-client fallback amplification, LNS public hubs alive and server attack-outage recovery notice; no personal-session claim",
+  "nativePrivacyFinalApi26": {
+    "device": "emulator-5556",
+    "artifact": "Triomi-C148-P12-final-acceptance.apk",
+    "enabledViaUi": true,
+    "forceStopColdStartLocked": true,
+    "correctPinUnlock": true,
+    "authenticatedDisable": true,
+    "disabledColdStartVerified": true,
+    "pinLogged": false
+  }
+}

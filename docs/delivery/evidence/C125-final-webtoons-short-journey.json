@@ -1,0 +1,24 @@
+{
+  "serial": "emulator-5554",
+  "status": "passed",
+  "artifactSha256": "52c391bd5ecf25e03d74981718aaad8505af570b7f87067085960510919b28b3",
+  "savedMode": "left-to-right",
+  "observedPages": [
+    "4/13",
+    "5/13",
+    "6/13"
+  ],
+  "horizontalSwipeActions": 2,
+  "homeResumePage": "6/13",
+  "forceStopIndependentResumePage": "6/13",
+  "realImagesVisuallyVerified": true,
+  "screenshots": [
+    "C125-final-webtoons-mode.png",
+    "C125-final-webtoons-horizontal-page.png",
+    "C125-final-webtoons-page-home.png",
+    "C125-final-webtoons-restart.png"
+  ],
+  "limits": [
+    "Short follow-up, not retroactive proof of long-run manga paging"
+  ]
+}

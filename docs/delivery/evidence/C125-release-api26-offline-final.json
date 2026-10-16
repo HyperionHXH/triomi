@@ -1,0 +1,24 @@
+{
+  "serial": "emulator-5556",
+  "status": "passed",
+  "artifactSha256": "52c391bd5ecf25e03d74981718aaad8505af570b7f87067085960510919b28b3",
+  "targetReplaced": false,
+  "networkControl": "ordinary Android Wi-Fi settings switch; svc data",
+  "noDefaultNetwork": true,
+  "detailOfflineFallback": true,
+  "restoredPages": [
+    "3 / 13"
+  ],
+  "knownBookVisible": true,
+  "independentRestart": true,
+  "screenshot": "C125-release-api26-offline-final.png",
+  "wifiRestored": true,
+  "dataRestored": true,
+  "networkSettingsRestored": true,
+  "activeDefaultNetworkAfterRestore": [
+    "103"
+  ],
+  "realBodyAndDedicatedFontVisuallyVerified": true,
+  "visualReviewAt": "2026-10-10T14:57:28.267Z",
+  "priorBlockedAttempt": "svc wifi exit137; normal Android settings switch succeeded"
+}

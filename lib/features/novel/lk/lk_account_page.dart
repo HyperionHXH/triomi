@@ -4,10 +4,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/models/lk_account.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/source/source_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/page_scaffold.dart';
+import '../../../core/widgets/source_network_image.dart';
 import 'lk_access.dart';
 
 /// 轻之国度账号页：资料 / 轻币余额 / 关注粉丝 + 七日签到。
@@ -109,7 +111,7 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
         title: '还没有登录轻之国度',
         message: '登录后可以查看轻币余额、七日签到与站点消息。',
         action: FilledButton.icon(
-          onPressed: () => context.push(AppRoutes.sources),
+          onPressed: () => context.push('${AppRoutes.sources}?type=novel'),
           icon: const Icon(Icons.login, size: 18),
           label: const Text('去登录'),
         ),
@@ -170,7 +172,11 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
                   backgroundColor: palette.coverPlaceholder,
                   foregroundImage: avatarUrl == null
                       ? null
-                      : NetworkImage(avatarUrl),
+                      : SourceNetworkImage(
+                          avatarUrl,
+                          http: ref.watch(sourceHttpClientProvider),
+                          sourceId: 'light-novel-kingdom',
+                        ),
                   child: const Icon(Icons.person_outline),
                 ),
                 const SizedBox(width: AppSpacing.sm),

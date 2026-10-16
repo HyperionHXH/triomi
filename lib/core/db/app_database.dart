@@ -21,6 +21,12 @@ part 'app_database.g.dart';
     Histories,
     Downloads,
     TrackBinds,
+    BackupImportJournals,
+    AnimeSourceLinks,
+    MangaFeeds,
+    MangaUpdates,
+    MigrationPlans,
+    MergedMangaReferences,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -31,13 +37,10 @@ class AppDatabase extends _$AppDatabase {
 
   /// 当前结构版本。
   ///
-  /// **改表约定**：改动 [tables.dart] 里的结构 → 版本号 +1 → 在 [migration] 的
-  /// `onUpgrade` 里补一步迁移；`test/library_repository_test.dart` 会断言表结构，
-  /// 忘了写迁移会在测试里暴露。
-  /// 需要更严格的版本校验时可用 drift 的 schema 工具链
-  /// （`dart run drift_dev schema dump` 导出各版本结构 + 升级测试）。
+  /// **改表约定**：改表 → 版本号 +1 → `onUpgrade` 增量迁移。
+  /// `test/database_migration_test.dart` 用历史库验证数据保留与新功能可用。
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -49,6 +52,33 @@ class AppDatabase extends _$AppDatabase {
         // v2：作品与章节补 url 列（详情页地址、正文页地址必须持久化）
         await m.addColumn(mediaItems, mediaItems.url);
         await m.addColumn(chapters, chapters.url);
+      }
+      if (from < 3) {
+        await m.createTable(backupImportJournals);
+      }
+      if (from < 4) {
+        await m.createTable(animeSourceLinks);
+      }
+      if (from < 5) {
+        await m.createTable(mangaFeeds);
+      }
+      if (from < 6) {
+        await m.createTable(mangaUpdates);
+      }
+      if (from == 6) {
+        await m.addColumn(mangaUpdates, mangaUpdates.generation);
+        await m.addColumn(mangaUpdates, mangaUpdates.notifiedGeneration);
+        await customStatement(
+          'UPDATE manga_updates SET generation = 1, notified_generation = CASE WHEN notified_at IS NULL OR notified_at < checked_at THEN 0 ELSE 1 END WHERE added > 0',
+        );
+      }
+      if (from < 8) {
+        await m.createTable(migrationPlans);
+        await m.createTable(mergedMangaReferences);
+      }
+      if (from < 9) {
+        await m.addColumn(categories, categories.hidden);
+        await m.addColumn(categories, categories.rulesJson);
       }
     },
   );

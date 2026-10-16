@@ -1,0 +1,750 @@
+{
+  "serial": "emulator-5554",
+  "status": "passed",
+  "targetSeconds": 1800,
+  "scope": "final installed release, real LK/LNS/Webtoons histories; chapter switching; observed page changes; actual no-default-network restart; no fixture",
+  "cycles": [
+    {
+      "kind": "lns",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "2 / 10"
+      ],
+      "finalPages": [
+        "2 / 10"
+      ],
+      "homeResumePages": [
+        "2 / 10"
+      ],
+      "restartPages": [
+        "2 / 10"
+      ]
+    },
+    {
+      "kind": "lk",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 1,
+      "initialPages": [
+        "1 / 17"
+      ],
+      "chapterLoadFailed": false,
+      "finalPages": [
+        "1 / 35"
+      ]
+    },
+    {
+      "kind": "webtoons",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 3,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "6/13"
+      ],
+      "finalPages": [
+        "5/13"
+      ],
+      "screenshot": "C125-postfix-manga-cycle-2.png"
+    },
+    {
+      "kind": "lns",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "2 / 10"
+      ],
+      "finalPages": [
+        "2 / 10"
+      ]
+    },
+    {
+      "kind": "lk",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 1,
+      "initialPages": [
+        "1 / 35"
+      ],
+      "chapterLoadFailed": false,
+      "finalPages": [
+        "1 / 17"
+      ]
+    },
+    {
+      "kind": "webtoons",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 3,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "5/13"
+      ],
+      "finalPages": [
+        "6/13"
+      ],
+      "screenshot": "C125-postfix-manga-cycle-5.png",
+      "homeResumePages": [
+        "6/13"
+      ]
+    },
+    {
+      "kind": "lns",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "1 / 17"
+      ],
+      "finalPages": [
+        "1 / 17"
+      ]
+    },
+    {
+      "kind": "lk",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 1,
+      "initialPages": [
+        "1 / 17"
+      ],
+      "chapterLoadFailed": false,
+      "finalPages": [
+        "1 / 35"
+      ]
+    },
+    {
+      "kind": "webtoons",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "6/13"
+      ],
+      "finalPages": [
+        "6/13"
+      ],
+      "screenshot": "C125-postfix-manga-cycle-8.png"
+    },
+    {
+      "kind": "lns",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "2 / 10"
+      ],
+      "finalPages": [
+        "2 / 10"
+      ]
+    },
+    {
+      "kind": "lk",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 1,
+      "initialPages": [
+        "1 / 35"
+      ],
+      "chapterLoadFailed": false,
+      "finalPages": [
+        "1 / 17"
+      ],
+      "homeResumePages": [
+        "1 / 17"
+      ],
+      "restartPages": [
+        "1 / 17"
+      ]
+    },
+    {
+      "kind": "webtoons",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "6/13"
+      ],
+      "finalPages": [
+        "6/13"
+      ]
+    },
+    {
+      "kind": "lns",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "2 / 10"
+      ],
+      "finalPages": [
+        "2 / 10"
+      ]
+    },
+    {
+      "kind": "lk",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 1,
+      "initialPages": [
+        "1 / 17"
+      ],
+      "chapterLoadFailed": false,
+      "finalPages": [
+        "1 / 35"
+      ]
+    },
+    {
+      "kind": "webtoons",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "6/13"
+      ],
+      "finalPages": [
+        "6/13"
+      ]
+    },
+    {
+      "kind": "lns",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "2 / 10"
+      ],
+      "finalPages": [
+        "2 / 10"
+      ],
+      "homeResumePages": [
+        "2 / 10"
+      ]
+    },
+    {
+      "kind": "lk",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 1,
+      "initialPages": [
+        "1 / 35"
+      ],
+      "chapterLoadFailed": false,
+      "finalPages": [
+        "1 / 17"
+      ]
+    },
+    {
+      "kind": "webtoons",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "6/13"
+      ],
+      "finalPages": [
+        "6/13"
+      ]
+    },
+    {
+      "kind": "lns",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "2 / 10"
+      ],
+      "finalPages": [
+        "2 / 10"
+      ]
+    },
+    {
+      "kind": "lk",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 1,
+      "initialPages": [
+        "1 / 17"
+      ],
+      "chapterLoadFailed": false,
+      "finalPages": [
+        "1 / 35"
+      ]
+    },
+    {
+      "kind": "webtoons",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "6/13"
+      ],
+      "finalPages": [
+        "6/13"
+      ],
+      "homeResumePages": [
+        "6/13"
+      ],
+      "restartPages": [
+        "6/13"
+      ]
+    },
+    {
+      "kind": "lns",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "2 / 10"
+      ],
+      "finalPages": [
+        "2 / 10"
+      ]
+    },
+    {
+      "kind": "lk",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 1,
+      "initialPages": [
+        "1 / 35"
+      ],
+      "chapterLoadFailed": false,
+      "finalPages": [
+        "1 / 17"
+      ]
+    },
+    {
+      "kind": "webtoons",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "6/13"
+      ],
+      "finalPages": [
+        "6/13"
+      ]
+    },
+    {
+      "kind": "lns",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "2 / 10"
+      ],
+      "finalPages": [
+        "2 / 10"
+      ]
+    },
+    {
+      "kind": "lk",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 1,
+      "initialPages": [
+        "1 / 17"
+      ],
+      "chapterLoadFailed": false,
+      "finalPages": [
+        "1 / 35"
+      ],
+      "homeResumePages": [
+        "1 / 35"
+      ]
+    },
+    {
+      "kind": "webtoons",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "6/13"
+      ],
+      "finalPages": [
+        "6/13"
+      ]
+    },
+    {
+      "kind": "lns",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 0,
+      "initialPages": [
+        "2 / 10"
+      ],
+      "finalPages": [
+        "2 / 10"
+      ]
+    },
+    {
+      "kind": "lk",
+      "entered": true,
+      "inputActions": 4,
+      "observedPageChanges": 4,
+      "chapterSwitches": 1,
+      "initialPages": [
+        "1 / 35"
+      ],
+      "chapterLoadFailed": false,
+      "finalPages": [
+        "1 / 17"
+      ]
+    }
+  ],
+  "samples": [
+    {
+      "elapsedSeconds": 40.5,
+      "running": true,
+      "pid": 32556,
+      "pssKiB": 199213,
+      "threads": 61,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 136.9,
+      "running": true,
+      "pid": 9490,
+      "pssKiB": 193003,
+      "threads": 49,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 187.8,
+      "running": true,
+      "pid": 9490,
+      "pssKiB": 228461,
+      "threads": 64,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 230.0,
+      "running": true,
+      "pid": 9490,
+      "pssKiB": 212267,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 320.3,
+      "running": true,
+      "pid": 11439,
+      "pssKiB": 193263,
+      "threads": 50,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 377.2,
+      "running": true,
+      "pid": 11439,
+      "pssKiB": 223093,
+      "threads": 65,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 433.6,
+      "running": true,
+      "pid": 11439,
+      "pssKiB": 200407,
+      "threads": 58,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 488.8,
+      "running": true,
+      "pid": 11439,
+      "pssKiB": 199137,
+      "threads": 59,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 542.2,
+      "running": true,
+      "pid": 11439,
+      "pssKiB": 224281,
+      "threads": 66,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 588.2,
+      "running": true,
+      "pid": 11439,
+      "pssKiB": 212953,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 639.7,
+      "running": true,
+      "pid": 11439,
+      "pssKiB": 205637,
+      "threads": 61,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 779.7,
+      "running": true,
+      "pid": 14913,
+      "pssKiB": 220320,
+      "threads": 64,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 837.1,
+      "running": true,
+      "pid": 14913,
+      "pssKiB": 212628,
+      "threads": 60,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 897.0,
+      "running": true,
+      "pid": 14913,
+      "pssKiB": 203781,
+      "threads": 58,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 957.5,
+      "running": true,
+      "pid": 14913,
+      "pssKiB": 225615,
+      "threads": 64,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1019.7,
+      "running": true,
+      "pid": 14913,
+      "pssKiB": 214979,
+      "threads": 58,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1100.8,
+      "running": true,
+      "pid": 14913,
+      "pssKiB": 201739,
+      "threads": 57,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1163.0,
+      "running": true,
+      "pid": 14913,
+      "pssKiB": 227497,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1226.4,
+      "running": true,
+      "pid": 14913,
+      "pssKiB": 213973,
+      "threads": 57,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1301.3,
+      "running": true,
+      "pid": 18855,
+      "pssKiB": 193982,
+      "threads": 51,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1352.2,
+      "running": true,
+      "pid": 18855,
+      "pssKiB": 225404,
+      "threads": 64,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1456.4,
+      "running": true,
+      "pid": 20224,
+      "pssKiB": 206445,
+      "threads": 61,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1512.5,
+      "running": true,
+      "pid": 20224,
+      "pssKiB": 200591,
+      "threads": 57,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1563.4,
+      "running": true,
+      "pid": 20224,
+      "pssKiB": 224804,
+      "threads": 64,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1608.4,
+      "running": true,
+      "pid": 20224,
+      "pssKiB": 214736,
+      "threads": 59,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1667.5,
+      "running": true,
+      "pid": 20224,
+      "pssKiB": 202638,
+      "threads": 57,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1731.2,
+      "running": true,
+      "pid": 20224,
+      "pssKiB": 225351,
+      "threads": 63,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1779.7,
+      "running": true,
+      "pid": 20224,
+      "pssKiB": 214647,
+      "threads": 59,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    },
+    {
+      "elapsedSeconds": 1833.3,
+      "running": true,
+      "pid": 20224,
+      "pssKiB": 202591,
+      "threads": 58,
+      "fileDescriptors": null,
+      "fdScope": "shell readable proc only; null means OS denied"
+    }
+  ],
+  "homeResume": 6,
+  "independentRestarts": 3,
+  "outages": [
+    {
+      "cycle": 3,
+      "noDefaultNetwork": true,
+      "status": "passed",
+      "cachedResumePages": [
+        "2 / 10"
+      ],
+      "screenshot": "C125-postfix-endurance-offline-3.png",
+      "networkRestored": true,
+      "visualReview": "real Chinese cached body/font and saved2/10 observed"
+    },
+    {
+      "cycle": 18,
+      "noDefaultNetwork": true,
+      "status": "passed",
+      "cachedResumePages": [
+        "2 / 10"
+      ],
+      "screenshot": "C125-postfix-endurance-offline-18.png",
+      "networkRestored": true,
+      "visualReview": "real Chinese cached body/font and saved2/10 observed"
+    }
+  ],
+  "artifactSha256": "307f2778a2fdc2015fd683ef13518a6d838ad02bd4ec756e57ac7a64980efd07",
+  "elapsedSeconds": 1841.8,
+  "newCrashMarkers": 0,
+  "limits": [
+    "Page indicators prove transitions, not every image decode",
+    "No hour-scale leak-free claim",
+    "FD may be denied; null remains unknown",
+    "Some chapter loads may fail normally and are recorded"
+  ],
+  "finalNetworkRestored": true,
+  "visualReview": {
+    "mangaCycles": [
+      2,
+      5,
+      8
+    ],
+    "status": "reviewed real decoded Space Boy pages",
+    "outageCycles": [
+      3,
+      18
+    ]
+  },
+  "summary": {
+    "pssKiBRange": [
+      193003,
+      228461
+    ],
+    "firstLastTenMedianKiB": [
+      206337.0,
+      210546.0
+    ],
+    "observedChanges": 114,
+    "mangaChanges": 34,
+    "chapterChanges": 10
+  },
+  "artifactScope": "307f27 playback-restored release; subsequent proxy/navigation/disabled-source changes require their targeted final-package journeys, not same-byte endurance"
+}

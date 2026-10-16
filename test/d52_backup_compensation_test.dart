@@ -90,15 +90,14 @@ void main() {
     'updatedAt': '2026-09-01T00:00:00.000',
   };
 
-  Map<String, Object?> historyRow(String chapterRemoteId) =>
-      <String, Object?>{
-        'sourceId': 'lk',
-        'remoteId': '1',
-        'chapterSourceId': 'lk',
-        'chapterRemoteId': chapterRemoteId,
-        'position': 3,
-        'visitedAt': '2026-09-10T00:00:00.000',
-      };
+  Map<String, Object?> historyRow(String chapterRemoteId) => <String, Object?>{
+    'sourceId': 'lk',
+    'remoteId': '1',
+    'chapterSourceId': 'lk',
+    'chapterRemoteId': chapterRemoteId,
+    'position': 3,
+    'visitedAt': '2026-09-10T00:00:00.000',
+  };
 
   Map<String, Object?> chapterRow(String remoteId) => <String, Object?>{
     'sourceId': 'lk',
@@ -134,17 +133,21 @@ void main() {
         throwsA(isA<Object>()),
       );
 
-      expect(await countOf('media_items'), 0,
-          reason: '事务里先写入的作品行必须随失败回滚');
+      expect(await countOf('media_items'), 0, reason: '事务里先写入的作品行必须随失败回滚');
       expect(await countOf('library_entries'), 0);
-      expect(preferences.get<String>('reader.theme'), 'old',
-          reason: '设置被补偿恢复为旧值');
-      expect(preferences.exportAll().containsKey('reader.new'), isFalse,
-          reason: '本次新增键被补偿删除');
+      expect(
+        preferences.get<String>('reader.theme'),
+        'old',
+        reason: '设置被补偿恢复为旧值',
+      );
+      expect(
+        preferences.exportAll().containsKey('reader.new'),
+        isFalse,
+        reason: '本次新增键被补偿删除',
+      );
     });
 
-    test('第 3/4 类行（histories/chapterRows）类型错误：全库回滚、设置已补偿',
-        () async {
+    test('第 3/4 类行（histories/chapterRows）类型错误：全库回滚、设置已补偿', () async {
       final badHistory = <String, Object?>{
         ...historyRow('1:1'),
         'position': '不是数字',
@@ -169,8 +172,7 @@ void main() {
       expect(await countOf('library_entries'), 0);
       expect(await countOf('histories'), 0);
       expect(await countOf('chapters'), 0);
-      expect(preferences.exportAll(), isEmpty,
-          reason: '设置导入被完整补偿（旧键不存在 → 删除）');
+      expect(preferences.exportAll(), isEmpty, reason: '设置导入被完整补偿（旧键不存在 → 删除）');
     });
   });
 
@@ -178,8 +180,11 @@ void main() {
     test('旧值是 null 的键补偿后仍存在（值为 null）；新键被删除', () async {
       // MemBox 里显式放一个「存在但值为 null」的键。
       await preferences.set('a.key', null);
-      expect(preferences.exportAll().containsKey('a.key'), isTrue,
-          reason: '前置确认：MemBox 能区分「存在值为 null」与「不存在」');
+      expect(
+        preferences.exportAll().containsKey('a.key'),
+        isTrue,
+        reason: '前置确认：MemBox 能区分「存在值为 null」与「不存在」',
+      );
 
       final payload = payloadOf(
         mediaItems: <Map<String, Object?>>[mediaItem('1')],
@@ -194,11 +199,17 @@ void main() {
       );
 
       final state = preferences.exportAll();
-      expect(state.containsKey('a.key'), isTrue,
-          reason: '导入前就存在的键（即使旧值是 null）必须还在');
+      expect(
+        state.containsKey('a.key'),
+        isTrue,
+        reason: '导入前就存在的键（即使旧值是 null）必须还在',
+      );
       expect(state['a.key'], isNull, reason: '恢复的是旧值 null，不是新值');
-      expect(state.containsKey('b.key'), isFalse,
-          reason: '导入前不存在的键补偿后必须不存在（删除，而不是写入 null）');
+      expect(
+        state.containsKey('b.key'),
+        isFalse,
+        reason: '导入前不存在的键补偿后必须不存在（删除，而不是写入 null）',
+      );
       expect(await countOf('media_items'), 0);
     });
 
@@ -228,11 +239,11 @@ void main() {
         settings: <String, Object?>{'reader.theme': 'new'},
       );
       await expectLater(
-        serviceOf(prefs: BrokenRestorePreferences()).importFromBytes(
-          zipOf(payload),
-        ),
+        serviceOf(prefs: BrokenRestorePreferences())
+            .importFromBytes(zipOf(payload)),
         throwsA(isA<Object>()),
-        reason: '补偿失败不能被吞掉静默成功——当前实现原错误/补偿错误向上抛，'
+        reason:
+            '补偿失败不能被吞掉静默成功——当前实现原错误/补偿错误向上抛，'
             '持久恢复协议（崩溃后补偿、补偿重试）交 Codex D60',
       );
       expect(await countOf('media_items'), 0, reason: '库事务自身回滚不受影响');

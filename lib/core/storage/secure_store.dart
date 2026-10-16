@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -7,7 +9,7 @@ import 'preferences.dart';
 ///
 /// 设计：初始化时把全部条目**预载进内存**，之后读写都是同步的——
 /// 凭据数量只有个位数，预载开销可忽略；这样 [LkClient.securityKey] 这类
-/// 同步 getter 不用改成 Future。写操作先更新内存再异步落盘，读永远命中缓存。
+/// 同步 getter 不用改成 Future。写入/删除落盘成功后才更新缓存，失败向上抛。
 ///
 /// 平台实现失败（Keystore 初始化异常等）时缓存保持为空：读取方会走
 /// Hive 回退，不崩溃。
@@ -32,7 +34,12 @@ class FlutterSecureStore implements SecureStore {
 
   final Map<String, String> _cache = <String, String>{};
   bool _ready = false;
+  bool _privacyReadFailed = false;
 
+  static const _privacyRecord = 'privacyLock.record.v1';
+  static const _durable = MethodChannel('triomi/secure-store-durable');
+  bool get _android => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  bool get _windows => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
   final FlutterSecureStorage _storage = const FlutterSecureStorage(
     // Android 用 EncryptedSharedPreferences（Keystore 加密）。
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -40,13 +47,25 @@ class FlutterSecureStore implements SecureStore {
 
   @override
   Future<void> init() async {
-    if (_ready) return;
+    if (_ready && !_privacyReadFailed) return;
     try {
       _cache.addAll(await _storage.readAll());
+      if (_android && _cache.containsKey(_privacyRecord)) {
+        _cache.remove(_privacyRecord);
+        try {
+          final record = await _durable.invokeMethod<String>('read', {'key': _privacyRecord});
+          if (record != null) _cache[_privacyRecord] = record;
+          _privacyReadFailed = false;
+        } catch (_) {
+          _privacyReadFailed = true;
+          // Protected reads never fall back, but unrelated auth sessions stay
+          // available to existing headless workers lacking the UI channel.
+        }
+      }
+      _ready = true;
     } catch (_) {
-      // 平台层失败：保持空缓存，调用方走 Hive 回退。
+      // 保持未就绪：读取仍返回 null，之后可重试恢复平台安全存储。
     }
-    _ready = true;
   }
 
   @override
@@ -54,22 +73,30 @@ class FlutterSecureStore implements SecureStore {
 
   @override
   Future<void> set(String key, String value) async {
-    _cache[key] = value;
-    try {
+    if (key == _privacyRecord && _android) {
+      final persisted = await _durable.invokeMethod<String>('write', {'key': key, 'value': value});
+      if (persisted != value) throw StateError('Protected storage write unavailable');
+    } else {
       await _storage.write(key: key, value: value);
-    } catch (_) {
-      // 落盘失败不影响本次会话内的读取；下次启动会走迁移重试。
+      if (key == _privacyRecord && _windows) {
+        // The pinned Windows FFI backend writes its DPAPI file with flush:true.
+        // Its legacy C++ per-key file format is not used by Dart applications.
+        if (await _storage.read(key: key) != value) {
+          throw StateError('Protected storage durable readback failed');
+        }
+      }
     }
+    _cache[key] = value;
   }
 
   @override
   Future<void> remove(String key) async {
-    _cache.remove(key);
-    try {
+    if (key == _privacyRecord && _android) {
+      await _durable.invokeMethod<void>('remove', {'key': key});
+    } else {
       await _storage.delete(key: key);
-    } catch (_) {
-      // 同上。
     }
+    _cache.remove(key);
   }
 
   @override

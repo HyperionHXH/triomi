@@ -1,0 +1,63 @@
+{
+  "phase": "install",
+  "at": "2026-10-10T03:01:25.899138Z",
+  "install": {
+    "ok": true,
+    "packageName": "eu.kanade.tachiyomi.extension.all.xkcd",
+    "versionCode": 106000,
+    "signerSha256": "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2",
+    "factoryLoaded": true,
+    "executable": true,
+    "abi": "1.6",
+    "sourceCount": 5,
+    "sources": [
+      {
+        "id": "1538249443376436084",
+        "name": "xkcd",
+        "lang": "en",
+        "supportsLatest": false
+      },
+      {
+        "id": "6901469937775055420",
+        "name": "xkcd",
+        "lang": "es",
+        "supportsLatest": false
+      },
+      {
+        "id": "8162821425156695837",
+        "name": "xkcd",
+        "lang": "zh",
+        "supportsLatest": false
+      },
+      {
+        "id": "987306860406766740",
+        "name": "xkcd",
+        "lang": "fr",
+        "supportsLatest": false
+      },
+      {
+        "id": "3742763978853704441",
+        "name": "xkcd",
+        "lang": "ru",
+        "supportsLatest": false
+      }
+    ],
+    "sha256": "c3eb9851d462b01b836c8a48a2d5ee6ef2ee55fcb9a83b81265bfbadb7580038",
+    "stagedPath": "/data/user/0/io.github.hyperionhxh.triomi/files/mihon-staging/eu.kanade.tachiyomi.extension.all.xkcd-c3eb9851d462b01b836c8a48a2d5ee6ef2ee55fcb9a83b81265bfbadb7580038.apk",
+    "signatureVerified": true
+  },
+  "sourceId": "mihon:eu.kanade.tachiyomi.extension.all.xkcd:1538249443376436084",
+  "popularCount": 1,
+  "keywordSearchCount": 0,
+  "selection": "popular",
+  "title": "xkcd",
+  "chapterCount": 3308,
+  "chapterId": "/1/",
+  "pageCount": 2,
+  "imageBytes": 7408,
+  "imageWidth": 1000,
+  "imageHeight": 140,
+  "disabledRejected": true,
+  "failedUpdateKeptOldPlugin": true,
+  "status": "passed"
+}

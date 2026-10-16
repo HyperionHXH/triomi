@@ -7,6 +7,9 @@ import '../../core/theme/app_tokens.dart';
 
 /// 应用外壳：三档自适应导航（对齐 PROJECT_SPEC 6.2）。
 ///
+/// 导航顺序固定为「发现、书架、追番、我的」（ADR-2026-10-05）：
+/// 发现是默认首屏；书架是漫画/小说阅读收藏库；追番是独立的动画工作区。
+///
 /// - `compact`  (< 600)   底部 NavigationBar
 /// - `medium`   (600~1240) NavigationRail
 /// - `expanded` (> 1240)  Komikku 式 Sidebar + Content
@@ -17,14 +20,14 @@ class AdaptiveShell extends StatelessWidget {
 
   static const List<_ShellDestination> _destinations = <_ShellDestination>[
     _ShellDestination(
-      label: '书架',
-      icon: Icons.collections_bookmark_outlined,
-      selectedIcon: Icons.collections_bookmark,
-    ),
-    _ShellDestination(
       label: '发现',
       icon: Icons.explore_outlined,
       selectedIcon: Icons.explore,
+    ),
+    _ShellDestination(
+      label: '书架',
+      icon: Icons.collections_bookmark_outlined,
+      selectedIcon: Icons.collections_bookmark,
     ),
     _ShellDestination(
       label: '追番',
@@ -60,8 +63,14 @@ class AdaptiveShell extends StatelessWidget {
             destinations: <Widget>[
               for (final destination in _destinations)
                 NavigationDestination(
-                  icon: Icon(destination.icon),
-                  selectedIcon: Icon(destination.selectedIcon),
+                  icon: Icon(
+                    destination.icon,
+                    semanticLabel: '切换到${destination.label}',
+                  ),
+                  selectedIcon: Icon(
+                    destination.selectedIcon,
+                    semanticLabel: '已选中${destination.label}',
+                  ),
                   label: destination.label,
                 ),
             ],
@@ -78,8 +87,14 @@ class AdaptiveShell extends StatelessWidget {
                 destinations: <NavigationRailDestination>[
                   for (final destination in _destinations)
                     NavigationRailDestination(
-                      icon: Icon(destination.icon),
-                      selectedIcon: Icon(destination.selectedIcon),
+                      icon: Icon(
+                        destination.icon,
+                        semanticLabel: '切换到${destination.label}',
+                      ),
+                      selectedIcon: Icon(
+                        destination.selectedIcon,
+                        semanticLabel: '已选中${destination.label}',
+                      ),
                       label: Text(destination.label),
                     ),
                 ],
@@ -221,6 +236,9 @@ class _SidebarItem extends StatelessWidget {
                   Icon(
                     selected ? destination.selectedIcon : destination.icon,
                     size: 20,
+                    semanticLabel: selected
+                        ? '已选中${destination.label}'
+                        : '切换到${destination.label}',
                     color: selected ? foreground : palette.mutedForeground,
                   ),
                   const SizedBox(width: AppSpacing.sm),

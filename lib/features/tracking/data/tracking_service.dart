@@ -1,14 +1,25 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:drift/drift.dart';
+
+import '../../../core/db/app_database.dart';
+import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
 import '../../../core/models/source_exception.dart';
 import '../../../core/source/http_client.dart';
 import '../../../core/storage/preferences.dart';
 import '../../../core/storage/secure_store.dart';
+import '../../library/data/anime_identity_repository.dart';
+import '../../library/data/library_repository.dart';
+import '../../library/data/merged_manga_repository.dart';
 import 'anilist_client.dart';
 import 'bangumi_client.dart';
 import 'tracking_models.dart';
 import 'tracking_repository.dart';
+
+part 'tracking_sync.dart';
 
 /// 第三方追踪服务的绑定与进度上报。
 ///
@@ -168,7 +179,14 @@ class TrackingService {
     required double chapterNumber,
     required MediaType type,
   }) async {
-    final rows = await repository.bindsFor(sourceId, remoteId);
+    final List<TrackBindRow> rows;
+    try {
+      rows = await repository.bindsFor(sourceId, remoteId);
+    } catch (_) {
+      // A reader can finish saving while its owning database is closing.
+      // Reporting is best effort and must not escape an unawaited callback.
+      return const <TrackSyncResult>[];
+    }
     final results = <TrackSyncResult>[];
     for (final row in rows) {
       final kind = TrackingServiceKind.parse(row.service);
@@ -196,7 +214,12 @@ class TrackingService {
     required MediaType type,
     double chapterNumber = 0,
   }) async {
-    final rows = await repository.bindsFor(sourceId, remoteId);
+    final List<TrackBindRow> rows;
+    try {
+      rows = await repository.bindsFor(sourceId, remoteId);
+    } catch (_) {
+      return const <TrackSyncResult>[];
+    }
     final results = <TrackSyncResult>[];
     for (final row in rows) {
       final kind = TrackingServiceKind.parse(row.service);

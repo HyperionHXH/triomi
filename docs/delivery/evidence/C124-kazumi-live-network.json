@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-09T16:16:10.517114Z",
+  "kind": "desktop-real-network-not-device-playback",
+  "recommendations": {
+    "first": 24,
+    "second": 24,
+    "nextOffset": 48,
+    "hasMore": true
+  },
+  "sites": [
+    {
+      "name": "7sefun",
+      "searchCount": 2,
+      "status": "search-chapters-webpage",
+      "title": "葬送的芙莉莲第二季",
+      "episodes": 20,
+      "lists": [
+        "播放列表 2",
+        "播放列表 4"
+      ],
+      "playerHost": "www.7sefun.top",
+      "webPage": true
+    },
+    {
+      "name": "MXdm",
+      "searchCount": 2,
+      "status": "search-chapters-webpage",
+      "title": "葬送的芙莉莲第二季",
+      "episodes": 40,
+      "lists": [
+        "播放列表 1",
+        "播放列表 2",
+        "播放列表 3",
+        "播放列表 4"
+      ],
+      "playerHost": "www.dcc3.com",
+      "webPage": true
+    },
+    {
+      "name": "DM84",
+      "searchCount": 2,
+      "status": "search-chapters-webpage",
+      "title": "葬送的芙莉莲 第二季",
+      "episodes": 30,
+      "lists": [
+        "播放列表 1",
+        "播放列表 2",
+        "播放列表 3"
+      ],
+      "playerHost": "dmbus.cc",
+      "webPage": true
+    }
+  ]
+}

@@ -1,0 +1,240 @@
+import 'dart:io';
+
+import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
+
+import '../backup/apk_backup_files.dart';
+import '../platform/platform_channel.dart';
+import '../storage/preferences.dart';
+import 'http_client.dart';
+import 'mihon_repository.dart';
+import 'source_filters.dart';
+
+class MihonPublisherCandidate {
+  const MihonPublisherCandidate({
+    required this.actualSigner,
+    required this.repositorySigner,
+    required this.apkHash,
+    required this.packageName,
+    required this.versionCode,
+    required this.versionName,
+  });
+  final String actualSigner;
+  final String repositorySigner;
+  final String apkHash;
+  final String packageName;
+  final int versionCode;
+  final String versionName;
+}
+
+class MihonInstaller {
+  const MihonInstaller({required this.http, required this.preferences});
+
+  final SourceHttpClient http;
+  final Preferences preferences;
+
+  Future<Map<String, Object?>> install(
+    MihonExtension extension, {
+    required String signerSha256,
+    Future<bool> Function(MihonPublisherCandidate candidate)? confirmPublisher,
+  }) async {
+    final directory = Directory(
+      '${(await getApplicationSupportDirectory()).path}/mihon-extensions',
+    );
+    await directory.create(recursive: true);
+    final candidateDirectory = await directory.createTemp('candidate-');
+    final candidate = File('${candidateDirectory.path}/extension.apk');
+    try {
+      for (var attempt = 0; ; attempt++) {
+        try {
+          await _download(extension, candidate);
+          break;
+        } on DioException {
+          if (attempt >= 2) rethrow;
+          await Future<void>.delayed(Duration(seconds: attempt + 1));
+        } on IOException {
+          if (attempt >= 2) rethrow;
+          await Future<void>.delayed(Duration(seconds: attempt + 1));
+        }
+      }
+      final metadata = await platformChannel.inspectMihonMetadata(
+        apkPath: candidate.path,
+        packageName: extension.packageName,
+        versionCode: extension.versionCode,
+      );
+      if (metadata['ok'] != true || metadata['signatureVerified'] != true) {
+        throw StateError('${metadata['error'] ?? 'APK 签名验证失败'}');
+      }
+      final actualSigner = '${metadata['signerSha256']}'.toLowerCase();
+      final actualHash = '${metadata['sha256']}'.toLowerCase();
+      if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(actualSigner) ||
+          !RegExp(r'^[0-9a-f]{64}$').hasMatch(actualHash)) {
+        throw StateError('APK 发布者或内容指纹无效');
+      }
+      if (extension.apkSha256 != null &&
+          extension.apkSha256!.toLowerCase() != actualHash) {
+        throw StateError('APK 内容 SHA-256 与仓库不一致');
+      }
+      final old = preferences.get<Map<dynamic, dynamic>>(
+        'mihon.hostStatus',
+      )?[extension.packageName];
+      final pinned = old is Map
+          ? old['signerSha256']?.toString().toLowerCase()
+          : null;
+      if (pinned != null && actualSigner != pinned) {
+        throw StateError('更新发布者签名与已信任版本不一致，保留旧版本');
+      }
+      ApkBackupFiles.checkUpdate({
+        'signerSha256': actualSigner,
+        'sha256': actualHash,
+        'versionCode': extension.versionCode,
+      }, old);
+      if (extension.publisherSignerSha256 != null &&
+          actualSigner != extension.publisherSignerSha256!.toLowerCase()) {
+        throw StateError('APK 发布者签名与扩展声明不一致');
+      }
+      final declared =
+          extension.publisherSignerSha256 ?? signerSha256.toLowerCase();
+      if (pinned == null && actualSigner != declared) {
+        final accepted = await confirmPublisher?.call(
+          MihonPublisherCandidate(
+            actualSigner: actualSigner,
+            repositorySigner: signerSha256,
+            apkHash: actualHash,
+            packageName: extension.packageName,
+            versionCode: extension.versionCode,
+            versionName: extension.versionName,
+          ),
+        );
+        if (accepted != true) throw StateError('扩展发布者与聚合仓库默认签名不同，尚未信任该发布者');
+      }
+      final status = await platformChannel.inspectMihonExtension(
+        apkPath: '${metadata['stagedPath']}',
+        packageName: extension.packageName,
+        versionCode: extension.versionCode,
+        signerSha256: actualSigner,
+        apkSha256: actualHash,
+      );
+      if (status['ok'] != true || status['executable'] != true) {
+        throw StateError(
+          '${status['hostError'] ?? status['error'] ?? 'APK 无法执行'}',
+        );
+      }
+      // Carry declarations only after the APK identity/hash checks above.
+      // This is display metadata, never permission to execute or enable.
+      status['name'] = extension.name;
+      status['lang'] = extension.sources.map((source) => source.language).toSet().length == 1
+          ? extension.sources.first.language : '';
+      status['nsfw'] = extension.declaredNsfw == true || sourceNsfwFlag(metadata['nsfw']) == true
+          ? true : sourceNsfwFlag(metadata['nsfw']) ?? extension.declaredNsfw;
+      final hostSources = status['sources'];
+      if (hostSources is List) {
+        status['sources'] = [
+          for (final raw in hostSources)
+            if (raw is Map) <String, Object?>{
+              for (final entry in raw.entries) '${entry.key}': entry.value,
+              'nsfw': sourceNsfwFlag(metadata['nsfw']) == true ? true :
+                  extension.sources.where((source) => source.id == '${raw['id']}').firstOrNull?.nsfw ??
+                  sourceNsfwFlag(status['nsfw']),
+            },
+        ];
+      }
+      final installed = <String, Object?>{
+        ...?preferences
+            .get<Map<dynamic, dynamic>>('mihon.installedPackages')
+            ?.map((key, value) => MapEntry('$key', value)),
+        extension.packageName: extension.versionName,
+      };
+      final hostStatus = <String, Object?>{
+        ...?preferences
+            .get<Map<dynamic, dynamic>>('mihon.hostStatus')
+            ?.map((key, value) => MapEntry('$key', value)),
+        extension.packageName: status,
+      };
+      await preferences.set('mihon.hostStatus', hostStatus);
+      await preferences.set('mihon.installedPackages', installed);
+      return status;
+    } finally {
+      await candidateDirectory.delete(recursive: true);
+    }
+  }
+
+  /// Restored bytes are inert until the user accepts the actual verified identity.
+  /// Backup metadata can never supply the acceptance or a publisher pin.
+  Future<Map<String, Object?>> activatePending(
+    ApkBackupFiles files,
+    String packageName, {
+    required Future<bool> Function(MihonPublisherCandidate candidate) confirmPublisher,
+  }) async {
+    final metadata = await files.inspectPending(packageName);
+    final accepted = await confirmPublisher(MihonPublisherCandidate(
+      actualSigner: metadata['signerSha256'] as String,
+      repositorySigner: '',
+      apkHash: metadata['sha256'] as String,
+      packageName: metadata['packageName'] as String,
+      versionCode: metadata['versionCode'] as int,
+      versionName: metadata['versionName'] as String,
+    ));
+    if (!accepted) throw StateError('尚未确认恢复 APK 的发布者；文件保持停用');
+    // Confirmation can take arbitrarily long; recheck catalogue and bytes.
+    final current = await files.inspectPending(packageName);
+    for (final key in const ['sha256', 'signerSha256', 'versionCode', 'versionName', 'packageName']) {
+      if (metadata[key] != current[key]) throw StateError('确认期间 APK 已改变，请重新确认');
+    }
+    final status = await platformChannel.inspectMihonExtension(
+      apkPath: current['stagedPath'] as String,
+      packageName: packageName,
+      versionCode: current['versionCode'] as int,
+      signerSha256: current['signerSha256'] as String,
+      apkSha256: current['sha256'] as String,
+    );
+    if (status['ok'] != true || status['executable'] != true) {
+      throw StateError('${status['hostError'] ?? status['error'] ?? 'APK 无法执行；保留待确认文件'}');
+    }
+    final restoredNsfw = sourceNsfwFlag(files.pending[packageName]?['nsfw']);
+    final manifestNsfw = sourceNsfwFlag(current['nsfw']);
+    status['nsfw'] = restoredNsfw == true || manifestNsfw == true
+        ? true : manifestNsfw ?? restoredNsfw;
+    final installed = <String, Object?>{
+      ...?preferences.get<Map<dynamic, dynamic>>('mihon.installedPackages')
+          ?.map((key, value) => MapEntry('$key', value)),
+      packageName: current['versionName'],
+    };
+    final hostStatus = <String, Object?>{
+      ...?preferences.get<Map<dynamic, dynamic>>('mihon.hostStatus')
+          ?.map((key, value) => MapEntry('$key', value)),
+      packageName: status,
+    };
+    await preferences.set('mihon.hostStatus', hostStatus);
+    await preferences.set('mihon.installedPackages', installed);
+    await preferences.flush();
+    // Loading is explicitly confirmed, but never enables a newly restored source.
+    await files.removeActivated(packageName, current['sha256'] as String);
+    return status;
+  }
+
+  Future<void> _download(MihonExtension extension, File candidate) async {
+    final stream = http is SecureRuleDownloadClient
+        ? await (http as SecureRuleDownloadClient).downloadRuleBytes(
+            extension.apkUrl,
+            sourceId: 'mihon:${extension.packageName}',
+          )
+        : await http.downloadBytes(
+            extension.apkUrl,
+            sourceId: 'mihon:${extension.packageName}',
+          );
+    const limit = 64 * 1024 * 1024;
+    final output = await candidate.open(mode: FileMode.write);
+    var length = 0;
+    try {
+      await for (final chunk in stream.stream) {
+        length += chunk.length;
+        if (length > limit) throw StateError('APK 超过 64 MiB 限制');
+        await output.writeFrom(chunk);
+      }
+    } finally {
+      await output.close();
+    }
+    if (length == 0) throw StateError('APK 下载为空');
+  }
+}

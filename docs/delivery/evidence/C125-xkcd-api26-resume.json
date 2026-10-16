@@ -1,0 +1,19 @@
+{
+  "phase": "resume",
+  "at": "2026-10-10T02:41:20.928600Z",
+  "sourceId": "mihon:eu.kanade.tachiyomi.extension.all.xkcd:1538249443376436084",
+  "popularCount": 1,
+  "keywordSearchCount": 0,
+  "selection": "popular",
+  "title": "xkcd",
+  "chapterCount": 3308,
+  "chapterId": "/1/",
+  "pageCount": 2,
+  "persistedPage": 0.0,
+  "imageBytes": 24848,
+  "imageWidth": 577,
+  "imageHeight": 311,
+  "disabledRejected": true,
+  "failedUpdateKeptOldPlugin": true,
+  "status": "passed"
+}

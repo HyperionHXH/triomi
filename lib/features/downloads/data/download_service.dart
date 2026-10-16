@@ -5,10 +5,14 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../../core/db/app_database.dart';
 import '../../../core/models/chapter.dart';
+import '../../../core/models/source_exception.dart';
+import '../../../core/models/video_resolve_cancellation.dart';
+import '../../../core/platform/platform_channel.dart';
 import '../../../core/source/http_client.dart';
 import '../../../core/source/source_api.dart';
 import '../../../core/storage/preferences.dart';
 import 'download_repository.dart';
+import 'image_download_checkpoint.dart';
 import 'video_downloader.dart';
 
 /// 网络接口名枚举器（D30 seam）：测试注入替身控制 WiFi 判定。
@@ -23,11 +27,18 @@ class DownloadService {
     required this.http,
     required this.preferences,
     this._interfaceNamesResolver,
+    this.resolveVideo,
+    this.videoCookieForUrl,
   });
 
   final DownloadRepository repository;
   final SourceHttpClient http;
   final Preferences preferences;
+  final Future<PlaySource> Function(
+    PlaySource source,
+    VideoResolveCancellation cancellation,
+  )? resolveVideo;
+  final Future<String?> Function(String url)? videoCookieForUrl;
 
   /// 网络接口名枚举器（D30 seam）：默认直读 dart:io；测试注入替身。
   final InterfaceNamesResolver? _interfaceNamesResolver;
@@ -80,8 +91,15 @@ class DownloadService {
   Future<void> run({
     required DownloadRow row,
     required ContentProvider? provider,
+    bool Function()? shouldContinue,
+    VideoResolveCancellation? cancellation,
+    bool pauseUnavailableSource = false,
   }) async {
     if (provider == null) {
+      if (pauseUnavailableSource) {
+        await repository.markPaused(row.id, message: '来源已停用或已移除，请启用后继续下载');
+        return;
+      }
       await repository.markFailed(row.id, '来源不可用（已停用或已移除）');
       return;
     }
@@ -92,7 +110,16 @@ class DownloadService {
     }
 
     await repository.markRunning(row.id);
+    final owner = cancellation ?? VideoResolveCancellation();
     try {
+      void check() {
+        if (shouldContinue != null && !shouldContinue()) {
+          throw const DownloadPaused();
+        }
+        if (owner.isCancelled) throw VideoResolveCancelled(owner.reason);
+      }
+
+      check();
       // 必须用目录里的章节行（带 url）：正文地址由来源规则从 url 推导。
       final catalogChapter = await repository.chapterOf(
         row.chapterSourceId,
@@ -100,7 +127,8 @@ class DownloadService {
       );
       // 任务行本身保存了章节键；旧任务可能没有目录快照，仍可下载并
       // 以任务键 upsert 正文。目录存在时继续使用其 URL/锁定标记。
-      final chapter = catalogChapter ??
+      final chapter =
+          catalogChapter ??
           Chapter(
             sourceId: row.chapterSourceId,
             remoteId: row.chapterRemoteId,
@@ -110,40 +138,69 @@ class DownloadService {
         throw const _LockedChapterException();
       }
       final content = await provider.content(chapter);
+      check();
       if (content.isEmpty) {
         throw StateError('正文为空（可能是锁定章节或选择器失配）');
       }
 
       if (content.playSources.isNotEmpty) {
-        // 番剧：把视频落到磁盘（渐进式或明文 HLS），`downloads.path` 存文件路径。
-        final file = await VideoDownloader(http: http, sourceId: row.sourceId)
-            .download(
-              url: content.playSources.first.url,
-              directory: await _videoDirectory(row),
+        var source = content.playSources.first;
+        final resolvedFromPage = source.webPage;
+        if (source.webPage) {
+          check();
+          if (resolveVideo == null) {
+            throw StateError('该来源需要网页解析，当前平台无法进行离线下载');
+          }
+          source = await resolveVideo!(source, owner);
+          check();
+          if (source.webPage) throw StateError('网页解析没有返回真实视频地址');
+        }
+        final directory = await _videoDirectory(row);
+        await repository.markPath(row.id, directory);
+        final file =
+            await VideoDownloader(
+              http: http,
+              sourceId: row.sourceId,
+              headers: source.headers,
+              cookieForUrl: resolvedFromPage ? videoCookieForUrl : null,
+              shouldContinue: () {
+                check();
+                return true;
+              },
+              availableBytes: platformChannel.availableDiskBytes,
+            ).download(
+              url: source.url,
+              directory: directory,
               onProgress: (value) => repository.markProgress(row.id, value),
             );
+        check();
         await repository.markDone(row.id, path: file);
         return;
       }
 
       if (content.images.isNotEmpty) {
         final directory = await _imageDirectory(row);
+        await repository.markPath(row.id, directory);
+        final checkpoint = await ImageDownloadCheckpoint.load(Directory(directory));
         final files = <String>[];
         for (var index = 0; index < content.images.length; index++) {
-          final bytes = await http.fetchBytes(
-            content.images[index],
-            sourceId: row.sourceId,
-          );
-          final name =
-              '${(index + 1).toString().padLeft(4, '0')}${_extensionOf(content.images[index])}';
-          final file = File('$directory${Platform.pathSeparator}$name');
-          await file.writeAsBytes(bytes, flush: true);
+          check();
+          final url = content.images[index];
+          final name = '${(index + 1).toString().padLeft(4, '0')}${_extensionOf(url)}';
+          if (!await checkpoint.valid(name, url: url)) {
+            final bytes = await http.fetchBytes(url, sourceId: row.sourceId);
+            check();
+            final file = File('$directory${Platform.pathSeparator}$name');
+            await file.writeAsBytes(bytes, flush: true);
+            await checkpoint.record(name, url);
+          }
           files.add(name);
           await repository.markProgress(
             row.id,
             (index + 1) / content.images.length,
           );
         }
+        check();
         await DownloadManifest.write(
           directory: directory,
           files: files,
@@ -166,6 +223,14 @@ class DownloadService {
       );
       await repository.markDone(row.id);
     } catch (error) {
+      if (error is DownloadPaused || error is VideoResolveCancelled || owner.isCancelled) {
+        await repository.markPaused(
+          row.id,
+          message: owner.isCancelled ? owner.reason :
+              error is VideoResolveCancelled ? error.message : null,
+        );
+        return;
+      }
       if (error is _WifiRequiredException || error is _LockedChapterException) {
         if (error is _LockedChapterException) {
           await repository.markFailed(row.id, error.message);
@@ -174,11 +239,20 @@ class DownloadService {
       }
       await repository.markFailed(row.id, _describe(error));
       rethrow;
+    } finally {
+      if (cancellation == null) owner.dispose();
     }
   }
 
   Future<String> _imageDirectory(DownloadRow row) async {
     final docs = await getApplicationDocumentsDirectory();
+    final root = await Directory('${docs.path}${Platform.pathSeparator}downloads').create(recursive: true);
+    if (row.path != null &&
+        await FileSystemEntity.type(row.path!, followLinks: false) == FileSystemEntityType.directory) {
+      final canonical = await Directory(row.path!).resolveSymbolicLinks();
+      final rootPath = await root.resolveSymbolicLinks();
+      if (canonical.startsWith('$rootPath${Platform.pathSeparator}')) return canonical;
+    }
     final dir = Directory(
       <String>[
         docs.path,
@@ -229,7 +303,7 @@ class DownloadService {
       value.replaceAll(RegExp(r'[\\/:*?"<>|\s]'), '_');
 
   static String _describe(Object error) {
-    final text = error.toString();
+    final text = SourceException.sanitizeMessage(error.toString());
     return text.length > 160 ? '${text.substring(0, 160)}…' : text;
   }
 }

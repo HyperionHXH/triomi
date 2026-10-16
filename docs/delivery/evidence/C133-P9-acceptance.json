@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-14",
+  "status": "partial",
+  "apk": {
+    "path": "D:/noval_and_manga/_tools/Triomi-C133-P9-verified-acceptance.apk",
+    "bytes": 126552664,
+    "sha256": "b16d73e277ff553a5345a8fbbc8e2cc0a86e9c9042dde9d1b3e3a05a2ef9c227",
+    "devicesInstalledAndHashMatched": ["emulator-5554", "emulator-5556"]
+  },
+  "verification": {
+    "fullSuitePassed": 779,
+    "analyze": "No issues found",
+    "migrationPlanPassed": 5,
+    "sourceMigrationPagePassed": 4,
+    "readerRestartAndMergedOwnerPassed": 3,
+    "feedBackupRegressionPassed": 3,
+    "finalTargetedTotalPassed": 15
+  },
+  "implementation": [
+    "MigrationPlans and MergedMangaReferences use SQLite v8; old entries, histories, downloads, and source identities remain untouched",
+    "Migration preview records exact source/target snapshots, selected scope, explicit chapter mappings, lock rejection, and destination hashes",
+    "Plan execution survives database reopen, verifies source file bytes and SHA256 before copy, publishes target download rows only after verification, and records failed/completed state",
+    "Existing-target merge is explicit; target progress and newer history remain authoritative; tracking conflicts reject atomically",
+    "Same-number/title chapters from multiple sources remain separate until explicit equivalence; merged directory keeps original chapter owner for content, history, progress, and source errors",
+    "Merged relations use tombstones for removal so an older backup cannot resurrect a confirmed removal; backup import validates identities, duplicate members, primary anchor, and group map",
+    "Reader loads current source registry for merged chapter requests instead of reusing stale source snapshot"
+  ],
+  "actualApi35": {
+    "preExistingWorks": ["MangaDex public API", "MangaDex Mihon zh-Hans APK"],
+    "mergeUi": "Confirmed both real versions; union showed APK Ch.76.2/76.1 plus public MangaDex chapters; SQLite retained 4013 chapter rows",
+    "mergedReader": "Public chapter opened at 3/14; APK chapter opened independently at 1/14; no cross-source page position reuse",
+    "relationAfterRestart": "Merge page and both versions remained after final APK force-stop/install-r",
+    "migrationPlan": "Real target APK version searched, scope mergeExisting selected, plan saved as ready, app force-stopped/restarted, plan selected and executed to completed; target progress values remained 76.2 public / -1 APK"
+  },
+  "limitations": [
+    "Real transfer used no selected offline file because no explicit old-image mapping was selected in the device run; SHA256/file-change behavior is consumer-tested",
+    "No claim of automatic same-work matching, cross-source chapter equivalence, or unified remote tracking",
+    "API26/signed/Windows complete P9 journeys and visual pixel review pending",
+    "Original C125 signed and Windows release artifacts unchanged"
+  ]
+}

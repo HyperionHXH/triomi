@@ -27,7 +27,7 @@ void main() {
     repository = TrackingRepository(db);
   });
 
-  tearDown(() => db.close);
+  tearDown(() => db.close());
 
   TrackingService serviceOf(TrackingGateway gateway) => TrackingService(
     http: gateway.build(),
@@ -46,6 +46,34 @@ void main() {
       remoteTrackId: '12',
     );
   }
+
+  test(
+    'reader teardown: closed database makes progress/status reporting no-op',
+    () async {
+      final gateway = TrackingGateway(remoteWatched: 0);
+      final service = serviceOf(gateway);
+      await bindBangumi('source', 'book');
+      await db.close();
+      expect(
+        await service.reportProgress(
+          sourceId: 'source',
+          remoteId: 'book',
+          chapterNumber: 2,
+          type: MediaType.novel,
+        ),
+        isEmpty,
+      );
+      expect(
+        await service.reportStatus(
+          sourceId: 'source',
+          remoteId: 'book',
+          status: 'doing',
+          type: MediaType.novel,
+        ),
+        isEmpty,
+      );
+    },
+  );
 
   group('并发时序', () {
     test('早请求晚返回：两个在途上报都能完成，各写一次同步标记', () async {
@@ -91,11 +119,7 @@ void main() {
         remoteId: '12',
         kind: TrackingServiceKind.bangumi,
       ))!.syncedAt!;
-      expect(
-        after.isBefore(before),
-        isFalse,
-        reason: '成功后才 markSynced，标记只能前进',
-      );
+      expect(after.isBefore(before), isFalse, reason: '成功后才 markSynced，标记只能前进');
     });
 
     test('进度连发：每次 PATCH 只包含不大于本地进度的集，且互不回退', () async {
@@ -293,8 +317,7 @@ void main() {
             sourceId: 'bangumi-anime',
             remoteId: '12',
             kind: TrackingServiceKind.bangumi,
-          ))!.syncedAt!)
-              .isAfter(before),
+          ))!.syncedAt!).isAfter(before),
           isTrue,
           reason: '重试成功才更新标记',
         );
@@ -364,8 +387,11 @@ void main() {
       );
       expect(next.single.ok, isFalse);
       expect(next.single.message, contains('token'));
-      expect(gateway.requests, hasLength(gateway.requests.length),
-          reason: '没有 token 时不应再发请求');
+      expect(
+        gateway.requests,
+        hasLength(gateway.requests.length),
+        reason: '没有 token 时不应再发请求',
+      );
     });
   });
 
@@ -415,10 +441,7 @@ void main() {
         chapterNumber: 2,
         type: MediaType.anime,
       );
-      expect(
-        gateway.patchBodies.single,
-        contains('"episode_id":[101,102]'),
-      );
+      expect(gateway.patchBodies.single, contains('"episode_id":[101,102]'));
     });
 
     test('两来源相同 remoteId：上报只更新本来源的同步标记', () async {
@@ -469,10 +492,7 @@ void main() {
       expect(lnsAfter, lnsBefore, reason: 'lns 不受 lk 的上报影响');
       // 小说走 ep_status（不是逐集 PATCH）。
       expect(gateway.patchCount, 0);
-      expect(
-        gateway.requests.last.url,
-        contains('/v0/users/-/collections/12'),
-      );
+      expect(gateway.requests.last.url, contains('/v0/users/-/collections/12'));
     });
   });
 }

@@ -12,7 +12,8 @@ enum DownloadStatus {
   queued('queued', '等待中'),
   running('running', '下载中'),
   done('done', '已完成'),
-  failed('failed', '失败');
+  failed('failed', '失败'),
+  paused('paused', '已暂停');
 
   const DownloadStatus(this.value, this.label);
 
@@ -129,17 +130,38 @@ class DownloadRepository {
     return query.getSingleOrNull();
   }
 
-  Future<void> markQueued(int id) => _update(
-    id,
-    const DownloadsCompanion(
-      status: Value('queued'),
-      progress: Value(0),
-      errorMessage: Value(null),
-    ),
-  );
+  Future<void> markQueued(int id) async {
+    // Reserved local imports have no network provider. Missing bytes are filled
+    // by local import/portable restore, never by the download retry controls.
+    await (_db.update(_db.downloads)
+      ..where((t) => t.id.equals(id) & t.sourceId.equals('local-comic').not()))
+        .write(const DownloadsCompanion(status: Value('queued'), errorMessage: Value(null)));
+  }
 
   Future<void> markRunning(int id) =>
       _update(id, const DownloadsCompanion(status: Value('running')));
+
+  Future<void> markPaused(int id, {String? message}) => _update(
+    id,
+    DownloadsCompanion(
+      status: const Value('paused'),
+      errorMessage: Value(message),
+    ),
+  );
+
+  Future<void> markPath(int id, String path) =>
+      _update(id, DownloadsCompanion(path: Value(path)));
+
+  Future<void> resumePaused() async {
+    await (_db.update(
+      _db.downloads,
+    )..where((t) => t.status.equals('paused') & t.sourceId.equals('local-comic').not())).write(
+      const DownloadsCompanion(
+        status: Value('queued'),
+        errorMessage: Value(null),
+      ),
+    );
+  }
 
   Future<void> markProgress(int id, double progress) =>
       _update(id, DownloadsCompanion(progress: Value(progress.clamp(0, 1))));
@@ -180,6 +202,9 @@ class DownloadRepository {
       ..orderBy([(table) => OrderingTerm.asc(table.id)]);
     return query.get();
   }
+
+  Stream<List<DownloadGroup>> watchGroups() =>
+      _db.select(_db.downloads).watch().asyncMap((_) => grouped());
 
   /// 全部任务（带章节与作品信息），按作品分组供下载管理页渲染。
   Future<List<DownloadGroup>> grouped() async {
@@ -285,28 +310,29 @@ class DownloadRepository {
     String? itemSourceId,
     String? itemRemoteId,
   }) async {
-    final existing = await (_db.select(_db.chapters)
-          ..where(
-            (table) =>
-                table.sourceId.equals(chapter.sourceId) &
-                table.remoteId.equals(chapter.remoteId),
-          ))
-        .getSingleOrNull();
-    final contentJson = jsonEncode(chapter.content?.toJson());
-    if (existing != null) {
-      await (_db.update(_db.chapters)
-            ..where(
+    final existing =
+        await (_db.select(_db.chapters)..where(
               (table) =>
                   table.sourceId.equals(chapter.sourceId) &
                   table.remoteId.equals(chapter.remoteId),
             ))
+            .getSingleOrNull();
+    final contentJson = jsonEncode(chapter.content?.toJson());
+    if (existing != null) {
+      await (_db.update(_db.chapters)..where(
+            (table) =>
+                table.sourceId.equals(chapter.sourceId) &
+                table.remoteId.equals(chapter.remoteId),
+          ))
           .write(ChaptersCompanion(contentJson: Value(contentJson)));
       return;
     }
     if (itemSourceId == null || itemRemoteId == null) {
       throw StateError('缺少章节所属作品键，无法创建离线章节');
     }
-    await _db.into(_db.chapters).insert(
+    await _db
+        .into(_db.chapters)
+        .insert(
           ChaptersCompanion.insert(
             sourceId: chapter.sourceId,
             remoteId: chapter.remoteId,

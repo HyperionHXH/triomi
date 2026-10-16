@@ -70,8 +70,11 @@ void main() {
       ];
       expect(illustrations, hasLength(3));
       for (final illustration in illustrations) {
-        expect(illustration.aspectRatio, greaterThan(0),
-            reason: '非法尺寸回退到默认宽高比');
+        expect(
+          illustration.aspectRatio,
+          greaterThan(0),
+          reason: '非法尺寸回退到默认宽高比',
+        );
       }
     });
 
@@ -109,10 +112,7 @@ void main() {
         bodyText: '第一段\n[res]image:abc[/res]\n第二段',
       );
       expect(blocks, hasLength(3));
-      expect(
-        (blocks[1] as ParagraphBlock).text,
-        '【插图暂时无法加载】',
-      );
+      expect((blocks[1] as ParagraphBlock).text, '【插图暂时无法加载】');
     });
 
     test('只有插图没有文本：可解析可分页', () {
@@ -137,7 +137,10 @@ void main() {
         '同时分页必须在有限步内结束，不能出现空白页或死循环。',
       ).join();
       final blocks = <ReaderBlock>[ParagraphBlock(source)];
-      final pages = paginateReaderBlocks(blocks, styleOf(width: 220, height: 240));
+      final pages = paginateReaderBlocks(
+        blocks,
+        styleOf(width: 220, height: 240),
+      );
 
       expect(pages.length, greaterThan(3), reason: '长段落应当确实分出多页');
       final rebuilt = StringBuffer();
@@ -148,8 +151,11 @@ void main() {
         }
       }
       // 首行缩进的「　　」是显示装饰，参与测量但不属于原文。
-      expect(rebuilt.toString().replaceFirst('　　', ''), source,
-          reason: '所有文本必须一字不差地保留');
+      expect(
+        rebuilt.toString().replaceFirst('　　', ''),
+        source,
+        reason: '所有文本必须一字不差地保留',
+      );
     });
 
     test('连续换行/空段：不产生空白页，有限终止', () {
@@ -159,10 +165,7 @@ void main() {
       );
       final pages = paginateReaderBlocks(blocks, styleOf());
       expect(pages, hasLength(1), reason: '空段被解析层过滤，不应撑出空白页');
-      expect(
-        pages.single.elements.whereType<TextElement>().length,
-        3,
-      );
+      expect(pages.single.elements.whereType<TextElement>().length, 3);
     });
 
     test('字号/宽度变化后：块下标位置保持合法，可用于续读恢复', () async {
@@ -186,8 +189,11 @@ void main() {
         for (final page in pages) {
           expect(page.elements, isNotEmpty);
           final firstIndex = page.elements.first.blockIndex;
-          expect(firstIndex, greaterThanOrEqualTo(lastBlockIndex),
-              reason: '页首块下标必须单调不减（续读位置才可回放）');
+          expect(
+            firstIndex,
+            greaterThanOrEqualTo(lastBlockIndex),
+            reason: '页首块下标必须单调不减（续读位置才可回放）',
+          );
           expect(firstIndex, lessThan(blocks.length), reason: '块下标必须合法');
           lastBlockIndex = firstIndex;
         }
@@ -195,9 +201,8 @@ void main() {
         // 续读恢复：任意合法块下标都能在某一页上找到落点（第一元素即它）。
         for (var index = 0; index < blocks.length; index++) {
           final owner = pages.where(
-            (page) => page.elements.any(
-              (element) => element.blockIndex == index,
-            ),
+            (page) =>
+                page.elements.any((element) => element.blockIndex == index),
           );
           expect(owner, isNotEmpty, reason: '块 $index 必须出现在某一页上');
         }
@@ -206,12 +211,10 @@ void main() {
     });
 
     test('带 emoji 的长段落：页面边界不得把代理对切成半截字符', () async {
-      final source =
-          '前面一些文字 😀😀😀 然后继续直到越过页边界 🎉🔥📚 更多文字来保证跨页。' * 8;
-      final pages = paginateReaderBlocks(
-        <ReaderBlock>[ParagraphBlock(source)],
-        styleOf(width: 180, height: 200),
-      );
+      final source = '前面一些文字 😀😀😀 然后继续直到越过页边界 🎉🔥📚 更多文字来保证跨页。' * 8;
+      final pages = paginateReaderBlocks(<ReaderBlock>[
+        ParagraphBlock(source),
+      ], styleOf(width: 180, height: 200));
       expect(pages.length, greaterThan(2));
 
       final rebuilt = StringBuffer();
@@ -228,7 +231,8 @@ void main() {
             expect(
               _hasLoneSurrogate(element.text),
               isFalse,
-              reason: '页面边界不能把 emoji 切成半截（渲染为乱码）：'
+              reason:
+                  '页面边界不能把 emoji 切成半截（渲染为乱码）：'
                   '${element.text.codeUnits.where(_isSurrogateHalf).toList()}',
             );
           }
@@ -310,11 +314,7 @@ void main() {
       );
     });
 
-    test('「全部标为已读」只清本地未读提示，不触碰远端阅读历史', () async {
-      // 结构性证据：LibraryRepository 不持有任何 HTTP 通道，
-      // markAllRead 是纯 drift 更新（G2）；远端同步只在阅读器
-      // _persistProgress(commit: true) 里发生，与标已读无调用关系。
-      // （unread_count 的写入方是 G1 缺口，这里用 SQL 模拟未来的写入方。）
+    test('确认作品标已读不改变已有阅读历史', () async {
       await library.addToLibrary(
         const MediaItem(
           sourceId: 'lk',
@@ -324,15 +324,10 @@ void main() {
         ),
       );
       await record('lk', '1001', '1001:1', 3);
-      await db.customStatement(
-        'UPDATE library_entries SET unread_count = 2',
-      );
-      final cleared = await library.markAllRead();
+      await db.customStatement('UPDATE library_entries SET unread_count = 2');
+      final cleared = await library.markEntriesRead({('lk', '1001')});
       expect(cleared, 1);
-      expect(await library.lastReadOf('lk', '1001'), isNotNull,
-          reason: '标已读不删除阅读历史');
-      final all = await library.recentHistory(limit: 20);
-      expect(all, isNotEmpty, reason: '本地提示清理不等于历史丢失');
+      expect((await library.lastReadOf('lk', '1001'))?.position, 3);
     });
   });
 }

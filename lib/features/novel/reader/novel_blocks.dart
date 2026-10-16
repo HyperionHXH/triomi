@@ -240,11 +240,15 @@ class TextElement extends ReaderPageElement {
     required this.heading,
     required this.firstLineIndent,
     required super.blockIndex,
+    this.startOffset = 0,
   });
 
   final String text;
   final bool heading;
   final bool firstLineIndent;
+
+  /// 原始段落中的字符偏移，不包括显示用的缩进。
+  final int startOffset;
 }
 
 class IllustrationElement extends ReaderPageElement {
@@ -380,6 +384,7 @@ List<ReaderPage> paginateReaderBlocks(
           heading: heading,
           firstLineIndent: indentThisFragment,
           blockIndex: blockIndex,
+          startOffset: offset,
         ),
       );
       remainingHeight = math.max(remainingHeight - painter.height, 0);
@@ -392,4 +397,35 @@ List<ReaderPage> paginateReaderBlocks(
   return pages.isEmpty
       ? <ReaderPage>[const ReaderPage(<ReaderPageElement>[])]
       : pages;
+}
+
+/// position 的整数部分兼容旧版段落号，小数部分保存段内字符比例。
+double readerElementPosition(
+  ReaderPageElement element,
+  List<ReaderBlock> blocks,
+) {
+  if (element is! TextElement) return element.blockIndex.toDouble();
+  final block = blocks[element.blockIndex];
+  final text = block is ParagraphBlock
+      ? block.text
+      : (block as HeadingBlock).text;
+  return element.blockIndex + element.startOffset / (text.length + 1);
+}
+
+int readerPageForPosition(
+  List<ReaderPage> pages,
+  List<ReaderBlock> blocks,
+  double position,
+) {
+  var result = 0;
+  for (var i = 0; i < pages.length; i++) {
+    if (pages[i].elements.isEmpty) continue;
+    if (readerElementPosition(pages[i].elements.first, blocks) <=
+        position + 1e-9) {
+      result = i;
+    } else {
+      break;
+    }
+  }
+  return result;
 }

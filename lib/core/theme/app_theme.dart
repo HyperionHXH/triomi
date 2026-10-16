@@ -5,40 +5,37 @@ import 'app_tokens.dart';
 /// 应用主题装配。
 ///
 /// 目标观感：Komikku（GNOME / libadwaita）。要点：
-/// - 强调色 Adwaita 蓝 `#3584E4`（深色 `#78AEED`），后续可被 Material You 动态取色覆盖
+/// - 命名强调色为深浅模式各提供种子色，前景与容器由 Material 配对生成
 /// - AppBar / 导航栏无阴影无描边，与背景同色
 /// - 卡片 12 圆角 + 极淡投影；输入框与按钮 8 圆角；chip 胶囊
 abstract final class AppTheme {
-  static const Color _accentLight = Color(0xFF3584E4);
-  static const Color _accentDark = Color(0xFF78AEED);
-
   /// Adwaita 前景色：浅色主题下不是纯黑，而是带一点暖调的深灰。
   static const Color _inkLight = Color(0xFF2E3436);
   static const Color _inkDark = Color(0xFFF6F5F4);
 
-  static ThemeData light() => _build(Brightness.light);
+  static ThemeData light({
+    AppAccentPalette accent = AppAccentPalette.blue,
+    CoverAppearance covers = const CoverAppearance(),
+  }) => _build(Brightness.light, accent, covers);
 
-  static ThemeData dark() => _build(Brightness.dark);
+  static ThemeData dark({
+    AppAccentPalette accent = AppAccentPalette.blue,
+    CoverAppearance covers = const CoverAppearance(),
+  }) => _build(Brightness.dark, accent, covers);
 
-  static ThemeData _build(Brightness brightness) {
+  static ThemeData _build(
+    Brightness brightness,
+    AppAccentPalette accent,
+    CoverAppearance covers,
+  ) {
     final isLight = brightness == Brightness.light;
     final palette = isLight ? AppPalette.light : AppPalette.dark;
-
-    final colorScheme = isLight
-        ? ColorScheme.fromSeed(
-            seedColor: _accentLight,
-            brightness: Brightness.light,
-            primary: _accentLight,
-            surface: const Color(0xFFF6F5F4),
-            onSurface: _inkLight,
-          )
-        : ColorScheme.fromSeed(
-            seedColor: _accentDark,
-            brightness: Brightness.dark,
-            primary: _accentDark,
-            surface: const Color(0xFF1E1E1E),
-            onSurface: _inkDark,
-          );
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: isLight ? accent.light : accent.dark,
+      brightness: brightness,
+      surface: isLight ? const Color(0xFFF6F5F4) : const Color(0xFF1E1E1E),
+      onSurface: isLight ? _inkLight : _inkDark,
+    );
 
     final base = ThemeData(
       brightness: brightness,
@@ -86,7 +83,7 @@ abstract final class AppTheme {
 
     return base.copyWith(
       textTheme: textTheme,
-      extensions: <ThemeExtension<dynamic>>[palette],
+      extensions: <ThemeExtension<dynamic>>[palette, covers],
 
       // 顶部栏：与背景同色、无高度阴影（libadwaita header bar 观感）。
       appBarTheme: AppBarTheme(

@@ -10,7 +10,6 @@ import 'package:triomi/core/source/js/js_source.dart';
 import 'package:triomi/core/source/js/runtime/js_runtime_factory_io.dart';
 import 'package:triomi/core/source/rule_schema.dart';
 
-
 /// D22：真实 flutter_js 运行时的生命周期与异常边界。
 ///
 /// 与 `t2_js_source_test.dart`（假引擎上的映射/分类）、`t2_js_engine_test.dart`
@@ -43,7 +42,10 @@ class ScriptedHttp implements SourceHttpClient {
   Completer<void>? gate;
 
   @override
-  Future<SourceResponse> send(SourceRequest request, {required String sourceId}) async {
+  Future<SourceResponse> send(
+    SourceRequest request, {
+    required String sourceId,
+  }) async {
     requests.add(request);
     final gate = this.gate;
     if (gate != null) await gate.future;
@@ -69,6 +71,7 @@ class ScriptedHttp implements SourceHttpClient {
     String url, {
     required String sourceId,
     Map<String, String> headers = const <String, String>{},
+    bool followRedirects = true,
   }) => throw UnimplementedError();
 
   @override
@@ -87,7 +90,7 @@ class ScriptedHttp implements SourceHttpClient {
 /// 探测真实引擎是否可用（不可用时调用方整体 skip）。
 bool engineAvailable() {
   try {
-    final runtime = createFlutterJsRuntime();
+    final runtime = FlutterJsRuntime();
     runtime.dispose();
     return true;
   } catch (_) {
@@ -140,7 +143,7 @@ async function search(keyword, page) {
       );
       final source = JsSource(
         rule: rule,
-        runtime: createFlutterJsRuntime(),
+        runtime: FlutterJsRuntime(),
         http: http,
       );
       addTearDown(source.dispose);
@@ -151,13 +154,10 @@ async function search(keyword, page) {
         '快的后发',
         '慢的先发',
       ], reason: '乱序完成不影响一一对应');
-      expect(
-        http.requests.map((request) => request.url),
-        <String>[
-          'https://example.com/slow?q=火影',
-          'https://example.com/fast?q=火影',
-        ],
-      );
+      expect(http.requests.map((request) => request.url), <String>[
+        'https://example.com/slow?q=火影',
+        'https://example.com/fast?q=火影',
+      ]);
     });
 
     test('Promise reject（宿主 auth）后引擎仍可继续调用，分类原样透传', () async {
@@ -171,10 +171,7 @@ async function search(keyword, page) {
             type: SourceErrorType.auth,
             message: 'HTTP 401',
           ),
-          jsonEncode(<String, Object?>{
-            'remoteId': '1',
-            'title': '恢复后',
-          }),
+          jsonEncode(<String, Object?>{'remoteId': '1', 'title': '恢复后'}),
         ]);
       final rule = jsRule(
         id: 'd22-reject',
@@ -188,7 +185,7 @@ async function search(keyword, page) {
       );
       final source = JsSource(
         rule: rule,
-        runtime: createFlutterJsRuntime(),
+        runtime: FlutterJsRuntime(),
         http: http,
       );
       addTearDown(source.dispose);
@@ -223,7 +220,7 @@ async function search(keyword, page) {
       );
       final source = JsSource(
         rule: rule,
-        runtime: createFlutterJsRuntime(),
+        runtime: FlutterJsRuntime(),
         http: http,
       );
       await source.initialize();
@@ -259,7 +256,7 @@ async function search(keyword, page) {
       );
       final source = JsSource(
         rule: rule,
-        runtime: createFlutterJsRuntime(),
+        runtime: FlutterJsRuntime(),
         http: ScriptedHttp(),
       );
       addTearDown(source.dispose);
@@ -296,7 +293,7 @@ async function search(keyword, page) {
       );
       final source = JsSource(
         rule: rule,
-        runtime: createFlutterJsRuntime(),
+        runtime: FlutterJsRuntime(),
         http: ScriptedHttp(),
       );
       addTearDown(source.dispose);
@@ -330,12 +327,12 @@ async function search(keyword, page) {
       );
       final sourceA = JsSource(
         rule: ruleA,
-        runtime: createFlutterJsRuntime(),
+        runtime: FlutterJsRuntime(),
         http: httpA,
       );
       final sourceB = JsSource(
         rule: ruleB,
-        runtime: createFlutterJsRuntime(),
+        runtime: FlutterJsRuntime(),
         http: httpB,
       );
       addTearDown(sourceA.dispose);
@@ -377,7 +374,7 @@ async function search(keyword, page) {
       );
       final source = JsSource(
         rule: rule,
-        runtime: createFlutterJsRuntime(),
+        runtime: FlutterJsRuntime(),
         http: http,
       );
       addTearDown(source.dispose);

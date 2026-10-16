@@ -1,0 +1,20 @@
+{
+  "status": "passed",
+  "source": "LK public content; no account or LNS purchase/export",
+  "artifacts": [
+    {
+      "name": "团地恋人 等待你的温柔时光.epub",
+      "bytes": 2947991,
+      "sha256": "ab7d740661842aca4c48fd464e957f4d21ed4f5a610e17bd115e366d6239dcf6",
+      "zipIntegrity": true,
+      "mimetype": "application/epub+zip",
+      "xhtmlMembers": 11
+    },
+    {
+      "name": "团地恋人 等待你的温柔时光.txt",
+      "bytes": 271010,
+      "sha256": "d699eeac2252eb3bc573f9567dffba01a1a8fe55e065fb8f9c787eea87fd2ea4",
+      "utf8Characters": 94651
+    }
+  ]
+}

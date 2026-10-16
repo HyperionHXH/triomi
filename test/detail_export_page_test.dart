@@ -143,8 +143,11 @@ void main() {
 
     expect(recordedWrites, isEmpty, reason: '取消选择就不该写授权目录');
     expect(find.textContaining('导出完成'), findsOneWidget, reason: '回退是导出成功');
-    expect(find.textContaining('未选择授权目录，已保存到应用导出目录'),
-        findsOneWidget, reason: 'D50：取消目录与权限失败分开提示');
+    expect(
+      find.textContaining('未选择授权目录，已保存到应用导出目录'),
+      findsOneWidget,
+      reason: 'D50：取消目录与权限失败分开提示',
+    );
     expect(
       find.textContaining(docsDir.path),
       findsOneWidget,
@@ -170,14 +173,15 @@ void main() {
     expect(recordedWrites.single.fileName, '导出小说.epub');
     expect(recordedWrites.single.treeUri, 'content://tree/exports');
     expect(
-      find.textContaining(
-        'content://tree/exports/document/renamed-导出小说.epub',
-      ),
+      find.textContaining('content://tree/exports/document/renamed-导出小说.epub'),
       findsOneWidget,
       reason: 'snackbar 显示系统返回的真实 document URI（D49）',
     );
-    expect(find.textContaining('已保存到授权目录'), findsOneWidget,
-        reason: 'D50：显式区分保存位置');
+    expect(
+      find.textContaining('已保存到授权目录'),
+      findsOneWidget,
+      reason: 'D50：显式区分保存位置',
+    );
   });
 
   testWidgets('TXT 导出：writeToTree 收到 text/plain', (tester) async {
@@ -200,8 +204,11 @@ void main() {
     await runExport(tester, epub: false);
 
     expect(find.textContaining('导出完成'), findsOneWidget, reason: '回退成功不报失败');
-    expect(find.textContaining('授权目录写入失败，已保存到应用导出目录'),
-        findsOneWidget, reason: 'D50：失败回退与取消选择分开提示');
+    expect(
+      find.textContaining('授权目录写入失败，已保存到应用导出目录'),
+      findsOneWidget,
+      reason: 'D50：失败回退与取消选择分开提示',
+    );
     expect(
       find.textContaining(docsDir.path),
       findsOneWidget,

@@ -1,0 +1,75 @@
+{
+  "phase": "install",
+  "at": "2026-10-10T02:57:55.925Z",
+  "install": {
+    "ok": true,
+    "packageName": "eu.kanade.tachiyomi.extension.all.webtoons",
+    "versionCode": 106002,
+    "signerSha256": "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2",
+    "factoryLoaded": true,
+    "executable": true,
+    "abi": "1.6",
+    "sourceCount": 7,
+    "sources": [
+      {
+        "id": "2522335540328470744",
+        "name": "Webtoons.com",
+        "lang": "en",
+        "supportsLatest": true
+      },
+      {
+        "id": "8749627068478740298",
+        "name": "Webtoons.com",
+        "lang": "id",
+        "supportsLatest": true
+      },
+      {
+        "id": "3330861233813615504",
+        "name": "Webtoons.com",
+        "lang": "th",
+        "supportsLatest": true
+      },
+      {
+        "id": "8664735734660636295",
+        "name": "Webtoons.com",
+        "lang": "es",
+        "supportsLatest": true
+      },
+      {
+        "id": "8251758253314457060",
+        "name": "Webtoons.com",
+        "lang": "fr",
+        "supportsLatest": true
+      },
+      {
+        "id": "2959982438613576472",
+        "name": "Webtoons.com",
+        "lang": "zh-Hant",
+        "supportsLatest": true
+      },
+      {
+        "id": "1486822823904297379",
+        "name": "Webtoons.com",
+        "lang": "de",
+        "supportsLatest": true
+      }
+    ],
+    "sha256": "8a9842dc5db97f9d3939a35eb819b154d5805a5338f5e35706d62bd3f0476079",
+    "stagedPath": "/data/user/0/io.github.hyperionhxh.triomi/files/mihon-staging/eu.kanade.tachiyomi.extension.all.webtoons-8a9842dc5db97f9d3939a35eb819b154d5805a5338f5e35706d62bd3f0476079.apk",
+    "signatureVerified": true
+  },
+  "sourceId": "mihon:eu.kanade.tachiyomi.extension.all.webtoons:2522335540328470744",
+  "popularCount": 30,
+  "keywordSearchCount": 15,
+  "selection": "search",
+  "title": "Space Boy",
+  "chapterCount": 389,
+  "chapterId": "/en/sf/space-boy/ep-1/viewer?title_no=400&episode_no=1",
+  "pageCount": 13,
+  "imageBytes": 91538,
+  "imageWidth": 800,
+  "imageHeight": 1313,
+  "disabledRejected": true,
+  "failedUpdateKeptOldPlugin": true,
+  "status": "passed"
+}

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="root" path="app_flutter/settings.hive" />
+        <exclude domain="root" path="app_flutter/settings.hivec" />
+        <exclude domain="root" path="app_flutter/settings.lock" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="root" path="app_flutter/settings.hive" />
+        <exclude domain="root" path="app_flutter/settings.hivec" />
+        <exclude domain="root" path="app_flutter/settings.lock" />
+    </device-transfer>
+</data-extraction-rules>
