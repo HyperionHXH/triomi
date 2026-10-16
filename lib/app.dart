@@ -22,7 +22,9 @@ class _TriomiAppState extends ConsumerState<TriomiApp> {
   @override
   void initState() {
     super.initState();
-    _backDispatcher = PrivacyLockBackButtonDispatcher(ref.read(privacyLockProvider));
+    _backDispatcher = PrivacyLockBackButtonDispatcher(
+      ref.read(privacyLockProvider),
+    );
   }
 
   @override
@@ -54,13 +56,39 @@ class _TriomiAppState extends ConsumerState<TriomiApp> {
         GlobalCupertinoLocalizations.delegate,
       ],
       builder: (context, child) {
-        // 界面字号只影响界面，不影响阅读器排版（阅读器有独立设置）。
+        // Keep platform accessibility scaling, including Android nonlinear
+        // scaling; the app's interface preference is an additional multiplier.
+        final media = MediaQuery.of(context);
+        final scaler = appearance.uiFontScale == 1
+            ? media.textScaler
+            : _InterfaceTextScaler(media.textScaler, appearance.uiFontScale);
         return MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(textScaler: TextScaler.linear(appearance.uiFontScale)),
+          data: media.copyWith(textScaler: scaler),
           child: PrivacyLockGate(child: child ?? const SizedBox.shrink()),
         );
       },
     );
   }
+}
+
+class _InterfaceTextScaler extends TextScaler {
+  const _InterfaceTextScaler(this.system, this.factor);
+
+  final TextScaler system;
+  final double factor;
+
+  @override
+  double scale(double fontSize) => system.scale(fontSize) * factor;
+
+  @override
+  double get textScaleFactor => scale(14) / 14;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _InterfaceTextScaler &&
+      other.system == system &&
+      other.factor == factor;
+
+  @override
+  int get hashCode => Object.hash(system, factor);
 }

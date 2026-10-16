@@ -1,0 +1,78 @@
+{
+  "round": "C154",
+  "version": "0.1.0+154",
+  "status": "release-prepared-platform-acceptance-partial",
+  "releasePublished": false,
+  "artifacts": [
+    {"name": "C154-font-acceptance.apk", "published": false, "bytes": 130470900, "sha256": "970877d939cd0007f76a13ead8dd965d7baca1dda254955261a762419ee03423"},
+    {"name": "triomi-android.apk", "bytes": 130470900, "sha256": "8c875afd4575ec004de478372b1386bbf6058a3ae58109e5404430d228c00e9d", "v2Verified": true, "signers": 1, "certificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077"},
+    {"name": "triomi-windows.zip", "bytes": 37137488, "sha256": "25de5a141262939e607559f17d8752ca621507f563f6712f96e103938b8d074b", "members": 50, "allMemberBytesMatchFinalBuild": true},
+    {"name": "triomi-windows.msi", "bytes": 30941184, "sha256": "7d51471771eeb7220307b61d1ff5223f2635537008bb6958a34c46d924037042", "version": "0.1.154", "authenticode": "NotSigned"},
+    {"name": "triomi-windows.update.json", "bytes": 8312, "sha256": "501b5f3697ac014b543472a953933bc68d35d5696c62bf4f9eb4e88b45c00a32", "versionCode": 154}
+  ],
+  "windowsPackage": {
+    "oneCommandBuildExit": 0,
+    "zipPayloadMatchesRelease": true,
+    "realMsiLifecycle": {"install153": 0, "upgrade154": 0, "uninstall154": 0, "installedPayloadExactFiles": 50, "originalUserDataFileHashesUnchanged": 584},
+    "applicationVisibleJourney": "not performed; dedicated desktop interface unavailable"
+  },
+  "changes": [
+    "Preserve platform TextScaler (including nonlinear Android scaling); compose saved interface preference rather than replace accessibility settings",
+    "Regression exercises rendered label height through TriomiApp before and after changing system text size and saved interface size"
+  ],
+  "failureBeforeFix": {
+    "api26SystemFontScale": 2.0,
+    "actualAppUi": "app interface stayed at its own saved size despite enlarged system status bar",
+    "regression": "rendered label remained 30px high; expected greater than 54px under system 2x",
+    "cause": "TriomiApp builder replaced system scaler with TextScaler.linear(appearance.uiFontScale)",
+    "screenshots": ["C153-api26-novel-200pct.png", "C153-api26-manga-200pct.png"],
+    "screenshotNamingLimit": "200pct denotes system setting only; these C153 app screenshots do not prove actual application 200-percent scaling"
+  },
+  "verification": {
+    "flutterSuite": {"passed": 975, "skipped": 3, "failed": 0, "elapsedSeconds": 159.63},
+    "targeted": {"rootPrivacyAppearance": 33, "rootShell": 3, "scope": "targeted totals not added to full-suite result"},
+    "analyze": {"result": "No issues found", "elapsedSeconds": 111.7},
+    "secretScan": {"file": "C154-secret-scan.json", "filesScanned": 1334, "credentialOrSigningSecretHits": 0, "artifactMembers": [601, 601, 50]}
+  },
+  "actualDevice": {
+    "api26": {
+      "serial": "emulator-5556",
+      "packageSha256": "970877d939cd0007f76a13ead8dd965d7baca1dda254955261a762419ee03423",
+      "systemFontScale": 2.0,
+      "observed": ["actual enlarged manga and novel workspace labels with wrapped controls", "novel filter sheet opened and Escape dismissed it", "anime recommendation/follows navigation in portrait and landscape"],
+      "screenshots": ["C154-api26-manga-200pct.png", "C154-api26-novel-200pct.png", "C154-api26-novel-filter-200pct.png", "C154-api26-anime-200pct.png", "C154-api26-landscape-200pct.png"],
+      "settingsRestored": {"fontScale": 1.0, "accelerometerRotation": 1, "userRotation": 0},
+      "talkBackInstalled": false
+    },
+    "api35": {
+      "serial": "emulator-5554",
+      "packageSha256": "970877d939cd0007f76a13ead8dd965d7baca1dda254955261a762419ee03423",
+      "systemFontScale": 2.0,
+      "observed": ["actual enlarged novel shelf", "keyboard input C154-no-match filtered local downloaded shelf to zero", "owned query cleared and original two downloaded books remained", "Escape input exercised without remote account requests"],
+      "screenshots": ["C154-api35-novel-200pct.png", "C154-api35-local-keyboard-200pct.png"],
+      "fontScaleRestored": 1.0
+    },
+    "signedApi35": {
+      "serial": "emulator-5558",
+      "packageSha256": "8c875afd4575ec004de478372b1386bbf6058a3ae58109e5404430d228c00e9d",
+      "installReplace": "Success",
+      "observed": "actual enlarged novel shelf at system 2.0; original downloaded book remains",
+      "screenshot": "C154-signed-novel-200pct.png",
+      "fontScaleRestored": 1.0
+    },
+    "workstationShutdownRecovery": {
+      "originalAvds": ["noval_api35:5554", "triomi_api26_acceptance:5556", "triomi_c125_signed:5558"],
+      "dataWipe": false,
+      "replacementAvds": false,
+      "installedHashesMatchedPreShutdown": true
+    }
+  },
+  "remainingVerification": [
+    "No dedicated desktop interaction tool exposed after restart (xd devices only ast_edit/debug/lsp); current Windows visible journey remains blocked",
+    "No actual TalkBack/screen-reader journey; accessibility node text alone is not screen-reader proof",
+    "Full original R153 journey matrix and external source FilterList variants not all rerun on current bytes",
+    "Existing public metadata/HTTP timing samples are not p95; no 20-sample performance distribution or fresh network video startup latency claimed",
+    "Screenshots and observed sample controls do not establish full 200-percent text accessibility coverage"
+  ],
+  "security": {"credentialsPrinted": false, "remoteAccountWrites": false, "tlsBypass": false, "cloudflareActualVerification": "not-completed-user-waived"}
+}

@@ -12,6 +12,9 @@ R0–R5实施依赖与验收契约仍见大纲；R6以当前字节实跑为准�
 
 Windows打包补充：保留ZIP并增加当前用户MSI，仓库`tools/package_windows.ps1`单命令构建并产出ZIP/MSI/清单/SHA256SUMS，普通构建与Release工作流共用；原153程序字节直接封装MSI，不替换已发布APK/ZIP。真实安装、152→153升级、修复、降级拒绝与卸载已验证，原用户数据584文件hash不变；89项Python工具通过。安装器生命周期不替代仍受桌面接口限制的应用UI验收，详情统一见CURRENT_STATUS和C153综合证据。
 
+C154继续补验发现并修复系统200%字号被应用设置覆盖的问题：保留平台TextScaler并合成应用偏好，根组件失败前/修后回归与双API/正式大字号实际画面已证，API26横屏和API35本地键盘筛选及还原通过。975项Flutter通过/3跳过、analyze无问题；正式原证书Android与ZIP/MSI同源构建完成，MSI153→154真实升级与卸载保留584个原数据文件。当前发布进度与未验的桌面/读屏/性能分布统一见[C154](delivery/evidence/C154-final-acceptance.json)及CURRENT_STATUS。
+
+
 
 ### C151及之前的主线与发布记录
 

@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-更新时间：R153四工作区实现与Android关键旅程已完成；[v0.1.0-test.153](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.153)保留原APK/ZIP/更新清单，另补MSI与新版校验文件。974项Flutter通过/3跳过为原应用源码结果；新增打包后89项Python通过。MSI真实安装→升级→修复→拒绝降级→卸载已跑通，卸载后原应用数据584文件hash不变。Windows应用可见旅程仍缺专用桌面接口，完整平台矩阵仍partial。
+更新时间：C154修复应用内字号覆盖系统无障碍缩放的问题；全量975项Flutter通过/3跳过，analyze无问题。原API26/API35及正式签名API35已保数据安装当前154，实际大字号标签/横屏/本地键盘筛选有样本证据，结束系统字号均恢复1.0。原153的ZIP/MSI交付保留，154同源正式Android与ZIP/MSI正在准备发布。Windows应用可见旅程和真实读屏仍缺对应接口/前置条件，完整平台矩阵仍partial。
 
 当前执行入口为本文件和 `docs/ROADMAP.md`；历史证据在 `docs/delivery/evidence/`。R152重构大纲是用户本轮明确要求的设计交付，不另建执行进度台账。
 
@@ -15,6 +15,9 @@
 最终生产源码整套974项Flutter通过/3跳过，85项Python通过，analyze无问题。原三设备已`install -r`保数据升级到最终C153并逐台核对hash；API35真实推荐→资料、保留原7sefun映射→本地已下载视频24:22/25:11真帧、MangaDex JS/API第76.2话5/14双页真图通过。API35/API26小说书架“已下载”独立强停重启保留，API26原小说20/22、正式包原小说3/37正文目视可读。设备DNS故障期间只用普通设置配置临时CONNECT代理，未解密/绕过TLS；结束已恢复空代理、移除自有转发、停止临时服务并以无自定义DNS启动原AVD，不把临时网络依赖放进产品。详见[C153当前证据](delivery/evidence/C153-final-acceptance.json)。Windows最终构建成功、50成员逐字节匹配，但工具库存无专用桌面交互接口，本轮Windows可见旅程及完整视觉/键盘/读屏/200%字号矩阵不冒称完成；不是账号授权阻塞。
 
 Windows MSI补充：仓库新增`tools/package_windows.ps1`单命令执行Flutter release构建、WiX固定版本还原、ZIP/MSI/更新清单/校验文件打包，`build.yml`与`release.yml`均复用。本机完整命令实际退出0（Flutter构建74秒），MSI的50文件与原153公开ZIP解压内容逐字节一致；原ZIP/APK/更新清单资产未替换。当前用户安装到`%LOCALAPPDATA%\Programs\Triomi`，创建开始菜单入口，版本`0.1.153`、稳定UpgradeCode与降级拒绝；原用户数据不作为安装器资源。真实安装/升级/修复/卸载退出0、降级以明确较新版本提示退出1603，用户自建文件保留，测试安装已清理。MSI未签Windows Authenticode，不使用Android证书冒充。ZIP和MSI任选，原ZIP目录不自动接管。安装器CLI实证不等于应用窗口/安装向导视觉验收，见[C153综合证据](delivery/evidence/C153-final-acceptance.json)。
+
+C154无障碍补验：系统`font_scale=2.0`时原应用仍以固定UI字号显示，根组件回归失败前实际高度30px而非大于54px；已保留系统TextScaler并叠加应用偏好，不破坏Android非线性缩放。原API26真实小说/漫画/番剧、筛选sheet与Escape、200%横屏追番入口；原API35与正式包实际大字号小说书架，API35本地键盘查询0本→清空恢复2本已观察，原正式离线书架1本保留。关机后只重启原AVD/端口、未清数据，三台安装hash与产物一致。33项相关定向、全量975/3跳过及analyze通过；[C154证据](delivery/evidence/C154-final-acceptance.json)。以上不等于完整读屏/桌面视觉通过，也不把此前两次主机请求计为p95。
+
 
 
 ## 产品完成度
