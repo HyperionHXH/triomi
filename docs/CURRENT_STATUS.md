@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-更新时间：C154修复应用内字号覆盖系统无障碍缩放的问题；全量975项Flutter通过/3跳过，analyze无问题。原API26/API35及正式签名API35已保数据安装当前154，实际大字号标签/横屏/本地键盘筛选有样本证据，结束系统字号均恢复1.0。原153的ZIP/MSI交付保留，154同源正式Android与ZIP/MSI正在准备发布。Windows应用可见旅程和真实读屏仍缺对应接口/前置条件，完整平台矩阵仍partial。
+更新时间：C154系统无障碍字号修复已发布[v0.1.0-test.154](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.154)，五项资产已实际下载且大小/SHA-256均与本地匹配。全量975项Flutter通过/3跳过，analyze无问题；原三设备保数据安装/hash及双API/正式大字号样本已证，结束字号均恢复1.0。WindowsZIP/MSI同源构建、真实MSI153→154升级及卸载保留原数据通过。Windows应用可见旅程与真实读屏仍缺接口/前置条件，完整平台矩阵仍partial。
 
 当前执行入口为本文件和 `docs/ROADMAP.md`；历史证据在 `docs/delivery/evidence/`。R152重构大纲是用户本轮明确要求的设计交付，不另建执行进度台账。
 
@@ -168,6 +168,21 @@ C149生产引擎补验：实际`JsSource + FlutterJsRuntime(QuickJS) + HTTPS`公
 5. 技术未完成与账号阻塞分开；账号授权仅影响P10实写/P11外部云，不暂停其他工作。旧轮次产物与新同源产物的视觉/耐久边界保留，CF豁免与明确暂缓不变。
 
 ## 当前产物与原设备
+
+C154当前产物位于`_tools/C154-release/`，验收APK另存`_tools/C154-font-acceptance.apk`：
+
+| 产物 | 字节 | SHA-256 |
+| --- | ---: | --- |
+| 验收APK（5554/5556） | 130470900 | `970877d939cd0007f76a13ead8dd965d7baca1dda254955261a762419ee03423` |
+| `triomi-android.apk`（原正式证书，5558） | 130470900 | `8c875afd4575ec004de478372b1386bbf6058a3ae58109e5404430d228c00e9d` |
+| `triomi-windows.zip`（完整50成员） | 37137488 | `25de5a141262939e607559f17d8752ca621507f563f6712f96e103938b8d074b` |
+| `triomi-windows.msi`（0.1.154，未签Authenticode） | 30941184 | `7d51471771eeb7220307b61d1ff5223f2635537008bb6958a34c46d924037042` |
+| `triomi-windows.update.json` | 8312 | `501b5f3697ac014b543472a953933bc68d35d5696c62bf4f9eb4e88b45c00a32` |
+
+原证书单签名/v2、三台安装hash、ZIP逐成员与最终build一致均通过；源码1334文件及601/601/50成员秘密扫描零命中。真实MSI153→154安装/升级/卸载均退出0，584个原应用数据文件hash不变；不是Windows应用可见旅程。详见[C154综合证据](delivery/evidence/C154-final-acceptance.json)。
+
+### C153历史产物（非当前安装）
+
 
 C153当前产物位于仓库外`_tools/`及`_tools/C153-release/`，版本`0.1.0+153`：
 

@@ -8,7 +8,7 @@
 
 ## 下载与安装
 
-到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.153) 下载 **v0.1.0-test.153**：
+到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.154) 下载 **v0.1.0-test.154**：
 
 | 文件 | 用途 |
 | --- | --- |
@@ -23,7 +23,7 @@
 Windows 可任选 ZIP 或 MSI，不需要两个都装。MSI 默认安装到 `%LOCALAPPDATA%\Programs\Triomi`，不自动导入/删除旧 ZIP 目录；两种形式沿用同一应用数据目录。升级 MSI 前退出 Triomi，再运行新 MSI；卸载只移除安装文件和快捷方式，保留收藏、账号、设置及下载。MSI 目前没有 Windows Authenticode 发布者签名，系统可能提示未知发布者；请从本仓库 Release 下载并核对 SHA-256，Android 签名证书不能用于 Windows 签名。
 
 
-本版已完成原三台Android设备保数据升级和关键播放/阅读旅程；Windows完整构建与打包已核验，但本轮环境无专用桌面交互接口，当前字节Windows可见旅程尚未完成。全量974项Flutter通过/3跳过、85项Python通过；不将测试全绿等同完整平台矩阵通过。
+本版修复应用内字号覆盖系统无障碍缩放：保留系统（含Android非线性）缩放，再叠加应用界面字号偏好。原三台Android设备已保数据升级并核对hash，双API/正式大字号界面、API26横屏及API35本地键盘筛选有实际样本；全量975项Flutter通过/3跳过、analyze无问题。ZIP/MSI同源构建通过，MSI153→154真实升级和卸载保留原数据；Windows应用可见旅程、真实读屏和完整矩阵仍未完成，详情见[C154证据](docs/delivery/evidence/C154-final-acceptance.json)。
 
 
 ## 开始使用
@@ -202,7 +202,7 @@ Actions Artifacts 为开发验收包，显式以 `ORG_GRADLE_PROJECT_triomiAccep
 
 生产签名使用原发布者身份，不生成替代密钥。手动 release 工作流需要已有四项私密签名配置，临时文件用后清理；可指定已存在的tag发布，留空只生成Artifacts。未配置远端签名时由维护者在受控本机验签后上传Release，不因push标签触发另一次覆盖资产构建。Windows配套清单记录实际成员大小/SHA-256，不是发布者签名。
 
-Windows job 和本机使用同一个 `tools/package_windows.ps1`；release工作流会将 APK、ZIP、MSI、Windows更新清单一起上传，并生成覆盖四个文件的`SHA256SUMS.txt`。给 release 工作流传入包含这套脚本的新版本tag；旧tag不会自动拥有后来添加的脚本。当前test.153的MSI为原Windows程序字节补充安装封装，没有替换已发布ZIP/APK。
+Windows job 和本机使用同一个 `tools/package_windows.ps1`；release工作流会将 APK、ZIP、MSI、Windows更新清单一起上传，并生成覆盖四个文件的`SHA256SUMS.txt`。给 release 工作流传入包含这套脚本的新版本tag；旧tag不会自动拥有后来添加的脚本。test.154已使用该入口构建ZIP/MSI；test.153原资产及后补MSI保留，不用新包覆盖旧版本资产。
 
 
 ## 本地功能与隐私边界

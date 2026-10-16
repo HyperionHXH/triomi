@@ -1,8 +1,21 @@
 {
   "round": "C154",
   "version": "0.1.0+154",
-  "status": "release-prepared-platform-acceptance-partial",
-  "releasePublished": false,
+  "status": "published-and-download-verified-platform-acceptance-partial",
+  "releasePublished": true,
+  "sourceCommit": "944169326a132208f659587c5011d4848709e9f6",
+  "release": {
+    "tag": "v0.1.0-test.154",
+    "url": "https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.154",
+    "id": 415123328,
+    "publishedAt": "2026-10-16T15:44:04Z",
+    "draft": false,
+    "prerelease": true,
+    "allFiveRemoteAssetDigestsMatch": true,
+    "allFiveActualDownloadsMatchTestedLocalBytes": true,
+    "assets": ["triomi-android.apk", "triomi-windows.zip", "triomi-windows.msi", "triomi-windows.update.json", "SHA256SUMS.txt"],
+    "checksumFileSha256": "1cc94bf9cb2ec851012b52adeb8ab3a1bb8c48a3dea5021546df44d803aa33c3"
+  },
   "artifacts": [
     {"name": "C154-font-acceptance.apk", "published": false, "bytes": 130470900, "sha256": "970877d939cd0007f76a13ead8dd965d7baca1dda254955261a762419ee03423"},
     {"name": "triomi-android.apk", "bytes": 130470900, "sha256": "8c875afd4575ec004de478372b1386bbf6058a3ae58109e5404430d228c00e9d", "v2Verified": true, "signers": 1, "certificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077"},
