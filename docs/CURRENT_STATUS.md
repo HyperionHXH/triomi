@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-更新时间：R153四工作区实现、交叉Review及Android关键旅程已完成；[v0.1.0-test.153](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.153)已发布，四项资产实际下载后SHA-256均与本地一致。974项Flutter通过/3跳过、85项Python通过、analyze无问题；C153双APK原证书验签、原三设备保数据升级/hash、Windows完整50成员构建与秘密扫描通过。Windows当前字节可见旅程因本会话无专用桌面接口尚未完成，完整平台矩阵仍partial。
+更新时间：R153四工作区实现与Android关键旅程已完成；[v0.1.0-test.153](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.153)保留原APK/ZIP/更新清单，另补MSI与新版校验文件。974项Flutter通过/3跳过为原应用源码结果；新增打包后89项Python通过。MSI真实安装→升级→修复→拒绝降级→卸载已跑通，卸载后原应用数据584文件hash不变。Windows应用可见旅程仍缺专用桌面接口，完整平台矩阵仍partial。
 
 当前执行入口为本文件和 `docs/ROADMAP.md`；历史证据在 `docs/delivery/evidence/`。R152重构大纲是用户本轮明确要求的设计交付，不另建执行进度台账。
 
@@ -13,6 +13,9 @@
 当前生产资料适配器真实HTTPS烟测：《葬送的芙莉莲》详情713ms，含36集资料总计1050ms；第二次缓存详情0ms、总计339ms。真实loopback HTTP取消25ms返回错误，并行同客户端请求仍200且正文一致。证据见 [R153运行烟测](delivery/evidence/R153-runtime-smoke.json)；仅证明传输与公开资料Adapter，不是UI/真实视频首帧或百分位数。原R152官方接口超时诊断保留，不重新探测确认。
 
 最终生产源码整套974项Flutter通过/3跳过，85项Python通过，analyze无问题。原三设备已`install -r`保数据升级到最终C153并逐台核对hash；API35真实推荐→资料、保留原7sefun映射→本地已下载视频24:22/25:11真帧、MangaDex JS/API第76.2话5/14双页真图通过。API35/API26小说书架“已下载”独立强停重启保留，API26原小说20/22、正式包原小说3/37正文目视可读。设备DNS故障期间只用普通设置配置临时CONNECT代理，未解密/绕过TLS；结束已恢复空代理、移除自有转发、停止临时服务并以无自定义DNS启动原AVD，不把临时网络依赖放进产品。详见[C153当前证据](delivery/evidence/C153-final-acceptance.json)。Windows最终构建成功、50成员逐字节匹配，但工具库存无专用桌面交互接口，本轮Windows可见旅程及完整视觉/键盘/读屏/200%字号矩阵不冒称完成；不是账号授权阻塞。
+
+Windows MSI补充：仓库新增`tools/package_windows.ps1`单命令执行Flutter release构建、WiX固定版本还原、ZIP/MSI/更新清单/校验文件打包，`build.yml`与`release.yml`均复用。本机完整命令实际退出0（Flutter构建74秒），MSI的50文件与原153公开ZIP解压内容逐字节一致；原ZIP/APK/更新清单资产未替换。当前用户安装到`%LOCALAPPDATA%\Programs\Triomi`，创建开始菜单入口，版本`0.1.153`、稳定UpgradeCode与降级拒绝；原用户数据不作为安装器资源。真实安装/升级/修复/卸载退出0、降级以明确较新版本提示退出1603，用户自建文件保留，测试安装已清理。MSI未签Windows Authenticode，不使用Android证书冒充。ZIP和MSI任选，原ZIP目录不自动接管。安装器CLI实证不等于应用窗口/安装向导视觉验收，见[C153综合证据](delivery/evidence/C153-final-acceptance.json)。
+
 
 ## 产品完成度
 
@@ -170,6 +173,7 @@ C153当前产物位于仓库外`_tools/`及`_tools/C153-release/`，版本`0.1.0
 | 验收APK（不公开替换正式包） | 130470900 | `d78b277045144cd7465c383845287ad7269811e9c8daa366b6e5baa06c2fac7d` |
 | `triomi-android.apk`（原正式证书） | 130470900 | `ff5e7864b9303e6ee1990372ae73a69208d29a0a9869e202b7630cc129c293d8` |
 | `triomi-windows.zip`（完整50成员） | 37133016 | `558106572b73c22be0f0aa5174a94358216b20f78d73d4b8d5d8a1eb3d59d051` |
+| `triomi-windows.msi`（当前用户安装，无Authenticode签名） | 30937088 | `ffe55657d07ff49299b29dbed48faef368ad3d504249887ef7d0b2484b5aa282` |
 | `triomi-windows.update.json`（完整性清单，非发布者签名） | 8312 | `e7e12eaa91c2b9ccf9ea28b30acfaa8c1c8aaac47cdf3ea4dc29ab3ac7c00a2a` |
 
 双APK单签名/v2验证通过；5554/5556安装验收hash，5558安装正式hash，均为覆盖安装且保留原数据。源码1317文件、两APK各601成员与ZIP 50成员秘密/私密材料/debug名称零命中。公开测试版发布状态以[C153综合证据](delivery/evidence/C153-final-acceptance.json)为准；未完成平台矩阵不能用旧轮次实证替代。

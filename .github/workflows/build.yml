@@ -73,23 +73,31 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
-  # Windows 绿色包（解压即用）
+  # Windows ZIP + per-user MSI from the same release tree.
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - run: flutter pub get
-      - run: flutter build windows --release
-      - name: 打包 zip
+      - name: Build and package Windows ZIP + MSI
         shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath triomi-windows.zip
+        run: ./tools/package_windows.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: triomi-windows
-          path: triomi-windows.zip
+          path: |
+            build/release/triomi-windows.zip
+            build/release/triomi-windows.msi
+            build/release/triomi-windows.update.json
+            build/release/SHA256SUMS.txt
           if-no-files-found: error

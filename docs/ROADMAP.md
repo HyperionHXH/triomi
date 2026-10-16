@@ -10,6 +10,9 @@
 
 R0–R5实施依赖与验收契约仍见大纲；R6以当前字节实跑为准。真实公开资料/HTTP取消已记录 [R153运行烟测](delivery/evidence/R153-runtime-smoke.json)，不冒称UI/视频首帧通过；完整原P1–P12剩余与外部授权条件仍集中在CURRENT_STATUS，不创建平行台账。
 
+Windows打包补充：保留ZIP并增加当前用户MSI，仓库`tools/package_windows.ps1`单命令构建并产出ZIP/MSI/清单/SHA256SUMS，普通构建与Release工作流共用；原153程序字节直接封装MSI，不替换已发布APK/ZIP。真实安装、152→153升级、修复、降级拒绝与卸载已验证，原用户数据584文件hash不变；89项Python工具通过。安装器生命周期不替代仍受桌面接口限制的应用UI验收，详情统一见CURRENT_STATUS和C153综合证据。
+
+
 ### C151及之前的主线与发布记录
 
 完整的“近期已解决 / 新发现N1–N18 / 原P1–P12剩余 / 全平台与外部条件”只在 [CURRENT_STATUS剩余主线](CURRENT_STATUS.md#剩余主线) 统一维护；下方阶段和轮次记录保留实现契约与历史证据，不把历史“未实现”当当前结论。

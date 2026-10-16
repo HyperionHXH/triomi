@@ -14,10 +14,14 @@
 | --- | --- |
 | `triomi-android.apk` | Android 正式证书签名包，普通使用下载这个；Android 7.0 / API24 起 |
 | `triomi-windows.zip` | Windows x64 完整绿色包，完整解压后运行 `triomi.exe`，不要只取 EXE |
+| `triomi-windows.msi` | Windows x64 安装包，当前用户安装、开始菜单入口、覆盖升级及系统卸载 |
 | `triomi-windows.update.json` | 与 Windows ZIP 配套的文件完整性清单，不是发布者签名 |
 | `SHA256SUMS.txt` | 下载文件 SHA-256 校验值 |
 
 已有同签名版本可覆盖安装，勿卸载或清除数据；建议先在「我的 → 备份与恢复」导出本地备份。开发/Actions 验收包使用另一证书，不能直接覆盖正式包，遇到签名冲突不要通过卸载丢弃原数据。当前为测试版，不宣称完整全平台验收；详情见 [当前状态](docs/CURRENT_STATUS.md)。
+
+Windows 可任选 ZIP 或 MSI，不需要两个都装。MSI 默认安装到 `%LOCALAPPDATA%\Programs\Triomi`，不自动导入/删除旧 ZIP 目录；两种形式沿用同一应用数据目录。升级 MSI 前退出 Triomi，再运行新 MSI；卸载只移除安装文件和快捷方式，保留收藏、账号、设置及下载。MSI 目前没有 Windows Authenticode 发布者签名，系统可能提示未知发布者；请从本仓库 Release 下载并核对 SHA-256，Android 签名证书不能用于 Windows 签名。
+
 
 本版已完成原三台Android设备保数据升级和关键播放/阅读旅程；Windows完整构建与打包已核验，但本轮环境无专用桌面交互接口，当前字节Windows可见旅程尚未完成。全量974项Flutter通过/3跳过、85项Python通过；不将测试全绿等同完整平台矩阵通过。
 
@@ -138,6 +142,7 @@ lib/
 - Flutter stable（当前验证版本 3.47.5 / Dart 3.13.4）
 - JDK 17+、Android SDK 36（当前项目 compileSdk/targetSdk；minSdk24）
 - Visual Studio 2022「使用 C++ 的桌面开发」工作负载（构建 Windows 端时需要）
+- Python 3.12+ 与 .NET 10 SDK（生成 Windows ZIP/MSI 时需要；WiX 6.0.2 由仓库工具清单自动还原）
 
 ```powershell
 cd triomi
@@ -154,6 +159,17 @@ python tools/check_fixture_media.py                      # 视频夹具自检
 python tools/ui_doc_drift_scan.py --json                 # UI 定位与文档漂移扫描
 python tools/delivery_consistency_scan.py --json         # 交付文档一致性扫描
 ```
+
+Windows 一条龙构建与打包（在仓库根目录运行）：
+
+```powershell
+./tools/package_windows.ps1
+# 已经构建过当前 release，只重新打包：
+./tools/package_windows.ps1 -SkipBuild
+```
+
+默认输出在 `build/release/`：`triomi-windows.zip`、`triomi-windows.msi`、`triomi-windows.update.json` 和 `SHA256SUMS.txt`。可用 `-OutputDirectory` 指定输出目录，或通过 `-Flutter`、`-Python`、`-Dotnet` 指定工具路径；脚本失败立即停止，不发布半成品。MSI 使用稳定 UpgradeCode，版本映射为 `major.minor.build`（例如 `0.1.0+153` → `0.1.153`），build 必须持续递增且不超过65535；较旧 MSI 拒绝降级，同版可修复。已有 ZIP 不受 MSI 升级/卸载管理。
+
 
 > **注意**：本机若设置了 `HTTP_PROXY` / `HTTPS_PROXY` 等代理环境变量，`flutter test`
 > 会因 flutter_tester 的 WebSocket 握手失败而报
@@ -180,11 +196,14 @@ python tools/delivery_consistency_scan.py --json         # 交付文档一致性
 1. `flutter analyze` + `flutter test`（零问题、全绿是硬门槛）；
 2. Python 工具链（`tools/requirements-dev.txt`：tools 单测、夹具媒体自检、文档漂移扫描）；
 3. Android release APK；
-4. Windows 绿色包（zip）。
+4. Windows 同源 ZIP + MSI、ZIP更新完整性清单及SHA-256校验文件。
 
 Actions Artifacts 为开发验收包，显式以 `ORG_GRADLE_PROJECT_triomiAcceptanceSigning=true` 使用 debug 证书，不用于覆盖正式签名安装。普通用户从 Releases 下载正式证书签名的 `triomi-android.apk`；缺少生产签名时构建明确失败，不回退其他证书。
 
 生产签名使用原发布者身份，不生成替代密钥。手动 release 工作流需要已有四项私密签名配置，临时文件用后清理；可指定已存在的tag发布，留空只生成Artifacts。未配置远端签名时由维护者在受控本机验签后上传Release，不因push标签触发另一次覆盖资产构建。Windows配套清单记录实际成员大小/SHA-256，不是发布者签名。
+
+Windows job 和本机使用同一个 `tools/package_windows.ps1`；release工作流会将 APK、ZIP、MSI、Windows更新清单一起上传，并生成覆盖四个文件的`SHA256SUMS.txt`。给 release 工作流传入包含这套脚本的新版本tag；旧tag不会自动拥有后来添加的脚本。当前test.153的MSI为原Windows程序字节补充安装封装，没有替换已发布ZIP/APK。
+
 
 ## 本地功能与隐私边界
 

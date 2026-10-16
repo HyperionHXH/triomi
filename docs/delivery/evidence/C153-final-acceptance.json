@@ -15,10 +15,45 @@
     "publicPageVerifiedWithoutLogin": true,
     "allFourGitHubAssetDigestsMatchLocal": true,
     "allFourAssetsDownloadedAndHashesMatch": true,
-    "assets": ["triomi-android.apk", "triomi-windows.zip", "triomi-windows.update.json", "SHA256SUMS.txt"],
-    "checksumFileSha256": "10a431c6320ab18b80dbfc496023aa0073b9fdcbf43058b164c5139fde3c44a3"
+    "assets": ["triomi-android.apk", "triomi-windows.zip", "triomi-windows.msi", "triomi-windows.update.json", "SHA256SUMS.txt"],
+    "checksumFileSha256": "b86cc21f6bf616037f2f6086df68bb4674204818478a58ccfc56050b37efbb24",
+    "allFiveAssetsDownloadVerified": true,
+    "downloadVerificationScope": "Original unchanged APK/ZIP bytes retained from prior verified downloads; MSI and refreshed checksum/update manifest verified from current downloads"
   },
   "runtimeEvidence": "R153-runtime-smoke.json",
+  "windowsInstaller": {
+    "scope": "per-user x64, LocalAppData/Programs/Triomi, Chinese WixUI_Minimal, Start Menu shortcut",
+    "toolchain": "WiX 6.0.2 and UI extension 6.0.2 pinned; .NET 10 SDK; Python 3.12+",
+    "entrypoint": "./tools/package_windows.ps1",
+    "fullBuildAndPackage": {"exit": 0, "flutterBuildSeconds": 74.0, "payloadFiles": 50, "allPayloadBytesMatchOriginalPublishedZip": true},
+    "msiVersion": "0.1.153",
+    "upgradeCode": "57F8467B-9E75-4D87-9744-41DC82F8F54F",
+    "productCode": "{F48F5C16-626D-555B-BF02-7812D604CC36}",
+    "authenticode": "NotSigned; no replacement or self-signed publisher identity created",
+    "payloadExactlyMatchesOriginalPublishedZip": true,
+    "originalApkZipUpdateAssetIdsAndDigestsUnchanged": true,
+    "realWindowsInstallerLifecycle": {
+      "installOlder152": 0,
+      "upgrade153": 0,
+      "repair153": 0,
+      "downgrade152": {"exit": 1603, "reason": "A newer Triomi version is already installed; WIX_DOWNGRADE_DETECTED confirmed"},
+      "uninstall153": 0,
+      "installed50FilesExactlyMatchPayload": true,
+      "startMenuCreatedThenRemoved": true,
+      "userCreatedFileSurvivesUpgradeAndUninstall": true,
+      "existingAppDataFileHashesUnchanged": 584,
+      "ownedSmokeInstallationCleaned": true,
+      "applicationVisibleUiJourney": "not exercised; missing dedicated desktop interface remains"
+    },
+    "pythonToolsAfterInstallerChanges": {"passed": 89, "failed": 0, "elapsedSeconds": 7.822},
+    "workflowYamlParsed": ["build.yml", "release.yml"],
+    "sourceSecretScan": {"filesScanned": 1323, "filesWithCredentialOrSigningSecret": 0, "status": "passed"},
+    "encodingErrors": 0,
+    "uiDocDriftErrors": 0,
+    "deliveryReferenceErrors": 0,
+    "releaseSupplement": "MSI and refreshed SHA256SUMS published and actually downloaded with matching hashes; original APK/ZIP/update asset identities and digests unchanged",
+    "downloadedMsi": {"bytes": 30937088, "sha256": "ffe55657d07ff49299b29dbed48faef368ad3d504249887ef7d0b2484b5aa282", "matchesRealLifecycleTestedPackage": true}
+  },
   "verification": {
     "driftGeneration": "passed",
     "analyzer": {"result": "No issues found", "elapsedSeconds": 73.3},
@@ -36,6 +71,7 @@
     {"name": "C153-android-acceptance.apk", "published": false, "bytes": 130470900, "sha256": "d78b277045144cd7465c383845287ad7269811e9c8daa366b6e5baa06c2fac7d", "v2Verified": true, "signers": 1, "certificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6"},
     {"name": "triomi-android.apk", "bytes": 130470900, "sha256": "ff5e7864b9303e6ee1990372ae73a69208d29a0a9869e202b7630cc129c293d8", "v2Verified": true, "signers": 1, "certificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077", "packageName": "io.github.hyperionhxh.triomi", "versionCode": 153},
     {"name": "triomi-windows.zip", "bytes": 37133016, "sha256": "558106572b73c22be0f0aa5174a94358216b20f78d73d4b8d5d8a1eb3d59d051", "members": 50, "allMemberBytesMatchFinalBuild": true},
+    {"name": "triomi-windows.msi", "bytes": 30937088, "sha256": "ffe55657d07ff49299b29dbed48faef368ad3d504249887ef7d0b2484b5aa282", "version": "0.1.153", "payloadFiles": 50, "authenticode": "NotSigned"},
     {"name": "triomi-windows.update.json", "bytes": 8312, "sha256": "e7e12eaa91c2b9ccf9ea28b30acfaa8c1c8aaac47cdf3ea4dc29ab3ac7c00a2a", "versionCode": 153, "filesVerified": 50, "publisherSignature": false}
   ],
   "preserveData": {
