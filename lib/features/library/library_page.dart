@@ -24,21 +24,21 @@ import 'migration_plans_page.dart';
 import 'source_migration_page.dart';
 
 class LibraryPage extends ConsumerStatefulWidget {
-  const LibraryPage({super.key, required this.type, this.embedded = false});
+  const LibraryPage({super.key, required this.type, this.embedded = false, this.searching = false});
   final MediaType type;
   final bool embedded;
+  final bool searching;
 
   @override
-  ConsumerState<LibraryPage> createState() => _LibraryPageState();
+  ConsumerState<LibraryPage> createState() => LibraryPageState();
 }
 
 class _LibraryOptions {
-  Set<String> tags = {};
   String sort = 'updated', layout = 'grid', group = 'none';
 
 }
 
-class _LibraryPageState extends ConsumerState<LibraryPage> {
+class LibraryPageState extends ConsumerState<LibraryPage> {
   final _search = TextEditingController();
   final _selected = <(String, String)>{};
   var _options = _LibraryOptions();
@@ -98,9 +98,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         )) {
       return false;
     }
-    return view.item.title.toLowerCase().contains(_query) &&
-        (_options.tags.isEmpty ||
-            _options.tags.every(view.item.tags.contains));
+    return view.item.title.toLowerCase().contains(_query);
   }
 
   static const _sorts = <String, String>{
@@ -111,6 +109,20 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     'added': '加入时间',
     'progress': '阅读进度',
   };
+
+  List<PopupMenuEntry<String>> get menuEntries => [
+    const PopupMenuItem(value: 'categories', child: Text('管理书架分类')),
+    const PopupMenuItem(value: 'markAllRead', child: Text('当前结果标为已读')),
+    for (final sort in _sorts.entries)
+      PopupMenuItem(value: 'sort:${sort.key}', child: Text('排序 · ${sort.value}')),
+    const PopupMenuItem(value: 'layout', child: Text('切换封面 / 列表')),
+    const PopupMenuItem(value: 'history', child: Text('阅读历史')),
+    const PopupMenuItem(value: 'downloads', child: Text('下载管理')),
+    if (widget.type == MediaType.manga) ...[
+      const PopupMenuItem(value: 'local', child: Text('本地漫画库')),
+      const PopupMenuItem(value: 'migration', child: Text('持久迁移计划')),
+    ],
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -129,6 +141,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           (group.sourceId, group.remoteId),
     };
     final actions = <Widget>[
+      if (!widget.embedded)
       IconButton(
         tooltip: '搜索本地书库',
         icon: const Icon(Icons.search),
@@ -136,31 +149,14 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       ),
       PopupMenuButton<String>(
         tooltip: '更多操作',
-        onSelected: _more,
-        itemBuilder: (_) => [
-          const PopupMenuItem(value: 'categories', child: Text('管理书架分类')),
-          const PopupMenuItem(value: 'markAllRead', child: Text('当前结果标为已读')),
-          for (final sort in _sorts.entries)
-            PopupMenuItem(value: 'sort:${sort.key}', child: Text('排序 · ${sort.value}')),
-          const PopupMenuItem(value: 'layout', child: Text('切换封面 / 列表')),
-          const PopupMenuItem(value: 'history', child: Text('阅读历史')),
-          const PopupMenuItem(value: 'downloads', child: Text('下载管理')),
-          if (widget.type == MediaType.manga) ...[
-            const PopupMenuItem(value: 'local', child: Text('本地漫画库')),
-            const PopupMenuItem(value: 'migration', child: Text('持久迁移计划')),
-          ],
-        ],
+        onSelected: handleAction,
+        itemBuilder: (_) => menuEntries,
       ),
     ];
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.embedded)
-          Align(
-            alignment: Alignment.centerRight,
-            child: Row(mainAxisSize: MainAxisSize.min, children: actions),
-          ),
-        if (_searching)
+        if (widget.embedded ? widget.searching : _searching)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: TextField(
@@ -176,36 +172,11 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
               }),
             ),
           ),
-        if (_searching)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                for (final tag in ({
-                  ...?library.asData?.value.expand((view) => view.item.tags),
-                  ..._options.tags,
-                }.toList()..sort()))
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      label: Text(tag),
-                      selected: _options.tags.contains(tag),
-                      onSelected: (selected) => setState(() {
-                        selected ? _options.tags.add(tag) : _options.tags.remove(tag);
-                        _exitSelection();
-                      }),
-                    ),
-                  ),
-              ],
-            ),
-          ),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              _categoryTab('全部', null),
               for (final category in categories?.categories ?? <CategoryRow>[])
                 _categoryTab(
                   category.name,
@@ -315,11 +286,13 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                   title: all.isEmpty ? '这个分类下还没有内容' : '没有匹配当前查询的收藏',
                   message: '仅显示${widget.type.label}本地收藏；来源离线不会删除作品。',
                   action: all.isEmpty
-                      ? FilledButton.tonal(
-                          onPressed: () =>
-                              context.push(AppRoutes.searchFor(widget.type)),
-                          child: const Text('搜索作品'),
-                        )
+                      ? widget.embedded
+                          ? null
+                          : FilledButton.tonal(
+                              onPressed: () =>
+                                  context.push(AppRoutes.searchFor(widget.type)),
+                              child: const Text('搜索作品'),
+                            )
                       : TextButton(
                           onPressed: () => setState(() {
                             _options = _LibraryOptions();
@@ -352,7 +325,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       label: Text(label),
       selected: _categoryId == id,
       onSelected: (_) => setState(() {
-        _categoryId = id;
+        _categoryId = _categoryId == id ? null : id;
         _exitSelection();
       }),
     ),
@@ -503,7 +476,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           );
   }
 
-  void _more(String action) {
+  void handleAction(String action) {
     if (action.startsWith('sort:')) {
       final sort = action.substring(5);
       if (!_sorts.containsKey(sort)) return;

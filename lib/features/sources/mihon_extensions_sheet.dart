@@ -37,6 +37,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   bool _loading = false;
   SourceFilters _filters = const SourceFilters(language: 'zh');
   _ExtensionSection _section = _ExtensionSection.installed;
+  bool _searching = false;
 
   void _setFilters(SourceFilters value) {
     setState(() => _filters = value);
@@ -463,6 +464,12 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ),
+                  if (_section != _ExtensionSection.repositories)
+                    IconButton(
+                      tooltip: '搜索插件名称',
+                      icon: const Icon(Icons.search),
+                      onPressed: () => setState(() => _searching = !_searching),
+                    ),
                   IconButton(
                     tooltip: '关闭扩展管理',
                     onPressed: () => Navigator.pop(context),
@@ -553,11 +560,12 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                       ),
                     ],
                   ),
+                if (_searching)
                 TextFormField(
+                  autofocus: true,
                   initialValue: _filters.query,
                   decoration: const InputDecoration(
                     labelText: '搜索插件名称',
-                    prefixIcon: Icon(Icons.search),
                   ),
                   onChanged: (query) => _setFilters(_filters.copyWith(query: query)),
                 ),

@@ -58,6 +58,8 @@ void main() {
   Future<void> pumpLibrary(
     WidgetTester tester, {
     MediaType type = MediaType.manga,
+    bool embedded = false,
+    bool searching = false,
   }) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -71,7 +73,9 @@ void main() {
         ],
         child: MaterialApp(
           theme: AppTheme.light(),
-          home: LibraryPage(type: type),
+          home: embedded
+              ? Scaffold(body: LibraryPage(type: type, embedded: true, searching: searching))
+              : LibraryPage(type: type),
         ),
       ),
     );
@@ -89,8 +93,28 @@ void main() {
     await tester.tap(find.text('管理书架分类'));
     await tester.pumpAndSettle();
   }
+  libraryTest('嵌入书库由工作区控制名称搜索，不提供第二个搜索按钮', (tester) async {
+    await repository.addToLibrary(manga);
+    await pumpLibrary(tester, embedded: true);
+    expect(find.byTooltip('搜索本地书库'), findsNothing);
+    expect(find.byTooltip('更多操作'), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+    await pumpLibrary(tester, embedded: true, searching: true);
+    expect(find.byTooltip('搜索本地书库'), findsNothing);
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '不存在');
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey(('test-manga', '12', MediaType.manga))), findsNothing);
+    final state = tester.state<LibraryPageState>(find.byType(LibraryPage));
+    expect(state.menuEntries.whereType<PopupMenuItem<String>>().map((entry) => entry.value),
+        containsAll(['categories', 'markAllRead', 'sort:title', 'layout', 'local', 'migration']));
+    state.handleAction('sort:title');
+    await tester.pumpAndSettle();
+    expect(preferences.get<String>('library.manga.sort'), 'title');
+  });
 
-  libraryTest('书库名称查询与标签组合并能恢复全部作品', (tester) async {
+
+  libraryTest('本地书库仅按名称查询，不显示题材或全部筛选', (tester) async {
     await repository.addToLibrary(manga);
     await repository.addToLibrary(
       const MediaItem(
@@ -115,15 +139,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(mangaCard, findsNothing);
     expect(otherCard, findsOneWidget);
-    await tester.tap(find.widgetWithText(FilterChip, '科幻'));
-    await tester.pumpAndSettle();
-    expect(mangaCard, findsNothing);
-    expect(otherCard, findsOneWidget);
+    expect(find.byType(FilterChip), findsNothing);
+    expect(find.widgetWithText(ChoiceChip, '全部'), findsNothing);
     await tester.enterText(find.byType(TextField), '作品甲');
     await tester.pumpAndSettle();
-    expect(mangaCard, findsNothing);
+    expect(mangaCard, findsOneWidget);
     expect(otherCard, findsNothing);
-    await tester.tap(find.widgetWithText(FilterChip, '科幻'));
     await tester.enterText(find.byType(TextField), '');
     await tester.pumpAndSettle();
     expect(mangaCard, findsOneWidget);
@@ -460,27 +481,26 @@ void main() {
     );
   });
 
-  libraryTest('标签只匹配拥有作品元数据，不把标签当标题文本', (tester) async {
+  libraryTest('本地名称查询不使用作品题材元数据且保留标签', (tester) async {
     await repository.addToLibrary(manga);
     await repository.addToLibrary(
       const MediaItem(
         sourceId: 'other',
         remoteId: '12',
         type: MediaType.manga,
-        title: '科幻作品',
+        title: '作品乙',
         tags: ['科幻'],
       ),
     );
     await pumpLibrary(tester);
     await openLocalSearch(tester);
-    await tester.tap(find.widgetWithText(FilterChip, '科幻'));
+    expect(find.byType(FilterChip), findsNothing);
+    await tester.enterText(find.byType(TextField), '科幻');
     await tester.pumpAndSettle();
     expect(find.text('作品甲'), findsNothing);
-    expect(find.text('科幻作品'), findsWidgets);
-    await tester.tap(find.widgetWithText(FilterChip, '科幻'));
-    await tester.pumpAndSettle();
-    expect(find.text('作品甲'), findsWidgets);
-    expect(find.text('科幻作品'), findsWidgets);
+    expect(find.text('作品乙'), findsNothing);
+    final retained = await repository.listLibrary();
+    expect(retained.singleWhere((view) => view.item.sourceId == 'other').item.tags, ['科幻']);
   });
 
   libraryTest('共享偏好仅首次导入，模块应用独立且不覆盖已有键', (tester) async {

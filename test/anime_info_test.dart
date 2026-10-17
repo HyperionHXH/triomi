@@ -26,6 +26,7 @@ import 'fixtures/test_database.dart';
 void main() {
   testWidgets('资料等待与失败不阻塞缓存首屏或播放来源选择', (tester) async {
     final db = openTestDatabase();
+    addTearDown(db.close);
     final pending = Completer<SourceResponse>();
     const item = MediaItem(
       sourceId: 'bangumi-anime',
@@ -64,7 +65,7 @@ void main() {
     expect(find.text('下载到本地'), findsNothing);
     expect(find.text('导出 EPUB'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
-    await db.close();
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   test('四季度筛选使用跨年上界；分页offset只按原始返回推进', () async {

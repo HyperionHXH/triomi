@@ -66,37 +66,38 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
       _error = null;
     });
     try {
-      final page = await owner.run(
-        () => ref
-            .read(bangumiPublicClientProvider)
-            .search(
-              filter: AnimePublicFilter(
-                tags: _filter.tags,
-                year: _filter.year,
-                quarter: _filter.quarter,
-                minScore: _filter.minScore,
-                maxScore: _filter.maxScore,
-                sort: _filter.sort,
-              ),
-              offset: reset ? 0 : _offset,
-              limit: 100,
+      var offset = reset ? 0 : _offset;
+      var more = true;
+      if (reset) {
+        _rows.clear();
+        _offset = 0;
+        _more = true;
+      }
+      while (more) {
+        final page = await owner.run(
+          () => ref.read(bangumiPublicClientProvider).search(
+            filter: AnimePublicFilter(
+              tags: _filter.tags, year: _filter.year, quarter: _filter.quarter,
+              minScore: _filter.minScore, maxScore: _filter.maxScore,
+              sort: _filter.sort,
             ),
-      );
-      if (!mounted || owner.cancelled || generation != _generation) return;
-      setState(() {
-        if (reset) _rows.clear();
-        final ids = _rows.map((row) => '${row['id']}').toSet();
-        _rows.addAll(
-          page.rows.where(
-            (row) =>
-                row['type'] == 2 &&
-                row['nsfw'] != true &&
-                ids.add('${row['id']}'),
+            offset: offset, limit: 100,
           ),
         );
-        _offset = page.nextOffset;
-        _more = page.hasMore;
-      });
+        if (!mounted || owner.cancelled || generation != _generation) return;
+        if (page.hasMore && page.nextOffset <= offset) {
+          throw StateError('季度资料分页未前进，请重试');
+        }
+        setState(() {
+          final ids = _rows.map((row) => '${row['id']}').toSet();
+          _rows.addAll(page.rows.where((row) => row['type'] == 2 &&
+            row['nsfw'] != true && ids.add('${row['id']}')));
+          _offset = page.nextOffset;
+          _more = page.hasMore;
+        });
+        offset = page.nextOffset;
+        more = page.hasMore;
+      }
     } catch (error) {
       if (mounted && !owner.cancelled && generation == _generation) {
         setState(() => _error = '季度资料暂不可用：$error');
@@ -155,12 +156,20 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
     final currentSeason =
         _filter.year == now.year && _filter.quarter == (now.month - 1) ~/ 3 + 1;
     _weekdays.clear();
+    final calendarRows = <Map<String, Object?>>[];
     if (currentSeason) {
       for (final day
           in ref.watch(weeklyScheduleProvider).asData?.value ??
               <ScheduleDay>[]) {
         for (final entry in day.items) {
           _weekdays[entry.id] = day.weekday;
+          if (_filter.tags.isEmpty && _filter.minScore == null && _filter.maxScore == null) {
+            calendarRows.add({
+              'id': entry.id, 'type': 2, 'name_cn': entry.title,
+              'images': {'large': entry.coverUrl}, 'date': entry.airDate,
+              'rating': {'score': entry.rating}, 'weekday': {'id': day.weekday},
+            });
+          }
         }
       }
     }
@@ -168,7 +177,11 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
       for (final view in ref.watch(animeFollowsProvider).asData?.value ?? [])
         '${view.item.sourceId}:${view.item.remoteId}': view.entry.status,
     };
-    final visible = _rows
+    // Calendar includes ongoing shows from earlier quarters too. Keep them
+    // alongside the fully paginated season results instead of truncating the day.
+    final combined = {for (final row in calendarRows) '${row['id']}': row,
+      for (final row in _rows) '${row['id']}': row};
+    final visible = combined.values
         .where((row) {
           final day = _day(row);
           // The calendar has seven real weekday buckets only. Do not surface
@@ -267,11 +280,6 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
                       ? TextButton(
                           onPressed: _load,
                           child: Text('$_error · 重试'),
-                        )
-                      : _more
-                      ? TextButton(
-                          onPressed: _load,
-                          child: const Text('加载更多本季作品'),
                         )
                       : Text(visible.isEmpty ? '没有符合条件的作品' : '本季作品已加载'),
                 ),

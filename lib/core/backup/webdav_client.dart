@@ -160,7 +160,7 @@ class WebDavClient {
   }) async {
     final tag = expected?.etag;
     if (expected?.exists == true &&
-        (tag == null || !RegExp(r'^"[^"\r\n]+"$').hasMatch(tag))) {
+        (tag == null || !_validRevisionTag(tag))) {
       throw StateError('远端不提供强ETag，不能安全覆盖；请选择新的备份文件名');
     }
     await ensureDirectory(config);
@@ -186,6 +186,13 @@ class WebDavClient {
       );
     }
   }
+
+  // Some DAV servers (including Jianguoyun) expose an opaque unquoted token
+  // and require it verbatim in If-Match. Never accept weak tags, wildcards,
+  // lists, whitespace or header controls; retain conditional writes exactly.
+  static bool _validRevisionTag(String tag) =>
+      RegExp(r'^"[^"\r\n]+"$').hasMatch(tag) ||
+      RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(tag);
 
   /// 拉取远端备份包；不存在返回 null。仅保留用于旧版小字节调用，
   /// 大备份必须使用 [downloadToFile]，避免把整个 ZIP 放进 Dart 堆。

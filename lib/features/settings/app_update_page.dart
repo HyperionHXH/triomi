@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'app_update_service.dart';
 
-/// Opening this page only reads installed identity. No automatic network call.
+/// Network checks and installation always require an explicit user action.
 class AppUpdatePage extends StatefulWidget {
   const AppUpdatePage({super.key, this.service});
   final AppUpdateService? service;
@@ -15,13 +15,12 @@ class AppUpdatePage extends StatefulWidget {
 
 class _AppUpdatePageState extends State<AppUpdatePage> {
   late final AppUpdateService _service = widget.service ?? AppUpdateService();
-  final _endpoint = TextEditingController();
   final _zipPath = TextEditingController();
   final _manifestPath = TextEditingController();
   AppUpdateInfo? _current;
   AppUpdateCandidate? _candidate;
-  AppUpdateManifest? _manifest;
-  String? _checkedEndpoint;
+  List<AppUpdateRelease>? _releases;
+  AppUpdateRelease? _selected;
   String? _message;
   String? _operation;
   AppUpdateProgress? _progress;
@@ -51,7 +50,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     if (candidate != null && candidate.offered.platform == 'android') {
       _service.discard(candidate).catchError((Object _) {});
     }
-    _endpoint.dispose(); _zipPath.dispose(); _manifestPath.dispose();
+    _zipPath.dispose(); _manifestPath.dispose();
     _service.close();
     super.dispose();
   }
@@ -67,12 +66,24 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     }
     on FormatException catch (error) { if (mounted) setState(() => _message = error.message); }
     on HttpException catch (error) { if (mounted) setState(() => _message = error.message); }
-    catch (_) { if (mounted) setState(() => _message = '更新操作未完成；请核对文件、当前平台和可用磁盘空间。未安装或覆盖现有应用。'); }
+    catch (_) { if (mounted) setState(() => _message = '更新操作未完成；请检查网络、文件和可用磁盘空间。未安装或覆盖现有应用。'); }
     finally { if (mounted) setState(() { _operation = null; _token = null; _progress = null; }); }
   }
   Future<void> _loadCurrent() => _run('读取实际安装版本与字节散列', (token) async {
     final current = await _service.current(); token.check();
     if (mounted) setState(() => _current = current);
+  });
+  Future<void> _checkReleases() => _run('查询官方 GitHub 发布版本（包含测试版）', (token) async {
+    final current = await _service.current(); token.check();
+    final releases = await _service.releases(token); token.check();
+    if (mounted) {
+      setState(() {
+        _current = current; _releases = releases; _selected = releases.firstOrNull;
+        _message = releases.isEmpty ? '暂无可识别的发布版本。' : releases.first.isNewerThan(current)
+          ? '发现新版本 ${releases.first.tag}，可选择版本下载。'
+          : '当前构建 ${current.versionCode} 已是最新，或比公开发布版本更新。';
+      });
+    }
   });
   Future<void> _acceptCandidate(AppUpdateCandidate? candidate) async {
     if (candidate == null) { if (mounted) setState(() => _message = '已取消文件选择；未修改现有应用。'); return; }
@@ -85,41 +96,27 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     }
     setState(() { _candidate = candidate; _current = candidate.current; });
   }
-  Future<void> _pickApk() => _run('选择并静态核验 APK（不执行候选）', (token) async {
+  Future<void> _downloadRelease() async {
+    final release = _selected;
+    if (release == null || _current == null || !release.isNewerThan(_current!)) return;
+    final consent = await _confirm('下载 ${release.tag}？',
+      '从官方 GitHub $appUpdateRepository 下载${Platform.isAndroid ? '原签名 APK' : '完整 Windows ZIP 与成员清单'}。'
+      '将核对 GitHub 摘要 / SHA256SUMS、实际版本与字节。最多 512 MiB；不会自动安装。'
+      '${Platform.isWindows ? '\n\nWindows 发布包未签名，SHA-256 校验完整性不等同发布者签名。' : '\n\nAndroid 必须通过系统 APK 验签并匹配当前实际安装证书。'}', '下载并核验');
+    if (consent != true || !mounted) return;
+    await _run('下载并核验官方更新包', (token) async {
+      await _acceptCandidate(await _service.downloadRelease(release, token));
+    });
+  }
+  Future<void> _pickApk() => _run('选择并静态核验 APK', (token) async {
     await _acceptCandidate(await _service.pickApk(token));
   });
-  Future<void> _checkManifest() async {
-    final endpoint = _endpoint.text.trim();
-    try { AppUpdateManifest.https(endpoint); }
-    on FormatException catch (error) { setState(() => _message = error.message); return; }
-    final consent = await _confirm('查询手动更新来源？',
-      '将向你填写的 HTTPS 地址发送一次匿名 GET 请求。不会携带来源账号、Cookie 或私密凭据；不跟随重定向。\n\n'
-      '尚无配置的公开生产发布端点。你填写的清单及其哈希不是发布者身份证明；Android APK 仍必须与实际安装签名一致。', '查询这个来源');
-    if (consent != true || !mounted) return;
-    await _run('读取手动 HTTPS 更新清单', (token) async {
-      final manifest = await _service.checkManifest(endpoint, token);
-      token.check();
-      if (mounted) setState(() { _manifest = manifest; _checkedEndpoint = endpoint; });
-    });
-  }
-  Future<void> _download() async {
-    final manifest = _manifest, endpoint = _checkedEndpoint;
-    if (manifest == null || endpoint == null) return;
-    final uri = manifest.url;
-    final consent = await _confirm('下载这个候选 APK？',
-      '提供方宣称 ${manifest.version}（${manifest.versionCode}）\n下载地址：${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}\n'
-      '预期 SHA-256：${manifest.sha256}\n\n最多 512 MiB。下载后核验实际包名、版本、字节散列和实际安装签名，不会自动进入安装器。', '下载并核验');
-    if (consent != true || !mounted) return;
-    await _run('下载并核验 APK', (token) async {
-      await _acceptCandidate(await _service.downloadApk(manifest, endpoint, token));
-    });
-  }
   Future<void> _windows() async {
-    final consent = await _confirm('暂存 Windows 独立更新包？',
-      '只复制并验证所选 ZIP、外部清单完整性和所有成员 SHA-256/CRC。不会运行候选、展开到程序目录或覆盖正在运行的 EXE。\n\n'
-      'ZIP 与清单可能一起被替换，哈希不是签名：你必须自行从可信发布渠道取得二者。Android APK 无法用于 Windows。', '确认来源并核验');
+    final consent = await _confirm('核验本地 Windows 独立更新包？',
+      '只复制并验证 ZIP、外部完整性清单、所有成员及实际 EXE 版本。请自行确认文件来源。'
+      '不会运行候选或覆盖正在运行的 EXE。哈希不代表发布者签名。', '确认来源并核验');
     if (consent != true || !mounted) return;
-    await _run('复制并核验 Windows ZIP 与所有成员', (token) async {
+    await _run('核验 Windows ZIP 与所有成员', (token) async {
       await _acceptCandidate(await _service.stageWindowsBundle(_zipPath.text.trim(), _manifestPath.text.trim(), token));
     });
   }
@@ -137,21 +134,33 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     catch (_) { if (mounted) setState(() => _message = '无法读取系统安装权限；未启动安装器。'); return; }
     if (!mounted) return;
     if (!allowed) {
-      final open = await _confirm('由你自行决定未知来源权限',
-        '此应用尚未获系统允许请求安装。可打开仅针对 Triomi 的系统设置；不会自动授权或自动返回安装。允许后返回此页，再次确认具体候选。', '打开此应用的系统设置');
+      final open = await _confirm('允许 Triomi 请求安装',
+        '可打开仅针对 Triomi 的系统设置，由你自行授权。允许后返回此页，再次确认具体候选。', '打开系统设置');
       if (open == true && mounted) {
-        await _run('打开未知来源系统设置（不自动授权）', (_) => _service.openUnknownSources());
+        await _run('打开未知来源系统设置', (_) => _service.openUnknownSources());
       }
       return;
     }
-    final consent = await _confirm('将这个核验候选交给系统安装器？',
-      '${_identity(candidate.current)}\n\n候选：${_identity(candidate.offered)}\n'
-      '来源：${candidate.source}\n\n只授权系统读取这一份应用专用 APK。交接前再次核验；不会静默安装、自动点击系统确认、自动授权或清除应用数据。'
-      '最终是否安装由系统和你决定。', '打开系统安装确认');
+    final consent = await _confirm('打开系统安装器？',
+      '当前：${_identity(candidate.current)}\n\n候选：${_identity(candidate.offered)}\n'
+      '来源：${candidate.source}\n\n交接前将再次核验。最终是否安装由系统和你决定，不清除应用数据。', '打开系统安装确认');
     if (consent != true || !mounted) return;
     await _run('再次核验并交给系统安装器', (_) async {
       await _service.launchInstaller(candidate);
-      if (mounted) setState(() { _candidate = null; _message = '已打开系统安装器；未声称安装成功。请在系统中自行决定，暂存 APK 保留供系统读取。'; });
+      if (mounted) setState(() { _candidate = null; _message = '已打开系统安装器，尚未确认安装成功。暂存 APK 保留供系统读取。'; });
+    });
+  }
+  Future<void> _revealWindows() async {
+    final candidate = _candidate;
+    if (candidate == null) return;
+    final consent = await _confirm('打开已核验的完整 Windows 包？',
+      '将在文件资源管理器中选中 ZIP。右键“全部解压缩”到一个新目录，然后关闭 Triomi，再从新目录运行 triomi.exe。'
+      '所有 DLL 和 data 文件必须保留在一起。请更新原快捷方式指向新目录。\n\n'
+      '不会覆盖正在运行的 EXE；原应用数据保留。此动作不代表已经安装。', '打开文件位置');
+    if (consent != true || !mounted) return;
+    await _run('重新核对 ZIP 并打开文件位置', (token) async {
+      await _service.revealWindowsBundle(candidate, token);
+      if (mounted) setState(() => _message = '已请求打开文件资源管理器。请解压到新目录，关闭 Triomi 后运行新目录中的 triomi.exe。尚未安装。');
     });
   }
   Future<void> _discard() async {
@@ -159,81 +168,93 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     if (candidate == null) return;
     await _run('移除本次更新暂存', (_) async {
       await _service.discard(candidate);
-      if (mounted) setState(() { _candidate = null; _message = '已移除本次未交给安装器的暂存；原 APK/ZIP 和应用数据不变。'; });
+      if (mounted) setState(() { _candidate = null; _message = '已移除本次更新暂存，应用数据不变。'; });
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final current = _current, candidate = _candidate, manifest = _manifest;
+    final current = _current, candidate = _candidate, selected = _selected;
     final android = Platform.isAndroid, windows = Platform.isWindows;
-    return Scaffold(appBar: AppBar(title: const Text('应用更新'), actions: [
+    final assetName = android ? 'triomi-android.apk' : 'triomi-windows.zip';
+    return Scaffold(appBar: AppBar(title: const Text('版本管理'), actions: [
       IconButton(tooltip: '重新读取安装身份', onPressed: _busy ? null : _loadCurrent, icon: const Icon(Icons.refresh)),
     ]), body: ListView(padding: const EdgeInsets.all(16), children: [
-      const Text('不需要新账号。不自动查询、不信任任意更新端点、不静默安装。当前未配置公开生产发布地址；本地签名 APK 可独立使用。'),
+      const Text('官方仓库 HyperionHXH/triomi。点击检查后匿名查询 GitHub Releases，包含测试版；不携带来源账号、Cookie 或令牌，不自动安装。'),
       if (_busy) Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(_operation!), const SizedBox(height: 8),
           LinearProgressIndicator(value: _progress?.total == null || _progress!.total! <= 0 ? null
             : (_progress!.bytes / _progress!.total!).clamp(0.0, 1.0)),
-          Text(_progress == null ? '核验期间不会执行候选；可取消后等待当前密码学核验结束。'
-            : '${_progress!.phase}：${_progress!.bytes} 字节${_progress!.total == null ? '' : ' / ${_progress!.total}'}'),
-          TextButton(onPressed: _token?.cancelled == true ? null : () => _service.cancel(_token!),
-            child: const Text('取消（系统文件选择器请返回取消）')),
+          Text(_progress == null ? '正在处理；可取消。' : '${_progress!.phase}：${_progress!.bytes} 字节${_progress!.total == null ? '' : ' / ${_progress!.total}'}'),
+          TextButton(onPressed: _token?.cancelled == true ? null : () => _service.cancel(_token!), child: const Text('取消')),
         ]))),
       if (_message != null) Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: SelectableText(_message!)),
       if (current != null) Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('实际安装身份'), SelectableText(_identity(current)),
-          if (android) Text(current.signerSha256 == appUpdateProductionSigner
-            ? '与已知正式证书一致。候选仍必须匹配实际安装证书。'
-            : '此设备不是已知正式签名；仍严格比较实际安装签名，无调试绕过。'),
+          Text('已安装 ${current.version} · 构建 ${current.versionCode}'),
+          ExpansionTile(title: const Text('实际安装身份与散列'), children: [SelectableText(_identity(current))]),
+          if (android && current.signerSha256 != appUpdateProductionSigner)
+            const Text('当前安装证书与正式证书不同；正式 APK 无法覆盖，仍严格核对实际安装证书。'),
         ]))),
-      if (android) ...[
-        FilledButton.icon(onPressed: _busy ? null : _pickApk, icon: const Icon(Icons.folder_open), label: const Text('选择本地 APK 并核验')),
-        const SizedBox(height: 16),
-        TextField(controller: _endpoint, enabled: !_busy, decoration: const InputDecoration(
-          labelText: '可选：自己指定 HTTPS JSON 清单地址', hintText: '无默认生产地址；不自动保存或查询')),
-        const SelectableText('JSON：{"versionCode":2,"version":"0.1.1","url":"https://你信任的主机/update.apk","sha256":"完整64位小写SHA256"}\n这些字段仅为格式说明，不是可用发布地址。所有重定向被拒绝。'),
-        OutlinedButton(onPressed: _busy ? null : _checkManifest, child: const Text('手动查询此清单')),
-        if (manifest != null) Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start, children: [
-            SelectableText('清单宣称 ${manifest.version}（${manifest.versionCode}）\nSHA-256：${manifest.sha256}'),
-            TextButton(onPressed: _busy ? null : _download, child: const Text('确认下载并核验实际 APK')),
-          ]))),
+      if (android || windows) FilledButton.icon(onPressed: _busy ? null : _checkReleases,
+        icon: const Icon(Icons.system_update), label: const Text('检查 GitHub 新版本')),
+      if (_releases != null && _releases!.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        DropdownButtonFormField<AppUpdateRelease>(key: ValueKey(_releases), initialValue: selected, isExpanded: true,
+          decoration: const InputDecoration(labelText: '选择发布版本（含测试版）'),
+          items: _releases!.map((release) => DropdownMenuItem(value: release,
+            child: Text('${release.tag}${release.prerelease ? ' · 测试版' : ''}', overflow: TextOverflow.ellipsis))).toList(),
+          onChanged: _busy ? null : (value) => setState(() => _selected = value)),
       ],
-      if (windows) ...[
-        const Text('Windows 使用独立桌面 ZIP + 外部文件清单，只做安全暂存交接；Android APK 不可运行。哈希不代表发布者签名。'),
-        TextField(controller: _zipPath, enabled: !_busy, decoration: const InputDecoration(labelText: '你选择的本地 Windows ZIP 完整路径')),
-        TextField(controller: _manifestPath, enabled: !_busy, decoration: const InputDecoration(labelText: '可信外部 JSON 清单完整路径')),
-        const SelectableText('清单格式：platform 为 windows；packageName 为 io.github.hyperionhxh.triomi；versionCode 为递增构建号；version 为显示版本；sha256 为整个ZIP散列；files 为每个文件相对路径到 {"size":字节数,"sha256":"完整散列"} 的映射。必须覆盖所有文件并包含 triomi.exe、flutter_windows.dll。'),
-        FilledButton(onPressed: _busy ? null : _windows, child: const Text('确认来源，核验并暂存桌面包')),
-      ],
-      if (!android && !windows) const Text('当前平台没有受支持的更新交接实现；请使用平台发布渠道。'),
+      if (selected != null) Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(selected.name, style: Theme.of(context).textTheme.titleMedium),
+          Text('发布：${selected.publishedAt}'),
+          Text(current == null ? '请先读取实际安装版本。' : selected.versionCode > current.versionCode
+            ? '可更新：构建 ${current.versionCode} → ${selected.versionCode}'
+            : selected.versionCode == current.versionCode ? '当前已安装此构建；不重复安装。' : '这是旧版本，不允许降级。'),
+          const SizedBox(height: 8), SelectableText(selected.notes.isEmpty ? '此版本未提供发布说明。' : selected.notes),
+          if (selected.assets[assetName] case final asset?) Text('完整更新包：${asset.name} · ${(asset.bytes / 1024 / 1024).toStringAsFixed(1)} MiB'),
+          FilledButton(onPressed: _busy || current == null || !selected.isNewerThan(current) ||
+              !selected.assets.containsKey(assetName) ? null : _downloadRelease,
+            child: Text(windows ? '下载并核验完整 Windows ZIP' : '下载并核验 APK')),
+        ]))),
       if (candidate != null) Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('实际候选（未执行）'), SelectableText(_identity(candidate.offered)),
+          const Text('实际候选（尚未安装）'), SelectableText(_identity(candidate.offered)),
           SelectableText('文件大小：${candidate.bytes} 字节\n来源：${candidate.source}'),
           Text(_decision(candidate.decision)),
-          if (android && candidate.canInstall) FilledButton(onPressed: _busy ? null : _install, child: const Text('确认后打开系统安装器')),
-          if (windows && candidate.canInstall) SelectableText('已核验暂存：${candidate.path}\n清单：${candidate.manifestPath}\n'
-            '从可信发布渠道另行核对后，关闭 Triomi，再将此 ZIP 解压到新目录并自行运行；不要覆盖运行中的 EXE。'
-            '本页没有执行或安装任何候选。'),
+          if (android && candidate.canInstall) FilledButton(onPressed: _busy ? null : _install, child: const Text('打开系统安装器')),
+          if (windows && candidate.canInstall) ...[
+            const Text('Windows ZIP 未签名。解压到新目录，关闭 Triomi 后运行新目录中的 triomi.exe；不覆盖正在运行的程序。'),
+            FilledButton.icon(onPressed: _busy ? null : _revealWindows, icon: const Icon(Icons.folder_open), label: const Text('打开文件位置，解压后更新')),
+          ],
           TextButton(onPressed: _busy ? null : _discard, child: const Text('移除本次更新暂存')),
         ]))),
+      if (android || windows) ExpansionTile(title: const Text('高级：核验本地更新包'), children: [
+        if (android) OutlinedButton.icon(onPressed: _busy ? null : _pickApk,
+          icon: const Icon(Icons.folder_open), label: const Text('选择本地 APK 并核验')),
+        if (windows) ...[
+          TextField(controller: _zipPath, enabled: !_busy, decoration: const InputDecoration(labelText: '可信本地 Windows ZIP 完整路径')),
+          TextField(controller: _manifestPath, enabled: !_busy, decoration: const InputDecoration(labelText: '对应 triomi-windows.update.json 完整路径')),
+          OutlinedButton(onPressed: _busy ? null : _windows, child: const Text('核验并暂存本地完整桌面包')),
+        ],
+      ]),
+      if (!android && !windows) const Text('当前平台请使用平台发布渠道。'),
     ]));
   }
 }
 
 String _identity(AppUpdateInfo info) => '${info.packageName}\n版本 ${info.version}（${info.versionCode}）\n'
     '字节 SHA-256：${info.sha256}${info.artifactSha256 == null ? '' : '\nEXE SHA-256：${info.artifactSha256}'}\n'
-    '签名证书 SHA-256：${info.signerSha256 ?? '不适用；桌面ZIP仅校验完整性，不声称签名'}';
+    '签名证书 SHA-256：${info.signerSha256 ?? 'Windows 未签名；仅核验完整性'}';
 String _decision(String value) => switch (value) {
   'upgrade' => '核验通过：高版本候选。尚未安装。',
   'wrongPackage' => '拒绝：包名或平台与当前应用不符。',
   'wrongSigner' => '拒绝：签名未核验或与实际安装签名不符。',
   'downgrade' => '拒绝：候选版本低于实际安装版本。',
-  'sameVersionChanged' => '拒绝：相同版本号的字节内容已改变；不会启动安装器。',
-  'alreadyInstalled' => '无需更新：相同版本和完全相同字节；不会启动安装器。',
+  'sameVersionChanged' => '拒绝：相同版本号的字节内容已改变。',
+  'alreadyInstalled' => '无需更新：相同版本和完全相同字节。',
   _ => '拒绝：未知的核验结果。',
 };

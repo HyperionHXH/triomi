@@ -22,6 +22,9 @@ import 'fixtures/test_database.dart';
 
 class _Content implements ContentProvider {
   static bool failFirstChapter = false;
+  static int requests = 0;
+  static bool singleParagraph = false;
+  static String? fontFamily;
   @override
   SourceDescriptor get descriptor => const SourceDescriptor(
     id: 'reader-controls', name: 'Reader controls', type: MediaType.novel,
@@ -31,11 +34,14 @@ class _Content implements ContentProvider {
   bool get isReady => true;
   @override
   Future<ChapterContent> content(Chapter chapter) async {
+    requests++;
     if (failFirstChapter && chapter.remoteId == 'one') {
       throw StateError('Chapter temporarily unavailable');
     }
     return ChapterContent(
-      text: List.generate(60, (i) => 'Paragraph $i ${List.filled(50, 'reading').join(' ')}.').join('\n\n'),
+      text: singleParagraph ? List.generate(4000, (i) => 'word$i').join(' ')
+        : List.generate(60, (i) => 'Paragraph $i ${List.filled(50, 'reading').join(' ')}.').join('\n\n'),
+      fontFamily: fontFamily,
     );
   }
 }
@@ -70,8 +76,14 @@ void main() {
     }
   }
 
-  Future<void> open(WidgetTester tester, {double scale = 1, bool failFirstChapter = false}) async {
+  Future<void> open(WidgetTester tester, {
+    double scale = 1, bool failFirstChapter = false,
+    bool singleParagraph = false, String? fontFamily,
+  }) async {
     _Content.failFirstChapter = failFirstChapter;
+    _Content.requests = 0;
+    _Content.singleParagraph = singleParagraph;
+    _Content.fontFamily = fontFamily;
     final db = openTestDatabase();
     final docs = Directory.systemTemp.createTempSync('reader_controls_');
     preferences = memoryPreferences();
@@ -165,7 +177,9 @@ void main() {
     final progress = tester.widget<Slider>(find.byType(Slider));
     progress.onChanged!(progress.max);
     await tester.pumpAndSettle();
+    final last = indicator(tester);
     await controls(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await settle(tester);
     expect(indicator(tester), startsWith('1 /'));
@@ -173,6 +187,109 @@ void main() {
     expect(find.textContaining('Book · Second chapter'), findsOneWidget);
     final next = tester.widget<TextButton>(find.widgetWithText(TextButton, '下一章'));
     expect(next.onPressed, isNull);
+    expect(_Content.requests, 2, reason: 'rapid boundary input must load the adjacent chapter once');
+    await controls(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await settle(tester);
+    expect(indicator(tester), last, reason: 'backward chapter edge restores its saved text anchor');
+    await controls(tester);
+    expect(find.textContaining('Book · First chapter'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('paged taps slide adjacent pages together and ignore card drags', (tester) async {
+    await open(tester);
+    final initial = indicator(tester);
+    final reader = tester.getRect(find.byType(NovelReaderPage));
+    await tester.dragFrom(reader.center, const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    expect(indicator(tester), initial,
+      reason: 'MixN paged mode uses taps; dragging belongs to card mode');
+
+    await tester.tapAt(Offset(reader.right - 20, reader.center.dy));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    final current = find.byKey(const ValueKey('novel-current-page'));
+    final adjacent = find.byKey(const ValueKey('novel-adjacent-page'));
+    final outgoing = tester.getRect(current);
+    final incoming = tester.getRect(adjacent);
+    expect(outgoing.left, lessThan(reader.left + 20));
+    expect(incoming.left, closeTo(outgoing.right, 0.01),
+      reason: 'slide pages stay edge-to-edge, not a card cover or same-side switch');
+    expect(indicator(tester), initial,
+      reason: 'position is committed only after the slide settles');
+    await tester.tapAt(Offset(reader.right - 20, reader.center.dy));
+    await tester.pumpAndSettle();
+    expect(indicator(tester), startsWith('2 /'));
+    expect(adjacent, findsNothing);
+
+    await tester.tapAt(Offset(reader.left + 20, reader.center.dy));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    final reverseOutgoing = tester.getRect(current);
+    final reverseIncoming = tester.getRect(adjacent);
+    expect(reverseIncoming.right, closeTo(reverseOutgoing.left, 0.01));
+    await tester.pumpAndSettle();
+    expect(indicator(tester), initial);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('paged default tap zones reserve the middle half for controls', (tester) async {
+    await open(tester);
+    final initial = indicator(tester);
+    final reader = tester.getRect(find.byType(NovelReaderPage));
+    for (final fraction in [0.25, 0.28, 0.72, 0.75]) {
+      await tester.tapAt(Offset(reader.left + reader.width * fraction, reader.center.dy));
+      await tester.pumpAndSettle();
+      expect(find.text('阅读设置'), findsOneWidget);
+      expect(indicator(tester), initial);
+      await controls(tester);
+    }
+    await tester.tapAt(Offset(reader.left + reader.width * 0.8, reader.center.dy));
+    await tester.pumpAndSettle();
+    expect(indicator(tester), startsWith('2 /'));
+    expect(find.text('阅读设置'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('paged reflow keeps a long paragraph character anchor and source font without refetching', (tester) async {
+    tester.view.physicalSize = const Size(800, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await open(tester, singleParagraph: true, fontFamily: 'source-required');
+    for (var i = 0; i < 5; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+    }
+    Text firstText() => tester.widget<Text>(find.descendant(
+      of: find.byKey(const ValueKey('novel-current-page')),
+      matching: find.byType(Text),
+    ).first);
+    String firstWord() => RegExp(r'word\d+').firstMatch(firstText().data!)!.group(0)!;
+    final beforeResize = firstWord();
+    expect(beforeResize, isNot('word0'));
+    final reader = tester.getRect(find.byType(NovelReaderPage));
+    await tester.tapAt(Offset(reader.right - 20, reader.center.dy));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    tester.view.physicalSize = const Size(620, 600);
+    await tester.pumpAndSettle();
+    expect(firstText().data, contains(beforeResize));
+    expect(firstText().style!.fontFamily, 'source-required');
+    final beforeFontChange = firstWord();
+    await controls(tester);
+    await tester.tap(find.text('文字样式'));
+    await tester.pumpAndSettle();
+    final size = tester.widgetList<Slider>(find.byType(Slider)).firstWhere((slider) => slider.max == 32);
+    size.onChanged!(24);
+    await tester.pump();
+    await tester.ensureVisible(find.widgetWithText(FilledButton, '完成'));
+    await tester.tap(find.widgetWithText(FilledButton, '完成'));
+    await settle(tester);
+    expect(firstText().data, contains(beforeFontChange));
+    expect(firstText().style!.fontFamily, 'source-required');
+    expect(firstText().style!.fontSize, 24);
+    expect(_Content.requests, 1, reason: 'style/width reflow must reuse the loaded chapter');
     expect(tester.takeException(), isNull);
   });
 

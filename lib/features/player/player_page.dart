@@ -780,231 +780,196 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           ? _player.state.duration
           : _duration,
     );
+    final previous = adjacentEpisodeIndex(_chapters, _chapterIndex, -1);
+    final next = adjacentEpisodeIndex(_chapters, _chapterIndex, 1);
 
     return Positioned.fill(
-      child: AnimatedOpacity(
-        opacity: _chromeVisible ? 1 : 0,
-        duration: const Duration(milliseconds: 180),
-        child: Column(
-          children: <Widget>[
-            // 顶栏
-            Container(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xs,
-                AppSpacing.xs,
-                AppSpacing.md,
-                AppSpacing.sm,
+      child: LayoutBuilder(builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 600;
+        final buttonWidth = (constraints.maxWidth - 16) /
+            (_useNativeAndroidVideo ? 7 : 6);
+        final buttonSize = buttonWidth.clamp(24.0, 40.0);
+        Widget button(String label, IconData icon, VoidCallback? onPressed) =>
+            IconButton(
+              tooltip: label,
+              style: IconButton.styleFrom(
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
+              onPressed: onPressed,
+              constraints: BoxConstraints.tightFor(
+                width: buttonSize,
+                height: 40,
+              ),
+              padding: EdgeInsets.zero,
+              color: Colors.white,
+              disabledColor: Colors.white38,
+              icon: Icon(icon),
+            );
+
+        return AnimatedOpacity(
+          opacity: _chromeVisible ? 1 : 0,
+          duration: const Duration(milliseconds: 180),
+          child: Column(children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: <Color>[Colors.black54, Colors.transparent],
+                  colors: [Colors.black54, Colors.transparent],
                 ),
               ),
-              child: Row(
-                children: <Widget>[
-                  BackButton(
-                    color: Colors.white,
-                    onPressed: () async {
-                      if (_fullscreen) {
-                        await _setFullscreen(false);
-                      } else if (context.mounted) {
-                        Navigator.of(context).maybePop();
-                      }
-                    },
-                  ),
-                  Expanded(
-                    child: Text(
-                      '${_item.title} · ${_chapter.title}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: _danmakuOn ? '关闭弹幕' : '开启弹幕',
-                    onPressed: () {
-                      setState(() => _danmakuOn = !_danmakuOn);
-                      _danmaku.enabled = _danmakuOn;
-                    },
-                    icon: Icon(
-                      _danmakuOn
-                          ? Icons.speaker_notes_outlined
-                          : Icons.speaker_notes_off_outlined,
+              child: Row(children: [
+                BackButton(
+                  color: Colors.white,
+                  onPressed: () async {
+                    if (_fullscreen) {
+                      await _setFullscreen(false);
+                    } else if (context.mounted) {
+                      Navigator.of(context).maybePop();
+                    }
+                  },
+                ),
+                Expanded(
+                  child: Text(
+                    '${_item.title} · ${_chapter.title}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
                       color: Colors.white,
                     ),
                   ),
-                  IconButton(
-                    tooltip: '弹幕设置',
-                    onPressed: _showDanmakuSettings,
-                    icon: const Icon(Icons.tune_rounded, color: Colors.white),
-                  ),
-                  IconButton(
-                    tooltip: '搜索弹幕',
-                    onPressed: _searchDanmaku,
-                    icon: const Icon(Icons.search_rounded, color: Colors.white),
-                  ),
-                  IconButton(
-                    tooltip: '发送弹幕',
-                    onPressed: _sendDanmaku,
-                    icon: const Icon(Icons.send_rounded, color: Colors.white),
-                  ),
-                ],
-              ),
+                ),
+                button(
+                  _danmakuOn ? '关闭弹幕' : '开启弹幕',
+                  _danmakuOn
+                      ? Icons.speaker_notes_outlined
+                      : Icons.speaker_notes_off_outlined,
+                  () {
+                    setState(() => _danmakuOn = !_danmakuOn);
+                    _danmaku.enabled = _danmakuOn;
+                  },
+                ),
+              ]),
             ),
             const Spacer(),
-            // 底栏
             Container(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                AppSpacing.sm,
-                AppSpacing.md,
-                AppSpacing.xs,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
-                  colors: <Color>[Colors.black54, Colors.transparent],
+                  colors: [Colors.black54, Colors.transparent],
                 ),
               ),
               child: SafeArea(
                 top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        IconButton(
-                          onPressed: _togglePlay,
-                          icon: Icon(
-                            _playing
-                                ? Icons.pause_rounded
-                                : Icons.play_arrow_rounded,
-                            color: Colors.white,
+                bottom: _fullscreen,
+                left: false,
+                right: false,
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Row(children: [
+                    Expanded(
+                      child: SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 3,
+                          thumbShape: const RoundSliderThumbShape(
+                            enabledThumbRadius: 6,
                           ),
                         ),
-                        Text(
-                          '$positionText / $durationText',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.white,
-                          ),
-                        ),
-                        const Spacer(),
-                        if (_lines.length > 1)
-                          TextButton(
-                            onPressed: _pickLine,
-                            child: Text(
-                              _lines[_lineIndex].name,
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        TextButton(
-                          onPressed: _showEpisodes,
-                          child: const Text(
-                            '剧集',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: _pickSpeed,
-                          child: Text(
-                            '${_speed}x',
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: '播放设置',
-                          onPressed: _controlsSheet,
-                          icon: const Icon(
-                            Icons.settings_outlined,
-                            color: Colors.white,
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: '全屏',
-                          onPressed: () => _setFullscreen(!_fullscreen),
-                          icon: const Icon(
-                            Icons.fullscreen_rounded,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                    SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        trackHeight: 3,
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 6,
+                        child: Slider(
+                          value: _sliderValue,
+                          max: _sliderMax,
+                          onChanged: (value) {
+                            final target = Duration(milliseconds: value.round());
+                            setState(() => _position = target);
+                          },
+                          onChangeEnd: (value) async {
+                            final target = Duration(milliseconds: value.round());
+                            if (_useNativeAndroidVideo) {
+                              await _nativeVideoController.seek(target);
+                            } else {
+                              await _player.seek(target);
+                            }
+                            _danmaku.seek(target);
+                          },
                         ),
                       ),
-                      child: Slider(
-                        value: _sliderValue,
-                        max: _sliderMax,
-                        onChanged: (value) {
-                          final target = Duration(milliseconds: value.round());
-                          setState(() => _position = target);
-                        },
-                        onChangeEnd: (value) async {
-                          final target = Duration(milliseconds: value.round());
-                          if (_useNativeAndroidVideo) {
-                            await _nativeVideoController.seek(target);
-                          } else {
-                            await _player.seek(target);
+                    ),
+                    Text(
+                      '$positionText / $durationText',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white,
+                      ),
+                    ),
+                  ]),
+                  Row(children: [
+                    button('上一集', Icons.skip_previous_rounded,
+                        previous == null ? null : () => _switchChapter(-1)),
+                    button(_playing ? '暂停' : '播放',
+                        _playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        _togglePlay),
+                    button('下一集', Icons.skip_next_rounded,
+                        next == null ? null : () => _switchChapter(1)),
+                    const Spacer(),
+                    if (wide) ...[
+                      button('剧集', Icons.playlist_play_rounded, _showEpisodes),
+                      button('倍速 · ${_speed}x', Icons.speed_rounded, _pickSpeed),
+                    ],
+                    button('字幕', Icons.subtitles_outlined, _pickSubtitles),
+                    if (_useNativeAndroidVideo)
+                      button('画中画', Icons.picture_in_picture_alt, _enterPip),
+                    SizedBox(
+                      width: buttonSize,
+                      height: 40,
+                      child: PopupMenuButton<String>(
+                        tooltip: '更多选项',
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(Icons.more_vert, color: Colors.white),
+                        onSelected: (action) {
+                          switch (action) {
+                            case 'episodes':
+                              _showEpisodes();
+                            case 'line':
+                              _pickLine();
+                            case 'speed':
+                              _pickSpeed();
+                            case 'settings':
+                              _controlsSheet();
+                            case 'danmakuSettings':
+                              _showDanmakuSettings();
+                            case 'searchDanmaku':
+                              _searchDanmaku();
+                            case 'sendDanmaku':
+                              _sendDanmaku();
                           }
-                          _danmaku.seek(target);
                         },
+                        itemBuilder: (context) => [
+                          if (!wide)
+                            const PopupMenuItem(value: 'episodes', child: Text('剧集')),
+                          if (_lines.length > 1)
+                            PopupMenuItem(value: 'line', child: Text('线路 · ${_lines[_lineIndex].name}')),
+                          if (!wide)
+                            PopupMenuItem(value: 'speed', child: Text('倍速 · ${_speed}x')),
+                          const PopupMenuItem(value: 'settings', child: Text('播放设置')),
+                          const PopupMenuItem(value: 'danmakuSettings', child: Text('弹幕设置')),
+                          const PopupMenuItem(value: 'searchDanmaku', child: Text('搜索弹幕')),
+                          const PopupMenuItem(value: 'sendDanmaku', child: Text('发送弹幕')),
+                        ],
                       ),
                     ),
-                    Row(
-                      children: <Widget>[
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () => _switchChapter(-1),
-                          child: const Text(
-                            '上一集',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => _switchChapter(1),
-                          child: const Text(
-                            '下一集',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                        ),
-                      ],
+                    button(
+                      _fullscreen ? '退出全屏' : '全屏',
+                      _fullscreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
+                      () => _setFullscreen(!_fullscreen),
                     ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: _pickSubtitles,
-                          child: const Text(
-                            '字幕',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                        ),
-                        if (_useNativeAndroidVideo)
-                          TextButton(
-                            onPressed: _enterPip,
-                            child: const Text(
-                              '画中画',
-                              style: TextStyle(color: Colors.white70),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
+                  ]),
+                ]),
               ),
             ),
-          ],
-        ),
-      ),
+          ]),
+        );
+      }),
     );
   }
 

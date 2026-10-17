@@ -1,18 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
-import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/features/anime/data/anime_collection_service.dart';
 import 'package:triomi/features/tracking/data/bangumi_client.dart';
 
 import 'fixtures/fake_http_client.dart';
-import 'fixtures/fake_preferences.dart';
 
 const firstSeason = MediaItem(sourceId: 'bangumi-anime', remoteId: '12',
   type: MediaType.anime, title: '相同标题');
@@ -110,27 +107,6 @@ void main() {
     expect(http.requests, hasLength(1));
   });
 
-  test('refresh failure keeps only clearly marked previous complete snapshot', () async {
-    var fail = false;
-    final service = serviceFor(FakeHttpClient((request) async {
-      if (fail) return const SourceResponse(statusCode: 503, body: 'offline');
-      return request.url.endsWith('/v0/me') ? jsonResponse({'id': 99, 'nickname': '账号'})
-        : jsonResponse({'total': 1, 'data': [collection(12, 3)]});
-    }));
-    final container = ProviderContainer(overrides: [
-      preferencesProvider.overrideWithValue(memoryPreferences()),
-      animeCollectionServiceProvider.overrideWithValue(service),
-    ]);
-    addTearDown(container.dispose);
-    await container.read(animeCloudProvider.notifier).refresh();
-    final first = container.read(animeCloudProvider).snapshot;
-    expect(first!.entries.single.status, 'doing');
-    fail = true;
-    await container.read(animeCloudProvider.notifier).refresh();
-    expect(container.read(animeCloudProvider).snapshot, same(first));
-    expect(container.read(animeCloudProvider).error, isA<SourceException>());
-    expect(container.read(animeCloudProvider).loading, isFalse);
-  });
 
   test('reused Bangumi client never reuses previous account uid after token switch', () async {
     final http = FakeHttpClient((request) async {
@@ -153,49 +129,6 @@ void main() {
     }
   });
 
-  test('post-write refresh supersedes an older in-flight collection snapshot', () async {
-    final firstRead = Completer<SourceResponse>(), started = Completer<void>();
-    var reads = 0;
-    final service = serviceFor(FakeHttpClient((request) async {
-      if (request.url.endsWith('/v0/me')) return jsonResponse({'id': 99});
-      if (reads++ == 0) { started.complete(); return firstRead.future; }
-      return jsonResponse({'total': 1, 'data': [collection(12, 2)]});
-    }));
-    final container = ProviderContainer(overrides: [
-      preferencesProvider.overrideWithValue(memoryPreferences()),
-      animeCollectionServiceProvider.overrideWithValue(service),
-    ]);
-    addTearDown(container.dispose);
-    final controller = container.read(animeCloudProvider.notifier);
-    final old = controller.refresh();
-    await started.future;
-    await controller.refresh(force: true);
-    expect(container.read(animeCloudProvider).snapshot!.entries.single.status, 'done');
-    firstRead.complete(jsonResponse({'total': 1, 'data': [collection(12, 3)]}));
-    await old;
-    expect(container.read(animeCloudProvider).snapshot!.entries.single.status, 'done');
-    expect(container.read(animeCloudProvider).loading, isFalse);
-  });
-  test('malformed successful refresh preserves the previous complete remote snapshot', () async {
-    Object payload = {'total': 1, 'data': [collection(12, 3)]};
-    final service = serviceFor(FakeHttpClient((request) async =>
-      jsonResponse(request.url.endsWith('/v0/me') ? {'id': 99} : payload)));
-    final container = ProviderContainer(overrides: [
-      preferencesProvider.overrideWithValue(memoryPreferences()),
-      animeCollectionServiceProvider.overrideWithValue(service),
-    ]);
-    addTearDown(container.dispose);
-    final controller = container.read(animeCloudProvider.notifier);
-    await controller.refresh();
-    final snapshot = container.read(animeCloudProvider).snapshot;
-    for (final invalid in [<String, Object?>{'total': 0}, {'total': 0, 'data': null},
-      {'total': 0, 'data': <Object?>[collection(12, 3)]}]) {
-      payload = invalid;
-      await controller.refresh();
-      expect(container.read(animeCloudProvider).snapshot, same(snapshot));
-      expect(container.read(animeCloudProvider).error, isNotNull);
-    }
-  });
 
   test('account authentication and parse failures cannot turn into not-collected', () async {
     for (final response in [

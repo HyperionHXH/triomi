@@ -82,11 +82,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   Future<void> _saveQueue = Future<void>.value();
 
   bool _chromeVisible = false;
-  double _cardDrag = 0;
+  double _pageDrag = 0;
   int _turnDirection = 1;
-  late final AnimationController _cardMotion;
+  late final AnimationController _pageMotion;
   double _pageWidth = 1;
-  bool _cardAnimating = false;
+  bool _pageAnimating = false;
+  bool _switchingChapter = false;
   Timer? _saveDebounce;
   bool _keepScreenOn = false;
   bool _scrollUpdateScheduled = false;
@@ -103,9 +104,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   @override
   void initState() {
     super.initState();
-    _cardMotion = AnimationController.unbounded(vsync: this)
+    _pageMotion = AnimationController.unbounded(vsync: this)
       ..addListener(() {
-        if (mounted) setState(() => _cardDrag = _cardMotion.value);
+        if (mounted) setState(() => _pageDrag = _pageMotion.value);
       });
     WidgetsBinding.instance.addObserver(this);
     _positions.itemPositions.addListener(_onScrollPositionsChanged);
@@ -131,7 +132,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   @override
   void dispose() {
     _disposing = true;
-    _cardMotion.dispose();
+    _pageMotion.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _positions.itemPositions.removeListener(_onScrollPositionsChanged);
     _saveDebounce?.cancel();
@@ -219,6 +220,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   Future<void> _load() async {
+    _pageMotion.stop();
+    _pageDrag = 0;
     final seq = ++_requestSeq;
     final chapter = _chapter;
     _saveDebounce?.cancel();
@@ -511,31 +514,34 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   // ---------------------------------------------------------------- 翻页/章节
 
   void _turnPage(int delta) {
-    if (_pages.isEmpty || _cardAnimating) return;
-    if (_settings.mode == NovelReadingMode.card) {
-      unawaited(_settleCard(delta));
-    } else {
+    if (!_hasReadableContent || _pages.isEmpty || _pageAnimating || _switchingChapter) return;
+    final target = _pageIndex + delta;
+    if (target < 0 || target >= _pages.length) {
+      // MixN changes chapters at the edge, without animating a blank page.
       _commitPageTurn(delta);
+      return;
     }
+    unawaited(_settlePageTurn(delta));
   }
 
-  Future<void> _settleCard(int delta) async {
-    if (_cardAnimating) return;
-    _cardAnimating = true;
+  Future<void> _settlePageTurn(int delta) async {
+    if (_pageAnimating) return;
+    _pageAnimating = true;
+    if (delta != 0) _turnDirection = delta;
     try {
-      _cardMotion.value = _cardDrag;
-      await _cardMotion.animateTo(
+      _pageMotion.value = _pageDrag;
+      await _pageMotion.animateTo(
         delta == 0 ? 0 : -delta * _pageWidth,
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOut,
       ).orCancel;
       if (!mounted) return;
       if (delta != 0) _commitPageTurn(delta);
-      _cardMotion.value = 0;
+      _pageMotion.value = 0;
     } on TickerCanceled {
       // Leaving the reader cancels the turn without committing a new position.
     } finally {
-      _cardAnimating = false;
+      _pageAnimating = false;
     }
   }
 
@@ -557,15 +563,21 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   Future<void> _switchChapter(int delta) async {
+    if (_switchingChapter) return;
     final target = _chapterIndex + delta;
     if (target < 0 || target >= _chapters.length) {
       _toast(delta > 0 ? '已经是最后一章' : '已经是第一章');
       return;
     }
-    await _persistProgress(commit: false);
-    if (!mounted) return;
-    setState(() => _chapterIndex = target);
-    await _load();
+    _switchingChapter = true;
+    try {
+      await _persistProgress(commit: false);
+      if (!mounted) return;
+      setState(() => _chapterIndex = target);
+      await _load();
+    } finally {
+      _switchingChapter = false;
+    }
   }
 
   void _toast(String message) {
@@ -616,6 +628,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     );
     if (!mounted || updated == null) return;
     final anchor = _readingPosition;
+    _pageMotion.stop();
+    _pageDrag = 0;
     final modeChanged = updated.mode != _settings.mode;
     final zhChanged = updated.zhMode != _settings.zhMode;
     if (updated.orientation != _settings.orientation) {
@@ -720,6 +734,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             '${contentWidth.round()}x${contentHeight.round()}';
         if (_layoutKey != layoutKey) {
           final anchor = _resumePosition ?? _readingPosition;
+          // A resize/reflow keeps the committed character anchor, not a
+          // partially animated target measured against the old viewport.
+          _pageMotion.stop();
+          _pageDrag = 0;
           _layoutKey = layoutKey;
           _pages = paginateReaderBlocks(
             _blocks,
@@ -743,34 +761,28 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           return const Center(child: Text('本章没有内容'));
         }
         final current = _pageIndex.clamp(0, _pages.length - 1);
-        _pageWidth = constraints.maxWidth;
+        _pageWidth = _settings.mode == NovelReadingMode.card
+            ? constraints.maxWidth : contentWidth;
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapUp: _handlePageTap,
-          onHorizontalDragUpdate: (details) {
-            if (_cardAnimating) return;
-            setState(() => _cardDrag = (_cardDrag + details.delta.dx)
+          // MixN's paged HorizontalPager disables user scrolling: taps/keys
+          // slide both pages together; only card mode follows a finger drag.
+          onHorizontalDragUpdate: _settings.mode != NovelReadingMode.card ? null : (details) {
+            if (_pageAnimating) return;
+            setState(() => _pageDrag = (_pageDrag + details.delta.dx)
               .clamp(-constraints.maxWidth, constraints.maxWidth));
           },
-          onHorizontalDragCancel: () {
-            if (_settings.mode == NovelReadingMode.card) {
-              unawaited(_settleCard(0));
-            } else {
-              setState(() => _cardDrag = 0);
-            }
+          onHorizontalDragCancel: _settings.mode != NovelReadingMode.card ? null : () {
+            unawaited(_settlePageTurn(0));
           },
-          onHorizontalDragEnd: (details) {
-            if (_cardAnimating) return;
+          onHorizontalDragEnd: _settings.mode != NovelReadingMode.card ? null : (details) {
+            if (_pageAnimating) return;
             final velocity = details.primaryVelocity ?? 0;
-            final delta = _cardDrag.abs() > constraints.maxWidth * 0.25
-                ? (_cardDrag < 0 ? 1 : -1)
+            final delta = _pageDrag.abs() > constraints.maxWidth * 0.25
+                ? (_pageDrag < 0 ? 1 : -1)
                 : velocity.abs() > 500 ? (velocity < 0 ? 1 : -1) : 0;
-            if (_settings.mode == NovelReadingMode.card) {
-              unawaited(_settleCard(delta));
-            } else {
-              setState(() => _cardDrag = 0);
-              if (delta != 0) _turnPage(delta);
-            }
+            unawaited(_settlePageTurn(delta));
           },
           child: Padding(
             padding: EdgeInsets.all(_settings.pageMargin),
@@ -779,35 +791,30 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               children: <Widget>[
                 Expanded(
                   child: ClipRect(
-                    child: _settings.mode == NovelReadingMode.card
-                      ? Stack(fit: StackFit.expand, children: [
-                          if (_cardDrag != 0 &&
-                              current + (_cardDrag < 0 ? 1 : -1) >= 0 &&
-                              current + (_cardDrag < 0 ? 1 : -1) < _pages.length)
-                            _pageContent(current + (_cardDrag < 0 ? 1 : -1)),
-                          Transform.translate(
-                            offset: Offset(_cardDrag, 0),
-                            child: Material(
-                              elevation: _cardDrag == 0 ? 0 : 8,
-                              color: _settings.theme.background,
-                              child: _pageContent(current),
-                            ),
-                          ),
-                        ])
-                      : AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 180),
-                          transitionBuilder: (child, animation) => SlideTransition(
-                            position: Tween<Offset>(
-                              begin: Offset(_turnDirection.toDouble(), 0),
-                              end: Offset.zero,
-                            ).animate(animation),
-                            child: child,
-                          ),
+                    child: Stack(fit: StackFit.expand, children: [
+                      if (_pageDrag != 0 &&
+                          current + (_pageDrag < 0 ? 1 : -1) >= 0 &&
+                          current + (_pageDrag < 0 ? 1 : -1) < _pages.length)
+                        Transform.translate(
+                          offset: Offset(_settings.mode == NovelReadingMode.card
+                            ? 0 : _pageDrag + _turnDirection * _pageWidth, 0),
                           child: SizedBox.expand(
-                            key: ValueKey('$_chapterIndex:$current'),
+                            key: const ValueKey('novel-adjacent-page'),
+                            child: _pageContent(current + (_pageDrag < 0 ? 1 : -1)),
+                          ),
+                        ),
+                      Transform.translate(
+                        offset: Offset(_pageDrag, 0),
+                        child: Material(
+                          elevation: _settings.mode == NovelReadingMode.card && _pageDrag != 0 ? 8 : 0,
+                          color: _settings.theme.background,
+                          child: SizedBox.expand(
+                            key: const ValueKey('novel-current-page'),
                             child: _pageContent(current),
                           ),
                         ),
+                      ),
+                    ]),
                   ),
                 ),
                 SizedBox(
@@ -836,11 +843,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   );
 
   void _handlePageTap(TapUpDetails details) {
-    final width = MediaQuery.sizeOf(context).width;
+    final width = _pageWidth + (_settings.mode == NovelReadingMode.paged
+      ? _settings.pageMargin * 2 : 0);
     final x = details.localPosition.dx;
-    if (x < width * 0.3) {
+    if (x < width * 0.25) {
       _turnPage(-1);
-    } else if (x > width * 0.7) {
+    } else if (x > width * 0.75) {
       _turnPage(1);
     } else {
       setState(() => _chromeVisible = !_chromeVisible);

@@ -23,13 +23,15 @@ class AppUpdateCancelled implements Exception {
 }
 
 class AppUpdateCancellation {
-  final CancelToken network = CancelToken();
   bool _cancelled = false;
   File? _marker;
+  final _requests = <CancelToken>{};
   bool get cancelled => _cancelled;
   void cancel() {
     _cancelled = true;
-    network.cancel();
+    for (final request in _requests.toList()) {
+      request.cancel();
+    }
     try { _marker?.writeAsStringSync('cancel'); } on FileSystemException { /* The operation may have just finished cleanup. */ }
   }
   void check() { if (_cancelled) throw const AppUpdateCancelled(); }
@@ -93,30 +95,115 @@ class AppUpdateCandidate {
   bool get canInstall => decision == 'upgrade';
 }
 
-class AppUpdateManifest {
-  const AppUpdateManifest({required this.versionCode, required this.version, required this.url, required this.sha256});
-  final int versionCode;
-  final String version, sha256;
+Uri _updateHttps(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null || uri.scheme != 'https' || uri.host.isEmpty || uri.userInfo.isNotEmpty || uri.hasFragment) {
+    throw const FormatException('只接受无用户名/密码及片段的 HTTPS 地址');
+  }
+  return uri;
+}
+
+const appUpdateRepository = 'HyperionHXH/triomi';
+const appUpdateReleasesApi = 'https://api.github.com/repos/$appUpdateRepository/releases?per_page=30';
+
+/// Release tags carry the same build number as Android and the Windows PE.
+/// Unknown tag conventions are deliberately not guessed from release titles.
+int? appUpdateReleaseCode(String tag) {
+  final match = RegExp(r'^v?(\d+\.\d+\.\d+)-test\.([1-9]\d*)$').firstMatch(tag);
+  final code = match == null ? null : int.tryParse(match[2]!);
+  return code != null && code <= 65535 ? code : null;
+}
+
+class AppUpdateReleaseAsset {
+  const AppUpdateReleaseAsset._(this.name, this.url, this.bytes, this.digest);
+  final String name;
   final Uri url;
-  static Uri https(String value) {
-    final uri = Uri.tryParse(value);
-    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty || uri.userInfo.isNotEmpty || uri.hasFragment) {
-      throw const FormatException('只接受无用户名/密码及片段的 HTTPS 地址');
-    }
-    return uri;
-  }
-  factory AppUpdateManifest.parse(List<int> bytes) {
-    if (bytes.length > 64 * 1024) throw const FormatException('更新清单超过 64 KiB');
+  final int bytes;
+  final String? digest;
+}
+
+class AppUpdateRelease {
+  const AppUpdateRelease._({required this.tag, required this.name, required this.version,
+    required this.versionCode, required this.notes, required this.prerelease,
+    required this.publishedAt, required this.assets});
+  final String tag, name, version, notes, publishedAt;
+  final int versionCode;
+  final bool prerelease;
+  final Map<String, AppUpdateReleaseAsset> assets;
+  bool isNewerThan(AppUpdateInfo installed) => versionCode > installed.versionCode;
+
+  static List<AppUpdateRelease> parse(List<int> bytes) {
+    if (bytes.length > 4 * 1024 * 1024) throw const FormatException('GitHub 版本列表超过 4 MiB');
     final raw = jsonDecode(utf8.decode(bytes));
-    if (raw is! Map || raw['versionCode'] is! int || (raw['versionCode'] as int) < 1 ||
-        raw['version'] is! String || (raw['version'] as String).isEmpty ||
-        (raw['version'] as String).length > 256 || raw['url'] is! String ||
-        raw['sha256'] is! String || !_hashPattern.hasMatch(raw['sha256'] as String)) {
-      throw const FormatException('清单需要有效 versionCode、version、HTTPS url 和完整 sha256');
+    if (raw is! List || raw.length > 30) throw const FormatException('GitHub 版本列表格式无效');
+    final releases = <AppUpdateRelease>[];
+    final codes = <int>{};
+    for (final item in raw) {
+      if (item is! Map || item['draft'] != false || item['tag_name'] is! String) continue;
+      final tag = item['tag_name'] as String;
+      final code = appUpdateReleaseCode(tag);
+      if (code == null) continue;
+      if (!codes.add(code)) throw const FormatException('发布版本的构建号重复');
+      final assets = <String, AppUpdateReleaseAsset>{};
+      if (item['assets'] is! List || (item['assets'] as List).length > 30) {
+        throw const FormatException('GitHub 发布资产格式无效');
+      }
+      for (final entry in item['assets'] as List) {
+        if (entry is! Map || entry['name'] is! String) continue;
+        final name = entry['name'] as String;
+        if (!const {'triomi-android.apk', 'triomi-windows.zip', 'triomi-windows.msi',
+          'triomi-windows.update.json', 'SHA256SUMS.txt'}.contains(name)) {
+          continue;
+        }
+        if (entry['state'] != 'uploaded' || entry['size'] is! int ||
+            (entry['size'] as int) < 1 || (entry['size'] as int) > appUpdateMaxBytes ||
+            entry['browser_download_url'] is! String || assets.containsKey(name)) {
+          throw const FormatException('GitHub 发布资产不完整或重复');
+        }
+        final url = _updateHttps(entry['browser_download_url'] as String);
+        if (url.host != 'github.com' || url.port != 443 || url.hasQuery ||
+            url.path != '/$appUpdateRepository/releases/download/$tag/$name') {
+          throw const FormatException('发布资产不属于官方仓库及当前版本');
+        }
+        final digest = entry['digest'];
+        if (digest != null && (digest is! String || !RegExp(r'^sha256:[a-f0-9]{64}$').hasMatch(digest))) {
+          throw const FormatException('GitHub 资产摘要无效');
+        }
+        assets[name] = AppUpdateReleaseAsset._(name, url, entry['size'] as int,
+          digest == null ? null : (digest as String).substring(7));
+      }
+      final notes = item['body'] is String ? item['body'] as String : '';
+      final name = item['name'] is String ? item['name'] as String : tag;
+      if (notes.length > 128 * 1024 || name.length > 1024) throw const FormatException('发布说明过长');
+      releases.add(AppUpdateRelease._(tag: tag, name: name,
+        version: tag.replaceFirst(RegExp(r'^v'), '').split('-test.').first,
+        versionCode: code, notes: notes, prerelease: item['prerelease'] == true,
+        publishedAt: item['published_at'] is String ? item['published_at'] as String : '',
+        assets: Map.unmodifiable(assets)));
     }
-    return AppUpdateManifest(versionCode: raw['versionCode'] as int,
-      version: raw['version'] as String, url: https(raw['url'] as String), sha256: raw['sha256'] as String);
+    releases.sort((a, b) => b.versionCode.compareTo(a.versionCode));
+    return releases;
   }
+}
+
+/// Only GitHub's official asset CDN is trusted across redirects. No wildcard
+/// suffixes, arbitrary ports, credentials, fragments or HTTPS downgrades.
+bool appUpdateTrustedRedirect(Uri uri, Uri original) => uri.scheme == 'https' &&
+    uri.port == 443 && uri.userInfo.isEmpty && !uri.hasFragment &&
+    (const {'release-assets.githubusercontent.com', 'objects.githubusercontent.com',
+      'github-releases.githubusercontent.com'}.contains(uri.host) ||
+      (uri.host == 'github.com' && uri.path == original.path && !uri.hasQuery));
+
+Map<String, String> appUpdateChecksums(List<int> bytes) {
+  if (bytes.length > 64 * 1024) throw const FormatException('校验文件超过 64 KiB');
+  final result = <String, String>{};
+  for (final line in const LineSplitter().convert(utf8.decode(bytes))) {
+    if (line.trim().isEmpty) continue;
+    final match = RegExp(r'^([a-f0-9]{64}) [ *]([^/\\\r\n]+)$').firstMatch(line);
+    if (match == null || result.containsKey(match[2])) throw const FormatException('SHA256SUMS 格式无效或名称重复');
+    result[match[2]!] = match[1]!;
+  }
+  return result;
 }
 
 /// Private bounded copy: cancellation and length/hash mismatches remove the partial file.
@@ -158,11 +245,25 @@ Future<String> stageAppUpdateBytes(Stream<List<int>> input, File destination, {
 }
 
 class AppUpdateService {
-  AppUpdateService({Dio? dio, this.windowsUpdateRoot}) : _dio = dio ?? Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 20), receiveTimeout: const Duration(seconds: 40),
-    followRedirects: false, maxRedirects: 0));
+  AppUpdateService({Dio? dio, this.windowsUpdateRoot, Future<void> Function(List<String>)? launchExplorer})
+    : _launchExplorer = launchExplorer ?? _startExplorer,
+      _dio = dio ?? Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 20), receiveTimeout: const Duration(seconds: 40),
+        followRedirects: false, maxRedirects: 0)) {
+    // This client is updater-owned. Never inherit a source login/cookie jar.
+    _dio.options.headers.clear();
+    _dio.interceptors.clear();
+    _dio.options.queryParameters.clear();
+    _dio.options.extra.clear();
+    _dio.options.connectTimeout = const Duration(seconds: 20);
+    _dio.options.receiveTimeout = const Duration(seconds: 40);
+  }
   static const _native = MethodChannel('triomi/app-update');
   final Dio _dio;
+  final Future<void> Function(List<String>) _launchExplorer;
+  static Future<void> _startExplorer(List<String> arguments) async {
+    await Process.start('explorer.exe', arguments);
+  }
   /// Explicit owned root for desktop staging (production defaults to support).
   final Directory? windowsUpdateRoot;
   void Function(AppUpdateProgress)? onProgress;
@@ -210,53 +311,187 @@ class AppUpdateService {
     return AppUpdateCandidate(current: installed, offered: offered, path: raw['path'] as String,
       bytes: raw['bytes'] as int, source: raw['source'] as String, decision: decision, signatureVerified: verified);
   }
+  Future<List<AppUpdateRelease>> releases(AppUpdateCancellation token) async =>
+    AppUpdateRelease.parse(await _readBounded(Uri.parse(appUpdateReleasesApi), token, 4 * 1024 * 1024));
 
-  Future<AppUpdateManifest> checkManifest(String endpoint, AppUpdateCancellation token) async {
-    final uri = AppUpdateManifest.https(endpoint);
-    final response = await _request(uri, token);
+  Future<List<int>> _readBounded(Uri uri, AppUpdateCancellation token, int limit,
+      {AppUpdateReleaseAsset? asset}) async {
+    final body = await _request(uri, token, officialAsset: asset != null);
     final bytes = <int>[];
-    await for (final chunk in response.stream) {
-      token.check();
-      if (bytes.length + chunk.length > 64 * 1024) throw const FormatException('更新清单超过 64 KiB');
-      bytes.addAll(chunk);
-    }
-    token.check();
-    return AppUpdateManifest.parse(bytes);
-  }
-  Future<ResponseBody> _request(Uri uri, AppUpdateCancellation token) async {
-    token.check();
     try {
-      final response = await _dio.getUri<ResponseBody>(uri,
-        options: Options(responseType: ResponseType.stream, followRedirects: false,
-          validateStatus: (status) => status == 200, headers: const {'Accept-Encoding': 'identity'}),
-        cancelToken: token.network);
-      return response.data!;
+      await for (final chunk in body.stream) {
+        token.check();
+        if (bytes.length + chunk.length > limit) throw const FormatException('更新元数据超过大小限制');
+        bytes.addAll(chunk);
+      }
     } on DioException {
       token.check();
-      // Do not expose request URL query, tokens or headers in errors/logs.
-      throw const HttpException('HTTPS 请求失败、超时或被重定向；未接受重定向和不安全连接');
+      throw const HttpException('更新元数据传输失败；请重试');
+    }
+    token.check();
+    if (asset != null && (bytes.length != asset.bytes ||
+        (asset.digest != null && sha256.convert(bytes).toString() != asset.digest))) {
+      throw const FormatException('发布元数据大小或 GitHub SHA-256 不符');
+    }
+    return bytes;
+  }
+  /// Resolves integrity before any payload is staged or handed to a platform.
+  Future<Map<String, String>> releaseChecksums(AppUpdateRelease release, AppUpdateCancellation token) async {
+    final sums = release.assets['SHA256SUMS.txt'];
+    final checksums = sums == null ? <String, String>{} : appUpdateChecksums(
+      await _readBounded(sums.url, token, 64 * 1024, asset: sums));
+    final result = <String, String>{};
+    for (final asset in release.assets.values) {
+      final checksum = checksums[asset.name];
+      if (checksum != null && asset.digest != null && checksum != asset.digest) {
+        throw const FormatException('SHA256SUMS 与 GitHub 资产摘要不一致');
+      }
+      final hash = checksum ?? asset.digest;
+      if (hash != null) result[asset.name] = hash;
+    }
+    token.check();
+    return result;
+  }
+
+  Future<AppUpdateCandidate> downloadRelease(AppUpdateRelease release, AppUpdateCancellation token) async {
+    final android = Platform.isAndroid;
+    if (!android && !Platform.isWindows) throw UnsupportedError('仅支持 Android 和 Windows 更新');
+    final asset = release.assets[android ? 'triomi-android.apk' : 'triomi-windows.zip'];
+    if (asset == null) throw const FormatException('此版本没有当前平台的完整更新包');
+    final checksums = await releaseChecksums(release, token);
+    String expected(AppUpdateReleaseAsset value) {
+      final hash = checksums[value.name];
+      if (hash == null) throw const FormatException('发布资产缺少可信传输的完整 SHA-256');
+      return hash;
+    }
+    final hash = expected(asset);
+    if (android) {
+      return _downloadApk(release, asset, hash, token);
+    }
+    final manifestAsset = release.assets['triomi-windows.update.json'];
+    if (manifestAsset == null) throw const FormatException('此版本缺少 Windows 完整成员清单');
+    final manifestBytes = await _readBounded(manifestAsset.url, token, 1024 * 1024, asset: manifestAsset);
+    if (sha256.convert(manifestBytes).toString() != expected(manifestAsset)) {
+      throw const FormatException('Windows 清单 SHA-256 不符');
+    }
+    final raw = jsonDecode(utf8.decode(manifestBytes));
+    if (raw is! Map || raw['versionCode'] != release.versionCode || raw['version'] != release.version || raw['sha256'] != hash) {
+      throw const FormatException('Windows 清单与 GitHub 版本或 ZIP 摘要不符');
+    }
+    final temporary = await Directory.systemTemp.createTemp('triomi-release-');
+    try {
+      final zip = File(p.join(temporary.path, 'release.zip'));
+      final manifest = File(p.join(temporary.path, 'release.json'));
+      await manifest.writeAsBytes(manifestBytes, flush: true);
+      final body = await _request(asset.url, token, officialAsset: true);
+      await stageAppUpdateBytes(body.stream, zip, cancellation: token, expectedHash: hash,
+        expectedBytes: asset.bytes, onProgress: onProgress);
+      final candidate = await stageWindowsBundle(zip.path, manifest.path, token);
+      return AppUpdateCandidate(current: candidate.current, offered: candidate.offered,
+        path: candidate.path, bytes: candidate.bytes, source: '官方 GitHub $appUpdateRepository · ${release.tag}（Windows 未签名）',
+        decision: candidate.decision, signatureVerified: candidate.signatureVerified, manifestPath: candidate.manifestPath);
+    } finally { await temporary.delete(recursive: true); }
+  }
+
+  Future<void> revealWindowsBundle(AppUpdateCandidate candidate, AppUpdateCancellation token) async {
+    token.check();
+    if (!Platform.isWindows || candidate.offered.platform != 'windows' || !candidate.canInstall) {
+      throw StateError('只能打开已核验的新版本 Windows 更新包');
+    }
+    final file = await _regular(candidate.path);
+    token.check();
+    final digest = _DigestSink();
+    final hash = sha256.startChunkedConversion(digest);
+    var bytes = 0;
+    try {
+      await for (final chunk in file.openRead()) {
+        token.check();
+        bytes += chunk.length;
+        if (bytes > appUpdateMaxBytes) throw const FormatException('暂存 ZIP 大小超限');
+        hash.add(chunk);
+        onProgress?.call(AppUpdateProgress('handoff', bytes, candidate.bytes));
+      }
+    } finally { hash.close(); }
+    token.check();
+    if (bytes != candidate.bytes || digest.value.toString() != candidate.offered.sha256) {
+      throw const FormatException('暂存 ZIP 已改变，请重新下载并核验');
+    }
+    token.check();
+    await _launchExplorer(['/select,', file.path]);
+  }
+
+  Future<ResponseBody> _request(Uri uri, AppUpdateCancellation token, {bool officialAsset = false}) async {
+    final original = uri;
+    for (var redirects = 0; ; redirects++) {
+      token.check();
+      if (officialAsset && !appUpdateTrustedRedirect(uri, original)) {
+        throw const FormatException('更新下载重定向离开 GitHub 官方资产主机');
+      }
+      final requestToken = CancelToken();
+      token._requests.add(requestToken);
+      void abortRequest() {
+        token._requests.remove(requestToken);
+        requestToken.cancel();
+      }
+      try {
+        final response = await _dio.getUri<ResponseBody>(uri,
+          options: Options(responseType: ResponseType.stream, followRedirects: false,
+            validateStatus: (status) => status == 200 || (officialAsset && [301, 302, 303, 307, 308].contains(status)),
+            headers: const {'Accept-Encoding': 'identity', 'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'Triomi-App-Updater'}),
+          cancelToken: requestToken);
+        if (token.cancelled) {
+          abortRequest();
+          await response.data!.stream.listen(null, onError: (Object _) {}).cancel();
+          token.check();
+        }
+        if (response.statusCode == 200) {
+          final body = response.data!;
+          Stream<Uint8List> chunks() async* {
+            try {
+              yield* body.stream;
+            } finally { abortRequest(); }
+          }
+          return ResponseBody(chunks(), body.statusCode, headers: body.headers);
+        }
+        // Dio's stream cancellation alone does not abort its underlying socket.
+        // Abort this hop before validating/following the next location.
+        abortRequest();
+        await response.data!.stream.listen(null, onError: (Object _) {}).cancel();
+        final location = response.headers.value('location');
+        if (redirects >= 4 || location == null) throw const FormatException('GitHub 下载重定向过多或缺少目标');
+        final next = uri.resolve(location);
+        if (!appUpdateTrustedRedirect(next, original)) throw const FormatException('拒绝不安全的 GitHub 下载重定向');
+        uri = next;
+      } on DioException {
+        abortRequest();
+        token.check();
+        // Never expose signed CDN queries, source credentials or headers.
+        throw const HttpException('更新 HTTPS 请求失败、超时或被拒绝；请稍后重试（GitHub 可能限流）');
+      }
     }
   }
-  Future<AppUpdateCandidate> downloadApk(AppUpdateManifest manifest, String endpoint, AppUpdateCancellation token) async {
-    if (!Platform.isAndroid) throw UnsupportedError('网络 APK 仅支持 Android；Windows 请选择独立桌面 ZIP');
+  Future<AppUpdateCandidate> _downloadApk(AppUpdateRelease release, AppUpdateReleaseAsset asset,
+      String hash, AppUpdateCancellation token) async {
+    if (!Platform.isAndroid) throw UnsupportedError('网络 APK 仅支持 Android');
     final directory = await _native.invokeMethod<String>('stagingDirectory');
     final root = await Directory(directory!).resolveSymbolicLinks();
     final incoming = File(p.join(root, 'download-${DateTime.now().microsecondsSinceEpoch}.apk'));
     try {
-      final body = await _request(manifest.url, token);
+      final body = await _request(asset.url, token, officialAsset: true);
       final length = int.tryParse(body.headers['content-length']?.firstOrNull ?? '');
-      if (length != null && (length < 1 || length > appUpdateMaxBytes)) throw const FormatException('更新文件长度超限');
-      await stageAppUpdateBytes(body.stream, incoming, cancellation: token, expectedHash: manifest.sha256,
-        expectedBytes: length, onProgress: onProgress);
+      if (length != null && length != asset.bytes) throw const FormatException('更新文件长度与发布资产不符');
+      await stageAppUpdateBytes(body.stream, incoming, cancellation: token, expectedHash: hash,
+        expectedBytes: asset.bytes, onProgress: onProgress);
       token.check();
       final raw = (await _native.invokeMethod<Map<Object?, Object?>>('inspect', {
-        'path': incoming.path, 'sha256': manifest.sha256,
-        'source': '用户手动指定 HTTPS 清单 ${_source(endpoint)}；APK ${_source(manifest.url.toString())}',
+        'path': incoming.path, 'sha256': hash,
+        'source': '官方 GitHub $appUpdateRepository · ${release.tag}',
       }))!;
       final candidate = _candidate(raw);
-      if (candidate.offered.versionCode != manifest.versionCode || candidate.offered.version != manifest.version) {
+      if (candidate.offered.versionCode != release.versionCode || candidate.offered.version != release.version) {
         await discard(candidate);
-        throw const FormatException('APK 实际版本与手动清单不符');
+        throw const FormatException('APK 实际版本与发布版本不符');
       }
       if (token.cancelled) await discard(candidate);
       token.check();
@@ -361,12 +596,6 @@ class AppUpdateService {
     } catch (_) { await directory.delete(recursive: true); rethrow; }
     finally { token._marker = null; }
   }
-}
-
-String _source(String url) {
-  final uri = Uri.parse(url);
-  // Only origins are shown; private endpoint paths/query are never copied to diagnostics.
-  return '${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}';
 }
 
 Future<File> _regular(String path) async {

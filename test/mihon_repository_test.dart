@@ -238,6 +238,16 @@ void main() {
       await tester.pump();
 
       expect(http.requests, isEmpty);
+      expect(find.byType(TextFormField), findsNothing);
+      expect(find.byTooltip('搜索插件名称'), findsOneWidget);
+      await tester.tap(find.byTooltip('搜索插件名称'));
+      await tester.pump();
+      expect(find.byType(TextFormField), findsOneWidget);
+      await tester.enterText(find.byType(TextFormField), '不存在的插件');
+      await tester.pump();
+      expect(find.byType(Switch), findsNothing);
+      await tester.enterText(find.byType(TextFormField), '');
+      await tester.pump();
       expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
       final switchNode = tester.getSemantics(
         find.bySemanticsLabel('启用扩展 MangaDex'),
@@ -399,6 +409,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.widgetWithText(ListTile, 'MangaDex'), findsOneWidget);
       expect(find.widgetWithText(ListTile, 'English'), findsOneWidget);
+      expect(find.byType(TextFormField), findsNothing);
+      await tester.tap(find.byTooltip('搜索插件名称'));
+      await tester.pumpAndSettle();
       expect(find.byType(TextFormField), findsOneWidget);
       await tester.enterText(find.byType(TextFormField), 'English');
       await tester.pumpAndSettle();
@@ -406,6 +419,9 @@ void main() {
       expect(find.widgetWithText(ListTile, 'MangaDex'), findsNothing);
       expect(http.requests, hasLength(1));
       await open(2);
+      expect(find.byType(TextFormField), findsNothing);
+      await tester.tap(find.byTooltip('搜索插件名称'));
+      await tester.pumpAndSettle();
       expect(tester.widget<TextFormField>(find.byType(TextFormField)).initialValue, 'English');
       expect(find.widgetWithText(ListTile, 'MangaDex'), findsNothing);
       await tester.tap(find.text('浏览扩展'));

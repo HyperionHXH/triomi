@@ -71,6 +71,18 @@ class _AnimeWorkspacePageState extends ConsumerState<AnimeWorkspacePage> {
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SegmentedButton<int>(
+              showSelectedIcon: false,
+              style: ButtonStyle(
+                backgroundColor: WidgetStateProperty.resolveWith((states) =>
+                  states.contains(WidgetState.selected)
+                    ? Theme.of(context).colorScheme.primaryContainer : null),
+                foregroundColor: WidgetStateProperty.resolveWith((states) =>
+                  states.contains(WidgetState.selected)
+                    ? Theme.of(context).colorScheme.onPrimaryContainer : null),
+                textStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
+                  fontWeight: states.contains(WidgetState.selected)
+                    ? FontWeight.bold : FontWeight.normal)),
+              ),
               segments: const [
                 ButtonSegment(
                   value: 0,

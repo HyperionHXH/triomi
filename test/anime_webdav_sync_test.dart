@@ -108,6 +108,17 @@ void main() {
     expect(fixture.http.uploads.single.headers['If-Match'], '"revision-1"');
   });
 
+  test('opaque DAV revision tokens preserve conditional conflict protection', () async {
+    fixture.body = document([record(remoteItem)]);
+    fixture.etag = 'opaque_revision-1';
+    await sync().sync();
+    expect(fixture.http.uploads.single.headers['If-Match'], 'opaque_revision-1');
+    fixture.http.uploads.clear();
+    fixture.putStatus = 412;
+    await expectLater(sync().sync(), throwsA(isA<SourceException>()));
+    expect(fixture.http.uploads.single.headers['If-Match'], 'opaque_revision-1');
+  });
+
   test('HTTP conflict leaves all local rows unchanged and exposes failure', () async {
     await library.addAnimeFollow(localItem);
     fixture.body = document([record(remoteItem)]);

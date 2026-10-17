@@ -114,6 +114,9 @@ class AnimeWebDavSync {
     _busy = true;
     try {
       _checkAccount();
+      // Missing parent collections may return 409 rather than a document 404.
+      await client.ensureDirectory(document);
+      _checkAccount();
       final local = await library.listAnimeFollows();
       final tombstones = await _tombstones();
       final expected = await client.stat(document);

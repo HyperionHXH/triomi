@@ -146,7 +146,7 @@ void main() {
         } else {
           for (var i = 0; i < 7; i++) {
             await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-            await tester.pump();
+            await tester.pumpAndSettle();
           }
         }
         await settle(tester);

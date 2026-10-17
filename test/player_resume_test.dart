@@ -76,6 +76,8 @@ void main() {
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       final channels = <MethodChannel>[];
       final opens = <Map<Object?, Object?>>[];
+      final nativeCalls = <MethodCall>[];
+      Completer<void>? pendingPause;
       messenger.setMockMethodCallHandler(SystemChannels.platform_views, (
         call,
       ) async {
@@ -84,6 +86,8 @@ void main() {
           final channel = MethodChannel('triomi/native-video/$id');
           channels.add(channel);
           messenger.setMockMethodCallHandler(channel, (call) async {
+            nativeCalls.add(call);
+            if (call.method == 'pause') await pendingPause?.future;
             if (call.method == 'setUrl') {
               opens.add(Map<Object?, Object?>.from(call.arguments as Map));
             }
@@ -104,6 +108,13 @@ void main() {
           await tester.pump();
         }
       }
+      // Danmaku keeps scheduling frames during playback. Wait for route
+      // transitions without requiring the entire player to become idle.
+      Future<void> settleRoute() async {
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+      }
 
       Future<void> event(String method, Map<String, Object?> args) async {
         final delivered = Completer<void>();
@@ -120,6 +131,7 @@ void main() {
 
       addTearDown(() async {
         await tester.pumpWidget(const SizedBox());
+        await tester.binding.setSurfaceSize(null);
         await settle();
         container.dispose();
         await db.close();
@@ -170,11 +182,81 @@ void main() {
         71,
         reason: 'preparation must not overwrite progress with zero',
       );
+      // The selected label must update even if pausing the old, unprepared
+      // native player has not answered yet.
+      final pause = Completer<void>();
+      pendingPause = pause;
+      final opensBeforeSelection = opens.length;
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Episode 2'));
+      await tester.pump();
+      expect(find.text('正在选择：Episode 2'), findsOneWidget);
+      expect(opens.length, opensBeforeSelection);
+      pause.complete();
+      pendingPause = null;
+      await settle();
+      expect(opens.last['title'], contains('Episode 2'));
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Episode 1'));
+      await settle();
+      expect(find.text('正在选择：Episode 1'), findsOneWidget);
+      expect(opens.last['startMilliseconds'], 71000);
       await event('prepared', {
         'position': 71000,
         'duration': 120000,
         'playing': true,
       });
+      final previous = find.widgetWithIcon(IconButton, Icons.skip_previous_rounded);
+      final next = find.widgetWithIcon(IconButton, Icons.skip_next_rounded);
+      expect(tester.widget<IconButton>(previous).onPressed, isNull);
+      expect(tester.widget<IconButton>(next).onPressed, isNotNull);
+      for (final size in [
+        const Size(280, 640),
+        const Size(320, 700),
+        const Size(720, 400),
+        const Size(1280, 800),
+      ]) {
+        await tester.binding.setSurfaceSize(size);
+        await tester.pump();
+        expect(tester.takeException(), isNull,
+            reason: 'transport must fit the actual video viewport at $size');
+        final y = tester.getCenter(find.byTooltip('暂停')).dy;
+        for (final control in [previous, next, find.byTooltip('字幕'), find.byTooltip('画中画')]) {
+          expect(tester.getCenter(control).dy, y,
+              reason: 'episode, playback, subtitle and PiP actions share one row');
+        }
+      }
+      await tester.binding.setSurfaceSize(const Size(320, 700));
+      await tester.pump();
+      await tester.tap(find.byTooltip('暂停'));
+      await tester.pump();
+      expect(nativeCalls.last.method, 'pause');
+      await tester.drag(find.byType(Slider), const Offset(30, 0));
+      await tester.pump();
+      expect(nativeCalls.any((call) => call.method == 'seek'), isTrue);
+      await tester.tap(find.byTooltip('字幕'));
+      await settleRoute();
+      await tester.tap(find.text('关闭字幕'));
+      await settleRoute();
+      expect(nativeCalls.any((call) => call.method == 'selectSubtitle'), isTrue);
+      await tester.tap(find.byTooltip('更多选项'));
+      await settleRoute();
+      expect(find.text('剧集'), findsOneWidget);
+      expect(find.text('播放设置'), findsOneWidget);
+      expect(find.text('弹幕设置'), findsOneWidget);
+      await tester.tap(find.text('倍速 · 1.0x'));
+      await settleRoute();
+      expect(find.text('1.5x'), findsOneWidget);
+      await tester.tap(find.text('1.5x'));
+      await settleRoute();
+      expect(nativeCalls.any((call) => call.method == 'setRate' &&
+          (call.arguments as Map)['rate'] == 1.5), isTrue);
+      await tester.tap(find.byTooltip('全屏'));
+      await tester.binding.setSurfaceSize(const Size(720, 320));
+      await settleRoute();
+      expect(find.byTooltip('退出全屏'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byTooltip('退出全屏'));
+      await tester.binding.setSurfaceSize(null);
+      await settleRoute();
       expect(find.text('正在加载视频…'), findsNothing);
       await event('completed', {
         'position': 120000,
@@ -194,12 +276,31 @@ void main() {
         'duration': 100000,
         'playing': true,
       });
+      expect(tester.widget<IconButton>(next).onPressed, isNull,
+          reason: 'manual next must also stop at the playlist boundary');
+      expect(tester.widget<IconButton>(previous).onPressed, isNotNull);
       await event('completed', {
         'position': 100000,
         'duration': 100000,
         'playing': false,
       });
       expect(opens.length, opensAtLastEpisode, reason: '末集不得自动串入另一播放列表');
+      await tester.tap(previous);
+      await settle();
+      await event('prepared', {
+        'position': 120000,
+        'duration': 180000,
+        'playing': true,
+      });
+      expect(opens.last['title'], contains('Episode 1'));
+      await tester.tap(next);
+      await settle();
+      await event('prepared', {
+        'position': 100000,
+        'duration': 180000,
+        'playing': true,
+      });
+      expect(opens.last['title'], contains('Episode 2'));
       await tester.pumpWidget(const SizedBox());
       await settle();
       await tester.pumpWidget(page(2));

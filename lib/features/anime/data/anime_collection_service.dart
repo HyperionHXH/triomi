@@ -31,8 +31,8 @@ class AnimeCollectionSnapshot {
   final DateTime loadedAt;
 }
 
-/// Account-bound protocol operations. Remote collection never becomes a local
-/// favourite, and an account switch invalidates every in-flight publication.
+/// Account-bound protocol operations. An explicit shelf sync reconciles these
+/// states with local favourites; stale-account results are never published.
 class AnimeCollectionService {
   AnimeCollectionService({required this.client, required String? Function() token,
     required this.canonical}) : token = token, _identityToken = token();
@@ -54,6 +54,8 @@ class AnimeCollectionService {
     _check(value);
     return value;
   }
+
+  void checkAccount() => _accountToken();
 
   void _check(String expected) {
     if (_disposed || token() != expected || expected != _identityToken) {
@@ -142,7 +144,9 @@ class AnimeCollectionService {
     final accountToken = _accountToken();
     final operation = _writes.then((_) async {
       _check(accountToken);
-      final id = await _subject(item);
+      final id = item.sourceId == 'bangumi-anime' && item.type == MediaType.anime
+          ? int.tryParse(item.remoteId) : await _subject(item);
+      if (id == null || id <= 0) throw StateError('Bangumi 动画身份无效');
       _check(accountToken);
       await _requests.run(() => client.upsertCollection(id, token: accountToken, status: status));
       _check(accountToken);
@@ -169,49 +173,3 @@ final animeCollectionServiceProvider = Provider<AnimeCollectionService>((ref) {
   return service;
 });
 
-final animeCollectionStatusProvider = FutureProvider.autoDispose
-  .family<BangumiCollection?, MediaItem>((ref, item) =>
-    ref.watch(animeCollectionServiceProvider).status(item));
-
-class AnimeCloudState {
-  const AnimeCloudState({this.snapshot, this.loading = false, this.error});
-  final AnimeCollectionSnapshot? snapshot;
-  final bool loading;
-  final Object? error;
-}
-
-class AnimeCloudController extends Notifier<AnimeCloudState> {
-  int _generation = 0;
-  @override
-  AnimeCloudState build() {
-    ref.watch(animeCollectionServiceProvider);
-    _generation++;
-    ref.onDispose(() => _generation++);
-    if (ref.read(preferencesProvider).get<String>('anime.follows.source') == 'bangumi') {
-      final generation = _generation;
-      Future.microtask(() {
-        if (ref.mounted && generation == _generation) refresh();
-      });
-    }
-    return const AnimeCloudState();
-  }
-
-  Future<void> refresh({bool force = false}) async {
-    if (state.loading && !force) return;
-    final generation = ++_generation;
-    final service = ref.read(animeCollectionServiceProvider);
-    final previous = state.snapshot;
-    state = AnimeCloudState(snapshot: previous, loading: true);
-    try {
-      final snapshot = await service.load();
-      if (!ref.mounted || generation != _generation) return;
-      state = AnimeCloudState(snapshot: snapshot);
-    } catch (error) {
-      if (!ref.mounted || generation != _generation) return;
-      state = AnimeCloudState(snapshot: previous, error: error);
-    }
-  }
-}
-
-final animeCloudProvider = NotifierProvider<AnimeCloudController, AnimeCloudState>(
-  AnimeCloudController.new);

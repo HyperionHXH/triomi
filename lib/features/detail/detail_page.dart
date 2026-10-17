@@ -861,17 +861,6 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                   showDragHandle: true,
                   builder: (_) => AnimeInfoSheet(id: item.remoteId),
                 );
-              case 'local-favorite':
-                showModalBottomSheet<void>(
-                  context: context,
-                  showDragHandle: true,
-                  builder: (_) => SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: _FollowButton(item: item),
-                    ),
-                  ),
-                );
               default:
                 final kind = TrackingServiceKind.values
                     .where((kind) => 'sync:${kind.name}' == value)
@@ -889,8 +878,6 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           itemBuilder: (_) => [
             if (item.sourceId == 'bangumi-anime')
               const PopupMenuItem(value: 'info', child: Text('完整番剧资料')),
-            if (item.type == MediaType.anime)
-              const PopupMenuItem(value: 'local-favorite', child: Text('本机收藏')),
             if (playable != null &&
                 playable.supportsContent &&
                 playable.chapters.isNotEmpty &&

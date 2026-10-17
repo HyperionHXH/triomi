@@ -56,10 +56,6 @@ class ProfilePage extends StatelessWidget {
                         ],
                       ),
                     ),
-                    TextButton(
-                      onPressed: () => context.push(AppRoutes.sources),
-                      child: const Text('管理'),
-                    ),
                   ],
                 ),
               ),
@@ -68,35 +64,31 @@ class ProfilePage extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: SettingsGroup(
-                title: '设置与来源',
+                title: '历史与本地内容',
                 children: <Widget>[
                   ListTile(
-                    leading: const Icon(Icons.settings_outlined),
-                    title: const Text('设置'),
-                    subtitle: const Text('外观、网络、下载、存储与应用更新'),
+                    leading: const Icon(Icons.history),
+                    title: const Text('全部观看与阅读历史'),
                     trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.settings),
+                    onTap: () => context.push(AppRoutes.history),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.extension_outlined),
-                    title: const Text('来源与规则管理'),
-                    subtitle: const Text('导入规则、启用或移除来源'),
+                    leading: const Icon(Icons.download_outlined),
+                    title: const Text('下载管理'),
                     trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.sources),
+                    onTap: () => context.push(AppRoutes.downloads),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.font_download_outlined),
-                    title: const Text('阅读字体'),
-                    subtitle: const Text('导入 TTF / OTF 供小说阅读器使用'),
+                    leading: const Icon(Icons.folder_open_outlined),
+                    title: const Text('本地漫画库'),
+                    subtitle: const Text('导入 CBZ / ZIP 或图片目录，离线阅读'),
                     trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.fonts),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.sync_outlined),
-                    title: const Text('追踪账号'),
-                    subtitle: const Text('Bangumi / AniList'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.tracking),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => const LocalComicLibraryPage(),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -127,6 +119,13 @@ class ProfilePage extends StatelessWidget {
                     trailing: const Icon(Icons.chevron_right, size: 20),
                     onTap: () => context.push(AppRoutes.lnsAccount),
                   ),
+                  ListTile(
+                    leading: const Icon(Icons.sync_outlined),
+                    title: const Text('追踪账号'),
+                    subtitle: const Text('Bangumi / AniList'),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => context.push(AppRoutes.tracking),
+                  ),
                 ],
               ),
             ),
@@ -135,18 +134,6 @@ class ProfilePage extends StatelessWidget {
               child: SettingsGroup(
                 title: '数据与任务',
                 children: <Widget>[
-                  ListTile(
-                    leading: const Icon(Icons.folder_open_outlined),
-                    title: const Text('本地漫画库'),
-                    subtitle: const Text('导入 CBZ / ZIP 或图片目录，离线阅读'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (_) => const LocalComicLibraryPage(),
-                      ),
-                    ),
-                  ),
                   ListTile(
                     leading: const Icon(Icons.bookmarks_outlined),
                     title: const Text('远端书架'),
@@ -162,23 +149,40 @@ class ProfilePage extends StatelessWidget {
                     onTap: () => context.push(AppRoutes.webdav),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.download_outlined),
-                    title: const Text('下载管理'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.downloads),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.history),
-                    title: const Text('全部观看与阅读历史'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.history),
-                  ),
-                  ListTile(
                     leading: const Icon(Icons.settings_backup_restore_outlined),
                     title: const Text('备份与恢复'),
                     subtitle: const Text('导出 / 导入本地备份（含封面）'),
                     trailing: const Icon(Icons.chevron_right, size: 20),
                     onTap: () => context.push(AppRoutes.backup),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: SettingsGroup(
+                title: '设置与来源',
+                children: <Widget>[
+                  ListTile(
+                    leading: const Icon(Icons.settings_outlined),
+                    title: const Text('设置'),
+                    subtitle: const Text('外观、网络、下载、存储与应用更新'),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => context.push(AppRoutes.settings),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.extension_outlined),
+                    title: const Text('来源与规则管理'),
+                    subtitle: const Text('导入规则、启用或移除来源'),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => context.push(AppRoutes.sources),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.font_download_outlined),
+                    title: const Text('阅读字体'),
+                    subtitle: const Text('导入 TTF / OTF 供小说阅读器使用'),
+                    trailing: const Icon(Icons.chevron_right, size: 20),
+                    onTap: () => context.push(AppRoutes.fonts),
                   ),
                   ListTile(
                     leading: const Icon(Icons.speaker_notes_outlined),

@@ -28,6 +28,8 @@ class _MangaWorkspacePageState extends ConsumerState<MangaWorkspacePage>
     with SingleTickerProviderStateMixin {
   late final _tabs = TabController(length: 3, vsync: this, initialIndex: _tab);
   int _tab = 0;
+  bool _searching = false;
+  final _libraryKey = GlobalKey<LibraryPageState>();
 
   @override
   void initState() {
@@ -35,7 +37,10 @@ class _MangaWorkspacePageState extends ConsumerState<MangaWorkspacePage>
     _tab = (ref.read(preferencesProvider).get<int>('manga.workspace.tab') ?? 0).clamp(0, 2);
     _tabs.addListener(() {
       if (_tab != _tabs.index) {
-        setState(() => _tab = _tabs.index);
+        setState(() {
+          _tab = _tabs.index;
+          _searching = false;
+        });
         unawaited(ref.read(preferencesProvider).set('manga.workspace.tab', _tab));
       }
     });
@@ -65,10 +70,29 @@ class _MangaWorkspacePageState extends ConsumerState<MangaWorkspacePage>
     appBar: AppBar(
       title: const Text('漫画'),
       actions: [
+        IconButton(
+          tooltip: _tab == 0 ? '搜索本地书库' : _tab == 2 ? '搜索已安装来源' : '搜索漫画',
+          icon: const Icon(Icons.search),
+          onPressed: () {
+            if (_tab != 1) {
+              setState(() => _searching = !_searching);
+            } else {
+              context.push(AppRoutes.searchFor(MediaType.manga));
+            }
+          },
+        ),
         PopupMenuButton<String>(
           tooltip: '漫画更多',
-          onSelected: (value) => unawaited(_more(value)),
-          itemBuilder: (_) => const [
+          onSelected: (value) {
+            final library = _libraryKey.currentState;
+            if (_tab == 0 && library != null) {
+              library.handleAction(value);
+            } else {
+              unawaited(_more(value));
+            }
+          },
+          itemBuilder: (_) => (_tab == 0 ? _libraryKey.currentState?.menuEntries : null)
+              ?? const [
             PopupMenuItem(value: 'migration', child: Text('迁移管理')),
             PopupMenuItem(value: 'history', child: Text('漫画阅读历史')),
             PopupMenuItem(value: 'downloads', child: Text('漫画下载')),
@@ -82,17 +106,18 @@ class _MangaWorkspacePageState extends ConsumerState<MangaWorkspacePage>
     ),
     body: IndexedStack(
       index: _tab,
-      children: const [
-        LibraryPage(type: MediaType.manga, embedded: true),
-        MangaUpdatesPage(embedded: true),
-        _MangaSources(),
+      children: [
+        LibraryPage(key: _libraryKey, type: MediaType.manga, embedded: true, searching: _tab == 0 && _searching),
+        const MangaUpdatesPage(embedded: true),
+        _MangaSources(searching: _tab == 2 && _searching),
       ],
     ),
   );
 }
 
 class _MangaSources extends ConsumerStatefulWidget {
-  const _MangaSources();
+  const _MangaSources({required this.searching});
+  final bool searching;
   @override
   ConsumerState<_MangaSources> createState() => _MangaSourcesState();
 }
@@ -138,17 +163,18 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
           ],
         ),
       ),
-      Padding(
-        padding: const EdgeInsets.all(16),
-        child: TextField(
-          decoration: const InputDecoration(
-            labelText: '搜索已安装来源名称',
-            prefixIcon: Icon(Icons.search),
-            border: OutlineInputBorder(),
+      if (widget.searching)
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: '搜索已安装来源名称',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (value) => setState(() => _query = value.trim().toLowerCase()),
           ),
-          onChanged: (value) => setState(() => _query = value.trim().toLowerCase()),
         ),
-      ),
       Expanded(
         child: ref.watch(sourcesProvider).when(
           loading: () => const Center(child: CircularProgressIndicator()),

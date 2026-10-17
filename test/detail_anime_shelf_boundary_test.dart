@@ -92,22 +92,22 @@ void main() {
     return (router: router, db: db);
   }
 
-  testWidgets('番剧本机收藏明确独立于 Bangumi 收藏且移除保留数据', (tester) async {
+  testWidgets('收藏夹在未连接账号时可用，取消收藏保留作品数据', (tester) async {
     final harness = await pumpDetail(tester, animeItem);
     final repository = LibraryRepository(harness.db);
     expect(find.text('加入书架'), findsNothing);
-    expect(find.text('连接 Bangumi 收藏'), findsOneWidget);
+    expect(find.text('加入收藏夹'), findsOneWidget);
     expect(await repository.listAnimeFollows(), isEmpty);
-    await tester.tap(find.byTooltip('更多'));
+    await tester.tap(find.byTooltip('收藏状态'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('本机收藏'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('加入本机收藏'));
+    await tester.tap(find.text('在看').last);
     await tester.pumpAndSettle();
     expect(await repository.isInLibrary(animeItem.sourceId, animeItem.remoteId), true);
     expect(await repository.listLibrary(), isEmpty);
     expect(await repository.listAnimeFollows(), hasLength(1));
-    await tester.tap(find.text('已在本机收藏 · 移除'));
+    await tester.tap(find.byTooltip('收藏状态'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('取消收藏').last);
     await tester.pumpAndSettle();
     expect(await repository.listAnimeFollows(), isEmpty);
     expect(await repository.itemByKey(animeItem.sourceId, animeItem.remoteId), isNotNull);

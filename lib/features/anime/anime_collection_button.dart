@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/models/media_item.dart';
-import '../../core/router/app_router.dart';
-import '../tracking/data/tracking_models.dart';
-import '../tracking/data/tracking_providers.dart';
+import '../library/data/library_providers.dart';
+import 'anime_follows_page.dart';
 import 'data/anime_collection_service.dart';
+import 'data/anime_follow_sync.dart';
 
-/// Bangumi-only control: neither an offline favourite nor a successful local
-/// write may masquerade as the account's remote collection state.
+/// The detail edits the same local shelf shown by My Anime. Account state is
+/// reconciled only through the explicit cloud-sync action.
 class AnimeCollectionButton extends ConsumerStatefulWidget {
   const AnimeCollectionButton({super.key, required this.item});
   final MediaItem item;
@@ -19,89 +18,53 @@ class AnimeCollectionButton extends ConsumerStatefulWidget {
 
 class _AnimeCollectionButtonState extends ConsumerState<AnimeCollectionButton> {
   bool _busy = false;
-  Object? _writeError;
-  int _generation = 0;
-
-  @override
-  void didUpdateWidget(covariant AnimeCollectionButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.item != widget.item) {
-      _generation++;
-      _busy = false;
-      _writeError = null;
-    }
-  }
+  String? _error;
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(animeCollectionServiceProvider);
-    final configured = ref.read(trackingServiceProvider).hasToken(TrackingServiceKind.bangumi);
-    final status = ref.watch(animeCollectionStatusProvider(widget.item));
-    final current = status.asData?.value;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+    final entries = ref.watch(animeFollowsProvider);
+    final current = entries.asData?.value.where((view) =>
+      view.item.sourceId == widget.item.sourceId &&
+      view.item.remoteId == widget.item.remoteId).firstOrNull;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min,
       children: [
-        if (!configured)
-          FilledButton.tonalIcon(
-            onPressed: () => context.push(AppRoutes.tracking),
-            icon: const Icon(Icons.account_circle_outlined),
-            label: const Text('连接 Bangumi 收藏'),
-          )
-        else
-          PopupMenuButton<String>(
-            enabled: !_busy && !status.isLoading && !status.hasError,
-            tooltip: '修改此季度的 Bangumi 收藏状态',
-            onSelected: _update,
-            itemBuilder: (_) => [
-              for (final entry in animeCollectionStatuses.entries)
-                CheckedPopupMenuItem(value: entry.key,
-                  checked: current?.localStatus == entry.key,
-                  child: Text(entry.value)),
-            ],
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-              child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8,
-                children: [
-                  if (_busy || status.isLoading)
-                    const SizedBox(width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  else const Icon(Icons.bookmark_outline),
-                  Text(_busy ? '正在更新 Bangumi…' : status.isLoading
-                    ? '读取 Bangumi 收藏…' : status.hasError
-                    ? 'Bangumi 收藏读取失败' : 'Bangumi · ${current == null ? '未收藏' : animeCollectionStatuses[current.localStatus]}'),
-                  const Icon(Icons.arrow_drop_down),
-                ]),
-            ),
-          ),
-        if (configured && status.hasError)
-          TextButton.icon(
-            onPressed: () => ref.invalidate(animeCollectionStatusProvider(widget.item)),
-            icon: const Icon(Icons.refresh), label: Text('读取失败：${status.error} · 重试')),
-        if (_writeError != null)
-          Text('Bangumi 更新未确认：$_writeError',
-            style: TextStyle(color: Theme.of(context).colorScheme.error)),
-        if (configured && status.hasError)
-          TextButton(onPressed: () => context.push(AppRoutes.tracking),
-            child: const Text('检查 Bangumi 账号')),
-      ],
-    );
+        PopupMenuButton<String>(
+          enabled: !_busy && !entries.isLoading && !entries.hasError,
+          tooltip: '收藏状态', onSelected: _update,
+          itemBuilder: (_) => [
+            for (final entry in animeCollectionStatuses.entries)
+              CheckedPopupMenuItem(value: entry.key,
+                checked: current?.entry.status == entry.key, child: Text(entry.value)),
+            if (current != null) const PopupMenuItem(value: 'remove', child: Text('取消收藏')),
+          ],
+          child: Padding(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(current == null ? Icons.bookmark_outline : Icons.bookmark),
+              const SizedBox(width: 8),
+              Flexible(child: Text(_busy ? '保存中…' : current == null ? '加入收藏夹' :
+                animeCollectionStatuses[current.entry.status] ?? '已收藏')),
+              const Icon(Icons.arrow_drop_down),
+            ])),
+        ),
+        if (entries.hasError) TextButton(onPressed: () => ref.invalidate(animeFollowsProvider),
+          child: const Text('收藏读取失败，重试')),
+        if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      ]);
   }
 
   Future<void> _update(String status) async {
     if (_busy) return;
     final item = widget.item;
-    setState(() { _busy = true; _writeError = null; });
-    final generation = _generation;
+    setState(() { _busy = true; _error = null; });
     try {
-      await ref.read(animeCollectionServiceProvider).updateStatus(item, status);
-      if (!mounted || generation != _generation) return;
-      ref.invalidate(animeCollectionStatusProvider(item));
-      await ref.read(animeCloudProvider.notifier).refresh(force: true);
-    } catch (error) {
-      if (mounted && generation == _generation) setState(() => _writeError = error);
-    } finally {
-      if (mounted && generation == _generation) setState(() => _busy = false);
-    }
+      if (status == 'remove') {
+        await removeAnimeFollow(ref, item);
+      } else {
+        await ref.read(animeFollowSyncProvider).setStatus(item, status);
+      }
+      ref.invalidate(inLibraryProvider);
+    } catch (_) {
+      if (mounted) setState(() => _error = '收藏未保存，请重试');
+    } finally { if (mounted) setState(() => _busy = false); }
   }
 }

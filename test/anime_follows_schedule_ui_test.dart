@@ -100,7 +100,7 @@ void main() {
   );
 
   testWidgets(
-    'missing Bangumi account opens account settings without writing a local favourite',
+    'local favourite works without a Bangumi account and makes no remote request',
     (tester) async {
       final db = openTestDatabase();
       final http = FakeHttpClient(
@@ -140,11 +140,15 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('连接 Bangumi 收藏'));
+      await tester.tap(find.byTooltip('收藏状态'));
       await tester.pumpAndSettle();
-      expect(find.text('账户设置目的页'), findsOneWidget);
+      await tester.tap(find.text('在看').last);
+      for (var i = 0; i < 10; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump();
+      }
       expect(http.requests, isEmpty);
-      expect(await LibraryRepository(db).listAnimeFollows(), isEmpty);
+      expect((await LibraryRepository(db).listAnimeFollows()).single.entry.status, 'doing');
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
@@ -217,19 +221,18 @@ void main() {
       final prefs = memoryPreferences();
       await prefs.set('anime.calendar.weekday', -1);
       final http = FakeHttpClient(
-        (_) async => SourceResponse(
+        (request) async => SourceResponse(
           statusCode: 200,
           body: jsonEncode({
-            'total': 8,
-            'data': [
-              for (var day = 0; day <= 7; day++)
-                {
-                  'id': day + 100,
-                  'type': 2,
-                  'name_cn': '星期作品$day',
-                  'weekday': {'id': day},
-                },
-            ],
+            'total': 9,
+            'data': Uri.parse(request.url).queryParameters['offset'] == '8'
+              ? [{'id': 999, 'type': 2, 'name_cn': '自动加载第二页',
+                  'weekday': {'id': DateTime.now().weekday}}]
+              : [
+                  for (var day = 0; day <= 7; day++)
+                    {'id': day + 100, 'type': 2, 'name_cn': '星期作品$day',
+                     'weekday': {'id': day}},
+                ],
           }),
         ),
       );
@@ -261,6 +264,8 @@ void main() {
       }
       final today = DateTime.now().weekday;
       expect(find.text('星期作品$today'), findsOneWidget);
+      expect(find.text('自动加载第二页'), findsOneWidget);
+      expect(find.text('加载更多本季作品'), findsNothing);
       expect(find.text('星期作品0'), findsNothing);
       expect(find.text('星期未注明'), findsNothing);
       final next = today == 7 ? 1 : today + 1;

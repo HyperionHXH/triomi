@@ -82,8 +82,8 @@ class SettingsPage extends ConsumerWidget {
             children: <Widget>[
               ListTile(
                 leading: const Icon(Icons.system_update_outlined),
-                title: const Text('版本与应用更新'),
-                subtitle: const Text('核验当前版本、签名和手动更新包'),
+                title: const Text('版本管理与应用更新'),
+                subtitle: const Text('GitHub 发布版本、更新说明、下载与安装'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(context, MaterialPageRoute<void>(
                   builder: (_) => const AppUpdatePage(),

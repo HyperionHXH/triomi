@@ -4,7 +4,6 @@ import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart' as zip;
 import 'package:crypto/crypto.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/features/settings/app_update_service.dart';
@@ -88,39 +87,6 @@ void main() {
     });
   });
 
-  test('manual manifest validates full hash, HTTPS and no embedded identity', () {
-    final valid = AppUpdateManifest.parse('''{"versionCode":148,"version":"0.1.1","url":"https://updates.example/app.apk","sha256":"$hash"}'''.codeUnits);
-    expect(valid.versionCode, 148);
-    for (final url in ['http://updates.example/app.apk', 'https://user:secret@updates.example/app.apk', 'https://updates.example/app.apk#fragment']) {
-      expect(() => AppUpdateManifest.https(url), throwsFormatException);
-    }
-    expect(() => AppUpdateManifest.parse('''{"versionCode":148,"version":"0.1.1","url":"https://updates.example/app.apk","sha256":"1111"}'''.codeUnits), throwsFormatException);
-  });
-
-  test('HTTPS redirects are not followed and errors do not disclose query tokens', () async {
-    final requests = <Uri>[];
-    final dio = Dio()..httpClientAdapter = _ManifestAdapter(requests, redirect: true);
-    final service = AppUpdateService(dio: dio);
-    try {
-      await expectLater(service.checkManifest('https://updates.example/manifest?token=private-test-token',
-        AppUpdateCancellation()), throwsA(isA<HttpException>().having((error) => error.toString(),
-          'safe error', isNot(contains('private-test-token')))));
-      expect(requests.length, 1);
-    } finally { service.close(); }
-  });
-  test('manual HTTPS manifest remains bounded and cancellable before request', () async {
-    final requests = <Uri>[];
-    final dio = Dio()..httpClientAdapter = _ManifestAdapter(requests);
-    final service = AppUpdateService(dio: dio);
-    try {
-      final token = AppUpdateCancellation()..cancel();
-      await expectLater(service.checkManifest('https://updates.example/manifest', token),
-        throwsA(isA<AppUpdateCancelled>()));
-      expect(requests, isEmpty);
-      await expectLater(service.checkManifest('https://updates.example/manifest', AppUpdateCancellation()), throwsFormatException);
-      expect(requests.length, 1);
-    } finally { service.close(); }
-  });
 
   test('real deflate ZIP with false small size is rejected during output and cleaned', () async {
     final directory = await Directory.systemTemp.createTemp('triomi-update-zip-');
@@ -210,19 +176,3 @@ void main() {
   }
 }
 
-class _ManifestAdapter implements HttpClientAdapter {
-  _ManifestAdapter(this.requests, {this.redirect = false});
-  final List<Uri> requests;
-  final bool redirect;
-  @override
-  Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream,
-      Future<void>? cancelFuture) async {
-    requests.add(options.uri);
-    expect(options.followRedirects, false);
-    expect(options.headers.keys.any((key) => ['authorization', 'cookie'].contains(key.toLowerCase())), false);
-    return ResponseBody.fromBytes(redirect ? utf8.encode('redirect') : List.filled(65537, 32),
-      redirect ? 302 : 200, headers: redirect ? {'location': ['http://unsafe.example/app.apk']} : {});
-  }
-  @override
-  void close({bool force = false}) {}
-}
