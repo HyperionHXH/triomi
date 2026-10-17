@@ -2,7 +2,18 @@
   "version": "0.1.0+155",
   "releaseTag": "v0.1.0-test.155",
   "releaseUrl": "https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.155",
-  "releaseStatus": "prepared-not-published",
+  "releaseStatus": "published-and-downloaded-verified",
+  "sourceCommit": "71037c1ed4e510b1a456fdd8bc6b90d350fb7ad2",
+  "publication": {
+    "prerelease": true,
+    "draft": false,
+    "assetsUploaded": 5,
+    "allServerSizesAndDigestsMatchLocal": true,
+    "publicDownloadVerification": "passed: all five assets fully downloaded; size and SHA256 match local artifacts and GitHub server digests",
+    "downloadMethod": "Authenticated GitHub release API redirect, then bounded HTTP Range downloads without forwarding credentials to the asset host",
+    "downloadLog": "D:/noval_and_manga/_tools/C155-download-verification.json",
+    "initialTransferFailureRetained": "gh bulk download timed out at 360s; public curl connections reset; bounded 4MiB requests completed all original artifacts without replacing release bytes"
+  },
   "platformAcceptance": "partial",
   "scope": "R155 Kazumi / Android Komikku / MixN workflow changes; original application data retained",
   "artifacts": [

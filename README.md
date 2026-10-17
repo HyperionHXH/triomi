@@ -8,7 +8,7 @@
 
 ## 下载与安装
 
-到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.154) 下载 **v0.1.0-test.154**：
+到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.155) 下载 **v0.1.0-test.155**：
 
 | 文件 | 用途 |
 | --- | --- |
@@ -23,7 +23,7 @@
 Windows 可任选 ZIP 或 MSI，不需要两个都装。MSI 默认安装到 `%LOCALAPPDATA%\Programs\Triomi`，不自动导入/删除旧 ZIP 目录；两种形式沿用同一应用数据目录。升级 MSI 前退出 Triomi，再运行新 MSI；卸载只移除安装文件和快捷方式，保留收藏、账号、设置及下载。MSI 目前没有 Windows Authenticode 发布者签名，系统可能提示未知发布者；请从本仓库 Release 下载并核对 SHA-256，Android 签名证书不能用于 Windows 签名。
 
 
-R155 已完成 Kazumi / Komikku / MixN 日常交互重做：番剧详情与选源选集、Bangumi 收藏和 WebDAV 追番同步、漫画插件浏览与单一搜索、小说站点收藏及三种阅读模式。小说朗读、应用自定义界面字号和隐私锁产品入口已移除，保留系统字号与原有数据。1004 项 Flutter / 89 项 Python 通过、3 项跳过，静态检查无问题；原设备及Windows实际使用、保数据升级与证据边界见 [C155验收](docs/delivery/evidence/C155-final-acceptance.json)。新版本发布核验中，上方旧版下载暂保留。
+R155 已完成 Kazumi / Komikku / MixN 日常交互重做：番剧详情与选源选集、Bangumi 收藏和 WebDAV 追番同步、漫画插件浏览与单一搜索、小说站点收藏及三种阅读模式。小说朗读、应用自定义界面字号和隐私锁产品入口已移除，保留系统字号与原有数据。1004 项 Flutter / 89 项 Python 通过、3 项跳过，静态检查无问题；原设备及Windows实际使用、保数据升级与证据边界见 [C155验收](docs/delivery/evidence/C155-final-acceptance.json)。五项资产已发布并完整下载，大小/SHA-256与本地及GitHub摘要全部一致；完整平台验收仍 partial。
 
 
 ## 开始使用
