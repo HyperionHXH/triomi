@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_ce_flutter/hive_flutter.dart';
 
 import '../../../core/models/media_type.dart';
 import '../../../core/platform/platform_channel.dart';
@@ -110,8 +111,12 @@ Future<void> runBackgroundUpdateCheckEntrypoint() async {
   ProviderContainer? container;
   try {
     WidgetsFlutterBinding.ensureInitialized();
-    // 插件（path_provider 等）由原生侧建引擎时自动登记，这里只需起最小容器。
-    container = ProviderContainer();
+    // Load existing settings before providers consume the user's source proxy.
+    await Hive.initFlutter();
+    final preferences = await Preferences.open();
+    container = ProviderContainer(
+      overrides: [preferencesProvider.overrideWithValue(preferences)],
+    );
 
     final result = await runBackgroundUpdateCheck(container);
     if (result != null) {

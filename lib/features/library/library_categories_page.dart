@@ -34,7 +34,7 @@ class LibraryCategoriesPage extends ConsumerWidget {
             const Padding(
               padding: EdgeInsets.all(16),
               child: Text(
-                '作品可属于多个手动分类。只要属于任一隐藏分类，普通书架、查询、计数和批量操作就会排除它；选择隐藏分类或开启「显示隐藏」后可访问。这是显示筛选，不是安全锁。动态分类实时匹配本地缓存，无需来源在线。下列数量对应当前内容形态，包含隐藏作品。',
+                '作品可属于多个手动分类。动态分类实时匹配本地缓存，无需来源在线。下列数量对应当前内容形态的全部收藏作品。',
               ),
             ),
             Expanded(
@@ -64,9 +64,7 @@ class LibraryCategoriesPage extends ConsumerWidget {
                         return ListTile(
                           key: ValueKey(category.id),
                           leading: Icon(
-                            category.hidden
-                                ? Icons.visibility_off
-                                : rule == null
+                            rule == null
                                 ? Icons.folder_outlined
                                 : Icons.rule_folder_outlined,
                           ),
@@ -116,7 +114,7 @@ class LibraryCategoriesPage extends ConsumerWidget {
                                       builder: (dialog) => AlertDialog(
                                         title: Text('删除分类「${category.name}」？'),
                                         content: const Text(
-                                          '只删除分组、关联和规则。收藏、进度、历史、下载和追踪绑定全部保留。删除隐藏分类后，只有仍属于其他隐藏分类的作品会继续隐藏。',
+                                          '只删除分组、关联和规则。收藏、进度、历史、下载和追踪绑定全部保留。',
                                         ),
                                         actions: [
                                           TextButton(
@@ -197,7 +195,6 @@ class _CategoryEditorState extends ConsumerState<_CategoryEditor> {
   late final TextEditingController _query;
   late final TextEditingController _status;
   late bool _dynamic;
-  late bool _hidden;
   late bool _all;
   late Set<String> _sources;
   bool? _unread;
@@ -216,7 +213,6 @@ class _CategoryEditorState extends ConsumerState<_CategoryEditor> {
     _query = TextEditingController(text: rule.query);
     _status = TextEditingController(text: rule.status);
     _dynamic = category?.rulesJson != null;
-    _hidden = category?.hidden ?? false;
     _all = rule.matchAll;
     _sources = Set.of(rule.sources);
     _unread = rule.unread;
@@ -264,15 +260,6 @@ class _CategoryEditorState extends ConsumerState<_CategoryEditor> {
                 controller: _name,
                 decoration: const InputDecoration(labelText: '分类名称'),
                 enabled: !_saving,
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('隐藏分类'),
-                value: _hidden,
-                subtitle: const Text('任一隐藏分类中的作品均从普通书架排除；不是安全锁。'),
-                onChanged: _saving
-                    ? null
-                    : (value) => setState(() => _hidden = value),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -397,7 +384,7 @@ class _CategoryEditorState extends ConsumerState<_CategoryEditor> {
                           type: widget.type,
                           id: widget.category?.id,
                           name: _name.text,
-                          hidden: _hidden,
+                          hidden: widget.category?.hidden ?? false,
                           rule: _dynamic ? _currentRule() : null,
                         );
                     if (context.mounted) Navigator.pop(context);

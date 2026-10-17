@@ -23,6 +23,21 @@ class CoverAppearanceSettingsPage extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         children: <Widget>[
+          Text('界面外观', style: theme.textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.xs),
+          const Text('界面字号跟随系统设置；阅读器排版独立保存。'),
+          _ThemeModeTile(
+            current: settings.themeMode,
+            onChanged: controller.setThemeMode,
+          ),
+          SwitchListTile(
+            value: settings.usesLargeIcons,
+            onChanged: (value) => controller.setUsesLargeIcons(value: value),
+            title: const Text('大图标'),
+            subtitle: const Text('增大导航与列表图标，适合触屏设备'),
+            contentPadding: EdgeInsets.zero,
+          ),
+          const SizedBox(height: AppSpacing.lg),
           Text('封面比例', style: theme.textTheme.titleMedium),
           const SizedBox(height: AppSpacing.xs),
           Text(
@@ -83,6 +98,20 @@ class CoverAppearanceSettingsPage extends ConsumerWidget {
               ],
             ),
           ),
+          const SizedBox(height: AppSpacing.lg),
+          Center(
+            child: TextButton.icon(
+              onPressed: () async {
+                await controller.resetGroup();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('已恢复外观默认值')),
+                );
+              },
+              icon: const Icon(Icons.restore, size: 18),
+              label: const Text('恢复外观默认值'),
+            ),
+          ),
         ],
       ),
     );
@@ -134,4 +163,63 @@ class _AccentSwatch extends StatelessWidget {
     ),
     child: const SizedBox(width: 28, height: 28),
   );
+}
+class _ThemeModeTile extends StatelessWidget {
+  const _ThemeModeTile({required this.current, required this.onChanged});
+
+  final ThemeMode current;
+  final ValueChanged<ThemeMode> onChanged;
+
+  static const Map<ThemeMode, String> _labels = <ThemeMode, String>{
+    ThemeMode.system: '跟随系统',
+    ThemeMode.light: '浅色',
+    ThemeMode.dark: '深色',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final palette = context.palette;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.md,
+            AppSpacing.md,
+            AppSpacing.xs,
+          ),
+          child: Text('主题模式', style: theme.textTheme.bodyMedium),
+        ),
+        for (final entry in _labels.entries)
+          ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+            ),
+            title: Text(entry.value),
+            trailing: entry.key == current
+                ? Icon(Icons.check, size: 20, color: theme.colorScheme.primary)
+                : null,
+            onTap: () => onChanged(entry.key),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.xs,
+            AppSpacing.md,
+            AppSpacing.sm,
+          ),
+          child: Text(
+            '深色主题下卡片改用明度分层，不再使用投影。',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: palette.mutedForeground,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

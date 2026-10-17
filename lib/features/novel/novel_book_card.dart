@@ -7,6 +7,8 @@ import '../../core/router/app_router.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/widgets/source_network_image.dart';
 
+import '../search/search_page.dart';
+
 /// A novel card uses real source metadata; absent fields are omitted.
 class NovelBookCard extends ConsumerWidget {
   const NovelBookCard({
@@ -16,6 +18,7 @@ class NovelBookCard extends ConsumerWidget {
     this.status,
     this.actions = const [],
     this.onLongPress,
+    this.onReturn,
   });
 
   final MediaItem item;
@@ -23,6 +26,7 @@ class NovelBookCard extends ConsumerWidget {
   final String? status;
   final List<Widget> actions;
   final VoidCallback? onLongPress;
+  final Future<void> Function()? onReturn;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -33,7 +37,10 @@ class NovelBookCard extends ConsumerWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => context.push(AppRoutes.detailFor(item), extra: item),
+        onTap: () async {
+          await context.push(AppRoutes.detailFor(item), extra: item);
+          await onReturn?.call();
+        },
         onLongPress: onLongPress,
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -99,6 +106,26 @@ class NovelBookCard extends ConsumerWidget {
               if (summary?.isNotEmpty == true) ...[
                 const SizedBox(height: 12),
                 Text(summary!, maxLines: 3, overflow: TextOverflow.ellipsis),
+              ],
+              if (item.tags.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final tag in item.tags)
+                      ActionChip(
+                        label: Text(tag),
+                        onPressed: () => SearchPage.open(
+                          context,
+                          type: item.type,
+                          sourceId: item.sourceId,
+                          tags: [tag],
+                          sourceOnly: true,
+                        ),
+                      ),
+                  ],
+                ),
               ],
               if (status != null) ...[
                 const SizedBox(height: 12),

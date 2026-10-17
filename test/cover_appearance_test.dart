@@ -12,6 +12,7 @@ import 'package:triomi/core/theme/app_tokens.dart';
 import 'package:triomi/features/discover/widgets/media_item_card.dart';
 import 'package:triomi/features/settings/cover_appearance_settings_page.dart';
 import 'package:triomi/features/settings/settings_controller.dart';
+import 'package:triomi/features/settings/settings_page.dart';
 
 import 'fixtures/fake_preferences.dart';
 
@@ -69,9 +70,10 @@ void main() {
     ]);
     try {
       await preferences.set('reader.theme', 'keep-reader-theme');
+      await preferences.set('appearance.uiFontScale', 1.25);
+      await preferences.set('privacy.incognito', true);
       final controller = container.read(appearanceProvider.notifier);
       await controller.setThemeMode(ThemeMode.dark);
-      await controller.setFontScale(1.25);
       await controller.setUsesLargeIcons(value: true);
       await controller.setAccentPalette(AppAccentPalette.teal);
       await controller.setCoverShape(CoverShape.auto);
@@ -87,7 +89,6 @@ void main() {
       ]);
       final restored = container.read(appearanceProvider);
       expect(restored.themeMode, ThemeMode.dark);
-      expect(restored.uiFontScale, 1.25);
       expect(restored.usesLargeIcons, isTrue);
       expect(restored.accentPalette, AppAccentPalette.teal);
       expect(restored.coverAppearance.shape, CoverShape.auto);
@@ -104,18 +105,41 @@ void main() {
       ]);
       final defaults = container.read(appearanceProvider);
       expect(defaults.themeMode, ThemeMode.system);
-      expect(defaults.uiFontScale, 1);
       expect(defaults.usesLargeIcons, isFalse);
       expect(defaults.accentPalette, AppAccentPalette.blue);
       expect(defaults.coverAppearance.shape, CoverShape.portrait);
       expect(defaults.coverAppearance.layout, CoverLayout.adaptive);
       expect(defaults.coverAppearance.density, CoverDensity.compact);
       expect(preferences.get<String>('reader.theme'), 'keep-reader-theme');
+      expect(preferences.get<double>('appearance.uiFontScale'), 1.25);
+      expect(preferences.get<bool>('privacy.incognito'), isTrue);
     } finally {
       container.dispose();
       if (box.isOpen) await box.close();
       await directory.delete(recursive: true);
     }
+  });
+
+  testWidgets('general settings opens independent appearance controls without obsolete product UI', (tester) async {
+    final preferences = memoryPreferences();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [preferencesProvider.overrideWithValue(preferences)],
+      child: MaterialApp(theme: AppTheme.light(), home: const SettingsPage()),
+    ));
+    expect(find.text('主题模式'), findsNothing);
+    expect(find.text('大图标'), findsNothing);
+    expect(find.text('恢复外观默认值'), findsNothing);
+    expect(find.textContaining('无痕'), findsNothing);
+    expect(find.textContaining('隐私'), findsNothing);
+    await tester.tap(find.text('封面与外观'));
+    await tester.pumpAndSettle();
+    expect(find.text('主题模式'), findsOneWidget);
+    expect(find.text('大图标'), findsOneWidget);
+    expect(find.byType(Slider), findsNothing);
+    await tester.tap(find.text('深色'));
+    await tester.pumpAndSettle();
+    expect(preferences.get<String>('appearance.themeMode'), 'dark');
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   test('all named accents provide accessible light and dark foreground pairs', () {
@@ -341,8 +365,13 @@ void main() {
     ));
     Future<void> choose(String label) async {
       await tester.scrollUntilVisible(find.text(label), 200);
-      await tester.tap(find.text(label));
-      await tester.pump();
+      // Lazy list extent estimates can change when the preceding large-text
+      // settings section is laid out. Wait, then reveal the actual label.
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text(label));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label).hitTestable());
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     }
     await choose('按内容类型');

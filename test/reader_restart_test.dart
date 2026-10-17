@@ -166,30 +166,6 @@ void main() {
         }
         await tester.pumpWidget(const SizedBox());
         await settle(tester);
-        await container
-            .read(preferencesProvider)
-            .set('privacy.incognito', true);
-        await tester.pumpWidget(page());
-        await settle(tester);
-        if (type == MediaType.manga) {
-          tester.widget<Slider>(find.byType(Slider)).onChanged!(9);
-        } else {
-          await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-        }
-        await settle(tester);
-        expect(indicator(), isNot(before));
-        await tester.pumpWidget(const SizedBox());
-        await settle(tester);
-        expect(
-          await tester.runAsync(
-            () => repo.chapterPositionOf('restart', 'book', chapter.remoteId),
-          ),
-          saved,
-          reason: '无痕翻页及销毁不能覆盖原来的续读位置',
-        );
-        await container
-            .read(preferencesProvider)
-            .set('privacy.incognito', false);
         await tester.pumpWidget(page());
         await settle(tester);
         expect(indicator(), before);

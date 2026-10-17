@@ -348,7 +348,15 @@ List<ReaderPage> paginateReaderBlocks(
         : (block as ParagraphBlock).text;
     final shouldIndent = block is ParagraphBlock && block.firstLineIndent;
     final baseStyle = heading ? style.headingStyle : style.paragraphStyle;
-    final lineHeight = baseStyle.fontSize! * (baseStyle.height ?? 1.5);
+    // Flutter rounds glyph line metrics; fontSize * height can undercount each
+    // line and admit a final line that does not actually fit on the page.
+    final lineProbe = TextPainter(
+      text: TextSpan(text: ' ', style: baseStyle),
+      textDirection: TextDirection.ltr,
+      textScaler: TextScaler.noScaling,
+    )..layout(maxWidth: style.pageWidth);
+    final lineHeight = lineProbe.height;
+    lineProbe.dispose();
     var offset = 0;
 
     while (offset < sourceText.length) {
@@ -389,6 +397,7 @@ List<ReaderPage> paginateReaderBlocks(
       );
       remainingHeight = math.max(remainingHeight - painter.height, 0);
       offset += safeEnd - (indentThisFragment ? 2 : 0);
+      painter.dispose();
       if (offset < sourceText.length) finishPage();
     }
   }

@@ -13,6 +13,7 @@ import 'package:triomi/core/source/bangumi_public_client.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/detail/anime_info_repository.dart';
 import 'package:triomi/features/detail/detail_page.dart';
 import 'package:triomi/features/discover/anime_recommendations.dart';
@@ -39,6 +40,8 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          preferencesProvider.overrideWithValue(memoryPreferences()),
+          secureStoreProvider.overrideWithValue(MemorySecureStore()),
           sourceHttpClientProvider.overrideWithValue(http),
         ],
         child: const MaterialApp(home: DetailPage(item: item)),
@@ -139,6 +142,8 @@ void main() {
     online = false;
     final actors = await repo.section('season1', 'characters');
     expect(actors.cached, true);
+    expect(actors.refreshError, isA<SourceException>(),
+        reason: '缓存可展示，但不能把在线失败宣称为刷新成功');
     expect((actors.rows.single['actors'] as List).single['name'], '声优');
     final relation = (await repo.section('season1', 'subjects')).rows.single;
     expect(bangumiItem(relation).remoteId, '2');

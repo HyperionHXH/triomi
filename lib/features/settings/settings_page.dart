@@ -4,31 +4,19 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/source/network_proxy.dart';
-import '../../core/storage/preferences.dart';
-import '../../core/storage/privacy.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import 'app_update_page.dart';
 import 'cache_management_page.dart';
 import 'cover_appearance_settings_page.dart';
-import 'privacy_lock_settings_page.dart';
-import 'settings_controller.dart';
 
-/// 设置页：外观 / 内容与来源 / 关于三个分组。
-///
-/// 对齐 Mixn 原则：界面外观设置与阅读设置分开保存，各分组可单独恢复默认值。
+/// 通用设置；界面外观与阅读器排版分别在独立页面配置。
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(appearanceProvider);
-    final controller = ref.read(appearanceProvider.notifier);
-    final theme = Theme.of(context);
-    final palette = context.palette;
-
     return PageScaffold(
       title: '设置',
       child: ListView(
@@ -38,108 +26,15 @@ class SettingsPage extends ConsumerWidget {
         ),
         children: <Widget>[
           SettingsGroup(
-            title: '外观',
-            footer: '阅读器的排版设置与此处的界面设置分开保存。',
+            title: '界面',
             children: <Widget>[
-              _ThemeModeTile(
-                current: settings.themeMode,
-                onChanged: controller.setThemeMode,
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.md,
-                  AppSpacing.sm,
-                  AppSpacing.md,
-                  AppSpacing.md,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: Text(
-                            '界面字号',
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ),
-                        Text(
-                          settings.fontScaleLabel,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: palette.mutedForeground,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    SizedBox(
-                      width: double.infinity,
-                      child: SegmentedButton<double>(
-                        segments: <ButtonSegment<double>>[
-                          for (final scale
-                              in AppearanceSettings.fontScaleOptions)
-                            ButtonSegment<double>(
-                              value: scale,
-                              label: Text(
-                                AppearanceSettings.labelForScale(scale),
-                              ),
-                            ),
-                        ],
-                        selected: <double>{settings.uiFontScale},
-                        showSelectedIcon: false,
-                        onSelectionChanged: (selection) =>
-                            controller.setFontScale(selection.first),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SwitchListTile(
-                value: settings.usesLargeIcons,
-                onChanged: (value) =>
-                    controller.setUsesLargeIcons(value: value),
-                title: const Text('大图标'),
-                subtitle: const Text('增大导航与列表图标，适合触屏设备'),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md,
-                ),
-              ),
               ListTile(
-                leading: const Icon(Icons.view_module_outlined),
+                leading: const Icon(Icons.palette_outlined),
                 title: const Text('封面与外观'),
-                subtitle: const Text('竖封面 / 宽封面、列表网格、密度与强调色'),
+                subtitle: const Text('主题、图标、封面布局、密度与强调色'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(context, MaterialPageRoute<void>(
                   builder: (_) => const CoverAppearanceSettingsPage(),
-                )),
-              ),
-            ],
-          ),
-          SettingsGroup(
-            title: '隐私',
-            children: [
-              SwitchListTile(
-                title: const Text('无痕阅读与播放'),
-                subtitle: const Text(
-                  '之后打开的阅读器/播放器不保存新进度或历史，不自动上报站点/追踪；不删除旧数据，不隐藏网络访问或缓存。',
-                ),
-                value:
-                    ref.watch(incognitoProvider).asData?.value ??
-                    ref
-                        .read(preferencesProvider)
-                        .get<bool>(incognitoPreferenceKey) ??
-                    false,
-                onChanged: (value) => ref
-                    .read(preferencesProvider)
-                    .set(incognitoPreferenceKey, value),
-              ),
-              ListTile(
-                leading: const Icon(Icons.lock_outline),
-                title: const Text('应用隐私锁'),
-                subtitle: const Text('本机 PIN 访问控制；不加密数据库或媒体文件'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.push(context, MaterialPageRoute<void>(
-                  builder: (_) => const PrivacyLockSettingsPage(),
                 )),
               ),
             ],
@@ -206,18 +101,6 @@ class SettingsPage extends ConsumerWidget {
               ),
             ],
           ),
-          Center(
-            child: TextButton.icon(
-              onPressed: () async {
-                await controller.resetGroup();
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(const SnackBar(content: Text('已恢复外观默认值')));
-              },
-              icon: const Icon(Icons.restore, size: 18),
-              label: const Text('恢复外观默认值'),
-            ),
-          ),
           const SizedBox(height: AppSpacing.lg),
         ],
       ),
@@ -280,62 +163,3 @@ class SettingsPage extends ConsumerWidget {
   }
 }
 
-class _ThemeModeTile extends StatelessWidget {
-  const _ThemeModeTile({required this.current, required this.onChanged});
-
-  final ThemeMode current;
-  final ValueChanged<ThemeMode> onChanged;
-
-  static const Map<ThemeMode, String> _labels = <ThemeMode, String>{
-    ThemeMode.system: '跟随系统',
-    ThemeMode.light: '浅色',
-    ThemeMode.dark: '深色',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final palette = context.palette;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.md,
-            AppSpacing.md,
-            AppSpacing.md,
-            AppSpacing.xs,
-          ),
-          child: Text('主题模式', style: theme.textTheme.bodyMedium),
-        ),
-        for (final entry in _labels.entries)
-          ListTile(
-            dense: true,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md,
-            ),
-            title: Text(entry.value),
-            trailing: entry.key == current
-                ? Icon(Icons.check, size: 20, color: theme.colorScheme.primary)
-                : null,
-            onTap: () => onChanged(entry.key),
-          ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.md,
-            AppSpacing.xs,
-            AppSpacing.md,
-            AppSpacing.sm,
-          ),
-          child: Text(
-            '深色主题下卡片改用明度分层，不再使用投影。',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: palette.mutedForeground,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}

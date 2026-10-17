@@ -9,6 +9,7 @@ import '../http_client.dart';
 import '../rule_schema.dart';
 import '../selector_engine.dart';
 import '../source_api.dart';
+import '../tag_search.dart';
 import 'js_runtime.dart';
 
 /// JS exports are verified when the source is first used. Browsing metadata
@@ -31,6 +32,7 @@ class JsSource
     implements
         DiscoverProvider,
         SearchProvider,
+        TagSearchProvider,
         DetailProvider,
         ContentProvider {
   JsSource({
@@ -141,6 +143,34 @@ class JsSource
   Future<List<MediaItem>> search(String keyword, {int page = 1}) async {
     final raw = await _invoke('search', <Object?>[keyword, page]);
     return _toItems(raw);
+  }
+
+  @override
+  Future<List<SearchTag>> searchTags() async {
+    await initialize();
+    if (!await runtime.hasFunction('searchTags')) return const [];
+    final raw = await _invoke('searchTags', const []);
+    if (raw is! List) throw const FormatException('来源标签列表格式无效');
+    return [
+      for (final row in raw)
+        if (row is Map && row['id'] is String && row['label'] is String)
+          SearchTag(id: row['id'] as String, label: row['label'] as String),
+    ];
+  }
+
+  @override
+  Future<List<MediaItem>> searchTagged(
+    String keyword, {
+    required List<String> tags,
+    int page = 1,
+  }) async {
+    await initialize();
+    if (await runtime.hasFunction('searchTagged')) {
+      return _toItems(await _invoke('searchTagged', [keyword, page, tags]));
+    }
+    // Legacy rules, like MixN's aggregate search, accept tag labels as online
+    // keywords. Do not filter their incomplete cached result list on-device.
+    return search([...tags, if (keyword.isNotEmpty) keyword].join(' '), page: page);
   }
 
   @override

@@ -26,9 +26,6 @@ using Map = flutter::EncodableMap;
 using Result = flutter::MethodResult<Value>;
 using SharedResult = std::shared_ptr<Result>;
 HWND owner_window = nullptr;
-size_t privacy_generation = 0;
-bool blocked = true;
-bool protected_ui = false;
 bool shutting_down = false;
 std::unique_ptr<flutter::MethodChannel<Value>> channel;
 
@@ -195,7 +192,7 @@ struct Profile : std::enable_shared_from_this<Profile> {
                       Url target;
                       const bool allowed = profile && ParseHttps(raw ? raw : L"", target) && target.origin == profile->origin;
                       CoTaskMemFree(raw);
-                      if (!allowed || blocked) args->put_Cancel(TRUE);
+                      if (!allowed) args->put_Cancel(TRUE);
                       return S_OK;
                     }).Get(), &self->navigation_token);
                 const HRESULT popup = self->web->add_NewWindowRequested(
@@ -306,7 +303,7 @@ LRESULT CALLBACK BrowserProc(HWND window, UINT message, WPARAM wparam, LPARAM lp
 }
 void OpenBrowser(const std::shared_ptr<Profile>& profile, const std::wstring& url,
     const std::wstring& agent, SharedResult result) {
-  if (blocked || shutting_down) { result->Error("locked", "application is locked"); return; }
+  if (shutting_down) { result->Error("closed", "application is closing"); return; }
   for (const auto& entry : profiles) {
     if (entry.second->pending) { result->Error("session_busy", "a source browser is already open"); return; }
   }
@@ -347,13 +344,6 @@ void Handle(const flutter::MethodCall<Value>& call, std::unique_ptr<Result> raw_
   const auto* args = call.arguments() ? std::get_if<Map>(call.arguments()) : nullptr;
   if (!args) { result->Error("invalid_args", "session arguments required"); return; }
   const auto& method = call.method_name();
-  if (method == "blocked") {
-    ++privacy_generation;
-    blocked = Flag(*args, "blocked");
-    protected_ui = Flag(*args, "protected");
-    if (blocked) for (const auto& entry : profiles) entry.second->Finish(false);
-    result->Success(); return;
-  }
   if (method != "open" && method != "cookies" && method != "videoCookies" && method != "store") {
     result->NotImplemented(); return;
   }
@@ -377,16 +367,12 @@ void Handle(const flutter::MethodCall<Value>& call, std::unique_ptr<Result> raw_
     return;
   }
   const auto agent = Wide(Text(*args, "userAgent"));
-  const auto generation = privacy_generation;
   std::shared_ptr<Map> captured;
   if (method == "store") captured = std::make_shared<Map>(*args);
-  profile->Ensure([profile, method, url, parsed, agent, result, generation, captured](bool success) {
+  profile->Ensure([profile, method, url, parsed, agent, result, captured](bool success) {
     if (shutting_down) return;
     if (!success) { Failed(result); return; }
     if (method == "open") {
-      if (generation != privacy_generation) {
-        result->Error("locked", "application access changed"); return;
-      }
       OpenBrowser(profile, url, agent, result); return;
     }
     if (method == "store") {
@@ -445,13 +431,6 @@ void RegisterWindowsWebSession(flutter::BinaryMessenger* messenger, HWND owner) 
   channel = std::make_unique<flutter::MethodChannel<Value>>(messenger,
       "triomi/windows-web-session", &flutter::StandardMethodCodec::GetInstance());
   channel->SetMethodCallHandler(Handle);
-}
-void WindowsWebSessionOnActivate(bool active) {
-  if (!active && protected_ui) {
-    ++privacy_generation;
-    blocked = true;
-    for (const auto& entry : profiles) entry.second->Finish(false);
-  }
 }
 void WindowsWebSessionOnResize() {
   if (!owner_window) return;

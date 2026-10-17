@@ -18,7 +18,6 @@ import '../../../core/source/windows_source_session.dart';
 import '../../../core/storage/preferences.dart';
 import '../../library/data/library_providers.dart';
 import '../../player/windows_video_resolver.dart';
-import '../../settings/privacy_lock_controller.dart';
 import 'download_repository.dart';
 import 'download_service.dart';
 
@@ -48,18 +47,16 @@ final downloadVideoResolverProvider = Provider<DownloadVideoResolver?>((ref) {
   }
   if (defaultTargetPlatform != TargetPlatform.windows) return null;
   final contextForResolve = ref.watch(downloadResolveContextProvider);
-  final privacy = ref.watch(privacyLockProvider);
   return (source, cancellation) async {
     final context = contextForResolve();
-    if (context == null || !context.mounted || privacy.blocksAccess) {
-      throw VideoResolveCancelled('请打开应用并解锁，在下载页继续此任务');
+    if (context == null || !context.mounted) {
+      throw VideoResolveCancelled('请打开应用，在下载页继续此任务');
     }
     final result = await resolveWindowsVideo(
       context,
       source,
       cancellation: cancellation,
       purpose: '下载',
-      privacyLock: privacy,
     );
     return PlaySource(
       name: source.name,
@@ -117,7 +114,6 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
   bool _sourceAvailable = true;
   bool _disposed = false;
   VideoResolveCancellation? _activeResolve;
-  PrivacyLockController? _privacy;
   late DownloadRepository _queueRepository;
   int _refreshGeneration = 0;
   int _queueGeneration = 0;
@@ -132,14 +128,10 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
     _queueRepository = ref.read(downloadRepositoryProvider);
     if (_windows) {
       WidgetsBinding.instance.addObserver(this);
-      final privacy = ref.read(privacyLockProvider);
-      _privacy = privacy;
-      privacy.addListener(_privacyChanged);
     }
     ref.onDispose(() {
       _disposed = true;
       WidgetsBinding.instance.removeObserver(this);
-      _privacy?.removeListener(_privacyChanged);
       _activeResolve?.cancel('下载队列已关闭，请重新打开下载页继续');
     });
     ref.listen(sourcesProvider, (_, snapshot) {
@@ -152,12 +144,6 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
       }
     });
     return _repository.grouped();
-  }
-
-  void _privacyChanged() {
-    if (_privacy?.blocksAccess == true) {
-      _activeResolve?.cancel('应用已锁定，请解锁后继续下载');
-    }
   }
 
   @override
@@ -378,10 +364,9 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
               shouldContinue: () {
                 if (_windows) {
                   final lifecycle = WidgetsBinding.instance.lifecycleState;
-                  if (_privacy?.blocksAccess == true ||
-                      (lifecycle != null &&
-                          lifecycle != AppLifecycleState.resumed)) {
-                    throw VideoResolveCancelled('请返回应用前台并解锁，在下载页继续任务');
+                  if (lifecycle != null &&
+                      lifecycle != AppLifecycleState.resumed) {
+                    throw VideoResolveCancelled('请返回应用前台，在下载页继续任务');
                   }
                 }
                 if (_windows && !_sourceAvailable) {

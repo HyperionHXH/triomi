@@ -185,10 +185,41 @@ class LkClient {
     return booksPage(data).take(30).toList(growable: false);
   }
 
+  Future<List<({String id, String label})>> searchTaxonomy() async {
+    final data = await _post('api/bff/apk-search-taxonomy-v1', {});
+    final tags = <String, ({String id, String label})>{};
+    void visit(Object? node) {
+      if (node is Map) {
+        final items = node['tag_items'];
+        if (items is List) {
+          for (final item in items) {
+            if (item is! Map) continue;
+            final id = _string(item, 'jump_value', 'code', 'alias');
+            final label = _string(item, 'title', 'name', 'label', 'tag_name');
+            if (label.isNotEmpty) {
+              final key = id.isEmpty ? label : id;
+              tags[key] = (id: key, label: label);
+            }
+          }
+        }
+        for (final value in node.values) {
+          if (value is List || value is Map) visit(value);
+        }
+      } else if (node is List) {
+        for (final item in node) {
+          visit(item);
+        }
+      }
+    }
+    visit(data);
+    return tags.values.toList(growable: false);
+  }
+
   Future<List<LkBook>> search(
     String query,
     int page, {
     int pageSize = 20,
+    String primaryTag = '',
   }) async {
     final data = await _post(
       'api/bff/apk-search-result-v1',
@@ -196,10 +227,10 @@ class LkClient {
         'q': query.trim(),
         'scope': '',
         'source': '',
-        'primary_tag': '',
+        'primary_tag': primaryTag,
         'channel_code': '',
         'work_type': '',
-        'preset': query.trim().isEmpty ? 'default' : '',
+        'preset': query.trim().isEmpty && primaryTag.isEmpty ? 'default' : '',
         'source_type': '',
         'filters': <String, Object?>{},
         'word_count_bucket': '',

@@ -147,6 +147,42 @@ void main() {
     expect((await db.select(db.mangaUpdates).get()).single.status, 'success');
   });
 
+  test('legacy hidden categories do not exclude books from refresh', () async {
+    await seed('s', 'legacy');
+    final categoryId = await library.saveCategory(
+      type: MediaType.manga,
+      name: 'Legacy category',
+      hidden: true,
+      rule: const LibraryCategoryRule(matchAll: true),
+    );
+    final container = ProviderContainer(
+      overrides: [databaseProvider.overrideWithValue(db)],
+    );
+    addTearDown(container.dispose);
+    expect(
+      (await container.read(mangaUpdateLibraryProvider.future))
+          .map((entry) => entry.item.remoteId),
+      ['legacy'],
+    );
+    var calls = 0;
+    add(UpdateSource('s', (_) async {
+      calls++;
+      return [
+        const Chapter(sourceId: 's', remoteId: 'legacy-old', title: 'old'),
+        const Chapter(sourceId: 's', remoteId: 'legacy-new', title: 'new'),
+      ];
+    }));
+    final updates = service();
+    await updates.enqueue();
+    await updates.run();
+    expect(calls, 1);
+    expect((await db.select(db.mangaUpdates).get()).single.status, 'success');
+    final category = await (db.select(db.categories)
+          ..where((row) => row.id.equals(categoryId)))
+        .getSingle();
+    expect(category.hidden, isTrue);
+  });
+
   test('empty or disabled sources preserve cached directory and unread while another source succeeds', () async {
     await seed('empty', 'a');
     await seed('disabled', 'b');

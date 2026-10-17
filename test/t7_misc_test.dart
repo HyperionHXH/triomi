@@ -219,6 +219,19 @@ void main() {
       expect(failure, isNull);
     });
 
+    test('停用来源不发送远端收藏新增或删除请求', () async {
+      final source = FakeRemoteShelf();
+      final disabled = SourceRegistrySnapshot(
+        entries: [SourceEntry(descriptor: source.descriptor, source: source, enabled: false)],
+        failures: const [],
+      );
+      for (final add in [true, false]) {
+        final failure = await syncShelfToSource(disabled, item: itemFor(source), add: add);
+        expect(failure, isNotNull);
+      }
+      expect(source.writes, isEmpty);
+    });
+
     test('站点未注册该来源（被移除/停用）：跳过同步', () async {
       final failure = await syncShelfToSource(
         snapshotWith(FakeRemoteShelf()),

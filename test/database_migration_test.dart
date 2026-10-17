@@ -502,6 +502,41 @@ void main() {
     }
   });
 
+  test('v10 follow sync journal upgrade preserves books and isolates account deletions', () async {
+    createV1Database(seed: true);
+    final prepare = AppDatabase.forTesting(NativeDatabase(dbFile));
+    await prepare.select(prepare.mediaItems).get();
+    await prepare.close();
+    final raw = openRaw();
+    raw.execute('DROP TABLE anime_follow_sync_states');
+    raw.execute('PRAGMA user_version = 10');
+    raw.close();
+    final upgraded = AppDatabase.forTesting(NativeDatabase(dbFile));
+    final changedAt = DateTime.utc(2026, 10, 16);
+    for (final (account, deleted) in [('account-a', true), ('account-b', false)]) {
+      await upgraded.into(upgraded.animeFollowSyncStates).insert(
+        AnimeFollowSyncStatesCompanion.insert(
+          accountKey: account, sourceId: 'bangumi-anime', remoteId: '1001',
+          changedAt: changedAt, deleted: Value(deleted),
+        ),
+      );
+    }
+    await upgraded.close();
+    final reopened = AppDatabase.forTesting(NativeDatabase(dbFile));
+    try {
+      final states = await reopened.select(reopened.animeFollowSyncStates).get();
+      expect({for (final row in states) row.accountKey: row.deleted},
+          {'account-a': true, 'account-b': false});
+      final books = await LibraryRepository(reopened).listLibrary();
+      expect({for (final book in books) book.item.sourceId: book.entry.progress},
+          {'lk': 3.0, 'lns': 9.5});
+      expect((await LibraryRepository(reopened).loadChapters('lk', '1001')).single.content!.html, '正文甲');
+      expect((await reopened.select(reopened.histories).get()).map((r) => r.position), [12.0, 5.0]);
+    } finally {
+      await reopened.close();
+    }
+  });
+
   test('关闭再打开升级幂等：记录不丢且不重复 ALTER', () async {
     createV1Database(seed: true);
 

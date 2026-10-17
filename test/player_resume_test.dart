@@ -159,6 +159,8 @@ void main() {
       await settle();
       expect(opens, isNotEmpty);
       expect(opens.last['startMilliseconds'], 71000);
+      expect(find.text('正在加载视频…'), findsOneWidget);
+      expect(find.text('选集 · 2 集'), findsOneWidget);
       await tester.pump(const Duration(seconds: 6));
       final unchanged = await tester.runAsync(
         () => repo.chapterPositionOf(item.sourceId, item.remoteId, 'ep1'),
@@ -173,6 +175,7 @@ void main() {
         'duration': 120000,
         'playing': true,
       });
+      expect(find.text('正在加载视频…'), findsNothing);
       await event('completed', {
         'position': 120000,
         'duration': 120000,
@@ -209,7 +212,6 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       await settle();
-      await container.read(preferencesProvider).set('privacy.incognito', true);
       await tester.pumpWidget(page(0));
       await settle();
       await event('prepared', {
@@ -229,9 +231,21 @@ void main() {
         await tester.runAsync(
           () => repo.chapterPositionOf(item.sourceId, item.remoteId, 'ep1'),
         ),
-        120,
-        reason: '无痕播放和退出不能覆盖已有播放位置',
+        150,
+        reason: '正常播放和退出持续保存实际播放位置',
       );
+      final openCount = opens.length;
+      await tester.pumpWidget(page(-1));
+      await settle();
+      expect(opens.length, openCount, reason: '无效的未选剧集不得自动播放第一集');
+      expect(find.text('尚未选择有效的本站剧集'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await settle();
+      await tester.pumpWidget(page(0));
+      await settle();
+      await tester.pump(const Duration(seconds: 31));
+      expect(find.textContaining('视频准备超时'), findsOneWidget);
+      expect(find.text('更换来源'), findsOneWidget);
       debugDefaultTargetPlatformOverride = null;
     },
   );

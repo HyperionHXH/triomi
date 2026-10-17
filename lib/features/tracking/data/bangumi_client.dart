@@ -96,33 +96,45 @@ class BangumiClient {
   /// 自己的数字 uid（`/v0/me` 里带回来的）。读单个收藏要用它，见 [collection]。
   String? _userId;
 
-  /// `/v0/me` 查过了（成功或失败），别为一个请求反复重试。
-  bool _userIdLookupDone = false;
+  String? _userIdToken;
 
-  /// 读接口要用的用户段：优先数字 uid，解析不出来就退回官方支持的 `-`。
+  void _account(String token) {
+    if (_userIdToken == token) return;
+    _userIdToken = token;
+    _userId = null;
+  }
+
+  /// 读接口优先数字 uid；仅传输失败时退回官方支持的 `-`。
   ///
   /// 只在**读单个收藏**时用；写接口与逐集接口固定 `-`（实测镜像反过来）。
   Future<String> _readUserSegment(String token) async {
+    _account(token);
     final cached = _userId;
     if (cached != null) return cached;
-    if (_userIdLookupDone) return '-';
-    _userIdLookupDone = true;
     try {
-      await me(token); // 成功时会把 uid 记在 [_userId]
-      return _userId ?? '-';
-    } catch (_) {
-      // 拿不到 uid（网络/鉴权问题）不额外抛错：让真正的请求去报错更准确。
+      final account = await me(token);
+      return account.id > 0 ? '${account.id}' : '-';
+    } on SourceException catch (error) {
+      // Only transport failures permit the documented `-` read fallback.
+      // Invalid credentials or malformed account reads must not become a 404
+      // that the caller could mistake for an uncollected subject.
+      if (!_unreachable(error)) rethrow;
       return '-';
     }
   }
 
   /// 当前 token 对应的用户（`GET /v0/me`）。
   Future<({int id, String username, String nickname})> me(String token) async {
+    _account(token);
     final data = await _json('/v0/me', token: token, allowMissing: false);
     final map = _asMap(data);
     final id = _int(map['id']) ?? 0;
+    if (id <= 0) {
+      throw const SourceException(sourceId: sourceId, type: SourceErrorType.parse,
+        message: 'Bangumi 账号身份无效');
+    }
     // 顺手记住自己的 uid：读收藏要用数字路径，见 [_readUserSegment]。
-    if (id > 0) _userId = '$id';
+    if (id > 0 && _userIdToken == token) _userId = '$id';
     return (
       id: id,
       username: _string(map['username']),
@@ -202,7 +214,7 @@ class BangumiClient {
   );
 
   static List<TrackCandidate> _toCandidates(Object? data) => <TrackCandidate>[
-    for (final node in _asList(_asMap(data)['data']))
+    for (final node in _dataList(data))
       if (_asMapOrNull(node) case final map?)
         TrackCandidate(
           remoteTrackId: '${_int(map['id']) ?? 0}',
@@ -233,12 +245,45 @@ class BangumiClient {
     );
     if (data == null) return null;
     final map = _asMap(data);
+    final type = _int(map['type']);
+    final returnedId = _int(map['subject_id']);
+    if (!TrackStatusMap.bangumiLocal.containsKey(type) ||
+        returnedId != null && returnedId != subjectId) {
+      throw const SourceException(sourceId: sourceId, type: SourceErrorType.parse,
+        message: 'Bangumi 收藏身份或状态无效，不能当作在看或未收藏');
+    }
     return BangumiCollection(
       subjectId: _int(map['subject_id']) ?? subjectId,
-      type: _int(map['type']) ?? 3,
+      type: type!,
       epStatus: _int(map['ep_status']) ?? 0,
       rate: _int(map['rate']),
     );
+  }
+
+  /// Lists one authenticated account's anime collections. Pagination is kept
+  /// explicit so consumers can publish only a complete, account-scoped snapshot.
+  Future<({List<Map<String, Object?>> rows, int total})> animeCollections(
+    String username, {
+    required String token,
+    int offset = 0,
+    int limit = 100,
+  }) async {
+    final data = _asMap(await _json(
+      '/v0/users/${Uri.encodeComponent(username)}/collections'
+      '?subject_type=2&limit=$limit&offset=$offset',
+      token: token,
+    ));
+    final rows = <Map<String, Object?>>[];
+    for (final node in _dataList(data)) {
+      final row = _asMapOrNull(node);
+      if (row == null) throw const FormatException('Bangumi 收藏条目格式无效');
+      rows.add(Map<String, Object?>.from(row));
+    }
+    final total = _int(data['total']);
+    if (total == null || total < 0) {
+      throw const FormatException('Bangumi 收藏分页信息无效');
+    }
+    return (rows: rows, total: total);
   }
 
   /// 新增或修改收藏（`POST`，服务端是 upsert）。
@@ -285,7 +330,7 @@ class BangumiClient {
       '/v0/episodes?subject_id=$subjectId&type=0&limit=200',
       token: token,
     );
-    final list = _asList(_asMap(data)['data']);
+    final list = _dataList(data);
     final result = <BangumiEpisode>[];
     // 补号按「已解析出的条数」走：垃圾元素不该占据序号位，
     // 否则它后面的章节会被顶到错的话数上（进度会标错集）。
@@ -315,9 +360,14 @@ class BangumiClient {
       token: token,
     );
     var watched = 0;
-    for (final node in _asList(_asMap(data)['data'])) {
+    for (final node in _dataList(data)) {
       final map = _asMapOrNull(node);
-      if (map != null && _int(map['type']) == 2) watched += 1;
+      final type = _int(map?['type']);
+      if (type == null || type < 0 || type > 3) {
+        throw const SourceException(sourceId: sourceId, type: SourceErrorType.parse,
+          message: 'Bangumi 剧集收藏状态无效，未视为零进度');
+      }
+      if (type == 2) watched += 1;
     }
     return watched;
   }
@@ -393,9 +443,14 @@ class BangumiClient {
     _ensureSuccess(response, path);
 
     if (expectNoContent) return null;
-    if (response.body.trim().isEmpty) return null;
+    if (response.body.trim().isEmpty) {
+      throw SourceException(sourceId: sourceId, type: SourceErrorType.parse,
+        message: 'Bangumi 返回了空响应（$path），未视为未收藏或同步成功');
+    }
     try {
-      return jsonDecode(response.body);
+      final decoded = jsonDecode(response.body);
+      if (decoded == null) throw const FormatException('null response');
+      return decoded;
     } on FormatException catch (error) {
       throw SourceException(
         sourceId: sourceId,
@@ -451,14 +506,19 @@ class BangumiClient {
     );
   }
 
+  static List<Object?> _dataList(Object? value) {
+    if (value is! Map || value['data'] is! List) {
+      throw const SourceException(sourceId: sourceId, type: SourceErrorType.parse,
+        message: 'Bangumi 列表响应格式无效，未视为空列表或同步成功');
+    }
+    return value['data'] as List<Object?>;
+  }
+
   static Map<Object?, Object?> _asMap(Object? value) =>
       _asMapOrNull(value) ?? const <Object?, Object?>{};
 
   static Map<Object?, Object?>? _asMapOrNull(Object? value) =>
       value is Map ? value : null;
-
-  static List<Object?> _asList(Object? value) =>
-      value is List ? value : const <Object?>[];
 
   static String _string(Object? value) => value?.toString().trim() ?? '';
 

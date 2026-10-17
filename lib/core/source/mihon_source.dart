@@ -10,6 +10,7 @@ import '../models/source_exception.dart';
 import '../platform/platform_channel.dart';
 import 'mihon_image_bridge.dart';
 import 'source_api.dart';
+import 'tag_search.dart';
 
 /// Adapter for one source exposed by an executable Mihon extension.
 ///
@@ -19,6 +20,7 @@ class MihonSource
     implements
         DiscoverProvider,
         SearchProvider,
+        TagSearchProvider,
         DetailProvider,
         ContentProvider {
   MihonSource({
@@ -107,6 +109,91 @@ class MihonSource
       for (final row in response['filters'] as List? ?? [])
         if (row is Map) Map<String, Object?>.from(row),
     ];
+  }
+
+  @override
+  Future<List<SearchTag>> searchTags() async {
+    final tags = <String, SearchTag>{};
+    void visit(List<Map<String, Object?>> rows, bool genreGroup) {
+      for (final row in rows) {
+        final name = '${row['name'] ?? ''}';
+        if (row['type'] == 'group') {
+          visit([
+            for (final child in row['state'] as List? ?? [])
+              if (child is Map) Map<String, Object?>.from(child),
+          ], genreGroup || RegExp(r'genre|tag|题材|題材|类型|類型', caseSensitive: false).hasMatch(name));
+        } else if (genreGroup &&
+            (row['type'] == 'check' || row['type'] == 'tri')) {
+          tags[name] = SearchTag(id: name, label: name);
+        } else if (RegExp(r'genre|tag|题材|題材|类型|類型', caseSensitive: false).hasMatch(name)) {
+          for (final value in row['values'] as List? ?? []) {
+            final label = '$value';
+            if (label.isNotEmpty) tags[label] = SearchTag(id: label, label: label);
+          }
+        }
+      }
+    }
+    visit(await searchFilters(), false);
+    return tags.values.toList(growable: false);
+  }
+
+  @override
+  Future<List<MediaItem>> searchTagged(
+    String keyword, {
+    required List<String> tags,
+    int page = 1,
+  }) async => (await searchTaggedPage(keyword, tags: tags, page: page)).items;
+
+  Future<({List<MediaItem> items, bool hasMore})> searchTaggedPage(
+    String keyword, {
+    required List<String> tags,
+    int page = 1,
+  }) async {
+    final filters = await searchFilters();
+    final remaining = tags.toSet();
+    void apply(List<Map<String, Object?>> rows) {
+      for (final row in rows) {
+        final state = row['state'];
+        if (row['type'] == 'group' && state is List) {
+          final children = [
+            for (final child in state)
+              if (child is Map) Map<String, Object?>.from(child),
+          ];
+          row['state'] = children;
+          apply(children);
+          continue;
+        }
+        final name = '${row['name'] ?? ''}';
+        final match = remaining.where((t) => t.toLowerCase() == name.toLowerCase()).firstOrNull;
+        if (match != null && (row['type'] == 'tri' || row['type'] == 'check')) {
+          row['state'] = row['type'] == 'tri' ? 1 : true;
+          remaining.remove(match);
+        } else if (row['type'] == 'select' || row['type'] == 'multi') {
+          final values = row['values'] as List? ?? [];
+          final selected = [
+            for (final tag in remaining)
+              if (values.any((v) => '$v'.toLowerCase() == tag.toLowerCase())) tag,
+          ];
+          if (row['type'] == 'select' && selected.length == 1) {
+            row['state'] = values.indexWhere((v) => '$v'.toLowerCase() == selected.single.toLowerCase());
+            remaining.remove(selected.single);
+          } else if (row['type'] == 'multi' && selected.isNotEmpty) {
+            row['state'] = [
+              for (final value in values)
+                if (selected.any((t) => t.toLowerCase() == '$value'.toLowerCase())) value,
+            ];
+            remaining.removeAll(selected);
+          }
+        }
+      }
+    }
+    apply(filters);
+    if (remaining.isNotEmpty) {
+      throw _error('本站没有对应的题材筛选：${remaining.join('、')}，请在来源搜索中选择其支持的标签');
+    }
+    return cataloguePage(
+      operation: 'search', query: keyword, page: page, filters: filters,
+    );
   }
 
   Future<({List<MediaItem> items, bool hasMore})> cataloguePage({

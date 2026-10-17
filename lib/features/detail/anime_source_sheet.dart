@@ -182,8 +182,8 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
         if (error is KazumiVerificationRequired) _verification[id] = error;
         setState(
           () => _errors[id] = error is SourceException
-              ? error.type.label
-              : '搜索失败，请重试',
+              ? error.userMessage
+              : SourceException.sanitizeMessage('$error'),
         );
       }
     } finally {
@@ -226,45 +226,27 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
   }
 
   Future<void> _choose(MediaItem candidate) async {
-    final subject = _subject ?? widget.item;
-    final known = _saved.any(
-      (link) =>
-          link.sourceId == candidate.sourceId &&
-          link.remoteId == candidate.remoteId,
-    );
-    if (known) {
-      Navigator.pop(context, candidate);
-      return;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('确认作品关联'),
-        content: Text(
-          '资料作品：${subject.title}\n站点作品：${candidate.title}\n\n核对季数、年份和原名。确认后在当前详情选择目标播放列表和剧集，不套用其他站点时间。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('确认关联'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
     try {
-      await ref
-          .read(animeIdentityRepositoryProvider)
-          .confirm(subject, candidate);
+      final snapshot = await ref.read(sourcesProvider.future);
+      if (!mounted) return;
+      if (!snapshot.enabledEntries.any((entry) =>
+          entry.descriptor.id == candidate.sourceId &&
+          entry.descriptor.type == MediaType.anime &&
+          entry.supports(SourceCapability.content))) {
+        throw StateError('此播放来源已停用，请选择其他来源');
+      }
+      final subject = _subject ?? widget.item;
+      // Choosing a concrete site work is the explicit identity decision; the
+      // mapping remains internal to resume, not a separate binding workflow.
+      if (subject.sourceId != candidate.sourceId) {
+        await ref.read(animeIdentityRepositoryProvider).confirm(subject, candidate);
+      }
       if (mounted) Navigator.pop(context, candidate);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(SourceException.sanitizeMessage('$error'))),
+        );
       }
     }
   }
@@ -368,14 +350,14 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
                                 .candidateFor(link),
                             builder: (context, snapshot) => ListTile(
                               title: Text(
-                                '已确认 · ${snapshot.data?.title ?? link.sourceId}',
+                                '最近使用 · ${snapshot.data?.title ?? link.sourceId}',
                               ),
                               subtitle: Text(
                                 _sources.any(
                                       (s) => s.descriptor.id == link.sourceId,
                                     )
-                                    ? '已保存，可直接打开；仍需核对目标剧集'
-                                    : '来源已停用或移除；映射保留，可改选其他站',
+                                    ? '选择作品后查看本站播放列表和剧集'
+                                    : '来源已停用或移除，可选择其他来源',
                               ),
                               onTap:
                                   snapshot.data != null &&
@@ -385,15 +367,15 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
                                   ? () => Navigator.pop(context, snapshot.data)
                                   : null,
                               trailing: IconButton(
-                                tooltip: '解除此关联',
+                                tooltip: '移除此播放来源记录',
                                 icon: const Icon(Icons.link_off),
                                 onPressed: () async {
                                   final confirmed = await showDialog<bool>(
                                     context: context,
                                     builder: (context) => AlertDialog(
-                                      title: const Text('解除作品关联'),
+                                      title: const Text('移除播放来源记录'),
                                       content: const Text(
-                                        '只解除本站映射，原收藏、观看历史和下载不会删除。',
+                                        '仅移除本站选择记录，收藏、观看历史和下载不会删除。',
                                       ),
                                       actions: [
                                         TextButton(
@@ -404,7 +386,7 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
                                         FilledButton(
                                           onPressed: () =>
                                               Navigator.pop(context, true),
-                                          child: const Text('解除'),
+                                          child: const Text('移除'),
                                         ),
                                       ],
                                     ),
@@ -497,7 +479,7 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
                           ))
                             ListTile(
                               title: Text(item.title),
-                              trailing: const Icon(Icons.chevron_right),
+                              trailing: const Icon(Icons.play_circle_outline),
                               onTap: () => _choose(item),
                             ),
                           if ((_results[source.descriptor.id]?.length ?? 0) > 3)

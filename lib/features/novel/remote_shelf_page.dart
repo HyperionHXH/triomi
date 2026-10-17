@@ -13,9 +13,9 @@ import '../../core/source/source_registry.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
-import '../../core/widgets/source_network_image.dart';
 import '../library/data/library_providers.dart';
 import '../sources/source_account_entries.dart';
+import 'novel_book_card.dart';
 
 /// 远端书架：聚合各来源站点收藏的入口。
 ///
@@ -45,6 +45,8 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
 
   /// [_future] 对应的来源 id（切换来源后据此重新加载）。
   String? _futureId;
+  ContentSource? _futureSource;
+  bool? _futureLoggedIn;
   SourceEntry? _current;
   Future<_ShelfResult>? _future;
   int _requestSeq = 0;
@@ -61,49 +63,92 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
     }
     try {
       final books = await provider.remoteShelf();
+      bool current() =>
+          mounted && seq == _requestSeq && provider.isLoggedIn;
+      if (!current()) {
+        return _ShelfResult(needsLogin: mounted && seq == _requestSeq);
+      }
+      String? warning;
       // LK-style sources may include an unread chapter snapshot. The shelf
       // itself remains usable if the optional unread refresh fails; in that
       // case the local value is left untouched.
       try {
         final counts = await provider.remoteUnreadCounts();
-        await ref
-            .read(libraryRepositoryProvider)
-            .applyRemoteUnreadCounts(
-              sourceId: entry.descriptor.id,
-              counts: counts,
-            );
-      } catch (_) {
-        // A failed optional refresh must not turn a successful shelf response
-        // into an empty/error shelf or overwrite the previous local count.
+        if (!current()) {
+          return _ShelfResult(needsLogin: mounted && seq == _requestSeq);
+        }
+        if (counts.isNotEmpty) {
+          await ref
+              .read(libraryRepositoryProvider)
+              .applyRemoteUnreadCounts(
+                sourceId: entry.descriptor.id,
+                counts: counts,
+              );
+        }
+      } catch (error) {
+        warning = error is SourceException
+            ? SourceRegistry.describeError(error, entry.descriptor.name)
+            : SourceException.sanitizeMessage('$error');
       }
       // 结果已过期（用户切了来源），丢弃这次响应。
-      if (seq != _requestSeq) return const _ShelfResult();
-      return _ShelfResult(books: books);
+      if (!current()) {
+        return _ShelfResult(
+          needsLogin: mounted && seq == _requestSeq,
+          error: warning,
+        );
+      }
+      final keys = <(String, String)>{};
+      return _ShelfResult(
+        books: books.where((book) =>
+            book.type == MediaType.novel &&
+            book.sourceId == entry.descriptor.id &&
+            keys.add((book.sourceId, book.remoteId))).toList(),
+        warning: warning,
+      );
     } catch (error) {
       final message = error is SourceException
           ? SourceRegistry.describeError(error, entry.descriptor.name)
-          : '${entry.descriptor.name}：$error';
-      return _ShelfResult(error: message);
+          : '${entry.descriptor.name}：${SourceException.sanitizeMessage('$error')}';
+      return _ShelfResult(
+        error: message,
+        needsLogin: error is SourceException && error.type == SourceErrorType.auth,
+      );
     }
   }
 
-  void _reloadCurrent() {
+  Future<void> _reloadCurrent() async {
     final entry = _current;
-    if (entry == null) return;
+    if (entry == null || !mounted) return;
     final refreshed = _load(entry);
-    setState(() { _future = refreshed; });
+    setState(() {
+      _future = refreshed;
+    });
+    await refreshed;
   }
 
   @override
   Widget build(BuildContext context) {
     final sourcesAsync = ref.watch(sourcesProvider);
+    ref.listen(sourcesProvider, (previous, next) {
+      if (next.isLoading && previous?.asData != null) {
+        _requestSeq++;
+        _futureId = null;
+        _futureSource = null;
+        _future = null;
+        _futureLoggedIn = null;
+        _current = null;
+      }
+    });
 
     return PageScaffold(
       title: '远端书架',
       actions: <Widget>[
         IconButton(
           tooltip: '刷新',
-          onPressed: _current == null ? null : _reloadCurrent,
+          onPressed: sourcesAsync.asData == null ||
+                  remoteShelfEntries(sourcesAsync.asData!.value).isEmpty
+              ? null
+              : _reloadCurrent,
           icon: const Icon(Icons.refresh),
         ),
       ],
@@ -122,6 +167,11 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
   Widget _buildBody(SourceRegistrySnapshot snapshot) {
     final sources = remoteShelfEntries(snapshot);
     if (sources.isEmpty) {
+      _requestSeq++;
+      _current = null;
+      _futureId = null;
+      _futureSource = null;
+      _future = null;
       return EmptyStateView(
         icon: Icons.bookmarks_outlined,
         title: '还没有可用的远端书架来源',
@@ -139,8 +189,13 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
       orElse: () => sources.first,
     );
     _current = entry;
-    if (_futureId != entry.descriptor.id) {
+    final provider = entry.source as RemoteShelfProvider;
+    if (_futureId != entry.descriptor.id ||
+        !identical(_futureSource, entry.source) ||
+        _futureLoggedIn != provider.isLoggedIn) {
       _futureId = entry.descriptor.id;
+      _futureSource = entry.source;
+      _futureLoggedIn = provider.isLoggedIn;
       _future = _load(entry);
     }
 
@@ -168,11 +223,11 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
                 return EmptyStateView(
                   icon: Icons.person_off_outlined,
                   title: '还没有登录${entry.descriptor.name}',
-                  message: '打开对应站点账号登录，返回后刷新本站书架。',
+                  message: result.error ?? '打开对应站点账号登录，返回后刷新本站书架。',
                   action: FilledButton.icon(
                     onPressed: () async {
                       await context.push(accountRouteFor(entry.descriptor.id));
-                      if (mounted) _reloadCurrent();
+                      if (mounted) await _reloadCurrent();
                     },
                     icon: const Icon(Icons.login, size: 18),
                     label: const Text('去登录'),
@@ -196,29 +251,40 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
                 return EmptyStateView(
                   icon: Icons.bookmarks_outlined,
                   title: '远端书架是空的',
-                  message: '在${entry.descriptor.name}把书加入书架后，这里会同步显示。',
+                  message: [
+                    '在${entry.descriptor.name}把书加入书架后，这里会同步显示。',
+                    if (result.warning != null)
+                      '未读刷新失败：${result.warning}（保留原值）',
+                  ].join('\n'),
                 );
               }
-              return RefreshIndicator(
-                onRefresh: () async => _reloadCurrent(),
-                child: GridView.builder(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 320,
-                    childAspectRatio: 2.6,
-                    crossAxisSpacing: AppSpacing.sm,
-                    mainAxisSpacing: AppSpacing.sm,
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (result.warning != null)
+                    Padding(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      child: Text('收藏已加载；未读刷新失败：${result.warning}（保留原值）'),
+                    ),
+                  Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: _reloadCurrent,
+                      child: ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        itemCount: result.books.length,
+                        itemBuilder: (context, index) {
+                          final book = result.books[index];
+                          return NovelBookCard(
+                            item: book,
+                            sourceLabel: entry.descriptor.name,
+                            onReturn: _reloadCurrent,
+                          );
+                        },
+                      ),
+                    ),
                   ),
-                  itemCount: result.books.length,
-                  itemBuilder: (context, index) {
-                    final book = result.books[index];
-                    return _ShelfCard(
-                      book: book,
-                      onTap: () =>
-                          context.push(AppRoutes.detailFor(book), extra: book),
-                    );
-                  },
-                ),
+                ],
               );
             },
           ),
@@ -233,11 +299,13 @@ class _ShelfResult {
   const _ShelfResult({
     this.books = const <MediaItem>[],
     this.error,
+    this.warning,
     this.needsLogin = false,
   });
 
   final List<MediaItem> books;
   final String? error;
+  final String? warning;
   final bool needsLogin;
 }
 
@@ -306,67 +374,3 @@ class _SourceChipBar extends StatelessWidget {
   }
 }
 
-class _ShelfCard extends ConsumerWidget {
-  const _ShelfCard({required this.book, required this.onTap});
-
-  final MediaItem book;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            AspectRatio(
-              aspectRatio: 0.7,
-              child: book.coverUrl == null
-                  ? const ColoredBox(
-                      color: Color(0x11000000),
-                      child: Icon(Icons.menu_book_outlined),
-                    )
-                  : Image(
-                      image: SourceNetworkImage(
-                        book.coverUrl!,
-                        http: ref.watch(sourceHttpClientProvider),
-                        sourceId: book.sourceId,
-                      ),
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stack) => const ColoredBox(
-                        color: Color(0x11000000),
-                        child: Icon(Icons.menu_book_outlined),
-                      ),
-                    ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.sm),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      book.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const Spacer(),
-                    Text(
-                      book.author ?? '',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

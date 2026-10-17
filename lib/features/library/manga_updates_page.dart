@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/db/database_provider.dart';
 import '../../core/models/media_type.dart';
 import '../../core/router/app_router.dart';
 import '../../core/source/source_providers.dart';
@@ -14,7 +12,6 @@ import 'data/library_providers.dart';
 import 'data/manga_update_background.dart';
 import 'data/manga_update_execution_lock.dart';
 import 'data/manga_update_service.dart';
-import 'source_migration_page.dart';
 
 class MangaUpdatesPage extends ConsumerStatefulWidget {
   const MangaUpdatesPage({super.key, this.embedded = false});
@@ -26,7 +23,7 @@ class MangaUpdatesPage extends ConsumerStatefulWidget {
 class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
   bool _running = false;
   String? _error;
-  Future<void> _run({bool failed = false, Set<String>? keys}) async {
+  Future<void> _run() async {
     if (_running) return;
     final container = ProviderScope.containerOf(context);
     final service = ref.read(mangaUpdateServiceProvider);
@@ -42,24 +39,13 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
         return;
       }
       await notifyMangaUpdates(container);
-      if (failed) {
-        final rows = await container
-            .read(databaseProvider)
-            .select(container.read(databaseProvider).mangaUpdates)
-            .get();
-        keys = {
-          for (final row in rows)
-            if (row.status == 'failed' || row.status == 'deferred')
-              '${row.sourceId}\u0000${row.remoteId}',
-        };
-      }
-      await service.enqueue(onlyFailed: failed, itemKeys: keys);
-      await service.run(itemKeys: keys);
+      await service.enqueue();
+      await service.run();
       await notifyMangaUpdates(container);
       container.invalidate(libraryByTypeProvider(MediaType.manga));
       container.invalidate(mangaUpdateLibraryProvider);
-    } catch (_) {
-      if (mounted) setState(() => _error = '更新未完成，已保存的目录及进度保留');
+    } catch (error) {
+      if (mounted) setState(() => _error = '更新未完成，目录及进度保留：$error');
     } finally {
       await release?.call();
       if (mounted) setState(() => _running = false);
@@ -208,160 +194,95 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
   @override
   Widget build(BuildContext context) {
     final rows = ref.watch(mangaUpdateRowsProvider);
-    final library = ref.watch(mangaUpdateLibraryProvider).asData?.value ?? [];
-    final progress = ref.watch(mangaUpdateProgressProvider).asData?.value;
+    final library = ref.watch(mangaUpdateLibraryProvider);
     final sourceLabels = ref.watch(librarySourceLabelsProvider);
-    const statusLabels = {
-      'queued': '待更新',
-      'running': '更新中',
-      'deferred': '等待条件',
-      'failed': '失败',
-      'success': '成功',
-    };
-    final groups = <String, int>{};
-    for (final entry in library) {
-      if (entry.item.type == MediaType.manga) {
-        groups.update(entry.item.sourceId, (n) => n + 1, ifAbsent: () => 1);
-      }
-    }
-    final controls = <Widget>[
-      IconButton(
-        tooltip: '更新策略',
-        onPressed: _running ? null : _settings,
-        icon: const Icon(Icons.tune),
-      ),
-      IconButton(
-        tooltip: '取消更新',
-        onPressed: () async {
-          ref.read(mangaUpdateServiceProvider).cancel();
-          try {
-            await const MethodChannel('triomi/platform')
-                .invokeMethod<void>('cancelMangaUpdate');
-          } on MissingPluginException {
-            // Desktop has only the already-cancelled foreground service.
-          }
-        },
-        icon: const Icon(Icons.stop),
-      ),
-    ];
     final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Wrap(
-          spacing: 8,
-          children: [
-            ...controls,
-            FilledButton(
-              onPressed: _running ? null : _run,
-              child: const Text('更新漫画书架'),
-            ),
-            TextButton(
-              onPressed: _running ? null : () => _run(failed: true),
-              child: const Text('重试失败/待更新'),
-            ),
-          ],
-        ),
-        if (_running)
-          LinearProgressIndicator(
-            value: progress == null || progress.$2 == 0
-                ? null
-                : progress.$1 / progress.$2,
-          ),
-        if (progress != null) Text('已检查 ${progress.$1} / ${progress.$2}'),
-        if (_error != null) Text(_error!),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              for (final group in groups.entries)
-                Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: ActionChip(
-                    label: Text(
-                      '${sourceLabels[group.key] ?? group.key} · ${group.value}本',
-                    ),
-                    onPressed: _running
-                        ? null
-                        : () => _run(
-                            keys: {
-                              for (final entry in library)
-                                if (entry.item.sourceId == group.key)
-                                  '${entry.item.sourceId}\u0000${entry.item.remoteId}',
-                            },
-                          ),
-                  ),
+              Expanded(
+                child: Text(
+                  _running ? '正在检查新章节…' : '漫画更新',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
+              ),
+              IconButton(
+                tooltip: '更新策略',
+                onPressed: _running ? null : _settings,
+                icon: const Icon(Icons.settings_outlined),
+              ),
+              IconButton(
+                tooltip: '刷新漫画更新',
+                onPressed: _running ? null : _run,
+                icon: const Icon(Icons.refresh),
+              ),
             ],
           ),
         ),
+        if (_running) const LinearProgressIndicator(),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(_error!),
+          ),
         Expanded(
-          child: rows.when(
+          child: library.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, _) => const Text('更新列表读取失败'),
-            data: (rows) => ListView(
-              children: [
-                for (final row in rows)
-                  Builder(
-                    builder: (context) {
-                      final item = library
-                          .where(
-                            (e) =>
-                                e.item.sourceId == row.sourceId &&
-                                e.item.remoteId == row.remoteId,
-                          )
-                          .firstOrNull
-                          ?.item;
-                      return Card(
-                        child: Column(
-                          children: [
-                            ListTile(
+            error: (error, _) => Center(child: Text('书库读取失败：$error')),
+            data: (items) => rows.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => Center(child: Text('更新列表读取失败：$error')),
+              data: (records) {
+                final visible = records.where((row) =>
+                  (row.status == 'success' && row.added > 0) ||
+                  row.status == 'failed' ||
+                  row.status == 'deferred' ||
+                  (!_running && (row.status == 'queued' || row.status == 'running')),
+                ).toList();
+                return RefreshIndicator(
+                  onRefresh: _run,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      if (visible.isEmpty && !_running && _error == null)
+                        const Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Center(child: Text('暂无新章节')),
+                        ),
+                      for (final row in visible)
+                        Builder(
+                          builder: (context) {
+                            final item = items.where((entry) =>
+                              entry.item.sourceId == row.sourceId &&
+                              entry.item.remoteId == row.remoteId,
+                            ).firstOrNull?.item;
+                            final failed = row.status != 'success';
+                            return ListTile(
+                              leading: failed
+                                  ? const Icon(Icons.error_outline)
+                                  : SizedBox(
+                                      width: 42,
+                                      height: 56,
+                                      child: MediaCover(url: item?.coverUrl),
+                                    ),
                               title: Text(item?.title ?? row.remoteId),
                               subtitle: Text(
-                                '${sourceLabels[row.sourceId] ?? row.sourceId}\n${statusLabels[row.status] ?? row.status} · 新增${row.added}章${row.error == null ? '' : '\n${row.error}'}',
+                                '${sourceLabels[row.sourceId] ?? row.sourceId}\n'
+                                '${failed ? (row.error ?? '检查尚未完成，请刷新重新检查') : '新增 ${row.added} 章'}',
                               ),
-                              leading: SizedBox(
-                                width: 42,
-                                height: 56,
-                                child: MediaCover(url: item?.coverUrl),
+                              onTap: item == null ? null : () => context.push(
+                                AppRoutes.detailFor(item), extra: item,
                               ),
-                              onTap: item == null
-                                  ? null
-                                  : () => context.push(
-                                      AppRoutes.detailFor(item),
-                                      extra: item,
-                                    ),
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                TextButton(
-                                  onPressed: _running
-                                      ? null
-                                      : () => _run(
-                                          keys: {
-                                            '${row.sourceId}\u0000${row.remoteId}',
-                                          },
-                                        ),
-                                  child: const Text('重试此作品'),
-                                ),
-                                if (item != null && row.status == 'failed')
-                                  TextButton(
-                                    onPressed: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute<void>(
-                                        builder: (_) =>
-                                            SourceMigrationPage(item: item),
-                                      ),
-                                    ),
-                                    child: const Text('迁移到其他来源'),
-                                  ),
-                              ],
-                            ),
-                          ],
+                            );
+                          },
                         ),
-                      );
-                    },
+                    ],
                   ),
-              ],
+                );
+              },
             ),
           ),
         ),
@@ -369,6 +290,6 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
     );
     return widget.embedded
         ? content
-        : PageScaffold(title: '漫画更新与错误', child: content);
+        : PageScaffold(title: '漫画更新', child: content);
   }
 }

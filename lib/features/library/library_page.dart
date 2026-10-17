@@ -33,23 +33,9 @@ class LibraryPage extends ConsumerStatefulWidget {
 }
 
 class _LibraryOptions {
-  Set<String> sources = {}, tags = {};
-  bool? unread, downloaded, completed, tracked;
-  String reading = '', sort = 'updated', layout = 'grid', group = 'none';
-  bool revealHidden = false;
+  Set<String> tags = {};
+  String sort = 'updated', layout = 'grid', group = 'none';
 
-  _LibraryOptions copy() => _LibraryOptions()
-    ..sources = Set.of(sources)
-    ..tags = Set.of(tags)
-    ..unread = unread
-    ..downloaded = downloaded
-    ..completed = completed
-    ..tracked = tracked
-    ..reading = reading
-    ..sort = sort
-    ..layout = layout
-    ..group = group
-    ..revealHidden = revealHidden;
 }
 
 class _LibraryPageState extends ConsumerState<LibraryPage> {
@@ -93,7 +79,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     _selecting = false;
   }
 
-  Set<(String, String)> _downloadedKeys = {}, _trackedKeys = {};
+  Set<(String, String)> _downloadedKeys = {};
 
   bool _matches(LibraryItemView view) {
     if (view.item.type != widget.type || view.entry.type != widget.type) {
@@ -107,47 +93,14 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         !categories.matches(
           view,
           categoryId: _categoryId,
-          revealHidden: _options.revealHidden,
-          query: _query,
+          revealHidden: true,
+          query: '',
         )) {
       return false;
     }
-    final o = _options;
-    if ((o.downloaded != null && !ref.read(downloadGroupsProvider).hasValue) ||
-        (o.tracked != null &&
-            !ref.read(libraryTrackedKeysProvider(widget.type)).hasValue)) {
-      return false;
-    }
-    final status = view.item.status?.trim().toLowerCase();
-    final completed = const {'completed', '2', '已完结', '完结'}.contains(status)
-        ? true
-        : const {
-            'ongoing',
-            '1',
-            '连载中',
-            '连载',
-            '更新中',
-            'publishing',
-          }.contains(status)
-        ? false
-        : null;
-    return (o.sources.isEmpty || o.sources.contains(view.item.sourceId)) &&
-        (o.tags.isEmpty || o.tags.every(view.item.tags.contains)) &&
-        (o.unread == null || (view.entry.unreadCount > 0) == o.unread) &&
-        (o.downloaded == null ||
-            _downloadedKeys.contains((
-                  view.item.sourceId,
-                  view.item.remoteId,
-                )) ==
-                o.downloaded) &&
-        (o.tracked == null ||
-            _trackedKeys.contains((view.item.sourceId, view.item.remoteId)) ==
-                o.tracked) &&
-        (o.completed == null || completed == o.completed) &&
-        (o.reading.isEmpty ||
-            (o.reading == 'started'
-                ? view.entry.progress > 0
-                : view.entry.progress <= 0));
+    return view.item.title.toLowerCase().contains(_query) &&
+        (_options.tags.isEmpty ||
+            _options.tags.every(view.item.tags.contains));
   }
 
   static const _sorts = <String, String>{
@@ -170,8 +123,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     final lastRead =
         ref.watch(libraryLastReadProvider(widget.type)).asData?.value ?? {};
     final downloads = ref.watch(downloadGroupsProvider);
-    final tracked = ref.watch(libraryTrackedKeysProvider(widget.type));
-    _trackedKeys = tracked.asData?.value ?? {};
     _downloadedKeys = {
       for (final group in downloads.asData?.value ?? <DownloadGroup>[])
         if (group.type == widget.type && group.doneCount > 0)
@@ -188,10 +139,12 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         onSelected: _more,
         itemBuilder: (_) => [
           const PopupMenuItem(value: 'categories', child: Text('管理书架分类')),
-          const PopupMenuItem(value: 'markAllRead', child: Text('当前筛选标为已读')),
+          const PopupMenuItem(value: 'markAllRead', child: Text('当前结果标为已读')),
+          for (final sort in _sorts.entries)
+            PopupMenuItem(value: 'sort:${sort.key}', child: Text('排序 · ${sort.value}')),
+          const PopupMenuItem(value: 'layout', child: Text('切换封面 / 列表')),
           const PopupMenuItem(value: 'history', child: Text('阅读历史')),
           const PopupMenuItem(value: 'downloads', child: Text('下载管理')),
-          const PopupMenuItem(value: 'search', child: Text('搜索来源作品')),
           if (widget.type == MediaType.manga) ...[
             const PopupMenuItem(value: 'local', child: Text('本地漫画库')),
             const PopupMenuItem(value: 'migration', child: Text('持久迁移计划')),
@@ -214,7 +167,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
               controller: _search,
               autofocus: true,
               decoration: const InputDecoration(
-                labelText: '查询本地书架（标题、作者、标签）',
+                labelText: '搜索书库名称',
                 prefixIcon: Icon(Icons.search),
               ),
               onChanged: (value) => setState(() {
@@ -223,15 +176,39 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
               }),
             ),
           ),
+        if (_searching)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                for (final tag in ({
+                  ...?library.asData?.value.expand((view) => view.item.tags),
+                  ..._options.tags,
+                }.toList()..sort()))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(tag),
+                      selected: _options.tags.contains(tag),
+                      onSelected: (selected) => setState(() {
+                        selected ? _options.tags.add(tag) : _options.tags.remove(tag);
+                        _exitSelection();
+                      }),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              _categoryTab('普通书架', null),
+              _categoryTab('全部', null),
               for (final category in categories?.categories ?? <CategoryRow>[])
                 _categoryTab(
-                  '${category.hidden ? '隐藏 · ' : ''}${category.name}',
+                  category.name,
                   category.id,
                 ),
               if (_categoryId != null &&
@@ -288,127 +265,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                   onPressed: _removeSelected,
                   child: const Text('移出书架'),
                 ),
-              ],
-            ),
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 12,
-              children: [
-                Text(
-                  '${_sorts[_options.sort]} · ${_options.layout == 'list' ? '列表' : '封面网格'}',
-                ),
-                TextButton.icon(
-                  onPressed: _panel,
-                  icon: const Icon(Icons.tune),
-                  label: const Text('筛选 / 排序 / 显示 / 分组'),
-                ),
-              ],
-            ),
-          ),
-        if (_options.revealHidden)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text('正在显示隐藏作品；隐藏分类不是安全锁。'),
-          ),
-        if (_options.downloaded != null && !downloads.hasValue)
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text(
-              downloads.hasError
-                  ? '下载状态读取失败：${downloads.error}'
-                  : '正在读取本地下载状态…',
-            ),
-          ),
-        if (_options.tracked != null && !tracked.hasValue)
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text(
-              tracked.hasError ? '追踪状态读取失败：${tracked.error}' : '正在读取本地追踪状态…',
-            ),
-          ),
-        if (_query.isNotEmpty ||
-            _options.sources.isNotEmpty ||
-            _options.tags.isNotEmpty ||
-            _options.unread != null ||
-            _options.downloaded != null ||
-            _options.completed != null ||
-            _options.tracked != null ||
-            _options.reading.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Wrap(
-              spacing: 8,
-              children: [
-                if (_query.isNotEmpty)
-                  InputChip(
-                    label: Text(_query),
-                    onDeleted: () => setState(() {
-                      _query = '';
-                      _search.clear();
-                      _exitSelection();
-                    }),
-                  ),
-                for (final source in _options.sources)
-                  InputChip(
-                    label: Text(labels[source] ?? source),
-                    onDeleted: () => setState(() {
-                      _options.sources.remove(source);
-                      _exitSelection();
-                    }),
-                  ),
-                for (final tag in _options.tags)
-                  InputChip(
-                    label: Text(tag),
-                    onDeleted: () => setState(() {
-                      _options.tags.remove(tag);
-                      _exitSelection();
-                    }),
-                  ),
-                if (_options.unread != null)
-                  InputChip(
-                    label: Text(_options.unread! ? '有未读' : '无未读'),
-                    onDeleted: () => setState(() {
-                      _options.unread = null;
-                      _exitSelection();
-                    }),
-                  ),
-                if (_options.downloaded != null)
-                  InputChip(
-                    label: Text(_options.downloaded! ? '已下载' : '未下载'),
-                    onDeleted: () => setState(() {
-                      _options.downloaded = null;
-                      _exitSelection();
-                    }),
-                  ),
-                if (_options.completed != null)
-                  InputChip(
-                    label: Text(_options.completed! ? '已完结' : '未完结'),
-                    onDeleted: () => setState(() {
-                      _options.completed = null;
-                      _exitSelection();
-                    }),
-                  ),
-                if (_options.tracked != null)
-                  InputChip(
-                    label: Text(_options.tracked! ? '有追踪' : '无追踪'),
-                    onDeleted: () => setState(() {
-                      _options.tracked = null;
-                      _exitSelection();
-                    }),
-                  ),
-                if (_options.reading.isNotEmpty)
-                  InputChip(
-                    label: Text(_options.reading == 'started' ? '阅读中' : '未开始'),
-                    onDeleted: () => setState(() {
-                      _options.reading = '';
-                      _exitSelection();
-                    }),
-                  ),
               ],
             ),
           ),
@@ -648,6 +504,18 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   }
 
   void _more(String action) {
+    if (action.startsWith('sort:')) {
+      final sort = action.substring(5);
+      if (!_sorts.containsKey(sort)) return;
+      setState(() { _options.sort = sort; _exitSelection(); });
+      unawaited(ref.read(preferencesProvider).set('$_prefix.sort', sort));
+      return;
+    }
+    if (action == 'layout') {
+      setState(() => _options.layout = _options.layout == 'list' ? 'grid' : 'list');
+      unawaited(ref.read(preferencesProvider).set('$_prefix.layout', _options.layout));
+      return;
+    }
     switch (action) {
       case 'categories':
         Navigator.push(
@@ -662,8 +530,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         context.push(AppRoutes.historyFor(widget.type));
       case 'downloads':
         context.push(AppRoutes.downloadsFor(widget.type));
-      case 'search':
-        context.push(AppRoutes.searchFor(widget.type));
       case 'local':
         Navigator.push(
           context,
@@ -679,327 +545,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     }
   }
 
-  Future<void> _panel() async {
-    var draft = _options.copy();
-    final entries =
-        ref.read(libraryByTypeProvider(widget.type)).asData?.value ?? [];
-    final labels = ref.read(librarySourceLabelsProvider);
-    final sources = {
-      ...entries.map((e) => e.item.sourceId),
-      ...draft.sources,
-    }.toList()..sort();
-    final tags = {...entries.expand((e) => e.item.tags), ...draft.tags}.toList()
-      ..sort();
-    String sourceQuery = '', tagQuery = '';
-    Widget group(String name, String summary, Widget child) => Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(name, style: Theme.of(context).textTheme.titleMedium),
-          Text(summary),
-          const SizedBox(height: 8),
-          child,
-          const Divider(),
-        ],
-      ),
-    );
-    final applied = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      constraints: const BoxConstraints(maxWidth: 640),
-      builder: (sheet) => StatefulBuilder(
-        builder: (sheet, update) {
-          Widget tri(String title, bool? value, void Function(bool?) change) =>
-              DropdownButtonFormField<int>(
-                key: ValueKey((title, value)),
-                initialValue: value == null
-                    ? 0
-                    : value
-                    ? 1
-                    : -1,
-                decoration: InputDecoration(labelText: title),
-                items: const [
-                  DropdownMenuItem(value: 0, child: Text('不限')),
-                  DropdownMenuItem(value: 1, child: Text('包含')),
-                  DropdownMenuItem(value: -1, child: Text('排除')),
-                ],
-                onChanged: (v) => update(() => change(v == 0 ? null : v == 1)),
-              );
-          return SizedBox(
-            height: MediaQuery.sizeOf(sheet).height * .85,
-            child: Column(
-              children: [
-                ListTile(
-                  title: const Text('筛选 / 排序 / 显示 / 分组'),
-                  subtitle: Text(
-                    '已选 ${draft.sources.length + draft.tags.length + [draft.unread, draft.downloaded, draft.completed, draft.tracked].where((v) => v != null).length + (draft.reading.isEmpty ? 0 : 1)} 个条件',
-                  ),
-                  trailing: IconButton(
-                    tooltip: '取消',
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(sheet, false),
-                  ),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      8,
-                      20,
-                      20 + MediaQuery.viewInsetsOf(sheet).bottom,
-                    ),
-                    child: Column(
-                      children: [
-                        group(
-                          '来源',
-                          draft.sources.isEmpty
-                              ? '不限来源'
-                              : '已选 ${draft.sources.length} 项',
-                          Column(
-                            children: [
-                              if (sources.length > 12)
-                                TextField(
-                                  decoration: const InputDecoration(
-                                    labelText: '搜索已知来源选项',
-                                  ),
-                                  onChanged: (v) => update(
-                                    () => sourceQuery = v.toLowerCase(),
-                                  ),
-                                ),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  for (final id in sources.where(
-                                    (id) => (labels[id] ?? id)
-                                        .toLowerCase()
-                                        .contains(sourceQuery),
-                                  ))
-                                    FilterChip(
-                                      label: Text(labels[id] ?? id),
-                                      selected: draft.sources.contains(id),
-                                      onSelected: (v) => update(() {
-                                        v
-                                            ? draft.sources.add(id)
-                                            : draft.sources.remove(id);
-                                      }),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        group(
-                          '题材',
-                          draft.tags.isEmpty
-                              ? '不限题材 · 仅使用本地已知标签'
-                              : '已选 ${draft.tags.length} 项（全部满足）',
-                          tags.isEmpty
-                              ? const Text('本地作品尚无题材元数据')
-                              : Column(
-                                  children: [
-                                    if (tags.length > 12)
-                                      TextField(
-                                        decoration: const InputDecoration(
-                                          labelText: '搜索已知题材选项',
-                                        ),
-                                        onChanged: (v) => update(
-                                          () => tagQuery = v.toLowerCase(),
-                                        ),
-                                      ),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: [
-                                        for (final tag in tags.where(
-                                          (tag) => tag.toLowerCase().contains(
-                                            tagQuery,
-                                          ),
-                                        ))
-                                          FilterChip(
-                                            label: Text(tag),
-                                            selected: draft.tags.contains(tag),
-                                            onSelected: (v) => update(() {
-                                              v
-                                                  ? draft.tags.add(tag)
-                                                  : draft.tags.remove(tag);
-                                            }),
-                                          ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                        ),
-                        group(
-                          '状态',
-                          '未知作品状态不视为未完结',
-                          Column(
-                            children: [
-                              tri('未读', draft.unread, (v) => draft.unread = v),
-                              const SizedBox(height: 12),
-                              tri(
-                                '已下载',
-                                draft.downloaded,
-                                (v) => draft.downloaded = v,
-                              ),
-                              const SizedBox(height: 12),
-                              tri(
-                                '完结',
-                                draft.completed,
-                                (v) => draft.completed = v,
-                              ),
-                              const SizedBox(height: 12),
-                              tri(
-                                '追踪绑定',
-                                draft.tracked,
-                                (v) => draft.tracked = v,
-                              ),
-                              const SizedBox(height: 12),
-                              DropdownButtonFormField<String>(
-                                key: ValueKey(('reading', draft.reading)),
-                                initialValue: draft.reading,
-                                decoration: const InputDecoration(
-                                  labelText: '阅读状态',
-                                ),
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: '',
-                                    child: Text('不限'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'started',
-                                    child: Text('阅读中'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'new',
-                                    child: Text('未开始'),
-                                  ),
-                                ],
-                                onChanged: (v) =>
-                                    update(() => draft.reading = v!),
-                              ),
-                            ],
-                          ),
-                        ),
-                        group(
-                          '排序',
-                          _sorts[draft.sort]!,
-                          DropdownButtonFormField<String>(
-                            key: ValueKey(('sort', draft.sort)),
-                            initialValue: draft.sort,
-                            items: [
-                              for (final sort in _sorts.entries)
-                                DropdownMenuItem(
-                                  value: sort.key,
-                                  child: Text(sort.value),
-                                ),
-                            ],
-                            onChanged: (v) => update(() => draft.sort = v!),
-                          ),
-                        ),
-                        group(
-                          '显示',
-                          '仅当前${widget.type.label}书库',
-                          Column(
-                            children: [
-                              DropdownButtonFormField<String>(
-                                key: ValueKey(('layout', draft.layout)),
-                                initialValue: draft.layout,
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: 'grid',
-                                    child: Text('封面网格'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'list',
-                                    child: Text('列表'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'adaptive',
-                                    child: Text('自适应网格'),
-                                  ),
-                                ],
-                                onChanged: (v) =>
-                                    update(() => draft.layout = v!),
-                              ),
-                              SwitchListTile(
-                                contentPadding: EdgeInsets.zero,
-                                title: const Text('显示隐藏'),
-                                value: draft.revealHidden,
-                                onChanged: (v) =>
-                                    update(() => draft.revealHidden = v),
-                              ),
-                            ],
-                          ),
-                        ),
-                        group(
-                          '分组',
-                          '不改变分类成员',
-                          DropdownButtonFormField<String>(
-                            key: ValueKey(('group', draft.group)),
-                            initialValue: draft.group,
-                            items: const [
-                              DropdownMenuItem(
-                                value: 'none',
-                                child: Text('不分组'),
-                              ),
-                              DropdownMenuItem(
-                                value: 'source',
-                                child: Text('按来源'),
-                              ),
-                              DropdownMenuItem(
-                                value: 'status',
-                                child: Text('按作品状态'),
-                              ),
-                            ],
-                            onChanged: (v) => update(() => draft.group = v!),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        TextButton(
-                          onPressed: () =>
-                              update(() => draft = _LibraryOptions()),
-                          child: const Text('重置'),
-                        ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () => Navigator.pop(sheet, false),
-                          child: const Text('取消'),
-                        ),
-                        FilledButton(
-                          onPressed: () => Navigator.pop(sheet, true),
-                          child: const Text('应用'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-    if (applied != true || !mounted) return;
-    setState(() {
-      _options = draft;
-      _exitSelection();
-    });
-    final preferences = ref.read(preferencesProvider);
-    await preferences.set('$_prefix.sort', draft.sort);
-    await preferences.set('$_prefix.layout', draft.layout);
-  }
 
   void _toggle(MediaItem item) {
     if (item.type != widget.type) return;
@@ -1031,8 +576,8 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             categories.matches(
               entry,
               categoryId: _categoryId,
-              revealHidden: _options.revealHidden,
-              query: _query,
+              revealHidden: true,
+              query: '',
             ))
           (entry.item.sourceId, entry.item.remoteId),
     });

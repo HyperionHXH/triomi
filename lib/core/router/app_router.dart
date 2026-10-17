@@ -52,12 +52,14 @@ abstract final class AppRoutes {
     String? sourceId,
     String? query,
     bool sourceOnly = false,
+    Iterable<String> tags = const [],
   }) => Uri(
     path: '/${type.name}/search',
     queryParameters: {
       'source': ?sourceId,
       'q': ?query,
       if (sourceOnly) 'sourceOnly': 'true',
+      if (tags.isNotEmpty) 'tag': tags.toList(growable: false),
     },
   ).toString();
 
@@ -305,10 +307,14 @@ abstract final class AppRouter {
         initialSourceId: state.uri.queryParameters['source'],
         initialQuery: state.uri.queryParameters['q'] ?? '',
         sourceOnly: state.uri.queryParameters['sourceOnly'] == 'true',
+        initialTags: state.uri.queryParametersAll['tag'] ?? const [],
       ),
     ),
     GoRoute(
       path: 'detail',
+      // Root pages (history/readers) can open details without pushing another
+      // instance of the stateful shell or reusing its branch Navigator keys.
+      parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => _DetailRoute(
         key: ValueKey((
           type,
@@ -329,6 +335,7 @@ abstract final class AppRouter {
           listing: state.uri.queryParameters['listing'] ?? 'popular',
           query: state.uri.queryParameters['query'] ?? '',
           filtersJson: state.uri.queryParameters['filters'],
+          initialTags: state.uri.queryParametersAll['tag'] ?? const [],
         ),
       ),
   ];

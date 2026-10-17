@@ -35,8 +35,6 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.9.4")
     implementation("androidx.media3:media3-session:1.9.4")
     implementation("androidx.preference:preference-ktx:1.2.1")
-    // Match flutter_secure_storage's cipher format for durable PIN commits.
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
     // Mihon 1.6 extensions are compiled against the OkHttp 5 ABI (including
     // the Duration-mangled CacheControl builder methods).
     implementation("com.squareup.okhttp3:okhttp:5.3.2")

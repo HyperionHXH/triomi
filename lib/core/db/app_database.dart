@@ -28,6 +28,7 @@ part 'app_database.g.dart';
     MangaUpdates,
     MigrationPlans,
     MergedMangaReferences,
+    AnimeFollowSyncStates,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -41,7 +42,7 @@ class AppDatabase extends _$AppDatabase {
   /// **改表约定**：改表 → 版本号 +1 → `onUpgrade` 增量迁移。
   /// `test/database_migration_test.dart` 用历史库验证数据保留与新功能可用。
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -89,6 +90,12 @@ class AppDatabase extends _$AppDatabase {
           // Commit v10 with its column/split so a process death in that gap
           // cannot replay ADD COLUMN against an already migrated v9 database.
           await customStatement('PRAGMA user_version = 10');
+        });
+      }
+      if (from < 11) {
+        await transaction(() async {
+          await m.createTable(animeFollowSyncStates);
+          await customStatement('PRAGMA user_version = 11');
         });
       }
     },

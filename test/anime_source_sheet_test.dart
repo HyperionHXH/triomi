@@ -123,28 +123,20 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('匹配作品'), findsOneWidget);
-    expect(find.text('搜索失败，请重试'), findsOneWidget);
+    expect(find.textContaining('offline'), findsOneWidget);
     expect(excludedRequests, 0);
     expect(find.text('停用站'), findsNothing);
     expect(find.text('资料站'), findsNothing);
   });
 
-  testWidgets('候选需人工确认，取消不保存，确认保持资料身份', (tester) async {
+  testWidgets('选择站点作品直接保存恢复身份，不再显示额外关联确认', (tester) async {
     late TestSource source;
     source = TestSource('站点', (_) async => [source.result('第二季候选')]);
     await tester.pumpWidget(harness([(source, true)]));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('第二季候选'));
-    await tester.pumpAndSettle();
-    expect(find.text('确认作品关联'), findsOneWidget);
     final repo = AnimeIdentityRepository(testDb);
     expect(await repo.subjectFor(source.result('第二季候选')), isNull);
-    await tester.tap(find.text('取消'));
-    await tester.pumpAndSettle();
-    expect(await repo.subjectFor(source.result('第二季候选')), isNull);
     await tester.tap(find.text('第二季候选'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('确认关联'));
     await tester.pumpAndSettle();
     expect(
       (await repo.subjectFor(source.result('第二季候选')))!.remoteId,

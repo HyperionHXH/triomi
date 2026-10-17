@@ -29,12 +29,14 @@ const developmentSourceIds = <String>{
 /// 一个可用的来源：描述信息 + 执行实现。
 class SourceEntry {
   const SourceEntry({
-    required this._descriptor,
+    required SourceDescriptor descriptor,
     required this.source,
     required this.enabled,
     this.ruleText,
     this.repoUrl,
-  });
+  // Keep the public descriptor: argument while exposing live JS capabilities.
+  // ignore: prefer_initializing_formals
+  }) : _descriptor = descriptor;
 
   final SourceDescriptor _descriptor;
   SourceDescriptor get descriptor => source is JsSource && source.isReady

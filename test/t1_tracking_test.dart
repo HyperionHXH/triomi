@@ -47,6 +47,9 @@ FakeHttpClient trackingHttpClient({
     final body = request.body ?? '';
 
     if (url.startsWith('https://bgm.test')) {
+      if (url.endsWith('/v0/me')) {
+        return SourceResponse(statusCode: 200, url: url, body: '{"id":99}');
+      }
       if (url.contains('/episodes?limit')) {
         // 逐集收藏：type == 2 的条数即远端已看集数。
         return SourceResponse(
@@ -194,7 +197,8 @@ void main() {
     });
 
     test('未收藏（404）返回 null 而不是抛错', () async {
-      final http = client(statuses: <String, int>{'/collections/': 404});
+      final http = client(routes: {'/v0/me': '{"id":99}'},
+        statuses: <String, int>{'/collections/': 404});
       final collection = await BangumiClient(http: http)
           .collection(12, token: 't');
       expect(collection, isNull);
@@ -349,7 +353,7 @@ void main() {
     });
 
     test('没有备用地址时不做「去掉 token 重试」（真实站点带 token 是正常的）', () async {
-      final http = client();
+      final http = client(routes: {'/v0/search/subjects': '{"data":[]}'});
       final results = await BangumiClient(http: http)
           .search('Naruto', token: 't');
       expect(results, isEmpty);

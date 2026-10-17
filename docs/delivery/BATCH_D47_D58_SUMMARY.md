@@ -9,8 +9,8 @@
 
 | 任务 | 交付文件 | 覆盖 / 实际命令 | 结果 | 发现 |
 |---|---|---|---|---|
-| D47 | `test/novel_reader_tts_lifecycle_test.dart` | 4 例真实页面 + fake engine：换章/退出/后台/繁简切换停止朗读、迟到完成事件不刷新已销毁页面 | 4/0/0 | 两例初稿失败均为测试交互缺陷（弹层 chip 在视口外、FakeAsync 零延时 Timer 残留），生产代码四条停止路径本就完备，未改 |
-| D48 | `lib/features/novel/tts/tts_controller.dart`（TtsVoiceInfo + 引擎选项默认实现）、`flutter_tts_engine.dart`（语速/音色应用与 getVoices 防御解析）、`novel_reader_settings.dart`（ttsRate/ttsVoice 持久化）、`novel_reader_page.dart`（朗读设置小面板 + 会话前应用选项）、`test/d48_tts_settings_test.dart` | 10 例：插件 mock 语速/音色/降级、面板三档语速、无音色提示、重启恢复、已存音色不可用、开关变更即停当前朗读 | 10/0/0 | 未动状态机代次逻辑；Dropdown 对已保存但系统不再返回的音色显示「（不可用）」 |
+| D47 | 历史文件，R155已移除：test/novel_reader_tts_lifecycle_test.dart | 4 例真实页面 + fake engine：换章/退出/后台/繁简切换停止朗读、迟到完成事件不刷新已销毁页面 | 4/0/0 | 两例初稿失败均为测试交互缺陷（弹层 chip 在视口外、FakeAsync 零延时 Timer 残留），生产代码四条停止路径本就完备，未改 |
+| D48 | 历史文件，R155已移除：lib/features/novel/tts/tts_controller.dart（TtsVoiceInfo + 引擎选项默认实现）、历史文件，R155已移除：flutter_tts_engine.dart（语速/音色应用与 getVoices 防御解析）、`novel_reader_settings.dart`（ttsRate/ttsVoice 持久化）、`novel_reader_page.dart`（朗读设置小面板 + 会话前应用选项）、历史文件，R155已移除：test/d48_tts_settings_test.dart | 10 例：插件 mock 语速/音色/降级、面板三档语速、无音色提示、重启恢复、已存音色不可用、开关变更即停当前朗读 | 10/0/0 | 未动状态机代次逻辑；Dropdown 对已保存但系统不再返回的音色显示「（不可用）」 |
 | D49 | `platform_channel.dart`（SafTreeWriter typedef）、`backup_service.dart`、`novel_export_service.dart`、`detail_page.dart`、`backup_page.dart`、三个测试文件 | 73 例相关测试全过：SAF writer 返回**系统真实 document URI**，删除合成 `treeUri/fileName` 路径；系统改名场景钉住；null/空 URI 回退；zip MIME 缺省保持 | 73/0/0 | 合成路径在系统改名时是错的——真实 URI 才是唯一事实 |
 | D50 | `novel_export_service.dart`（savedToAuthorizedDirectory）、`backup_service.dart`（BackupSummary.savedToSaf）、两个页面三分支提示、`detail_export_page_test.dart` 断言 | 38 例相关测试全过：授权目录成功/取消选择/写入失败回退三种提示互不相同，回退仍是「导出完成」 | 38/0/0 | 顺带清理了 backup_page 一段重复的状态赋值块 |
 | D51 | `tools/dev_fixture_server.py`（Range 解析重写）、`tools/test_fixture_http_contract.py`、`docs/FIXTURE_CONTRACTS.md` | 15 例契约测试（新增 7 种非法 Range 形态统一 416） | 15/0/0 | 修复中曾把 helper 插进 do_GET 体导致视频处理器失效，已修正为类级方法 |

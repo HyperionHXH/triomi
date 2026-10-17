@@ -326,6 +326,7 @@ class BackupService {
     final histories = await database.select(database.histories).get();
     final chapters = await database.select(database.chapters).get();
     final animeLinks = await database.select(database.animeSourceLinks).get();
+    final animeSyncStates = await database.select(database.animeFollowSyncStates).get();
     final mangaFeeds = await database.select(database.mangaFeeds).get();
     final mergedReferences = await database
         .select(database.mergedMangaReferences)
@@ -490,6 +491,16 @@ class BackupService {
             'updatedAt': row.updatedAt.toIso8601String(),
           },
       ],
+      'animeFollowSyncStates': [
+        for (final row in animeSyncStates)
+          {
+            'accountKey': row.accountKey,
+            'sourceId': row.sourceId,
+            'remoteId': row.remoteId,
+            'changedAt': row.changedAt.toUtc().toIso8601String(),
+            'deleted': row.deleted,
+          },
+      ],
       'histories': <Object?>[
         for (final row in histories)
           if (!row.incognito)
@@ -571,6 +582,7 @@ class BackupService {
         mediaIntegrity ?? {},
       );
     }
+    _animeSyncStatesOf(payload);
     return payload;
   }
 
@@ -674,6 +686,31 @@ class BackupService {
     return decoded.cast<String, Object?>();
   }
 
+  /// Optional in older backups. Account identity is a digest, never a WebDAV
+  /// address, username, credential or trust decision.
+  static List<({String accountKey, String sourceId, String remoteId,
+    DateTime changedAt, bool deleted})> _animeSyncStatesOf(Map<String, Object?> payload) {
+    final raw = payload['animeFollowSyncStates'];
+    if (raw == null) return const [];
+    if (raw is! List) throw const FormatException('追番同步记录列表无效');
+    final rows = <({String accountKey, String sourceId, String remoteId,
+      DateTime changedAt, bool deleted})>[];
+    final seen = <(String, String, String)>{};
+    for (final node in raw) {
+      if (node is! Map) throw const FormatException('追番同步记录无效');
+      final account = node['accountKey'], source = node['sourceId'], remote = node['remoteId'];
+      final date = _dateOf(node['changedAt']), deleted = node['deleted'];
+      if (account is! String || !RegExp(r'^[0-9a-f]{64}$').hasMatch(account) ||
+          source is! String || source.isEmpty || remote is! String || remote.isEmpty ||
+          date == null || deleted is! bool || !seen.add((account, source, remote))) {
+        throw const FormatException('追番同步身份、时间、删除状态无效或重复；未修改本机数据');
+      }
+      rows.add((accountKey: account, sourceId: source, remoteId: remote,
+        changedAt: date, deleted: deleted));
+    }
+    return rows;
+  }
+
   /// Validate only the stored envelope, never source capabilities or execution.
   /// Keep original JSON bytes; legacy FilterLists and v1 envelopes round-trip.
   static void validateSavedSearchFilters(Map<String, Object?> payload) {
@@ -713,6 +750,7 @@ class BackupService {
       throw StateError('备份包版本（$version）高于当前应用支持的 $backupFormatVersion');
     }
     validateSavedSearchFilters(payload);
+    final animeSyncStates = _animeSyncStatesOf(payload);
     final rules = sourceRulesOf(payload);
     ApkBackupFiles.validatePayload(payload['apkPackages']);
     ApkRestoreTransaction? apkTransaction;
@@ -917,6 +955,21 @@ class BackupService {
                 );
             libraryCount += 1;
           }
+          for (final row in animeSyncStates) {
+            final existing = await (database.select(database.animeFollowSyncStates)..where((t) =>
+              t.accountKey.equals(row.accountKey) & t.sourceId.equals(row.sourceId) &
+              t.remoteId.equals(row.remoteId))).getSingleOrNull();
+            if (existing != null && (existing.changedAt.isAfter(row.changedAt) ||
+                existing.changedAt.isAtSameMomentAs(row.changedAt) &&
+                (existing.deleted || !row.deleted))) {
+              continue;
+            }
+            await database.into(database.animeFollowSyncStates).insertOnConflictUpdate(
+              AnimeFollowSyncStatesCompanion.insert(accountKey: row.accountKey,
+                sourceId: row.sourceId, remoteId: row.remoteId,
+                changedAt: row.changedAt, deleted: Value(row.deleted)));
+          }
+
 
           for (final row in _listOf(payload['histories'])) {
             final sourceId = row['sourceId']?.toString();

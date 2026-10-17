@@ -335,9 +335,25 @@ void main() {
     }
   });
   testWidgets(
-    'Mihon default Chinese preference migrates to persistent explicit language selection',
+    'plugin name query persists without changing installed or trust state',
     (tester) async {
       final preferences = memoryPreferences();
+      const package = 'eu.kanade.tachiyomi.extension.all.mangadex';
+      const installed = {package: '1.6.0'};
+      const enabled = [package];
+      const hostStatus = {
+        package: {
+          'ok': true,
+          'signerSha256': 'fixture-publisher-pin',
+          'sha256': 'fixture-content-pin',
+          'sources': [
+            {'name': 'MangaDex', 'lang': 'zh', 'id': '1'},
+          ],
+        },
+      };
+      await preferences.set('mihon.installedPackages', installed);
+      await preferences.set('mihon.enabledPackages', enabled);
+      await preferences.set('mihon.hostStatus', hostStatus);
       final http = FakeHttpClient(
         (_) async => SourceResponse(
           statusCode: 200,
@@ -356,7 +372,10 @@ void main() {
           sourceHttpClientProvider.overrideWithValue(http),
         ],
       );
-      addTearDown(container.dispose);
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.runAsync(() async => container.dispose());
+      });
       Future<void> open(int key) async {
         await tester.pumpWidget(
           UncontrolledProviderScope(
@@ -375,22 +394,39 @@ void main() {
       }
 
       await open(1);
-      expect(find.text('MangaDex'), findsOneWidget);
-      expect(find.text('English'), findsNothing);
-      await tester.tap(find.byKey(const ValueKey('source-language-filter')));
+      expect(http.requests, isEmpty);
+      await tester.tap(find.text('浏览扩展'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('en').last);
+      expect(find.widgetWithText(ListTile, 'MangaDex'), findsOneWidget);
+      expect(find.widgetWithText(ListTile, 'English'), findsOneWidget);
+      expect(find.byType(TextFormField), findsOneWidget);
+      await tester.enterText(find.byType(TextFormField), 'English');
       await tester.pumpAndSettle();
-      expect(find.text('English'), findsOneWidget);
-      expect(find.text('MangaDex'), findsNothing);
+      expect(find.widgetWithText(ListTile, 'English'), findsOneWidget);
+      expect(find.widgetWithText(ListTile, 'MangaDex'), findsNothing);
+      expect(http.requests, hasLength(1));
       await open(2);
-      expect(find.text('English'), findsOneWidget);
-      expect(find.text('MangaDex'), findsNothing);
-      expect(preferences.get<Object?>('mihon.enabledPackages'), isNull);
-      await tester.tap(find.text('清除筛选'));
+      expect(tester.widget<TextFormField>(find.byType(TextFormField)).initialValue, 'English');
+      expect(find.widgetWithText(ListTile, 'MangaDex'), findsNothing);
+      await tester.tap(find.text('浏览扩展'));
       await tester.pumpAndSettle();
-      expect(find.text('MangaDex'), findsOneWidget);
-      expect(find.text('English'), findsOneWidget);
+      expect(find.widgetWithText(ListTile, 'English'), findsOneWidget);
+      expect(find.widgetWithText(ListTile, 'MangaDex'), findsNothing);
+      expect(preferences.get<Object?>('mihon.enabledPackages'), enabled);
+      expect(preferences.get<Object?>('mihon.installedPackages'), installed);
+      expect(preferences.get<Object?>('mihon.hostStatus'), hostStatus);
+      await tester.enterText(find.byType(TextFormField), package);
+      await tester.pumpAndSettle();
+      expect(find.byType(ListTile), findsNothing);
+      await tester.enterText(find.byType(TextFormField), '');
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(ListTile, 'MangaDex'), findsOneWidget);
+      expect(find.widgetWithText(ListTile, 'English'), findsOneWidget);
+      expect(http.requests, hasLength(2));
+      expect(http.requests.every((request) => request.url == mihonDefaultRepositoryUrl), isTrue);
+      expect(preferences.get<Object?>('mihon.enabledPackages'), enabled);
+      expect(preferences.get<Object?>('mihon.installedPackages'), installed);
+      expect(preferences.get<Object?>('mihon.hostStatus'), hostStatus);
     },
   );
 }

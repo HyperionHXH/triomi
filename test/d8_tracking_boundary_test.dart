@@ -42,6 +42,7 @@ void main() {
       // DioSourceHttpClient 对 404 是抛 SourceException(notFound)；
       // 只测「返回 404 响应」的替身路径盖不住设备上真正走的这条。
       final http = realLikeClient(
+        bodies: {'/v0/me': '{"id":99}'},
         throws: <String, SourceException Function(SourceRequest)>{
           '/collections/12': (_) => const SourceException(
             sourceId: BangumiClient.sourceId,
@@ -57,13 +58,14 @@ void main() {
 
     test('官方不可达、镜像也未收藏（404）：同样返回 null', () async {
       final http = realLikeClient(
+        bodies: {'/v0/me': '{"id":99}'},
         throws: <String, SourceException Function(SourceRequest)>{
           'official.test': (_) => const SourceException(
             sourceId: BangumiClient.sourceId,
             type: SourceErrorType.network,
             message: '连接被拒绝',
           ),
-          'mirror.test': (_) => const SourceException(
+          '/collections/12': (_) => const SourceException(
             sourceId: BangumiClient.sourceId,
             type: SourceErrorType.notFound,
             message: 'HTTP 404',
@@ -78,9 +80,9 @@ void main() {
 
       expect(await bangumi.collection(12, token: 't'), isNull);
       expect(bangumi.usedFallback, isTrue);
-      // uid 解析（官方→镜像各一跳，失败回退 `-`）+ 读收藏（官方→镜像各一跳）。
+      // Both account lookup and collection read fall back to the mirror.
       expect(http.requests, hasLength(4));
-      expect(http.requests.last.url, contains('/v0/users/-/collections/12'));
+      expect(http.requests.last.url, contains('/v0/users/99/collections/12'));
     });
 
     test('镜像再次失败（也连不上）：抛出错误，只有两次请求', () async {
@@ -213,14 +215,35 @@ void main() {
       expect(http.requests, hasLength(1));
     });
 
-    test('空响应体按空数据处理，不当成错误', () async {
-      final http = realLikeClient();
-      final bangumi = BangumiClient(http: http);
-
-      expect(await bangumi.search('Naruto'), isEmpty);
-      expect(await bangumi.watchedEpisodeCount(12, token: 't'), 0);
-      expect(await bangumi.episodes(12, token: 't'), isEmpty);
+    test('空响应体不能冒充空搜索、零进度或空目录', () async {
+      final bangumi = BangumiClient(http: realLikeClient());
+      final parseError = throwsA(isA<SourceException>()
+        .having((error) => error.type, 'type', SourceErrorType.parse));
+      await expectLater(bangumi.search('Naruto'), parseError);
+      await expectLater(bangumi.watchedEpisodeCount(12, token: 't'), parseError);
+      await expectLater(bangumi.episodes(12, token: 't'), parseError);
     });
+    test('合法空列表与缺失列表字段有不同结果', () async {
+      for (final body in ['{}', '[]', '{"data":null}', '{"data":{}}']) {
+        final http = realLikeClient(bodies: {
+          '/v0/search/subjects': body, '/v0/episodes': body, '/episodes?limit': body,
+        });
+        final bangumi = BangumiClient(http: http);
+        final parseError = throwsA(isA<SourceException>()
+          .having((error) => error.type, 'type', SourceErrorType.parse));
+        await expectLater(bangumi.search('Naruto'), parseError);
+        await expectLater(bangumi.episodes(12), parseError);
+        await expectLater(bangumi.watchedEpisodeCount(12, token: 't'), parseError);
+      }
+      final bangumi = BangumiClient(http: realLikeClient(bodies: {
+        '/v0/search/subjects': '{"data":[]}', '/v0/episodes': '{"data":[]}',
+        '/episodes?limit': '{"data":[]}',
+      }));
+      expect(await bangumi.search('Naruto'), isEmpty);
+      expect(await bangumi.episodes(12), isEmpty);
+      expect(await bangumi.watchedEpisodeCount(12, token: 't'), 0);
+    });
+
 
     test('非法 JSON 归类为解析错误，错误信息带请求路径', () async {
       final http = realLikeClient(

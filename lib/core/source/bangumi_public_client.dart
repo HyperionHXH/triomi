@@ -25,6 +25,7 @@ class BangumiPublicClient {
       'Triomi/0.1.0 (https://github.com/HyperionHXH/triomi)';
   static const v0Base = 'https://api.bgmapi.com/v0';
   static const p1Base = 'https://api.kazumi.fyi/p1';
+  static const nextBase = 'https://next.bgm.tv/p1';
   static const popularUrl = 'https://api.kazumi.fyi/kazumi/v1/popular/subjects';
   static const Duration requestTimeout = Duration(seconds: 12);
   static const int pageSize = 24;
@@ -57,15 +58,20 @@ class BangumiPublicClient {
     return BangumiP1Adapter.subject(value);
   }
 
-  /// Public comments use p1; the classic related-data lists use v0. A failed
-  /// optional partition never invalidates the subject or playable directory.
+  Future<Map<String, Object?>> character(String id) async =>
+      BangumiV0Adapter.subject(
+        await _getJson('$v0Base/characters/${Uri.encodeComponent(id)}'),
+      );
+
+  /// Comments use the official public Next API. The mirror requires its own
+  /// app authentication for comments; no upstream app credentials are copied.
   Future<Object?> section(
     String id,
     String name, {
     int offset = 0,
     int limit = 20,
   }) {
-    final base = name == 'comments' ? p1Base : v0Base;
+    final base = name == 'comments' ? nextBase : v0Base;
     return _getJson(
       '$base/subjects/${Uri.encodeComponent(id)}/${Uri.encodeComponent(name)}'
       '?limit=${limit.clamp(1, 100)}&offset=${offset.clamp(0, 100000)}',

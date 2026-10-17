@@ -347,6 +347,7 @@ extension PersistentMigration on SourceMigrationRepository {
           recordResume: !scope.history,
         );
         if (scope.history) {
+          // Retain the export boundary for legacy incognito rows.
           final oldRows =
               await (_db.select(_db.histories)..where(
                     (t) =>

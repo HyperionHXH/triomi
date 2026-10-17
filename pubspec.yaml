@@ -1,7 +1,7 @@
 name: triomi
 description: "追番 · 漫画 · 小说 三位一体的聚合客户端。"
 publish_to: 'none'
-version: 0.1.0+154
+version: 0.1.0+155
 
 environment:
   sdk: ^3.13.4
@@ -27,7 +27,6 @@ dependencies:
 
   # JS 规则沙箱（Android 用 quickjs / iOS 用 JavaScriptCore，均为 dart-ffi）
   flutter_js: ^0.8.7
-  flutter_tts: ^4.2.5
 
   # 凭据安全存储（Android Keystore / Windows DPAPI）；T6 唯一新增插件
   flutter_secure_storage: ^9.2.4

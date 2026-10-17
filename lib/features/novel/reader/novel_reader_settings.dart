@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../../../core/storage/preferences.dart';
 import '../../../core/text/zh_converter.dart';
-import '../tts/tts_controller.dart';
 
 /// 小说阅读模式。
-enum NovelReadingMode { paged, scroll }
+enum NovelReadingMode {
+  paged('左右翻页'),
+  card('卡片翻页'),
+  scroll('上下滚动');
+
+  const NovelReadingMode(this.label);
+  final String label;
+}
 
 /// 阅读器屏幕方向（B4）。
 enum ReaderOrientation { system, portrait, landscape }
@@ -36,9 +42,6 @@ class NovelReaderSettings {
     this.volumeKeyTurn = false,
     this.keepScreenOn = true,
     this.orientation = ReaderOrientation.system,
-    this.ttsRate = defaultTtsRate,
-    this.ttsVoiceName,
-    this.ttsVoiceLocale,
   });
 
   final NovelReadingMode mode;
@@ -68,22 +71,6 @@ class NovelReaderSettings {
   /// 屏幕方向（默认跟随系统；小说与漫画阅读器共用此设置）。
   final ReaderOrientation orientation;
 
-  /// TTS 语速（D48）：可选 0.3 / 0.5 / 0.7，默认 0.5。
-  final double ttsRate;
-
-  /// TTS 音色（D48）：系统返回的可用项；null = 系统默认音色。
-  final String? ttsVoiceName;
-
-  /// TTS 音色语言区域（与 [ttsVoiceName] 成对出现）。
-  final String? ttsVoiceLocale;
-
-  static const double defaultTtsRate = 0.5;
-  static const List<double> ttsRateChoices = <double>[0.3, 0.5, 0.7];
-
-  /// 音色选择值（名称+区域都存在才有效）；null = 系统默认音色。
-  TtsVoiceInfo? get ttsVoice => (ttsVoiceName != null && ttsVoiceLocale != null)
-      ? TtsVoiceInfo(name: ttsVoiceName!, locale: ttsVoiceLocale!)
-      : null;
 
   static const double defaultFontSize = 18;
   static const double defaultLineHeight = 1.7;
@@ -101,10 +88,6 @@ class NovelReaderSettings {
     bool? volumeKeyTurn,
     bool? keepScreenOn,
     ReaderOrientation? orientation,
-    double? ttsRate,
-    String? ttsVoiceName,
-    String? ttsVoiceLocale,
-    bool clearTtsVoice = false,
   }) => NovelReaderSettings(
     mode: mode ?? this.mode,
     theme: theme ?? this.theme,
@@ -116,11 +99,6 @@ class NovelReaderSettings {
     volumeKeyTurn: volumeKeyTurn ?? this.volumeKeyTurn,
     keepScreenOn: keepScreenOn ?? this.keepScreenOn,
     orientation: orientation ?? this.orientation,
-    ttsRate: ttsRate ?? this.ttsRate,
-    ttsVoiceName: clearTtsVoice ? null : (ttsVoiceName ?? this.ttsVoiceName),
-    ttsVoiceLocale: clearTtsVoice
-        ? null
-        : (ttsVoiceLocale ?? this.ttsVoiceLocale),
   );
 
   /// 段落/标题正文样式（按主题着色）。
@@ -151,21 +129,13 @@ class NovelReaderSettings {
   static const String _volumeKeyTurnKey = 'novelReader.volumeKeyTurn';
   static const String _keepScreenOnKey = 'novelReader.keepScreenOn';
   static const String _orientationKey = 'novelReader.orientation';
-  static const String _ttsRateKey = 'novelReader.ttsRate';
-  static const String _ttsVoiceNameKey = 'novelReader.ttsVoiceName';
-  static const String _ttsVoiceLocaleKey = 'novelReader.ttsVoiceLocale';
-
-  /// 只接受三个固定档位，历史/异常值回落默认 0.5。
-  static double _clampRate(Object? raw) => switch (raw) {
-    0.3 || 0.5 || 0.7 => raw as double,
-    _ => defaultTtsRate,
-  };
 
   static NovelReaderSettings load(Preferences preferences) {
     final mode = preferences.get<String>(_modeKey);
     final theme = preferences.get<String>(_themeKey);
     return NovelReaderSettings(
-      mode: mode == 'scroll' ? NovelReadingMode.scroll : NovelReadingMode.paged,
+      mode: NovelReadingMode.values.where((value) => value.name == mode).firstOrNull ??
+          NovelReadingMode.paged,
       theme: switch (theme) {
         'light' => NovelTheme.light,
         'dark' => NovelTheme.dark,
@@ -190,17 +160,11 @@ class NovelReaderSettings {
         'landscape' => ReaderOrientation.landscape,
         _ => ReaderOrientation.system,
       },
-      ttsRate: _clampRate(preferences.get<double>(_ttsRateKey)),
-      ttsVoiceName: preferences.get<String>(_ttsVoiceNameKey),
-      ttsVoiceLocale: preferences.get<String>(_ttsVoiceLocaleKey),
     );
   }
 
   Future<void> save(Preferences preferences) async {
-    await preferences.set(
-      _modeKey,
-      mode == NovelReadingMode.scroll ? 'scroll' : 'paged',
-    );
+    await preferences.set(_modeKey, mode.name);
     await preferences.set(_themeKey, switch (theme) {
       NovelTheme.light => 'light',
       NovelTheme.sepia => 'sepia',
@@ -226,14 +190,6 @@ class NovelReaderSettings {
       ReaderOrientation.portrait => 'portrait',
       ReaderOrientation.landscape => 'landscape',
     });
-    await preferences.set(_ttsRateKey, ttsRate);
-    if (ttsVoiceName == null || ttsVoiceLocale == null) {
-      await preferences.remove(_ttsVoiceNameKey);
-      await preferences.remove(_ttsVoiceLocaleKey);
-    } else {
-      await preferences.set(_ttsVoiceNameKey, ttsVoiceName);
-      await preferences.set(_ttsVoiceLocaleKey, ttsVoiceLocale);
-    }
   }
 
   /// 分组恢复默认（对齐 Mixn 的「恢复默认」分组开关）。

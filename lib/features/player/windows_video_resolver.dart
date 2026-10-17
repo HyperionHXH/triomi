@@ -8,7 +8,6 @@ import 'package:webview_windows/webview_windows.dart';
 import '../../core/models/chapter.dart';
 import '../../core/models/video_resolve_cancellation.dart';
 import '../../core/source/windows_source_session.dart';
-import '../settings/privacy_lock_controller.dart';
 
 class ResolvedDesktopVideo {
   const ResolvedDesktopVideo(this.url, this.headers);
@@ -23,10 +22,9 @@ Future<ResolvedDesktopVideo> resolveWindowsVideo(
   PlaySource line, {
   VideoResolveCancellation? cancellation,
   String purpose = '播放',
-  PrivacyLockController? privacyLock,
 }) async {
   final owner = cancellation ?? VideoResolveCancellation();
-  if (!context.mounted || owner.isCancelled || privacyLock?.blocksAccess == true) {
+  if (!context.mounted || owner.isCancelled) {
     throw VideoResolveCancelled(owner.reason);
   }
   final lifecycle = WidgetsBinding.instance.lifecycleState;
@@ -51,7 +49,6 @@ Future<ResolvedDesktopVideo> resolveWindowsVideo(
         line: line,
         owner: owner,
         purpose: purpose,
-        privacyLock: privacyLock,
         onResolved: (result) {
           if (route.isActive) navigator.removeRoute(route, result);
         },
@@ -80,14 +77,12 @@ class _DesktopResolveDialog extends StatefulWidget {
     required this.line,
     required this.owner,
     required this.purpose,
-    required this.privacyLock,
     required this.closed,
     required this.onResolved,
   });
   final PlaySource line;
   final VideoResolveCancellation owner;
   final String purpose;
-  final PrivacyLockController? privacyLock;
   final Completer<void> closed;
   final ValueChanged<ResolvedDesktopVideo> onResolved;
 
@@ -131,7 +126,6 @@ class _DesktopResolveDialogState extends State<_DesktopResolveDialog>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    widget.privacyLock?.addListener(_privacyChanged);
     widget.owner.addListener(_cancelBrowser);
     _deadline = Timer(const Duration(seconds: 45), () {
       _fail('播放页未返回可播放地址，请重试或换来源');
@@ -148,12 +142,6 @@ class _DesktopResolveDialogState extends State<_DesktopResolveDialog>
       if (_creating != null) await _initializing;
       await _disposeWeb();
     }());
-  }
-
-  void _privacyChanged() {
-    if (widget.privacyLock?.blocksAccess == true) {
-      widget.owner.cancel('应用已锁定，请解锁后继续下载');
-    }
   }
 
   @override
@@ -344,7 +332,6 @@ class _DesktopResolveDialogState extends State<_DesktopResolveDialog>
     _finished = true;
     WidgetsBinding.instance.removeObserver(this);
     widget.owner.removeListener(_cancelBrowser);
-    widget.privacyLock?.removeListener(_privacyChanged);
     _deadline?.cancel();
     unawaited(_messages?.cancel());
     unawaited(_errors?.cancel());

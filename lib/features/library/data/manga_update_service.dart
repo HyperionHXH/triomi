@@ -20,7 +20,7 @@ import 'library_repository.dart';
 final mangaUpdateLibraryProvider = FutureProvider(
   (ref) =>
       LibraryRepository(ref.watch(databaseProvider))
-          .listLibrary(type: MediaType.manga),
+          .listLibrary(type: MediaType.manga, revealHidden: true),
 );
 
 class MangaUpdateOptions {
@@ -99,7 +99,7 @@ class MangaUpdateService {
 
   Future<void> enqueue({Set<String>? itemKeys, bool onlyFailed = false}) async {
     final library = await LibraryRepository(db)
-        .listLibrary(type: MediaType.manga);
+        .listLibrary(type: MediaType.manga, revealHidden: true);
     final snapshot = await LibraryRepository(db)
         .categorySnapshot(type: MediaType.manga);
     final eligible = {
@@ -161,7 +161,7 @@ class MangaUpdateService {
               ))
               .get();
       final entries = await LibraryRepository(db)
-          .listLibrary(type: MediaType.manga);
+          .listLibrary(type: MediaType.manga, revealHidden: true);
       final eligible = {
         for (final entry in entries)
           if (!options.skipCompleted ||

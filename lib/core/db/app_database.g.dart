@@ -7745,6 +7745,384 @@ class MergedMangaReferencesCompanion
   }
 }
 
+class $AnimeFollowSyncStatesTable extends AnimeFollowSyncStates
+    with TableInfo<$AnimeFollowSyncStatesTable, AnimeFollowSyncStateRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AnimeFollowSyncStatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _accountKeyMeta = const VerificationMeta(
+    'accountKey',
+  );
+  @override
+  late final GeneratedColumn<String> accountKey = GeneratedColumn<String>(
+    'account_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceIdMeta = const VerificationMeta(
+    'sourceId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceId = GeneratedColumn<String>(
+    'source_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _remoteIdMeta = const VerificationMeta(
+    'remoteId',
+  );
+  @override
+  late final GeneratedColumn<String> remoteId = GeneratedColumn<String>(
+    'remote_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _changedAtMeta = const VerificationMeta(
+    'changedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> changedAt = GeneratedColumn<DateTime>(
+    'changed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deletedMeta = const VerificationMeta(
+    'deleted',
+  );
+  @override
+  late final GeneratedColumn<bool> deleted = GeneratedColumn<bool>(
+    'deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    accountKey,
+    sourceId,
+    remoteId,
+    changedAt,
+    deleted,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'anime_follow_sync_states';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AnimeFollowSyncStateRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('account_key')) {
+      context.handle(
+        _accountKeyMeta,
+        accountKey.isAcceptableOrUnknown(data['account_key']!, _accountKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountKeyMeta);
+    }
+    if (data.containsKey('source_id')) {
+      context.handle(
+        _sourceIdMeta,
+        sourceId.isAcceptableOrUnknown(data['source_id']!, _sourceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceIdMeta);
+    }
+    if (data.containsKey('remote_id')) {
+      context.handle(
+        _remoteIdMeta,
+        remoteId.isAcceptableOrUnknown(data['remote_id']!, _remoteIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_remoteIdMeta);
+    }
+    if (data.containsKey('changed_at')) {
+      context.handle(
+        _changedAtMeta,
+        changedAt.isAcceptableOrUnknown(data['changed_at']!, _changedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_changedAtMeta);
+    }
+    if (data.containsKey('deleted')) {
+      context.handle(
+        _deletedMeta,
+        deleted.isAcceptableOrUnknown(data['deleted']!, _deletedMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {accountKey, sourceId, remoteId};
+  @override
+  AnimeFollowSyncStateRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AnimeFollowSyncStateRow(
+      accountKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_key'],
+      )!,
+      sourceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_id'],
+      )!,
+      remoteId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_id'],
+      )!,
+      changedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}changed_at'],
+      )!,
+      deleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}deleted'],
+      )!,
+    );
+  }
+
+  @override
+  $AnimeFollowSyncStatesTable createAlias(String alias) {
+    return $AnimeFollowSyncStatesTable(attachedDatabase, alias);
+  }
+}
+
+class AnimeFollowSyncStateRow extends DataClass
+    implements Insertable<AnimeFollowSyncStateRow> {
+  final String accountKey;
+  final String sourceId;
+  final String remoteId;
+  final DateTime changedAt;
+  final bool deleted;
+  const AnimeFollowSyncStateRow({
+    required this.accountKey,
+    required this.sourceId,
+    required this.remoteId,
+    required this.changedAt,
+    required this.deleted,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['account_key'] = Variable<String>(accountKey);
+    map['source_id'] = Variable<String>(sourceId);
+    map['remote_id'] = Variable<String>(remoteId);
+    map['changed_at'] = Variable<DateTime>(changedAt);
+    map['deleted'] = Variable<bool>(deleted);
+    return map;
+  }
+
+  AnimeFollowSyncStatesCompanion toCompanion(bool nullToAbsent) {
+    return AnimeFollowSyncStatesCompanion(
+      accountKey: Value(accountKey),
+      sourceId: Value(sourceId),
+      remoteId: Value(remoteId),
+      changedAt: Value(changedAt),
+      deleted: Value(deleted),
+    );
+  }
+
+  factory AnimeFollowSyncStateRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AnimeFollowSyncStateRow(
+      accountKey: serializer.fromJson<String>(json['accountKey']),
+      sourceId: serializer.fromJson<String>(json['sourceId']),
+      remoteId: serializer.fromJson<String>(json['remoteId']),
+      changedAt: serializer.fromJson<DateTime>(json['changedAt']),
+      deleted: serializer.fromJson<bool>(json['deleted']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'accountKey': serializer.toJson<String>(accountKey),
+      'sourceId': serializer.toJson<String>(sourceId),
+      'remoteId': serializer.toJson<String>(remoteId),
+      'changedAt': serializer.toJson<DateTime>(changedAt),
+      'deleted': serializer.toJson<bool>(deleted),
+    };
+  }
+
+  AnimeFollowSyncStateRow copyWith({
+    String? accountKey,
+    String? sourceId,
+    String? remoteId,
+    DateTime? changedAt,
+    bool? deleted,
+  }) => AnimeFollowSyncStateRow(
+    accountKey: accountKey ?? this.accountKey,
+    sourceId: sourceId ?? this.sourceId,
+    remoteId: remoteId ?? this.remoteId,
+    changedAt: changedAt ?? this.changedAt,
+    deleted: deleted ?? this.deleted,
+  );
+  AnimeFollowSyncStateRow copyWithCompanion(
+    AnimeFollowSyncStatesCompanion data,
+  ) {
+    return AnimeFollowSyncStateRow(
+      accountKey: data.accountKey.present
+          ? data.accountKey.value
+          : this.accountKey,
+      sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
+      remoteId: data.remoteId.present ? data.remoteId.value : this.remoteId,
+      changedAt: data.changedAt.present ? data.changedAt.value : this.changedAt,
+      deleted: data.deleted.present ? data.deleted.value : this.deleted,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AnimeFollowSyncStateRow(')
+          ..write('accountKey: $accountKey, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('remoteId: $remoteId, ')
+          ..write('changedAt: $changedAt, ')
+          ..write('deleted: $deleted')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(accountKey, sourceId, remoteId, changedAt, deleted);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AnimeFollowSyncStateRow &&
+          other.accountKey == this.accountKey &&
+          other.sourceId == this.sourceId &&
+          other.remoteId == this.remoteId &&
+          other.changedAt == this.changedAt &&
+          other.deleted == this.deleted);
+}
+
+class AnimeFollowSyncStatesCompanion
+    extends UpdateCompanion<AnimeFollowSyncStateRow> {
+  final Value<String> accountKey;
+  final Value<String> sourceId;
+  final Value<String> remoteId;
+  final Value<DateTime> changedAt;
+  final Value<bool> deleted;
+  final Value<int> rowid;
+  const AnimeFollowSyncStatesCompanion({
+    this.accountKey = const Value.absent(),
+    this.sourceId = const Value.absent(),
+    this.remoteId = const Value.absent(),
+    this.changedAt = const Value.absent(),
+    this.deleted = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AnimeFollowSyncStatesCompanion.insert({
+    required String accountKey,
+    required String sourceId,
+    required String remoteId,
+    required DateTime changedAt,
+    this.deleted = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : accountKey = Value(accountKey),
+       sourceId = Value(sourceId),
+       remoteId = Value(remoteId),
+       changedAt = Value(changedAt);
+  static Insertable<AnimeFollowSyncStateRow> custom({
+    Expression<String>? accountKey,
+    Expression<String>? sourceId,
+    Expression<String>? remoteId,
+    Expression<DateTime>? changedAt,
+    Expression<bool>? deleted,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (accountKey != null) 'account_key': accountKey,
+      if (sourceId != null) 'source_id': sourceId,
+      if (remoteId != null) 'remote_id': remoteId,
+      if (changedAt != null) 'changed_at': changedAt,
+      if (deleted != null) 'deleted': deleted,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AnimeFollowSyncStatesCompanion copyWith({
+    Value<String>? accountKey,
+    Value<String>? sourceId,
+    Value<String>? remoteId,
+    Value<DateTime>? changedAt,
+    Value<bool>? deleted,
+    Value<int>? rowid,
+  }) {
+    return AnimeFollowSyncStatesCompanion(
+      accountKey: accountKey ?? this.accountKey,
+      sourceId: sourceId ?? this.sourceId,
+      remoteId: remoteId ?? this.remoteId,
+      changedAt: changedAt ?? this.changedAt,
+      deleted: deleted ?? this.deleted,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (accountKey.present) {
+      map['account_key'] = Variable<String>(accountKey.value);
+    }
+    if (sourceId.present) {
+      map['source_id'] = Variable<String>(sourceId.value);
+    }
+    if (remoteId.present) {
+      map['remote_id'] = Variable<String>(remoteId.value);
+    }
+    if (changedAt.present) {
+      map['changed_at'] = Variable<DateTime>(changedAt.value);
+    }
+    if (deleted.present) {
+      map['deleted'] = Variable<bool>(deleted.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AnimeFollowSyncStatesCompanion(')
+          ..write('accountKey: $accountKey, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('remoteId: $remoteId, ')
+          ..write('changedAt: $changedAt, ')
+          ..write('deleted: $deleted, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -7768,6 +8146,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $MigrationPlansTable migrationPlans = $MigrationPlansTable(this);
   late final $MergedMangaReferencesTable mergedMangaReferences =
       $MergedMangaReferencesTable(this);
+  late final $AnimeFollowSyncStatesTable animeFollowSyncStates =
+      $AnimeFollowSyncStatesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -7788,6 +8168,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     mangaUpdates,
     migrationPlans,
     mergedMangaReferences,
+    animeFollowSyncStates,
   ];
 }
 
@@ -11853,6 +12234,239 @@ typedef $$MergedMangaReferencesTableProcessedTableManager =
       MergedMangaReferenceRow,
       PrefetchHooks Function()
     >;
+typedef $$AnimeFollowSyncStatesTableCreateCompanionBuilder =
+    AnimeFollowSyncStatesCompanion Function({
+      required String accountKey,
+      required String sourceId,
+      required String remoteId,
+      required DateTime changedAt,
+      Value<bool> deleted,
+      Value<int> rowid,
+    });
+typedef $$AnimeFollowSyncStatesTableUpdateCompanionBuilder =
+    AnimeFollowSyncStatesCompanion Function({
+      Value<String> accountKey,
+      Value<String> sourceId,
+      Value<String> remoteId,
+      Value<DateTime> changedAt,
+      Value<bool> deleted,
+      Value<int> rowid,
+    });
+
+class $$AnimeFollowSyncStatesTableFilterComposer
+    extends Composer<_$AppDatabase, $AnimeFollowSyncStatesTable> {
+  $$AnimeFollowSyncStatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remoteId => $composableBuilder(
+    column: $table.remoteId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get changedAt => $composableBuilder(
+    column: $table.changedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get deleted => $composableBuilder(
+    column: $table.deleted,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AnimeFollowSyncStatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $AnimeFollowSyncStatesTable> {
+  $$AnimeFollowSyncStatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get remoteId => $composableBuilder(
+    column: $table.remoteId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get changedAt => $composableBuilder(
+    column: $table.changedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get deleted => $composableBuilder(
+    column: $table.deleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AnimeFollowSyncStatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AnimeFollowSyncStatesTable> {
+  $$AnimeFollowSyncStatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceId =>
+      $composableBuilder(column: $table.sourceId, builder: (column) => column);
+
+  GeneratedColumn<String> get remoteId =>
+      $composableBuilder(column: $table.remoteId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get changedAt =>
+      $composableBuilder(column: $table.changedAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get deleted =>
+      $composableBuilder(column: $table.deleted, builder: (column) => column);
+}
+
+class $$AnimeFollowSyncStatesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AnimeFollowSyncStatesTable,
+          AnimeFollowSyncStateRow,
+          $$AnimeFollowSyncStatesTableFilterComposer,
+          $$AnimeFollowSyncStatesTableOrderingComposer,
+          $$AnimeFollowSyncStatesTableAnnotationComposer,
+          $$AnimeFollowSyncStatesTableCreateCompanionBuilder,
+          $$AnimeFollowSyncStatesTableUpdateCompanionBuilder,
+          (
+            AnimeFollowSyncStateRow,
+            BaseReferences<
+              _$AppDatabase,
+              $AnimeFollowSyncStatesTable,
+              AnimeFollowSyncStateRow
+            >,
+          ),
+          AnimeFollowSyncStateRow,
+          PrefetchHooks Function()
+        > {
+  $$AnimeFollowSyncStatesTableTableManager(
+    _$AppDatabase db,
+    $AnimeFollowSyncStatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AnimeFollowSyncStatesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$AnimeFollowSyncStatesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$AnimeFollowSyncStatesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> accountKey = const Value.absent(),
+                Value<String> sourceId = const Value.absent(),
+                Value<String> remoteId = const Value.absent(),
+                Value<DateTime> changedAt = const Value.absent(),
+                Value<bool> deleted = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AnimeFollowSyncStatesCompanion(
+                accountKey: accountKey,
+                sourceId: sourceId,
+                remoteId: remoteId,
+                changedAt: changedAt,
+                deleted: deleted,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String accountKey,
+                required String sourceId,
+                required String remoteId,
+                required DateTime changedAt,
+                Value<bool> deleted = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AnimeFollowSyncStatesCompanion.insert(
+                accountKey: accountKey,
+                sourceId: sourceId,
+                remoteId: remoteId,
+                changedAt: changedAt,
+                deleted: deleted,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<
+                    $AnimeFollowSyncStatesTable,
+                    AnimeFollowSyncStateRow
+                  >(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AnimeFollowSyncStatesTable,
+                    AnimeFollowSyncStateRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AnimeFollowSyncStatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AnimeFollowSyncStatesTable,
+      AnimeFollowSyncStateRow,
+      $$AnimeFollowSyncStatesTableFilterComposer,
+      $$AnimeFollowSyncStatesTableOrderingComposer,
+      $$AnimeFollowSyncStatesTableAnnotationComposer,
+      $$AnimeFollowSyncStatesTableCreateCompanionBuilder,
+      $$AnimeFollowSyncStatesTableUpdateCompanionBuilder,
+      (
+        AnimeFollowSyncStateRow,
+        BaseReferences<
+          _$AppDatabase,
+          $AnimeFollowSyncStatesTable,
+          AnimeFollowSyncStateRow
+        >,
+      ),
+      AnimeFollowSyncStateRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -11887,4 +12501,6 @@ class $AppDatabaseManager {
       $$MigrationPlansTableTableManager(_db, _db.migrationPlans);
   $$MergedMangaReferencesTableTableManager get mergedMangaReferences =>
       $$MergedMangaReferencesTableTableManager(_db, _db.mergedMangaReferences);
+  $$AnimeFollowSyncStatesTableTableManager get animeFollowSyncStates =>
+      $$AnimeFollowSyncStatesTableTableManager(_db, _db.animeFollowSyncStates);
 }

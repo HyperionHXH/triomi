@@ -44,6 +44,8 @@ class FakeShelfSource implements RemoteShelfProvider {
   final String name;
   bool loggedIn;
   List<MediaItem> books;
+  Object? unreadError;
+  Object? shelfError;
   int shelfCalls = 0;
 
   @override
@@ -76,6 +78,7 @@ class FakeShelfSource implements RemoteShelfProvider {
   @override
   Future<List<MediaItem>> remoteShelf() async {
     shelfCalls += 1;
+    if (shelfError != null) throw shelfError!;
     return books;
   }
 
@@ -83,7 +86,10 @@ class FakeShelfSource implements RemoteShelfProvider {
   Future<void> setInRemoteShelf(MediaItem item, bool add) async {}
 
   @override
-  Future<Map<String, int>> remoteUnreadCounts() async => const <String, int>{};
+  Future<Map<String, int>> remoteUnreadCounts() async {
+    if (unreadError != null) throw unreadError!;
+    return const <String, int>{};
+  }
 }
 
 /// 声明了远端书架能力但没实现契约的来源（不应出现在切换条里）。
@@ -231,9 +237,63 @@ void main() {
 
       expect(find.text('远端书架'), findsOneWidget);
       expect(find.text('站点收藏甲'), findsOneWidget);
-      // 只有一个来源时不出现来源切换条。
-      expect(find.text('轻之国度'), findsNothing);
+      // 来源身份仍显示在书卡；没有额外的来源切换条。
+      expect(find.text('轻之国度'), findsOneWidget);
       expect(lk.shelfCalls, 1);
+    });
+
+    testWidgets('收藏成功但未读接口失败：保留书目并显示独立错误', (tester) async {
+      final source = FakeShelfSource(
+        id: 'lk',
+        name: '轻之国度',
+        books: [book('lk', '仍然可读的站点收藏')],
+      )..unreadError = StateError('unread unavailable');
+      await tester.pumpWidget(
+        harness(snapshotOf([source]), const RemoteShelfPage()),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('仍然可读的站点收藏'), findsOneWidget);
+      expect(find.textContaining('unread unavailable'), findsOneWidget);
+      expect(source.shelfCalls, 1);
+    });
+
+    testWidgets('首次加载后刷新可用，失败显示错误而不是空书架', (tester) async {
+      final source = FakeShelfSource(
+        id: 'lk', name: '轻之国度', books: [book('lk', '刷新前收藏')],
+      );
+      await tester.pumpWidget(
+        harness(snapshotOf([source]), const RemoteShelfPage()),
+      );
+      await tester.pumpAndSettle();
+      source.shelfError = StateError('remote unavailable');
+      await tester.tap(find.byTooltip('刷新'));
+      await tester.pumpAndSettle();
+      expect(source.shelfCalls, 2);
+      expect(find.text('书架加载失败'), findsOneWidget);
+      expect(find.textContaining('remote unavailable'), findsOneWidget);
+      expect(find.text('远端书架是空的'), findsNothing);
+      source.shelfError = null;
+      source.books = [book('lk', '刷新后收藏')];
+      await tester.tap(find.text('重试'));
+      await tester.pumpAndSettle();
+      expect(find.text('刷新后收藏'), findsOneWidget);
+    });
+
+    testWidgets('大系统字号窄屏书卡不受固定网格高度截断', (tester) async {
+      tester.view.physicalSize = const Size(280, 1200);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final source = FakeShelfSource(
+        id: 'lk', name: '轻之国度', books: [book('lk', '长标题站点收藏与作者信息')],
+      );
+      await tester.pumpWidget(
+        harness(snapshotOf([source]), const RemoteShelfPage()),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('长标题站点收藏与作者信息'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('未登录：给出「去登录」引导且不拉取站点收藏', (tester) async {

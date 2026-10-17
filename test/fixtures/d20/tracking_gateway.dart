@@ -56,6 +56,9 @@ class TrackingGateway {
 
     final url = request.url;
     if (url.contains('bgm.test')) {
+      if (url.endsWith('/v0/me')) {
+        return _json(<String, Object?>{'id': 99, 'username': 'fixture-account'}, url);
+      }
       if (url.contains('/episodes?limit')) {
         return _json(<String, Object?>{
           'data': <Object?>[

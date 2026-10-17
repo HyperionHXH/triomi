@@ -12,9 +12,9 @@ import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/mihon_source.dart';
 import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_registry.dart';
-import 'package:triomi/features/discover/manga_feed_editor.dart';
 import 'package:triomi/features/discover/manga_feed_repository.dart';
 import 'package:triomi/features/manga/manga_filter_snapshot.dart';
+import 'package:triomi/features/manga/manga_filters_dialog.dart';
 
 import 'fixtures/fake_http_client.dart';
 import 'fixtures/fake_preferences.dart';

@@ -12,7 +12,6 @@ import '../../core/source/mihon_repository.dart';
 import '../../core/source/source_filters.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/storage/preferences.dart';
-import 'source_filter_controls.dart';
 
 const mihonDefaultRepositoryUrl =
     'https://raw.githubusercontent.com/HyperionHXH/Mihon-Extensions/main/repo/index.json';
@@ -436,38 +435,17 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   @override
   Widget build(BuildContext context) {
     final index = _index;
-    final entries =
-        index?.filter(
-          query: _filters.query,
-          language: _filters.language,
-          content: _filters.content,
-        ) ??
-        const <MihonExtension>[];
+    final query = _filters.query.trim().toLowerCase();
+    final entries = index?.extensions
+        .where((entry) => entry.name.toLowerCase().contains(query))
+        .toList() ?? const <MihonExtension>[];
     final packages = <String>{..._installed.keys, ..._hostStatus.keys}.toList()
       ..sort();
-    final localFilters = _filters.copyWith(
-      clearLanguage: true,
-      clearType: true,
-    );
     final installed = packages
-        .where(
-          (package) => localFilters.matches(
-            languages: const [],
-            nsfw: sourceNsfwFlag(_hostStatus[package]?['nsfw']),
-            mediaType: null,
-            searchText: [package, _packageName(package)],
-          ),
-        )
+        .where((package) => _packageName(package).toLowerCase().contains(query))
         .toList();
     final pending = _pendingApks
-        .where(
-          (row) => localFilters.matches(
-            languages: const [],
-            nsfw: sourceNsfwFlag(row['nsfw']),
-            mediaType: null,
-            searchText: ['${row['packageName']}', '${row['name'] ?? ''}'],
-          ),
-        )
+        .where((row) => '${row['name'] ?? ''}'.toLowerCase().contains(query))
         .toList();
     return SafeArea(
       child: Padding(
@@ -492,7 +470,9 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                   ),
                 ],
               ),
-              const Text('Mihon / Komikku APK · 安装后需手动启用；不支持的平台不能运行扩展。'),
+              Text(Platform.isAndroid
+                  ? 'Mihon / Komikku APK · 安装后需手动启用，并确认发布者。'
+                  : '当前平台不执行 APK。漫画浏览中的内置 MangaDex 可直接在线使用；这里可管理 APK 文件与仓库。'),
               const SizedBox(height: 12),
               SegmentedButton<_ExtensionSection>(
                 showSelectedIcon: false,
@@ -573,32 +553,13 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                       ),
                     ],
                   ),
-                SourceFilterControls(
-                  filters: _section == _ExtensionSection.installed
-                      ? localFilters
-                      : _filters,
-                  types: const [],
-                  showLanguage: _section != _ExtensionSection.installed,
-                  languages: _section == _ExtensionSection.installed
-                      ? const []
-                      : [
-                          ...?index?.extensions.expand(
-                            (extension) => extension.sources.map(
-                              (source) => source.language,
-                            ),
-                          ),
-                        ],
-                  onChanged: (value) => _setFilters(
-                    _section == _ExtensionSection.installed
-                        ? value.copyWith(language: _filters.language)
-                        : value,
+                TextFormField(
+                  initialValue: _filters.query,
+                  decoration: const InputDecoration(
+                    labelText: '搜索插件名称',
+                    prefixIcon: Icon(Icons.search),
                   ),
-                  visibleCount: _section == _ExtensionSection.installed
-                      ? installed.length + pending.length
-                      : entries.length,
-                  totalCount: _section == _ExtensionSection.installed
-                      ? packages.length + _pendingApks.length
-                      : index?.extensions.length ?? 0,
+                  onChanged: (query) => _setFilters(_filters.copyWith(query: query)),
                 ),
                 if (_section == _ExtensionSection.installed)
                   Expanded(
@@ -635,7 +596,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                         if (entries.isEmpty && !_loading && _error == null)
                           const Padding(
                             padding: EdgeInsets.all(16),
-                            child: Text('没有匹配的扩展，请调整语言或搜索条件。'),
+                            child: Text('没有匹配的扩展，请调整插件名称。'),
                           ),
                       ],
                     ),

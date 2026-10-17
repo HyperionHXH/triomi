@@ -30,25 +30,16 @@ class MainActivity : FlutterActivity() {
     private var videoPipEnabled = false
     private var videoBackgroundAudio = false
     private var videoPolicyOwner: String? = null
-    private var privacyLockProtected = true
-    private var privacyLockBlocked = true
     private var nativeForeground = false
     private var consentGeneration = 0L
 
     fun updateConsentGeneration(): Long = consentGeneration
     fun updateConsentCurrent(generation: Long): Boolean =
         generation == consentGeneration && nativeForeground && hasWindowFocus() &&
-            !isFinishing && !isDestroyed && (!privacyLockProtected || !privacyLockBlocked)
+            !isFinishing && !isDestroyed
 
     private fun invalidateNativeConsent() {
         consentGeneration++
-        if (privacyLockProtected) {
-            privacyLockBlocked = true
-            mihonWebSession?.close()
-            videoResolver?.cancel()
-            downloadVideoResolver?.cancel()
-            NativeVideoLifecycle.active?.onBackground(false)
-        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -66,31 +57,6 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         appUpdateHost = AppUpdateHost(this, flutterEngine.dartExecutor.binaryMessenger)
-        SecureStorePersistence.register(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
-        // Secure from the first native frame; Dart clears this only if the
-        // device-local lock is disabled. Enabled locks also disallow PiP.
-        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "triomi/privacy-lock")
-            .setMethodCallHandler { call, result ->
-                if (call.method != "protect") {
-                    result.notImplemented()
-                } else {
-                    val values = call.arguments as? Map<*, *>
-                    val enabled = values?.get("enabled") == true
-                    val blocked = values?.get("blocked") == true
-                    if (blocked && !privacyLockBlocked) invalidateNativeConsent()
-                    privacyLockProtected = enabled
-                    privacyLockBlocked = blocked
-                    if (enabled && blocked) {
-                        mihonWebSession?.close()
-                        videoResolver?.cancel()
-                        downloadVideoResolver?.cancel()
-                    }
-                    if (privacyLockProtected) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                    else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                    result.success(null)
-                }
-            }
         BackupArtifactGuard.register(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         JsWorkerController(this, flutterEngine)
         mihonHost = MihonHost(this)
@@ -172,7 +138,7 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
                     "enterVideoPip" -> {
-                        val supported = !privacyLockProtected && Build.VERSION.SDK_INT >= 26 &&
+                        val supported = Build.VERSION.SDK_INT >= 26 &&
                             packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
                         result.success(supported && enterPictureInPictureMode(
                             android.app.PictureInPictureParams.Builder()
@@ -186,7 +152,7 @@ class MainActivity : FlutterActivity() {
                         if (uri?.scheme != "https" || uri.host.isNullOrBlank() || uri.userInfo != null) {
                             result.error("invalid_url", "rule session requires HTTPS", null)
                         } else if (!updateConsentCurrent(requestGeneration)) {
-                            result.error("privacy_locked", "unlock before opening source browser", null)
+                            result.error("activity_inactive", "return to the app before opening source browser", null)
                         } else if (mihonSessionPending) {
                             result.error("session_busy", "a source browser is already open", null)
                         } else {
@@ -248,7 +214,7 @@ class MainActivity : FlutterActivity() {
                         } else if (mihonSessionPending) {
                             result.error("session_busy", "a source browser is already open", null)
                         } else if (!updateConsentCurrent(requestGeneration)) {
-                            result.error("privacy_locked", "unlock before opening source browser", null)
+                            result.error("activity_inactive", "return to the app before opening source browser", null)
                         } else {
                             mihonSessionPending = true
                             mihonExecutor.execute {
@@ -323,19 +289,18 @@ class MainActivity : FlutterActivity() {
                         if (pkg == null || sourceId == null) {
                             result.error("invalid_args", "source identity required", null)
                         } else if (!updateConsentCurrent(requestGeneration)) {
-                            result.error("privacy_locked", "unlock before opening source settings", null)
+                            result.error("activity_inactive", "return to the app before opening source settings", null)
                         } else {
                             mihonExecutor.execute {
                                 try {
                                     mihonHost.settingsSource(pkg, sourceId)
                                     runOnUiThread {
                                         if (!updateConsentCurrent(requestGeneration)) {
-                                            result.error("privacy_locked", "source settings consent expired", null)
+                                            result.error("activity_inactive", "source settings consent expired", null)
                                             return@runOnUiThread
                                         }
                                         startActivity(Intent(this, MihonSettingsActivity::class.java)
-                                            .putExtra("packageName", pkg).putExtra("sourceId", sourceId)
-                                            .putExtra("privacyLock", privacyLockProtected))
+                                            .putExtra("packageName", pkg).putExtra("sourceId", sourceId))
                                         result.success(true)
                                     }
                                 } catch (error: Throwable) {
@@ -434,7 +399,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (!privacyLockProtected && videoPipEnabled && Build.VERSION.SDK_INT >= 26 &&
+        if (videoPipEnabled && Build.VERSION.SDK_INT >= 26 &&
             packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
             enterPictureInPictureMode(android.app.PictureInPictureParams.Builder()
                 .setAspectRatio(android.util.Rational(16, 9)).build())
@@ -452,19 +417,16 @@ class MainActivity : FlutterActivity() {
         nativeForeground = false
         invalidateNativeConsent()
         val pip = Build.VERSION.SDK_INT >= 26 && isInPictureInPictureMode
-        NativeVideoLifecycle.active?.onBackground(!privacyLockProtected && (videoBackgroundAudio || pip))
-        if (privacyLockProtected) {
-            mihonWebSession?.close()
-            videoResolver?.cancel()
-            downloadVideoResolver?.cancel()
-        }
+        NativeVideoLifecycle.active?.onBackground(videoBackgroundAudio || pip)
+        mihonWebSession?.close()
+        videoResolver?.cancel()
+        downloadVideoResolver?.cancel()
     }
 
     override fun onResume() {
         super.onResume()
         nativeForeground = true
-        if (privacyLockProtected) NativeVideoLifecycle.active?.onBackground(false)
-        else NativeVideoLifecycle.active?.onForeground()
+        NativeVideoLifecycle.active?.onForeground()
     }
 
     override fun onDestroy() {

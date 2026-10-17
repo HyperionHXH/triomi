@@ -1,0 +1,121 @@
+{
+  "version": "0.1.0+155",
+  "releaseTag": "v0.1.0-test.155",
+  "releaseUrl": "https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.155",
+  "releaseStatus": "prepared-not-published",
+  "platformAcceptance": "partial",
+  "scope": "R155 Kazumi / Android Komikku / MixN workflow changes; original application data retained",
+  "artifacts": [
+    {"name": "triomi-android.apk", "bytes": 130487164, "sha256": "c4bad1bfa63592e32d6d6bbd3fa1dbb0c60e42f5eab94397b695fcff2f2f5ed0"},
+    {"name": "triomi-windows.zip", "bytes": 37061935, "sha256": "a65c9eee43d38b59de0693c043984e64fee48ba537fa46f68dd1fa08ad6354df"},
+    {"name": "triomi-windows.msi", "bytes": 30892032, "sha256": "87d882600ac7675a5916e5e5a6829cea9e3eee1062124b4aed05744ecb6a4e9a"},
+    {"name": "triomi-windows.update.json", "bytes": 8164, "sha256": "db509cb569941e1d9f1492a7928b1a6b4003064d3ef6866b6730088f4fb7a350"},
+    {"name": "SHA256SUMS.txt", "bytes": 352, "sha256": "232468358444c0403f8e101e38071a308290bb060ef37be84fffcb4c2aa771a5"}
+  ],
+  "androidSigning": {
+    "certificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077",
+    "verification": "apksigner verify --print-certs exited 0; original production certificate retained",
+    "acceptanceApkSha256": "7a19ed2d767d7ab9cdbfa7e5bc4974df736b8dbe8c1fb78c4eb7fe68d1c21505"
+  },
+  "verification": {
+    "flutter": {"passed": 1004, "skipped": 3, "log": "D:/noval_and_manga/_tools/R155-suite-delivery.log", "exit": 0},
+    "analyze": {"issues": 0, "log": "D:/noval_and_manga/_tools/R155-analyze-delivery.log", "exit": 0},
+    "python": {"passed": 89, "command": "python -m unittest discover -s tools -p test_*.py", "basis": "completed command output retained in R155 conversation"},
+    "documentationScan": {"exit": 0, "errors": 0, "historicalTemplateWarnings": 35},
+    "secrets": {
+      "filesScanned": 1352,
+      "filesWithCredentialOrSigningSecret": 0,
+      "apkMembersEach": 601,
+      "windowsZipMembers": 49,
+      "artifactSecretMatches": 0,
+      "privateMaterialNames": 0,
+      "debugFiles": 0,
+      "log": "D:/noval_and_manga/_tools/C155-final-secret-scan.json"
+    }
+  },
+  "devices": [
+    {
+      "serial": "emulator-5554", "api": 35,
+      "installedSha256": "7a19ed2d767d7ab9cdbfa7e5bc4974df736b8dbe8c1fb78c4eb7fe68d1c21505",
+      "install": "install -r succeeded; installed base.apk SHA256 independently read",
+      "dataPreserved": true,
+      "finalBytes": [
+        "LNS original cached novel and source-specific font visually readable, page 2/10",
+        "Reader mode restored from temporary card mode to paged; settings reopened to verify selection",
+        "All five anime information tabs opened: overview, cached comments, character/voice, relations and staff",
+        "Cached anime directory retained 21 episodes and two playlists"
+      ],
+      "networkFailures": "Public metadata and playback refresh still report DNS/timeout; cached partitions are not online-success evidence",
+      "screenshots": ["C155-LNS-body-api35.png", "C155-LNS-menu-api35.png"]
+    },
+    {
+      "serial": "emulator-5556", "api": 26,
+      "installedSha256": "7a19ed2d767d7ab9cdbfa7e5bc4974df736b8dbe8c1fb78c4eb7fe68d1c21505",
+      "install": "install -r succeeded; installed base.apk SHA256 independently read",
+      "dataPreserved": true,
+      "finalBytes": ["Original xkcd history -> visible detail -> continue -> real appendix image 2/2 -> back to detail -> original history page 2"],
+      "screenshots": ["C155-history-reader-api26.png"],
+      "preFinalBytesOnly": [
+        "Manga library has one name search, no ordinary/encrypted selector or extra filter panel",
+        "Updates refresh reached empty result; library has no manga, so live progress was not exercised",
+        "Installed plugin name search xkcd filters the original installed extensions; no installs or trust changes"
+      ],
+      "networkFailures": "Device DNS prevented new public-source reads"
+    },
+    {
+      "serial": "emulator-5558", "api": 35,
+      "installedSha256": "c4bad1bfa63592e32d6d6bbd3fa1dbb0c60e42f5eab94397b695fcff2f2f5ed0",
+      "install": "install -r succeeded; installed base.apk SHA256 independently read",
+      "dataPreserved": true,
+      "finalBytes": ["Original downloaded LK novel retained, continue reading opens readable body at page 3/37"],
+      "screenshots": ["C155-signed-reader.png"]
+    }
+  ],
+  "windows": {
+    "zipFiles": 49,
+    "portableBundleMatchesZip": true,
+    "manifestAllFileHashesMatchZip": true,
+    "msi": {
+      "install154Exit": 0, "upgrade155Exit": 0,
+      "upgradePreservedFiles": 662, "upgradeDataHashesUnchanged": true,
+      "installedFilesMatchZip": true,
+      "uninstall155Exit": 0, "uninstallPreservedFiles": 747,
+      "uninstallDataHashesUnchanged": true,
+      "windowsAuthenticodeSigned": false,
+      "note": "Different counts are separate before/after comparisons around upgrade and uninstall; application use between them created additional WebView files. All files within each comparison were unchanged."
+    },
+    "finalBytes": [
+      "Installed MSI launched with original application data",
+      "FX anime detail -> retained MXdm mapping -> playlist 1 episode 1 -> real video frame 4:30/24:19 with right-side playlist/episode selector",
+      "Staff partition loaded actual names, roles and episode participation",
+      "Official Next API comments timed out and showed retry; not counted as online comments success",
+      "Portable manga browser -> MangaDex JS/API source -> recent updates 20 works with covers",
+      "Downloaded novel tag 奇幻 -> root online search -> scoped LK results 20 works with covers; back returns to original shelf",
+      "Downloaded novel opens body and independent reader controls",
+      "Follows selector separates local offline, Bangumi account and WebDAV; unconfigured accounts display setup guidance, not fake synchronized collections"
+    ],
+    "earlierR155SourceObservations": ["Seven weekday calendar with real covers", "Separate global settings and appearance; system font scaling retained"],
+    "screenshots": ["C155-installed-player.png", "C155-mangadex-directory.png", "C155-novel-tag-search.png", "C155-follows-bangumi.png"]
+  },
+  "repairs": [
+    {
+      "problem": "History to detail produced a blank shell",
+      "rootCause": "Root history pushed a branch detail route, creating a second StatefulShellRoute with duplicate page/Navigator keys",
+      "fix": "Detail routes use the root Navigator; detail/tag/source drill-downs use real root MaterialPageRoutes while canonical workspace searches and drafts stay independent",
+      "evidence": "Failing-before widget assertion; nine targeted regressions passed; final API26 original-history journey passed"
+    },
+    {"problem": "Headless anime update entrypoint omitted preferences initialization", "fix": "Initialize and override persistent preferences in the background container", "evidence": "Failing-before and passing-after focused regression included in full suite; no new OS background-job claim"},
+    {"problem": "Novel paging overflowed and illustrations lacked reserved spacing", "fix": "Match measured line heights and inter-block layout spacing", "evidence": "Reader consumer regressions and actual body/menu rendering"},
+    {"problem": "Remote collection refresh or mutation could corrupt state on malformed response, account change or failed write", "fix": "Validate response shapes, bind pending operations to account/source identity, retain old complete state on failure", "evidence": "Consumer state-transition and failure-path regressions"}
+  ],
+  "boundaries": [
+    "No claim of complete Kazumi/Komikku/MixN compatibility or full platform acceptance",
+    "Bangumi status/progress/rating writes and external WebDAV uploads require specific target/field authorization; none performed in this acceptance",
+    "Loopback sync and contract tests are not external-cloud success",
+    "Cloudflare remains waived/userWaived; actualVerificationStatus=not-completed",
+    "LNS/Mixn dedicated reachability probing was not resumed; no paid action or authorization bypass",
+    "Windows cannot execute Mihon APKs; current online manga evidence uses the JS/API source",
+    "System screen-reader semantics remain; in-app TTS, PIN/privacy feature entries and custom UI font control were removed without deleting original business data",
+    "Full accessibility traversal, physical-device experience, every source and long-duration stability remain partial"
+  ]
+}

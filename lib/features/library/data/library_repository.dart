@@ -641,7 +641,6 @@ class LibraryRepository {
     required Chapter chapter,
     double position = 0,
     String? device,
-    bool incognito = false,
   }) async {
     await _db.transaction(() async {
       final deleteStatement = _db.delete(_db.histories)
@@ -664,7 +663,6 @@ class LibraryRepository {
               position: Value(position),
               device: Value(device),
               visitedAt: DateTime.now(),
-              incognito: Value(incognito),
             ),
           );
     });

@@ -1,0 +1,544 @@
+{
+  "version": 155,
+  "recordedAt": "2026-10-16T17:55:55.453179Z",
+  "credentialsUsed": false,
+  "mangadex": {
+    "status": "passed",
+    "taxonomyCount": 77,
+    "tagId": "391b0423-d847-456f-aff0-8b0cfc03066b",
+    "tag": "Action",
+    "results": [
+      {
+        "id": "801513ba-a712-498c-8f57-cae55b38cc92",
+        "title": "烙印勇士",
+        "tags": [
+          "Award Winning",
+          "Monsters",
+          "Action",
+          "Demons",
+          "Psychological",
+          "Survival",
+          "Adventure",
+          "Sexual Violence",
+          "Magic",
+          "Military",
+          "Philosophical",
+          "Gore",
+          "Drama",
+          "Horror",
+          "Fantasy",
+          "Tragedy"
+        ]
+      }
+    ],
+    "version": "1.0.5"
+  },
+  "bangumi": {
+    "status": "passed",
+    "rows": 3,
+    "items": [
+      {
+        "id": 400602,
+        "name": "葬送的芙莉莲",
+        "tags": [
+          {
+            "name": "治愈",
+            "count": 8131,
+            "total_count": 307803
+          },
+          {
+            "name": "公路片",
+            "count": 6521,
+            "total_count": 23009
+          },
+          {
+            "name": "奇幻",
+            "count": 6455,
+            "total_count": 489759
+          },
+          {
+            "name": "MADHouse",
+            "count": 6227,
+            "total_count": 112244
+          },
+          {
+            "name": "漫画改",
+            "count": 5914,
+            "total_count": 888853
+          },
+          {
+            "name": "2023年10月",
+            "count": 4942,
+            "total_count": 37942
+          },
+          {
+            "name": "旅行",
+            "count": 4307,
+            "total_count": 8648
+          },
+          {
+            "name": "寿命论",
+            "count": 3725,
+            "total_count": 3852
+          },
+          {
+            "name": "TV",
+            "count": 3211,
+            "total_count": 1439843
+          },
+          {
+            "name": "斋藤圭一郎",
+            "count": 3164,
+            "total_count": 3875
+          },
+          {
+            "name": "异世界",
+            "count": 2550,
+            "total_count": 272459
+          },
+          {
+            "name": "2023",
+            "count": 1752,
+            "total_count": 82783
+          },
+          {
+            "name": "漫改",
+            "count": 1594,
+            "total_count": 369239
+          },
+          {
+            "name": "催泪",
+            "count": 1448,
+            "total_count": 61328
+          },
+          {
+            "name": "日本",
+            "count": 901,
+            "total_count": 311746
+          },
+          {
+            "name": "战斗",
+            "count": 359,
+            "total_count": 487255
+          },
+          {
+            "name": "斎藤圭一郎",
+            "count": 312,
+            "total_count": 1920
+          },
+          {
+            "name": "冒险",
+            "count": 247,
+            "total_count": 56679
+          },
+          {
+            "name": "日常",
+            "count": 189,
+            "total_count": 413737
+          },
+          {
+            "name": "神作",
+            "count": 161,
+            "total_count": 48317
+          },
+          {
+            "name": "公路",
+            "count": 127,
+            "total_count": 1547
+          },
+          {
+            "name": "魔法",
+            "count": 125,
+            "total_count": 20502
+          },
+          {
+            "name": "葬送的芙莉莲",
+            "count": 108,
+            "total_count": 1923
+          },
+          {
+            "name": "恋爱",
+            "count": 54,
+            "total_count": 581293
+          },
+          {
+            "name": "2023年",
+            "count": 52,
+            "total_count": 3672
+          },
+          {
+            "name": "搞笑",
+            "count": 51,
+            "total_count": 655196
+          },
+          {
+            "name": "半年番",
+            "count": 37,
+            "total_count": 4428
+          },
+          {
+            "name": "2024",
+            "count": 32,
+            "total_count": 72881
+          },
+          {
+            "name": "鈴木智尋",
+            "count": 25,
+            "total_count": 141
+          },
+          {
+            "name": "种崎敦美",
+            "count": 23,
+            "total_count": 937
+          }
+        ]
+      },
+      {
+        "id": 9717,
+        "name": "魔法少女小圆",
+        "tags": [
+          {
+            "name": "虚渊玄",
+            "count": 10696,
+            "total_count": 40684
+          },
+          {
+            "name": "新房昭之",
+            "count": 9231,
+            "total_count": 102988
+          },
+          {
+            "name": "魔法少女",
+            "count": 8574,
+            "total_count": 37702
+          },
+          {
+            "name": "致郁",
+            "count": 5339,
+            "total_count": 23872
+          },
+          {
+            "name": "梶浦由紀",
+            "count": 4263,
+            "total_count": 5686
+          },
+          {
+            "name": "原创",
+            "count": 4224,
+            "total_count": 633675
+          },
+          {
+            "name": "SHAFT",
+            "count": 3791,
+            "total_count": 68528
+          },
+          {
+            "name": "2011年1月",
+            "count": 3173,
+            "total_count": 9006
+          },
+          {
+            "name": "治愈",
+            "count": 2965,
+            "total_count": 307803
+          },
+          {
+            "name": "TV",
+            "count": 2894,
+            "total_count": 1439848
+          },
+          {
+            "name": "百合",
+            "count": 2153,
+            "total_count": 412682
+          },
+          {
+            "name": "爱的战士虚渊玄",
+            "count": 2031,
+            "total_count": 2104
+          },
+          {
+            "name": "2011",
+            "count": 1562,
+            "total_count": 53769
+          },
+          {
+            "name": "猎奇",
+            "count": 1538,
+            "total_count": 37871
+          },
+          {
+            "name": "战斗",
+            "count": 1094,
+            "total_count": 487258
+          },
+          {
+            "name": "悠木碧",
+            "count": 783,
+            "total_count": 12369
+          },
+          {
+            "name": "日本",
+            "count": 548,
+            "total_count": 311748
+          },
+          {
+            "name": "奇幻",
+            "count": 479,
+            "total_count": 489762
+          },
+          {
+            "name": "强力STAFF",
+            "count": 317,
+            "total_count": 317
+          },
+          {
+            "name": "神作",
+            "count": 315,
+            "total_count": 48317
+          },
+          {
+            "name": "魔法少女小圆",
+            "count": 295,
+            "total_count": 7863
+          },
+          {
+            "name": "斎藤千和",
+            "count": 261,
+            "total_count": 1096
+          },
+          {
+            "name": "蒼樹うめ",
+            "count": 218,
+            "total_count": 496
+          },
+          {
+            "name": "梶浦由记",
+            "count": 129,
+            "total_count": 11543
+          },
+          {
+            "name": "轮回",
+            "count": 127,
+            "total_count": 17625
+          },
+          {
+            "name": "违和感",
+            "count": 90,
+            "total_count": 124
+          },
+          {
+            "name": "魔法",
+            "count": 82,
+            "total_count": 20502
+          },
+          {
+            "name": "剧情",
+            "count": 80,
+            "total_count": 16414
+          },
+          {
+            "name": "2011年",
+            "count": 74,
+            "total_count": 3007
+          },
+          {
+            "name": "虚淵玄",
+            "count": 62,
+            "total_count": 2159
+          }
+        ]
+      },
+      {
+        "id": 55770,
+        "name": "进击的巨人",
+        "tags": [
+          {
+            "name": "进击的巨人",
+            "count": 6747,
+            "total_count": 33322
+          },
+          {
+            "name": "热血",
+            "count": 5993,
+            "total_count": 217983
+          },
+          {
+            "name": "泽野弘之",
+            "count": 3882,
+            "total_count": 27379
+          },
+          {
+            "name": "漫画改",
+            "count": 3411,
+            "total_count": 888853
+          },
+          {
+            "name": "2013年4月",
+            "count": 3222,
+            "total_count": 23652
+          },
+          {
+            "name": "WITSTUDIO",
+            "count": 3032,
+            "total_count": 46737
+          },
+          {
+            "name": "战斗",
+            "count": 2908,
+            "total_count": 487257
+          },
+          {
+            "name": "TV",
+            "count": 2513,
+            "total_count": 1439843
+          },
+          {
+            "name": "Production.I.G",
+            "count": 1838,
+            "total_count": 42769
+          },
+          {
+            "name": "2013",
+            "count": 1471,
+            "total_count": 69851
+          },
+          {
+            "name": "漫改",
+            "count": 1073,
+            "total_count": 369240
+          },
+          {
+            "name": "奇幻",
+            "count": 998,
+            "total_count": 489761
+          },
+          {
+            "name": "荒木哲郎",
+            "count": 976,
+            "total_count": 7065
+          },
+          {
+            "name": "梶裕贵",
+            "count": 800,
+            "total_count": 3849
+          },
+          {
+            "name": "日本",
+            "count": 473,
+            "total_count": 311746
+          },
+          {
+            "name": "神谷浩史",
+            "count": 287,
+            "total_count": 30078
+          },
+          {
+            "name": "神作",
+            "count": 174,
+            "total_count": 48317
+          },
+          {
+            "name": "ProductionI.G",
+            "count": 144,
+            "total_count": 35494
+          },
+          {
+            "name": "猎奇",
+            "count": 96,
+            "total_count": 37871
+          },
+          {
+            "name": "剧情",
+            "count": 78,
+            "total_count": 16414
+          },
+          {
+            "name": "燃",
+            "count": 77,
+            "total_count": 16199
+          },
+          {
+            "name": "孝哥",
+            "count": 70,
+            "total_count": 124
+          },
+          {
+            "name": "谏山创",
+            "count": 64,
+            "total_count": 664
+          },
+          {
+            "name": "2013年",
+            "count": 56,
+            "total_count": 4017
+          },
+          {
+            "name": "战争",
+            "count": 55,
+            "total_count": 22494
+          },
+          {
+            "name": "2013春",
+            "count": 51,
+            "total_count": 150
+          },
+          {
+            "name": "小林靖子",
+            "count": 48,
+            "total_count": 958
+          },
+          {
+            "name": "悬疑",
+            "count": 43,
+            "total_count": 116429
+          },
+          {
+            "name": "WIT_STUDIO",
+            "count": 40,
+            "total_count": 1065
+          },
+          {
+            "name": "兵长",
+            "count": 38,
+            "total_count": 59
+          }
+        ]
+      }
+    ]
+  },
+  "lk": {
+    "status": "passed",
+    "taxonomyCount": 63,
+    "selectedId": "奇幻",
+    "selectedLabel": "奇幻",
+    "rows": 20,
+    "sample": [
+      {
+        "id": "13599",
+        "title": "秋津皇国兴亡记",
+        "tags": [
+          "青梅竹马",
+          "奇幻"
+        ]
+      },
+      {
+        "id": "33218",
+        "title": "一滴星星",
+        "tags": [
+          "恋爱",
+          "奇幻"
+        ]
+      },
+      {
+        "id": "33211",
+        "title": "帮我找尾巴！",
+        "tags": [
+          "恋爱喜剧",
+          "校园",
+          "奇幻"
+        ]
+      }
+    ]
+  }
+}

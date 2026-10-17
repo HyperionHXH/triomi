@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -34,12 +32,6 @@ class FlutterSecureStore implements SecureStore {
 
   final Map<String, String> _cache = <String, String>{};
   bool _ready = false;
-  bool _privacyReadFailed = false;
-
-  static const _privacyRecord = 'privacyLock.record.v1';
-  static const _durable = MethodChannel('triomi/secure-store-durable');
-  bool get _android => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-  bool get _windows => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
   final FlutterSecureStorage _storage = const FlutterSecureStorage(
     // Android 用 EncryptedSharedPreferences（Keystore 加密）。
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -47,21 +39,9 @@ class FlutterSecureStore implements SecureStore {
 
   @override
   Future<void> init() async {
-    if (_ready && !_privacyReadFailed) return;
+    if (_ready) return;
     try {
       _cache.addAll(await _storage.readAll());
-      if (_android && _cache.containsKey(_privacyRecord)) {
-        _cache.remove(_privacyRecord);
-        try {
-          final record = await _durable.invokeMethod<String>('read', {'key': _privacyRecord});
-          if (record != null) _cache[_privacyRecord] = record;
-          _privacyReadFailed = false;
-        } catch (_) {
-          _privacyReadFailed = true;
-          // Protected reads never fall back, but unrelated auth sessions stay
-          // available to existing headless workers lacking the UI channel.
-        }
-      }
       _ready = true;
     } catch (_) {
       // 保持未就绪：读取仍返回 null，之后可重试恢复平台安全存储。
@@ -73,29 +53,13 @@ class FlutterSecureStore implements SecureStore {
 
   @override
   Future<void> set(String key, String value) async {
-    if (key == _privacyRecord && _android) {
-      final persisted = await _durable.invokeMethod<String>('write', {'key': key, 'value': value});
-      if (persisted != value) throw StateError('Protected storage write unavailable');
-    } else {
-      await _storage.write(key: key, value: value);
-      if (key == _privacyRecord && _windows) {
-        // The pinned Windows FFI backend writes its DPAPI file with flush:true.
-        // Its legacy C++ per-key file format is not used by Dart applications.
-        if (await _storage.read(key: key) != value) {
-          throw StateError('Protected storage durable readback failed');
-        }
-      }
-    }
+    await _storage.write(key: key, value: value);
     _cache[key] = value;
   }
 
   @override
   Future<void> remove(String key) async {
-    if (key == _privacyRecord && _android) {
-      await _durable.invokeMethod<void>('remove', {'key': key});
-    } else {
-      await _storage.delete(key: key);
-    }
+    await _storage.delete(key: key);
     _cache.remove(key);
   }
 

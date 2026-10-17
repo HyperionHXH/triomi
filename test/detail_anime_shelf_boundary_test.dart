@@ -14,6 +14,7 @@ import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/anime/anime_follows_page.dart';
 import 'package:triomi/features/detail/detail_page.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
@@ -62,6 +63,7 @@ void main() {
       overrides: [
         databaseProvider.overrideWithValue(db),
         preferencesProvider.overrideWithValue(memoryPreferences()),
+        secureStoreProvider.overrideWithValue(MemorySecureStore()),
         sourcesProvider.overrideWith(() => StubSources(snapshotOf(item))),
         sourceHttpClientProvider.overrideWithValue(
           FakeHttpClient(
@@ -90,51 +92,25 @@ void main() {
     return (router: router, db: db);
   }
 
-  testWidgets('番剧详情加入追番后真实本地列表可见，取消时保留缓存', (tester) async {
+  testWidgets('番剧本机收藏明确独立于 Bangumi 收藏且移除保留数据', (tester) async {
     final harness = await pumpDetail(tester, animeItem);
     final repository = LibraryRepository(harness.db);
-
     expect(find.text('加入书架'), findsNothing);
-    expect(find.text('已在书架'), findsNothing);
-    expect(find.text('加入追番'), findsOneWidget);
-
-    await tester.tap(find.text('加入追番'));
-    for (var i = 0; i < 12; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 15)),
-      );
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    expect(
-      await repository.isInLibrary(animeItem.sourceId, animeItem.remoteId),
-      true,
-    );
+    expect(find.text('连接 Bangumi 收藏'), findsOneWidget);
+    expect(await repository.listAnimeFollows(), isEmpty);
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('本机收藏'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('加入本机收藏'));
+    await tester.pumpAndSettle();
+    expect(await repository.isInLibrary(animeItem.sourceId, animeItem.remoteId), true);
     expect(await repository.listLibrary(), isEmpty);
     expect(await repository.listAnimeFollows(), hasLength(1));
-    harness.router.go('/schedule');
+    await tester.tap(find.text('已在本机收藏 · 移除'));
     await tester.pumpAndSettle();
-    expect(find.text(animeItem.title), findsOneWidget);
-    await tester.longPress(find.text(animeItem.title));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('批量修改追番状态'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('取消所选追番（保留历史与缓存）'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, '取消追番'));
-    for (var i = 0; i < 8; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 15)),
-      );
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    expect(find.text(animeItem.title), findsNothing);
     expect(await repository.listAnimeFollows(), isEmpty);
-    expect(
-      await repository.itemByKey(animeItem.sourceId, animeItem.remoteId),
-      isNotNull,
-    );
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
+    expect(await repository.itemByKey(animeItem.sourceId, animeItem.remoteId), isNotNull);
   });
 
   testWidgets('漫画详情：保留「加入书架」动作', (tester) async {

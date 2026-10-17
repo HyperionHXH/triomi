@@ -10,6 +10,8 @@ import '../../core/router/app_router.dart';
 import '../../core/source/mihon_source.dart';
 import '../../core/source/source_providers.dart';
 
+import '../search/search_page.dart';
+
 class MangaRelatedSection extends ConsumerStatefulWidget {
   const MangaRelatedSection({super.key, required this.item});
   final MediaItem item;
@@ -79,11 +81,10 @@ class _MangaRelatedSectionState extends ConsumerState<MangaRelatedSection> {
                     context.push(AppRoutes.detailFor(item), extra: item),
               ),
             TextButton.icon(
-              onPressed: () => context.push(
-                AppRoutes.searchFor(
-                  MediaType.manga,
-                  sourceId: widget.item.sourceId,
-                ),
+              onPressed: () => SearchPage.open(
+                context,
+                type: MediaType.manga,
+                sourceId: widget.item.sourceId,
               ),
               icon: const Icon(Icons.search),
               label: const Text('手动搜索相关作品'),

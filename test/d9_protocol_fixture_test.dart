@@ -522,18 +522,23 @@ void main() {
       expect(candidates[1].totalEpisodes, isNull);
     });
 
-    test('搜索：data 缺失或不是数组时返回空列表', () async {
-      final noData = routingHttpClient(<String, String>{
-        '/v0/search/subjects': jsonEncode(<String, Object?>{'foo': 1}),
+    test('搜索：data 缺失或不是数组时报解析错误，合法空数组才是空结果', () async {
+      for (final payload in <Object?>[
+        <String, Object?>{'foo': 1},
+        <String, Object?>{'data': <String, Object?>{'id': 1}},
+        <String, Object?>{'data': null},
+      ]) {
+        final http = routingHttpClient(<String, String>{
+          '/v0/search/subjects': jsonEncode(payload),
+        });
+        await expectLater(BangumiClient(http: http).search('x'),
+          throwsA(isA<SourceException>()
+            .having((error) => error.type, 'type', SourceErrorType.parse)));
+      }
+      final empty = routingHttpClient(<String, String>{
+        '/v0/search/subjects': jsonEncode(<String, Object?>{'data': <Object?>[]}),
       });
-      expect(await BangumiClient(http: noData).search('x'), isEmpty);
-
-      final objectData = routingHttpClient(<String, String>{
-        '/v0/search/subjects': jsonEncode(<String, Object?>{
-          'data': <String, Object?>{'id': 1},
-        }),
-      });
-      expect(await BangumiClient(http: objectData).search('x'), isEmpty);
+      expect(await BangumiClient(http: empty).search('x'), isEmpty);
     });
 
     test('剧集列表：ep 缺失时按列表顺序补号；非 Map 元素跳过', () async {

@@ -1,127 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/models/media_type.dart';
-import '../../core/source/source_registry.dart';
-import '../manga/manga_filter_snapshot.dart';
-import 'manga_feed_repository.dart';
-
-/// The ordinary subscription flow deliberately has no name/query form. Advanced
-/// listings and saved searches belong to the source workspace.
-class MangaFeedEditor extends ConsumerStatefulWidget {
-  const MangaFeedEditor({super.key, required this.snapshot});
-  final SourceRegistrySnapshot snapshot;
-  @override
-  ConsumerState<MangaFeedEditor> createState() => _MangaFeedEditorState();
-}
-
-class _MangaFeedEditorState extends ConsumerState<MangaFeedEditor> {
-  String? _sourceId;
-  bool _busy = false;
-  String? _error;
-
-  @override
-  Widget build(BuildContext context) {
-    final entries = widget.snapshot.enabledEntries
-        .where(
-          (entry) =>
-              entry.descriptor.type == MediaType.manga &&
-              defaultMangaFeed(entry.source) != null,
-        )
-        .toList();
-    _sourceId ??= entries.firstOrNull?.descriptor.id;
-    final entry = entries
-        .where((e) => e.descriptor.id == _sourceId)
-        .firstOrNull;
-    final feed = entry == null ? null : defaultMangaFeed(entry.source);
-    return AlertDialog(
-      title: const Text('添加订阅'),
-      content: SizedBox(
-        width: 420,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (entries.isEmpty)
-                const Text('没有可订阅的已启用漫画来源。请先在来源/扩展管理中启用来源。')
-              else
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: entry?.descriptor.id,
-                  decoration: const InputDecoration(labelText: '选择来源'),
-                  items: [
-                    for (final e in entries)
-                      DropdownMenuItem(
-                        value: e.descriptor.id,
-                        child: Text(
-                          '${e.descriptor.name} · ${e.descriptor.lang}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                  ],
-                  onChanged: _busy
-                      ? null
-                      : (id) => setState(() => _sourceId = id),
-                ),
-              if (feed != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 20),
-                  child: Text(
-                    isLatestMangaFeed(feed)
-                        ? '订阅最近更新'
-                        : feed.id == 'popular'
-                        ? '此来源未提供最近更新，将订阅热门'
-                        : '订阅 ${feed.name}（此来源未提供最近更新）',
-                  ),
-                ),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(_error!),
-                ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: _busy || entry == null || feed == null
-              ? null
-              : () async {
-                  setState(() {
-                    _busy = true;
-                    _error = null;
-                  });
-                  try {
-                    final id = await ref
-                        .read(mangaFeedRepositoryProvider)
-                        .save(
-                          sourceId: entry.descriptor.id,
-                          name: '${entry.descriptor.name} · ${feed.name}',
-                          kind: 'discover',
-                          feedId: feed.id,
-                        );
-                    if (context.mounted) Navigator.pop(context, id);
-                  } catch (error) {
-                    if (mounted) {
-                      setState(() {
-                        _busy = false;
-                        _error = '订阅未保存：$error';
-                      });
-                    }
-                  }
-                },
-          child: Text(_busy ? '保存中…' : '确认'),
-        ),
-      ],
-    );
-  }
-}
+import 'manga_filter_snapshot.dart';
 
 class MangaFiltersDialog extends StatefulWidget {
   const MangaFiltersDialog({
@@ -385,7 +264,7 @@ class _MangaFiltersDialogState extends State<MangaFiltersDialog> {
       if (widget.onSaveApplied != null)
         TextButton(
           onPressed: widget.onSaveApplied,
-          child: const Text('保存已应用搜索为订阅'),
+          child: const Text('保存已应用搜索'),
         ),
       TextButton(
         onPressed: () => Navigator.pop(context),

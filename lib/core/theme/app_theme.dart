@@ -4,7 +4,7 @@ import 'app_tokens.dart';
 
 /// 应用主题装配。
 ///
-/// 目标观感：Komikku（GNOME / libadwaita）。要点：
+/// - 四工作区的 Material 自适应界面
 /// - 命名强调色为深浅模式各提供种子色，前景与容器由 Material 配对生成
 /// - AppBar / 导航栏无阴影无描边，与背景同色
 /// - 卡片 12 圆角 + 极淡投影；输入框与按钮 8 圆角；chip 胶囊
@@ -111,7 +111,7 @@ abstract final class AppTheme {
 
       chipTheme: ChipThemeData(
         backgroundColor: palette.card,
-        side: BorderSide.none,
+        side: BorderSide(color: colorScheme.outline),
         labelStyle: textTheme.bodySmall,
         shape: const RoundedRectangleBorder(borderRadius: AppRadius.pillRadius),
         padding: const EdgeInsets.symmetric(

@@ -273,6 +273,7 @@ Future<String?> syncShelfToSource(
   final entry = snapshot.entries
       .where((candidate) => candidate.descriptor.id == item.sourceId)
       .firstOrNull;
+  if (entry != null && !entry.enabled) return '来源已停用，未同步站点收藏';
   final source = entry?.source;
   if (source is! RemoteShelfProvider) return null;
   if (!source.isLoggedIn) return null;

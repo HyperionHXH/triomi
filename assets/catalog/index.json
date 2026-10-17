@@ -33,7 +33,7 @@
       "id": "mangadex",
       "name": "MangaDex 漫画（开放 API）",
       "type": "manga",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "url": "asset://assets/rules/mangadex-api-js.json",
       "capabilities": [
         "discover",

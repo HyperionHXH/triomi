@@ -50,6 +50,7 @@ class SourceMigrationRepository {
           ))
           .getSingleOrNull();
 
+  // Legacy incognito rows remain local; new history is always ordinary.
   Future<HistoryRow?> _lastHistory(MediaItem item) =>
       (_db.select(_db.histories)
             ..where(

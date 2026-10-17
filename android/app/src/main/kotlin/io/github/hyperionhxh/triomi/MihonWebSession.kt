@@ -7,7 +7,6 @@ import android.os.Build
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceError
 import android.webkit.WebView
@@ -121,9 +120,6 @@ class MihonWebSession(
         dialog.show()
         dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         dialog.window?.let { window ->
-            if ((activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE) != 0) {
-                window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-            }
             if (Build.VERSION.SDK_INT >= 30) {
                 val appearance = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
                     WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS

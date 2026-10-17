@@ -649,6 +649,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                       });
                       try {
                         await provider.login(account, password);
+                        ref.invalidate(sourcesProvider);
                         if (dialogContext.mounted) {
                           Navigator.of(dialogContext).pop();
                         }

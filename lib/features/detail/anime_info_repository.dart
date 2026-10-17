@@ -11,6 +11,8 @@ import '../../core/models/media_type.dart';
 import '../../core/source/bangumi_public_client.dart';
 import '../../core/source/http_client.dart';
 
+import '../library/data/library_repository.dart';
+
 class AnimeFilter {
   const AnimeFilter({
     this.tags = const <String>[],
@@ -137,10 +139,12 @@ class AnimeInfoPage {
     this.nextOffset = 0,
     this.hasMore = false,
     this.cached = false,
+    this.refreshError,
   });
   final List<Map<String, Object?>> rows;
   final int nextOffset;
   final bool hasMore, cached;
+  final Object? refreshError;
 }
 
 class AnimeInfoRepository {
@@ -152,6 +156,8 @@ class AnimeInfoRepository {
         (String, String, int, SourceRequestCancellation?),
         Future<AnimeInfoPage>
       >{};
+
+  Future<Map<String, Object?>> character(String id) => publicClient.character(id);
 
   Future<AnimeInfoPage> section(String id, String section, {int offset = 0}) {
     final key = (id, section, offset, SourceRequestCancellation.current);
@@ -178,14 +184,14 @@ class AnimeInfoRepository {
         : Map<String, dynamic>.from(jsonDecode(item!.detailJson!) as Map);
     final key = '$section:$offset';
 
-    AnimeInfoPage parse(Object? raw, {bool cached = false}) {
+    AnimeInfoPage parse(Object? raw, {Object? refreshError}) {
       if (raw is Map && raw['format'] == 'bangumi-public-v1') {
         raw = raw['payload'];
       }
       final values = raw is List
           ? raw
           : raw is Map
-          ? raw['data']
+          ? raw['data'] ?? raw['list']
           : null;
       if (values is! List) throw const FormatException('资料返回结构有变化');
       final rows = [
@@ -203,7 +209,8 @@ class AnimeInfoRepository {
             (total is num
                 ? next < total
                 : values.length >= (section == 'episodes' ? 100 : 20)),
-        cached: cached,
+        cached: refreshError != null,
+        refreshError: refreshError,
       );
     }
 
@@ -217,7 +224,10 @@ class AnimeInfoRepository {
         raw = await publicClient.section(id, section, offset: offset);
       }
       final result = parse(raw);
-      if (item != null) {
+      if (section == 'info' && item == null) {
+        await LibraryRepository(db).cacheItem(bangumiItem(result.rows.single));
+      }
+      if (item != null || section == 'info') {
         await db.transaction(() async {
           final current = await query.getSingleOrNull();
           final merged = current?.detailJson == null
@@ -240,8 +250,10 @@ class AnimeInfoRepository {
         });
       }
       return result;
-    } catch (_) {
-      if (cache.containsKey(key)) return parse(cache[key], cached: true);
+    } catch (error) {
+      if (cache.containsKey(key)) {
+        return parse(cache[key], refreshError: error);
+      }
       rethrow;
     }
   }

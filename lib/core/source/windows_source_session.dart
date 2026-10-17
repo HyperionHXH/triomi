@@ -93,13 +93,4 @@ class WindowsSourceSession {
     });
   }
 
-  static Future<void> setBlocked(bool blocked, {required bool protected}) async {
-    try {
-      await _channel.invokeMethod<void>('blocked', {
-        'blocked': blocked, 'protected': protected,
-      });
-    } on MissingPluginException {
-      // No native browser exists on platforms without this Windows helper.
-    }
-  }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,6 +51,9 @@ class _NovelSource
   bool loggedIn;
   List<MediaItem> books;
   Object? shelfError;
+  Object? unreadError;
+  Object? writeError;
+  Completer<List<MediaItem>>? shelfResponse;
   int shelfCalls = 0;
   int remoteWrites = 0;
   final listingCalls = <String>[];
@@ -113,14 +118,24 @@ class _NovelSource
   Future<List<MediaItem>> remoteShelf() async {
     shelfCalls++;
     if (shelfError != null) throw shelfError!;
-    return books;
+    final response = shelfResponse;
+    return response == null ? books : await response.future;
   }
 
   @override
-  Future<Map<String, int>> remoteUnreadCounts() async => {};
+  Future<Map<String, int>> remoteUnreadCounts() async {
+    if (unreadError != null) throw unreadError!;
+    return {};
+  }
   @override
   Future<void> setInRemoteShelf(MediaItem item, bool add) async {
     remoteWrites++;
+    if (writeError != null) throw writeError!;
+    if (add) {
+      books = [...books, item];
+    } else {
+      books = books.where((book) => book.remoteId != item.remoteId).toList();
+    }
   }
 }
 
@@ -163,13 +178,7 @@ void main() {
       overrides: [
         databaseProvider.overrideWithValue(db),
         preferencesProvider.overrideWithValue(memoryPreferences()),
-        sourceRegistryProvider.overrideWith(
-          (ref) => throw StateError(
-            'Local novel shelf must not initialise source execution',
-          ),
-        ),
-        if (sources != null)
-          sourcesProvider.overrideWith(() => _Sources(sources)),
+        sourcesProvider.overrideWith(() => _Sources(sources ?? [])),
       ],
     );
     await tester.pumpWidget(
@@ -203,7 +212,7 @@ void main() {
   }
 
   shelfTest(
-    'local novels and partial bodies load without source execution; missing fonts are not offline',
+    'downloaded novels require readable bodies and fonts, and remain media scoped',
     (tester) async {
       final novel = _book('lk', 'same-id', '离线小说');
       final brokenFont = _book('lns', 'same-id', '缺字体小说');
@@ -294,10 +303,8 @@ void main() {
       );
       final loggedOut = _NovelSource('anonymous', loggedIn: false);
       await pumpShelf(tester, sources: [lk, lns, loggedOut]);
-      expect(lk.shelfCalls, 0);
-      expect(lns.shelfCalls, 0);
-      await tester.tap(find.text('刷新已登录站点收藏 / 未读'));
-      await tester.pumpAndSettle();
+      expect(lk.shelfCalls, 1);
+      expect(lns.shelfCalls, 1);
       var books = await repository.listLibrary(type: MediaType.novel);
       expect(books.map((v) => (v.item.sourceId, v.item.remoteId)).toSet(), {
         ('lk', 'one'),
@@ -321,8 +328,7 @@ void main() {
       );
       expect(loggedOut.shelfCalls, 0);
       expect(lk.remoteWrites + lns.remoteWrites + loggedOut.remoteWrites, 0);
-      await tester.enterText(find.byType(TextField), '站点小说');
-      await tester.pumpAndSettle();
+      await tester.ensureVisible(remoteBookCard());
       expect(remoteBookCard(), findsOneWidget);
       expect(find.textContaining('尚未加入本机收藏'), findsOneWidget);
       lk.shelfError = StateError('shelf unavailable');
@@ -387,7 +393,7 @@ void main() {
       ];
       source.directoryErrors.add('failed');
       await pumpShelf(tester, sources: [source]);
-      expect(source.directoryCalls, isEmpty);
+      expect(source.directoryCalls.toSet(), {'updated', 'failed', 'empty'});
       for (var refresh = 0; refresh < 2; refresh++) {
         await tester.tap(find.text('刷新已登录站点收藏 / 未读'));
         await tester.pumpAndSettle();
@@ -417,36 +423,137 @@ void main() {
   );
 
   shelfTest(
-    'selectable local tag draft cancels without changing results, then applies conjunctively',
+    'reading history never creates shelf membership; orphan downloads stay reachable',
     (tester) async {
-      await repository.addToLibrary(_book('lk', 'sf', '科幻小说', tags: ['科幻']));
-      await repository.addToLibrary(_book('lk', 'daily', '日常小说', tags: ['日常']));
-      await pumpShelf(tester);
-      await tester.tap(find.text('筛选 / 排序'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilterChip, '科幻'));
-      await tester.tap(find.byTooltip('取消筛选'));
-      await tester.pumpAndSettle();
-      expect(find.text('科幻小说'), findsOneWidget);
-      expect(find.text('日常小说'), findsOneWidget);
-      await tester.tap(find.text('筛选 / 排序'));
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<FilterChip>(find.widgetWithText(FilterChip, '科幻'))
-            .selected,
-        false,
+      final history = _book('lk', 'history', '仅阅读历史');
+      final downloaded = _book('lk', 'download', '仅下载小说');
+      final favourite = _book('lns', 'history', '同编号显式收藏');
+      await repository.cacheItem(history);
+      await repository.cacheItem(downloaded);
+      await repository.addToLibrary(favourite);
+      await repository.recordHistory(
+        sourceId: history.sourceId,
+        remoteId: history.remoteId,
+        chapter: const Chapter(sourceId: 'lk', remoteId: 'read', title: '读过'),
       );
-      await tester.tap(find.widgetWithText(FilterChip, '科幻'));
-      await tester.tap(find.text('应用'));
+      await repository.saveChapters(
+        itemSourceId: 'lk',
+        itemRemoteId: 'download',
+        chapters: const [Chapter(sourceId: 'lk', remoteId: 'cached', title: '缓存')],
+      );
+      await DownloadRepository(db).saveChapterContent(
+        const Chapter(
+          sourceId: 'lk',
+          remoteId: 'cached',
+          title: '缓存',
+          content: ChapterContent(text: '离线正文'),
+        ),
+      );
+      await pumpShelf(tester);
+      expect(find.text('仅阅读历史'), findsNothing);
+      expect(find.text('仅下载小说'), findsNothing);
+      expect(find.text('同编号显式收藏'), findsOneWidget);
+      expect((await repository.recentHistory(type: MediaType.novel)).length, 1);
+      await tester.tap(find.text('已下载'));
       await tester.pumpAndSettle();
-      expect(find.text('科幻小说'), findsOneWidget);
-      expect(find.text('日常小说'), findsNothing);
+      expect(find.text('仅下载小说'), findsOneWidget);
+      expect(find.text('仅阅读历史'), findsNothing);
+      expect(await repository.isInLibrary('lk', 'download'), false);
+    },
+  );
+
+  shelfTest(
+    'optional unread failure leaves successful remote shelf visible without writes',
+    (tester) async {
+      final source = _NovelSource('lk', books: [_book('lk', 'remote', '站点小说')])
+        ..unreadError = StateError('unread unavailable');
+      await pumpShelf(tester, sources: [source]);
+      expect(remoteBookCard(), findsOneWidget);
+      expect(find.textContaining('unread unavailable'), findsOneWidget);
+      expect(await repository.isInLibrary('lk', 'remote'), false);
+      expect(source.remoteWrites, 0);
+    },
+  );
+
+  shelfTest(
+    'failed first shelf load is not represented as an empty collection',
+    (tester) async {
+      final source = _NovelSource('lk', shelfError: StateError('shelf offline'));
+      await pumpShelf(tester, sources: [source]);
+      expect(find.textContaining('shelf offline'), findsOneWidget);
+      expect(find.textContaining('书架暂无收藏'), findsNothing);
+      expect(source.remoteWrites, 0);
+    },
+  );
+
+  shelfTest(
+    'remote-only removal uses account service and preserves local downloads and history',
+    (tester) async {
+      final book = _book('lk', 'remote', '站点小说');
+      await repository.cacheItem(book);
+      const chapter = Chapter(
+        sourceId: 'lk', remoteId: 'cached', title: '离线章节',
+        content: ChapterContent(text: '保留离线正文'),
+      );
+      await repository.saveChapters(
+        itemSourceId: 'lk', itemRemoteId: 'remote', chapters: [chapter],
+      );
+      await DownloadRepository(db).saveChapterContent(chapter);
+      await repository.recordHistory(
+        sourceId: 'lk', remoteId: 'remote', chapter: chapter, position: 4,
+      );
+      final source = _NovelSource('lk', books: [book]);
+      await pumpShelf(tester, sources: [source]);
+      await tester.tap(find.text('移出站点收藏'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(source.remoteWrites, 0);
+      source.writeError = StateError('write unavailable');
+      await tester.tap(find.text('移出站点收藏'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('移除'));
+      await tester.pumpAndSettle();
+      expect(remoteBookCard(), findsOneWidget);
+      expect(find.textContaining('write unavailable'), findsOneWidget);
+      source.writeError = null;
+      await tester.tap(find.text('移出站点收藏'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('移除'));
+      await tester.pumpAndSettle();
+      expect(source.remoteWrites, 2);
+      expect(remoteBookCard(), findsNothing);
+      expect(await repository.isInLibrary('lk', 'remote'), false);
+      expect((await repository.lastReadOf('lk', 'remote'))!.position, 4);
+      expect((await repository.loadChapters('lk', 'remote')).single.content!.text,
+          '保留离线正文');
+      await tester.tap(find.text('已下载'));
+      await tester.pumpAndSettle();
+      expect(remoteBookCard(), findsOneWidget);
+    },
+  );
+
+  shelfTest(
+    'revoked sessions discard late remote shelf results',
+    (tester) async {
+      final slow = _NovelSource('slow');
+      final fast = _NovelSource('lk', books: [_book('lk', 'remote', '站点小说')]);
+      await pumpShelf(tester, sources: [slow, fast]);
+      expect(remoteBookCard(), findsOneWidget);
+      slow.shelfResponse = Completer<List<MediaItem>>();
+      await tester.tap(find.text('刷新已登录站点收藏 / 未读'));
+      await tester.pump();
+      slow.loggedIn = false;
+      shelfContainer!.invalidate(sourcesProvider);
+      slow.shelfResponse!.complete([_book('slow', 'late', '过期账号作品')]);
+      await tester.pumpAndSettle();
+      expect(find.text('过期账号作品'), findsNothing);
+      expect(await repository.isInLibrary('slow', 'late'), false);
     },
   );
 
   testWidgets(
-    'novel discovery ends repeated snapshots and retains independent source queries',
+    'novel discovery ends repeated pages and retains independent source channels',
     (tester) async {
       final lk = _NovelSource('lk');
       final lns = _NovelSource('lns');
@@ -467,13 +574,6 @@ void main() {
       expect(lk.listingCalls, ['hot/1', 'hot/2']);
       expect(find.text('lk hot book'), findsOneWidget);
       expect(find.text('已经到底了'), findsOneWidget);
-      await tester.enterText(
-        find.byKey(const ValueKey('novel-source-query-lk')),
-        '独立查询',
-      );
-      await tester.testTextInput.receiveAction(TextInputAction.search);
-      await tester.pumpAndSettle();
-      expect(lk.listingCalls, contains('search/独立查询/1'));
       await tester.tap(find.byType(DropdownMenu<String>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('lns test').last);
@@ -483,12 +583,31 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('lk test').last);
       await tester.pumpAndSettle();
-      expect(find.text('lk result 独立查询'), findsOneWidget);
-      expect(
-        lk.listingCalls.where((call) => call == 'search/独立查询/1').length,
-        1,
-      );
+      expect(find.text('lk hot book'), findsOneWidget);
+      expect(lk.listingCalls, ['hot/1', 'hot/2']);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+  testWidgets('discovery reloads retained channels after registry replacement', (tester) async {
+    final source = _NovelSource('lk');
+    final container = ProviderContainer(overrides: [
+      preferencesProvider.overrideWithValue(memoryPreferences()),
+      sourcesProvider.overrideWith(() => _Sources([source])),
+    ]);
+    try {
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: NovelDiscoveryView())),
+      ));
+      await tester.pumpAndSettle();
+      expect(source.listingCalls, ['hot/1']);
+      container.invalidate(sourcesProvider);
+      await tester.pumpAndSettle();
+      expect(source.listingCalls, ['hot/1', 'hot/1']);
+      expect(find.text('lk hot book'), findsOneWidget);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+    }
+  });
 }

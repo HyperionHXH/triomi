@@ -89,6 +89,16 @@ void main() {
         .get();
     return rows.first.data['n'] as int;
   }
+  test('portable backups exclude and cannot overwrite secure local settings', () async {
+    const key = 'secure.localPolicy';
+    await preferences.set(key, true);
+    final backup = await serviceOf().exportToBytes(includeCovers: false);
+    final payload = BackupService.validatedPayload(backup.bytes);
+    expect((payload['settingsValues'] as Map).containsKey(key), isFalse);
+    await serviceOf().importFromBytes(zipOf(payloadOf(settings: {key: false})));
+    expect(preferences.get<bool>(key), isTrue);
+  });
+
 
   group('拒绝路径：旧数据不丢', () {
     setUp(() async {

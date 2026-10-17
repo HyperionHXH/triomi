@@ -5,6 +5,7 @@ import '../../../../core/models/media_type.dart';
 import '../../../../core/models/source_descriptor.dart';
 import '../../../../core/models/source_exception.dart';
 import '../../../../core/source/source_api.dart';
+import '../../../../core/source/tag_search.dart';
 import 'lk_client.dart';
 
 /// 轻之国度来源：把 LK 的 HTTP 接口映射到 Triomi 的来源能力契约。
@@ -17,6 +18,7 @@ class LkSource
     implements
         DiscoverProvider,
         SearchProvider,
+        TagSearchProvider,
         DetailProvider,
         ContentProvider,
         AccountProfileProvider,
@@ -76,6 +78,38 @@ class LkSource
   Future<List<MediaItem>> search(String keyword, {int page = 1}) async {
     final books = await client.search(keyword, page);
     return <MediaItem>[for (final book in books) _toItem(book)];
+  }
+
+  @override
+  Future<List<SearchTag>> searchTags() async => [
+    for (final tag in await client.searchTaxonomy())
+      SearchTag(id: tag.id, label: tag.label),
+  ];
+
+  @override
+  Future<List<MediaItem>> searchTagged(
+    String keyword, {
+    required List<String> tags,
+    int page = 1,
+  }) async {
+    if (tags.length > 1) {
+      throw const SourceException(
+        sourceId: id,
+        type: SourceErrorType.parse,
+        message: '本站每次支持一个题材，请选择一个标签',
+      );
+    }
+    final taxonomy = await searchTags();
+    final selected = tags.isEmpty ? '' : tags.single;
+    final tag = taxonomy
+        .where((t) => t.id == selected || t.label == selected)
+        .firstOrNull;
+    final books = await client.search(
+      keyword,
+      page,
+      primaryTag: tag?.id ?? selected,
+    );
+    return [for (final book in books) _toItem(book)];
   }
 
   /// 登录用户的发布管理列表，供账号页通过来源注册表调用。

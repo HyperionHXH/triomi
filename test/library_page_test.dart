@@ -90,7 +90,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  libraryTest('本地查询筛选作者和标签，清空后恢复全部作品', (tester) async {
+  libraryTest('书库名称查询与标签组合并能恢复全部作品', (tester) async {
     await repository.addToLibrary(manga);
     await repository.addToLibrary(
       const MediaItem(
@@ -104,17 +104,30 @@ void main() {
     );
     await pumpLibrary(tester);
     await openLocalSearch(tester);
-    await tester.enterText(find.byType(TextField), '科幻');
+    expect(find.byType(TextField), findsOneWidget);
+    final mangaCard = find.byKey(
+      ValueKey(('test-manga', '12', MediaType.manga)),
+    );
+    final otherCard = find.byKey(
+      ValueKey(('other', '12', MediaType.manga)),
+    );
+    await tester.enterText(find.byType(TextField), '作品乙');
     await tester.pumpAndSettle();
-    expect(find.text('作品甲'), findsNothing);
-    expect(find.text('作品乙'), findsWidgets);
-    await tester.enterText(find.byType(TextField), '独立作者');
+    expect(mangaCard, findsNothing);
+    expect(otherCard, findsOneWidget);
+    await tester.tap(find.widgetWithText(FilterChip, '科幻'));
     await tester.pumpAndSettle();
-    expect(find.text('作品乙'), findsWidgets);
+    expect(mangaCard, findsNothing);
+    expect(otherCard, findsOneWidget);
+    await tester.enterText(find.byType(TextField), '作品甲');
+    await tester.pumpAndSettle();
+    expect(mangaCard, findsNothing);
+    expect(otherCard, findsNothing);
+    await tester.tap(find.widgetWithText(FilterChip, '科幻'));
     await tester.enterText(find.byType(TextField), '');
     await tester.pumpAndSettle();
-    expect(find.text('作品甲'), findsWidgets);
-    expect(find.text('作品乙'), findsWidgets);
+    expect(mangaCard, findsOneWidget);
+    expect(otherCard, findsOneWidget);
   });
 
   libraryTest('筛选已读仅清确认快照，不影响同ID其他来源及确认后新增作品', (tester) async {
@@ -146,7 +159,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('更多操作'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('当前筛选标为已读'));
+    await tester.tap(find.text('当前结果标为已读'));
     await tester.pumpAndSettle();
     expect(find.textContaining('1 部作品'), findsOneWidget);
     await repository.addToLibrary(late);
@@ -165,7 +178,7 @@ void main() {
     expect(unread[(late.sourceId, late.remoteId)], 5);
   });
 
-  libraryTest('隐藏分类默认排除并可显式查看，当前筛选已读不跨隐藏边界', (tester) async {
+  libraryTest('旧隐藏分类作品出现在全部书库，分类成员身份仍保留', (tester) async {
     await repository.addToLibrary(manga);
     const other = MediaItem(
       sourceId: 'other',
@@ -194,30 +207,13 @@ void main() {
       counts: {'12': 4},
     );
     await pumpLibrary(tester);
-    expect(find.text('作品甲'), findsNothing);
+    expect(find.text('作品甲'), findsWidgets);
     expect(find.text('普通作品'), findsWidgets);
     await tester.tap(find.byTooltip('更多操作'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('当前筛选标为已读'));
+    await tester.tap(find.text('当前结果标为已读'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('1 部作品'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, '清空'));
-    await tester.pumpAndSettle();
-    expect(
-      (await repository.listLibrary(categoryId: hidden))
-          .single
-          .entry
-          .unreadCount,
-      3,
-    );
-    await tester.tap(find.text('隐藏 · 私有书单').last);
-    await tester.pumpAndSettle();
-    expect(find.text('作品甲'), findsWidgets);
-    expect(find.text('普通作品'), findsNothing);
-    await tester.tap(find.byTooltip('更多操作'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('当前筛选标为已读'));
-    await tester.pumpAndSettle();
+    expect(find.textContaining('2 部作品'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, '清空'));
     await tester.pumpAndSettle();
     expect(
@@ -227,15 +223,21 @@ void main() {
           .unreadCount,
       0,
     );
+    await tester.tap(find.text('私有书单').last);
+    await tester.pumpAndSettle();
+    expect(find.text('作品甲'), findsWidgets);
+    expect(find.text('普通作品'), findsNothing);
     await repository.deleteCategory(hidden, type: MediaType.manga);
     await tester.pumpAndSettle();
+    expect(await repository.itemByKey(manga.sourceId, manga.remoteId), isNotNull);
+    expect(await repository.isInLibrary(other.sourceId, other.remoteId), isTrue);
     // Stale selected category never silently becomes ordinary all.
     expect(find.text('作品甲'), findsNothing);
     expect(find.text('普通作品'), findsNothing);
     expect(find.text('所选分类不可用'), findsOneWidget);
   });
 
-  libraryTest('真实UI创建手动隐藏分类并批量加入移除，再重命名删除保留作品', (tester) async {
+  libraryTest('创建分类并批量加入移除，重命名删除保留作品', (tester) async {
     await repository.addToLibrary(manga);
     await repository.addToLibrary(
       const MediaItem(
@@ -250,7 +252,6 @@ void main() {
     await tester.tap(find.text('新建分类'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '我的隐藏分类');
-    await tester.tap(find.text('隐藏分类'));
     await tester.tap(find.text('保存分类'));
     await tester.pumpAndSettle();
     await tester.pageBack();
@@ -263,15 +264,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('应用分类'));
     await tester.pumpAndSettle();
-    expect(find.text('作品甲'), findsNothing);
-    expect(find.text('作品乙'), findsWidgets);
-    await tester.tap(find.text('筛选 / 排序 / 显示 / 分组'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('显示隐藏'));
-    await tester.tap(find.text('显示隐藏'));
-    await tester.tap(find.widgetWithText(FilledButton, '应用'));
-    await tester.pumpAndSettle();
     expect(find.text('作品甲'), findsWidgets);
+    expect(find.text('作品乙'), findsWidgets);
     await tester.longPress(find.text('作品甲').first);
     await tester.pumpAndSettle();
     await tester.ensureVisible(assign);
@@ -394,13 +388,28 @@ void main() {
     ]);
     await tester.pageBack();
     await tester.pumpAndSettle();
+    await repository.assignCategory(
+      second,
+      {(manga.sourceId, manga.remoteId)},
+      type: MediaType.manga,
+      add: true,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, '第二分类'));
+    await tester.pumpAndSettle();
     await tester.longPress(find.text('作品甲').first);
     await tester.pumpAndSettle();
     final assign = find.widgetWithText(TextButton, '分配分类');
     await tester.ensureVisible(assign);
     await tester.tap(assign);
     await tester.pumpAndSettle();
-    // The modal froze only manga; another process hides it before apply.
+    // The modal froze only manga; another process removes it from the selected category.
+    await repository.assignCategory(
+      second,
+      {(manga.sourceId, manga.remoteId)},
+      type: MediaType.manga,
+      add: false,
+    );
     await repository.assignCategory(
       hidden,
       {(manga.sourceId, manga.remoteId)},
@@ -451,7 +460,7 @@ void main() {
     );
   });
 
-  libraryTest('题材面板取消和重置不修改已应用条件，应用才筛选', (tester) async {
+  libraryTest('标签只匹配拥有作品元数据，不把标签当标题文本', (tester) async {
     await repository.addToLibrary(manga);
     await repository.addToLibrary(
       const MediaItem(
@@ -463,25 +472,14 @@ void main() {
       ),
     );
     await pumpLibrary(tester);
-    await tester.tap(find.text('筛选 / 排序 / 显示 / 分组'));
-    await tester.pumpAndSettle();
+    await openLocalSearch(tester);
     await tester.tap(find.widgetWithText(FilterChip, '科幻'));
-    await tester.tap(find.widgetWithText(TextButton, '取消'));
-    await tester.pumpAndSettle();
-    expect(find.text('作品甲'), findsWidgets);
-    await tester.tap(find.text('筛选 / 排序 / 显示 / 分组'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilterChip, '科幻'));
-    await tester.tap(find.widgetWithText(FilledButton, '应用'));
     await tester.pumpAndSettle();
     expect(find.text('作品甲'), findsNothing);
     expect(find.text('科幻作品'), findsWidgets);
-    await tester.tap(find.text('筛选 / 排序 / 显示 / 分组'));
+    await tester.tap(find.widgetWithText(FilterChip, '科幻'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(TextButton, '重置'));
-    await tester.tap(find.widgetWithText(TextButton, '取消'));
-    await tester.pumpAndSettle();
-    expect(find.text('作品甲'), findsNothing);
+    expect(find.text('作品甲'), findsWidgets);
     expect(find.text('科幻作品'), findsWidgets);
   });
 
@@ -498,10 +496,9 @@ void main() {
     await migrateLibraryPreferences(preferences);
     expect(preferences.get<String>('library.manga.sort'), isNull);
     await pumpLibrary(tester);
-    await tester.tap(find.text('筛选 / 排序 / 显示 / 分组'));
+    await tester.tap(find.byTooltip('更多操作'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(TextButton, '重置'));
-    await tester.tap(find.widgetWithText(FilledButton, '应用'));
+    await tester.tap(find.text('切换封面 / 列表'));
     await tester.pumpAndSettle();
     expect(preferences.get<String>('library.manga.layout'), 'grid');
     expect(preferences.get<String>('library.novel.layout'), 'list');

@@ -15,7 +15,6 @@ import '../../core/platform/platform_channel.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/storage/preferences.dart';
-import '../../core/storage/privacy.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/source_network_image.dart';
 import '../downloads/data/download_providers.dart';
@@ -24,7 +23,6 @@ import '../library/data/library_providers.dart';
 import '../library/data/library_repository.dart';
 import '../library/data/merged_manga_repository.dart';
 import '../novel/reader/novel_reader_settings.dart';
-import '../settings/privacy_lock_controller.dart';
 import '../tracking/data/tracking_providers.dart';
 import 'manga_page_image.dart';
 import 'reader_settings.dart';
@@ -72,7 +70,6 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   final ScrollOffsetController _scrollOffset = ScrollOffsetController();
   Timer? _autoScrollTimer;
   bool _foreground = true;
-  late final PrivacyLockController _privacyLock;
   late final int _previousCacheBytes;
   ReaderWorkKey get _workKey =>
       (sourceId: _item.sourceId, remoteId: _item.remoteId);
@@ -109,7 +106,6 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
   ProgressReporter? _trackingReporter;
   bool _keepScreenOn = false;
-  late final bool _incognito;
   bool _volumeKeyTurn = false;
 
   @override
@@ -117,10 +113,6 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _libraryRepository = ref.read(libraryRepositoryProvider);
-    _privacyLock = ref.read(privacyLockProvider);
-    _incognito =
-        ref.read(preferencesProvider).get<bool>(incognitoPreferenceKey) ??
-        false;
     if (_item.sourceId != 'local-comic') {
       _trackingReporter = ref.read(progressReporterProvider);
     }
@@ -138,7 +130,6 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
       if (!mounted ||
           !_foreground ||
-          _privacyLock.blocksAccess ||
           _loading ||
           _restoring ||
           _chromeVisible ||
@@ -359,7 +350,6 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   }
 
   Future<void> _persistProgress() {
-    if (_incognito) return Future<void>.value();
     if (_loading || _error != null || _images.isEmpty || _restoring) {
       return Future<void>.value();
     }
@@ -476,7 +466,6 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
   void _onScroll() {
     if (!mounted ||
-        _privacyLock.blocksAccess ||
         _isPaged ||
         _restoring ||
         _loading) {
@@ -496,7 +485,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   }
 
   void _onPageChanged(int index) {
-    if (_privacyLock.blocksAccess || _restoring || _loading) return;
+    if (_restoring || _loading) return;
     final page = index * _spreadSize;
     if (_page == page) return;
     setState(() => _page = page);

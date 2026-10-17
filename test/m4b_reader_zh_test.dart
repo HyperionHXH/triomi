@@ -153,16 +153,19 @@ void main() {
     // 简体正文已渲染。
     expect(find.textContaining('简体测试段落'), findsOneWidget);
 
-    // 打开阅读设置（默认 chrome 可见）。
-    await tester.tap(find.byIcon(Icons.text_format));
+    // 正文中部唤出控制栏，再打开文字面板。
+    await tester.tapAt(tester.getCenter(find.byType(NovelReaderPage)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('文字样式'));
     await tester.pumpAndSettle();
 
-    // '简→繁' 在 sheet 的 SingleChildScrollView 下方可视区外，先滚到可见。
+    // 转换选项在文字面板滚动区内。
     await tester.scrollUntilVisible(find.text('简→繁'), 160);
     await tester.pumpAndSettle();
 
     // 选「简→繁」。
     await tester.tap(find.text('简→繁'));
+    await tester.tap(find.widgetWithText(FilledButton, '完成'));
     await tester.pumpAndSettle();
 
     // 正文当场变成繁体（设置变更 → 重转换 → 重新分页）。

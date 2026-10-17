@@ -12,7 +12,6 @@ import '../../../core/platform/platform_channel.dart';
 import '../../../core/source/source_api.dart';
 import '../../../core/source/source_providers.dart';
 import '../../../core/storage/preferences.dart';
-import '../../../core/storage/privacy.dart';
 import '../../../core/text/zh_converter.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/widgets/image_viewer.dart';
@@ -20,11 +19,8 @@ import '../../../core/widgets/source_network_image.dart';
 import '../../downloads/data/download_providers.dart';
 import '../../library/data/library_providers.dart';
 import '../../library/data/library_repository.dart';
-import '../../settings/privacy_lock_controller.dart';
 import '../../tracking/data/tracking_providers.dart';
 import '../data/lk/lk_source.dart';
-import '../tts/flutter_tts_engine.dart';
-import '../tts/tts_controller.dart';
 import 'chapter_font.dart';
 import 'novel_blocks.dart';
 import 'novel_reader_settings.dart';
@@ -43,7 +39,7 @@ class NovelReaderArgs {
   final int initialIndex;
 }
 
-/// 小说阅读器：分页（仿真翻页用简化平移）与滚动双模式。
+/// 小说阅读器：左右翻页、卡片翻页与上下滚动，共享稳定的正文位置。
 class NovelReaderPage extends ConsumerStatefulWidget {
   const NovelReaderPage({super.key, required this.args});
 
@@ -54,7 +50,7 @@ class NovelReaderPage extends ConsumerStatefulWidget {
 }
 
 class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late final LibraryRepository _libraryRepository;
 
   /// dispose 里不能用 ref：进度上报器同样提前取出。
@@ -85,13 +81,20 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   bool _disposing = false;
   Future<void> _saveQueue = Future<void>.value();
 
-  bool _chromeVisible = true;
+  bool _chromeVisible = false;
+  double _cardDrag = 0;
+  int _turnDirection = 1;
+  late final AnimationController _cardMotion;
+  double _pageWidth = 1;
+  bool _cardAnimating = false;
   Timer? _saveDebounce;
   bool _keepScreenOn = false;
-  TtsController? _tts;
-  bool _ttsBusy = false;
-  late final bool _incognito;
-  late final PrivacyLockController _privacyLock;
+  bool _scrollUpdateScheduled = false;
+  double? _publishedScrollPosition;
+  int? _publishedScrollPercent;
+
+  bool get _hasReadableContent =>
+      !_loading && _error == null && !_locked && _blocks.isNotEmpty;
 
   MediaItem get _item => widget.args.item;
   List<Chapter> get _chapters => widget.args.chapters;
@@ -100,13 +103,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   @override
   void initState() {
     super.initState();
+    _cardMotion = AnimationController.unbounded(vsync: this)
+      ..addListener(() {
+        if (mounted) setState(() => _cardDrag = _cardMotion.value);
+      });
     WidgetsBinding.instance.addObserver(this);
+    _positions.itemPositions.addListener(_onScrollPositionsChanged);
     _libraryRepository = ref.read(libraryRepositoryProvider);
-    _privacyLock = ref.read(privacyLockProvider);
-    _privacyLock.addListener(_onPrivacyLockChanged);
-    _incognito =
-        ref.read(preferencesProvider).get<bool>(incognitoPreferenceKey) ??
-        false;
     _trackingReporter = ref.read(progressReporterProvider);
     _chapterIndex = widget.args.initialIndex.clamp(
       0,
@@ -128,9 +131,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   @override
   void dispose() {
     _disposing = true;
-    _privacyLock.removeListener(_onPrivacyLockChanged);
+    _cardMotion.dispose();
     WidgetsBinding.instance.removeObserver(this);
-    _releaseTts();
+    _positions.itemPositions.removeListener(_onScrollPositionsChanged);
     _saveDebounce?.cancel();
     // dispose 里不能用 ref；仓储已在 initState 里取出。
     unawaited(_persistProgress(commit: true));
@@ -145,94 +148,36 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) {
       unawaited(_persistProgress(commit: true));
-      _releaseTts();
-      if (mounted) setState(() {});
     }
   }
 
-  void _onPrivacyLockChanged() {
-    if (!_privacyLock.blocksAccess) return;
-    _releaseTts();
-    if (mounted) setState(() {});
-  }
-
-  void _releaseTts() {
-    _tts?.removeListener(_onTtsChanged);
-    _tts?.dispose();
-    _tts = null;
-  }
-
-  void _onTtsChanged() {
-    if (!mounted || _privacyLock.blocksAccess) return;
-    final anchor = _tts?.progress?.anchor;
-    if (anchor != null && _settings.mode == NovelReadingMode.paged) {
-      final index = _pages.indexWhere(
-        (page) => page.elements.any((e) => e.blockIndex == anchor),
-      );
-      if (index >= 0) _pageIndex = index;
-    } else if (anchor != null && _settings.mode == NovelReadingMode.scroll) {
-      _scrollToBlock(anchor);
+  void _onScrollPositionsChanged() {
+    if (!mounted || _disposing || _settings.mode != NovelReadingMode.scroll ||
+        !_hasReadableContent || _scrollUpdateScheduled) {
+      return;
     }
-    setState(() {});
-    if (_tts?.state == TtsState.error) _toast('朗读失败，请检查系统语音引擎');
-    _scheduleSave();
-  }
-
-  void _scrollToBlock(int blockIndex) {
-    if (blockIndex < 0 || blockIndex >= _blocks.length) return;
+    if (_publishedScrollPosition == _readingPosition &&
+        _publishedScrollPercent == _percent) {
+      return;
+    }
+    _scrollUpdateScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _privacyLock.blocksAccess) return;
-      if (_itemScroll.isAttached) _itemScroll.jumpTo(index: blockIndex);
+      _scrollUpdateScheduled = false;
+      if (!mounted || _disposing || _settings.mode != NovelReadingMode.scroll ||
+          !_hasReadableContent) {
+        return;
+      }
+      _publishedScrollPosition = _readingPosition;
+      _publishedScrollPercent = _percent;
+      setState(() {});
+      _saveDebounce?.cancel();
+      _saveDebounce = Timer(const Duration(seconds: 1), () {
+        unawaited(_persistProgress(commit: false));
+      });
     });
+    WidgetsBinding.instance.scheduleFrame();
   }
 
-  Future<void> _toggleTts() async {
-    if (_privacyLock.blocksAccess ||
-        _ttsBusy ||
-        _locked ||
-        _loading ||
-        _error != null ||
-        _blocks.isEmpty) {
-      return;
-    }
-    if (_sourceFont != null) {
-      _toast('本章使用站点专用字形，系统语音无法可靠朗读');
-      return;
-    }
-    setState(() => _ttsBusy = true);
-    try {
-      final current = _tts;
-      if (current?.state == TtsState.playing) {
-        await current!.pause();
-      } else if (current?.state == TtsState.paused) {
-        await current!.resume();
-      } else {
-        final anchor = _progressParagraph;
-        _releaseTts();
-        final engine = ref.read(ttsEngineFactoryProvider)();
-        // 语音选项在会话开始前应用一次（D48：变更只影响下一次朗读）。
-        await engine.applySpeechSettings(
-          rate: _settings.ttsRate,
-          voice: _settings.ttsVoice,
-        );
-        if (!mounted || _privacyLock.blocksAccess) {
-          await engine.stop();
-          return;
-        }
-        final controller = TtsController(engine: engine, blocks: _blocks);
-        _tts = controller;
-        controller.addListener(_onTtsChanged);
-        final index = controller.plan.utterances.indexWhere(
-          (u) => u.blockIndex >= anchor,
-        );
-        if (index >= 0) await controller.seekToUtterance(index);
-      }
-    } catch (_) {
-      _toast('朗读失败，请检查系统语音引擎');
-    } finally {
-      if (mounted) setState(() => _ttsBusy = false);
-    }
-  }
 
   /// 应用屏幕方向（B4）；空列表 = 跟随系统。
   Future<void> _applyOrientation(ReaderOrientation orientation) async {
@@ -263,7 +208,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   /// 繁简设置变化后用缓存的原始正文重转换（不重新请求网络）。
   Future<void> _reconvert() async {
-    _releaseTts();
     final raw = _rawContent;
     if (raw == null) return;
     _zh ??= await ZhConverter.instance();
@@ -280,7 +224,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _saveDebounce?.cancel();
     _restoring = true;
     _resumePosition = null;
-    _releaseTts();
     setState(() {
       _loading = true;
       _error = null;
@@ -445,7 +388,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   Future<void> _persistProgress({required bool commit}) {
-    if (_incognito) return Future<void>.value();
     if (_loading ||
         _error != null ||
         _locked ||
@@ -541,10 +483,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   /// 当前读到第几个排版块（进度回传用段落下标）。
   int get _progressParagraph {
-    if (_tts?.state == TtsState.playing || _tts?.state == TtsState.paused) {
-      final anchor = _tts?.progress?.anchor;
-      if (anchor != null) return anchor;
-    }
     if (_blocks.isEmpty) return 0;
     if (_settings.mode == NovelReadingMode.scroll) {
       return _readingPosition.floor().clamp(0, _blocks.length - 1);
@@ -556,6 +494,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   int get _percent {
     if (_settings.mode == NovelReadingMode.scroll) {
+      if (_blocks.isNotEmpty && _positions.itemPositions.value.any(
+        (position) => position.index == _blocks.length - 1 &&
+            position.itemTrailingEdge <= 1 && position.itemTrailingEdge > 0,
+      )) {
+        return 100;
+      }
       return _blocks.isEmpty
           ? 0
           : (_readingPosition / _blocks.length * 100).round().clamp(0, 100);
@@ -567,7 +511,35 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   // ---------------------------------------------------------------- 翻页/章节
 
   void _turnPage(int delta) {
-    if (_pages.isEmpty) return;
+    if (_pages.isEmpty || _cardAnimating) return;
+    if (_settings.mode == NovelReadingMode.card) {
+      unawaited(_settleCard(delta));
+    } else {
+      _commitPageTurn(delta);
+    }
+  }
+
+  Future<void> _settleCard(int delta) async {
+    if (_cardAnimating) return;
+    _cardAnimating = true;
+    try {
+      _cardMotion.value = _cardDrag;
+      await _cardMotion.animateTo(
+        delta == 0 ? 0 : -delta * _pageWidth,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      ).orCancel;
+      if (!mounted) return;
+      if (delta != 0) _commitPageTurn(delta);
+      _cardMotion.value = 0;
+    } on TickerCanceled {
+      // Leaving the reader cancels the turn without committing a new position.
+    } finally {
+      _cardAnimating = false;
+    }
+  }
+
+  void _commitPageTurn(int delta) {
     final target = _pageIndex + delta;
     if (target < 0) {
       unawaited(_switchChapter(-1));
@@ -577,7 +549,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       unawaited(_switchChapter(1));
       return;
     }
-    setState(() => _pageIndex = target);
+    setState(() {
+      _turnDirection = delta;
+      _pageIndex = target;
+    });
     _scheduleSave();
   }
 
@@ -604,7 +579,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
-    if (_settings.mode != NovelReadingMode.paged) return KeyEventResult.ignored;
+    if (_settings.mode == NovelReadingMode.scroll) return KeyEventResult.ignored;
     // 音量键翻页：默认关（防误触），开启后接管系统音量键。
     if (_settings.volumeKeyTurn) {
       switch (event.logicalKey) {
@@ -629,40 +604,26 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   // ---------------------------------------------------------------- 设置
 
-  /// TTS 语音选项变更（D48）：先停止当前朗读，下次开始时应用；
-  /// 本机设置即时落盘。
-  void _applyTtsSettings(NovelReaderSettings next) {
-    _releaseTts();
-    setState(() => _settings = next);
-    unawaited(next.save(ref.read(preferencesProvider)));
-  }
 
-  Future<void> _showTtsSettings() async {
-    final engine = ref.read(ttsEngineFactoryProvider)();
-    final voices = await engine.availableVoices();
-    if (!mounted) return;
-    await showDialog<void>(
+  Future<void> _showSettings({bool textOnly = false}) async {
+    final updated = await showDialog<NovelReaderSettings>(
       context: context,
-      builder: (context) => _TtsSettingsSheet(
+      builder: (context) => _SettingsSheet(
         settings: _settings,
-        voices: voices,
-        onSettingsChanged: _applyTtsSettings,
+        textOnly: textOnly,
+        sourceFontRequired: _sourceFont != null,
       ),
     );
-  }
-
-  Future<void> _showSettings() async {
-    final updated = await showModalBottomSheet<NovelReaderSettings>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => _SettingsSheet(settings: _settings),
-    );
-    if (updated == null || updated == _settings) return;
+    if (!mounted || updated == null) return;
     final anchor = _readingPosition;
     final modeChanged = updated.mode != _settings.mode;
     final zhChanged = updated.zhMode != _settings.zhMode;
     if (updated.orientation != _settings.orientation) {
       unawaited(_applyOrientation(updated.orientation));
+    }
+    if (updated.keepScreenOn != _keepScreenOn) {
+      _keepScreenOn = updated.keepScreenOn;
+      unawaited(platformChannel.setKeepScreenOn(_keepScreenOn));
     }
     setState(() {
       _resumePosition = anchor;
@@ -671,11 +632,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       _restoring = true;
     });
     if (modeChanged && updated.mode == NovelReadingMode.scroll) _pageIndex = 0;
+    // 先重转换再落盘：设置变更立即生效，持久化是尽力而为的收尾。
+    if (zhChanged) await _reconvert();
+    if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _finishRestore(_requestSeq),
     );
-    // 先重转换再落盘：设置变更立即生效，持久化是尽力而为的收尾。
-    if (zhChanged) await _reconvert();
     unawaited(updated.save(ref.read(preferencesProvider)));
     // 分页结果随样式变化重建；滚动模式无需处理。
     setState(() {});
@@ -685,7 +647,19 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final readerTheme = Theme.of(context).copyWith(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: _settings.theme.foreground,
+        brightness: _settings.theme == NovelTheme.dark ? Brightness.dark : Brightness.light,
+      ),
+      textTheme: Theme.of(context).textTheme.apply(
+        bodyColor: _settings.theme.foreground,
+        displayColor: _settings.theme.foreground,
+      ),
+    );
+    return Theme(
+      data: readerTheme,
+      child: Scaffold(
       backgroundColor: _settings.theme.background,
       body: SafeArea(
         child: Focus(
@@ -694,10 +668,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           child: Stack(
             children: <Widget>[
               _buildBody(),
-              if (_chromeVisible) _buildChrome(),
+              if (_chromeVisible || !_hasReadableContent) _buildChrome(),
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -768,20 +743,71 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           return const Center(child: Text('本章没有内容'));
         }
         final current = _pageIndex.clamp(0, _pages.length - 1);
+        _pageWidth = constraints.maxWidth;
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapUp: _handlePageTap,
+          onHorizontalDragUpdate: (details) {
+            if (_cardAnimating) return;
+            setState(() => _cardDrag = (_cardDrag + details.delta.dx)
+              .clamp(-constraints.maxWidth, constraints.maxWidth));
+          },
+          onHorizontalDragCancel: () {
+            if (_settings.mode == NovelReadingMode.card) {
+              unawaited(_settleCard(0));
+            } else {
+              setState(() => _cardDrag = 0);
+            }
+          },
+          onHorizontalDragEnd: (details) {
+            if (_cardAnimating) return;
+            final velocity = details.primaryVelocity ?? 0;
+            final delta = _cardDrag.abs() > constraints.maxWidth * 0.25
+                ? (_cardDrag < 0 ? 1 : -1)
+                : velocity.abs() > 500 ? (velocity < 0 ? 1 : -1) : 0;
+            if (_settings.mode == NovelReadingMode.card) {
+              unawaited(_settleCard(delta));
+            } else {
+              setState(() => _cardDrag = 0);
+              if (delta != 0) _turnPage(delta);
+            }
+          },
           child: Padding(
             padding: EdgeInsets.all(_settings.pageMargin),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 Expanded(
-                  child: _PageContent(
-                    page: _pages[current],
-                    settings: _settings,
-                    sourceId: _item.sourceId,
-                    sourceFont: _sourceFont,
+                  child: ClipRect(
+                    child: _settings.mode == NovelReadingMode.card
+                      ? Stack(fit: StackFit.expand, children: [
+                          if (_cardDrag != 0 &&
+                              current + (_cardDrag < 0 ? 1 : -1) >= 0 &&
+                              current + (_cardDrag < 0 ? 1 : -1) < _pages.length)
+                            _pageContent(current + (_cardDrag < 0 ? 1 : -1)),
+                          Transform.translate(
+                            offset: Offset(_cardDrag, 0),
+                            child: Material(
+                              elevation: _cardDrag == 0 ? 0 : 8,
+                              color: _settings.theme.background,
+                              child: _pageContent(current),
+                            ),
+                          ),
+                        ])
+                      : AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          transitionBuilder: (child, animation) => SlideTransition(
+                            position: Tween<Offset>(
+                              begin: Offset(_turnDirection.toDouble(), 0),
+                              end: Offset.zero,
+                            ).animate(animation),
+                            child: child,
+                          ),
+                          child: SizedBox.expand(
+                            key: ValueKey('$_chapterIndex:$current'),
+                            child: _pageContent(current),
+                          ),
+                        ),
                   ),
                 ),
                 SizedBox(
@@ -802,6 +828,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       },
     );
   }
+  Widget _pageContent(int index) => _PageContent(
+    page: _pages[index],
+    settings: _settings,
+    sourceId: _item.sourceId,
+    sourceFont: _sourceFont,
+  );
 
   void _handlePageTap(TapUpDetails details) {
     final width = MediaQuery.sizeOf(context).width;
@@ -816,180 +848,177 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   Widget _buildScrollView() {
-    return Stack(
-      children: <Widget>[
-        NotificationListener<ScrollNotification>(
-          onNotification: (notification) {
-            if (notification is ScrollEndNotification) _scheduleSave();
-            return false;
-          },
-          child: ScrollablePositionedList.separated(
-            key: ValueKey('$_chapterIndex:$_requestSeq'),
-            itemScrollController: _itemScroll,
-            itemPositionsListener: _positions,
-            initialScrollIndex: (_resumePosition ?? 0).floor().clamp(
-              0,
-              _blocks.length - 1,
-            ),
-            padding: EdgeInsets.symmetric(
-              horizontal: _settings.pageMargin + 8,
-              vertical: _settings.pageMargin,
-            ),
-            itemCount: _blocks.length,
-            separatorBuilder: (context, index) =>
-                SizedBox(height: _settings.fontSize * 0.5),
-            itemBuilder: (context, index) => _BlockView(
-              block: _blocks[index],
-              settings: _settings,
-              sourceId: _item.sourceId,
-              sourceFont: _sourceFont,
-            ),
-          ),
-        ),
-        Positioned(
-          right: AppSpacing.md,
-          bottom: AppSpacing.md,
-          child: FloatingActionButton.small(
-            backgroundColor: _settings.theme.background,
-            foregroundColor: _settings.theme.foreground,
-            elevation: 2,
-            onPressed: () => setState(() => _chromeVisible = !_chromeVisible),
-            child: const Icon(Icons.menu, size: 20),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildChrome() {
-    final theme = Theme.of(context);
-    return Positioned.fill(
-      child: GestureDetector(
-        // 半透明遮罩必须自己接管点击（ColoredBox 是 opaque 命中测试，
-        // 否则会吞掉整个屏幕的触摸）：点空白处收起控制条，按钮优先命中。
-        behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() => _chromeVisible = !_chromeVisible),
-        child: Container(
-          color: Colors.black54,
-          child: SafeArea(
-            child: Column(
-              children: <Widget>[
-                // 顶栏
-                Row(
-                  children: <Widget>[
-                    BackButton(
-                      color: Colors.white,
-                      onPressed: () => Navigator.of(context).maybePop(),
-                    ),
-                    Expanded(
-                      child: Text(
-                        '${_item.title} · ${_chapter.title}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: '阅读设置',
-                      onPressed: _showSettings,
-                      icon: const Icon(Icons.text_format, color: Colors.white),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-                if (ttsPlatformSupported &&
-                    !_locked &&
-                    !_loading &&
-                    _error == null)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        tooltip: _tts?.state == TtsState.playing
-                            ? '暂停朗读'
-                            : '朗读',
-                        onPressed: _ttsBusy ? null : _toggleTts,
-                        icon: Icon(
-                          _tts?.state == TtsState.playing
-                              ? Icons.pause
-                              : Icons.volume_up_outlined,
-                          color: Colors.white,
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: '停止朗读',
-                        onPressed: _tts == null || _ttsBusy
-                            ? null
-                            : () {
-                                _releaseTts();
-                                setState(() {});
-                              },
-                        icon: const Icon(Icons.stop, color: Colors.white),
-                      ),
-                      IconButton(
-                        tooltip: '朗读设置',
-                        onPressed: _showTtsSettings,
-                        icon: const Icon(Icons.tune, color: Colors.white),
-                      ),
-                    ],
-                  ),
-                // 底栏
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    if (_settings.mode == NovelReadingMode.paged &&
-                        _pages.isNotEmpty)
-                      SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          trackHeight: 3,
-                          thumbShape: const RoundSliderThumbShape(
-                            enabledThumbRadius: 6,
-                          ),
-                        ),
-                        child: Slider(
-                          value: _pageIndex
-                              .clamp(0, _pages.length - 1)
-                              .toDouble(),
-                          max: (_pages.length - 1).toDouble().clamp(
-                            0,
-                            double.infinity,
-                          ),
-                          onChanged: (value) {
-                            setState(() => _pageIndex = value.round());
-                            _scheduleSave();
-                          },
-                        ),
-                      ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        TextButton(
-                          onPressed: () => unawaited(_switchChapter(-1)),
-                          child: const Text(
-                            '上一章',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.lg),
-                        TextButton(
-                          onPressed: () => unawaited(_switchChapter(1)),
-                          child: const Text(
-                            '下一章',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ],
-            ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _chromeVisible = !_chromeVisible),
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          if (notification is ScrollEndNotification) {
+            _scheduleSave();
+            setState(() {});
+          }
+          return false;
+        },
+        child: ScrollablePositionedList.separated(
+          key: ValueKey('$_chapterIndex:$_requestSeq'),
+          itemScrollController: _itemScroll,
+          itemPositionsListener: _positions,
+          initialScrollIndex: (_resumePosition ?? 0).floor().clamp(0, _blocks.length - 1),
+          padding: EdgeInsets.all(_settings.pageMargin),
+          itemCount: _blocks.length,
+          separatorBuilder: (context, index) => SizedBox(height: _settings.fontSize * 0.5),
+          itemBuilder: (context, index) => _BlockView(
+            block: _blocks[index], settings: _settings,
+            sourceId: _item.sourceId, sourceFont: _sourceFont,
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildChrome() {
+    final scrolling = _settings.mode == NovelReadingMode.scroll;
+    final canSeek = !_loading && !_locked && _error == null && _blocks.isNotEmpty;
+    final max = scrolling ? (_blocks.length - 1).clamp(0, _blocks.length) : (_pages.length - 1).clamp(0, _pages.length);
+    final position = scrolling ? _readingPosition : _pageIndex.toDouble();
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          if (_hasReadableContent) Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() => _chromeVisible = false),
+            ),
+          ),
+          Align(
+            alignment: Alignment.topCenter,
+            child: Material(
+              color: _settings.theme.background,
+              elevation: 2,
+              child: Row(
+                children: [
+                  BackButton(onPressed: () => Navigator.of(context).maybePop()),
+                  Expanded(child: Text('${_item.title} · ${_chapter.title}',
+                    maxLines: 2, overflow: TextOverflow.ellipsis)),
+                  IconButton(tooltip: '阅读菜单', onPressed: _showMenu,
+                    icon: const Icon(Icons.more_vert)),
+                ],
+              ),
+            ),
+          ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Material(
+              color: _settings.theme.background,
+              elevation: 4,
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: Text(scrolling ? '${_chapter.title} · 已读 $_percent%' :
+                        '${_chapter.title} · ${_pages.isEmpty ? 0 : _pageIndex + 1} / ${_pages.length}',
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                    Slider(
+                      value: position.clamp(0, max).toDouble(),
+                      max: max > 0 ? max.toDouble() : 1,
+                      onChanged: canSeek && max > 0 ? (value) {
+                        if (scrolling) {
+                          if (_itemScroll.isAttached) _itemScroll.jumpTo(index: value.round());
+                        } else {
+                          setState(() => _pageIndex = value.round());
+                          _scheduleSave();
+                        }
+                      } : null,
+                    ),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      children: [
+                        TextButton(onPressed: _chapterIndex > 0 && !_loading ?
+                          () => unawaited(_switchChapter(-1)) : null, child: const Text('上一章')),
+                        TextButton.icon(onPressed: _showCatalog,
+                          icon: const Icon(Icons.list), label: const Text('目录')),
+                        TextButton.icon(onPressed: () => _showSettings(textOnly: true),
+                          icon: const Icon(Icons.text_fields), label: const Text('文字样式')),
+                        TextButton.icon(onPressed: _showSettings,
+                          icon: const Icon(Icons.settings_outlined), label: const Text('阅读设置')),
+                        TextButton(onPressed: _chapterIndex < _chapters.length - 1 && !_loading ?
+                          () => unawaited(_switchChapter(1)) : null, child: const Text('下一章')),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showMenu() async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420, maxHeight: 640),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              ListTile(title: Text(_item.title), subtitle: Text('${_chapter.title}\n${_settings.mode.label} · $_percent%')),
+              for (final entry in const [
+                ('catalog', Icons.list, '打开章节目录', '选择其他章节'),
+                ('text', Icons.text_fields, '文字样式', '字体、字号、行距和页边距'),
+                ('settings', Icons.settings_outlined, '阅读设置', '翻页方式、阅读背景与屏幕'),
+                ('reload', Icons.refresh, '重新加载', '重新请求当前章节内容'),
+              ])
+                ListTile(leading: Icon(entry.$2), title: Text(entry.$3),
+                  subtitle: Text(entry.$4), onTap: () => Navigator.pop(context, entry.$1)),
+            ]),
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    switch (action) {
+      case 'catalog': await _showCatalog();
+      case 'text': await _showSettings(textOnly: true);
+      case 'settings': await _showSettings();
+      case 'reload': await _load();
+    }
+  }
+
+  Future<void> _showCatalog() async {
+    final target = await showDialog<int>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480, maxHeight: 640),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Padding(padding: EdgeInsets.all(16), child: Text('章节目录')),
+            Flexible(child: ScrollablePositionedList.builder(
+              initialScrollIndex: _chapterIndex,
+              itemCount: _chapters.length,
+              itemBuilder: (context, index) {
+                final chapter = _chapters[index];
+                return ListTile(
+                  selected: index == _chapterIndex,
+                  leading: chapter.locked ? const Icon(Icons.lock_outline) : null,
+                  title: Text(chapter.title),
+                  subtitle: chapter.volumeTitle == null ? null : Text(chapter.volumeTitle!),
+                  onTap: () => Navigator.pop(context, index),
+                );
+              },
+            )),
+          ]),
+        ),
+      ),
+    );
+    if (!mounted || target == null || target == _chapterIndex) return;
+    await _switchChapter(target - _chapterIndex);
   }
 }
 
@@ -1028,15 +1057,15 @@ class _PageContent extends ConsumerWidget {
     final children = <Widget>[];
     for (var index = 0; index < page.elements.length; index++) {
       final element = page.elements[index];
+      if (index > 0) {
+        children.add(SizedBox(height: settings.fontSize * 0.8));
+      }
       switch (element) {
         case TextElement(:final text, :final heading):
-          if (index > 0 && !heading) {
-            // 段间距取 0.7×字号，分页模型按 0.8×字号预留（略多留一点当余量）。
-            children.add(SizedBox(height: settings.fontSize * 0.7));
-          }
           children.add(
             Text(
               text,
+              textScaler: TextScaler.noScaling,
               style: _style(
                 heading
                     ? settings.headingStyle(context)
@@ -1045,7 +1074,6 @@ class _PageContent extends ConsumerWidget {
             ),
           );
         case IllustrationElement(:final block, :final heightPx):
-          children.add(SizedBox(height: settings.fontSize * 0.6));
           children.add(
             ClipRRect(
               borderRadius: const BorderRadius.all(Radius.circular(8)),
@@ -1132,10 +1160,12 @@ class _BlockView extends ConsumerWidget {
     return switch (block) {
       HeadingBlock(:final text) => Text(
         text,
+        textScaler: TextScaler.noScaling,
         style: _style(settings.headingStyle(context)),
       ),
       ParagraphBlock(:final text, :final firstLineIndent) => Text(
         firstLineIndent ? '　　$text' : text,
+        textScaler: TextScaler.noScaling,
         style: _style(settings.paragraphStyle(context)),
       ),
       IllustrationBlock(:final url, :final aspectRatio) => ClipRRect(
@@ -1262,11 +1292,13 @@ class _ErrorView extends StatelessWidget {
   }
 }
 
-/// 阅读设置抽屉：模式 / 主题 / 字号 / 行距 / 边距 / 繁简 / 字体。
+/// 限宽可滚动的阅读调整面板，文字与阅读操作分别组织。
 class _SettingsSheet extends StatefulWidget {
-  const _SettingsSheet({required this.settings});
+  const _SettingsSheet({required this.settings, required this.textOnly, required this.sourceFontRequired});
 
   final NovelReaderSettings settings;
+  final bool textOnly;
+  final bool sourceFontRequired;
 
   @override
   State<_SettingsSheet> createState() => _SettingsSheetState();
@@ -1274,13 +1306,8 @@ class _SettingsSheet extends StatefulWidget {
 
 class _SettingsSheetState extends State<_SettingsSheet> {
   late NovelReaderSettings _draft = widget.settings;
+  List<UserFont> _fonts = const [];
 
-  NovelReaderSettings get value => _draft;
-
-  List<UserFont> _fonts = const <UserFont>[];
-
-  /// 拖动过程只改草稿（视觉即时反馈），松手才提交生效。
-  void commit(NovelReaderSettings next) => Navigator.of(context).pop(next);
   @override
   void initState() {
     super.initState();
@@ -1290,312 +1317,98 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   Future<void> _loadFonts() async {
     await UserFontStore.instance.ensureLoaded();
     final fonts = await UserFontStore.instance.list();
-    if (!mounted) return;
-    setState(() => _fonts = fonts);
+    if (mounted) setState(() => _fonts = fonts);
   }
+
+  void _change(NovelReaderSettings next) => setState(() => _draft = next);
+
+  Widget _section(String label, Widget child) => Padding(
+    padding: const EdgeInsets.only(bottom: 20),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: Theme.of(context).textTheme.titleSmall),
+      const SizedBox(height: 8),
+      child,
+    ]),
+  );
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    Widget title(String text) => Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, 0, 0),
-      child: Text(text, style: theme.textTheme.titleSmall),
-    );
-
-    void commitDraft(NovelReaderSettings next) {
-      setState(() => _draft = next);
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 0, 0, AppSpacing.lg),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            title('阅读模式'),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: SegmentedButton<NovelReadingMode>(
-                segments: const <ButtonSegment<NovelReadingMode>>[
-                  ButtonSegment(
-                    value: NovelReadingMode.paged,
-                    icon: Icon(Icons.auto_stories_outlined, size: 18),
-                    label: Text('分页'),
-                  ),
-                  ButtonSegment(
-                    value: NovelReadingMode.scroll,
-                    icon: Icon(Icons.swap_vert, size: 18),
-                    label: Text('滚动'),
-                  ),
-                ],
-                selected: {value.mode},
-                onSelectionChanged: (selection) =>
-                    commit(value.copyWith(mode: selection.first)),
-              ),
-            ),
-            title('主题'),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: Wrap(
-                spacing: AppSpacing.xs,
-                children: <Widget>[
-                  for (final candidate in NovelTheme.values)
-                    ChoiceChip(
-                      label: Text(candidate.label),
-                      selected: value.theme == candidate,
-                      onSelected: (_) =>
-                          commit(value.copyWith(theme: candidate)),
-                    ),
-                ],
-              ),
-            ),
-            title('字号 ${value.fontSize.round()}'),
-            Slider(
-              value: value.fontSize,
-              min: 12,
-              max: 32,
-              divisions: 20,
-              label: value.fontSize.round().toString(),
-              onChanged: (next) => commitDraft(value.copyWith(fontSize: next)),
-              onChangeEnd: (next) => commit(value.copyWith(fontSize: next)),
-            ),
-            title('行距 ${value.lineHeight.toStringAsFixed(1)}'),
-            Slider(
-              value: value.lineHeight,
-              min: 1.2,
-              max: 2.4,
-              divisions: 12,
-              label: value.lineHeight.toStringAsFixed(1),
-              onChanged: (next) =>
-                  commitDraft(value.copyWith(lineHeight: next)),
-              onChangeEnd: (next) => commit(value.copyWith(lineHeight: next)),
-            ),
-            title('页边距 ${value.pageMargin.round()}'),
-            Slider(
-              value: value.pageMargin,
-              min: 8,
-              max: 48,
-              divisions: 10,
-              label: value.pageMargin.round().toString(),
-              onChanged: (next) =>
-                  commitDraft(value.copyWith(pageMargin: next)),
-              onChangeEnd: (next) => commit(value.copyWith(pageMargin: next)),
-            ),
-            title('繁简转换'),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: SegmentedButton<ZhConversionMode>(
-                segments: const <ButtonSegment<ZhConversionMode>>[
-                  ButtonSegment(value: ZhConversionMode.off, label: Text('原文')),
-                  ButtonSegment(
-                    value: ZhConversionMode.s2t,
-                    label: Text('简→繁'),
-                  ),
-                  ButtonSegment(
-                    value: ZhConversionMode.t2s,
-                    label: Text('繁→简'),
-                  ),
-                ],
-                selected: {value.zhMode},
-                onSelectionChanged: (selection) =>
-                    commit(value.copyWith(zhMode: selection.first)),
-              ),
-            ),
-            title('阅读操作'),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: Column(
-                children: <Widget>[
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: const Text('音量键翻页'),
-                    subtitle: const Text('开启后音量键不再调节音量'),
-                    value: value.volumeKeyTurn,
-                    onChanged: (next) =>
-                        commit(value.copyWith(volumeKeyTurn: next)),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: const Text('屏幕常亮'),
-                    value: value.keepScreenOn,
-                    onChanged: (next) =>
-                        commit(value.copyWith(keepScreenOn: next)),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: AppSpacing.xs),
-                    child: SegmentedButton<ReaderOrientation>(
-                      segments: const <ButtonSegment<ReaderOrientation>>[
-                        ButtonSegment(
-                          value: ReaderOrientation.system,
-                          label: Text('跟随系统'),
-                        ),
-                        ButtonSegment(
-                          value: ReaderOrientation.portrait,
-                          label: Text('竖屏'),
-                        ),
-                        ButtonSegment(
-                          value: ReaderOrientation.landscape,
-                          label: Text('横屏'),
-                        ),
-                      ],
-                      selected: {value.orientation},
-                      onSelectionChanged: (selection) =>
-                          commit(value.copyWith(orientation: selection.first)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            title('正文字体'),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: Wrap(
-                spacing: AppSpacing.xs,
-                children: <Widget>[
-                  ChoiceChip(
-                    label: const Text('系统默认'),
-                    selected: value.fontFamily == null,
-                    onSelected: (_) =>
-                        commit(value.copyWith(clearFontFamily: true)),
-                  ),
-                  for (final font in _fonts)
-                    ChoiceChip(
-                      label: Text(font.displayName),
-                      selected: value.fontFamily == font.familyName,
-                      onSelected: (_) =>
-                          commit(value.copyWith(fontFamily: font.familyName)),
-                    ),
-                  ActionChip(
-                    avatar: const Icon(Icons.add, size: 18),
-                    label: const Text('导入'),
-                    onPressed: () async {
-                      final sheetMessenger = ScaffoldMessenger.of(context);
-                      try {
-                        await UserFontStore.instance.pickAndImport();
-                        await _loadFonts();
-                      } catch (error) {
-                        sheetMessenger.showSnackBar(
-                          SnackBar(content: Text('导入失败：$error')),
-                        );
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// TTS 语音选项小面板（D48）：语速三档 + 系统音色（仅列引擎返回的可用项）。
-///
-/// 变更即通过 [onSettingsChanged] 提交（阅读器负责停止当前朗读并落盘）。
-class _TtsSettingsSheet extends StatelessWidget {
-  const _TtsSettingsSheet({
-    required this.settings,
-    required this.voices,
-    required this.onSettingsChanged,
-  });
-
-  final NovelReaderSettings settings;
-  final List<TtsVoiceInfo> voices;
-  final void Function(NovelReaderSettings next) onSettingsChanged;
-
-  String _rateLabel(double rate) => switch (rate) {
-    0.3 => '慢速 0.3',
-    0.7 => '快速 0.7',
-    _ => '正常 0.5',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final value = _draft;
     return AlertDialog(
-      title: const Text('朗读设置'),
+      title: Text(widget.textOnly ? '文字样式' : '阅读设置'),
       content: SizedBox(
-        width: 320,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text('语速', style: theme.textTheme.titleSmall),
-            const SizedBox(height: AppSpacing.xs),
-            Wrap(
-              spacing: AppSpacing.xs,
-              children: <Widget>[
-                for (final rate in NovelReaderSettings.ttsRateChoices)
-                  ChoiceChip(
-                    label: Text(_rateLabel(rate)),
-                    selected: settings.ttsRate == rate,
-                    onSelected: (_) =>
-                        onSettingsChanged(settings.copyWith(ttsRate: rate)),
-                  ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text('音色', style: theme.textTheme.titleSmall),
-            const SizedBox(height: AppSpacing.xs),
-            if (voices.isEmpty)
-              Text('系统未返回可用音色，将使用系统默认音色', style: theme.textTheme.bodySmall)
-            else
-              Builder(
-                builder: (context) {
-                  // 重启后系统音色列表可能变化：已保存但系统不再返回的
-                  // 音色保留为独立选项（显示「不可用」），避免 Dropdown 断言。
-                  final saved = settings.ttsVoice;
-                  final savedUnavailable =
-                      saved != null && !voices.contains(saved);
-                  return DropdownButton<TtsVoiceInfo?>(
-                    isExpanded: true,
-                    value: saved,
-                    items: <DropdownMenuItem<TtsVoiceInfo?>>[
-                      const DropdownMenuItem<TtsVoiceInfo?>(
-                        value: null,
-                        child: Text('系统默认'),
-                      ),
-                      if (savedUnavailable)
-                        DropdownMenuItem<TtsVoiceInfo?>(
-                          value: saved,
-                          child: Text(
-                            '${saved.label}（不可用）',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      for (final voice in voices)
-                        DropdownMenuItem<TtsVoiceInfo?>(
-                          value: voice,
-                          child: Text(
-                            voice.label,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
-                    onChanged: (voice) => onSettingsChanged(
-                      voice == null
-                          ? settings.copyWith(clearTtsVoice: true)
-                          : settings.copyWith(
-                              ttsVoiceName: voice.name,
-                              ttsVoiceLocale: voice.locale,
-                            ),
-                    ),
-                  );
-                },
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (widget.textOnly) ...[
+              if (widget.sourceFontRequired)
+                const Padding(padding: EdgeInsets.only(bottom: 16),
+                  child: Text('本章使用来源专用字体以保证文字编码正确；字体选择将在普通章节生效。')),
+              _section('正文字体', Wrap(spacing: 8, runSpacing: 4, children: [
+                ChoiceChip(label: const Text('系统默认'), selected: value.fontFamily == null,
+                  onSelected: (_) => _change(value.copyWith(clearFontFamily: true))),
+                for (final font in _fonts)
+                  ChoiceChip(label: Text(font.displayName), selected: value.fontFamily == font.familyName,
+                    onSelected: (_) => _change(value.copyWith(fontFamily: font.familyName))),
+                ActionChip(label: const Text('导入字体'), avatar: const Icon(Icons.add),
+                  onPressed: () async {
+                    try {
+                      await UserFontStore.instance.pickAndImport();
+                      await _loadFonts();
+                    } catch (error) {
+                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导入失败：$error')));
+                    }
+                  }),
+              ])),
+              _section('字号 ${value.fontSize.round()}', Slider(
+                value: value.fontSize, min: 12, max: 32, divisions: 20,
+                onChanged: (next) => _change(value.copyWith(fontSize: next)))),
+              _section('行高 ${value.lineHeight.toStringAsFixed(1)}', Slider(
+                value: value.lineHeight, min: 1.2, max: 2.4, divisions: 12,
+                onChanged: (next) => _change(value.copyWith(lineHeight: next)))),
+              _section('页边距 ${value.pageMargin.round()}', Slider(
+                value: value.pageMargin, min: 8, max: 48, divisions: 10,
+                onChanged: (next) => _change(value.copyWith(pageMargin: next)))),
+              _section('繁简转换', Wrap(spacing: 8, children: [
+                for (final entry in const [(ZhConversionMode.off, '原文'), (ZhConversionMode.s2t, '简→繁'), (ZhConversionMode.t2s, '繁→简')])
+                  ChoiceChip(label: Text(entry.$2), selected: value.zhMode == entry.$1,
+                    onSelected: (_) => _change(value.copyWith(zhMode: entry.$1))),
+              ])),
+              Container(
+                color: value.theme.background,
+                padding: const EdgeInsets.all(12),
+                child: Text('清晨的风吹过书页，故事从这里继续。',
+                  textScaler: TextScaler.noScaling, style: value.paragraphStyle(context)),
               ),
-          ],
+            ] else ...[
+              _section('翻页方式', Wrap(spacing: 8, runSpacing: 4, children: [
+                for (final mode in NovelReadingMode.values)
+                  ChoiceChip(label: Text(mode.label), selected: value.mode == mode,
+                    onSelected: (_) => _change(value.copyWith(mode: mode))),
+              ])),
+              _section('阅读背景', Wrap(spacing: 8, runSpacing: 4, children: [
+                for (final theme in NovelTheme.values)
+                  ChoiceChip(label: Text(theme.label), selected: value.theme == theme,
+                    avatar: CircleAvatar(backgroundColor: theme.background),
+                    onSelected: (_) => _change(value.copyWith(theme: theme))),
+              ])),
+              _section('屏幕方向', Wrap(spacing: 8, children: [
+                for (final entry in const [(ReaderOrientation.system, '跟随系统'), (ReaderOrientation.portrait, '竖屏'), (ReaderOrientation.landscape, '横屏')])
+                  ChoiceChip(label: Text(entry.$2), selected: value.orientation == entry.$1,
+                    onSelected: (_) => _change(value.copyWith(orientation: entry.$1))),
+              ])),
+              SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('音量键翻页'),
+                subtitle: const Text('开启后音量键不再调节音量'),
+                value: value.volumeKeyTurn, onChanged: (next) => _change(value.copyWith(volumeKeyTurn: next))),
+              SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('保持屏幕常亮'),
+                value: value.keepScreenOn, onChanged: (next) => _change(value.copyWith(keepScreenOn: next))),
+            ],
+          ]),
         ),
       ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('完成'),
-        ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        FilledButton(onPressed: () => Navigator.pop(context, _draft), child: const Text('完成')),
       ],
     );
   }

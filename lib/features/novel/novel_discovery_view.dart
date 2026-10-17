@@ -26,8 +26,6 @@ class NovelDiscoveryView extends ConsumerStatefulWidget {
 }
 
 class _NovelChannel {
-  _NovelChannel({this.query = ''});
-  final String query;
   final scroll = ScrollController();
   final items = <MediaItem>[];
   int nextPage = 1;
@@ -44,9 +42,7 @@ class _NovelChannel {
 class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
   String? _sourceId;
   final _feeds = <String, String>{};
-  final _queries = <String, String>{};
-  final _queryEditors = <String, TextEditingController>{};
-  final _channels = <(String, String, String), _NovelChannel>{};
+  final _channels = <(String, String), _NovelChannel>{};
 
   @override
   void initState() {
@@ -65,9 +61,6 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
 
   @override
   void dispose() {
-    for (final editor in _queryEditors.values) {
-      editor.dispose();
-    }
     for (final channel in _channels.values) {
       channel.generation++;
       channel.owner?.cancel('已离开小说发现');
@@ -76,23 +69,6 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
     super.dispose();
   }
 
-  void _cancelChannel(_NovelChannel channel, String reason) {
-    channel.generation++;
-    channel.owner?.cancel(reason);
-    channel.owner = null;
-    channel.loading = false;
-    if (channel.items.isEmpty) channel.started = false;
-  }
-
-  void _applyQuery(String sourceId, String value, _NovelChannel previous) {
-    final query = value.trim();
-    if ((_queries[sourceId] ?? '') != query) {
-      // Only the superseded request is cancelled. Retained source/channel
-      // requests are not cancelled simply because another tab becomes visible.
-      _cancelChannel(previous, '小说来源查询已改变');
-    }
-    _queries[sourceId] = query;
-  }
 
   Future<void> _load(
     SourceEntry entry,
@@ -123,12 +99,10 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
       // LK HTTP requests inherit this owner through the request Zone. LNS Hub
       // invocations may still finish; cancelled/late responses never publish.
       final books = await owner.run(
-        () => channel.query.isNotEmpty && source is SearchProvider
-            ? source.search(channel.query, page: channel.nextPage)
-            : (source as DiscoverProvider).discover(
-                feed,
-                page: channel.nextPage,
-              ),
+        () => (source as DiscoverProvider).discover(
+          feed,
+          page: channel.nextPage,
+        ),
       ).timeout(
         const Duration(seconds: 20),
         onTimeout: () {
@@ -181,17 +155,31 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
     }
   }
 
-  Future<void> _account(
-    SourceEntry entry,
-    DiscoverFeed feed,
-    _NovelChannel channel,
-  ) async {
+  Future<void> _account(SourceEntry entry) async {
     await context.push(accountRouteFor(entry.descriptor.id));
-    if (mounted) await _load(entry, feed, channel, reset: true);
+    if (mounted) ref.invalidate(sourcesProvider);
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(sourcesProvider, (previous, next) {
+      if (!next.isLoading || previous?.asData == null) return;
+      // Registry changes include account switches and adapter replacements.
+      // A retained channel must not expose the previous session's results.
+      for (final channel in _channels.values) {
+        channel.generation++;
+        channel.owner?.cancel('小说来源或账号已更改');
+        channel.owner = null;
+        channel.items.clear();
+        channel.nextPage = 1;
+        channel.loading = false;
+        channel.started = false;
+        channel.ended = false;
+        channel.replaceOnSuccess = false;
+        channel.error = null;
+        channel.needsLogin = false;
+      }
+    });
     return ref
         .watch(sourcesProvider)
         .when(
@@ -239,16 +227,10 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
         feeds.where((f) => f.id == _feeds[sourceId]).firstOrNull ??
         feeds.where((f) => f.id == 'hot' || f.id == 'popular').firstOrNull ??
         feeds.first;
-    final query = _queries[sourceId] ?? '';
-    final editor = _queryEditors.putIfAbsent(
-      sourceId,
-      TextEditingController.new,
+    final channel = _channels.putIfAbsent(
+      (sourceId, feed.id),
+      _NovelChannel.new,
     );
-    final channel = _channels.putIfAbsent((
-      sourceId,
-      query.isEmpty ? feed.id : 'search',
-      query,
-    ), () => _NovelChannel(query: query));
     if (!channel.started) {
       channel.started = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -280,59 +262,9 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
                   unawaited(ref.read(preferencesProvider).set('novel.discovery.source', id));
                 },
               ),
-              if (entry.source is SearchProvider &&
-                  entry.supports(SourceCapability.search))
-                TextButton.icon(
-                  onPressed: () => context.push(
-                    AppRoutes.searchFor(
-                      MediaType.novel,
-                      sourceId: sourceId,
-                      query: query,
-                      sourceOnly: true,
-                    ),
-                  ),
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('独立搜索页'),
-                ),
             ],
           ),
         ),
-        if (entry.source is SearchProvider &&
-            entry.supports(SourceCapability.search))
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: TextField(
-              key: ValueKey('novel-source-query-$sourceId'),
-              controller: editor,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                labelText: '搜索${entry.descriptor.name}书名 / 作者',
-                helperText: '提交后查询本站；清空后回到已选频道',
-                suffixIcon: IconButton(
-                  tooltip: '搜索本站',
-                  icon: const Icon(Icons.search),
-                  onPressed: () => setState(() =>
-                      _applyQuery(sourceId, editor.text, channel)),
-                ),
-              ),
-              onSubmitted: (value) => setState(() =>
-                  _applyQuery(sourceId, value, channel)),
-            ),
-          ),
-        if (query.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: InputChip(
-                label: Text('本站搜索：$query'),
-                onDeleted: () => setState(() {
-                  _applyQuery(sourceId, '', channel);
-                  editor.clear();
-                }),
-              ),
-            ),
-          ),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -343,12 +275,10 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(
                     label: Text(candidate.name),
-                    selected: query.isEmpty && candidate.id == feed.id,
+                    selected: candidate.id == feed.id,
                     onSelected: (_) {
                       setState(() {
                         _feeds[sourceId] = candidate.id;
-                        _applyQuery(sourceId, '', channel);
-                        editor.clear();
                       });
                       unawaited(ref.read(preferencesProvider).set('novel.discovery.feeds', Map<String, String>.of(_feeds)));
                     },
@@ -373,7 +303,7 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
               },
               child: ListView.builder(
                 key: PageStorageKey(
-                  'novel-discovery-$sourceId-${feed.id}-$query',
+                  'novel-discovery-$sourceId-${feed.id}',
                 ),
                 controller: channel.scroll,
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -407,10 +337,10 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
                                 onPressed: () => _load(entry, feed, channel),
                                 child: const Text('重试'),
                               ),
-                              if (channel.needsLogin)
+                              if (channel.needsLogin &&
+                                  entry.source is AccountProvider)
                                 FilledButton(
-                                  onPressed: () =>
-                                      _account(entry, feed, channel),
+                                  onPressed: () => _account(entry),
                                   child: Text('${entry.descriptor.name}账号'),
                                 ),
                             ],

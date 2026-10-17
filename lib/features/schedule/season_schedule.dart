@@ -13,7 +13,7 @@ import '../library/data/library_providers.dart';
 import 'data/schedule_providers.dart';
 
 /// Current and historical seasons share one retained calendar state. Only the
-/// upstream broadcast weekday is used; missing weekday is an explicit bucket.
+/// upstream broadcast weekday is used; absent weekdays are never invented.
 class SeasonSchedule extends ConsumerStatefulWidget {
   const SeasonSchedule({super.key, this.embedded = false});
   final bool embedded;
@@ -45,7 +45,7 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
     final weekday = ref
         .read(preferencesProvider)
         .get<int>('anime.calendar.weekday');
-    if (weekday != null && weekday >= -1 && weekday <= 7) _weekday = weekday;
+    if (weekday != null && weekday >= 1 && weekday <= 7) _weekday = weekday;
     unawaited(_load(reset: true));
   }
 
@@ -168,7 +168,7 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
     };
     final visible = _rows
         .where((row) {
-          if (_weekday != -1 && _day(row) != _weekday) return false;
+          if (_day(row) != _weekday) return false;
           final status = statuses['bangumi-anime:${row['id']}'];
           if (_filter.onlyWatching && status != 'doing') return false;
           if (_filter.hideCompleted && status == 'done') return false;
@@ -183,7 +183,7 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
             '${_filter.year ?? '全部年份'} · ${_filter.quarter == null ? '全年' : '${_filter.quarter}季度'}',
           ),
           subtitle: Text(
-            '${_filter.tags.join(' · ')}${_filter.tags.isEmpty ? '' : ' · '}按公开放送星期；未提供则保留未注明',
+            '${_filter.tags.join(' · ')}${_filter.tags.isEmpty ? '' : ' · '}按公开放送星期排列',
           ),
           trailing: IconButton(
             tooltip: '筛选历史季度',
@@ -191,33 +191,29 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
             onPressed: _pickFilter,
           ),
         ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              for (var day = -1; day <= 7; day++)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(
-                      day == -1
-                          ? '全部'
-                          : day == 0
-                          ? '未注明'
-                          : '周${['一', '二', '三', '四', '五', '六', '日'][day - 1]}',
-                    ),
-                    selected: day == _weekday,
-                    onSelected: (_) => _setWeekday(day),
-                  ),
-                ),
-              TextButton(
-                onPressed: () => _setWeekday(DateTime.now().weekday),
-                child: const Text('今天'),
-              ),
-            ],
-          ),
-        ),
+        LayoutBuilder(builder: (context, constraints) {
+          final scaler = MediaQuery.textScalerOf(context);
+          final tabWidth = (scaler.scale(14) * 2 + 20).clamp(48.0, 120.0);
+          final scrollable = constraints.maxWidth - 32 < tabWidth * 7;
+          final buttons = [
+            for (var day = 1; day <= 7; day++)
+              SizedBox(width: scrollable ? tabWidth : (constraints.maxWidth - 32) / 7,
+                child: Semantics(selected: day == _weekday, inMutuallyExclusiveGroup: true,
+                  label: '星期${['一', '二', '三', '四', '五', '六', '日'][day - 1]}',
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      backgroundColor: day == _weekday ? Theme.of(context).colorScheme.secondaryContainer : null,
+                      foregroundColor: day == _weekday ? Theme.of(context).colorScheme.onSecondaryContainer : null),
+                    onPressed: () => _setWeekday(day),
+                    child: Text('周${['一', '二', '三', '四', '五', '六', '日'][day - 1]}',
+                      maxLines: 1, softWrap: false)))),
+          ];
+          return Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: scrollable ? SingleChildScrollView(scrollDirection: Axis.horizontal,
+              child: Row(children: buttons)) : Row(children: buttons));
+        }),
         Expanded(
           child: RefreshIndicator(
             onRefresh: () => _load(reset: true),
@@ -225,6 +221,7 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
               items: [for (final row in visible) bangumiItem(row)],
               sourceName: 'Bangumi · 公开兼容季度资料',
               preferGrid: true,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               badgeOf: (item) {
                 final row = visible.firstWhere(
                   (row) => '${row['id']}' == item.remoteId,

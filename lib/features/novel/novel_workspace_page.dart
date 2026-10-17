@@ -12,7 +12,7 @@ import '../library/library_categories_page.dart';
 import 'novel_discovery_view.dart';
 import 'novel_shelf_view.dart';
 
-/// Novel discovery and local-first reading have independent retained state.
+/// Novel discovery and authenticated collections retain independent positions.
 class NovelWorkspacePage extends ConsumerStatefulWidget {
   const NovelWorkspacePage({super.key});
 
@@ -127,7 +127,10 @@ class _NovelWorkspacePageState extends ConsumerState<NovelWorkspacePage> {
         index: _tab,
         children: [
           const NovelDiscoveryView(),
-          if (_openedShelf) const NovelShelfView() else const SizedBox.shrink(),
+          if (_openedShelf)
+            NovelShelfView(active: _tab == 1)
+          else
+            const SizedBox.shrink(),
         ],
       ),
     );

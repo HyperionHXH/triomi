@@ -146,7 +146,6 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
-  if (message == WM_ACTIVATEAPP) WindowsWebSessionOnActivate(wparam != FALSE);
   if (message == WM_SIZE) WindowsWebSessionOnResize();
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {

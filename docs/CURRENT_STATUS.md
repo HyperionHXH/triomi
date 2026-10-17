@@ -1,5 +1,17 @@
 # Triomi 当前状态
 
+## 当前请求：R155 Kazumi / Komikku / MixN 使用流程重做（实现及本机验收完成，发布核验中）
+
+本轮逐项功能已完成：五分区在线番剧详情、选站点作品→选播放列表/剧集→播放器、真实 Bangumi 收藏与 WebDAV 追番同步、漫画插件浏览/单一查找/刷新结果、小说远端收藏与独立三模式阅读菜单。已移除朗读、应用自定义 UI 字号和 PIN/无痕产品入口，系统字号及原业务数据保留；SQLite v11 保存追番删除同步日志。完整平台验收仍 partial，不等于所有来源兼容。
+
+Review 与实际操作发现的问题已修：迟到恢复覆盖手动换站、目录缓存异常卡加载、远端刷新 setState 返回 Future、小说远端收藏误作本地收藏、停用来源仍写远端、Bangumi malformed 空响应、WebDAV 删除/身份/账号切换边界、小说分页溢出与插图间距、搜索资源关闭挂起，以及统一历史→详情白屏。白屏真因为 root 历史再次压入含重复 Navigator/page key 的工作区；详情和标签/单源子流程改走 root 覆盖层，保留原历史返回与独立搜索草稿。后台番剧检查补齐 preferences 初始化及注入，不宣称新一轮系统后台任务验收。
+
+最终源码整套 **1004 项 Flutter 通过 / 3 项跳过、89 项 Python 通过，analyze 无问题**。最终正式 APK 原证书 `9b474750…`，SHA-256 `c4bad1bf…`；验收 APK `7a19ed2d…`，原 API35/API26 与正式 API35 均 install-r 并逐台读取安装哈希匹配，未清数据。Windows ZIP `a65c9eee…` / MSI `87d88260…` 同源构建；实际 MSI154→155 升级和卸载均退出0，各自比较的662/747个数据文件哈希不变，安装文件与49成员ZIP一致。最终源码/产物凭据扫描零命中；文档扫描零错误、35项旧模板警告。
+
+最终字节实证：Windows 已安装 MSI→FX战士久留美→MXdm→第01集真帧 **4:30/24:19**，右侧真实播放列表/选集可见；Staff 在线返回姓名/职务，官方 Next 吐槽接口超时且显示重试，未算在线成功。绿色包实际 MangaDex JS/API 最近更新20部及封面、小说「奇幻」标签→LK在线20条、返回原书架/缓存阅读通过。API26 原 xkcd 历史→详情→继续阅读 **2/2 真图**→返回原历史通过；API35 原 LNS 专用字体正文 **2/10**、五个资料tabs缓存、21集/两个列表已观察，阅读模式已恢复左右翻页；正式原 LK 正文 **3/37** 可读。五分区缓存不冒充在线，模拟器 DNS/超时失败保留。
+
+综合证据与八张可核对图片：[C155验收](delivery/evidence/C155-final-acceptance.json)；公开生产来源题材请求：[R155-tag烟测](delivery/evidence/R155-public-tag-smoke.json)。完整原始日志在 `D:/noval_and_manga/_tools/R155-*`。Bangumi账号状态/评分/进度实写、外部WebDAV上传及双设备需具体目标授权，本轮未执行，不能用loopback或未配置界面冒充成功；CF仍豁免且未完成验证。发布下载与逐项远端字节校验完成后更新下方版本链接，旧C154交付保留不覆盖。
+
 更新时间：C154系统无障碍字号修复已发布[v0.1.0-test.154](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.154)，五项资产已实际下载且大小/SHA-256均与本地匹配。全量975项Flutter通过/3跳过，analyze无问题；原三设备保数据安装/hash及双API/正式大字号样本已证，结束字号均恢复1.0。Windows ZIP/MSI同源构建、真实MSI153→154升级及卸载保留原数据通过。用户已授权终端驱动原生桌面自动化，当前下载ZIP的真实界面、阅读与冷启、窄窗口200%字号及NVDA语音输出样本已补；缺专用桌面工具不再是阻塞，完整平台矩阵仍partial。
 
 当前执行入口为本文件和 `docs/ROADMAP.md`；历史证据在 `docs/delivery/evidence/`。R152重构大纲是用户本轮明确要求的设计交付，不另建执行进度台账。
@@ -171,7 +183,22 @@ C149生产引擎补验：实际`JsSource + FlutterJsRuntime(QuickJS) + HTTPS`公
 
 ## 当前产物与原设备
 
-C154当前产物位于`_tools/C154-release/`，验收APK另存`_tools/C154-font-acceptance.apk`：
+C155当前产物位于`_tools/C155-release/`，验收APK另存`_tools/C155-android-acceptance.apk`：
+
+| 产物 | 字节 | SHA-256 |
+| --- | ---: | --- |
+| 验收APK（5554/5556） | 130487164 | `7a19ed2d767d7ab9cdbfa7e5bc4974df736b8dbe8c1fb78c4eb7fe68d1c21505` |
+| `triomi-android.apk`（原正式证书，5558） | 130487164 | `c4bad1bfa63592e32d6d6bbd3fa1dbb0c60e42f5eab94397b695fcff2f2f5ed0` |
+| `triomi-windows.zip`（完整49成员） | 37061935 | `a65c9eee43d38b59de0693c043984e64fee48ba537fa46f68dd1fa08ad6354df` |
+| `triomi-windows.msi`（0.1.155，未签Authenticode） | 30892032 | `87d882600ac7675a5916e5e5a6829cea9e3eee1062124b4aed05744ecb6a4e9a` |
+| `triomi-windows.update.json` | 8164 | `db509cb569941e1d9f1492a7928b1a6b4003064d3ef6866b6730088f4fb7a350` |
+
+最终Windows运行目录/ZIP/更新清单逐文件一致，MSI安装文件亦一致；实际播放/来源/阅读和安装生命周期证据见顶部及[C155综合证据](delivery/evidence/C155-final-acceptance.json)。原三台安装哈希已匹配，无卸载或清数据；未覆盖历史C125–C154产物。
+
+### C154历史产物（非当前安装）
+
+
+C154历史产物位于`_tools/C154-release/`，验收APK另存`_tools/C154-font-acceptance.apk`：
 
 | 产物 | 字节 | SHA-256 |
 | --- | ---: | --- |

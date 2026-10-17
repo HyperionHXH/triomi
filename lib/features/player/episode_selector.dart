@@ -9,11 +9,11 @@ String playbackListOf(Chapter chapter) =>
 
 /// Adjacent episodes belong to the selected site playback list only.
 int? adjacentEpisodeIndex(List<Chapter> chapters, int current, int delta) {
-  if (current < 0 || current >= chapters.length) return null;
+  if (current < 0 || current >= chapters.length || chapters[current].locked) return null;
   final list = playbackListOf(chapters[current]);
   final indices = [
     for (var i = 0; i < chapters.length; i++)
-      if (playbackListOf(chapters[i]) == list) i,
+      if (playbackListOf(chapters[i]) == list && !chapters[i].locked) i,
   ];
   final target = indices.indexOf(current) + delta;
   return target < 0 || target >= indices.length ? null : indices[target];
@@ -37,17 +37,29 @@ class _EpisodeSelectorState extends State<EpisodeSelector> {
   String? _list;
   int _range = 0;
   bool _reverse = false;
+  void _revealCurrent() {
+    final current = widget.currentIndex;
+    if (current == null || current < 0 || current >= widget.chapters.length) return;
+    _list = playbackListOf(widget.chapters[current]);
+    var localIndex = 0;
+    for (var i = 0; i < current; i++) {
+      if (playbackListOf(widget.chapters[i]) == _list) localIndex++;
+    }
+    _range = localIndex ~/ 50;
+  }
+
   @override
   void initState() {
     super.initState();
-    final current = widget.currentIndex;
-    if (current != null && current >= 0 && current < widget.chapters.length) {
-      _list = playbackListOf(widget.chapters[current]);
-      final indices = [
-        for (var i = 0; i <= current; i++)
-          if (playbackListOf(widget.chapters[i]) == _list) i,
-      ];
-      _range = (indices.length - 1) ~/ 50;
+    _revealCurrent();
+  }
+
+  @override
+  void didUpdateWidget(covariant EpisodeSelector oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentIndex != widget.currentIndex ||
+        !identical(oldWidget.chapters, widget.chapters)) {
+      _revealCurrent();
     }
   }
 

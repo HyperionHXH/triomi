@@ -345,3 +345,16 @@ class MergedMangaReferences extends Table {
   @override
   Set<Column<Object>> get primaryKey => {sourceId, remoteId};
 }
+
+/// Per-account follow changes, including deletions, for anime WebDAV sync.
+/// Account keys contain normalized endpoint/user identity, never credentials.
+@DataClassName('AnimeFollowSyncStateRow')
+class AnimeFollowSyncStates extends Table {
+  TextColumn get accountKey => text()();
+  TextColumn get sourceId => text()();
+  TextColumn get remoteId => text()();
+  DateTimeColumn get changedAt => dateTime()();
+  BoolColumn get deleted => boolean().withDefault(const Constant(false))();
+  @override
+  Set<Column<Object>> get primaryKey => {accountKey, sourceId, remoteId};
+}

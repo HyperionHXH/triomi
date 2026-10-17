@@ -68,12 +68,12 @@ class ProfilePage extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: SettingsGroup(
-                title: '外观与内容设置',
+                title: '设置与来源',
                 children: <Widget>[
                   ListTile(
-                    leading: const Icon(Icons.palette_outlined),
-                    title: const Text('外观与主题'),
-                    subtitle: const Text('主题模式、界面字号、图标大小'),
+                    leading: const Icon(Icons.settings_outlined),
+                    title: const Text('设置'),
+                    subtitle: const Text('外观、网络、下载、存储与应用更新'),
                     trailing: const Icon(Icons.chevron_right, size: 20),
                     onTap: () => context.push(AppRoutes.settings),
                   ),
