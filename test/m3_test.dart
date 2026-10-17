@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
+import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/declarative_source.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/rule_schema.dart';
@@ -74,6 +76,47 @@ void main() {
     test('返回非法 JSON 时抛出解析错误', () {
       final client = clientOf(routingHttpClient({'/calendar': 'not-json'}));
       expect(client.fetchWeekly(), throwsException);
+    });
+
+    test('default calendar uses the public mirror directly without credentials', () async {
+      final http = FakeHttpClient((_) async => SourceResponse(
+        statusCode: 200, body: calendarJson,
+      ));
+      final days = await BangumiScheduleClient(http: http).fetchWeekly();
+      expect(days.single.items, hasLength(2));
+      expect(http.requests, hasLength(1));
+      expect(http.requests.single.url, BangumiScheduleClient.mirrorUrl);
+      expect(http.requests.single.headers.keys
+          .map((key) => key.toLowerCase()),
+          isNot(anyOf(contains('authorization'), contains('cookie'),
+              contains('x-appid'), contains('x-signature'))));
+    });
+
+    test('cancelled weekly request neither accepts late results nor starts fallback', () async {
+      final pending = Completer<SourceResponse>();
+      final http = FakeHttpClient((_) => pending.future);
+      final owner = SourceRequestCancellation();
+      final client = BangumiScheduleClient(
+        http: http,
+        fallbackBaseUrl: BangumiScheduleClient.calendarUrl,
+      );
+      final fetching = owner.run(client.fetchWeekly);
+      final rejected = expectLater(fetching, throwsA(isA<SourceException>()));
+      owner.cancel();
+      pending.complete(SourceResponse(statusCode: 200, body: calendarJson));
+      await rejected;
+      expect(http.requests, hasLength(1));
+      expect(http.requests.single.cancellation!.cancelled, isTrue);
+      expect(client.usedBaseUrl, isNull);
+    });
+
+    test('HTTP failure cannot masquerade as an empty successful calendar', () async {
+      final http = FakeHttpClient((_) async =>
+          const SourceResponse(statusCode: 503, body: '[]'));
+      await expectLater(
+        BangumiScheduleClient(http: http).fetchWeekly(),
+        throwsA(isA<SourceException>()),
+      );
     });
   });
 

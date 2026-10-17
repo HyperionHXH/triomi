@@ -31,9 +31,16 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
   int _generation = 0, _offset = 0;
   int _weekday = DateTime.now().weekday;
   bool _busy = false, _more = true;
-  String? _error;
+  String? _error, _calendarError;
   SourceRequestCancellation? _owner;
-  final _weekdays = <String, int>{};
+  Set<String>? _tagMatches;
+  bool _calendarReady = false;
+
+  bool get _currentSeason {
+    final now = DateTime.now();
+    return _filter.year == now.year &&
+        _filter.quarter == (now.month - 1) ~/ 3 + 1;
+  }
 
   @override
   void initState() {
@@ -56,51 +63,103 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
     super.dispose();
   }
 
-  Future<void> _load({bool reset = false}) async {
+  Future<void> _load({bool reset = false, bool refresh = false}) async {
     if (_busy && !reset || !_more && !reset) return;
     final generation = reset ? ++_generation : _generation;
     if (reset) _owner?.cancel();
     final owner = _owner = SourceRequestCancellation();
+    final filter = _filter;
+    final currentSeason = _currentSeason;
     setState(() {
       _busy = true;
-      _error = null;
-    });
-    try {
-      var offset = reset ? 0 : _offset;
-      var more = true;
+      _error = currentSeason && !refresh ? _calendarError : null;
       if (reset) {
-        _rows.clear();
         _offset = 0;
         _more = true;
+        _tagMatches = null;
       }
+    });
+    bool active() => mounted && !owner.cancelled && generation == _generation;
+    var fetchingWeek = false;
+    try {
+      var offset = reset ? 0 : _offset;
+      if (currentSeason) {
+        if (!_calendarReady || refresh) {
+          fetchingWeek = true;
+          if (refresh) ref.invalidate(weeklyScheduleProvider);
+          final days = await ref.read(weeklyScheduleProvider.future);
+          if (!active()) return;
+          setState(() {
+            _rows.clear();
+            for (final day in days) {
+              for (final entry in day.items) {
+                _rows.add({
+                  'id': entry.id, 'type': 2, 'name_cn': entry.title,
+                  'images': {'large': entry.coverUrl}, 'date': entry.airDate,
+                  'rating': {
+                    'score': entry.rating, 'rank': entry.rank, 'total': entry.votes,
+                  },
+                  'weekday': {'id': day.weekday},
+                });
+              }
+            }
+            _calendarReady = true;
+            _calendarError = null;
+            _more = filter.tags.isNotEmpty;
+          });
+          fetchingWeek = false;
+        }
+        if (filter.tags.isEmpty) return;
+      } else if (reset) {
+        setState(() {
+          _rows.clear();
+          _calendarReady = false;
+        });
+      }
+      final matches = <String>{};
+      var more = true;
       while (more) {
         final page = await owner.run(
           () => ref.read(bangumiPublicClientProvider).search(
             filter: AnimePublicFilter(
-              tags: _filter.tags, year: _filter.year, quarter: _filter.quarter,
-              minScore: _filter.minScore, maxScore: _filter.maxScore,
-              sort: _filter.sort,
+              tags: filter.tags,
+              // A currently broadcasting title can have premiered years ago.
+              year: currentSeason ? null : filter.year,
+              quarter: currentSeason ? null : filter.quarter,
+              minScore: currentSeason ? null : filter.minScore,
+              maxScore: currentSeason ? null : filter.maxScore,
+              sort: filter.sort,
             ),
             offset: offset, limit: 100,
           ),
         );
-        if (!mounted || owner.cancelled || generation != _generation) return;
+        if (!active()) return;
         if (page.hasMore && page.nextOffset <= offset) {
           throw StateError('季度资料分页未前进，请重试');
         }
         setState(() {
           final ids = _rows.map((row) => '${row['id']}').toSet();
-          _rows.addAll(page.rows.where((row) => row['type'] == 2 &&
-            row['nsfw'] != true && ids.add('${row['id']}')));
+          for (final row in page.rows) {
+            if (row['type'] != 2 || row['nsfw'] == true) continue;
+            if (currentSeason) {
+              if (ids.contains('${row['id']}')) matches.add('${row['id']}');
+            } else if (ids.add('${row['id']}')) {
+              _rows.add(row);
+            }
+          }
           _offset = page.nextOffset;
           _more = page.hasMore;
         });
         offset = page.nextOffset;
         more = page.hasMore;
       }
+      if (currentSeason) setState(() => _tagMatches = matches);
     } catch (error) {
-      if (mounted && !owner.cancelled && generation == _generation) {
-        setState(() => _error = '季度资料暂不可用：$error');
+      if (active()) {
+        setState(() {
+          _error = '公开放送资料暂不可用：$error';
+          if (fetchingWeek) _calendarError = _error;
+        });
       }
     } finally {
       if (mounted && generation == _generation) setState(() => _busy = false);
@@ -108,8 +167,6 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
   }
 
   int _day(Map<String, Object?> row) {
-    final known = _weekdays['${row['id']}'];
-    if (known != null) return known;
     final weekday = row['weekday'];
     if (weekday is Map && weekday['id'] is num) {
       return (weekday['id'] as num).toInt();
@@ -131,6 +188,10 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
       builder: (_) => AnimeFilterDialog(initial: _filter),
     );
     if (!mounted || filter == null) return;
+    final reuseWeek = _currentSeason && _calendarReady &&
+        filter.year == _filter.year && filter.quarter == _filter.quarter;
+    final sameTags = filter.tags.length == _filter.tags.length &&
+        filter.tags.every(_filter.tags.contains);
     setState(() {
       unawaited(
         ref
@@ -138,11 +199,18 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
             .set('anime.calendar.filter', filter.toJson()),
       );
       _filter = filter;
-      _rows.clear();
-      _more = true;
-      _offset = 0;
+      if (!reuseWeek) {
+        _rows.clear();
+        _calendarReady = false;
+        _calendarError = null;
+      }
+      if (!reuseWeek || !sameTags) {
+        _tagMatches = null;
+        _more = true;
+        _offset = 0;
+      }
     });
-    unawaited(_load(reset: true));
+    if (!reuseWeek || !sameTags) unawaited(_load(reset: true));
   }
 
   void _setWeekday(int day) {
@@ -152,41 +220,36 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final currentSeason =
-        _filter.year == now.year && _filter.quarter == (now.month - 1) ~/ 3 + 1;
-    _weekdays.clear();
-    final calendarRows = <Map<String, Object?>>[];
-    if (currentSeason) {
-      for (final day
-          in ref.watch(weeklyScheduleProvider).asData?.value ??
-              <ScheduleDay>[]) {
-        for (final entry in day.items) {
-          _weekdays[entry.id] = day.weekday;
-          if (_filter.tags.isEmpty && _filter.minScore == null && _filter.maxScore == null) {
-            calendarRows.add({
-              'id': entry.id, 'type': 2, 'name_cn': entry.title,
-              'images': {'large': entry.coverUrl}, 'date': entry.airDate,
-              'rating': {'score': entry.rating}, 'weekday': {'id': day.weekday},
-            });
-          }
-        }
-      }
-    }
+    // Retain the provider while this calendar is visible; refresh explicitly
+    // invalidates it, while a tag-filter change reuses the same public week.
+    if (_currentSeason) ref.watch(weeklyScheduleProvider);
     final statuses = {
       for (final view in ref.watch(animeFollowsProvider).asData?.value ?? [])
         '${view.item.sourceId}:${view.item.remoteId}': view.entry.status,
     };
-    // Calendar includes ongoing shows from earlier quarters too. Keep them
-    // alongside the fully paginated season results instead of truncating the day.
-    final combined = {for (final row in calendarRows) '${row['id']}': row,
-      for (final row in _rows) '${row['id']}': row};
-    final visible = combined.values
+    final visible = _rows
         .where((row) {
           final day = _day(row);
           // The calendar has seven real weekday buckets only. Do not surface
           // upstream records whose broadcast day is unknown as a fake tab.
           if (day == 0 || day != _weekday) return false;
+          if (_currentSeason) {
+            if (_tagMatches != null && !_tagMatches!.contains('${row['id']}')) {
+              return false;
+            }
+            final rating = row['rating'];
+            final score = rating is Map
+                ? double.tryParse('${rating['score']}')
+                : null;
+            if (_filter.minScore != null &&
+                (score == null || score < _filter.minScore!)) {
+              return false;
+            }
+            if (_filter.maxScore != null &&
+                (score == null || score > _filter.maxScore!)) {
+              return false;
+            }
+          }
           final status = statuses['bangumi-anime:${row['id']}'];
           if (_filter.onlyWatching && status != 'doing') return false;
           if (_filter.hideCompleted && status == 'done') return false;
@@ -194,6 +257,19 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
           return true;
         })
         .toList(growable: false);
+    if (_currentSeason) {
+      double number(Map<String, Object?> row, String key) {
+        final rating = row['rating'];
+        return rating is Map ? double.tryParse('${rating[key]}') ?? 0 : 0;
+      }
+      visible.sort((a, b) => switch (_filter.sort) {
+        'score' => number(b, 'score').compareTo(number(a, 'score')),
+        'rank' => (number(a, 'rank') > 0 ? number(a, 'rank') : double.infinity)
+            .compareTo(number(b, 'rank') > 0 ? number(b, 'rank') : double.infinity),
+        'date' => '${b['date'] ?? ''}'.compareTo('${a['date'] ?? ''}'),
+        _ => number(b, 'total').compareTo(number(a, 'total')),
+      });
+    }
     final body = Column(
       children: [
         ListTile(
@@ -201,7 +277,9 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
             '${_filter.year ?? '全部年份'} · ${_filter.quarter == null ? '全年' : '${_filter.quarter}季度'}',
           ),
           subtitle: Text(
-            '${_filter.tags.join(' · ')}${_filter.tags.isEmpty ? '' : ' · '}按公开放送星期排列',
+            _currentSeason && _filter.tags.isNotEmpty && _tagMatches == null
+                ? '题材筛选${_busy ? '中' : '未完成'}，暂显示未按题材筛选的放送表'
+                : '${_filter.tags.join(' · ')}${_filter.tags.isEmpty ? '' : ' · '}按公开放送星期排列',
           ),
           trailing: IconButton(
             tooltip: '筛选历史季度',
@@ -258,7 +336,7 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
         ),
         Expanded(
           child: RefreshIndicator(
-            onRefresh: () => _load(reset: true),
+            onRefresh: () => _load(reset: true, refresh: true),
             child: MediaItemCollection(
               items: [for (final row in visible) bangumiItem(row)],
               sourceName: 'Bangumi · 公开兼容季度资料',
@@ -278,10 +356,14 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
                       ? const CircularProgressIndicator()
                       : _error != null
                       ? TextButton(
-                          onPressed: _load,
+                          onPressed: () => _load(reset: true, refresh: true),
                           child: Text('$_error · 重试'),
                         )
-                      : Text(visible.isEmpty ? '没有符合条件的作品' : '本季作品已加载'),
+                      : Text(visible.isEmpty
+                          ? '没有符合条件的作品'
+                          : _currentSeason && _calendarReady
+                          ? '本周作品已加载'
+                          : '本季作品已加载'),
                 ),
               ),
             ),

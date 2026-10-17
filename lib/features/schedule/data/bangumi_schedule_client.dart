@@ -15,6 +15,8 @@ class ScheduleEntry {
     this.airDate,
     this.rating,
     this.url,
+    this.rank,
+    this.votes,
   });
 
   /// Bangumi 条目 ID。
@@ -26,6 +28,7 @@ class ScheduleEntry {
   final String? airDate;
   final double? rating;
   final String? url;
+  final int? rank, votes;
 }
 
 /// 某一天的放送列表。
@@ -50,15 +53,15 @@ class ScheduleDay {
 class BangumiScheduleClient {
   BangumiScheduleClient({
     required this.http,
-    this.baseUrl = calendarUrl,
+    this.baseUrl = mirrorUrl,
     this.fallbackBaseUrl,
     this.userAgent = 'Triomi/0.1.0 (https://github.com/HyperionHXH/triomi)',
   });
 
   static const String calendarUrl = 'https://api.bgm.tv/calendar';
 
-  /// 官方接口不可达时用的镜像（Kazumi 同款做法，见其 `api_endpoints.dart`；
-  /// 只代理公开的 v0/legacy 读接口，不携带任何第三方凭据）。
+  /// 默认公开镜像避免官方不可达时先耗尽超时；仅回退一次官方接口。
+  /// 不携带任何用户或第三方应用凭据。
   static const String mirrorUrl = 'https://api.bgmapi.com/calendar';
 
   final SourceHttpClient http;
@@ -84,6 +87,7 @@ class BangumiScheduleClient {
       _usedBaseUrl = baseUrl;
       return days;
     } on SourceException {
+      if (SourceRequestCancellation.current?.cancelled == true) rethrow;
       final fallback = fallbackBaseUrl;
       // 备用地址与主地址相同时没有意义（也可能造成重复请求）。
       if (fallback == null || fallback == baseUrl) rethrow;
@@ -103,6 +107,7 @@ class BangumiScheduleClient {
     }));
     final SourceResponse response;
     try {
+      if (owner.cancelled) throw StateError('每日放送请求已取消');
       response = await http
           .send(
             SourceRequest(
@@ -123,8 +128,18 @@ class BangumiScheduleClient {
               );
             },
           );
+      if (owner.cancelled) throw StateError('每日放送请求已取消');
+    } catch (error) {
+      throw SourceException.wrap(error, sourceId: 'bangumi-schedule', url: base);
     } finally {
       finished = true;
+    }
+    if (!response.isSuccess) {
+      throw SourceException(
+        sourceId: 'bangumi-schedule',
+        type: SourceErrorType.network,
+        message: '每日放送 HTTP ${response.statusCode}',
+      );
     }
 
     final Object? decoded;
@@ -182,6 +197,8 @@ class BangumiScheduleClient {
           ? double.tryParse(rating['score']?.toString() ?? '')
           : null,
       url: node['url']?.toString(),
+      rank: int.tryParse('${node['rank']}'),
+      votes: rating is Map ? int.tryParse('${rating['total']}') : null,
     );
   }
 

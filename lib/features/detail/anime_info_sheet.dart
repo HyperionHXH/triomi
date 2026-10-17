@@ -9,6 +9,7 @@ import '../../core/models/media_type.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/router/app_router.dart';
 import '../../core/source/http_client.dart';
+import '../../core/theme/app_tokens.dart';
 import '../discover/widgets/media_item_card.dart';
 import '../search/search_page.dart';
 import 'anime_info_repository.dart';
@@ -70,7 +71,7 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
     super.dispose();
   }
 
-  Future<void> _load({bool reset = false}) async {
+  Future<void> _load({bool reset = false, bool refresh = false}) async {
     final section = _section;
     final partition = _current;
     if (partition.busy) return;
@@ -83,7 +84,10 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
       final page = await owner.run(
         () => ref
             .read(animeInfoRepositoryProvider)
-            .section(widget.id, section, offset: reset ? 0 : partition.offset),
+            .section(
+              widget.id, section, offset: reset ? 0 : partition.offset,
+              refresh: refresh,
+            ),
       );
       if (!mounted || owner.cancelled) return;
       setState(() {
@@ -257,47 +261,34 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
   Widget _subjectGrid(List<Map<String, Object?>> rows) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 820
-            ? 3
-            : constraints.maxWidth >= 540
-            ? 2
-            : 1;
+        final appearance = CoverAppearance.of(context);
+        final columns = constraints.maxWidth < 600 ? 3 :
+            ((constraints.maxWidth + appearance.gap) /
+                (150 + appearance.gap)).floor().clamp(3, 8);
+        final width = (constraints.maxWidth - (columns - 1) * appearance.gap) / columns;
+        final scaler = MediaQuery.textScalerOf(context);
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: rows.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 8,
-            mainAxisExtent: 88,
+            crossAxisSpacing: appearance.gap,
+            mainAxisSpacing: 12,
+            mainAxisExtent: width / appearance.ratio(isAnime: true) +
+                scaler.scale(13) * 2.8 + scaler.scale(11) * 1.4 +
+                appearance.gap + 4,
           ),
           itemBuilder: (context, index) {
             final row = rows[index];
             final item = bangumiItem(row);
-            return Card(
-              clipBehavior: Clip.antiAlias,
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                leading: _portrait(row),
-                title: Text(
-                  _name(row),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: row['relation'] == null
-                    ? null
-                    : Text(
-                        '${row['relation']}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  if (!widget.embedded) Navigator.pop(context);
-                  context.push(AppRoutes.detailFor(item), extra: item);
-                },
-              ),
+            return MediaItemCard(
+              item: item,
+              sourceName: '${row['relation'] ?? ''}',
+              onTap: () {
+                if (!widget.embedded) Navigator.pop(context);
+                context.push(AppRoutes.detailFor(item), extra: item);
+              },
             );
           },
         );
@@ -458,9 +449,11 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
             ),
         ],
         if (partition.cached)
-          const Padding(
-            padding: EdgeInsets.only(top: 12),
-            child: Text('显示已保存的公开资料，在线刷新未成功'),
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(partition.error == null
+                ? '显示最近保存的公开资料'
+                : '显示已保存的公开资料，在线刷新未成功'),
           ),
         if (partition.error != null)
           Padding(
@@ -470,12 +463,20 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
               children: [
                 Text(partition.error!),
                 TextButton.icon(
-                  onPressed: partition.busy ? null : () => _load(reset: true),
+                  onPressed: partition.busy
+                      ? null
+                      : () => _load(reset: true, refresh: true),
                   icon: const Icon(Icons.refresh),
                   label: Text('重试${sections[_section]}'),
                 ),
               ],
             ),
+          ),
+        if (partition.loaded && partition.error == null && !partition.busy)
+          TextButton.icon(
+            onPressed: () => _load(reset: true, refresh: true),
+            icon: const Icon(Icons.refresh),
+            label: Text('刷新${sections[_section]}'),
           ),
         if (partition.busy)
           const Padding(

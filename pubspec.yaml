@@ -1,7 +1,7 @@
 name: triomi
 description: "追番 · 漫画 · 小说 三位一体的聚合客户端。"
 publish_to: 'none'
-version: 0.1.0+157
+version: 0.11.0+158
 
 environment:
   sdk: ^3.13.4
@@ -13,6 +13,7 @@ dependencies:
     sdk: flutter
 
   # 状态与路由
+  package_info_plus: ^9.0.1
   flutter_riverpod: ^3.4.3
   go_router: ^18.0.1
 

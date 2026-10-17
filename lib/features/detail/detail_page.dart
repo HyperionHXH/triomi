@@ -124,7 +124,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     setState(() => _data = data);
   }
 
-  Future<_DetailData> _load() async {
+  Future<_DetailData> _load({bool refresh = false}) async {
     final generation = ++_generation;
     _metadataOwner?.cancel();
     final owner = _metadataOwner = SourceRequestCancellation();
@@ -150,7 +150,9 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       try {
         if (item.type != MediaType.anime) throw StateError('资料来源不属于当前工作区');
         final info = await owner.run(
-          () => ref.read(animeInfoRepositoryProvider).section(item.remoteId, 'info'),
+          () => ref.read(animeInfoRepositoryProvider).section(
+            item.remoteId, 'info', refresh: refresh,
+          ),
         );
         final row = info.rows.single;
         if (!mounted || generation != _generation || owner.cancelled) {
@@ -765,7 +767,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       if (selected != null) {
         await _loadPlayback(selected);
       } else {
-        final refreshed = _load();
+        final refreshed = _load(refresh: true);
         setState(() { _future = refreshed; });
       }
     } catch (_) {
@@ -833,7 +835,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           onSelected: (value) {
             switch (value) {
               case 'reload':
-                final refreshed = _load();
+                final refreshed = _load(refresh: true);
                 setState(() { _future = refreshed; });
               case 'download':
                 unawaited(_downloadOffline());
@@ -928,7 +930,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               title: Text(_metadataError!),
               trailing: TextButton(
                 onPressed: () {
-                  final refreshed = _load();
+                  final refreshed = _load(refresh: true);
                   setState(() { _future = refreshed; });
                 },
                 child: const Text('重试资料'),
@@ -971,7 +973,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                   if (_playback?.item case final selected?) {
                     unawaited(_loadPlayback(selected));
                   } else {
-                    final refreshed = _load();
+                    final refreshed = _load(refresh: true);
                     setState(() { _future = refreshed; });
                   }
                 },

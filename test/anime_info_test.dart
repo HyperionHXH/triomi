@@ -68,6 +68,76 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   });
 
+  test('fresh persisted metadata opens without a request and explicit refresh bypasses both caches', () async {
+    final db = openTestDatabase();
+    addTearDown(db.close);
+    var title = '已保存的资料';
+    final http = FakeHttpClient((_) async => SourceResponse(
+      statusCode: 200,
+      body: jsonEncode({'id': 400602, 'type': 2, 'name_cn': title}),
+    ));
+    final first = AnimeInfoRepository(BangumiPublicClient(http), db);
+    await first.section('400602', 'info');
+    final reopened = AnimeInfoRepository(BangumiPublicClient(http), db);
+    final cached = await reopened.section('400602', 'info');
+    expect(cached.rows.single['name_cn'], '已保存的资料');
+    expect(cached.cached, isTrue);
+    expect(cached.refreshError, isNull);
+    expect(http.requests, hasLength(1));
+    title = '真正刷新后的资料';
+    final refreshed = await first.section('400602', 'info', refresh: true);
+    expect(refreshed.rows.single['name_cn'], title);
+    expect(refreshed.cached, isFalse);
+    expect(http.requests, hasLength(2));
+    final persisted = await reopened.section('400602', 'info');
+    expect(persisted.rows.single['name_cn'], title);
+    expect(http.requests, hasLength(2));
+  });
+
+  test('failed refresh preserves metadata and cancelled late refresh cannot overwrite cache', () async {
+    final db = openTestDatabase();
+    addTearDown(db.close);
+    final pending = Completer<SourceResponse>();
+    final started = Completer<void>();
+    var calls = 0;
+    final http = FakeHttpClient((_) async {
+      switch (++calls) {
+        case 1:
+          return const SourceResponse(
+            statusCode: 200,
+            body: '{"id":400602,"type":2,"name_cn":"可用资料"}',
+          );
+        case 2:
+          throw StateError('offline');
+        default:
+          started.complete();
+          return pending.future;
+      }
+    });
+    final repo = AnimeInfoRepository(BangumiPublicClient(http), db);
+    await repo.section('400602', 'info');
+    final failed = await repo.section('400602', 'info', refresh: true);
+    expect(failed.rows.single['name_cn'], '可用资料');
+    expect(failed.cached, isTrue);
+    expect(failed.refreshError, isA<SourceException>());
+    final owner = SourceRequestCancellation();
+    final refreshing = owner.run(
+      () => repo.section('400602', 'info', refresh: true),
+    );
+    await started.future;
+    final rejected = expectLater(refreshing, throwsA(isA<SourceException>()));
+    owner.cancel();
+    pending.complete(const SourceResponse(
+      statusCode: 200,
+      body: '{"id":400602,"type":2,"name_cn":"取消后的旧资料"}',
+    ));
+    await rejected;
+    final cached = await repo.section('400602', 'info');
+    expect(cached.rows.single['name_cn'], '可用资料');
+    expect(cached.refreshError, isNull);
+    expect(http.requests, hasLength(3));
+  });
+
   test('四季度筛选使用跨年上界；分页offset只按原始返回推进', () async {
     final http = FakeHttpClient((request) async {
       final body = jsonDecode(request.body!) as Map;
@@ -141,7 +211,7 @@ void main() {
       ),
     );
     online = false;
-    final actors = await repo.section('season1', 'characters');
+    final actors = await repo.section('season1', 'characters', refresh: true);
     expect(actors.cached, true);
     expect(actors.refreshError, isA<SourceException>(),
         reason: '缓存可展示，但不能把在线失败宣称为刷新成功');

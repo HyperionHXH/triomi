@@ -113,8 +113,11 @@ class MediaItemCollection extends StatelessWidget {
         final minimumWidth =
             appearance.minimumCardWidth *
             (scaler.scale(13) / 13).clamp(1.0, 2.5);
-        final columns =
-            ((width + appearance.gap) / (minimumWidth + appearance.gap))
+        final animeGrid = items.isNotEmpty &&
+            items.every((item) => item.type == MediaType.anime);
+        final columns = animeGrid && constraints.maxWidth < 600
+            ? 3
+            : ((width + appearance.gap) / (minimumWidth + appearance.gap))
                 .floor()
                 .clamp(1, 8);
         final coverWidth = (width - (columns - 1) * appearance.gap) / columns;

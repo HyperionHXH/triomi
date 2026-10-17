@@ -14,6 +14,7 @@ import '../discover/manga_feed_repository.dart';
 import '../library/library_page.dart';
 import '../library/manga_updates_page.dart';
 import '../library/migration_plans_page.dart';
+import '../search/search_page.dart';
 import '../sources/sources_page.dart';
 import 'manga_extensions_page.dart';
 import 'manga_source_page.dart';
@@ -28,7 +29,6 @@ class _MangaWorkspacePageState extends ConsumerState<MangaWorkspacePage>
     with SingleTickerProviderStateMixin {
   late final _tabs = TabController(length: 3, vsync: this, initialIndex: _tab);
   int _tab = 0;
-  bool _searching = false;
   final _libraryKey = GlobalKey<LibraryPageState>();
 
   @override
@@ -37,10 +37,7 @@ class _MangaWorkspacePageState extends ConsumerState<MangaWorkspacePage>
     _tab = (ref.read(preferencesProvider).get<int>('manga.workspace.tab') ?? 0).clamp(0, 2);
     _tabs.addListener(() {
       if (_tab != _tabs.index) {
-        setState(() {
-          _tab = _tabs.index;
-          _searching = false;
-        });
+        setState(() => _tab = _tabs.index);
         unawaited(ref.read(preferencesProvider).set('manga.workspace.tab', _tab));
       }
     });
@@ -71,13 +68,13 @@ class _MangaWorkspacePageState extends ConsumerState<MangaWorkspacePage>
       title: const Text('漫画'),
       actions: [
         IconButton(
-          tooltip: _tab == 0 ? '搜索本地书库' : _tab == 2 ? '搜索已安装来源' : '搜索漫画',
+          tooltip: _tab == 0 ? '搜索本地书库' : '搜索漫画',
           icon: const Icon(Icons.search),
           onPressed: () {
-            if (_tab != 1) {
-              setState(() => _searching = !_searching);
+            if (_tab == 0) {
+              unawaited(_libraryKey.currentState?.openSearch());
             } else {
-              context.push(AppRoutes.searchFor(MediaType.manga));
+              unawaited(SearchPage.open(context, type: MediaType.manga));
             }
           },
         ),
@@ -107,23 +104,21 @@ class _MangaWorkspacePageState extends ConsumerState<MangaWorkspacePage>
     body: IndexedStack(
       index: _tab,
       children: [
-        LibraryPage(key: _libraryKey, type: MediaType.manga, embedded: true, searching: _tab == 0 && _searching),
+        LibraryPage(key: _libraryKey, type: MediaType.manga, embedded: true),
         const MangaUpdatesPage(embedded: true),
-        _MangaSources(searching: _tab == 2 && _searching),
+        const _MangaSources(),
       ],
     ),
   );
 }
 
 class _MangaSources extends ConsumerStatefulWidget {
-  const _MangaSources({required this.searching});
-  final bool searching;
+  const _MangaSources();
   @override
   ConsumerState<_MangaSources> createState() => _MangaSourcesState();
 }
 
 class _MangaSourcesState extends ConsumerState<_MangaSources> {
-  String _query = '';
 
   Future<void> _extensions() async {
     await Navigator.push(context, MaterialPageRoute<void>(
@@ -163,18 +158,6 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
           ],
         ),
       ),
-      if (widget.searching)
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: TextField(
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: '搜索已安装来源名称',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (value) => setState(() => _query = value.trim().toLowerCase()),
-          ),
-        ),
       Expanded(
         child: ref.watch(sourcesProvider).when(
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -193,13 +176,11 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
           data: (snapshot) {
             final entries = snapshot.entries.where((entry) =>
               entry.descriptor.type == MediaType.manga &&
-              (developmentSourcesEnabled || !developmentSourceIds.contains(entry.descriptor.id)) &&
-              entry.descriptor.name.toLowerCase().contains(_query),
+              (developmentSourcesEnabled || !developmentSourceIds.contains(entry.descriptor.id)),
             ).toList();
             final failures = snapshot.failures.where((entry) =>
               entry.type == MediaType.manga &&
-              (developmentSourcesEnabled || !developmentSourceIds.contains(entry.id)) &&
-              entry.name.toLowerCase().contains(_query),
+              (developmentSourcesEnabled || !developmentSourceIds.contains(entry.id)),
             ).toList();
             return ListView(
               key: const PageStorageKey('manga-source-directory'),

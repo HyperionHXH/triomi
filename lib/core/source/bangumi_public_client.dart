@@ -17,7 +17,7 @@ class BangumiPublicClient {
 
   final SourceHttpClient http;
   final _subjectReads =
-      <(String, SourceRequestCancellation?), Future<Map<String, Object?>>>{};
+      <(String, SourceRequestCancellation?, bool), Future<Map<String, Object?>>>{};
   final _subjects = <String, (DateTime, Map<String, Object?>)>{};
 
   static const sourceId = 'bangumi-anime';
@@ -30,13 +30,13 @@ class BangumiPublicClient {
   static const Duration requestTimeout = Duration(seconds: 12);
   static const int pageSize = 24;
 
-  Future<Map<String, Object?>> subject(String id) {
+  Future<Map<String, Object?>> subject(String id, {bool refresh = false}) {
     final cached = _subjects[id];
-    if (cached != null &&
+    if (!refresh && cached != null &&
         DateTime.now().difference(cached.$1) < const Duration(minutes: 5)) {
       return Future.value(cached.$2);
     }
-    final key = (id, SourceRequestCancellation.current);
+    final key = (id, SourceRequestCancellation.current, refresh);
     return _subjectReads.putIfAbsent(key, () async {
       try {
         final value = await _getJson(
@@ -144,6 +144,7 @@ class BangumiPublicClient {
       if (!finished) leaf.cancel();
     }));
     try {
+      if (leaf.cancelled) throw StateError('公开资料请求已取消');
       final response = await http
           .send(
             SourceRequest(

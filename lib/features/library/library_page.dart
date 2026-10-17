@@ -15,6 +15,7 @@ import '../discover/widgets/media_item_card.dart';
 import '../downloads/data/download_providers.dart';
 import '../downloads/data/download_repository.dart';
 import '../local/local_comic_library_page.dart';
+import '../search/search_page.dart';
 import 'data/library_preferences.dart';
 import 'data/library_providers.dart';
 import 'data/library_repository.dart';
@@ -24,10 +25,31 @@ import 'migration_plans_page.dart';
 import 'source_migration_page.dart';
 
 class LibraryPage extends ConsumerStatefulWidget {
-  const LibraryPage({super.key, required this.type, this.embedded = false, this.searching = false});
+  const LibraryPage({super.key, required this.type, this.embedded = false})
+      : _searchMode = false,
+        _initialQuery = '',
+        _initialCategoryId = null,
+        _onQueryChanged = null,
+        _onCategoryChanged = null;
+
+  const LibraryPage._search({
+    required String query,
+    required int? categoryId,
+    required ValueChanged<String> this._onQueryChanged,
+    required ValueChanged<int?> this._onCategoryChanged,
+  }) : type = MediaType.manga,
+       embedded = false,
+       _searchMode = true,
+       _initialQuery = query,
+       _initialCategoryId = categoryId;
+
   final MediaType type;
   final bool embedded;
-  final bool searching;
+  final bool _searchMode;
+  final String _initialQuery;
+  final int? _initialCategoryId;
+  final ValueChanged<String>? _onQueryChanged;
+  final ValueChanged<int?>? _onCategoryChanged;
 
   @override
   ConsumerState<LibraryPage> createState() => LibraryPageState();
@@ -39,10 +61,13 @@ class _LibraryOptions {
 }
 
 class LibraryPageState extends ConsumerState<LibraryPage> {
-  final _search = TextEditingController();
+  late final _search = TextEditingController(text: widget._initialQuery);
   final _selected = <(String, String)>{};
   var _options = _LibraryOptions();
   String _query = '';
+  String _lastMangaQuery = '';
+  int? _lastMangaCategoryId;
+  bool _hasMangaSearchSession = false;
   bool _searching = false, _selecting = false;
   int? _categoryId;
 
@@ -51,6 +76,8 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
   @override
   void initState() {
     super.initState();
+    _query = widget._initialQuery.trim().toLowerCase();
+    _categoryId = widget._initialCategoryId;
     unawaited(_loadPreferences());
   }
 
@@ -72,6 +99,41 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
   void dispose() {
     _search.dispose();
     super.dispose();
+  }
+
+  Future<void> openSearch() async {
+    if (widget.type != MediaType.manga) {
+      setState(() => _searching = !_searching);
+      return;
+    }
+    if (!_hasMangaSearchSession) {
+      _lastMangaCategoryId = _categoryId;
+      _hasMangaSearchSession = true;
+    }
+    await Navigator.of(context, rootNavigator: true).push<void>(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: '/manga/library/search'),
+        builder: (_) => LibraryPage._search(
+          query: _lastMangaQuery,
+          categoryId: _lastMangaCategoryId,
+          onQueryChanged: (query) => _lastMangaQuery = query,
+          onCategoryChanged: (categoryId) => _lastMangaCategoryId = categoryId,
+        ),
+      ),
+    );
+  }
+
+  void _changeQuery(String value) {
+    setState(() {
+      _query = value.trim().toLowerCase();
+      _exitSelection();
+    });
+    widget._onQueryChanged?.call(value);
+  }
+
+  void _clearQuery() {
+    _search.clear();
+    _changeQuery('');
   }
 
   void _exitSelection() {
@@ -141,11 +203,11 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
           (group.sourceId, group.remoteId),
     };
     final actions = <Widget>[
-      if (!widget.embedded)
+      if (!widget.embedded && !widget._searchMode)
       IconButton(
         tooltip: '搜索本地书库',
         icon: const Icon(Icons.search),
-        onPressed: () => setState(() => _searching = !_searching),
+        onPressed: openSearch,
       ),
       PopupMenuButton<String>(
         tooltip: '更多操作',
@@ -156,20 +218,36 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.embedded ? widget.searching : _searching)
+        if (_searching || widget._searchMode)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: TextField(
               controller: _search,
               autofocus: true,
-              decoration: const InputDecoration(
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
                 labelText: '搜索书库名称',
-                prefixIcon: Icon(Icons.search),
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _search.text.isEmpty ? null : IconButton(
+                  tooltip: '清空查询',
+                  icon: const Icon(Icons.clear),
+                  onPressed: _clearQuery,
+                ),
               ),
-              onChanged: (value) => setState(() {
-                _query = value.trim().toLowerCase();
-                _exitSelection();
-              }),
+              onChanged: _changeQuery,
+            ),
+          ),
+        if (widget._searchMode && _query.isNotEmpty)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => SearchPage.open(
+                context,
+                type: MediaType.manga,
+                query: _search.text,
+              ),
+              icon: const Icon(Icons.travel_explore),
+              label: Text('全局搜索：${_search.text}'),
             ),
           ),
         SingleChildScrollView(
@@ -283,9 +361,11 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
               if (entries.isEmpty) {
                 return EmptyStateView(
                   icon: Icons.auto_stories_outlined,
-                  title: all.isEmpty ? '这个分类下还没有内容' : '没有匹配当前查询的收藏',
+                  title: _query.isNotEmpty
+                      ? '没有匹配当前查询的收藏'
+                      : all.isEmpty ? '这个分类下还没有内容' : '没有匹配当前查询的收藏',
                   message: '仅显示${widget.type.label}本地收藏；来源离线不会删除作品。',
-                  action: all.isEmpty
+                  action: all.isEmpty && !widget._searchMode
                       ? widget.embedded
                           ? null
                           : FilledButton.tonal(
@@ -294,12 +374,10 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
                               child: const Text('搜索作品'),
                             )
                       : TextButton(
-                          onPressed: () => setState(() {
-                            _options = _LibraryOptions();
-                            _query = '';
-                            _search.clear();
-                            _exitSelection();
-                          }),
+                          onPressed: () {
+                            setState(() => _options = _LibraryOptions());
+                            _clearQuery();
+                          },
                           child: const Text('清空筛选'),
                         ),
                 );
@@ -313,7 +391,7 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
     return widget.embedded
         ? content
         : PageScaffold(
-            title: '${widget.type.label}书库',
+            title: widget._searchMode ? '搜索漫画书库' : '${widget.type.label}书库',
             actions: actions,
             child: content,
           );
@@ -324,10 +402,13 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
     child: ChoiceChip(
       label: Text(label),
       selected: _categoryId == id,
-      onSelected: (_) => setState(() {
-        _categoryId = _categoryId == id ? null : id;
-        _exitSelection();
-      }),
+      onSelected: (_) {
+        setState(() {
+          _categoryId = _categoryId == id ? null : id;
+          _exitSelection();
+        });
+        widget._onCategoryChanged?.call(_categoryId);
+      },
     ),
   );
 

@@ -59,7 +59,6 @@ void main() {
     WidgetTester tester, {
     MediaType type = MediaType.manga,
     bool embedded = false,
-    bool searching = false,
   }) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -74,7 +73,7 @@ void main() {
         child: MaterialApp(
           theme: AppTheme.light(),
           home: embedded
-              ? Scaffold(body: LibraryPage(type: type, embedded: true, searching: searching))
+              ? Scaffold(body: LibraryPage(type: type, embedded: true))
               : LibraryPage(type: type),
         ),
       ),
@@ -93,24 +92,42 @@ void main() {
     await tester.tap(find.text('管理书架分类'));
     await tester.pumpAndSettle();
   }
-  libraryTest('嵌入书库由工作区控制名称搜索，不提供第二个搜索按钮', (tester) async {
+  libraryTest('嵌入书库不提供内联搜索，工作区复用书库菜单', (tester) async {
     await repository.addToLibrary(manga);
     await pumpLibrary(tester, embedded: true);
     expect(find.byTooltip('搜索本地书库'), findsNothing);
     expect(find.byTooltip('更多操作'), findsNothing);
     expect(find.byType(TextField), findsNothing);
-    await pumpLibrary(tester, embedded: true, searching: true);
-    expect(find.byTooltip('搜索本地书库'), findsNothing);
-    expect(find.byType(TextField), findsOneWidget);
-    await tester.enterText(find.byType(TextField), '不存在');
-    await tester.pumpAndSettle();
-    expect(find.byKey(ValueKey(('test-manga', '12', MediaType.manga))), findsNothing);
     final state = tester.state<LibraryPageState>(find.byType(LibraryPage));
     expect(state.menuEntries.whereType<PopupMenuItem<String>>().map((entry) => entry.value),
         containsAll(['categories', 'markAllRead', 'sort:title', 'layout', 'local', 'migration']));
     state.handleAction('sort:title');
     await tester.pumpAndSettle();
     expect(preferences.get<String>('library.manga.sort'), 'title');
+  });
+
+  libraryTest('漫画名称搜索打开独立页面，返回保留书库和上次查询', (tester) async {
+    await repository.addToLibrary(manga);
+    await pumpLibrary(tester);
+    await openLocalSearch(tester);
+    expect(find.byType(BackButton), findsOneWidget);
+    expect(find.text('搜索漫画书库'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '不存在');
+    await tester.pumpAndSettle();
+    expect(find.text('没有匹配当前查询的收藏'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '全局搜索：不存在'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey(('test-manga', '12', MediaType.manga))), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+    await openLocalSearch(tester);
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, '不存在');
+    await tester.enterText(find.byType(TextField), '作品甲');
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey(('test-manga', '12', MediaType.manga))), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '全局搜索：作品甲'), findsOneWidget);
+    expect(find.byType(FilterChip), findsNothing);
+    expect(find.widgetWithText(ChoiceChip, '全部'), findsNothing);
   });
 
 

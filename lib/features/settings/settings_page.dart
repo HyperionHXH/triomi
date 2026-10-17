@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/source/network_proxy.dart';
@@ -93,11 +94,15 @@ class SettingsPage extends ConsumerWidget {
                 leading: const Icon(Icons.balance_outlined),
                 title: const Text('开源许可'),
                 subtitle: const Text('GPL-3.0'),
-                onTap: () => showLicensePage(
-                  context: context,
-                  applicationName: 'Triomi',
-                  applicationVersion: '0.1.0',
-                ),
+                onTap: () async {
+                  final package = await PackageInfo.fromPlatform();
+                  if (!context.mounted) return;
+                  showLicensePage(
+                    context: context,
+                    applicationName: 'Triomi',
+                    applicationVersion: '${package.version}+${package.buildNumber}',
+                  );
+                },
               ),
             ],
           ),

@@ -673,6 +673,7 @@ void main() {
     test('官方取不到时回退镜像，并标记 usedFallback', () async {
       final client = BangumiScheduleClient(
         http: httpWithDeadOfficial(),
+        baseUrl: BangumiScheduleClient.calendarUrl,
         fallbackBaseUrl: BangumiScheduleClient.mirrorUrl,
       );
 
@@ -708,6 +709,7 @@ void main() {
             url: request.url,
           ),
         ),
+        baseUrl: BangumiScheduleClient.calendarUrl,
         fallbackBaseUrl: BangumiScheduleClient.mirrorUrl,
       );
 

@@ -153,17 +153,22 @@ class AnimeInfoRepository {
   final AppDatabase db;
   final _inflight =
       <
-        (String, String, int, SourceRequestCancellation?),
+        (String, String, int, SourceRequestCancellation?, bool),
         Future<AnimeInfoPage>
       >{};
 
   Future<Map<String, Object?>> character(String id) => publicClient.character(id);
 
-  Future<AnimeInfoPage> section(String id, String section, {int offset = 0}) {
-    final key = (id, section, offset, SourceRequestCancellation.current);
+  Future<AnimeInfoPage> section(
+    String id,
+    String section, {
+    int offset = 0,
+    bool refresh = false,
+  }) {
+    final key = (id, section, offset, SourceRequestCancellation.current, refresh);
     return _inflight.putIfAbsent(key, () async {
       try {
-        return await _section(id, section, offset: offset);
+        return await _section(id, section, offset: offset, refresh: refresh);
       } finally {
         unawaited(_inflight.remove(key));
       }
@@ -174,17 +179,21 @@ class AnimeInfoRepository {
     String id,
     String section, {
     int offset = 0,
+    bool refresh = false,
   }) async {
     final query = db.select(
       db.mediaItems,
     )..where((t) => t.sourceId.equals('bangumi-anime') & t.remoteId.equals(id));
     final item = await query.getSingleOrNull();
+    if (SourceRequestCancellation.current?.cancelled == true) {
+      throw StateError('公开资料请求已取消');
+    }
     final cache = item?.detailJson == null
         ? <String, dynamic>{}
         : Map<String, dynamic>.from(jsonDecode(item!.detailJson!) as Map);
     final key = '$section:$offset';
 
-    AnimeInfoPage parse(Object? raw, {Object? refreshError}) {
+    AnimeInfoPage parse(Object? raw, {bool cached = false, Object? refreshError}) {
       if (raw is Map && raw['format'] == 'bangumi-public-v1') {
         raw = raw['payload'];
       }
@@ -209,21 +218,33 @@ class AnimeInfoRepository {
             (total is num
                 ? next < total
                 : values.length >= (section == 'episodes' ? 100 : 20)),
-        cached: refreshError != null,
+        cached: cached,
         refreshError: refreshError,
       );
+    }
+
+    final saved = cache[key];
+    if (!refresh && saved is Map && saved['format'] == 'bangumi-public-v1') {
+      final updatedAt = DateTime.tryParse('${saved['updatedAt']}');
+      final age = updatedAt == null ? null : DateTime.now().difference(updatedAt);
+      if (age != null && !age.isNegative && age < const Duration(minutes: 5)) {
+        return parse(saved, cached: true);
+      }
     }
 
     try {
       final Object? raw;
       if (section == 'info') {
-        raw = [await publicClient.subject(id)];
+        raw = [await publicClient.subject(id, refresh: refresh)];
       } else if (section == 'episodes') {
         raw = {'data': await publicClient.episodes(id, offset: offset)};
       } else {
         raw = await publicClient.section(id, section, offset: offset);
       }
       final result = parse(raw);
+      if (SourceRequestCancellation.current?.cancelled == true) {
+        throw StateError('公开资料请求已取消');
+      }
       if (section == 'info' && item == null) {
         await LibraryRepository(db).cacheItem(bangumiItem(result.rows.single));
       }
@@ -251,8 +272,9 @@ class AnimeInfoRepository {
       }
       return result;
     } catch (error) {
+      if (SourceRequestCancellation.current?.cancelled == true) rethrow;
       if (cache.containsKey(key)) {
-        return parse(cache[key], refreshError: error);
+        return parse(cache[key], cached: true, refreshError: error);
       }
       rethrow;
     }

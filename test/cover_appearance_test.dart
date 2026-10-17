@@ -159,6 +159,27 @@ void main() {
     }
   });
 
+  for (final width in [320.0, 412.0]) {
+    testWidgets('anime cover grids show three works per row at phone width $width', (tester) async {
+      tester.view.physicalSize = Size(width, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final items = [for (var i = 0; i < 4; i++) _item(MediaType.anime, i)];
+      await tester.pumpWidget(_collection(
+        covers: const CoverAppearance(),
+        items: items, preferGrid: true, textScale: 2,
+      ));
+      final cards = [for (final item in items)
+        tester.getRect(find.byKey(ValueKey((item.sourceId, item.remoteId, item.type))))];
+      expect(cards[0].top, cards[1].top);
+      expect(cards[1].top, cards[2].top);
+      expect(cards[2].right, lessThanOrEqualTo(width));
+      expect(cards[3].top, greaterThan(cards[0].bottom));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final width in [280.0, 1100.0]) {
     for (final shape in CoverShape.values) {
       testWidgets('$shape grid actual cover ratio at width $width and large text', (tester) async {
