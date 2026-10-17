@@ -81,11 +81,9 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
     });
     try {
       final page = await owner.run(
-        () => ref.read(animeInfoRepositoryProvider).section(
-          widget.id,
-          section,
-          offset: reset ? 0 : partition.offset,
-        ),
+        () => ref
+            .read(animeInfoRepositoryProvider)
+            .section(widget.id, section, offset: reset ? 0 : partition.offset),
       );
       if (!mounted || owner.cancelled) return;
       setState(() {
@@ -129,26 +127,37 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
   String? _image(Map<Object?, Object?> row) {
     final images = row['images'] ?? row['avatar'];
     return images is Map
-        ? (images['medium'] ?? images['common'] ?? images['large'] ?? images['small'])?.toString()
+        ? (images['medium'] ??
+                  images['common'] ??
+                  images['large'] ??
+                  images['small'])
+              ?.toString()
         : null;
   }
 
-  Widget _portrait(Map<Object?, Object?> row, {bool avatar = false}) => ClipRRect(
-    borderRadius: BorderRadius.circular(avatar ? 24 : 8),
-    child: SizedBox(
-      width: 48,
-      height: avatar ? 48 : 64,
-      child: MediaCover(url: _image(row)),
-    ),
-  );
+  Widget _portrait(Map<Object?, Object?> row, {bool avatar = false}) =>
+      ClipRRect(
+        borderRadius: BorderRadius.circular(avatar ? 24 : 8),
+        child: SizedBox(
+          width: 48,
+          height: avatar ? 48 : 64,
+          child: MediaCover(url: _image(row)),
+        ),
+      );
 
   Widget _overview(_InfoPartition partition) {
-    final row = partition.rows.firstOrNull ?? widget.overview ?? const <String, Object?>{};
+    final row =
+        partition.rows.firstOrNull ??
+        widget.overview ??
+        const <String, Object?>{};
     final item = widget.item;
     final summary = '${row['summary'] ?? item?.description ?? ''}'.trim();
     final rawTags = row['tags'];
     final tags = rawTags is List
-        ? [for (final tag in rawTags) if (tag is Map && tag['name'] is String) '${tag['name']}']
+        ? [
+            for (final tag in rawTags)
+              if (tag is Map && tag['name'] is String) '${tag['name']}',
+          ]
         : item?.tags ?? const <String>[];
     final rating = row['rating'];
     final date = '${row['date'] ?? ''}';
@@ -158,19 +167,37 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (platform.isNotEmpty || date.isNotEmpty || episodes != null)
-          Text([platform, date, if (episodes != null) '$episodes 集'].where((v) => v.isNotEmpty).join(' · ')),
+          Text(
+            [
+              platform,
+              date,
+              if (episodes != null) '$episodes 集',
+            ].where((v) => v.isNotEmpty).join(' · '),
+          ),
         if (rating is Map && rating['score'] != null)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text('★ ${rating['score']}  ·  ${rating['total'] ?? 0} 人评分${rating['rank'] == null ? '' : '  ·  #${rating['rank']}'}', style: Theme.of(context).textTheme.titleMedium),
+            child: Text(
+              '★ ${rating['score']}  ·  ${rating['total'] ?? 0} 人评分${rating['rank'] == null ? '' : '  ·  #${rating['rank']}'}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
           ),
         const SizedBox(height: 12),
         Text('简介', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         if (summary.isNotEmpty) ...[
-          Text(summary, maxLines: _fullSummary ? null : 7, overflow: _fullSummary ? TextOverflow.visible : TextOverflow.ellipsis),
+          Text(
+            summary,
+            maxLines: _fullSummary ? null : 7,
+            overflow: _fullSummary
+                ? TextOverflow.visible
+                : TextOverflow.ellipsis,
+          ),
           if (summary.length > 200)
-            TextButton(onPressed: () => setState(() => _fullSummary = !_fullSummary), child: Text(_fullSummary ? '收起简介' : '展开简介')),
+            TextButton(
+              onPressed: () => setState(() => _fullSummary = !_fullSummary),
+              child: Text(_fullSummary ? '收起简介' : '展开简介'),
+            ),
         ] else if (!partition.busy)
           const Text('Bangumi 尚未提供简介'),
         if (tags.isNotEmpty) ...[
@@ -192,7 +219,10 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
                   ),
                 ),
               if (!_fullTags && tags.length > 12)
-                ActionChip(label: Text('更多 ${tags.length - 12}'), onPressed: () => setState(() => _fullTags = true)),
+                ActionChip(
+                  label: Text('更多 ${tags.length - 12}'),
+                  onPressed: () => setState(() => _fullTags = true),
+                ),
             ],
           ),
         ],
@@ -203,7 +233,9 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
             if (field is Map)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 5),
-                child: SelectableText('${field['key']}：${_value(field['value'])}'),
+                child: SelectableText(
+                  '${field['key']}：${_value(field['value'])}',
+                ),
               ),
         ],
         const SizedBox(height: 12),
@@ -212,7 +244,8 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
             context: context,
             isScrollControlled: true,
             showDragHandle: true,
-            builder: (_) => AnimeInfoSheet(id: widget.id, initialSection: 'episodes'),
+            builder: (_) =>
+                AnimeInfoSheet(id: widget.id, initialSection: 'episodes'),
           ),
           icon: const Icon(Icons.info_outline),
           label: const Text('查看分集资料'),
@@ -221,16 +254,69 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
     );
   }
 
+  Widget _subjectGrid(List<Map<String, Object?>> rows) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 820
+            ? 3
+            : constraints.maxWidth >= 540
+            ? 2
+            : 1;
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: rows.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 8,
+            mainAxisExtent: 88,
+          ),
+          itemBuilder: (context, index) {
+            final row = rows[index];
+            final item = bangumiItem(row);
+            return Card(
+              clipBehavior: Clip.antiAlias,
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                leading: _portrait(row),
+                title: Text(
+                  _name(row),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: row['relation'] == null
+                    ? null
+                    : Text(
+                        '${row['relation']}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  if (!widget.embedded) Navigator.pop(context);
+                  context.push(AppRoutes.detailFor(item), extra: item);
+                },
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _row(Map<String, Object?> row) {
     if (_section == 'episodes') {
       return ListTile(
         contentPadding: const EdgeInsets.symmetric(vertical: 8),
         title: Text('${row['sort'] ?? ''} · ${_name(row)}'),
-        subtitle: Text([
-          '${row['airdate'] ?? ''}',
-          '${row['duration'] ?? ''}',
-          '${row['desc'] ?? ''}',
-        ].where((v) => v.isNotEmpty).join('\n')),
+        subtitle: Text(
+          [
+            '${row['airdate'] ?? ''}',
+            '${row['duration'] ?? ''}',
+            '${row['desc'] ?? ''}',
+          ].where((v) => v.isNotEmpty).join('\n'),
+        ),
       );
     }
     if (_section == 'comments') {
@@ -242,7 +328,11 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
       final rate = body is Map ? body['rate'] : row['rate'];
       final updated = body is Map ? body['updatedAt'] : row['updatedAt'];
       final date = updated is num && updated > 0
-          ? DateTime.fromMillisecondsSinceEpoch(updated.toInt() * 1000).toLocal().toString().split(' ').first
+          ? DateTime.fromMillisecondsSinceEpoch(updated.toInt() * 1000)
+                .toLocal()
+                .toString()
+                .split(' ')
+                .first
           : '';
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -251,13 +341,27 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
           children: [
             _portrait(user, avatar: true),
             const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('${user['nickname'] ?? user['username'] ?? 'Bangumi 用户'}', style: Theme.of(context).textTheme.titleSmall),
-              if (date.isNotEmpty || (rate is num && rate > 0))
-                Text([date, if (rate is num && rate > 0) '★ $rate'].where((s) => s.isNotEmpty).join(' · '), style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 6),
-              SelectableText('${content ?? ''}'),
-            ])),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${user['nickname'] ?? user['username'] ?? 'Bangumi 用户'}',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  if (date.isNotEmpty || (rate is num && rate > 0))
+                    Text(
+                      [
+                        date,
+                        if (rate is num && rate > 0) '★ $rate',
+                      ].where((s) => s.isNotEmpty).join(' · '),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  const SizedBox(height: 6),
+                  SelectableText('${content ?? ''}'),
+                ],
+              ),
+            ),
           ],
         ),
       );
@@ -267,7 +371,8 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
       '${row['relation'] ?? ''}',
       if (actors is List && actors.isNotEmpty)
         '声优：${actors.whereType<Map<Object?, Object?>>().map(_name).join(' / ')}',
-      if (_section == 'persons' && row['eps'] != null) '参与剧集：${_value(row['eps'])}',
+      if (_section == 'persons' && row['eps'] != null)
+        '参与剧集：${_value(row['eps'])}',
     ].where((s) => s.isNotEmpty).join('\n');
     final relatedAnime = _section == 'subjects' && row['type'] == 2;
     return ListTile(
@@ -275,7 +380,9 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
       leading: _portrait(row),
       title: Text(_name(row)),
       subtitle: subtitle.isEmpty ? null : Text(subtitle),
-      trailing: relatedAnime || _section == 'characters' ? const Icon(Icons.chevron_right) : null,
+      trailing: relatedAnime || _section == 'characters'
+          ? const Icon(Icons.chevron_right)
+          : null,
       onTap: relatedAnime
           ? () {
               final item = bangumiItem(row);
@@ -301,52 +408,102 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
       children: [
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            for (final entry in sections.entries.where((entry) => !widget.embedded || entry.key != 'episodes'))
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(
-                  label: Text(entry.value),
-                  selected: _section == entry.key,
-                  onSelected: (_) {
-                    if (_section == entry.key) return;
-                    setState(() => _section = entry.key);
-                    if (!_current.loaded && !_current.busy && (_section != 'info' || widget.item == null)) {
-                      unawaited(_load(reset: true));
-                    }
-                  },
+          child: Row(
+            children: [
+              for (final entry in sections.entries.where(
+                (entry) => !widget.embedded || entry.key != 'episodes',
+              ))
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(entry.value),
+                    selected: _section == entry.key,
+                    onSelected: (_) {
+                      if (_section == entry.key) return;
+                      setState(() => _section = entry.key);
+                      if (!_current.loaded &&
+                          !_current.busy &&
+                          (_section != 'info' || widget.item == null)) {
+                        unawaited(_load(reset: true));
+                      }
+                    },
+                  ),
                 ),
-              ),
-          ]),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
-        if (_section == 'info') _overview(partition)
+        if (_section == 'info')
+          _overview(partition)
         else ...[
-          for (final row in partition.rows) ...[_row(row), const Divider(height: 1)],
-          if (partition.loaded && !partition.busy && partition.rows.isEmpty && partition.error == null)
-            Padding(padding: const EdgeInsets.symmetric(vertical: 32), child: Text(switch (_section) {
-              'comments' => '暂无公开吐槽',
-              'characters' => '暂无角色资料',
-              'subjects' => '暂无关联作品',
-              _ => '暂无制作人员资料',
-            })),
+          if (_section == 'subjects')
+            _subjectGrid(partition.rows)
+          else
+            for (final row in partition.rows) ...[
+              _row(row),
+              const Divider(height: 1),
+            ],
+          if (partition.loaded &&
+              !partition.busy &&
+              partition.rows.isEmpty &&
+              partition.error == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Text(switch (_section) {
+                'comments' => '暂无公开吐槽',
+                'characters' => '暂无角色资料',
+                'subjects' => '暂无关联作品',
+                _ => '暂无制作人员资料',
+              }),
+            ),
         ],
-        if (partition.cached) const Padding(padding: EdgeInsets.only(top: 12), child: Text('显示已保存的公开资料，在线刷新未成功')),
+        if (partition.cached)
+          const Padding(
+            padding: EdgeInsets.only(top: 12),
+            child: Text('显示已保存的公开资料，在线刷新未成功'),
+          ),
         if (partition.error != null)
           Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(partition.error!),
-              TextButton.icon(onPressed: partition.busy ? null : () => _load(reset: true), icon: const Icon(Icons.refresh), label: Text('重试${sections[_section]}')),
-            ]),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(partition.error!),
+                TextButton.icon(
+                  onPressed: partition.busy ? null : () => _load(reset: true),
+                  icon: const Icon(Icons.refresh),
+                  label: Text('重试${sections[_section]}'),
+                ),
+              ],
+            ),
           ),
-        if (partition.busy) const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())),
+        if (partition.busy)
+          const Padding(
+            padding: EdgeInsets.all(20),
+            child: Center(child: CircularProgressIndicator()),
+          ),
         if (partition.more && !partition.busy && partition.error == null)
           TextButton(onPressed: _load, child: const Text('加载更多')),
       ],
     );
-    if (widget.embedded) return Padding(padding: const EdgeInsets.all(16), child: content);
-    return SafeArea(child: SizedBox(height: MediaQuery.sizeOf(context).height * .85, child: SingleChildScrollView(padding: const EdgeInsets.all(16), child: content)));
+    final constrained = Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 950),
+        child: content,
+      ),
+    );
+    if (widget.embedded) {
+      return Padding(padding: const EdgeInsets.all(16), child: constrained);
+    }
+    return SafeArea(
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * .85,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: constrained,
+        ),
+      ),
+    );
   }
 }
 
@@ -360,12 +517,16 @@ class _CharacterProfile extends ConsumerStatefulWidget {
 class _CharacterProfileState extends ConsumerState<_CharacterProfile> {
   final _owner = SourceRequestCancellation();
   late Future<Map<String, Object?>> _future = _load();
-  Future<Map<String, Object?>> _load() => _owner.run(() => ref.read(animeInfoRepositoryProvider).character('${widget.row['id']}'));
+  Future<Map<String, Object?>> _load() => _owner.run(
+    () =>
+        ref.read(animeInfoRepositoryProvider).character('${widget.row['id']}'),
+  );
   @override
   void dispose() {
     _owner.cancel();
     super.dispose();
   }
+
   @override
   Widget build(BuildContext context) => SafeArea(
     child: SizedBox(
@@ -377,28 +538,62 @@ class _CharacterProfileState extends ConsumerState<_CharacterProfile> {
           builder: (context, snapshot) {
             final row = snapshot.data ?? widget.row;
             final images = row['images'];
-            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (images is Map) SizedBox(width: 160, height: 210, child: MediaCover(url: (images['large'] ?? images['medium'])?.toString())),
-              const SizedBox(height: 12),
-              SelectableText('${row['name'] ?? ''}', style: Theme.of(context).textTheme.titleLarge),
-              if (widget.row['relation'] != null) Text('${widget.row['relation']}'),
-              if (widget.row['actors'] is List)
-                Text('声优：${(widget.row['actors'] as List).whereType<Map<Object?, Object?>>().map((v) => v['name']).join(' / ')}'),
-              const SizedBox(height: 16),
-              if (snapshot.connectionState == ConnectionState.waiting) const LinearProgressIndicator(),
-              if (snapshot.hasError) ...[
-                Text('角色资料加载失败：${SourceException.sanitizeMessage('${snapshot.error}')}'),
-                TextButton(onPressed: () => setState(() => _future = _load()), child: const Text('重试角色资料')),
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (images is Map)
+                  SizedBox(
+                    width: 160,
+                    height: 210,
+                    child: MediaCover(
+                      url: (images['large'] ?? images['medium'])?.toString(),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                SelectableText(
+                  '${row['name'] ?? ''}',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                if (widget.row['relation'] != null)
+                  Text('${widget.row['relation']}'),
+                if (widget.row['actors'] is List)
+                  Text(
+                    '声优：${(widget.row['actors'] as List).whereType<Map<Object?, Object?>>().map((v) => v['name']).join(' / ')}',
+                  ),
+                const SizedBox(height: 16),
+                if (snapshot.connectionState == ConnectionState.waiting)
+                  const LinearProgressIndicator(),
+                if (snapshot.hasError) ...[
+                  Text(
+                    '角色资料加载失败：${SourceException.sanitizeMessage('${snapshot.error}')}',
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _future = _load()),
+                    child: const Text('重试角色资料'),
+                  ),
+                ],
+                if (row['summary'] is String &&
+                    (row['summary'] as String).isNotEmpty)
+                  SelectableText(row['summary'] as String),
+                for (final field
+                    in row['infobox'] is List
+                        ? row['infobox'] as List
+                        : const [])
+                  if (field is Map)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: SelectableText(
+                        '${field['key']}：${_profileValue(field['value'])}',
+                      ),
+                    ),
               ],
-              if (row['summary'] is String && (row['summary'] as String).isNotEmpty) SelectableText(row['summary'] as String),
-              for (final field in row['infobox'] is List ? row['infobox'] as List : const [])
-                if (field is Map)
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: SelectableText('${field['key']}：${_profileValue(field['value'])}')),
-            ]);
+            );
           },
         ),
       ),
     ),
   );
-  String _profileValue(Object? value) => value is List ? value.map((v) => v is Map ? '${v['v'] ?? ''}' : '$v').join(' / ') : '${value ?? ''}';
+  String _profileValue(Object? value) => value is List
+      ? value.map((v) => v is Map ? '${v['v'] ?? ''}' : '$v').join(' / ')
+      : '${value ?? ''}';
 }

@@ -156,7 +156,9 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
         _filter.year == now.year && _filter.quarter == (now.month - 1) ~/ 3 + 1;
     _weekdays.clear();
     if (currentSeason) {
-      for (final day in ref.watch(weeklyScheduleProvider).asData?.value ?? <ScheduleDay>[]) {
+      for (final day
+          in ref.watch(weeklyScheduleProvider).asData?.value ??
+              <ScheduleDay>[]) {
         for (final entry in day.items) {
           _weekdays[entry.id] = day.weekday;
         }
@@ -168,7 +170,10 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
     };
     final visible = _rows
         .where((row) {
-          if (_day(row) != _weekday) return false;
+          final day = _day(row);
+          // The calendar has seven real weekday buckets only. Do not surface
+          // upstream records whose broadcast day is unknown as a fake tab.
+          if (day == 0 || day != _weekday) return false;
           final status = statuses['bangumi-anime:${row['id']}'];
           if (_filter.onlyWatching && status != 'doing') return false;
           if (_filter.hideCompleted && status == 'done') return false;
@@ -191,29 +196,53 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
             onPressed: _pickFilter,
           ),
         ),
-        LayoutBuilder(builder: (context, constraints) {
-          final scaler = MediaQuery.textScalerOf(context);
-          final tabWidth = (scaler.scale(14) * 2 + 20).clamp(48.0, 120.0);
-          final scrollable = constraints.maxWidth - 32 < tabWidth * 7;
-          final buttons = [
-            for (var day = 1; day <= 7; day++)
-              SizedBox(width: scrollable ? tabWidth : (constraints.maxWidth - 32) / 7,
-                child: Semantics(selected: day == _weekday, inMutuallyExclusiveGroup: true,
-                  label: '星期${['一', '二', '三', '四', '五', '六', '日'][day - 1]}',
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size(48, 48),
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      backgroundColor: day == _weekday ? Theme.of(context).colorScheme.secondaryContainer : null,
-                      foregroundColor: day == _weekday ? Theme.of(context).colorScheme.onSecondaryContainer : null),
-                    onPressed: () => _setWeekday(day),
-                    child: Text('周${['一', '二', '三', '四', '五', '六', '日'][day - 1]}',
-                      maxLines: 1, softWrap: false)))),
-          ];
-          return Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: scrollable ? SingleChildScrollView(scrollDirection: Axis.horizontal,
-              child: Row(children: buttons)) : Row(children: buttons));
-        }),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final scaler = MediaQuery.textScalerOf(context);
+            final tabWidth = (scaler.scale(14) * 2 + 20).clamp(48.0, 120.0);
+            final scrollable = constraints.maxWidth - 32 < tabWidth * 7;
+            final buttons = [
+              for (var day = 1; day <= 7; day++)
+                SizedBox(
+                  width: scrollable
+                      ? tabWidth
+                      : (constraints.maxWidth - 32) / 7,
+                  child: Semantics(
+                    selected: day == _weekday,
+                    inMutuallyExclusiveGroup: true,
+                    label: '星期${['一', '二', '三', '四', '五', '六', '日'][day - 1]}',
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        backgroundColor: day == _weekday
+                            ? Theme.of(context).colorScheme.secondaryContainer
+                            : null,
+                        foregroundColor: day == _weekday
+                            ? Theme.of(context).colorScheme.onSecondaryContainer
+                            : null,
+                      ),
+                      onPressed: () => _setWeekday(day),
+                      child: Text(
+                        '周${['一', '二', '三', '四', '五', '六', '日'][day - 1]}',
+                        maxLines: 1,
+                        softWrap: false,
+                      ),
+                    ),
+                  ),
+                ),
+            ];
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: scrollable
+                  ? SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(children: buttons),
+                    )
+                  : Row(children: buttons),
+            );
+          },
+        ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: () => _load(reset: true),
@@ -227,9 +256,7 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
                   (row) => '${row['id']}' == item.remoteId,
                 );
                 final day = _day(row);
-                return day == 0
-                    ? '星期未注明'
-                    : '周${['一', '二', '三', '四', '五', '六', '日'][day - 1]}';
+                return '周${['一', '二', '三', '四', '五', '六', '日'][day - 1]}';
               },
               footer: Padding(
                 padding: const EdgeInsets.all(16),

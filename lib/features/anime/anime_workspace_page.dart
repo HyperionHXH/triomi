@@ -68,20 +68,34 @@ class _AnimeWorkspacePageState extends ConsumerState<AnimeWorkspacePage> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: SegmentedButton<int>(
-            segments: const [
-              ButtonSegment(value: 0, label: Text('推荐')),
-              ButtonSegment(value: 1, label: Text('时间表')),
-              ButtonSegment(value: 2, label: Text('我的追番')),
-            ],
-            selected: {_tab},
-            onSelectionChanged: (selection) => setState(() {
-              _tab = selection.single;
-              _visited.add(_tab);
-              unawaited(
-                ref.read(preferencesProvider).set('anime.workspace.tab', _tab),
-              );
-            }),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(
+                  value: 0,
+                  label: Text('推荐', maxLines: 1, softWrap: false),
+                ),
+                ButtonSegment(
+                  value: 1,
+                  label: Text('时间表', maxLines: 1, softWrap: false),
+                ),
+                ButtonSegment(
+                  value: 2,
+                  label: Text('我的追番', maxLines: 1, softWrap: false),
+                ),
+              ],
+              selected: {_tab},
+              onSelectionChanged: (selection) => setState(() {
+                _tab = selection.single;
+                _visited.add(_tab);
+                unawaited(
+                  ref
+                      .read(preferencesProvider)
+                      .set('anime.workspace.tab', _tab),
+                );
+              }),
+            ),
           ),
         ),
         Expanded(
