@@ -1,0 +1,54 @@
+{
+  "release": "v0.1.0-test.156",
+  "sourceCommit": "8121830cf7891235b3e38a392e6d36632070edba",
+  "version": "0.1.0+156",
+  "status": "incremental fixes verified; full platform acceptance partial",
+  "changes": [
+    "Anime segmented labels remain single-line and horizontally scroll at large system text scale",
+    "Follow status chips have explicit outlines and accessible counts",
+    "Schedule excludes unknown broadcast weekdays rather than putting them into the selected weekday",
+    "Related subjects use responsive one/two/three-column cards; information partitions are constrained to width 950"
+  ],
+  "checks": {
+    "flutterSuite": {"passed": 1005, "skipped": 3, "scope": "after functional fixes, before formatter; post-format targeted tests below"},
+    "pythonSuite": {"passed": 89},
+    "postFormatAnimeTests": {"passed": 7},
+    "analyze": "No issues found",
+    "knownWarnings": ["Existing Drift multiple-database warnings during tests", "Python HTTPError resource warnings", "Third-party webview CMake CMP0175 warning", "Flutter plugin KGP migration warnings"]
+  },
+  "android": {
+    "productionSha256": "8aabb9e392a8582b80e649dd34a5d28db815946e298e3d9bb8d335e0c2d63333",
+    "acceptanceSha256": "6830ed128d7abf0ad0db13d59bfb52af33509375f5e9a60f8805336e771c8b3c",
+    "certificateSha256": "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077",
+    "signatureV2Verified": true,
+    "versionCode": 156,
+    "preserveDataInstall": ["emulator-5554", "emulator-5556", "emulator-5558"],
+    "installedHashesMatch": true,
+    "currentByteUi": ["API35 original novel shelf still contains two downloaded books after upgrade", "Follow shelf retains two original local anime", "System font_scale 2.0: labels stay on one line; horizontal swipe reveals complete selected 我的追番"],
+    "fontScaleBefore": "1.0",
+    "fontScaleRestored": "1.0",
+    "screenshots": ["C156-android-large-tabs-scrolled.png"]
+  },
+  "windows": {
+    "applicationFiles": 49,
+    "bundleMatchesZip": true,
+    "manifestHashesMatchZip": true,
+    "msiVersion": "0.1.156",
+    "msiInstallExit": 0,
+    "installedFilesMatchZip": true,
+    "installedAppWindowObserved": true,
+    "appExitCodes": [0, 0],
+    "windowsAuthenticodeSigned": false,
+    "currentByteUi": ["Seven weekdays, Saturday selection and three complete cover cards", "Explicit outlines around six follow-status chips", "Student Council related-subject response displays four cards in three columns", "MSI-installed application starts and retains selected calendar workspace"],
+    "screenshots": ["C156-windows-follows.png", "C156-windows-calendar.png", "C156-windows-relations.png"]
+  },
+  "releaseVerification": "C156-download-verification.json",
+  "credentialScan": "C156-secret-scan.json",
+  "limits": [
+    "No new end-to-end video or reader journey is claimed for R156; R155 observations remain historical",
+    "External Bangumi collection writes and external WebDAV multi-device sync still require an explicitly authorized target",
+    "API26 and production API35 installation/hash were checked; the new large-font UI interaction used acceptance API35",
+    "MSI installation and file integrity were checked; this increment does not repeat the historical upgrade/uninstall data-hash matrix",
+    "Missing related-cover images remain visible placeholders; returned subject titles and relations were observed, not claimed as cover-download success"
+  ]
+}

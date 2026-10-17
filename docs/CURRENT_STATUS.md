@@ -1,10 +1,12 @@
 # Triomi 当前状态
 
-## 当前增量：R156 番剧布局修复
+## 当前增量：R156 番剧布局修复（已发布，完整平台验收partial）
 
 追番顶部三个标签改为单行横向滚动，保留系统无障碍字号；状态筛选增加可见边框和各状态数量语义。时间表只纳入公开放送星期为1–7的作品，不再将未知星期混入当日。关联作品采用响应式1/2/3列卡片，资料分区限宽950，保留真实在线请求、错误及独立重试。
 
 本轮完整Flutter套件1005项通过/3项跳过、89项Python通过；格式化后7项番剧定向回归及analyze零问题。Windows release真实窗口已观察七星期、完整封面、状态边框和四项关联三列卡片；API35系统200%字号单行与横向滚动实操通过，原字号1.0已恢复。三台原Android设备install-r且安装哈希逐台一致，未清数据。仅验证上述新增范围，不把R155的播放/阅读历史实证扩算成R156重新验收；外部Bangumi写入和WebDAV双设备仍需具体目标授权。
+
+源码已推送`8121830`，[test.156](https://github.com/HyperionHXH/triomi/releases/tag/v0.1.0-test.156)五项资产已完整下载且大小/SHA-256匹配本地与GitHub摘要。正式APK `8aabb9e3…`沿用原证书；Windows ZIP `2a44f999…`、MSI `72baf811…`，49成员与构建目录/更新清单一致。MSI实际安装退出0，安装文件与ZIP一致、安装后窗口已启动；本轮不重算历史升级/卸载数据哈希矩阵。源码及APK/ZIP凭据与私钥材料扫描零命中。四张实际画面及精确范围见[C156验收](delivery/evidence/C156-final-acceptance.json)，[完整下载校验](delivery/evidence/C156-download-verification.json)与[安全扫描](delivery/evidence/C156-secret-scan.json)；旧C155产物保留。
 
 ## 当前请求：R155 Kazumi / Komikku / MixN 使用流程重做（已发布，完整平台验收partial）
 

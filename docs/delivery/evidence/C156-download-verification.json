@@ -1,0 +1,41 @@
+{
+  "status": "passed",
+  "method": "GitHub release API redirect followed by bounded HTTP Range requests; credentials not forwarded to asset host",
+  "assets": [
+    {
+      "name": "SHA256SUMS.txt",
+      "bytes": 352,
+      "sha256": "10e9f50a963892509fbbba080dcd264f53bd92169f5cc22ca7deecb999c75acc",
+      "matchesLocal": true,
+      "matchesServerDigest": true
+    },
+    {
+      "name": "triomi-android.apk",
+      "bytes": 130487164,
+      "sha256": "8aabb9e392a8582b80e649dd34a5d28db815946e298e3d9bb8d335e0c2d63333",
+      "matchesLocal": true,
+      "matchesServerDigest": true
+    },
+    {
+      "name": "triomi-windows.msi",
+      "bytes": 30892032,
+      "sha256": "72baf811e34e0776d5681345af380211374a57d83f90b0e511c547c75828e5da",
+      "matchesLocal": true,
+      "matchesServerDigest": true
+    },
+    {
+      "name": "triomi-windows.update.json",
+      "bytes": 8164,
+      "sha256": "b2978dd75fc9d421e0bd42fee59e9c826111137725d6e8fb4464b12b8b03e63b",
+      "matchesLocal": true,
+      "matchesServerDigest": true
+    },
+    {
+      "name": "triomi-windows.zip",
+      "bytes": 37062223,
+      "sha256": "2a44f999da745327e17a5be783db248b391a4e0bed38ff171be6a34826605d04",
+      "matchesLocal": true,
+      "matchesServerDigest": true
+    }
+  ]
+}
