@@ -143,46 +143,49 @@ class _TrackingSyncPageState extends ConsumerState<TrackingSyncPage> {
             Text(
               '稳定主作品：${preview.item.title}\n${preview.item.sourceId} / ${preview.item.remoteId}\n远端条目 ${preview.binding.remoteTrackId}',
             ),
-            DataTable(
-              columns: const [
-                DataColumn(label: Text('字段')),
-                DataColumn(label: Text('本地')),
-                DataColumn(label: Text('远端')),
-              ],
-              rows: [
-                DataRow(
-                  cells: [
-                    const DataCell(Text('状态')),
-                    DataCell(
-                      Text(
-                        labels[preview.local.status] ?? preview.local.status,
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('字段')),
+                  DataColumn(label: Text('本地')),
+                  DataColumn(label: Text('远端')),
+                ],
+                rows: [
+                  DataRow(
+                    cells: [
+                      const DataCell(Text('状态')),
+                      DataCell(
+                        Text(
+                          labels[preview.local.status] ?? preview.local.status,
+                        ),
                       ),
-                    ),
-                    DataCell(
-                      Text(
-                        preview.remote.exists
-                            ? labels[preview.remote.status] ??
-                                  preview.remote.status
-                            : '未收藏',
+                      DataCell(
+                        Text(
+                          preview.remote.exists
+                              ? labels[preview.remote.status] ??
+                                    preview.remote.status
+                              : '未收藏',
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                DataRow(
-                  cells: [
-                    const DataCell(Text('评分')),
-                    DataCell(Text('${preview.local.score ?? 0}')),
-                    DataCell(Text('${preview.remote.score ?? 0}')),
-                  ],
-                ),
-                DataRow(
-                  cells: [
-                    const DataCell(Text('进度')),
-                    DataCell(Text('${preview.local.progress}')),
-                    DataCell(Text('${preview.remote.progress}')),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                  DataRow(
+                    cells: [
+                      const DataCell(Text('评分')),
+                      DataCell(Text('${preview.local.score ?? 0}')),
+                      DataCell(Text('${preview.remote.score ?? 0}')),
+                    ],
+                  ),
+                  DataRow(
+                    cells: [
+                      const DataCell(Text('进度')),
+                      DataCell(Text('${preview.local.progress}')),
+                      DataCell(Text('${preview.remote.progress}')),
+                    ],
+                  ),
+                ],
+              ),
             ),
             Text('进度合并采用较大值：${preview.forwardProgress}；不把远端章节映射成某站的页码或播放时间。'),
             DropdownButtonFormField<String>(

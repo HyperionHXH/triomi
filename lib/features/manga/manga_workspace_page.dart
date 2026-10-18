@@ -14,7 +14,6 @@ import '../../core/storage/preferences.dart';
 import '../discover/manga_feed_repository.dart';
 import '../library/library_page.dart';
 import '../library/manga_updates_page.dart';
-import '../library/migration_plans_page.dart';
 import '../search/search_page.dart';
 import '../sources/sources_page.dart';
 import 'manga_extension_details_page.dart';
@@ -63,22 +62,6 @@ class _MangaWorkspacePageState extends ConsumerState<MangaWorkspacePage>
     super.dispose();
   }
 
-  Future<void> _more(String value) async {
-    switch (value) {
-      case 'migration':
-        await Navigator.push(
-          context,
-          MaterialPageRoute<void>(builder: (_) => const MigrationPlansPage()),
-        );
-      case 'history':
-        if (mounted) await context.push(AppRoutes.historyFor(MediaType.manga));
-      case 'downloads':
-        if (mounted) {
-          await context.push(AppRoutes.downloadsFor(MediaType.manga));
-        }
-    }
-  }
-
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: _tab != 0 || _library.selectionCount == 0,
@@ -97,23 +80,20 @@ class _MangaWorkspacePageState extends ConsumerState<MangaWorkspacePage>
         actions: [
           if (_tab == 0)
             ..._library.actions
-          else ...[
+          else
             IconButton(
-              tooltip: _tab == 0 ? '搜索本地书库' : '搜索漫画',
+              tooltip: '搜索漫画',
               icon: const Icon(Icons.search),
               onPressed: () =>
                   unawaited(SearchPage.open(context, type: MediaType.manga)),
             ),
-            PopupMenuButton<String>(
-              tooltip: '漫画更多',
-              onSelected: (value) => unawaited(_more(value)),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'migration', child: Text('迁移管理')),
-                PopupMenuItem(value: 'history', child: Text('漫画阅读历史')),
-                PopupMenuItem(value: 'downloads', child: Text('漫画下载')),
-              ],
+          if (_library.selectionCount == 0)
+            IconButton(
+              tooltip: '漫画设置',
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () =>
+                  context.push(AppRoutes.workspaceSettingsFor(MediaType.manga)),
             ),
-          ],
         ],
         bottom: TabBar(
           controller: _tabs,

@@ -61,12 +61,10 @@ class CoverAppearance extends ThemeExtension<CoverAppearance> {
   };
 
   double get gap => density == CoverDensity.compact ? 8 : 12;
-  double get minimumCardWidth =>
-      density == CoverDensity.compact ? 140 : 184;
+  double get minimumCardWidth => density == CoverDensity.compact ? 140 : 184;
 
   static CoverAppearance of(BuildContext context) =>
-      Theme.of(context).extension<CoverAppearance>() ??
-      const CoverAppearance();
+      Theme.of(context).extension<CoverAppearance>() ?? const CoverAppearance();
 
   @override
   CoverAppearance copyWith({
@@ -86,8 +84,8 @@ class CoverAppearance extends ThemeExtension<CoverAppearance> {
 
 /// 全局设计令牌。
 ///
-/// 对齐 `PROJECT_SPEC.md` 第 6 章：视觉基准是 Komikku 的 GNOME / libadwaita 观感
-/// —— 大留白、圆角卡片、用背景色分层而非描边、柔和到几乎看不见的投影。
+/// 工作区采用各自的内容层级，共享留白、圆角与低对比度描边。
+/// 卡片轮廓与列表分隔线在浅色、深色主题中均需清晰可辨。
 ///
 /// 所有页面禁止硬编码颜色与间距，一律从这里取。
 abstract final class AppSpacing {

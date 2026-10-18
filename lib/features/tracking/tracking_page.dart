@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/db/app_database.dart';
+import '../../core/models/media_type.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
@@ -18,7 +19,9 @@ import 'tracking_sync_page.dart';
 /// 两个服务的凭据**彼此隔离**（与来源账号同一条红线），token 存设置存储、
 /// 不写日志、不随备份导出（备份的敏感键过滤已覆盖 `token`）。
 class TrackingPage extends ConsumerStatefulWidget {
-  const TrackingPage({super.key});
+  const TrackingPage({super.key, this.type});
+
+  final MediaType? type;
 
   @override
   ConsumerState<TrackingPage> createState() => _TrackingPageState();
@@ -59,10 +62,13 @@ class _TrackingPageState extends ConsumerState<TrackingPage> {
 
   @override
   Widget build(BuildContext context) {
-    final bindings = ref.watch(allTrackingBindingsProvider);
+    final type = widget.type;
+    final bindings = type == null
+        ? ref.watch(allTrackingBindingsProvider)
+        : ref.watch(trackingBindingsByTypeProvider(type));
 
     return PageScaffold(
-      title: '追踪账号',
+      title: type == null ? '追踪账号' : '${type.label}追踪账号',
       child: ListView(
         padding: const EdgeInsets.only(bottom: AppSpacing.xl),
         children: <Widget>[
@@ -73,8 +79,9 @@ class _TrackingPageState extends ConsumerState<TrackingPage> {
                 Text('进度上报', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  '绑定作品后，阅读/播放进度会自动上报到所选服务。'
-                  '远端进度比本地新时不会回退（只增不减）。',
+                  '${type == null ? '作品' : type.label}绑定后，进度会上报到所选服务。'
+                  '远端进度比本地新时不会回退。Bangumi / AniList 凭据由各媒体共用，'
+                  '下方只显示${type == null ? '全部' : type.label}作品的独立绑定。',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -188,13 +195,14 @@ class _TrackingPageState extends ConsumerState<TrackingPage> {
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
-          Row(
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
             children: <Widget>[
               FilledButton(
                 onPressed: _busy ? null : () => unawaited(_save(kind)),
                 child: const Text('保存并测试连接'),
               ),
-              const SizedBox(width: AppSpacing.sm),
               if (configured)
                 TextButton(
                   onPressed: _busy ? null : () => unawaited(_clear(kind)),

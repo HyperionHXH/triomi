@@ -28,6 +28,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory docsDir;
+  late AppDatabase db;
   final recordedWrites = <({String treeUri, String fileName, String mime})>[];
   Object? writeToTreeError;
   String? pickDirectoryResult;
@@ -52,6 +53,7 @@ void main() {
   }
 
   setUp(() {
+    db = AppDatabase.forTesting(NativeDatabase.memory());
     docsDir = Directory.systemTemp.createTempSync('triomi_d39_docs_');
     pickDirectoryResult = null;
     writeToTreeError = null;
@@ -85,6 +87,18 @@ void main() {
     }
   });
 
+  void exportTest(String name, WidgetTesterCallback body) {
+    testWidgets(name, (tester) async {
+      try {
+        await body(tester);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 1));
+        await tester.runAsync(db.close);
+      }
+    });
+  }
+
   const item = MediaItem(
     sourceId: 'd39-source',
     remoteId: '1',
@@ -96,9 +110,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(
-            AppDatabase.forTesting(NativeDatabase.memory()),
-          ),
+          databaseProvider.overrideWithValue(db),
           sourcesProvider.overrideWith(() => StubSources(snapshotOf())),
           sourceHttpClientProvider.overrideWithValue(
             FakeHttpClient(
@@ -136,7 +148,7 @@ void main() {
     }
   }
 
-  testWidgets('SAF 目录选择取消：回退私有目录，不调用 writeToTree', (tester) async {
+  exportTest('SAF 目录选择取消：回退私有目录，不调用 writeToTree', (tester) async {
     pickDirectoryResult = null; // 用户取消。
     await pumpDetail(tester);
     await runExport(tester, epub: true);
@@ -163,7 +175,7 @@ void main() {
     );
   });
 
-  testWidgets('EPUB 导出：writeToTree 收到 application/epub+zip', (tester) async {
+  exportTest('EPUB 导出：writeToTree 收到 application/epub+zip', (tester) async {
     pickDirectoryResult = 'content://tree/exports';
     await pumpDetail(tester);
     await runExport(tester, epub: true);
@@ -184,7 +196,7 @@ void main() {
     );
   });
 
-  testWidgets('TXT 导出：writeToTree 收到 text/plain', (tester) async {
+  exportTest('TXT 导出：writeToTree 收到 text/plain', (tester) async {
     pickDirectoryResult = 'content://tree/exports';
     await pumpDetail(tester);
     await runExport(tester, epub: false);
@@ -194,7 +206,7 @@ void main() {
     expect(recordedWrites.single.fileName, '导出小说.txt');
   });
 
-  testWidgets('授权目录写入失败：回退私有目录并在 snackbar 提示回退路径', (tester) async {
+  exportTest('授权目录写入失败：回退私有目录并在 snackbar 提示回退路径', (tester) async {
     pickDirectoryResult = 'content://broken/tree';
     writeToTreeError = PlatformException(
       code: 'create_failed',
@@ -239,6 +251,7 @@ SourceRegistrySnapshot snapshotOf() => SourceRegistrySnapshot(
         name: 'D39 夹具源',
         type: MediaType.novel,
         kind: SourceKind.builtin,
+        capabilities: {SourceCapability.detail, SourceCapability.content},
       ),
       source: _StubNovelSource(),
       enabled: true,
@@ -254,6 +267,7 @@ class _StubNovelSource implements DetailProvider, ContentProvider {
     name: 'D39 夹具源',
     type: MediaType.novel,
     kind: SourceKind.builtin,
+    capabilities: {SourceCapability.detail, SourceCapability.content},
   );
 
   @override

@@ -46,6 +46,8 @@ abstract final class AppRoutes {
   static const String profile = '/profile';
 
   static const String settings = '/settings';
+  static String workspaceSettingsFor(MediaType type) =>
+      '/${type.name}/settings';
   static const String sources = '/sources';
   static String searchFor(
     MediaType type, {
@@ -149,6 +151,12 @@ abstract final class AppRouter {
             parentNavigatorKey: _rootNavigatorKey,
             builder: (context, state) => const SettingsPage(),
           ),
+          for (final type in MediaType.values)
+            GoRoute(
+              path: AppRoutes.workspaceSettingsFor(type),
+              parentNavigatorKey: _rootNavigatorKey,
+              builder: (context, state) => WorkspaceSettingsPage(type: type),
+            ),
           GoRoute(
             path: AppRoutes.sources,
             parentNavigatorKey: _rootNavigatorKey,
@@ -266,7 +274,9 @@ abstract final class AppRouter {
           GoRoute(
             path: AppRoutes.tracking,
             parentNavigatorKey: _rootNavigatorKey,
-            builder: (context, state) => const TrackingPage(),
+            builder: (context, state) => TrackingPage(
+              type: MediaType.tryParse(state.uri.queryParameters['type']),
+            ),
           ),
           GoRoute(
             path: AppRoutes.downloads,
@@ -283,7 +293,9 @@ abstract final class AppRouter {
           GoRoute(
             path: AppRoutes.webdav,
             parentNavigatorKey: _rootNavigatorKey,
-            builder: (context, state) => const WebDavSyncPage(),
+            builder: (context, state) => WebDavSyncPage(
+              animeCollectionOnly: state.uri.queryParameters['type'] == 'anime',
+            ),
           ),
           GoRoute(
             path: AppRoutes.danmakuSettings,

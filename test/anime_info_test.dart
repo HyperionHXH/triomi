@@ -26,8 +26,16 @@ import 'fixtures/test_database.dart';
 void main() {
   testWidgets('资料等待与失败不阻塞缓存首屏或播放来源选择', (tester) async {
     final db = openTestDatabase();
-    addTearDown(db.close);
     final pending = Completer<SourceResponse>();
+    addTearDown(() async {
+      if (!pending.isCompleted) {
+        pending.completeError(StateError('metadata request closed'));
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.runAsync(db.close);
+      await tester.pump(const Duration(milliseconds: 1));
+    });
     const item = MediaItem(
       sourceId: 'bangumi-anime',
       remoteId: '400602',
@@ -57,6 +65,16 @@ void main() {
     expect(http.requests, hasLength(1));
     pending.completeError(StateError('metadata unavailable'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text(item.description!),
+      150,
+      scrollable: find
+          .descendant(
+            of: find.byType(DetailPage),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     expect(find.text(item.description!), findsOneWidget);
     expect(find.text('选择来源'), findsOneWidget);
     expect(find.text('重试资料'), findsOneWidget);
@@ -72,10 +90,12 @@ void main() {
     final db = openTestDatabase();
     addTearDown(db.close);
     var title = '已保存的资料';
-    final http = FakeHttpClient((_) async => SourceResponse(
-      statusCode: 200,
-      body: jsonEncode({'id': 400602, 'type': 2, 'name_cn': title}),
-    ));
+    final http = FakeHttpClient(
+      (_) async => SourceResponse(
+        statusCode: 200,
+        body: jsonEncode({'id': 400602, 'type': 2, 'name_cn': title}),
+      ),
+    );
     final first = AnimeInfoRepository(BangumiPublicClient(http), db);
     await first.section('400602', 'info');
     final reopened = AnimeInfoRepository(BangumiPublicClient(http), db);
@@ -127,10 +147,12 @@ void main() {
     await started.future;
     final rejected = expectLater(refreshing, throwsA(isA<SourceException>()));
     owner.cancel();
-    pending.complete(const SourceResponse(
-      statusCode: 200,
-      body: '{"id":400602,"type":2,"name_cn":"取消后的旧资料"}',
-    ));
+    pending.complete(
+      const SourceResponse(
+        statusCode: 200,
+        body: '{"id":400602,"type":2,"name_cn":"取消后的旧资料"}',
+      ),
+    );
     await rejected;
     final cached = await repo.section('400602', 'info');
     expect(cached.rows.single['name_cn'], '可用资料');
@@ -213,8 +235,11 @@ void main() {
     online = false;
     final actors = await repo.section('season1', 'characters', refresh: true);
     expect(actors.cached, true);
-    expect(actors.refreshError, isA<SourceException>(),
-        reason: '缓存可展示，但不能把在线失败宣称为刷新成功');
+    expect(
+      actors.refreshError,
+      isA<SourceException>(),
+      reason: '缓存可展示，但不能把在线失败宣称为刷新成功',
+    );
     expect((actors.rows.single['actors'] as List).single['name'], '声优');
     final relation = (await repo.section('season1', 'subjects')).rows.single;
     expect(bangumiItem(relation).remoteId, '2');
@@ -267,11 +292,13 @@ void main() {
         body: '{"total":1,"data":[{"id":2,"type":2,"name_cn":"新作品"}]}',
       );
     });
-    final container = ProviderContainer(overrides: [
-      sourceHttpClientProvider.overrideWithValue(http),
-      databaseProvider.overrideWithValue(db),
-      preferencesProvider.overrideWithValue(memoryPreferences()),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        sourceHttpClientProvider.overrideWithValue(http),
+        databaseProvider.overrideWithValue(db),
+        preferencesProvider.overrideWithValue(memoryPreferences()),
+      ],
+    );
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,

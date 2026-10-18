@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/db/database_provider.dart';
 import '../../core/models/media_type.dart';
 import '../../core/platform/platform_channel.dart';
-import '../../core/router/app_router.dart';
 import '../../core/source/http_client.dart';
 import '../../core/source/js/js_source.dart';
 import '../../core/source/kazumi_source.dart';
@@ -74,10 +72,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
 
   void _selectType(MediaType value) {
     if (_type == value) return;
-    if (widget.initialType != null && widget.initialType != value) {
-      context.pushReplacement('${AppRoutes.sources}?type=${value.name}');
-      return;
-    }
+    if (widget.initialType != null && widget.initialType != value) return;
     final preferences = ref.read(preferencesProvider);
     setState(() {
       _type = value;
@@ -98,7 +93,11 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
       await ref.read(sourcesProvider.notifier).refresh();
       if (!mounted) return;
       _selectType(descriptor.type);
-      _toast('已导入「${descriptor.name}」');
+      _toast(
+        widget.initialType != null && descriptor.type != widget.initialType
+            ? '已导入「${descriptor.name}」；请在${descriptor.type.label}设置中管理'
+            : '已导入「${descriptor.name}」',
+      );
     } on RuleFormatException catch (error) {
       if (!mounted) return;
       _toast('规则有问题：${error.message}');
@@ -188,16 +187,15 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
             ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(switch (_type) {
-                    MediaType.anime => '规则仓库 → 安装播放源 → 选择线路观看',
-                    MediaType.manga => '扩展仓库 → 安装扩展 → 启用来源阅读',
-                    MediaType.novel => '选择小说站点 → 管理账号 → 阅读与缓存',
-                  }, style: Theme.of(context).textTheme.bodySmall),
-                ),
-                const SizedBox(width: 12),
+                Text(switch (_type) {
+                  MediaType.anime => '规则仓库 → 安装播放源 → 选择线路观看',
+                  MediaType.manga => '扩展仓库 → 安装扩展 → 启用来源阅读',
+                  MediaType.novel => '选择小说站点 → 管理账号 → 阅读与缓存',
+                }, style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: AppSpacing.xs),
                 FilledButton.icon(
                   onPressed: _busy ? null : _showAddSources,
                   icon: const Icon(Icons.add),
@@ -824,68 +822,118 @@ class _SourceTile extends StatelessWidget {
     final theme = Theme.of(context);
     final palette = context.palette;
 
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: AppSpacing.xxs,
-      ),
-      leading: CircleAvatar(
-        backgroundColor: palette.coverPlaceholder,
-        child: Text(
-          descriptor.type.label.characters.first,
-          style: theme.textTheme.bodySmall,
-        ),
-      ),
-      title: Text(descriptor.name),
-      subtitle: Text(
-        <String>[
-          entry.enabled ? '已启用' : '已停用',
-          descriptor.kind.label,
-          sourceLanguageLabel(sourceLanguage(descriptor.lang)),
-          sourceContentLabel(descriptor.nsfw),
-          if (descriptor.version != null) 'v${descriptor.version}',
-          if (entry.source case final AccountProvider account)
-            account.isLoggedIn ? '已登录' : '未登录',
-          if (descriptor.requireLogin) '需站点权限',
-        ].join('  ·  '),
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          if (onAccount != null)
-            IconButton(
-              tooltip: '管理来源账号',
-              onPressed: onAccount,
-              icon: const Icon(Icons.person_outline, size: 20),
-            ),
-          Semantics(
-            label: '启用来源 ${descriptor.name}',
-            child: Switch(value: entry.enabled, onChanged: onToggle),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.sm,
           ),
-          PopupMenuButton<String>(
-            tooltip: '${descriptor.name}更多操作',
-            onSelected: (value) {
-              switch (value) {
-                case 'session':
-                  onWebSession?.call();
-                case 'settings':
-                  onSettings?.call();
-                case 'remove':
-                  onDelete();
-              }
-            },
-            itemBuilder: (_) => [
-              if (onSettings != null)
-                const PopupMenuItem(value: 'settings', child: Text('来源设置')),
-              if (onWebSession != null)
-                const PopupMenuItem(value: 'session', child: Text('打开站点与验证')),
-              const PopupMenuItem(value: 'remove', child: Text('移除来源')),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    backgroundColor: palette.coverPlaceholder,
+                    child: Text(
+                      descriptor.type.label.characters.first,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          descriptor.name,
+                          style: theme.textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: AppSpacing.xxs),
+                        Text(
+                          <String>[
+                            entry.enabled ? '已启用' : '已停用',
+                            descriptor.kind.label,
+                            sourceLanguageLabel(
+                              sourceLanguage(descriptor.lang),
+                            ),
+                            sourceContentLabel(descriptor.nsfw),
+                            if (descriptor.version != null)
+                              'v${descriptor.version}',
+                            if (entry.source case final AccountProvider account)
+                              account.isLoggedIn ? '已登录' : '未登录',
+                            if (descriptor.requireLogin) '需站点权限',
+                          ].join(' · '),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: palette.mutedForeground,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Wrap(
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xxs,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('启用', style: theme.textTheme.bodySmall),
+                      Semantics(
+                        label: '启用来源 ${descriptor.name}',
+                        child: Switch(
+                          value: entry.enabled,
+                          onChanged: onToggle,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (onAccount != null)
+                    TextButton.icon(
+                      onPressed: onAccount,
+                      icon: const Icon(Icons.person_outline, size: 20),
+                      label: const Text('站点账号'),
+                    ),
+                  PopupMenuButton<String>(
+                    tooltip: '${descriptor.name}更多操作',
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'session':
+                          onWebSession?.call();
+                        case 'settings':
+                          onSettings?.call();
+                        case 'remove':
+                          onDelete();
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      if (onSettings != null)
+                        const PopupMenuItem(
+                          value: 'settings',
+                          child: Text('来源设置'),
+                        ),
+                      if (onWebSession != null)
+                        const PopupMenuItem(
+                          value: 'session',
+                          child: Text('打开站点与验证'),
+                        ),
+                      const PopupMenuItem(value: 'remove', child: Text('移除来源')),
+                    ],
+                  ),
+                ],
+              ),
             ],
           ),
-        ],
-      ),
+        ),
+        const Divider(indent: AppSpacing.lg, endIndent: AppSpacing.lg),
+      ],
     );
   }
 }

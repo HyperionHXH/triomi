@@ -45,23 +45,16 @@ class _AnimeWorkspacePageState extends ConsumerState<AnimeWorkspacePage> {
         icon: const Icon(Icons.search),
         onPressed: () => context.push(AppRoutes.searchFor(MediaType.anime)),
       ),
-      PopupMenuButton<String>(
-        tooltip: '更多',
-        onSelected: (value) => context.push(value),
-        itemBuilder: (_) => [
-          PopupMenuItem(
-            value: '${AppRoutes.sources}?type=anime',
-            child: const Text('管理番剧来源'),
-          ),
-          PopupMenuItem(
-            value: AppRoutes.historyFor(MediaType.anime),
-            child: const Text('观看历史'),
-          ),
-          PopupMenuItem(
-            value: AppRoutes.downloadsFor(MediaType.anime),
-            child: const Text('番剧下载'),
-          ),
-        ],
+      IconButton(
+        tooltip: '观看历史',
+        icon: const Icon(Icons.history),
+        onPressed: () => context.push(AppRoutes.historyFor(MediaType.anime)),
+      ),
+      IconButton(
+        tooltip: '追番设置',
+        icon: const Icon(Icons.settings_outlined),
+        onPressed: () =>
+            context.push(AppRoutes.workspaceSettingsFor(MediaType.anime)),
       ),
     ],
     child: Column(
@@ -73,15 +66,23 @@ class _AnimeWorkspacePageState extends ConsumerState<AnimeWorkspacePage> {
             child: SegmentedButton<int>(
               showSelectedIcon: false,
               style: ButtonStyle(
-                backgroundColor: WidgetStateProperty.resolveWith((states) =>
-                  states.contains(WidgetState.selected)
-                    ? Theme.of(context).colorScheme.primaryContainer : null),
-                foregroundColor: WidgetStateProperty.resolveWith((states) =>
-                  states.contains(WidgetState.selected)
-                    ? Theme.of(context).colorScheme.onPrimaryContainer : null),
-                textStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
-                  fontWeight: states.contains(WidgetState.selected)
-                    ? FontWeight.bold : FontWeight.normal)),
+                backgroundColor: WidgetStateProperty.resolveWith(
+                  (states) => states.contains(WidgetState.selected)
+                      ? Theme.of(context).colorScheme.primaryContainer
+                      : null,
+                ),
+                foregroundColor: WidgetStateProperty.resolveWith(
+                  (states) => states.contains(WidgetState.selected)
+                      ? Theme.of(context).colorScheme.onPrimaryContainer
+                      : null,
+                ),
+                textStyle: WidgetStateProperty.resolveWith(
+                  (states) => TextStyle(
+                    fontWeight: states.contains(WidgetState.selected)
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
+                ),
               ),
               segments: const [
                 ButtonSegment(

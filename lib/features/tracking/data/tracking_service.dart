@@ -113,12 +113,17 @@ class TrackingService {
 
   Future<List<TrackCandidate>> search(
     TrackingServiceKind kind,
-    String keyword,
-  ) {
+    String keyword, {
+    required MediaType type,
+  }) {
     final token = tokenOf(kind);
     return switch (kind) {
-      TrackingServiceKind.bangumi => _bangumi.search(keyword, token: token),
-      TrackingServiceKind.anilist => _anilist.search(keyword),
+      TrackingServiceKind.bangumi => _bangumi.search(
+        keyword,
+        type: type,
+        token: token,
+      ),
+      TrackingServiceKind.anilist => _anilist.search(keyword, type: type),
     };
   }
 

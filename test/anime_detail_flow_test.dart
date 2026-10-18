@@ -26,31 +26,65 @@ import 'fixtures/fake_http_client.dart';
 import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
 
-const subject = MediaItem(sourceId: 'bangumi-anime', remoteId: '42',
-  type: MediaType.anime, title: '原始作品', description: '作品简介');
+const subject = MediaItem(
+  sourceId: 'bangumi-anime',
+  remoteId: '42',
+  type: MediaType.anime,
+  title: '原始作品',
+  description: '作品简介',
+);
 
 class _Site implements SearchProvider, DetailProvider, ContentProvider {
   @override
   SourceDescriptor get descriptor => const SourceDescriptor(
-    id: 'playable-site', name: '播放站', type: MediaType.anime,
+    id: 'playable-site',
+    name: '播放站',
+    type: MediaType.anime,
     kind: SourceKind.plugin,
-    capabilities: {SourceCapability.search, SourceCapability.detail, SourceCapability.content});
+    capabilities: {
+      SourceCapability.search,
+      SourceCapability.detail,
+      SourceCapability.content,
+    },
+  );
   @override
   bool get isReady => true;
-  final item = const MediaItem(sourceId: 'playable-site', remoteId: 'site-work',
-    type: MediaType.anime, title: '本站作品');
+  final item = const MediaItem(
+    sourceId: 'playable-site',
+    remoteId: 'site-work',
+    type: MediaType.anime,
+    title: '本站作品',
+  );
   @override
-  Future<List<MediaItem>> search(String keyword, {int page = 1}) async => [item];
+  Future<List<MediaItem>> search(String keyword, {int page = 1}) async => [
+    item,
+  ];
   @override
   Future<MediaItem> detail(MediaItem item) async => item;
   @override
   Future<List<Chapter>> chapters(MediaItem item) async => const [
-    Chapter(sourceId: 'playable-site', remoteId: 'one', title: '第一集', volumeTitle: '主线路'),
-    Chapter(sourceId: 'playable-site', remoteId: 'two', title: '第二集', volumeTitle: '主线路'),
-    Chapter(sourceId: 'playable-site', remoteId: 'other', title: '备用第一集', volumeTitle: '备用线路'),
+    Chapter(
+      sourceId: 'playable-site',
+      remoteId: 'one',
+      title: '第一集',
+      volumeTitle: '主线路',
+    ),
+    Chapter(
+      sourceId: 'playable-site',
+      remoteId: 'two',
+      title: '第二集',
+      volumeTitle: '主线路',
+    ),
+    Chapter(
+      sourceId: 'playable-site',
+      remoteId: 'other',
+      title: '备用第一集',
+      volumeTitle: '备用线路',
+    ),
   ];
   @override
-  Future<ChapterContent> content(Chapter chapter) => throw StateError('must only resolve after selecting a player episode');
+  Future<ChapterContent> content(Chapter chapter) =>
+      throw StateError('must only resolve after selecting a player episode');
 }
 
 class _Sources extends SourceRegistryController {
@@ -58,7 +92,9 @@ class _Sources extends SourceRegistryController {
   final _Site site;
   @override
   Future<SourceRegistrySnapshot> build() async => SourceRegistrySnapshot(
-    entries: [SourceEntry(descriptor: site.descriptor, source: site, enabled: true)],
+    entries: [
+      SourceEntry(descriptor: site.descriptor, source: site, enabled: true),
+    ],
     failures: const [],
   );
 }
@@ -68,30 +104,53 @@ void main() {
     final db = openTestDatabase();
     final site = _Site();
     PlayerArgs? opened;
-    final http = FakeHttpClient((request) async => SourceResponse(statusCode: 200,
-      body: jsonEncode({'id': 42, 'type': 2, 'name_cn': '原始作品', 'summary': '作品简介'})));
-    final router = GoRouter(routes: [
-      GoRoute(path: '/', builder: (_, _) => const DetailPage(item: subject)),
-      GoRoute(path: AppRoutes.player, builder: (_, state) {
-        opened = state.extra! as PlayerArgs;
-        return const Scaffold(body: Text('消费选定剧集'));
-      }),
-    ]);
-    final container = ProviderContainer(overrides: [
-      databaseProvider.overrideWithValue(db),
-      preferencesProvider.overrideWithValue(memoryPreferences()),
-      secureStoreProvider.overrideWithValue(MemorySecureStore()),
-      sourceHttpClientProvider.overrideWithValue(http),
-      sourcesProvider.overrideWith(() => _Sources(site)),
-    ]);
+    final http = FakeHttpClient(
+      (request) async => SourceResponse(
+        statusCode: 200,
+        body: jsonEncode({
+          'id': 42,
+          'type': 2,
+          'name_cn': '原始作品',
+          'summary': '作品简介',
+        }),
+      ),
+    );
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => const DetailPage(item: subject),
+        ),
+        GoRoute(
+          path: AppRoutes.player,
+          builder: (_, state) {
+            opened = state.extra! as PlayerArgs;
+            return const Scaffold(body: Text('消费选定剧集'));
+          },
+        ),
+      ],
+    );
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        preferencesProvider.overrideWithValue(memoryPreferences()),
+        secureStoreProvider.overrideWithValue(MemorySecureStore()),
+        sourceHttpClientProvider.overrideWithValue(http),
+        sourcesProvider.overrideWith(() => _Sources(site)),
+      ],
+    );
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox());
       router.dispose();
       container.dispose();
       await db.close();
     });
-    await tester.pumpWidget(UncontrolledProviderScope(container: container,
-      child: MaterialApp.router(routerConfig: router)));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('开始 / 继续观看'));
     await tester.pumpAndSettle();
@@ -103,7 +162,10 @@ void main() {
     expect(opened!.item.sourceId, 'playable-site');
     expect(opened!.item.remoteId, 'site-work');
     expect(opened!.chapters[opened!.initialIndex].remoteId, 'two');
-    expect((await AnimeIdentityRepository(db).subjectFor(site.item))!.remoteId, '42');
+    expect(
+      (await AnimeIdentityRepository(db).subjectFor(site.item))!.remoteId,
+      '42',
+    );
     expect(find.text('消费选定剧集'), findsOneWidget);
   });
 
@@ -114,41 +176,77 @@ void main() {
     final http = FakeHttpClient((request) async {
       final path = Uri.parse(request.url).path;
       if (path.endsWith('/comments')) {
-        if (++commentAttempts == 1) return const SourceResponse(statusCode: 429, body: '{}');
-        return const SourceResponse(statusCode: 200, body: '{"total":1,"list":[{"user":{"nickname":"真实用户"},"comment":"公开吐槽内容","rate":8,"updatedAt":1700000000}]}');
+        if (++commentAttempts == 1) {
+          return const SourceResponse(statusCode: 429, body: '{}');
+        }
+        return const SourceResponse(
+          statusCode: 200,
+          body: '{"total":1,"list":[{"user":{"nickname":"真实用户"},"comment":"公开吐槽内容","rate":8,"updatedAt":1700000000}]}',
+        );
       }
       if (path.endsWith('/characters')) {
-        return const SourceResponse(statusCode: 200, body: '[{"id":7,"name":"角色甲","relation":"主角","actors":[{"name":"声优甲"}]}]');
+        return const SourceResponse(
+          statusCode: 200,
+          body: '[{"id":7,"name":"角色甲","relation":"主角","actors":[{"name":"声优甲"}]}]',
+        );
       }
       if (path.endsWith('/characters/7')) {
-        return const SourceResponse(statusCode: 200, body: '{"id":7,"name":"角色甲","summary":"在线角色简介","infobox":[{"key":"生日","value":"1月1日"}]}');
+        return const SourceResponse(
+          statusCode: 200,
+          body: '{"id":7,"name":"角色甲","summary":"在线角色简介","infobox":[{"key":"生日","value":"1月1日"}]}',
+        );
       }
       if (path.endsWith('/episodes')) {
-        return const SourceResponse(statusCode: 200, body: '{"data":[{"id":1,"sort":1,"name_cn":"首集资料","desc":"只读分集简介"}],"total":1}');
+        return const SourceResponse(
+          statusCode: 200,
+          body: '{"data":[{"id":1,"sort":1,"name_cn":"首集资料","desc":"只读分集简介"}],"total":1}',
+        );
       }
-      if (path.endsWith('/persons')) return const SourceResponse(statusCode: 403, body: '{}');
-      return const SourceResponse(statusCode: 200, body: '[{"id":43,"type":2,"name_cn":"续篇","relation":"续集"}]');
+      if (path.endsWith('/persons')) {
+        return const SourceResponse(statusCode: 403, body: '{}');
+      }
+      return const SourceResponse(
+        statusCode: 200,
+        body: '[{"id":43,"type":2,"name_cn":"续篇","relation":"续集"},{"id":44,"type":1,"name_cn":"同名原作漫画","relation":"原作"},{"id":45,"type":4,"name_cn":"同名游戏","relation":"改编"}]',
+      );
     });
-    final router = GoRouter(routes: [
-      GoRoute(path: '/', builder: (_, _) => const Scaffold(body: SingleChildScrollView(
-        child: AnimeInfoSheet(id: '42', item: subject, embedded: true)))),
-      GoRoute(path: '/anime/detail', builder: (_, state) {
-        related = state.extra! as MediaItem;
-        return const Scaffold(body: Text('关联资料目的地'));
-      }),
-    ]);
-    final container = ProviderContainer(overrides: [
-      databaseProvider.overrideWithValue(db),
-      sourceHttpClientProvider.overrideWithValue(http),
-    ]);
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => const Scaffold(
+            body: SingleChildScrollView(
+              child: AnimeInfoSheet(id: '42', item: subject, embedded: true),
+            ),
+          ),
+        ),
+        GoRoute(
+          path: '/anime/detail',
+          builder: (_, state) {
+            related = state.extra! as MediaItem;
+            return const Scaffold(body: Text('关联资料目的地'));
+          },
+        ),
+      ],
+    );
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        sourceHttpClientProvider.overrideWithValue(http),
+      ],
+    );
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox());
       router.dispose();
       container.dispose();
       await db.close();
     });
-    await tester.pumpWidget(UncontrolledProviderScope(container: container,
-      child: MaterialApp.router(routerConfig: router)));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
     await tester.tap(find.text('查看分集资料'));
     await tester.pumpAndSettle();
     expect(find.textContaining('只读分集简介'), findsOneWidget);
@@ -177,6 +275,15 @@ void main() {
     expect(commentAttempts, 2);
     await tester.tap(find.text('关联'));
     await tester.pumpAndSettle();
+    for (final title in ['同名原作漫画', '同名游戏']) {
+      final target = find.text(title);
+      await tester.ensureVisible(target);
+      await tester.tap(target);
+      await tester.pumpAndSettle();
+      expect(related, isNull);
+      expect(router.routeInformationProvider.value.uri.path, '/');
+    }
+    await tester.ensureVisible(find.text('续篇'));
     await tester.tap(find.text('续篇'));
     await tester.pumpAndSettle();
     expect(related!.remoteId, '43');
@@ -185,27 +292,45 @@ void main() {
   });
   testWidgets('番剧标签进入公开在线筛选而不写入标题关键词', (tester) async {
     final db = openTestDatabase();
-    final container = ProviderContainer(overrides: [
-      databaseProvider.overrideWithValue(db),
-      preferencesProvider.overrideWithValue(memoryPreferences()),
-      sourcesProvider.overrideWith(() => _Sources(_Site())),
-    ]);
-    final router = GoRouter(routes: [
-      GoRoute(path: '/', builder: (_, _) => const Scaffold(body: AnimeInfoSheet(
-        id: '42', item: MediaItem(sourceId: 'bangumi-anime', remoteId: '42',
-          title: '作品名不是查询', type: MediaType.anime, tags: ['科幻']), embedded: true,
-      ))),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        preferencesProvider.overrideWithValue(memoryPreferences()),
+        sourcesProvider.overrideWith(() => _Sources(_Site())),
+      ],
+    );
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => const Scaffold(
+            body: AnimeInfoSheet(
+              id: '42',
+              item: MediaItem(
+                sourceId: 'bangumi-anime',
+                remoteId: '42',
+                title: '作品名不是查询',
+                type: MediaType.anime,
+                tags: ['科幻'],
+              ),
+              embedded: true,
+            ),
+          ),
+        ),
+      ],
+    );
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox.shrink());
       router.dispose();
       container.dispose();
       await db.close();
     });
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp.router(routerConfig: router),
-    ));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
     await tester.tap(find.widgetWithText(ActionChip, '科幻'));
     await tester.pumpAndSettle();
     final search = tester.widget<SearchPage>(find.byType(SearchPage));

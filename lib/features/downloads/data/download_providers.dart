@@ -153,7 +153,7 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
     }
   }
 
-  /// 把一本书的未锁定章节加入队列（已完成的自动跳过）。
+  /// 把当前作品来源的未锁定章节加入队列（已完成的自动跳过）。
   ///
   /// 入队前先把作品快照与目录写库：下载正文要用目录里的 url，
   /// 下载列表也要靠这两张表显示标题（否则只能显示 remoteId）。
@@ -172,7 +172,11 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
 
     var added = 0;
     for (final chapter in chapters) {
-      if (chapter.locked) continue;
+      if (chapter.locked ||
+          chapter.sourceId != item.sourceId ||
+          chapter.remoteId.trim().isEmpty) {
+        continue;
+      }
       if (selectedChapterIds != null &&
           !selectedChapterIds.contains(chapter.remoteId)) {
         continue;

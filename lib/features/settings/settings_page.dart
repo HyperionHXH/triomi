@@ -3,11 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../../core/models/media_type.dart';
 import '../../core/router/app_router.dart';
 import '../../core/source/network_proxy.dart';
+import '../../core/source/source_providers.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../library/library_categories_page.dart';
+import '../library/migration_plans_page.dart';
+import '../local/local_comic_library_page.dart';
+import '../manga/manga_extensions_page.dart';
+import '../novel/novel_workspace_page.dart';
 import 'app_update_page.dart';
 import 'cache_management_page.dart';
 import 'cover_appearance_settings_page.dart';
@@ -19,51 +26,13 @@ class SettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return PageScaffold(
-      title: '设置',
+      title: '通用设置',
       child: ListView(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.lg,
           vertical: AppSpacing.sm,
         ),
         children: <Widget>[
-          SettingsGroup(
-            title: '账号',
-            children: <Widget>[
-              ListTile(
-                leading: const Icon(Icons.account_circle_outlined),
-                title: const Text('轻之国度账号'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.lkAccount),
-              ),
-              ListTile(
-                leading: const Icon(Icons.account_circle_outlined),
-                title: const Text('轻书架账号'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.lnsAccount),
-              ),
-              ListTile(
-                leading: const Icon(Icons.account_circle_outlined),
-                title: const Text('其他来源账号'),
-                subtitle: const Text('在对应来源管理登录，不共享凭据'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.sources),
-              ),
-              ListTile(
-                leading: const Icon(Icons.sync_outlined),
-                title: const Text('追踪账号'),
-                subtitle: const Text('Bangumi / AniList'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.tracking),
-              ),
-              ListTile(
-                leading: const Icon(Icons.cloud_outlined),
-                title: const Text('云同步账号'),
-                subtitle: const Text('WebDAV 连接与同步'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.webdav),
-              ),
-            ],
-          ),
           SettingsGroup(
             title: '界面',
             children: <Widget>[
@@ -82,7 +51,7 @@ class SettingsPage extends ConsumerWidget {
             ],
           ),
           SettingsGroup(
-            title: '内容与来源',
+            title: '网络与存储',
             children: <Widget>[
               ListTile(
                 leading: const Icon(Icons.wifi_outlined),
@@ -95,16 +64,9 @@ class SettingsPage extends ConsumerWidget {
                 onTap: () => _editProxy(context, ref),
               ),
               ListTile(
-                leading: const Icon(Icons.extension_outlined),
-                title: const Text('规则与扩展源'),
-                subtitle: const Text('来源语言与内容筛选、规则仓库和扩展管理'),
-                trailing: const Icon(Icons.chevron_right, size: 20),
-                onTap: () => context.push(AppRoutes.sources),
-              ),
-              ListTile(
                 leading: const Icon(Icons.download_outlined),
-                title: const Text('下载设置'),
-                subtitle: const Text('下载队列、暂停与恢复'),
+                title: const Text('下载管理'),
+                subtitle: const Text('全部下载队列、暂停与恢复'),
                 trailing: const Icon(Icons.chevron_right, size: 20),
                 onTap: () => context.push(AppRoutes.downloads),
               ),
@@ -213,5 +175,218 @@ class SettingsPage extends ConsumerWidget {
       await Future<void>.delayed(const Duration(milliseconds: 300));
       text.dispose();
     }
+  }
+}
+
+/// Each hub exposes only its own media's accounts and existing controls.
+class WorkspaceSettingsPage extends ConsumerWidget {
+  const WorkspaceSettingsPage({super.key, required this.type});
+
+  final MediaType type;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    Widget route(
+      IconData icon,
+      String title,
+      String path, {
+      String? subtitle,
+    }) => ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => context.push(path),
+    );
+    Widget page(
+      IconData icon,
+      String title,
+      Widget destination, {
+      bool refreshSources = false,
+    }) => ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () async {
+        await Navigator.of(context)
+            .push(MaterialPageRoute<void>(builder: (_) => destination));
+        if (!context.mounted || !refreshSources) return;
+        ref.invalidate(sourceRegistryProvider);
+        await ref.read(sourcesProvider.notifier).refresh();
+      },
+    );
+
+    return PageScaffold(
+      title: '${type == MediaType.anime ? '追番' : type.label}设置',
+      child: ListView(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.sm,
+        ),
+        children: [
+          if (type == MediaType.anime) ...[
+            SettingsGroup(
+              title: '账号与收藏同步',
+              children: [
+                route(
+                  Icons.sync_outlined,
+                  '追番追踪账号',
+                  '${AppRoutes.tracking}?type=anime',
+                  subtitle: 'Bangumi / AniList · 仅显示番剧绑定，服务凭据共用',
+                ),
+                route(
+                  Icons.cloud_sync_outlined,
+                  'WebDAV 追番收藏',
+                  '${AppRoutes.webdav}?type=anime',
+                  subtitle: '仅合并本地追番收藏；不上传全应用备份',
+                ),
+              ],
+            ),
+            SettingsGroup(
+              title: '来源与播放',
+              children: [
+                route(
+                  Icons.extension_outlined,
+                  '番剧规则与来源',
+                  '${AppRoutes.sources}?type=anime',
+                ),
+                route(
+                  Icons.speaker_notes_outlined,
+                  '弹幕设置',
+                  AppRoutes.danmakuSettings,
+                  subtitle: '显示、屏蔽词与弹弹play；播放选项在播放器内调整',
+                ),
+              ],
+            ),
+          ],
+          if (type == MediaType.manga) ...[
+            SettingsGroup(
+              title: '扩展与来源',
+              children: [
+                page(
+                  Icons.extension_outlined,
+                  '漫画扩展',
+                  const MangaExtensionsPage(),
+                  refreshSources: true,
+                ),
+                route(
+                  Icons.language_outlined,
+                  '漫画规则与来源',
+                  '${AppRoutes.sources}?type=manga',
+                  subtitle: '来源登录与偏好在各漫画来源中管理',
+                ),
+                route(
+                  Icons.sync_outlined,
+                  '漫画追踪账号',
+                  '${AppRoutes.tracking}?type=manga',
+                  subtitle: 'Bangumi / AniList · 仅显示漫画绑定，服务凭据共用',
+                ),
+              ],
+            ),
+            SettingsGroup(
+              title: '书库与阅读',
+              children: [
+                page(
+                  Icons.folder_open_outlined,
+                  '本地漫画库',
+                  const LocalComicLibraryPage(),
+                ),
+                page(
+                  Icons.label_outline,
+                  '漫画本地分类',
+                  const LibraryCategoriesPage(type: MediaType.manga),
+                ),
+                page(Icons.swap_horiz, '迁移管理', const MigrationPlansPage()),
+                const ListTile(
+                  leading: Icon(Icons.chrome_reader_mode_outlined),
+                  title: Text('阅读器选项'),
+                  subtitle: Text('打开漫画阅读器，在设置中调整翻页、方向与显示；支持按作品保存'),
+                ),
+              ],
+            ),
+          ],
+          if (type == MediaType.novel) ...[
+            SettingsGroup(
+              title: '轻之国度',
+              children: [
+                route(
+                  Icons.account_circle_outlined,
+                  '账号与签到',
+                  AppRoutes.lkAccount,
+                  subtitle: '轻之国度独立登录、轻币与关注',
+                ),
+                route(
+                  Icons.mark_email_unread_outlined,
+                  '消息中心',
+                  AppRoutes.lkMessages,
+                  subtitle: '轻之国度回复、点赞与私信',
+                ),
+              ],
+            ),
+            SettingsGroup(
+              title: '轻书架',
+              children: [
+                route(
+                  Icons.account_circle_outlined,
+                  '账号与签到',
+                  AppRoutes.lnsAccount,
+                  subtitle: '轻书架独立登录、轻币与连续签到',
+                ),
+              ],
+            ),
+            SettingsGroup(
+              title: '书架与阅读',
+              children: [
+                route(
+                  Icons.sync_outlined,
+                  '小说追踪账号',
+                  '${AppRoutes.tracking}?type=novel',
+                  subtitle: 'Bangumi / AniList · 仅显示小说绑定，服务凭据共用',
+                ),
+                route(
+                  Icons.bookmarks_outlined,
+                  '站点远端书架',
+                  AppRoutes.remoteShelf,
+                  subtitle: '轻之国度 / 轻书架，保持各站收藏独立',
+                ),
+                route(Icons.font_download_outlined, '阅读字体', AppRoutes.fonts),
+                page(
+                  Icons.label_outline,
+                  '小说本地分类',
+                  const LibraryCategoriesPage(type: MediaType.novel),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.ios_share_outlined),
+                  title: const Text('导出小说'),
+                  subtitle: const Text('选择书籍后检查章节与站点导出权限'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => showNovelExportChooser(context),
+                ),
+                route(
+                  Icons.language_outlined,
+                  '小说来源管理',
+                  '${AppRoutes.sources}?type=novel',
+                ),
+              ],
+            ),
+          ],
+          SettingsGroup(
+            title: '记录与下载',
+            children: [
+              route(
+                Icons.history,
+                type == MediaType.anime ? '观看历史' : '阅读历史',
+                AppRoutes.historyFor(type),
+              ),
+              route(
+                Icons.download_outlined,
+                '下载管理',
+                AppRoutes.downloadsFor(type),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

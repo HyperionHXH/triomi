@@ -7,7 +7,7 @@ import 'app_tokens.dart';
 /// - 四工作区的 Material 自适应界面
 /// - 命名强调色为深浅模式各提供种子色，前景与容器由 Material 配对生成
 /// - AppBar / 导航栏无阴影无描边，与背景同色
-/// - 卡片 12 圆角 + 极淡投影；输入框与按钮 8 圆角；chip 胶囊
+/// - 卡片 12 圆角 + 1px 分层描边；输入框与按钮 8 圆角；chip 胶囊
 abstract final class AppTheme {
   /// Adwaita 前景色：浅色主题下不是纯黑，而是带一点暖调的深灰。
   static const Color _inkLight = Color(0xFF2E3436);
@@ -100,7 +100,10 @@ abstract final class AppTheme {
         elevation: isLight ? 1 : 0,
         shadowColor: palette.cardShadow,
         margin: EdgeInsets.zero,
-        shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardRadius),
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.cardRadius,
+          side: BorderSide(color: palette.divider),
+        ),
       ),
 
       dividerTheme: DividerThemeData(
@@ -122,6 +125,7 @@ abstract final class AppTheme {
 
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
+          minimumSize: const Size(48, 48),
           shape: const RoundedRectangleBorder(
             borderRadius: AppRadius.controlRadius,
           ),
@@ -135,6 +139,7 @@ abstract final class AppTheme {
 
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
+          minimumSize: const Size(48, 48),
           shape: const RoundedRectangleBorder(
             borderRadius: AppRadius.controlRadius,
           ),
@@ -149,6 +154,7 @@ abstract final class AppTheme {
 
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
+          minimumSize: const Size(48, 48),
           shape: const RoundedRectangleBorder(
             borderRadius: AppRadius.controlRadius,
           ),
@@ -170,9 +176,9 @@ abstract final class AppTheme {
           borderRadius: AppRadius.controlRadius,
           borderSide: BorderSide.none,
         ),
-        enabledBorder: const OutlineInputBorder(
+        enabledBorder: OutlineInputBorder(
           borderRadius: AppRadius.controlRadius,
-          borderSide: BorderSide.none,
+          borderSide: BorderSide(color: palette.divider),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppRadius.controlRadius,

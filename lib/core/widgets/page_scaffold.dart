@@ -43,23 +43,41 @@ class PageScaffold extends StatelessWidget {
                   top: AppSpacing.lg,
                   bottom: AppSpacing.sm,
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (Navigator.of(context).canPop()) ...[
-                      const BackButton(),
-                      const SizedBox(width: AppSpacing.sm),
-                    ],
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
+                    Row(
+                      children: [
+                        if (Navigator.of(context).canPop()) ...[
+                          const BackButton(),
+                          const SizedBox(width: AppSpacing.sm),
+                        ],
+                        Expanded(
+                          child: Semantics(
+                            header: true,
+                            child: Text(
+                              title,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    ...actions,
+                    if (actions.isNotEmpty)
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: Wrap(
+                          spacing: AppSpacing.xxs,
+                          runSpacing: AppSpacing.xxs,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: actions,
+                        ),
+                      ),
                   ],
                 ),
               ),
               ?bottom,
+              const Divider(),
               Expanded(child: child),
             ],
           ),
@@ -99,43 +117,45 @@ class EmptyStateView extends StatelessWidget {
     final palette = context.palette;
 
     return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 360),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: palette.coverPlaceholder,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 32, color: palette.mutedForeground),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium,
-              ),
-              if (message != null) ...[
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  message!,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: palette.mutedForeground,
+      child: SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: palette.coverPlaceholder,
+                    shape: BoxShape.circle,
                   ),
+                  child: Icon(icon, size: 32, color: palette.mutedForeground),
                 ),
-              ],
-              if (action != null) ...[
                 const SizedBox(height: AppSpacing.md),
-                action!,
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium,
+                ),
+                if (message != null) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    message!,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: palette.mutedForeground,
+                    ),
+                  ),
+                ],
+                if (action != null) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  action!,
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

@@ -174,7 +174,8 @@ void main() {
           }),
         },
       );
-      final candidates = await BangumiClient(http: http).search('人形电脑');
+      final candidates = await BangumiClient(http: http)
+          .search('人形电脑', type: MediaType.anime);
 
       expect(http.lastRequest.method, 'POST');
       expect(http.lastRequest.url, contains('/v0/search/subjects'));
@@ -197,8 +198,10 @@ void main() {
     });
 
     test('未收藏（404）返回 null 而不是抛错', () async {
-      final http = client(routes: {'/v0/me': '{"id":99}'},
-        statuses: <String, int>{'/collections/': 404});
+      final http = client(
+        routes: {'/v0/me': '{"id":99}'},
+        statuses: <String, int>{'/collections/': 404},
+      );
       final collection = await BangumiClient(http: http)
           .collection(12, token: 't');
       expect(collection, isNull);
@@ -293,7 +296,11 @@ void main() {
         fallbackBaseUrl: BangumiClient.mirrorBaseUrl,
       );
 
-      final candidates = await bangumi.search('Naruto', token: 't');
+      final candidates = await bangumi.search(
+        'Naruto',
+        type: MediaType.anime,
+        token: 't',
+      );
 
       expect(candidates.single.remoteTrackId, '2782');
       expect(candidates.single.title, '火影忍者');
@@ -342,7 +349,11 @@ void main() {
         fallbackBaseUrl: BangumiClient.mirrorBaseUrl,
       );
 
-      final candidates = await bangumi.search('Fixture', token: 't');
+      final candidates = await bangumi.search(
+        'Fixture',
+        type: MediaType.anime,
+        token: 't',
+      );
 
       expect(candidates.single.remoteTrackId, '42');
       expect(http.requests, hasLength(3));
@@ -355,7 +366,7 @@ void main() {
     test('没有备用地址时不做「去掉 token 重试」（真实站点带 token 是正常的）', () async {
       final http = client(routes: {'/v0/search/subjects': '{"data":[]}'});
       final results = await BangumiClient(http: http)
-          .search('Naruto', token: 't');
+          .search('Naruto', type: MediaType.anime, token: 't');
       expect(results, isEmpty);
       expect(http.requests.length, 1);
       expect(http.lastRequest.headers['Authorization'], 'Bearer t');
@@ -577,7 +588,8 @@ void main() {
           }),
         },
       );
-      final candidates = await AniListClient(http: http).search('Chobits');
+      final candidates = await AniListClient(http: http)
+          .search('Chobits', type: MediaType.anime);
       expect(candidates.single.remoteTrackId, '5');
       expect(candidates.single.title, 'Chobits');
       expect(candidates.single.originalTitle, 'ちょびっツ');

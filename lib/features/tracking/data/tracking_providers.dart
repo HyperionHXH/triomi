@@ -81,6 +81,26 @@ final allTrackingBindingsProvider = FutureProvider<List<TrackBindRow>>(
   (ref) => ref.watch(trackingRepositoryProvider).allBinds(),
 );
 
+/// Credentials are shared per service; the visible works stay media scoped.
+final trackingBindingsByTypeProvider =
+    FutureProvider.family<List<TrackBindRow>, MediaType>((ref, type) async {
+      final rows = await ref.watch(allTrackingBindingsProvider.future);
+      final db = ref.watch(databaseProvider);
+      final query = db.selectOnly(db.mediaItems)
+        ..addColumns([db.mediaItems.sourceId, db.mediaItems.remoteId])
+        ..where(db.mediaItems.type.equalsValue(type));
+      final keys = {
+        for (final row in await query.get())
+          (
+            row.read(db.mediaItems.sourceId)!,
+            row.read(db.mediaItems.remoteId)!,
+          ),
+      };
+      return rows
+          .where((row) => keys.contains((row.sourceId, row.remoteId)))
+          .toList();
+    });
+
 /// 进度上报入口：供播放器/阅读器调用（失败只回结果，不抛错）。
 ///
 /// 用 provider 包一层而不是让页面直接依赖 service，是为了让页面拿到的

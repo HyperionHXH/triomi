@@ -14,13 +14,16 @@ import '../../core/storage/preferences.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../anime/data/anime_webdav_sync.dart';
 import '../library/data/library_providers.dart';
 import 'backup_restore_dialog.dart';
 import 'data/sync_providers.dart';
 
 /// WebDAV 同步：上传本机备份、拉取远端备份并合并（多设备零服务器方案）。
 class WebDavSyncPage extends ConsumerStatefulWidget {
-  const WebDavSyncPage({super.key});
+  const WebDavSyncPage({super.key, this.animeCollectionOnly = false});
+
+  final bool animeCollectionOnly;
 
   @override
   ConsumerState<WebDavSyncPage> createState() => _WebDavSyncPageState();
@@ -76,10 +79,18 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
   Widget build(BuildContext context) {
     final config = ref.watch(webDavConfigProvider);
     return PageScaffold(
-      title: 'WebDAV 同步',
+      title: widget.animeCollectionOnly ? 'WebDAV 追番收藏' : 'WebDAV 应用备份',
       child: ListView(
         padding: const EdgeInsets.only(bottom: AppSpacing.xl),
         children: <Widget>[
+          if (widget.animeCollectionOnly)
+            _card(
+              child: const Text(
+                '只同步本地追番收藏及收藏状态，使用 anime-follows.v1.json。'
+                '连接与应用备份共用，但不会读取或覆盖全应用备份、账号凭据、历史和下载。'
+                'Bangumi / AniList 追踪账号在追番设置中单独配置。',
+              ),
+            ),
           _card(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -119,14 +130,15 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
                     hintText: 'triomi',
                   ),
                 ),
-                TextField(
-                  controller: _fileController,
-                  enabled: _initialized && !_busy,
-                  decoration: const InputDecoration(
-                    labelText: '备份文件名',
-                    hintText: 'backup.zip',
+                if (!widget.animeCollectionOnly)
+                  TextField(
+                    controller: _fileController,
+                    enabled: _initialized && !_busy,
+                    decoration: const InputDecoration(
+                      labelText: '备份文件名',
+                      hintText: 'backup.zip',
+                    ),
                   ),
-                ),
                 const SizedBox(height: AppSpacing.sm),
                 Row(
                   children: <Widget>[
@@ -144,48 +156,59 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
               ],
             ),
           ),
-          _card(
-            child: SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _includeDownloadedMedia,
-              onChanged: _busy
-                  ? null
-                  : (value) => setState(() => _includeDownloadedMedia = value),
-              title: const Text('包含已完成/部分下载媒体'),
-              subtitle: const Text('默认仅备份元数据和封面；启用后云端仍不包含来源代码或 APK。'),
+          if (!widget.animeCollectionOnly)
+            _card(
+              child: SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _includeDownloadedMedia,
+                onChanged: _busy
+                    ? null
+                    : (value) =>
+                          setState(() => _includeDownloadedMedia = value),
+                title: const Text('包含已完成/部分下载媒体'),
+                subtitle: const Text('默认仅备份元数据和封面；启用后云端仍不包含来源代码或 APK。'),
+              ),
             ),
-          ),
-          _card(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text('同步', style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  _remote == null
-                      ? '尚未检测远端状态'
-                      : _remote!.exists
-                      ? '远端已有备份：'
-                            '${((_remote!.sizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB'
-                            '${_remote!.modifiedAt == null ? '' : ' · ${_formatTime(_remote!.modifiedAt!)}'}'
-                      : '远端还没有备份文件',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                FilledButton.icon(
-                  onPressed: _busy ? null : _upload,
-                  icon: const Icon(Icons.cloud_upload_outlined, size: 18),
-                  label: const Text('上传本机备份'),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : _download,
-                  icon: const Icon(Icons.cloud_download_outlined, size: 18),
-                  label: const Text('拉取远端备份并合并'),
-                ),
-              ],
+          if (widget.animeCollectionOnly)
+            _card(
+              child: FilledButton.icon(
+                onPressed: _busy ? null : _syncAnimeCollection,
+                icon: const Icon(Icons.cloud_sync_outlined),
+                label: const Text('合并追番收藏'),
+              ),
             ),
-          ),
+          if (!widget.animeCollectionOnly)
+            _card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text('同步', style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    _remote == null
+                        ? '尚未检测远端状态'
+                        : _remote!.exists
+                        ? '远端已有备份：'
+                              '${((_remote!.sizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB'
+                              '${_remote!.modifiedAt == null ? '' : ' · ${_formatTime(_remote!.modifiedAt!)}'}'
+                        : '远端还没有备份文件',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  FilledButton.icon(
+                    onPressed: _busy ? null : _upload,
+                    icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                    label: const Text('上传本机备份'),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : _download,
+                    icon: const Icon(Icons.cloud_download_outlined, size: 18),
+                    label: const Text('拉取远端备份并合并'),
+                  ),
+                ],
+              ),
+            ),
           if (_status != null)
             _card(
               child: Row(
@@ -242,15 +265,36 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
     try {
       final client = ref.read(webDavClientProvider);
       final info = await client.stat(
-        VersionedWebDavBackup(client).head(config),
+        widget.animeCollectionOnly
+            ? ref.read(animeWebDavSyncProvider).document
+            : VersionedWebDavBackup(client).head(config),
       );
       if (!mounted) return;
       setState(() {
         _remote = info;
-        _status = info.exists ? '远端备份可用' : '远端还没有备份文件（首次上传会自动创建目录）';
+        _status = widget.animeCollectionOnly
+            ? (info.exists ? '远端追番收藏可用' : '尚无远端追番收藏；首次同步会创建')
+            : (info.exists ? '远端备份可用' : '远端还没有备份文件（首次上传会自动创建目录）');
       });
     } catch (error) {
       if (mounted) setState(() => _status = '检测失败：$error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _syncAnimeCollection() async {
+    await ref.read(webDavConfigProvider.notifier).update(_config);
+    if (!mounted) return;
+    setState(() {
+      _busy = true;
+      _status = '正在合并追番收藏…';
+    });
+    try {
+      final count = await ref.read(animeWebDavSyncProvider).sync();
+      if (mounted) setState(() => _status = '追番收藏已合并，共 $count 部');
+    } catch (error) {
+      if (mounted) setState(() => _status = '追番收藏同步失败：$error');
     } finally {
       if (mounted) setState(() => _busy = false);
     }

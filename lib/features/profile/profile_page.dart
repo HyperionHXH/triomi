@@ -2,203 +2,72 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
-import '../local/local_comic_library_page.dart';
 
-/// 我的：账号入口 + 通用设置。
-///
-/// 账号严格按来源隔离（Mixn 不变量）：LK、LNS 各自登录，
-/// Bangumi / AniList 追踪账号也各自持有 token，彼此不共享凭据。
+/// Shared personal maintenance; media accounts belong to their workspaces.
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final palette = context.palette;
-
-    return PageScaffold(
-      title: '我的',
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: AppCard(
-                onTap: () => context.push(AppRoutes.settings),
-                child: Row(
-                  children: <Widget>[
-                    CircleAvatar(
-                      radius: 24,
-                      backgroundColor: palette.coverPlaceholder,
-                      child: Icon(
-                        Icons.person_outline,
-                        color: palette.mutedForeground,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text('账号与设置', style: theme.textTheme.titleSmall),
-                          const SizedBox(height: 2),
-                          Text(
-                            '各来源独立登录，凭据互不共享',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: palette.mutedForeground,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right),
-                  ],
-                ),
-              ),
+  Widget build(BuildContext context) => PageScaffold(
+    title: '我的',
+    child: ListView(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.sm,
+      ),
+      children: [
+        SettingsGroup(
+          title: '记录与下载',
+          children: [
+            ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text('观看与阅读历史'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push(AppRoutes.history),
             ),
-            const SizedBox(height: AppSpacing.lg),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: SettingsGroup(
-                title: '历史与本地内容',
-                children: <Widget>[
-                  ListTile(
-                    leading: const Icon(Icons.history),
-                    title: const Text('全部观看与阅读历史'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.history),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.download_outlined),
-                    title: const Text('下载管理'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.downloads),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.folder_open_outlined),
-                    title: const Text('本地漫画库'),
-                    subtitle: const Text('导入 CBZ / ZIP 或图片目录，离线阅读'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (_) => const LocalComicLibraryPage(),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: SettingsGroup(
-                title: '站点账号',
-                children: <Widget>[
-                  ListTile(
-                    leading: const Icon(Icons.account_circle_outlined),
-                    title: const Text('轻之国度 · 账号与签到'),
-                    subtitle: const Text('轻币余额、关注粉丝、七日签到'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.lkAccount),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.mark_email_unread_outlined),
-                    title: const Text('轻之国度 · 消息中心'),
-                    subtitle: const Text('回复、点赞、私信等未读角标'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.lkMessages),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.account_circle_outlined),
-                    title: const Text('轻书架 · 账号与签到'),
-                    subtitle: const Text('轻币余额、连续签到'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.lnsAccount),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.sync_outlined),
-                    title: const Text('追踪账号'),
-                    subtitle: const Text('Bangumi / AniList'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.tracking),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: SettingsGroup(
-                title: '数据与任务',
-                children: <Widget>[
-                  ListTile(
-                    leading: const Icon(Icons.bookmarks_outlined),
-                    title: const Text('远端书架'),
-                    subtitle: const Text('同步已登录站点的收藏（轻之国度 / 轻书架）'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.remoteShelf),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.cloud_outlined),
-                    title: const Text('云同步'),
-                    subtitle: const Text('WebDAV 同步书架与进度'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.webdav),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.settings_backup_restore_outlined),
-                    title: const Text('备份与恢复'),
-                    subtitle: const Text('导出 / 导入本地备份（含封面）'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.backup),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: SettingsGroup(
-                title: '设置与来源',
-                children: <Widget>[
-                  ListTile(
-                    leading: const Icon(Icons.settings_outlined),
-                    title: const Text('设置'),
-                    subtitle: const Text('外观、网络、下载、存储与应用更新'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.settings),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.extension_outlined),
-                    title: const Text('来源与规则管理'),
-                    subtitle: const Text('导入规则、启用或移除来源'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.sources),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.font_download_outlined),
-                    title: const Text('阅读字体'),
-                    subtitle: const Text('导入 TTF / OTF 供小说阅读器使用'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.fonts),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.speaker_notes_outlined),
-                    title: const Text('弹幕设置'),
-                    subtitle: const Text('显示参数、屏蔽词与弹弹play 凭据'),
-                    trailing: const Icon(Icons.chevron_right, size: 20),
-                    onTap: () => context.push(AppRoutes.danmakuSettings),
-                  ),
-                ],
-              ),
+            ListTile(
+              leading: const Icon(Icons.download_outlined),
+              title: const Text('下载管理'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push(AppRoutes.downloads),
             ),
           ],
         ),
-      ),
-    );
-  }
+        SettingsGroup(
+          title: '数据维护',
+          children: [
+            ListTile(
+              leading: const Icon(Icons.settings_backup_restore_outlined),
+              title: const Text('备份与恢复'),
+              subtitle: const Text('全应用本地数据与封面，不含账号凭据'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push(AppRoutes.backup),
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud_outlined),
+              title: const Text('WebDAV 应用备份'),
+              subtitle: const Text('上传或合并完整备份；追番收藏同步在追番设置中'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push(AppRoutes.webdav),
+            ),
+          ],
+        ),
+        SettingsGroup(
+          title: '应用',
+          children: [
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('通用设置'),
+              subtitle: const Text('外观、网络、存储与应用更新'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push(AppRoutes.settings),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
 }

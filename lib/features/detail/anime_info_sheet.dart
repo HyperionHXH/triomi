@@ -85,7 +85,9 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
         () => ref
             .read(animeInfoRepositoryProvider)
             .section(
-              widget.id, section, offset: reset ? 0 : partition.offset,
+              widget.id,
+              section,
+              offset: reset ? 0 : partition.offset,
               refresh: refresh,
             ),
       );
@@ -259,28 +261,35 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
   }
 
   Widget _subjectGrid(List<Map<String, Object?>> rows) {
+    final animeRows = rows.where(_isAnimeSubject).toList(growable: false);
     return LayoutBuilder(
       builder: (context, constraints) {
         final appearance = CoverAppearance.of(context);
-        final columns = constraints.maxWidth < 600 ? 3 :
-            ((constraints.maxWidth + appearance.gap) /
-                (150 + appearance.gap)).floor().clamp(3, 8);
-        final width = (constraints.maxWidth - (columns - 1) * appearance.gap) / columns;
+        final columns = constraints.maxWidth < 600
+            ? 3
+            : ((constraints.maxWidth + appearance.gap) / (150 + appearance.gap))
+                  .floor()
+                  .clamp(3, 8);
+        final width =
+            (constraints.maxWidth - (columns - 1) * appearance.gap) / columns;
         final scaler = MediaQuery.textScalerOf(context);
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          itemCount: rows.length,
+          itemCount: animeRows.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
             crossAxisSpacing: appearance.gap,
             mainAxisSpacing: 12,
-            mainAxisExtent: width / appearance.ratio(isAnime: true) +
-                scaler.scale(13) * 2.8 + scaler.scale(11) * 1.4 +
-                appearance.gap + 4,
+            mainAxisExtent:
+                width / appearance.ratio(isAnime: true) +
+                scaler.scale(13) * 2.8 +
+                scaler.scale(11) * 1.4 +
+                appearance.gap +
+                4,
           ),
           itemBuilder: (context, index) {
-            final row = rows[index];
+            final row = animeRows[index];
             final item = bangumiItem(row);
             return MediaItemCard(
               item: item,
@@ -295,6 +304,9 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
       },
     );
   }
+
+  static bool _isAnimeSubject(Map<String, Object?> row) =>
+      int.tryParse('${row['type']}') == 2;
 
   Widget _row(Map<String, Object?> row) {
     if (_section == 'episodes') {
@@ -360,12 +372,21 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
     final actors = row['actors'];
     final subtitle = [
       '${row['relation'] ?? ''}',
+      if (_section == 'subjects')
+        switch (int.tryParse('${row['type']}')) {
+          1 => '书籍资料 · 非动画',
+          3 => '音乐资料 · 非动画',
+          4 => '游戏资料 · 非动画',
+          6 => '三次元资料 · 非动画',
+          2 => '动画',
+          _ => '其他资料',
+        },
       if (actors is List && actors.isNotEmpty)
         '声优：${actors.whereType<Map<Object?, Object?>>().map(_name).join(' / ')}',
       if (_section == 'persons' && row['eps'] != null)
         '参与剧集：${_value(row['eps'])}',
     ].where((s) => s.isNotEmpty).join('\n');
-    final relatedAnime = _section == 'subjects' && row['type'] == 2;
+    final relatedAnime = _section == 'subjects' && _isAnimeSubject(row);
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(vertical: 8),
       leading: _portrait(row),
@@ -427,9 +448,12 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
         if (_section == 'info')
           _overview(partition)
         else ...[
-          if (_section == 'subjects')
-            _subjectGrid(partition.rows)
-          else
+          if (_section == 'subjects') ...[
+            _subjectGrid(partition.rows),
+            for (final row in partition.rows.where(
+              (row) => !_isAnimeSubject(row),
+            )) ...[_row(row), const Divider(height: 1)],
+          ] else
             for (final row in partition.rows) ...[
               _row(row),
               const Divider(height: 1),
@@ -451,9 +475,9 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
         if (partition.cached)
           Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: Text(partition.error == null
-                ? '显示最近保存的公开资料'
-                : '显示已保存的公开资料，在线刷新未成功'),
+            child: Text(
+              partition.error == null ? '显示最近保存的公开资料' : '显示已保存的公开资料，在线刷新未成功',
+            ),
           ),
         if (partition.error != null)
           Padding(

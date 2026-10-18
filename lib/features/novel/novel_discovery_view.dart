@@ -14,6 +14,7 @@ import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
 import '../../core/storage/preferences.dart';
+import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../sources/source_account_entries.dart';
 import 'novel_book_card.dart';
@@ -35,6 +36,7 @@ class _NovelChannel {
   bool ended = false;
   bool replaceOnSuccess = false;
   String? error;
+  SourceErrorType? errorType;
   bool needsLogin = false;
   SourceRequestCancellation? owner;
 }
@@ -49,7 +51,9 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
     super.initState();
     final preferences = ref.read(preferencesProvider);
     _sourceId = preferences.get<String>('novel.discovery.source');
-    final saved = preferences.get<Map<dynamic, dynamic>>('novel.discovery.feeds');
+    final saved = preferences.get<Map<dynamic, dynamic>>(
+      'novel.discovery.feeds',
+    );
     if (saved != null) {
       for (final entry in saved.entries) {
         if (entry.key is String && entry.value is String) {
@@ -68,7 +72,6 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
     }
     super.dispose();
   }
-
 
   Future<void> _load(
     SourceEntry entry,
@@ -92,25 +95,30 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
       channel.loading = true;
       channel.started = true;
       channel.error = null;
+      channel.errorType = null;
       channel.needsLogin = false;
     });
     try {
       final source = entry.source;
       // LK HTTP requests inherit this owner through the request Zone. LNS Hub
       // invocations may still finish; cancelled/late responses never publish.
-      final books = await owner.run(
-        () => (source as DiscoverProvider).discover(
-          feed,
-          page: channel.nextPage,
-        ),
-      ).timeout(
-        const Duration(seconds: 20),
-        onTimeout: () {
-          owner.cancel('小说频道请求超时');
-          throw TimeoutException('小说频道请求超时');
-        },
-      );
-      if (!mounted || channel.generation != generation || owner.cancelled ||
+      final books = await owner
+          .run(
+            () => (source as DiscoverProvider).discover(
+              feed,
+              page: channel.nextPage,
+            ),
+          )
+          .timeout(
+            const Duration(seconds: 20),
+            onTimeout: () {
+              owner.cancel('小说频道请求超时');
+              throw TimeoutException('小说频道请求超时');
+            },
+          );
+      if (!mounted ||
+          channel.generation != generation ||
+          owner.cancelled ||
           !identical(channel.owner, owner)) {
         return;
       }
@@ -138,12 +146,17 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
         channel.loading = false;
       });
     } catch (error) {
-      if (!mounted || channel.generation != generation ||
+      if (!mounted ||
+          channel.generation != generation ||
           !identical(channel.owner, owner)) {
         return;
       }
       setState(() {
         channel.loading = false;
+        channel.errorType = SourceException.wrap(
+          error,
+          sourceId: entry.descriptor.id,
+        ).type;
         channel.needsLogin =
             error is SourceException && error.type == SourceErrorType.auth;
         channel.error = error is SourceException
@@ -227,10 +240,10 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
         feeds.where((f) => f.id == _feeds[sourceId]).firstOrNull ??
         feeds.where((f) => f.id == 'hot' || f.id == 'popular').firstOrNull ??
         feeds.first;
-    final channel = _channels.putIfAbsent(
-      (sourceId, feed.id),
-      _NovelChannel.new,
-    );
+    final channel = _channels.putIfAbsent((
+      sourceId,
+      feed.id,
+    ), _NovelChannel.new);
     if (!channel.started) {
       channel.started = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -259,7 +272,11 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
                 ],
                 onSelected: (id) {
                   setState(() => _sourceId = id);
-                  unawaited(ref.read(preferencesProvider).set('novel.discovery.source', id));
+                  unawaited(
+                    ref
+                        .read(preferencesProvider)
+                        .set('novel.discovery.source', id),
+                  );
                 },
               ),
             ],
@@ -280,13 +297,22 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
                       setState(() {
                         _feeds[sourceId] = candidate.id;
                       });
-                      unawaited(ref.read(preferencesProvider).set('novel.discovery.feeds', Map<String, String>.of(_feeds)));
+                      unawaited(
+                        ref
+                            .read(preferencesProvider)
+                            .set(
+                              'novel.discovery.feeds',
+                              Map<String, String>.of(_feeds),
+                            ),
+                      );
                     },
                   ),
                 ),
             ],
           ),
         ),
+        const SizedBox(height: AppSpacing.xs),
+        const Divider(),
         Expanded(
           child: RefreshIndicator(
             onRefresh: () => _load(entry, feed, channel, reset: true),
@@ -301,13 +327,13 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
                 }
                 return false;
               },
-              child: ListView.builder(
-                key: PageStorageKey(
-                  'novel-discovery-$sourceId-${feed.id}',
-                ),
+              child: ListView.separated(
+                key: PageStorageKey('novel-discovery-$sourceId-${feed.id}'),
                 controller: channel.scroll,
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(AppSpacing.md),
+                separatorBuilder: (_, _) =>
+                    const SizedBox(height: AppSpacing.sm),
                 itemCount: channel.items.length + 1,
                 itemBuilder: (context, index) {
                   if (index < channel.items.length) {
@@ -323,13 +349,25 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
                         if (channel.loading)
                           const CircularProgressIndicator()
                         else if (channel.error != null) ...[
-                          Text(channel.error!, textAlign: TextAlign.center),
+                          const Icon(Icons.cloud_off_outlined, size: 32),
+                          const SizedBox(height: 12),
+                          Text(
+                            '${entry.descriptor.name} · ${channel.errorType?.label ?? '暂时无法加载'}',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 8),
                           if (entry.source is AccountProvider)
                             Text(
                               (entry.source as AccountProvider).isLoggedIn
                                   ? '本站账号已登录；站点可能要求重新认证。'
                                   : '本站账号未登录；公开频道是否可访问由站点决定。',
                             ),
+                          ExpansionTile(
+                            title: const Text('错误详情'),
+                            childrenPadding: const EdgeInsets.all(12),
+                            children: [SelectableText(channel.error!)],
+                          ),
                           Wrap(
                             spacing: 12,
                             children: [

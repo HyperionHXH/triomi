@@ -100,17 +100,23 @@ void main() {
     expect(await repository.listAnimeFollows(), isEmpty);
     await tester.tap(find.byTooltip('收藏状态'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('在看').last);
+    await tester.tap(find.widgetWithText(CheckedPopupMenuItem<String>, '在看'));
     await tester.pumpAndSettle();
-    expect(await repository.isInLibrary(animeItem.sourceId, animeItem.remoteId), true);
+    expect(
+      await repository.isInLibrary(animeItem.sourceId, animeItem.remoteId),
+      true,
+    );
     expect(await repository.listLibrary(), isEmpty);
     expect(await repository.listAnimeFollows(), hasLength(1));
     await tester.tap(find.byTooltip('收藏状态'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('取消收藏').last);
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, '取消收藏'));
     await tester.pumpAndSettle();
     expect(await repository.listAnimeFollows(), isEmpty);
-    expect(await repository.itemByKey(animeItem.sourceId, animeItem.remoteId), isNotNull);
+    expect(
+      await repository.itemByKey(animeItem.sourceId, animeItem.remoteId),
+      isNotNull,
+    );
   });
 
   testWidgets('漫画详情：保留「加入书架」动作', (tester) async {

@@ -11,6 +11,7 @@ import '../../core/router/app_router.dart';
 import '../../core/storage/preferences.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../detail/chapter_download_picker.dart';
 import '../discover/widgets/media_item_card.dart';
 import '../downloads/data/download_providers.dart';
 import '../downloads/data/download_repository.dart';
@@ -869,11 +870,12 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
               onPressed: _assignSelected,
               icon: const Icon(Icons.folder_outlined),
             ),
-            IconButton(
-              tooltip: '下载',
-              onPressed: _downloadSelected,
-              icon: const Icon(Icons.download_outlined),
-            ),
+            if (_scopedSelection().any((key) => key.$1 != 'local-comic'))
+              IconButton(
+                tooltip: '下载',
+                onPressed: _downloadSelected,
+                icon: const Icon(Icons.download_outlined),
+              ),
             IconButton(
               tooltip: '移出书架',
               onPressed: _removeSelected,
@@ -1212,51 +1214,83 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
   Future<void> _downloadSelected() async {
     final keys = _scopedSelection();
     if (keys.isEmpty) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        scrollable: true,
-        title: const Text('下载已选作品'),
-        content: Text(
-          '将已选 ${keys.length} 部作品本地缓存目录中的未锁定章节加入下载队列；没有缓存目录的作品需先打开详情加载。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialog, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialog, true),
-            child: const Text('加入队列'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+    final repository = ref.read(libraryRepositoryProvider);
+    final plans = <(MediaItem, Set<String>)>[];
+    var unavailable = 0;
+    for (final key in keys) {
+      final item = await repository.itemByKey(key.$1, key.$2);
+      if (!mounted) return;
+      if (item == null || item.type != widget.type) continue;
+      if (item.sourceId == 'local-comic') {
+        unavailable++;
+        continue;
+      }
+      final chapters = await repository.loadChapters(key.$1, key.$2);
+      if (!mounted) return;
+      if (!chapters.any(
+        (chapter) =>
+            !chapter.locked &&
+            chapter.sourceId == item.sourceId &&
+            chapter.remoteId.trim().isNotEmpty,
+      )) {
+        unavailable++;
+        continue;
+      }
+      final selected = await showChapterDownloadPicker(
+        context,
+        item: item,
+        chapters: chapters,
+      );
+      if (!mounted || selected == null) return;
+      if (selected.isNotEmpty) plans.add((item, selected));
+    }
+    if (plans.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('没有可下载的未锁定章节；请先打开作品详情。本地导入漫画无需网络下载。')),
+        );
+      }
+      return;
+    }
     await _perform(() async {
       await _retainVisibleSelection(keys);
       if (!mounted || keys.isEmpty) return;
-      final repository = ref.read(libraryRepositoryProvider);
       var count = 0;
-      for (final key in keys) {
+      for (final (plannedItem, selected) in plans) {
+        final key = (plannedItem.sourceId, plannedItem.remoteId);
         final item = await repository.itemByKey(key.$1, key.$2);
         if (!mounted) return;
         if (item == null || item.type != widget.type) continue;
         final chapters = await repository.loadChapters(key.$1, key.$2);
         if (!mounted) return;
+        final availableIds = {
+          for (final chapter in chapters)
+            if (!chapter.locked &&
+                chapter.sourceId == item.sourceId &&
+                selected.contains(chapter.remoteId))
+              chapter.remoteId,
+        };
+        if (availableIds.isEmpty) continue;
         final current = {key};
         await _retainVisibleSelection(current);
         if (!mounted) return;
         if (current.isEmpty) continue;
-        if (chapters.isNotEmpty) {
-          count += await ref
-              .read(downloadsProvider.notifier)
-              .enqueue(item: item, chapters: chapters);
-        }
+        count += await ref
+            .read(downloadsProvider.notifier)
+            .enqueue(
+              item: item,
+              chapters: chapters,
+              selectedChapterIds: availableIds,
+            );
       }
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('已加入 $count 章；仅处理本地已有目录')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '已加入 $count 章${unavailable == 0 ? '' : '；$unavailable 部无可下载章节'}',
+            ),
+          ),
+        );
       }
     });
   }

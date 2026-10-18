@@ -175,6 +175,12 @@ void main() {
 
   testWidgets('取消账号对话框不删收藏也不触发登出', (tester) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.runAsync(db.close);
+      await tester.pump(const Duration(milliseconds: 1));
+    });
     final repository = LibraryRepository(db);
     await repository.addToLibrary(
       const MediaItem(
@@ -218,7 +224,7 @@ void main() {
     await settle(tester);
 
     // 打开账号对话框。
-    await tester.tap(find.byTooltip('管理来源账号'));
+    await tester.tap(find.widgetWithText(TextButton, '站点账号'));
     await settle(tester);
     expect(find.textContaining('· 账号'), findsOneWidget);
 

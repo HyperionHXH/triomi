@@ -27,7 +27,6 @@ const animeFollowStatuses = <String, String>{
   ...animeCollectionStatuses,
 };
 
-
 /// Local collection edits are reconciled with connected services by cloud sync.
 Future<void> setAnimeFollowStatus(
   WidgetRef ref,
@@ -108,14 +107,17 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
     unawaited(preferences.set('anime.follows.grid', _grid));
   }
 
-
   @override
   Widget build(BuildContext context) {
     final local = ref.watch(animeFollowsProvider);
     final rows = [
       for (final view in local.asData?.value ?? const <LibraryItemView>[])
-        AnimeCollectionEntry(item: view.item, status: view.entry.status,
-          progress: view.entry.progress.floor(), updatedAt: view.entry.updatedAt),
+        AnimeCollectionEntry(
+          item: view.item,
+          status: view.entry.status,
+          progress: view.entry.progress.floor(),
+          updatedAt: view.entry.updatedAt,
+        ),
     ];
     final filtered = rows
         .where((row) => _status.isEmpty || row.status == _status)
@@ -129,14 +131,29 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Row(children: [
-            Expanded(child: Text('收藏夹', style: Theme.of(context).textTheme.titleMedium)),
-            IconButton(tooltip: '云同步', onPressed: _busy ? null : _syncCloud,
-              icon: const Icon(Icons.cloud_sync_outlined)),
-            IconButton(tooltip: _grid ? '切换列表' : '切换卡片',
-              onPressed: () { setState(() => _grid = !_grid); _persist(); },
-              icon: Icon(_grid ? Icons.view_list : Icons.grid_view)),
-          ]),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '收藏夹',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              IconButton(
+                tooltip: '云同步',
+                onPressed: _busy ? null : _syncCloud,
+                icon: const Icon(Icons.cloud_sync_outlined),
+              ),
+              IconButton(
+                tooltip: _grid ? '切换列表' : '切换卡片',
+                onPressed: () {
+                  setState(() => _grid = !_grid);
+                  _persist();
+                },
+                icon: Icon(_grid ? Icons.view_list : Icons.grid_view),
+              ),
+            ],
+          ),
         ),
         if (_message != null)
           Padding(
@@ -155,7 +172,9 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
                 TextButton(
-                  onPressed: loading ? null : () => ref.invalidate(animeFollowsProvider),
+                  onPressed: loading
+                      ? null
+                      : () => ref.invalidate(animeFollowsProvider),
                   child: const Text('重试'),
                 ),
               ],
@@ -197,7 +216,8 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
         if (_selected.isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(children: [
+            child: Row(
+              children: [
                 Text('${_selected.length} 项'),
                 PopupMenuButton<String>(
                   enabled: !_busy,
@@ -208,10 +228,10 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
                         value: status.key,
                         child: Text('设为${status.value}'),
                       ),
-                      const PopupMenuItem(
-                        value: 'remove',
-                        child: Text('取消本机收藏（保留历史）'),
-                      ),
+                    const PopupMenuItem(
+                      value: 'remove',
+                      child: Text('取消本机收藏（保留历史）'),
+                    ),
                   ],
                   onSelected: _setStatus,
                 ),
@@ -220,9 +240,9 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
                   onPressed: _busy ? null : () => setState(_selected.clear),
                   icon: const Icon(Icons.close),
                 ),
-            ],
+              ],
+            ),
           ),
-        ),
         if (_busy || loading) const LinearProgressIndicator(),
         Expanded(
           child: filtered.isEmpty
@@ -294,9 +314,12 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final scale = MediaQuery.textScalerOf(context);
-        final columns = constraints.maxWidth < 600 ? 3 :
-          ((constraints.maxWidth - 32 + appearance.gap) /
-            (150 + appearance.gap)).floor().clamp(3, 8);
+        final columns = constraints.maxWidth < 600
+            ? 3
+            : ((constraints.maxWidth - 32 + appearance.gap) /
+                      (150 + appearance.gap))
+                  .floor()
+                  .clamp(3, 8);
         final width =
             (constraints.maxWidth - 32 - (columns - 1) * appearance.gap) /
             columns;
@@ -361,45 +384,110 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
 
   Future<void> _syncCloud() async {
     final dav = ref.read(webDavConfigProvider).isConfigured;
-    final bgm = ref.read(trackingServiceProvider).hasToken(TrackingServiceKind.bangumi);
+    final bgm = ref
+        .read(trackingServiceProvider)
+        .hasToken(TrackingServiceKind.bangumi);
     var useDav = dav, useBangumi = bgm;
     var priority = AnimeSyncPriority.bangumi;
-    final confirmed = await showDialog<bool>(context: context,
-      builder: (dialogContext) => StatefulBuilder(builder: (_, update) => AlertDialog(
-        title: const Text('云同步'),
-        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('WebDAV 合并设备间的收藏夹；Bangumi 同步收藏状态。两者不替代本地收藏。'),
-          CheckboxListTile(title: const Text('WebDAV 收藏夹'), value: useDav,
-            onChanged: dav ? (v) => update(() => useDav = v!) : null),
-          if (!dav) TextButton(onPressed: () { Navigator.pop(dialogContext); context.push(AppRoutes.webdav); },
-            child: const Text('连接 WebDAV')),
-          CheckboxListTile(title: const Text('Bangumi 收藏状态'), value: useBangumi,
-            onChanged: bgm ? (v) => update(() => useBangumi = v!) : null),
-          if (!bgm) TextButton(onPressed: () { Navigator.pop(dialogContext); context.push(AppRoutes.tracking); },
-            child: const Text('连接 Bangumi')),
-          if (useBangumi) DropdownButton<AnimeSyncPriority>(value: priority, isExpanded: true,
-            items: const [
-              DropdownMenuItem(value: AnimeSyncPriority.bangumi, child: Text('状态冲突：Bangumi 优先')),
-              DropdownMenuItem(value: AnimeSyncPriority.local, child: Text('状态冲突：本地优先')),
-              DropdownMenuItem(value: AnimeSyncPriority.newest, child: Text('状态冲突：最新修改优先')),
-            ], onChanged: (v) => update(() => priority = v!)),
-          if (useBangumi) const Text('本地独有收藏上传状态，云端独有收藏补入本地；删除本地收藏不删除 Bangumi 记录。'),
-        ])),
-        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-          FilledButton(onPressed: useDav || useBangumi ? () => Navigator.pop(dialogContext, true) : null,
-            child: const Text('同步'))],
-      )));
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (_, update) => AlertDialog(
+          title: const Text('云同步'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('WebDAV 合并设备间的收藏夹；Bangumi 同步收藏状态。两者不替代本地收藏。'),
+                CheckboxListTile(
+                  title: const Text('WebDAV 收藏夹'),
+                  value: useDav,
+                  onChanged: dav ? (v) => update(() => useDav = v!) : null,
+                ),
+                if (!dav)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(dialogContext);
+                      context.push('${AppRoutes.webdav}?type=anime');
+                    },
+                    child: const Text('连接 WebDAV'),
+                  ),
+                CheckboxListTile(
+                  title: const Text('Bangumi 收藏状态'),
+                  value: useBangumi,
+                  onChanged: bgm ? (v) => update(() => useBangumi = v!) : null,
+                ),
+                if (!bgm)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(dialogContext);
+                      context.push('${AppRoutes.tracking}?type=anime');
+                    },
+                    child: const Text('连接 Bangumi'),
+                  ),
+                if (useBangumi)
+                  DropdownButton<AnimeSyncPriority>(
+                    value: priority,
+                    isExpanded: true,
+                    items: const [
+                      DropdownMenuItem(
+                        value: AnimeSyncPriority.bangumi,
+                        child: Text('状态冲突：Bangumi 优先'),
+                      ),
+                      DropdownMenuItem(
+                        value: AnimeSyncPriority.local,
+                        child: Text('状态冲突：本地优先'),
+                      ),
+                      DropdownMenuItem(
+                        value: AnimeSyncPriority.newest,
+                        child: Text('状态冲突：最新修改优先'),
+                      ),
+                    ],
+                    onChanged: (v) => update(() => priority = v!),
+                  ),
+                if (useBangumi)
+                  const Text('本地独有收藏上传状态，云端独有收藏补入本地；删除本地收藏不删除 Bangumi 记录。'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: useDav || useBangumi
+                  ? () => Navigator.pop(dialogContext, true)
+                  : null,
+              child: const Text('同步'),
+            ),
+          ],
+        ),
+      ),
+    );
     if (confirmed != true || !mounted) return;
-    setState(() { _busy = true; _message = null; });
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
     try {
-      await syncAnimeFollows(ref, webDav: useDav, bangumi: useBangumi,
-        priority: priority, onProgress: (message) {
+      await syncAnimeFollows(
+        ref,
+        webDav: useDav,
+        bangumi: useBangumi,
+        priority: priority,
+        onProgress: (message) {
           if (mounted) setState(() => _message = message);
-        });
-      if (mounted) setState(() => _message = '收藏已同步 · ${_time(DateTime.now())}');
+        },
+      );
+      if (mounted) {
+        setState(() => _message = '收藏已同步 · ${_time(DateTime.now())}');
+      }
     } catch (error) {
       if (mounted) setState(() => _message = '同步未完成：$error');
-    } finally { if (mounted) setState(() => _busy = false); }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _setStatus(String status) async {

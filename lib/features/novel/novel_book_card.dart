@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/media_item.dart';
 import '../../core/router/app_router.dart';
-import '../../core/source/source_providers.dart';
-import '../../core/widgets/source_network_image.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/theme/app_tokens.dart';
+import '../discover/widgets/media_item_card.dart';
 
 import '../search/search_page.dart';
 
 /// A novel card uses real source metadata; absent fields are omitted.
-class NovelBookCard extends ConsumerWidget {
+class NovelBookCard extends StatelessWidget {
   const NovelBookCard({
     super.key,
     required this.item,
@@ -29,7 +29,16 @@ class NovelBookCard extends ConsumerWidget {
   final Future<void> Function()? onReturn;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final palette = context.palette;
+    void searchTag(String tag) => SearchPage.open(
+      context,
+      type: item.type,
+      sourceId: item.sourceId,
+      tags: [tag],
+      sourceOnly: true,
+    );
     final summary = item.description
         ?.replaceAll(RegExp(r'<[^>]*>'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
@@ -43,7 +52,7 @@ class NovelBookCard extends ConsumerWidget {
         },
         onLongPress: onLongPress,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: AppSpacing.card,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -54,49 +63,46 @@ class NovelBookCard extends ConsumerWidget {
                     width: 76,
                     height: 106,
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: item.coverUrl?.isNotEmpty == true
-                          ? Image(
-                              image: SourceNetworkImage(
-                                item.coverUrl!,
-                                http: ref.watch(sourceHttpClientProvider),
-                                sourceId: item.sourceId,
-                              ),
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, error, stack) =>
-                                  const ColoredBox(
-                                    color: Color(0x11777777),
-                                    child: Icon(Icons.menu_book_outlined),
-                                  ),
-                            )
-                          : const ColoredBox(
-                              color: Color(0x11777777),
-                              child: Icon(Icons.menu_book_outlined),
-                            ),
+                      borderRadius: AppRadius.controlRadius,
+                      child: MediaCover(
+                        url: item.coverUrl,
+                        sourceId: item.sourceId,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           item.title,
-                          style: Theme.of(context).textTheme.titleMedium,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: AppTypography.strong,
+                          ),
                         ),
                         if (item.author?.isNotEmpty == true) ...[
-                          const SizedBox(height: 6),
-                          Text(item.author!),
+                          const SizedBox(height: AppSpacing.xxs),
+                          Text(
+                            item.author!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: palette.mutedForeground,
+                            ),
+                          ),
                         ],
-                        const SizedBox(height: 6),
+                        const SizedBox(height: AppSpacing.xxs),
                         Text(
                           sourceLabel,
-                          style: Theme.of(context).textTheme.labelMedium,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                          ),
                         ),
                         if (item.status?.isNotEmpty == true)
                           Text(
                             item.status!,
-                            style: Theme.of(context).textTheme.bodySmall,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: palette.mutedForeground,
+                            ),
                           ),
                       ],
                     ),
@@ -104,36 +110,77 @@ class NovelBookCard extends ConsumerWidget {
                 ],
               ),
               if (summary?.isNotEmpty == true) ...[
-                const SizedBox(height: 12),
-                Text(summary!, maxLines: 3, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  summary!,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: palette.mutedForeground,
+                  ),
+                ),
               ],
               if (item.tags.isNotEmpty) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.xxs),
                 Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
+                  spacing: AppSpacing.xxs,
+                  runSpacing: AppSpacing.xxs,
                   children: [
-                    for (final tag in item.tags)
-                      ActionChip(
-                        label: Text(tag),
-                        onPressed: () => SearchPage.open(
-                          context,
-                          type: item.type,
-                          sourceId: item.sourceId,
-                          tags: [tag],
-                          sourceOnly: true,
+                    for (final tag in item.tags.take(3))
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(48, 48),
+                          textStyle: theme.textTheme.bodySmall,
+                        ),
+                        onPressed: () => searchTag(tag),
+                        child: Text('#$tag'),
+                      ),
+                    if (item.tags.length > 3)
+                      PopupMenuButton<String>(
+                        tooltip: '更多在线标签',
+                        onSelected: searchTag,
+                        itemBuilder: (_) => [
+                          for (final tag in item.tags.skip(3))
+                            PopupMenuItem(value: tag, child: Text(tag)),
+                        ],
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            minWidth: 48,
+                            minHeight: 48,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(AppSpacing.sm),
+                            child: Text(
+                              '更多标签 (${item.tags.length - 3})',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                   ],
                 ),
               ],
               if (status != null) ...[
-                const SizedBox(height: 12),
-                Text(status!, style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  status!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: palette.mutedForeground,
+                  ),
+                ),
               ],
               if (actions.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(spacing: 8, runSpacing: 4, children: actions),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                  child: Divider(),
+                ),
+                Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: actions,
+                ),
               ],
             ],
           ),

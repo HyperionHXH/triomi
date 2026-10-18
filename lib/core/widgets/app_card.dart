@@ -5,7 +5,7 @@ import '../theme/app_tokens.dart';
 
 /// 设计语言的基础容器：圆角卡片。
 ///
-/// 浅色主题用极淡投影，深色主题靠明度分层（投影为透明），与 libadwaita 一致。
+/// 浅色、深色主题均以细描边区分容器，Material 负责圆角裁剪与水波纹。
 /// 设置组、详情信息块、书架卡片外壳都应使用它。
 class AppCard extends StatelessWidget {
   const AppCard({
@@ -26,10 +26,13 @@ class AppCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final decoration = BoxDecoration(
+    final decoration = ShapeDecoration(
       color: palette.card,
-      borderRadius: AppRadius.cardRadius,
-      boxShadow: palette.cardShadow == const Color(0x00000000)
+      shape: RoundedRectangleBorder(
+        borderRadius: AppRadius.cardRadius,
+        side: BorderSide(color: palette.divider),
+      ),
+      shadows: palette.cardShadow == const Color(0x00000000)
           ? null
           : <BoxShadow>[
               BoxShadow(
@@ -40,13 +43,16 @@ class AppCard extends StatelessWidget {
             ],
     );
 
+    // Material owns both the rounded clip and ink splash. Keeping the
+    // decoration in Ink prevents covers/actions from painting outside it.
     return Padding(
       padding: margin,
-      child: DecoratedBox(
-        decoration: decoration,
-        child: Material(
-          type: MaterialType.transparency,
-          clipBehavior: clipBehavior,
+      child: Material(
+        type: MaterialType.transparency,
+        shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardRadius),
+        clipBehavior: clipBehavior,
+        child: Ink(
+          decoration: decoration,
           child: InkWell(
             onTap: onTap,
             child: Padding(padding: padding, child: child),

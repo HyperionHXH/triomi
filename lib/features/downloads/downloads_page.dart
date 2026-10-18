@@ -256,14 +256,14 @@ class _DownloadGroupCard extends StatelessWidget {
                   borderRadius: AppRadius.controlRadius,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.xs,
+                      vertical: AppSpacing.sm,
                     ),
                     child: Row(
                       children: <Widget>[
                         Expanded(
                           child: Text(
                             group.title,
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.titleSmall,
                           ),

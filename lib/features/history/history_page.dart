@@ -69,7 +69,7 @@ class HistoryPage extends ConsumerWidget {
                 ),
                 title: Text(
                   item?.title ?? '来源已移除的作品',
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 subtitle: Text(
@@ -82,8 +82,7 @@ class HistoryPage extends ConsumerWidget {
                       '已观看 ${entry.position.floor()} 秒',
                     _formatTime(entry.visitedAt),
                   ].join('  ·  '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  softWrap: true,
                   style: Theme.of(context).textTheme.bodySmall
                       ?.copyWith(color: context.palette.mutedForeground),
                 ),

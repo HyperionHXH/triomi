@@ -513,7 +513,8 @@ void main() {
         }),
       });
 
-      final candidates = await BangumiClient(http: http).search('x');
+      final candidates = await BangumiClient(http: http)
+          .search('x', type: MediaType.anime);
       expect(candidates, hasLength(2));
       expect(candidates[0].title, 'Only Japanese Title');
       expect(candidates[0].originalTitle, 'Only Japanese Title');
@@ -525,20 +526,34 @@ void main() {
     test('搜索：data 缺失或不是数组时报解析错误，合法空数组才是空结果', () async {
       for (final payload in <Object?>[
         <String, Object?>{'foo': 1},
-        <String, Object?>{'data': <String, Object?>{'id': 1}},
+        <String, Object?>{
+          'data': <String, Object?>{'id': 1},
+        },
         <String, Object?>{'data': null},
       ]) {
         final http = routingHttpClient(<String, String>{
           '/v0/search/subjects': jsonEncode(payload),
         });
-        await expectLater(BangumiClient(http: http).search('x'),
-          throwsA(isA<SourceException>()
-            .having((error) => error.type, 'type', SourceErrorType.parse)));
+        await expectLater(
+          BangumiClient(http: http).search('x', type: MediaType.anime),
+          throwsA(
+            isA<SourceException>().having(
+              (error) => error.type,
+              'type',
+              SourceErrorType.parse,
+            ),
+          ),
+        );
       }
       final empty = routingHttpClient(<String, String>{
-        '/v0/search/subjects': jsonEncode(<String, Object?>{'data': <Object?>[]}),
+        '/v0/search/subjects': jsonEncode(<String, Object?>{
+          'data': <Object?>[],
+        }),
       });
-      expect(await BangumiClient(http: empty).search('x'), isEmpty);
+      expect(
+        await BangumiClient(http: empty).search('x', type: MediaType.anime),
+        isEmpty,
+      );
     });
 
     test('剧集列表：ep 缺失时按列表顺序补号；非 Map 元素跳过', () async {
@@ -581,7 +596,8 @@ void main() {
         ]),
       });
 
-      final candidates = await AniListClient(http: http).search('x');
+      final candidates = await AniListClient(http: http)
+          .search('x', type: MediaType.anime);
       expect(candidates, hasLength(2));
       expect(candidates[0].title, 'ネイティブだけ');
       expect(candidates[0].originalTitle, 'ネイティブだけ');
@@ -598,14 +614,20 @@ void main() {
           },
         }),
       });
-      expect(await AniListClient(http: noMedia).search('x'), isEmpty);
+      expect(
+        await AniListClient(http: noMedia).search('x', type: MediaType.anime),
+        isEmpty,
+      );
 
       final noPage = routingHttpClient(<String, String>{
         'graphql.anilist.co': jsonEncode(<String, Object?>{
           'data': <String, Object?>{},
         }),
       });
-      expect(await AniListClient(http: noPage).search('x'), isEmpty);
+      expect(
+        await AniListClient(http: noPage).search('x', type: MediaType.anime),
+        isEmpty,
+      );
     });
 
     test('收藏：进度与状态缺失时降到 0 / 空串，映射不抛错', () async {

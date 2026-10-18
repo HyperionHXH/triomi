@@ -195,6 +195,20 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                       : null,
                   onTap: _busy ? null : _pickExportDirectory,
                 ),
+              ],
+            ),
+          ),
+          _card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('恢复备份', style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  '选择已有备份，先预览内容，再确认合并到本机；不会自动恢复账号凭据。',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: AppSpacing.sm),
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _pickBackup,
                   icon: const Icon(Icons.file_open_outlined),

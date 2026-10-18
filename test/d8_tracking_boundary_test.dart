@@ -153,7 +153,7 @@ void main() {
       );
 
       await expectLater(
-        bangumi.search('Naruto', token: 't'),
+        bangumi.search('Naruto', type: MediaType.anime, token: 't'),
         throwsA(
           isA<SourceException>()
               .having((error) => error.type, 'type', SourceErrorType.timeout)
@@ -217,40 +217,70 @@ void main() {
 
     test('空响应体不能冒充空搜索、零进度或空目录', () async {
       final bangumi = BangumiClient(http: realLikeClient());
-      final parseError = throwsA(isA<SourceException>()
-        .having((error) => error.type, 'type', SourceErrorType.parse));
-      await expectLater(bangumi.search('Naruto'), parseError);
-      await expectLater(bangumi.watchedEpisodeCount(12, token: 't'), parseError);
+      final parseError = throwsA(
+        isA<SourceException>().having(
+          (error) => error.type,
+          'type',
+          SourceErrorType.parse,
+        ),
+      );
+      await expectLater(
+        bangumi.search('Naruto', type: MediaType.anime),
+        parseError,
+      );
+      await expectLater(
+        bangumi.watchedEpisodeCount(12, token: 't'),
+        parseError,
+      );
       await expectLater(bangumi.episodes(12, token: 't'), parseError);
     });
     test('合法空列表与缺失列表字段有不同结果', () async {
       for (final body in ['{}', '[]', '{"data":null}', '{"data":{}}']) {
-        final http = realLikeClient(bodies: {
-          '/v0/search/subjects': body, '/v0/episodes': body, '/episodes?limit': body,
-        });
+        final http = realLikeClient(
+          bodies: {
+            '/v0/search/subjects': body,
+            '/v0/episodes': body,
+            '/episodes?limit': body,
+          },
+        );
         final bangumi = BangumiClient(http: http);
-        final parseError = throwsA(isA<SourceException>()
-          .having((error) => error.type, 'type', SourceErrorType.parse));
-        await expectLater(bangumi.search('Naruto'), parseError);
+        final parseError = throwsA(
+          isA<SourceException>().having(
+            (error) => error.type,
+            'type',
+            SourceErrorType.parse,
+          ),
+        );
+        await expectLater(
+          bangumi.search('Naruto', type: MediaType.anime),
+          parseError,
+        );
         await expectLater(bangumi.episodes(12), parseError);
-        await expectLater(bangumi.watchedEpisodeCount(12, token: 't'), parseError);
+        await expectLater(
+          bangumi.watchedEpisodeCount(12, token: 't'),
+          parseError,
+        );
       }
-      final bangumi = BangumiClient(http: realLikeClient(bodies: {
-        '/v0/search/subjects': '{"data":[]}', '/v0/episodes': '{"data":[]}',
-        '/episodes?limit': '{"data":[]}',
-      }));
-      expect(await bangumi.search('Naruto'), isEmpty);
+      final bangumi = BangumiClient(
+        http: realLikeClient(
+          bodies: {
+            '/v0/search/subjects': '{"data":[]}',
+            '/v0/episodes': '{"data":[]}',
+            '/episodes?limit': '{"data":[]}',
+          },
+        ),
+      );
+      expect(await bangumi.search('Naruto', type: MediaType.anime), isEmpty);
       expect(await bangumi.episodes(12), isEmpty);
       expect(await bangumi.watchedEpisodeCount(12, token: 't'), 0);
     });
-
 
     test('非法 JSON 归类为解析错误，错误信息带请求路径', () async {
       final http = realLikeClient(
         bodies: <String, String>{'/v0/search/subjects': '<html>oops</html>'},
       );
       await expectLater(
-        BangumiClient(http: http).search('Naruto'),
+        BangumiClient(http: http).search('Naruto', type: MediaType.anime),
         throwsA(
           isA<SourceException>()
               .having((error) => error.type, 'type', SourceErrorType.parse)

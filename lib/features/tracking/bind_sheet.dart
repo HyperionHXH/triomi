@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/media_item.dart';
+import '../../core/models/media_type.dart';
 import '../../core/theme/app_tokens.dart';
 import 'data/tracking_models.dart';
 import 'data/tracking_providers.dart';
@@ -54,7 +55,7 @@ class _TrackingBindSheetState extends ConsumerState<_TrackingBindSheet> {
     final bindingsKey = '${widget.item.sourceId}\u0000${widget.item.remoteId}';
 
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: EdgeInsets.only(
           left: AppSpacing.lg,
           right: AppSpacing.lg,
@@ -90,9 +91,12 @@ class _TrackingBindSheetState extends ConsumerState<_TrackingBindSheet> {
             Text(
               service.hasToken(_kind)
                   ? '已配置 ${_kind.label} token'
-                  : '尚未配置 ${_kind.label} token：请先到「我的 → 追踪账号」填写',
+                  : '尚未配置 ${_kind.label} token：请到对应${widget.item.type == MediaType.anime ? '追番' : widget.item.type.label}模块的设置 → 追踪账号填写',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            if (_kind == TrackingServiceKind.bangumi &&
+                widget.item.type != MediaType.anime)
+              const Text('Bangumi 将漫画与小说归为书籍，请核对版本。'),
             const SizedBox(height: AppSpacing.sm),
             Row(
               children: <Widget>[
@@ -127,7 +131,8 @@ class _TrackingBindSheetState extends ConsumerState<_TrackingBindSheet> {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
-            Flexible(
+            SizedBox(
+              height: 240,
               child: ListView(
                 shrinkWrap: true,
                 children: <Widget>[
@@ -141,7 +146,7 @@ class _TrackingBindSheetState extends ConsumerState<_TrackingBindSheet> {
                               candidate.originalTitle!.isNotEmpty)
                             candidate.originalTitle!,
                           if (candidate.totalEpisodes != null)
-                            '共 ${candidate.totalEpisodes} 集',
+                            '共 ${candidate.totalEpisodes} ${widget.item.type == MediaType.anime ? '集' : '章'}',
                         ].join(' · '),
                       ),
                       trailing: const Icon(Icons.link, size: 18),
@@ -204,7 +209,8 @@ class _TrackingBindSheetState extends ConsumerState<_TrackingBindSheet> {
     if (!service.hasToken(_kind)) {
       setState(() {
         _results = const <TrackCandidate>[];
-        _message = '请先在「我的 → 追踪账号」配置 ${_kind.label} 的 access token';
+        _message =
+            '请先在对应${widget.item.type == MediaType.anime ? '追番' : widget.item.type.label}模块设置的「追踪账号」配置 ${_kind.label} access token';
       });
       return;
     }
@@ -213,7 +219,11 @@ class _TrackingBindSheetState extends ConsumerState<_TrackingBindSheet> {
       _message = null;
     });
     try {
-      final results = await service.search(_kind, keyword);
+      final results = await service.search(
+        _kind,
+        keyword,
+        type: widget.item.type,
+      );
       if (!mounted) return;
       setState(() {
         _results = results;

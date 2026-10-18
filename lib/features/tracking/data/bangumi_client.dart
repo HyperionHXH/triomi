@@ -130,8 +130,11 @@ class BangumiClient {
     final map = _asMap(data);
     final id = _int(map['id']) ?? 0;
     if (id <= 0) {
-      throw const SourceException(sourceId: sourceId, type: SourceErrorType.parse,
-        message: 'Bangumi 账号身份无效');
+      throw const SourceException(
+        sourceId: sourceId,
+        type: SourceErrorType.parse,
+        message: 'Bangumi 账号身份无效',
+      );
     }
     // 顺手记住自己的 uid：读收藏要用数字路径，见 [_readUserSegment]。
     if (id > 0 && _userIdToken == token) _userId = '$id';
@@ -156,6 +159,7 @@ class BangumiClient {
   /// 不需要鉴权）。超时这种网络层问题重试也救不了，先把 `[[connection timeout]]` 如实透出。
   Future<List<TrackCandidate>> search(
     String keyword, {
+    required MediaType type,
     int limit = 10,
     String? token,
   }) async {
@@ -163,7 +167,12 @@ class BangumiClient {
     final hasToken = token != null && token.isNotEmpty;
     Object? data;
     try {
-      data = await _searchRequest(keyword, limit: limit, token: token);
+      data = await _searchRequest(
+        keyword,
+        type: type,
+        limit: limit,
+        token: token,
+      );
     } on SourceException catch (error) {
       // 镜像对带 Authorization 的搜索可能直接超时；搜索本身不需要鉴权，
       // 在确认请求已经切到备用地址后，按空结果路径再用匿名请求重试一次。
@@ -175,6 +184,7 @@ class BangumiClient {
       }
       data = await _searchRequest(
         keyword,
+        type: type,
         limit: limit,
         token: null,
         requestBaseUrl: fallbackBaseUrl,
@@ -184,6 +194,7 @@ class BangumiClient {
     if (candidates.isEmpty && hasToken && fallbackBaseUrl != null) {
       data = await _searchRequest(
         keyword,
+        type: type,
         limit: limit,
         token: null,
         requestBaseUrl: usedFallback ? fallbackBaseUrl : null,
@@ -195,6 +206,7 @@ class BangumiClient {
 
   Future<Object?> _searchRequest(
     String keyword, {
+    required MediaType type,
     required int limit,
     required String? token,
     String? requestBaseUrl,
@@ -206,9 +218,9 @@ class BangumiClient {
     body: <String, Object?>{
       'keyword': keyword.trim(),
       'sort': 'match',
-      // 2 = 动画；追踪以追番为主，搜索也限定动画避免拿到同名书籍。
       'filter': <String, Object?>{
-        'type': <int>[2],
+        // Bangumi groups manga and novels under books; do not invent subtypes.
+        'type': <int>[type == MediaType.anime ? 2 : 1],
       },
     },
   );
@@ -249,8 +261,11 @@ class BangumiClient {
     final returnedId = _int(map['subject_id']);
     if (!TrackStatusMap.bangumiLocal.containsKey(type) ||
         returnedId != null && returnedId != subjectId) {
-      throw const SourceException(sourceId: sourceId, type: SourceErrorType.parse,
-        message: 'Bangumi 收藏身份或状态无效，不能当作在看或未收藏');
+      throw const SourceException(
+        sourceId: sourceId,
+        type: SourceErrorType.parse,
+        message: 'Bangumi 收藏身份或状态无效，不能当作在看或未收藏',
+      );
     }
     return BangumiCollection(
       subjectId: _int(map['subject_id']) ?? subjectId,
@@ -268,11 +283,13 @@ class BangumiClient {
     int offset = 0,
     int limit = 100,
   }) async {
-    final data = _asMap(await _json(
-      '/v0/users/${Uri.encodeComponent(username)}/collections'
-      '?subject_type=2&limit=$limit&offset=$offset',
-      token: token,
-    ));
+    final data = _asMap(
+      await _json(
+        '/v0/users/${Uri.encodeComponent(username)}/collections'
+        '?subject_type=2&limit=$limit&offset=$offset',
+        token: token,
+      ),
+    );
     final rows = <Map<String, Object?>>[];
     for (final node in _dataList(data)) {
       final row = _asMapOrNull(node);
@@ -364,8 +381,11 @@ class BangumiClient {
       final map = _asMapOrNull(node);
       final type = _int(map?['type']);
       if (type == null || type < 0 || type > 3) {
-        throw const SourceException(sourceId: sourceId, type: SourceErrorType.parse,
-          message: 'Bangumi 剧集收藏状态无效，未视为零进度');
+        throw const SourceException(
+          sourceId: sourceId,
+          type: SourceErrorType.parse,
+          message: 'Bangumi 剧集收藏状态无效，未视为零进度',
+        );
       }
       if (type == 2) watched += 1;
     }
@@ -444,8 +464,11 @@ class BangumiClient {
 
     if (expectNoContent) return null;
     if (response.body.trim().isEmpty) {
-      throw SourceException(sourceId: sourceId, type: SourceErrorType.parse,
-        message: 'Bangumi 返回了空响应（$path），未视为未收藏或同步成功');
+      throw SourceException(
+        sourceId: sourceId,
+        type: SourceErrorType.parse,
+        message: 'Bangumi 返回了空响应（$path），未视为未收藏或同步成功',
+      );
     }
     try {
       final decoded = jsonDecode(response.body);
@@ -508,8 +531,11 @@ class BangumiClient {
 
   static List<Object?> _dataList(Object? value) {
     if (value is! Map || value['data'] is! List) {
-      throw const SourceException(sourceId: sourceId, type: SourceErrorType.parse,
-        message: 'Bangumi 列表响应格式无效，未视为空列表或同步成功');
+      throw const SourceException(
+        sourceId: sourceId,
+        type: SourceErrorType.parse,
+        message: 'Bangumi 列表响应格式无效，未视为空列表或同步成功',
+      );
     }
     return value['data'] as List<Object?>;
   }

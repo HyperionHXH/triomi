@@ -53,17 +53,22 @@ class AniListClient {
     return (id: _int(viewer['id']) ?? 0, name: _string(viewer['name']));
   }
 
-  /// 动画搜索。
+  /// Search within the actual AniList media type and publication format.
   Future<List<TrackCandidate>> search(
     String keyword, {
+    required MediaType type,
     int perPage = 10,
   }) async {
     final trimmed = keyword.trim();
     if (trimmed.isEmpty) return const <TrackCandidate>[];
     final data = await _query(
       'query (\$q: String) { Page(perPage: $perPage) '
-      r'{ media(search: $q, type: ANIME) '
-      r'{ id title { romaji native } episodes coverImage { medium } } } }',
+      '{ media(search: \$q, ${switch (type) {
+        MediaType.anime => 'type: ANIME',
+        MediaType.manga => 'type: MANGA, format_not: NOVEL',
+        MediaType.novel => 'type: MANGA, format: NOVEL',
+      }}) '
+      r'{ id title { romaji native } episodes chapters coverImage { medium } } } }',
       variables: <String, Object?>{'q': trimmed},
     );
     final media = _asList(_asMap(_asMap(data)['Page'])['media']);
@@ -77,7 +82,9 @@ class AniListClient {
                 : _string(_asMap(map['title'])['romaji']),
             originalTitle: _string(_asMap(map['title'])['native']),
             coverUrl: _string(_asMap(map['coverImage'])['medium']),
-            totalEpisodes: _int(map['episodes']),
+            totalEpisodes: _int(
+              map[type == MediaType.anime ? 'episodes' : 'chapters'],
+            ),
           ),
     ]..removeWhere((candidate) => candidate.remoteTrackId == '0');
   }

@@ -15,6 +15,7 @@ import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
 import '../../core/storage/preferences.dart';
+import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../library/data/library_providers.dart';
 import '../library/data/library_repository.dart';
@@ -705,12 +706,15 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
             ],
           ),
         ),
+        const SizedBox(height: AppSpacing.xs),
+        const Divider(),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refresh,
-            child: ListView.builder(
+            child: ListView.separated(
               key: PageStorageKey('novel-shelf-$_downloaded'),
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(AppSpacing.md),
+              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
               physics: const AlwaysScrollableScrollPhysics(),
               itemCount: filtered.length + 1,
               itemBuilder: (context, index) {
@@ -946,8 +950,8 @@ class NovelExportChooser extends ConsumerWidget {
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
             child: Text(
-              '选择书籍后，在详情更多中使用 EPUB / TXT 或下载。'
-              '仅可导出有权限的正文；轻书架保留官方整书下载限制。',
+              '在详情选择章节缓存，或通过导出菜单导出 EPUB / TXT；'
+              '仅可导出有权限的正文，轻书架官方整书下载仍受站点权限限制。',
             ),
           ),
           Expanded(
@@ -966,7 +970,7 @@ class NovelExportChooser extends ConsumerWidget {
                   ? const EmptyStateView(
                       icon: Icons.menu_book_outlined,
                       title: '还没有本地小说',
-                      message: '先从小说发现或搜索打开作品、收藏或阅读，再在该作品详情更多中下载 / 导出。',
+                      message: '先从小说发现或搜索打开作品、收藏或阅读，再在作品详情缓存章节或导出。',
                     )
                   : ListView.builder(
                       itemCount: items.length,
