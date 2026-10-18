@@ -4,6 +4,7 @@ import 'dart:io';
 
 import '../../../../core/models/media_type.dart';
 import '../../../../core/models/source_exception.dart';
+import '../../../../core/source/http_adapter_io.dart';
 import 'lns_json.dart';
 
 /// 轻书架（LNS）SignalR 协议层。
@@ -40,9 +41,32 @@ Future<LnsSocket> connectLnsWebSocket(
   Uri uri,
   Map<String, String> headers,
 ) async {
-  final socket = await WebSocket.connect(uri.toString(), headers: headers);
-  socket.pingInterval = const Duration(seconds: 15);
-  return _IoWebSocketSocket(socket);
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 14);
+  final resolver = SourceDnsFallback();
+  client.connectionFactory = (target, proxyHost, proxyPort) async {
+    if (proxyHost != null) {
+      return Socket.startConnect(proxyHost, proxyPort ?? target.port);
+    }
+    if (sourceDnsHosts.contains(target.host)) {
+      return connectWithDnsFallback(target, resolver);
+    }
+    if (target.scheme == 'https' || target.scheme == 'wss') {
+      return SecureSocket.startConnect(target.host, target.port);
+    }
+    return Socket.startConnect(target.host, target.port);
+  };
+  try {
+    final socket = await WebSocket.connect(
+      uri.toString(),
+      headers: headers,
+      customClient: client,
+    ).timeout(const Duration(seconds: 14));
+    socket.pingInterval = const Duration(seconds: 15);
+    return _IoWebSocketSocket(socket, client);
+  } catch (_) {
+    client.close(force: true);
+    rethrow;
+  }
 }
 
 /// 把 hub 地址映射成 `WebSocket.connect` 能吃的 scheme。
@@ -50,16 +74,27 @@ Future<LnsSocket> connectLnsWebSocket(
 /// 配置里 hub 地址是 `https://…`（http 语义），而 `WebSocket.connect` 只接受
 /// `ws` / `wss`——直接传 https 会立刻抛 `Unsupported URL scheme 'https'`。
 /// 放在建连这一层做，自定义连接器（桌面 / 测试替身）拿到的就都是可用地址。
-Uri webSocketUrl(Uri uri) => switch (uri.scheme) {
-  'https' => uri.replace(scheme: 'wss'),
-  'http' => uri.replace(scheme: 'ws'),
-  _ => uri,
-};
+Uri webSocketUrl(Uri uri) {
+  final scheme = switch (uri.scheme) {
+    'https' => 'wss',
+    'http' => 'ws',
+    _ => uri.scheme,
+  };
+  final port = uri.hasPort
+      ? uri.port
+      : switch (scheme) {
+          'wss' => 443,
+          'ws' => 80,
+          _ => null,
+        };
+  return uri.replace(scheme: scheme, port: port);
+}
 
 class _IoWebSocketSocket implements LnsSocket {
-  _IoWebSocketSocket(this._socket);
+  _IoWebSocketSocket(this._socket, this._client);
 
   final WebSocket _socket;
+  final HttpClient _client;
 
   @override
   Stream<Object?> get stream => _socket;
@@ -68,7 +103,13 @@ class _IoWebSocketSocket implements LnsSocket {
   void send(String data) => _socket.add(data);
 
   @override
-  Future<void> close() => _socket.close();
+  Future<void> close() async {
+    try {
+      await _socket.close();
+    } finally {
+      _client.close();
+    }
+  }
 }
 
 /// Hub 调用抽象：`invoke` 返回响应信封（由网关解包）。

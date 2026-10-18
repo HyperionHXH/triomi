@@ -425,6 +425,103 @@ void main() {
     });
   });
 
+  group('漫画整本阅读状态', () {
+    test('已读和未读修改本地进度但保留真实阅读历史', () async {
+      await repository.addToLibrary(manga);
+      final first = chapter(remoteId: '101', title: '第 1 话');
+      await repository.saveChapters(
+        itemSourceId: manga.sourceId,
+        itemRemoteId: manga.remoteId,
+        chapters: [
+          first,
+          chapter(remoteId: '105', title: '第 4.5 话', index: 1),
+        ],
+      );
+      await repository.recordHistory(
+        sourceId: manga.sourceId,
+        remoteId: manga.remoteId,
+        chapter: first,
+        position: 7,
+      );
+      final keys = {(manga.sourceId, manga.remoteId)};
+      expect(await repository.setMangaRead(keys, read: true), 1);
+      var entry = (await repository.listLibrary()).single.entry;
+      expect(entry.status, 'done');
+      expect(entry.progress, 4.5);
+      expect(entry.unreadCount, 0);
+      expect(await repository.setMangaRead(keys, read: true), 0);
+      expect(await repository.setMangaRead(keys, read: false), 1);
+      entry = (await repository.listLibrary()).single.entry;
+      expect(entry.status, 'want');
+      expect(entry.progress, 0);
+      expect(entry.unreadCount, 2);
+      expect(await repository.setMangaRead(keys, read: false), 0);
+      final history = (await repository.recentHistory()).single;
+      expect(history.chapterRemoteId, '101');
+      expect(history.position, 7);
+    });
+
+    test('未缓存目录仍保存阅读状态且不会编造章节或回退更远的进度', () async {
+      await repository.addToLibrary(manga);
+      final keys = {(manga.sourceId, manga.remoteId)};
+      await repository.updateProgress(
+        sourceId: manga.sourceId,
+        remoteId: manga.remoteId,
+        chapterNumber: 12,
+      );
+      await repository.setMangaRead(keys, read: true);
+      var entry = (await repository.listLibrary()).single.entry;
+      expect(entry.progress, 12);
+      expect(entry.status, 'done');
+      await repository.setMangaRead(keys, read: false);
+      entry = (await repository.listLibrary()).single.entry;
+      expect(entry.progress, 0);
+      expect(entry.status, 'want');
+      expect(entry.unreadCount, 0);
+      expect(
+        await repository.loadChapters(manga.sourceId, manga.remoteId),
+        isEmpty,
+      );
+    });
+
+    test('同号其他来源、其他形态和未收藏作品不受批量状态影响', () async {
+      await repository.addToLibrary(manga);
+      const other = MediaItem(
+        sourceId: 'other-manga',
+        remoteId: '12',
+        type: MediaType.manga,
+        title: '同号其他来源',
+      );
+      const novel = MediaItem(
+        sourceId: 'novel',
+        remoteId: '12',
+        type: MediaType.novel,
+        title: '小说',
+      );
+      await repository.addToLibrary(other);
+      await repository.addToLibrary(novel);
+      final before = {
+        for (final view in await repository.listLibrary())
+          view.item.sourceId: view.entry,
+      };
+      expect(
+        await repository.setMangaRead({
+          (manga.sourceId, manga.remoteId),
+          (novel.sourceId, novel.remoteId),
+          ('missing', '12'),
+        }, read: true),
+        1,
+      );
+      final after = {
+        for (final view in await repository.listLibrary())
+          view.item.sourceId: view.entry,
+      };
+      expect(after[other.sourceId], before[other.sourceId]);
+      expect(after[novel.sourceId], before[novel.sourceId]);
+      expect(after[manga.sourceId]!.status, 'done');
+    });
+  });
+
   group('阅读历史', () {
     test('记录历史后可查回，且带作品与章节标题', () async {
       await repository.addToLibrary(manga);

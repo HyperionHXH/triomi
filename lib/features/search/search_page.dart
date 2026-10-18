@@ -46,17 +46,20 @@ class SearchPage extends ConsumerStatefulWidget {
     String query = '',
     bool sourceOnly = false,
     List<String> tags = const [],
-  }) => Navigator.of(context, rootNavigator: true).push<void>(
-    MaterialPageRoute<void>(
-      builder: (_) => SearchPage(
-        type: type,
-        initialSourceId: sourceId,
-        initialQuery: query,
-        sourceOnly: sourceOnly,
-        initialTags: tags,
+  }) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    return Navigator.of(context, rootNavigator: true).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => SearchPage(
+          type: type,
+          initialSourceId: sourceId,
+          initialQuery: query,
+          sourceOnly: sourceOnly,
+          initialTags: tags,
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   final MediaType type;
   final String? initialSourceId;
@@ -117,7 +120,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   Future<void> _submit() async {
     final query = _controller.text.trim();
-    final hasCriteria = query.isNotEmpty || _tags.isNotEmpty ||
+    final hasCriteria =
+        query.isNotEmpty ||
+        _tags.isNotEmpty ||
         (widget.type == MediaType.anime && _animeFilter.active);
     final generation = ++_generation;
     _cancelRequests();
@@ -130,6 +135,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       _starting = hasCriteria;
     });
     if (!hasCriteria) return;
+    FocusManager.instance.primaryFocus?.unfocus();
     try {
       final preferences = ref.read(preferencesProvider);
       final history = preferences.get<List<Object?>>(_historyKey) ?? [];
@@ -223,31 +229,33 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       }
       final provider = active.source as SearchProvider;
       final items = await owner
-          .run(
-            () {
-              if (provider is BangumiSource) {
-                return provider.searchFiltered(
-                  query,
-                  page: page,
-                  filter: AnimePublicFilter(
-                    tags: _animeFilter.tags,
-                    year: _animeFilter.year,
-                    quarter: _animeFilter.quarter,
-                    minScore: _animeFilter.minScore,
-                    maxScore: _animeFilter.maxScore,
-                    sort: _animeFilter.sort,
-                  ),
-                );
-              }
-              if (_tags.isNotEmpty && provider is TagSearchProvider) {
-                return (provider as TagSearchProvider).searchTagged(query, tags: _tags, page: page);
-              }
-              return provider.search(
-                [..._tags, if (query.isNotEmpty) query].join(' '),
+          .run(() {
+            if (provider is BangumiSource) {
+              return provider.searchFiltered(
+                query,
+                page: page,
+                filter: AnimePublicFilter(
+                  tags: _animeFilter.tags,
+                  year: _animeFilter.year,
+                  quarter: _animeFilter.quarter,
+                  minScore: _animeFilter.minScore,
+                  maxScore: _animeFilter.maxScore,
+                  sort: _animeFilter.sort,
+                ),
+              );
+            }
+            if (_tags.isNotEmpty && provider is TagSearchProvider) {
+              return (provider as TagSearchProvider).searchTagged(
+                query,
+                tags: _tags,
                 page: page,
               );
-            },
-          )
+            }
+            return provider.search(
+              [..._tags, if (query.isNotEmpty) query].join(' '),
+              page: page,
+            );
+          })
           .timeout(
             const Duration(seconds: 20),
             onTimeout: () {
@@ -310,33 +318,44 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     try {
       final snapshot = await ref.read(sourcesProvider.future);
       if (!mounted) return;
-      final candidates = snapshot.enabledWith(SourceCapability.search)
-          .where((e) => e.descriptor.type == widget.type &&
-              e.source is TagSearchProvider &&
-              (_scopeId == null || e.descriptor.id == _scopeId))
+      final candidates = snapshot
+          .enabledWith(SourceCapability.search)
+          .where(
+            (e) =>
+                e.descriptor.type == widget.type &&
+                e.source is TagSearchProvider &&
+                (_scopeId == null || e.descriptor.id == _scopeId),
+          )
           .toList();
       SourceEntry? entry;
       if (candidates.length == 1) {
         entry = candidates.single;
       } else if (candidates.isNotEmpty) {
         entry = await showModalBottomSheet<SourceEntry>(
-          context: context, useSafeArea: true, isScrollControlled: true,
+          context: context,
+          useSafeArea: true,
+          isScrollControlled: true,
           builder: (context) => SafeArea(
-            child: ListView(shrinkWrap: true, children: [
-              const ListTile(title: Text('选择来源题材')),
-              for (final source in candidates)
-                ListTile(
-                  title: Text(source.descriptor.name),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.pop(context, source),
-                ),
-            ]),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                const ListTile(title: Text('选择来源题材')),
+                for (final source in candidates)
+                  ListTile(
+                    title: Text(source.descriptor.name),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.pop(context, source),
+                  ),
+              ],
+            ),
           ),
         );
       }
       if (!mounted || entry == null) return;
       final source = entry.source as TagSearchProvider;
-      final taxonomy = await source.searchTags().timeout(const Duration(seconds: 20));
+      final taxonomy = await source.searchTags().timeout(
+        const Duration(seconds: 20),
+      );
       if (!mounted) return;
       if (taxonomy.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -346,35 +365,51 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       }
       var selected = _tags.firstOrNull;
       final result = await showModalBottomSheet<List<String>>(
-        context: context, useSafeArea: true, isScrollControlled: true,
+        context: context,
+        useSafeArea: true,
+        isScrollControlled: true,
         constraints: const BoxConstraints(maxWidth: 680),
         builder: (context) => StatefulBuilder(
           builder: (context, update) => SizedBox(
             height: MediaQuery.sizeOf(context).height * .7,
-            child: Column(children: [
-              ListTile(
-                title: Text('${entry!.descriptor.name} · 题材'),
-                trailing: TextButton(
-                  onPressed: () => Navigator.pop(context, selected == null ? <String>[] : [selected!]),
-                  child: const Text('搜索'),
-                ),
-              ),
-              Expanded(child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Wrap(spacing: 8, runSpacing: 8, children: [
-                  FilterChip(
-                    label: const Text('不限'), selected: selected == null,
-                    onSelected: (_) => update(() => selected = null),
-                  ),
-                  for (final tag in taxonomy)
-                    FilterChip(
-                      label: Text(tag.label),
-                      selected: selected == tag.label || selected == tag.id,
-                      onSelected: (value) => update(() => selected = value ? tag.id : null),
+            child: Column(
+              children: [
+                ListTile(
+                  title: Text('${entry!.descriptor.name} · 题材'),
+                  trailing: TextButton(
+                    onPressed: () => Navigator.pop(
+                      context,
+                      selected == null ? <String>[] : [selected!],
                     ),
-                ]),
-              )),
-            ]),
+                    child: const Text('搜索'),
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        FilterChip(
+                          label: const Text('不限'),
+                          selected: selected == null,
+                          onSelected: (_) => update(() => selected = null),
+                        ),
+                        for (final tag in taxonomy)
+                          FilterChip(
+                            label: Text(tag.label),
+                            selected:
+                                selected == tag.label || selected == tag.id,
+                            onSelected: (value) =>
+                                update(() => selected = value ? tag.id : null),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -386,9 +421,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       await _submit();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('加载来源题材失败：$error')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('加载来源题材失败：$error')));
       }
     } finally {
       if (mounted) setState(() => _tagBusy = false);
@@ -464,20 +498,24 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           if (_tags.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final tag in _tags)
-                  InputChip(
-                    label: Text(tag),
-                    deleteButtonTooltipMessage: '移除标签 $tag',
-                    onDeleted: () {
-                      setState(() {
-                        _tags = _tags.where((t) => t != tag).toList();
-                        _animeFilter = _animeFilter.withTags(_tags);
-                      });
-                      unawaited(_submit());
-                    },
-                  ),
-              ]),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final tag in _tags)
+                    InputChip(
+                      label: Text(tag),
+                      deleteButtonTooltipMessage: '移除标签 $tag',
+                      onDeleted: () {
+                        setState(() {
+                          _tags = _tags.where((t) => t != tag).toList();
+                          _animeFilter = _animeFilter.withTags(_tags);
+                        });
+                        unawaited(_submit());
+                      },
+                    ),
+                ],
+              ),
             ),
           if (widget.type != MediaType.anime)
             Align(

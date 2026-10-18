@@ -113,13 +113,14 @@ class MediaItemCollection extends StatelessWidget {
         final minimumWidth =
             appearance.minimumCardWidth *
             (scaler.scale(13) / 13).clamp(1.0, 2.5);
-        final animeGrid = items.isNotEmpty &&
+        final animeGrid =
+            items.isNotEmpty &&
             items.every((item) => item.type == MediaType.anime);
         final columns = animeGrid && constraints.maxWidth < 600
             ? 3
             : ((width + appearance.gap) / (minimumWidth + appearance.gap))
-                .floor()
-                .clamp(1, 8);
+                  .floor()
+                  .clamp(1, 8);
         final coverWidth = (width - (columns - 1) * appearance.gap) / columns;
         // A mixed auto grid reserves portrait-height cells, but every cover
         // keeps its own type's exact ratio rather than stretching anime.
@@ -391,27 +392,12 @@ class MediaCover extends ConsumerStatefulWidget {
 }
 
 class _MediaCoverState extends ConsumerState<MediaCover> {
-  Timer? _fallback;
-  bool _useMirror = false;
-  bool _loaded = false;
   Uint8List? _localBytes;
   bool _checkingLocal = false;
   int _localGeneration = 0;
-  String? get _mirrorUrl {
-    final uri = Uri.tryParse(widget.url ?? '');
-    if (uri == null || uri.scheme != 'https' || uri.host != 'lain.bgm.tv') {
-      return null;
-    }
-    return Uri.https('wsrv.nl', '/', {
-      'url': '${uri.host}${uri.path}',
-    }).toString();
-  }
 
   void _prepare() {
     final generation = ++_localGeneration;
-    _fallback?.cancel();
-    _useMirror = false;
-    _loaded = false;
     _localBytes = null;
     final url = widget.url;
     _checkingLocal = url != null && url.isNotEmpty;
@@ -432,11 +418,6 @@ class _MediaCoverState extends ConsumerState<MediaCover> {
         }
       }());
     }
-    if (_mirrorUrl != null) {
-      _fallback = Timer(const Duration(seconds: 6), () {
-        if (mounted && !_loaded) setState(() => _useMirror = true);
-      });
-    }
   }
 
   @override
@@ -449,12 +430,6 @@ class _MediaCoverState extends ConsumerState<MediaCover> {
   void didUpdateWidget(MediaCover oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.url != widget.url) _prepare();
-  }
-
-  @override
-  void dispose() {
-    _fallback?.cancel();
-    super.dispose();
   }
 
   @override
@@ -484,37 +459,15 @@ class _MediaCoverState extends ConsumerState<MediaCover> {
   }
 
   Widget _networkCover(Widget placeholder, SourceHttpClient http) {
-    final value = _useMirror ? _mirrorUrl : widget.url;
+    final value = widget.url;
     if (value == null || value.isEmpty) return placeholder;
 
     return Image(
       image: SourceNetworkImage(value, http: http, sourceId: widget.sourceId),
       fit: BoxFit.cover,
-      frameBuilder: (context, child, frame, synchronous) {
-        if (frame != null || synchronous) {
-          _loaded = true;
-          _fallback?.cancel();
-          return child;
-        }
-        return placeholder;
-      },
-      errorBuilder: (context, error, stack) {
-        final mirror = _mirrorUrl;
-        if (!_useMirror && mirror != null) {
-          return Image(
-            image: SourceNetworkImage(
-              mirror,
-              http: http,
-              sourceId: widget.sourceId,
-            ),
-            fit: BoxFit.cover,
-            frameBuilder: (_, child, frame, synchronous) =>
-                frame != null || synchronous ? child : placeholder,
-            errorBuilder: (_, error, stack) => placeholder,
-          );
-        }
-        return placeholder;
-      },
+      frameBuilder: (_, child, frame, synchronous) =>
+          frame != null || synchronous ? child : placeholder,
+      errorBuilder: (_, error, stack) => placeholder,
     );
   }
 }

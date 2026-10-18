@@ -634,6 +634,61 @@ class LibraryRepository {
         return updated;
       });
 
+  /// Mark whole manga locally using the existing library reading state.
+  /// Cached chapters bound the known progress/count; absent chapters are not
+  /// invented. Actual visits/page positions and remote shelves stay untouched.
+  Future<int> setMangaRead(Set<(String, String)> keys, {required bool read}) =>
+      _db.transaction(() async {
+        var updated = 0;
+        for (final key in keys) {
+          final entry =
+              await (_db.select(_db.libraryEntries)..where(
+                    (table) =>
+                        table.sourceId.equals(key.$1) &
+                        table.remoteId.equals(key.$2) &
+                        table.type.equalsValue(MediaType.manga),
+                  ))
+                  .getSingleOrNull();
+          if (entry == null) continue;
+          final chapters = await _db
+              .customSelect(
+                'SELECT COUNT(*) AS chapter_count, '
+                'CAST(MAX(CASE WHEN number >= 0 THEN number '
+                'ELSE sort_index + 1.0 END) AS REAL) AS last_progress '
+                'FROM chapters WHERE item_source_id = ? AND item_remote_id = ?',
+                variables: [Variable<String>(key.$1), Variable<String>(key.$2)],
+                readsFrom: {_db.chapters},
+              )
+              .getSingle();
+          final last = chapters.readNullable<double>('last_progress') ?? 0;
+          final progress = read
+              ? (entry.progress > last ? entry.progress : last)
+              : 0.0;
+          final unread = read ? 0 : chapters.read<int>('chapter_count');
+          final status = read ? 'done' : 'want';
+          if (entry.progress == progress &&
+              entry.unreadCount == unread &&
+              entry.status == status) {
+            continue;
+          }
+          updated +=
+              await (_db.update(_db.libraryEntries)..where(
+                    (table) =>
+                        table.sourceId.equals(key.$1) &
+                        table.remoteId.equals(key.$2) &
+                        table.type.equalsValue(MediaType.manga),
+                  ))
+                  .write(
+                    LibraryEntriesCompanion(
+                      status: Value(status),
+                      progress: Value(progress),
+                      unreadCount: Value(unread),
+                    ),
+                  );
+        }
+        return updated;
+      });
+
   /// 记录一次阅读（同一章节重复阅读只保留最新一条）。
   Future<void> recordHistory({
     required String sourceId,

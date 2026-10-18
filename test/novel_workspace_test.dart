@@ -127,6 +127,7 @@ class _NovelSource
     if (unreadError != null) throw unreadError!;
     return {};
   }
+
   @override
   Future<void> setInRemoteShelf(MediaItem item, bool add) async {
     remoteWrites++;
@@ -162,8 +163,10 @@ void main() {
   ProviderContainer? shelfContainer;
 
   Finder remoteBookCard() => find.byWidgetPredicate(
-    (widget) => widget is NovelBookCard &&
-        widget.item.sourceId == 'lk' && widget.item.remoteId == 'remote',
+    (widget) =>
+        widget is NovelBookCard &&
+        widget.item.sourceId == 'lk' &&
+        widget.item.remoteId == 'remote',
   );
 
   Future<void> pumpShelf(
@@ -188,6 +191,19 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+  }
+
+  Future<void> pullRefresh(WidgetTester tester) async {
+    final scrollable = find
+        .descendant(
+          of: find.byType(RefreshIndicator),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    tester.state<ScrollableState>(scrollable).position.jumpTo(0);
+    await tester.drag(find.byType(RefreshIndicator), const Offset(0, 400));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
   }
 
   void shelfTest(String name, WidgetTesterCallback body) {
@@ -332,24 +348,24 @@ void main() {
       expect(remoteBookCard(), findsOneWidget);
       expect(find.textContaining('尚未加入本机收藏'), findsOneWidget);
       lk.shelfError = StateError('shelf unavailable');
-      await tester.tap(find.text('刷新已登录站点收藏 / 未读'));
+      await pullRefresh(tester);
       await tester.pumpAndSettle();
       expect(remoteBookCard(), findsOneWidget);
       expect(find.textContaining('上次成功快照（本次刷新失败）'), findsOneWidget);
       lk.shelfError = null;
       lk.books = [];
-      await tester.tap(find.text('刷新已登录站点收藏 / 未读'));
+      await pullRefresh(tester);
       await tester.pumpAndSettle();
       books = await repository.listLibrary(type: MediaType.novel);
       expect(books.length, 2);
       expect(remoteBookCard(), findsNothing);
       expect(lk.remoteWrites + lns.remoteWrites, 0);
       lk.books = [_book('lk', 'remote', '站点小说')];
-      await tester.tap(find.text('刷新已登录站点收藏 / 未读'));
+      await pullRefresh(tester);
       await tester.pumpAndSettle();
       expect(remoteBookCard(), findsOneWidget);
       lk.loggedIn = false;
-      await tester.tap(find.text('刷新已登录站点收藏 / 未读'));
+      await pullRefresh(tester);
       await tester.pumpAndSettle();
       expect(remoteBookCard(), findsNothing);
       expect((await repository.listLibrary(type: MediaType.novel)).length, 2);
@@ -395,7 +411,7 @@ void main() {
       await pumpShelf(tester, sources: [source]);
       expect(source.directoryCalls.toSet(), {'updated', 'failed', 'empty'});
       for (var refresh = 0; refresh < 2; refresh++) {
-        await tester.tap(find.text('刷新已登录站点收藏 / 未读'));
+        await pullRefresh(tester);
         await tester.pumpAndSettle();
         final unread = {
           for (final view in await repository.listLibrary(
@@ -439,7 +455,9 @@ void main() {
       await repository.saveChapters(
         itemSourceId: 'lk',
         itemRemoteId: 'download',
-        chapters: const [Chapter(sourceId: 'lk', remoteId: 'cached', title: '缓存')],
+        chapters: const [
+          Chapter(sourceId: 'lk', remoteId: 'cached', title: '缓存'),
+        ],
       );
       await DownloadRepository(db).saveChapterContent(
         const Chapter(
@@ -478,7 +496,10 @@ void main() {
   shelfTest(
     'failed first shelf load is not represented as an empty collection',
     (tester) async {
-      final source = _NovelSource('lk', shelfError: StateError('shelf offline'));
+      final source = _NovelSource(
+        'lk',
+        shelfError: StateError('shelf offline'),
+      );
       await pumpShelf(tester, sources: [source]);
       expect(find.textContaining('shelf offline'), findsOneWidget);
       expect(find.textContaining('书架暂无收藏'), findsNothing);
@@ -492,15 +513,22 @@ void main() {
       final book = _book('lk', 'remote', '站点小说');
       await repository.cacheItem(book);
       const chapter = Chapter(
-        sourceId: 'lk', remoteId: 'cached', title: '离线章节',
+        sourceId: 'lk',
+        remoteId: 'cached',
+        title: '离线章节',
         content: ChapterContent(text: '保留离线正文'),
       );
       await repository.saveChapters(
-        itemSourceId: 'lk', itemRemoteId: 'remote', chapters: [chapter],
+        itemSourceId: 'lk',
+        itemRemoteId: 'remote',
+        chapters: [chapter],
       );
       await DownloadRepository(db).saveChapterContent(chapter);
       await repository.recordHistory(
-        sourceId: 'lk', remoteId: 'remote', chapter: chapter, position: 4,
+        sourceId: 'lk',
+        remoteId: 'remote',
+        chapter: chapter,
+        position: 4,
       );
       final source = _NovelSource('lk', books: [book]);
       await pumpShelf(tester, sources: [source]);
@@ -525,32 +553,34 @@ void main() {
       expect(remoteBookCard(), findsNothing);
       expect(await repository.isInLibrary('lk', 'remote'), false);
       expect((await repository.lastReadOf('lk', 'remote'))!.position, 4);
-      expect((await repository.loadChapters('lk', 'remote')).single.content!.text,
-          '保留离线正文');
+      expect(
+        (await repository.loadChapters('lk', 'remote')).single.content!.text,
+        '保留离线正文',
+      );
       await tester.tap(find.text('已下载'));
       await tester.pumpAndSettle();
       expect(remoteBookCard(), findsOneWidget);
     },
   );
 
-  shelfTest(
-    'revoked sessions discard late remote shelf results',
-    (tester) async {
-      final slow = _NovelSource('slow');
-      final fast = _NovelSource('lk', books: [_book('lk', 'remote', '站点小说')]);
-      await pumpShelf(tester, sources: [slow, fast]);
-      expect(remoteBookCard(), findsOneWidget);
-      slow.shelfResponse = Completer<List<MediaItem>>();
-      await tester.tap(find.text('刷新已登录站点收藏 / 未读'));
-      await tester.pump();
-      slow.loggedIn = false;
-      shelfContainer!.invalidate(sourcesProvider);
-      slow.shelfResponse!.complete([_book('slow', 'late', '过期账号作品')]);
-      await tester.pumpAndSettle();
-      expect(find.text('过期账号作品'), findsNothing);
-      expect(await repository.isInLibrary('slow', 'late'), false);
-    },
-  );
+  shelfTest('revoked sessions discard late remote shelf results', (
+    tester,
+  ) async {
+    final slow = _NovelSource('slow');
+    final fast = _NovelSource('lk', books: [_book('lk', 'remote', '站点小说')]);
+    await pumpShelf(tester, sources: [slow, fast]);
+    expect(remoteBookCard(), findsOneWidget);
+    slow.shelfResponse = Completer<List<MediaItem>>();
+    await pullRefresh(tester);
+    await tester.pump();
+    expect(slow.shelfCalls, 2);
+    slow.loggedIn = false;
+    shelfContainer!.invalidate(sourcesProvider);
+    slow.shelfResponse!.complete([_book('slow', 'late', '过期账号作品')]);
+    await tester.pumpAndSettle();
+    expect(find.text('过期账号作品'), findsNothing);
+    expect(await repository.isInLibrary('slow', 'late'), false);
+  });
 
   testWidgets(
     'novel discovery ends repeated pages and retains independent source channels',
@@ -588,26 +618,35 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
-  testWidgets('discovery reloads retained channels after registry replacement', (tester) async {
-    final source = _NovelSource('lk');
-    final container = ProviderContainer(overrides: [
-      preferencesProvider.overrideWithValue(memoryPreferences()),
-      sourcesProvider.overrideWith(() => _Sources([source])),
-    ]);
-    try {
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(home: Scaffold(body: NovelDiscoveryView())),
-      ));
-      await tester.pumpAndSettle();
-      expect(source.listingCalls, ['hot/1']);
-      container.invalidate(sourcesProvider);
-      await tester.pumpAndSettle();
-      expect(source.listingCalls, ['hot/1', 'hot/1']);
-      expect(find.text('lk hot book'), findsOneWidget);
-    } finally {
-      await tester.pumpWidget(const SizedBox.shrink());
-      container.dispose();
-    }
-  });
+  testWidgets(
+    'discovery reloads retained channels after registry replacement',
+    (tester) async {
+      final source = _NovelSource('lk');
+      final container = ProviderContainer(
+        overrides: [
+          preferencesProvider.overrideWithValue(memoryPreferences()),
+          sourcesProvider.overrideWith(() => _Sources([source])),
+        ],
+      );
+      try {
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(
+              home: Scaffold(body: NovelDiscoveryView()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(source.listingCalls, ['hot/1']);
+        container.invalidate(sourcesProvider);
+        await tester.pumpAndSettle();
+        expect(source.listingCalls, ['hot/1', 'hot/1']);
+        expect(find.text('lk hot book'), findsOneWidget);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        container.dispose();
+      }
+    },
+  );
 }

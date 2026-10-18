@@ -14,7 +14,7 @@ const String _scheduleBase = String.fromEnvironment(
 
 /// 每日放送数据源。
 ///
-/// 公开镜像优先，避免官方不可达时先等待完整超时，再回退一次官方接口。
+/// 与推荐共用公开镜像的 Next 放送表，保留全部七天；失败可回退旧版官方表。
 /// 请求有界并遵从用户网络策略。用 dart-define 指到夹具时不回退。
 final scheduleClientProvider = Provider<BangumiScheduleClient>((ref) {
   final isDefaultBase = _scheduleBase == BangumiScheduleClient.mirrorUrl;

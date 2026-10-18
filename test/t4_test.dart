@@ -258,19 +258,22 @@ void main() {
   });
 
   group('T4 Hub 地址', () {
-    test('生产 hub 常量映射成 wss/ws（WebSocket.connect 不接受 https）', () {
-      // 真机踩过：直接把配置里的 https 地址交给 WebSocket.connect 会立刻抛
-      // Unsupported URL scheme 'https'，表现为「连接轻书架失败」。
-      expect(webSocketUrl(Uri.parse(lnsHubUrl)).scheme, 'wss');
-      expect(webSocketUrl(Uri.parse(lnsFallbackHubUrl)).scheme, 'wss');
+    test('生产 hub 映射成 wss 并显式保留 HTTPS 默认端口', () {
+      final primary = webSocketUrl(Uri.parse(lnsHubUrl));
+      final fallback = webSocketUrl(Uri.parse(lnsFallbackHubUrl));
+      expect(primary.scheme, 'wss');
+      expect(fallback.scheme, 'wss');
+      expect(primary.port, 443);
+      expect(primary.hasPort, isTrue);
+      expect(fallback.port, 443);
     });
 
-    test('scheme 映射：https/http 换掉，ws/wss 与 token 参数保持不变', () {
+    test('scheme 映射保留 query 和显式端口，补齐 websocket 默认端口', () {
       expect(
         webSocketUrl(
           Uri.parse('https://api.lightnovel.life/hub/api?access_token=t'),
         ).toString(),
-        'wss://api.lightnovel.life/hub/api?access_token=t',
+        'wss://api.lightnovel.life:443/hub/api?access_token=t',
       );
       expect(
         webSocketUrl(Uri.parse('http://10.0.2.2:8123/hub/api')).toString(),
@@ -278,7 +281,15 @@ void main() {
       );
       expect(
         webSocketUrl(Uri.parse('wss://example.test/hub/api')).toString(),
-        'wss://example.test/hub/api',
+        'wss://example.test:443/hub/api',
+      );
+      expect(
+        webSocketUrl(Uri.parse('https://example.test:8443/hub/api')).port,
+        8443,
+      );
+      expect(
+        webSocketUrl(Uri.parse('http://example.test/hub/api')).toString(),
+        'ws://example.test:80/hub/api',
       );
     });
 
@@ -308,6 +319,8 @@ void main() {
       await pumpEventQueue();
 
       expect(uris.single.scheme, 'wss');
+      expect(uris.single.port, 443);
+      expect(uris.single.hasPort, isTrue);
       expect(uris.single.query, contains('access_token=token-abc'));
       connection.reset();
     });

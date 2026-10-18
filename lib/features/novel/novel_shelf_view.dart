@@ -130,7 +130,6 @@ final _localNovelsProvider = StreamProvider<List<_LocalNovel>>((ref) {
       });
 });
 
-
 class NovelShelfView extends ConsumerStatefulWidget {
   const NovelShelfView({super.key, this.active = true});
 
@@ -216,7 +215,9 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
   @override
   void initState() {
     super.initState();
-    _downloaded = ref.read(preferencesProvider).get<bool>('novel.shelf.downloaded') ?? false;
+    _downloaded =
+        ref.read(preferencesProvider).get<bool>('novel.shelf.downloaded') ??
+        false;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && widget.active && !_downloaded) {
         unawaited(_refreshRemote());
@@ -249,7 +250,8 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
   Future<void> _removeRemote(MediaItem item) async {
     final sourceId = item.sourceId;
     final provider = _remoteProviders[sourceId];
-    if (provider == null || !provider.isLoggedIn ||
+    if (provider == null ||
+        !provider.isLoggedIn ||
         _mutatingSources.contains(sourceId)) {
       return;
     }
@@ -270,7 +272,9 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
         ],
       ),
     );
-    if (confirmed != true || !mounted || !provider.isLoggedIn ||
+    if (confirmed != true ||
+        !mounted ||
+        !provider.isLoggedIn ||
         !identical(_remoteProviders[sourceId], provider) ||
         _mutatingSources.contains(sourceId)) {
       return;
@@ -292,9 +296,9 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
       await _refreshRemote();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('移出站点收藏失败：${_describe(error)}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('移出站点收藏失败：${_describe(error)}')));
       }
     } finally {
       if (mounted) setState(() => _mutatingSources.remove(sourceId));
@@ -626,7 +630,6 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     if ((widget.active && !_downloaded) || _remoteProviders.isNotEmpty) {
@@ -690,7 +693,11 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
                 selected: {_downloaded},
                 onSelectionChanged: (value) {
                   setState(() => _downloaded = value.single);
-                  unawaited(ref.read(preferencesProvider).set('novel.shelf.downloaded', value.single));
+                  unawaited(
+                    ref
+                        .read(preferencesProvider)
+                        .set('novel.shelf.downloaded', value.single),
+                  );
                   if (!value.single) unawaited(_refreshRemote());
                 },
               ),
@@ -716,19 +723,6 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
                         runSpacing: 8,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          OutlinedButton.icon(
-                            onPressed: _refreshing ? null : _refresh,
-                            icon: _refreshing
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.refresh),
-                            label: Text(_downloaded
-                                ? '刷新下载'
-                                : '刷新已登录站点收藏 / 未读'),
-                          ),
                           if (!_downloaded)
                             TextButton(
                               onPressed: filtered.isEmpty
@@ -784,7 +778,8 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
                           padding: EdgeInsets.all(24),
                           child: Center(child: CircularProgressIndicator()),
                         )
-                      else if (filtered.isEmpty && !_refreshing &&
+                      else if (filtered.isEmpty &&
+                          !_refreshing &&
                           (_downloaded ||
                               (!_remoteRegistryFailed &&
                                   _remoteStale.isEmpty &&
@@ -869,12 +864,14 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
                       onPressed: () => _openDetail(book.item),
                       child: const Text('目录 / 下载 / 导出'),
                     ),
-                    if (!_downloaded && remoteKeys.contains((
-                      book.item.sourceId,
-                      book.item.remoteId,
-                    )))
+                    if (!_downloaded &&
+                        remoteKeys.contains((
+                          book.item.sourceId,
+                          book.item.remoteId,
+                        )))
                       TextButton(
-                        onPressed: _refreshing ||
+                        onPressed:
+                            _refreshing ||
                                 _mutatingSources.contains(book.item.sourceId)
                             ? null
                             : () => _removeRemote(book.item),
@@ -890,7 +887,6 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
     );
   }
 }
-
 
 /// Reuses the permission-aware detail actions rather than creating another
 /// exporter or bypassing the LNS official-download restriction.

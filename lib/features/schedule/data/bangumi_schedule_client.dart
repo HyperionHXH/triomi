@@ -60,9 +60,9 @@ class BangumiScheduleClient {
 
   static const String calendarUrl = 'https://api.bgm.tv/calendar';
 
-  /// 默认公开镜像避免官方不可达时先耗尽超时；仅回退一次官方接口。
+  /// 与公开推荐共用镜像连接；Next 放送表通过独立适配器解析。
   /// 不携带任何用户或第三方应用凭据。
-  static const String mirrorUrl = 'https://api.bgmapi.com/calendar';
+  static const String mirrorUrl = 'https://api.kazumi.fyi/p1/calendar';
 
   final SourceHttpClient http;
 
@@ -102,9 +102,11 @@ class BangumiScheduleClient {
     final owner = SourceRequestCancellation();
     var finished = false;
     if (parent?.cancelled == true) owner.cancel();
-    unawaited(parent?.token.whenCancel.then((_) {
-      if (!finished) owner.cancel();
-    }));
+    unawaited(
+      parent?.token.whenCancel.then((_) {
+        if (!finished) owner.cancel();
+      }),
+    );
     final SourceResponse response;
     try {
       if (owner.cancelled) throw StateError('每日放送请求已取消');
@@ -130,7 +132,11 @@ class BangumiScheduleClient {
           );
       if (owner.cancelled) throw StateError('每日放送请求已取消');
     } catch (error) {
-      throw SourceException.wrap(error, sourceId: 'bangumi-schedule', url: base);
+      throw SourceException.wrap(
+        error,
+        sourceId: 'bangumi-schedule',
+        url: base,
+      );
     } finally {
       finished = true;
     }
@@ -152,6 +158,8 @@ class BangumiScheduleClient {
         message: '每日放送返回的不是合法 JSON：$error',
       );
     }
+
+    if (decoded is Map) return _p1Days(decoded);
 
     if (decoded is! List) {
       throw const SourceException(
@@ -181,6 +189,81 @@ class BangumiScheduleClient {
 
     days.sort((a, b) => a.weekday.compareTo(b.weekday));
     return days;
+  }
+
+  /// Next calendar groups all seven weekdays by string keys. Its entries wrap
+  /// a P1 subject (nameCN/image/airtime), unlike the legacy calendar payload.
+  static List<ScheduleDay> _p1Days(Map<Object?, Object?> decoded) {
+    const labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    final days = <ScheduleDay>[];
+    for (var weekday = 1; weekday <= 7; weekday++) {
+      final values = decoded['$weekday'];
+      if (values is! List) {
+        throw const SourceException(
+          sourceId: 'bangumi-schedule',
+          type: SourceErrorType.parse,
+          message: '每日放送缺少完整的一周数据',
+        );
+      }
+      days.add(
+        ScheduleDay(
+          weekday: weekday,
+          label: labels[weekday - 1],
+          items: [
+            for (final value in values)
+              if (value is Map && value['subject'] is Map)
+                _p1Entry(value['subject'] as Map),
+          ],
+        ),
+      );
+    }
+    return days;
+  }
+
+  static ScheduleEntry _p1Entry(Map<Object?, Object?> node) {
+    final id = node['id']?.toString() ?? '';
+    final nameCn = (node['nameCN'] ?? node['name_cn'])?.toString().trim();
+    final name = node['name']?.toString().trim();
+    final images = node['images'];
+    final rating = node['rating'];
+    final airtime = node['airtime'];
+    final date = node['date'] ?? (airtime is Map ? airtime['date'] : null);
+    return ScheduleEntry(
+      id: id,
+      title: nameCn != null && nameCn.isNotEmpty
+          ? nameCn
+          : (name == null || name.isEmpty ? '未知条目' : name),
+      coverUrl:
+          (images is Map ? images['large'] : null)?.toString() ??
+          node['image']?.toString(),
+      airDate: date?.toString() ?? _compactP1Date(node['info']),
+      rating: rating is Map ? double.tryParse('${rating['score']}') : null,
+      url: subjectUrl(id),
+      rank: rating is Map ? int.tryParse('${rating['rank']}') : null,
+      votes: rating is Map ? int.tryParse('${rating['total']}') : null,
+    );
+  }
+
+  static final _compactDate = RegExp(r'^(\d{4})年(\d{1,2})月(\d{1,2})日$');
+
+  /// Compact calendar subjects omit airtime. Their human-readable info contains
+  /// a standalone premiere-date segment, sometimes after an episode count.
+  static String? _compactP1Date(Object? info) {
+    if (info is! String) return null;
+    for (final segment in info.split('/')) {
+      final match = _compactDate.firstMatch(segment.trim());
+      if (match == null) continue;
+      final year = int.parse(match[1]!);
+      final month = int.parse(match[2]!);
+      final day = int.parse(match[3]!);
+      final parsed = DateTime(year, month, day);
+      if (parsed.year != year || parsed.month != month || parsed.day != day) {
+        return null;
+      }
+      return '${match[1]}-${month.toString().padLeft(2, '0')}'
+          '-${day.toString().padLeft(2, '0')}';
+    }
+    return null;
   }
 
   static ScheduleEntry _toEntry(Map<Object?, Object?> node) {

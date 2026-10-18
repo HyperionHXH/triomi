@@ -97,7 +97,7 @@ void main() {
     'system DNS remains preferred; fallback does not query other hosts',
     () async {
       var queries = 0;
-      final resolver = LkDnsFallback(
+      final resolver = SourceDnsFallback(
         systemLookup: (_) async => [InternetAddress('1.1.1.1')],
         query: (_) async {
           queries++;
@@ -109,7 +109,7 @@ void main() {
         '1.1.1.1',
       );
       expect(queries, 0);
-      final failed = LkDnsFallback(
+      final failed = SourceDnsFallback(
         systemLookup: (_) async => throw const SocketException('dns'),
         query: (_) async {
           queries++;
@@ -125,7 +125,7 @@ void main() {
   );
   test('fallback filters local addresses, caches briefly and tries second resolver', () async {
     var queries = 0;
-    final resolver = LkDnsFallback(
+    final resolver = SourceDnsFallback(
       systemLookup: (_) async => throw const SocketException('dns'),
       query: (_) async {
         queries++;
@@ -147,5 +147,38 @@ void main() {
     );
     await resolver.lookup('www.lightnovel.fun');
     expect(queries, 2);
+  });
+  test('LNS primary and Cloudflare hosts are explicitly allowlisted', () async {
+    final resolver = SourceDnsFallback(
+      systemLookup: (_) async => throw const SocketException('dns'),
+      query: (_) async => {
+        'Status': 0,
+        'Answer': [
+          {'type': 1, 'TTL': 30, 'data': '165.154.243.56'},
+        ],
+      },
+    );
+
+    for (final host in ['api.lightnovel.life', 'cf-api.lightnovel.life']) {
+      expect((await resolver.lookup(host)).single.address, '165.154.243.56');
+    }
+  });
+
+  test('failed system-resolved LK route tries DoH alternatives', () async {
+    var queries = 0;
+    final resolver = SourceDnsFallback(
+      systemLookup: (_) async => [InternetAddress('127.0.0.2')],
+      query: (_) async {
+        queries++;
+        return {};
+      },
+    );
+    final connection = connectWithDnsFallback(
+      Uri.parse('http://www.lightnovel.fun/'),
+      resolver,
+    );
+
+    await expectLater(connection.socket, throwsA(isA<SocketException>()));
+    expect(queries, greaterThan(0));
   });
 }

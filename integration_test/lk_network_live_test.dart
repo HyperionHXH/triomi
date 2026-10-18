@@ -25,7 +25,7 @@ void main() {
       }
     }
     try {
-      result['fallback'] = (await LkDnsFallback().lookup('www.lightnovel.fun'))
+      result['fallback'] = (await SourceDnsFallback().lookup('www.lightnovel.fun'))
           .map((a) => a.address)
           .toList();
     } catch (e) {

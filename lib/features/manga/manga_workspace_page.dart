@@ -29,22 +29,33 @@ class _MangaWorkspacePageState extends ConsumerState<MangaWorkspacePage>
     with SingleTickerProviderStateMixin {
   late final _tabs = TabController(length: 3, vsync: this, initialIndex: _tab);
   int _tab = 0;
-  final _libraryKey = GlobalKey<LibraryPageState>();
+  final _library = LibraryPageController();
 
   @override
   void initState() {
     super.initState();
-    _tab = (ref.read(preferencesProvider).get<int>('manga.workspace.tab') ?? 0).clamp(0, 2);
+    _tab = (ref.read(preferencesProvider).get<int>('manga.workspace.tab') ?? 0)
+        .clamp(0, 2);
+    _library.addListener(_libraryChanged);
     _tabs.addListener(() {
       if (_tab != _tabs.index) {
+        _library.exitSelection?.call();
         setState(() => _tab = _tabs.index);
-        unawaited(ref.read(preferencesProvider).set('manga.workspace.tab', _tab));
+        unawaited(
+          ref.read(preferencesProvider).set('manga.workspace.tab', _tab),
+        );
       }
     });
   }
 
+  void _libraryChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _library.removeListener(_libraryChanged);
+    _library.dispose();
     _tabs.dispose();
     super.dispose();
   }
@@ -52,62 +63,76 @@ class _MangaWorkspacePageState extends ConsumerState<MangaWorkspacePage>
   Future<void> _more(String value) async {
     switch (value) {
       case 'migration':
-        await Navigator.push(context, MaterialPageRoute<void>(
-          builder: (_) => const MigrationPlansPage(),
-        ));
+        await Navigator.push(
+          context,
+          MaterialPageRoute<void>(builder: (_) => const MigrationPlansPage()),
+        );
       case 'history':
         if (mounted) await context.push(AppRoutes.historyFor(MediaType.manga));
       case 'downloads':
-        if (mounted) await context.push(AppRoutes.downloadsFor(MediaType.manga));
+        if (mounted) {
+          await context.push(AppRoutes.downloadsFor(MediaType.manga));
+        }
     }
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('漫画'),
-      actions: [
-        IconButton(
-          tooltip: _tab == 0 ? '搜索本地书库' : '搜索漫画',
-          icon: const Icon(Icons.search),
-          onPressed: () {
-            if (_tab == 0) {
-              unawaited(_libraryKey.currentState?.openSearch());
-            } else {
-              unawaited(SearchPage.open(context, type: MediaType.manga));
-            }
-          },
+  Widget build(BuildContext context) => PopScope(
+    canPop: _tab != 0 || _library.selectionCount == 0,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop && _tab == 0 && _library.selectionCount > 0) {
+        _library.exitSelection?.call();
+      }
+    },
+    child: Scaffold(
+      appBar: AppBar(
+        title: Text(
+          _tab == 0 && _library.selectionCount > 0
+              ? '已选 ${_library.selectionCount}'
+              : '漫画',
         ),
-        PopupMenuButton<String>(
-          tooltip: '漫画更多',
-          onSelected: (value) {
-            final library = _libraryKey.currentState;
-            if (_tab == 0 && library != null) {
-              library.handleAction(value);
-            } else {
-              unawaited(_more(value));
-            }
-          },
-          itemBuilder: (_) => (_tab == 0 ? _libraryKey.currentState?.menuEntries : null)
-              ?? const [
-            PopupMenuItem(value: 'migration', child: Text('迁移管理')),
-            PopupMenuItem(value: 'history', child: Text('漫画阅读历史')),
-            PopupMenuItem(value: 'downloads', child: Text('漫画下载')),
+        actions: [
+          if (_tab == 0)
+            ..._library.actions
+          else ...[
+            IconButton(
+              tooltip: _tab == 0 ? '搜索本地书库' : '搜索漫画',
+              icon: const Icon(Icons.search),
+              onPressed: () =>
+                  unawaited(SearchPage.open(context, type: MediaType.manga)),
+            ),
+            PopupMenuButton<String>(
+              tooltip: '漫画更多',
+              onSelected: (value) => unawaited(_more(value)),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'migration', child: Text('迁移管理')),
+                PopupMenuItem(value: 'history', child: Text('漫画阅读历史')),
+                PopupMenuItem(value: 'downloads', child: Text('漫画下载')),
+              ],
+            ),
+          ],
+        ],
+        bottom: TabBar(
+          controller: _tabs,
+          tabs: const [
+            Tab(text: '书库'),
+            Tab(text: '更新'),
+            Tab(text: '浏览'),
           ],
         ),
-      ],
-      bottom: TabBar(
-        controller: _tabs,
-        tabs: const [Tab(text: '书库'), Tab(text: '更新'), Tab(text: '浏览')],
       ),
-    ),
-    body: IndexedStack(
-      index: _tab,
-      children: [
-        LibraryPage(key: _libraryKey, type: MediaType.manga, embedded: true),
-        const MangaUpdatesPage(embedded: true),
-        const _MangaSources(),
-      ],
+      body: IndexedStack(
+        index: _tab,
+        children: [
+          LibraryPage(
+            type: MediaType.manga,
+            embedded: true,
+            controller: _library,
+          ),
+          const MangaUpdatesPage(embedded: true),
+          const _MangaSources(),
+        ],
+      ),
     ),
   );
 }
@@ -119,20 +144,23 @@ class _MangaSources extends ConsumerStatefulWidget {
 }
 
 class _MangaSourcesState extends ConsumerState<_MangaSources> {
-
   Future<void> _extensions() async {
-    await Navigator.push(context, MaterialPageRoute<void>(
-      builder: (_) => const MangaExtensionsPage(),
-    ));
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(builder: (_) => const MangaExtensionsPage()),
+    );
     if (!mounted) return;
     ref.invalidate(sourceRegistryProvider);
     await ref.read(sourcesProvider.notifier).refresh();
   }
 
   Future<void> _rules() async {
-    await Navigator.push(context, MaterialPageRoute<void>(
-      builder: (_) => const SourcesPage(initialType: MediaType.manga),
-    ));
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => const SourcesPage(initialType: MediaType.manga),
+      ),
+    );
     if (mounted) await ref.read(sourcesProvider.notifier).refresh();
   }
 
@@ -159,59 +187,81 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
         ),
       ),
       Expanded(
-        child: ref.watch(sourcesProvider).when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('来源列表不可用：$error'),
-                TextButton(
-                  onPressed: () => ref.read(sourcesProvider.notifier).refresh(),
-                  child: const Text('重试'),
+        child: ref
+            .watch(sourcesProvider)
+            .when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('来源列表不可用：$error'),
+                    TextButton(
+                      onPressed: () =>
+                          ref.read(sourcesProvider.notifier).refresh(),
+                      child: const Text('重试'),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+              data: (snapshot) {
+                final entries = snapshot.entries
+                    .where(
+                      (entry) =>
+                          entry.descriptor.type == MediaType.manga &&
+                          (developmentSourcesEnabled ||
+                              !developmentSourceIds.contains(
+                                entry.descriptor.id,
+                              )),
+                    )
+                    .toList();
+                final failures = snapshot.failures
+                    .where(
+                      (entry) =>
+                          entry.type == MediaType.manga &&
+                          (developmentSourcesEnabled ||
+                              !developmentSourceIds.contains(entry.id)),
+                    )
+                    .toList();
+                return ListView(
+                  key: const PageStorageKey('manga-source-directory'),
+                  children: [
+                    if (entries.isEmpty && failures.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text('没有匹配的漫画来源。可安装插件，或在规则与来源设置中启用来源。'),
+                      ),
+                    for (final entry in entries)
+                      ListTile(
+                        leading: Icon(
+                          entry.enabled
+                              ? Icons.language
+                              : Icons.pause_circle_outline,
+                        ),
+                        title: Text(entry.descriptor.name),
+                        subtitle: Text(
+                          '${entry.descriptor.lang} · ${entry.enabled ? '已启用' : '已停用'} · ${entry.source is SearchProvider ? '在线搜索 / 浏览' : '在线目录'}',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push(
+                          MangaSourcePage.location(
+                            entry.descriptor.id,
+                            listing:
+                                defaultMangaFeed(entry.source)?.id ?? 'popular',
+                          ),
+                        ),
+                      ),
+                    for (final failure in failures)
+                      ListTile(
+                        leading: const Icon(Icons.error_outline),
+                        title: Text(failure.name),
+                        subtitle: Text('${failure.lang} · ${failure.message}'),
+                        onTap: _rules,
+                      ),
+                  ],
+                );
+              },
             ),
-          ),
-          data: (snapshot) {
-            final entries = snapshot.entries.where((entry) =>
-              entry.descriptor.type == MediaType.manga &&
-              (developmentSourcesEnabled || !developmentSourceIds.contains(entry.descriptor.id)),
-            ).toList();
-            final failures = snapshot.failures.where((entry) =>
-              entry.type == MediaType.manga &&
-              (developmentSourcesEnabled || !developmentSourceIds.contains(entry.id)),
-            ).toList();
-            return ListView(
-              key: const PageStorageKey('manga-source-directory'),
-              children: [
-                if (entries.isEmpty && failures.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text('没有匹配的漫画来源。可安装插件，或在规则与来源设置中启用来源。'),
-                  ),
-                for (final entry in entries)
-                  ListTile(
-                    leading: Icon(entry.enabled ? Icons.language : Icons.pause_circle_outline),
-                    title: Text(entry.descriptor.name),
-                    subtitle: Text('${entry.descriptor.lang} · ${entry.enabled ? '已启用' : '已停用'} · ${entry.source is SearchProvider ? '在线搜索 / 浏览' : '在线目录'}'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push(MangaSourcePage.location(
-                      entry.descriptor.id,
-                      listing: defaultMangaFeed(entry.source)?.id ?? 'popular',
-                    )),
-                  ),
-                for (final failure in failures)
-                  ListTile(
-                    leading: const Icon(Icons.error_outline),
-                    title: Text(failure.name),
-                    subtitle: Text('${failure.lang} · ${failure.message}'),
-                    onTap: _rules,
-                  ),
-              ],
-            );
-          },
-        ),
       ),
     ],
   );

@@ -7,16 +7,18 @@ import 'package:dio/io.dart';
 
 import 'lk_tls_socket.dart';
 
-// Only the built-in LK hosts use this fallback. TLS still authenticates the
+// Only built-in novel-site hosts use this fallback. TLS still authenticates the
 // original URL hostname; DNS results never replace the URL, Host or SNI.
-const lkDnsHosts = {
+const sourceDnsHosts = {
   'www.lightnovel.fun',
   'api.lightnovel.fun',
   'res.lightnovel.fun',
+  'api.lightnovel.life',
+  'cf-api.lightnovel.life',
 };
 
 void configureSourceHttpAdapter(Dio dio, {String proxy = ''}) {
-  final resolver = LkDnsFallback();
+  final resolver = SourceDnsFallback();
   dio.httpClientAdapter = IOHttpClientAdapter(
     createHttpClient: () {
       final client = HttpClient();
@@ -26,7 +28,7 @@ void configureSourceHttpAdapter(Dio dio, {String proxy = ''}) {
         client.findProxy = (_) => 'PROXY $host:${uri.port}';
       }
       client.connectionFactory = (uri, proxyHost, proxyPort) async {
-        if (proxyHost != null || !lkDnsHosts.contains(uri.host)) {
+        if (proxyHost != null || !sourceDnsHosts.contains(uri.host)) {
           if (proxyHost == null && uri.scheme == 'https') {
             return SecureSocket.startConnect(uri.host, uri.port);
           }
@@ -35,7 +37,7 @@ void configureSourceHttpAdapter(Dio dio, {String proxy = ''}) {
             proxyPort ?? uri.port,
           );
         }
-        return connectLkAddresses(uri, await resolver.lookup(uri.host));
+        return connectWithDnsFallback(uri, resolver);
       };
       return client;
     },
@@ -105,8 +107,9 @@ ConnectionTask<Socket> connectLkAddresses(
         last = error;
       }
     }
+    final detail = last == null ? '' : ' (${last.runtimeType}: $last)';
     throw SocketException(
-      cancelled ? 'Connection cancelled' : 'LK connection failed',
+      '${cancelled ? 'Connection cancelled' : 'LK connection failed'}$detail',
       osError: last is SocketException ? last.osError : null,
     );
   }
@@ -114,9 +117,60 @@ ConnectionTask<Socket> connectLkAddresses(
   return ConnectionTask.fromSocket(connect(), cancel);
 }
 
-class LkDnsFallback {
-  LkDnsFallback({this.systemLookup = InternetAddress.lookup, this.query});
+ConnectionTask<Socket> connectWithDnsFallback(
+  Uri uri,
+  SourceDnsFallback resolver,
+) {
+  ConnectionTask<Socket>? active;
+  var cancelled = false;
+
+  Future<Socket> connect() async {
+    final transportUri = switch (uri.scheme) {
+      'wss' => uri.replace(scheme: 'https'),
+      'ws' => uri.replace(scheme: 'http'),
+      _ => uri,
+    };
+    final resolved = await resolver.lookup(transportUri.host);
+    if (cancelled) throw const SocketException('Connection cancelled');
+
+    active = connectLkAddresses(transportUri, resolved);
+    try {
+      return await active!.socket;
+    } catch (error) {
+      active?.cancel();
+      if (cancelled) rethrow;
+
+      final fallback = await resolver.lookupDoh(uri.host);
+      if (cancelled) throw const SocketException('Connection cancelled');
+      final alternatives = fallback
+          .where((address) => !resolved.contains(address))
+          .toList(growable: false);
+      if (alternatives.isEmpty) rethrow;
+
+      active = connectLkAddresses(transportUri, alternatives);
+      try {
+        return await active!.socket;
+      } catch (_) {
+        active?.cancel();
+        rethrow;
+      }
+    }
+  }
+
+  return ConnectionTask.fromSocket(connect(), () {
+    cancelled = true;
+    active?.cancel();
+  });
+}
+
+class SourceDnsFallback {
+  SourceDnsFallback({
+    this.systemLookup = InternetAddress.lookup,
+    this.query,
+    this.allowedHosts = sourceDnsHosts,
+  });
   final Future<List<InternetAddress>> Function(String) systemLookup;
+  final Set<String> allowedHosts;
   final Future<Map<String, dynamic>> Function(Uri)? query;
   final _cache =
       <String, ({DateTime expires, List<InternetAddress> addresses})>{};
@@ -127,15 +181,23 @@ class LkDnsFallback {
           .timeout(const Duration(seconds: 3));
       if (result.isNotEmpty) return result;
     } catch (_) {
-      /* Try HTTPS DNS only for an explicitly built-in LK host. */
+      /* Try HTTPS DNS only for an explicitly built-in novel host. */
     }
-    if (!lkDnsHosts.contains(host)) {
+    return lookupDoh(host);
+  }
+
+  Future<List<InternetAddress>> lookupDoh(
+    String host, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    if (!allowedHosts.contains(host)) {
       throw const SocketException('DNS lookup failed');
     }
     final cached = _cache[host];
     if (cached != null && cached.expires.isAfter(DateTime.now())) {
       return cached.addresses;
     }
+    final stopwatch = Stopwatch()..start();
     for (final origin in [
       'https://dns.alidns.com/resolve',
       'https://doh.pub/dns-query',
@@ -143,11 +205,18 @@ class LkDnsFallback {
       'https://dns.google/resolve',
       'https://1.1.1.1/dns-query',
     ]) {
+      final remaining = timeout - stopwatch.elapsed;
+      if (remaining <= Duration.zero) break;
+      final slice = origin.contains('1.1.1.1')
+          ? const Duration(seconds: 2)
+          : const Duration(milliseconds: 750);
+      final attemptBudget = remaining < slice ? remaining : slice;
       try {
         final uri = Uri.parse(origin)
             .replace(queryParameters: {'name': host, 'type': 'A'});
-        final data = await (query ?? _query)(uri)
-            .timeout(const Duration(seconds: 5));
+        final data = query == null
+            ? await _query(uri, timeout: attemptBudget)
+            : await query!(uri).timeout(attemptBudget);
         final addresses = parseDnsAnswers(data);
         if (addresses.isEmpty) continue;
         final ttl = (data['Answer'] as List)
@@ -165,7 +234,7 @@ class LkDnsFallback {
         /* The second resolver has an independent network path. */
       }
     }
-    throw const SocketException('LK DNS lookup failed');
+    throw const SocketException('Source DNS lookup failed');
   }
 
   static List<InternetAddress> parseDnsAnswers(Map<String, dynamic> data) {
@@ -193,9 +262,12 @@ class LkDnsFallback {
         !(b[0] == 100 && b[1] >= 64 && b[1] <= 127);
   }
 
-  Future<Map<String, dynamic>> _query(Uri uri) async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 4);
-    final deadline = Timer(const Duration(seconds: 5), () {
+  Future<Map<String, dynamic>> _query(
+    Uri uri, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    final client = HttpClient()..connectionTimeout = timeout;
+    final deadline = Timer(timeout, () {
       client.close(force: true);
     });
     try {
