@@ -794,6 +794,58 @@ void main() {
     expect(find.text('这个分类下还没有内容'), findsOneWidget);
   });
 
+  libraryTest('单本长按更多可编辑，批量选择不提供单本编辑', (tester) async {
+    const other = MediaItem(
+      sourceId: 'other-source',
+      remoteId: '12',
+      type: MediaType.manga,
+      title: '另一本',
+    );
+    await repository.addToLibrary(manga);
+    await repository.addToLibrary(other);
+    await pumpLibrary(tester);
+    await tester.longPress(find.text('作品甲').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('已选更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑漫画资料'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '标题'), '书架自定义名');
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+    expect(find.text('书架自定义名'), findsOneWidget);
+    expect((await repository.itemByKey('other-source', '12'))!.title, '另一本');
+    await tester.longPress(find.text('书架自定义名'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('全选当前结果'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('已选更多'));
+    await tester.pumpAndSettle();
+    expect(find.text('编辑漫画资料'), findsNothing);
+  });
+
+  libraryTest('编辑确认时重新限定仍可见的单本选择', (tester) async {
+    await repository.addToLibrary(manga);
+    await pumpLibrary(tester);
+    await tester.longPress(find.text('作品甲').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('已选更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑漫画资料'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '标题'), '不得保存');
+    await repository.removeFromLibrary(
+      'test-manga',
+      '12',
+      type: MediaType.manga,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+    expect((await repository.itemByKey('test-manga', '12'))!.title, '作品甲');
+    expect(await repository.isInLibrary('test-manga', '12'), isFalse);
+  });
+
   for (final wide in [false, true]) {
     libraryTest('同名作品通过本地来源与语言区分 ${wide ? '网格' : '列表'}', (tester) async {
       tester.view.physicalSize = Size(wide ? 1200 : 390, 900);

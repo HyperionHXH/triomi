@@ -1,3 +1,4 @@
+import 'manga_metadata_override.dart';
 import 'media_type.dart';
 
 /// 作品（一部番剧 / 漫画 / 小说）在应用内的统一表示。
@@ -8,14 +9,15 @@ class MediaItem {
     required this.sourceId,
     required this.remoteId,
     required this.type,
-    required this.title,
+    required this._title,
     this.url,
     this.coverUrl,
-    this.author,
-    this.description,
+    this._author,
+    this._description,
     this.tags = const <String>[],
     this.rating,
     this.status,
+    this.localMangaMetadata,
   });
 
   /// 来源标识。与 [remoteId] 一起构成业务键。
@@ -25,13 +27,24 @@ class MediaItem {
   final String remoteId;
 
   final MediaType type;
-  final String title;
+  final String _title;
+  final MangaMetadataOverride? localMangaMetadata;
+  String get title =>
+      type == MediaType.manga ? localMangaMetadata?.title ?? _title : _title;
+  String get sourceTitle => _title;
+  String? get sourceAuthor => _author;
+  String? get sourceDescription => _description;
 
   /// 详情页地址（相对地址已在解析时补全为绝对地址）。
   final String? url;
   final String? coverUrl;
-  final String? author;
-  final String? description;
+  final String? _author;
+  final String? _description;
+  String? get author =>
+      type == MediaType.manga ? localMangaMetadata?.author ?? _author : _author;
+  String? get description => type == MediaType.manga
+      ? localMangaMetadata?.description ?? _description
+      : _description;
   final List<String> tags;
   final double? rating;
 
@@ -42,14 +55,16 @@ class MediaItem {
     'sourceId': sourceId,
     'remoteId': remoteId,
     'type': type.name,
-    'title': title,
+    'title': _title,
     'url': url,
     'coverUrl': coverUrl,
-    'author': author,
-    'description': description,
+    'author': _author,
+    'description': _description,
     'tags': tags,
     'rating': rating,
     'status': status,
+    if (type == MediaType.manga && localMangaMetadata != null)
+      'localMangaMetadata': localMangaMetadata!.toJson(),
   };
 
   static MediaItem fromJson(
@@ -57,13 +72,14 @@ class MediaItem {
     required String sourceId,
     MediaType? fallbackType,
   }) {
+    final type =
+        MediaType.tryParse(json['type']?.toString()) ??
+        fallbackType ??
+        MediaType.manga;
     return MediaItem(
       sourceId: sourceId,
       remoteId: json['remoteId']?.toString() ?? '',
-      type:
-          MediaType.tryParse(json['type']?.toString()) ??
-          fallbackType ??
-          MediaType.manga,
+      type: type,
       title: json['title']?.toString() ?? '',
       url: json['url']?.toString(),
       coverUrl: json['coverUrl']?.toString(),
@@ -75,6 +91,9 @@ class MediaItem {
       ],
       rating: double.tryParse(json['rating']?.toString() ?? ''),
       status: json['status']?.toString(),
+      localMangaMetadata: type == MediaType.manga
+          ? MangaMetadataOverride.readOptional(json['localMangaMetadata'])
+          : null,
     );
   }
 
@@ -82,13 +101,33 @@ class MediaItem {
     sourceId: sourceId,
     remoteId: remoteId,
     type: type,
-    title: title,
+    title: _title,
     url: url,
     coverUrl: coverUrl ?? this.coverUrl,
-    author: author,
-    description: description ?? this.description,
+    author: _author,
+    description: description ?? _description,
     tags: tags,
     rating: rating,
     status: status,
+    localMangaMetadata: localMangaMetadata,
+  );
+
+  /// Source providers must never receive local display overrides.
+  MediaItem get sourceSnapshot =>
+      localMangaMetadata == null ? this : withMangaMetadata(null);
+
+  MediaItem withMangaMetadata(MangaMetadataOverride? metadata) => MediaItem(
+    sourceId: sourceId,
+    remoteId: remoteId,
+    type: type,
+    title: _title,
+    url: url,
+    coverUrl: coverUrl,
+    author: _author,
+    description: _description,
+    tags: tags,
+    rating: rating,
+    status: status,
+    localMangaMetadata: type == MediaType.manga ? metadata : null,
   );
 }

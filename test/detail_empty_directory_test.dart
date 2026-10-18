@@ -31,13 +31,12 @@ void main() {
     title: '无中文目录的作品',
   );
 
-  Future<void> pumpDetail(WidgetTester tester, ContentSource source) async {
+  Future<AppDatabase> pumpDetail(WidgetTester tester, ContentSource source) async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          databaseProvider.overrideWithValue(
-            AppDatabase.forTesting(NativeDatabase.memory()),
-          ),
+          databaseProvider.overrideWithValue(db),
           sourcesProvider.overrideWith(() => StubSources(snapshotOf(source))),
           sourceHttpClientProvider.overrideWithValue(
             FakeHttpClient(
@@ -51,11 +50,11 @@ void main() {
     for (var index = 0; index < 10; index++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
+    return db;
   }
 
   testWidgets('停用来源：缓存目录可读且不再请求来源详情', (tester) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(db.close);
     final library = LibraryRepository(db);
     await library.cacheItem(item);
     await library.saveChapters(
@@ -94,6 +93,9 @@ void main() {
     expect(source.requests, 0);
     expect(find.text('本地缓存章节'), findsOneWidget);
     expect(find.textContaining('显示本机缓存'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.runAsync(db.close);
   });
 
   testWidgets('停用且无缓存：明确拒绝且零请求，启用后重新加载恢复', (tester) async {
@@ -147,17 +149,20 @@ void main() {
   });
 
   testWidgets('成功但无中文章节：明确空目录说明 + 搜索其他作品，不伪造章节', (tester) async {
-    await pumpDetail(tester, _EmptyCatalogSource());
+    final db = await pumpDetail(tester, _EmptyCatalogSource());
 
     expect(find.text('当前中文目录为空'), findsOneWidget);
     expect(find.textContaining('暂时没有这本作品的中文章节'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, '搜索其他作品'), findsOneWidget);
     // 不把成功空态说成失败，也不出现伪造的章节行。
     expect(find.textContaining('加载失败'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.runAsync(db.close);
   });
 
   testWidgets('目录请求失败：显示带来源的错误与重试，不被空态吞掉', (tester) async {
-    await pumpDetail(tester, _BrokenCatalogSource());
+    final db = await pumpDetail(tester, _BrokenCatalogSource());
 
     // 错误卡可见，带来源名（SourceRegistry.describeError 的口径；
     // 来源名同时出现在头部与错误卡，断言至少一处即可）。
@@ -171,6 +176,9 @@ void main() {
       findsNothing,
       reason: '失败态不给「去搜索别的作品」的误导入口',
     );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.runAsync(db.close);
   });
 }
 

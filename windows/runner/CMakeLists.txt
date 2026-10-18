@@ -37,7 +37,7 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib" "taskschd.lib" "ole32.lib" "oleaut32.lib" "advapi32.lib")
-target_link_libraries(${BINARY_NAME} PRIVATE "version.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "version.lib" "shell32.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "winhttp.lib"
   "${CMAKE_BINARY_DIR}/packages/Microsoft.Web.WebView2/build/native/Microsoft.Web.WebView2.targets")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")

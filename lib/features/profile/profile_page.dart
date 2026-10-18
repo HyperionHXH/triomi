@@ -30,6 +30,7 @@ class ProfilePage extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: AppCard(
+                onTap: () => context.push(AppRoutes.settings),
                 child: Row(
                   children: <Widget>[
                     CircleAvatar(
@@ -56,6 +57,7 @@ class ProfilePage extends StatelessWidget {
                         ],
                       ),
                     ),
+                    const Icon(Icons.chevron_right),
                   ],
                 ),
               ),

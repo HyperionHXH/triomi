@@ -403,6 +403,52 @@ void main() {
   }
 
   navigationTest(
+    'global results longpress edits locally and source browse uses the same actions',
+    (tester) async {
+      const result = MediaItem(
+        sourceId: '操作插件',
+        remoteId: 'same',
+        type: MediaType.manga,
+        title: '在线原名',
+      );
+      final source = _SearchSource('操作插件', (_, _) async => [result]);
+      await render(tester, [entry(source)], tab: 2);
+      await tester.tap(find.byTooltip('搜索漫画'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '关键词');
+      await tester.tap(find.byTooltip('搜索'));
+      await advance(tester);
+      await tester.longPress(find.text('在线原名'));
+      await tester.pumpAndSettle();
+      expect(find.text('加入书架'), findsOneWidget);
+      await tester.tap(find.text('编辑漫画资料'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, '标题'), '自定义在线名');
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await tester.pumpAndSettle();
+      expect(find.text('自定义在线名'), findsOneWidget);
+      expect(await LibraryRepository(db).isInLibrary('操作插件', 'same'), isFalse);
+      await tester.tap(find.widgetWithText(ListTile, '操作插件'));
+      await advance(tester);
+      expect(find.byType(MangaSourcePage), findsOneWidget);
+      await tester.longPress(
+        find.descendant(
+          of: find.byType(MangaSourcePage),
+          matching: find.text('自定义在线名'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('加入书架'));
+      await tester.pumpAndSettle();
+      expect(await LibraryRepository(db).isInLibrary('操作插件', 'same'), isTrue);
+      expect(
+        (await LibraryRepository(db).itemByKey('操作插件', 'same'))!.sourceTitle,
+        '在线原名',
+      );
+    },
+  );
+
+  navigationTest(
     'global groups keep success loading and failure independent with source pagination',
     (tester) async {
       final pending = Completer<List<MediaItem>>();

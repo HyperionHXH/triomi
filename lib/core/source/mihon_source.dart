@@ -10,6 +10,7 @@ import '../models/source_exception.dart';
 import '../platform/platform_channel.dart';
 import 'mihon_image_bridge.dart';
 import 'source_api.dart';
+import 'source_website.dart';
 import 'tag_search.dart';
 
 /// Adapter for one source exposed by an executable Mihon extension.
@@ -33,6 +34,7 @@ class MihonSource
     required this.versionCode,
     required this.signerSha256,
     this.supportsLatest = true,
+    this.isConfigurable,
     bool? nsfw,
   }) : _descriptor = SourceDescriptor(
          id: 'mihon:$packageName:$hostSourceId',
@@ -57,6 +59,7 @@ class MihonSource
   final String? signerSha256;
   final bool enabled;
   final bool supportsLatest;
+  final bool? isConfigurable;
   final SourceDescriptor _descriptor;
 
   @override
@@ -64,6 +67,22 @@ class MihonSource
 
   @override
   bool get isReady => enabled;
+
+  Future<bool> openSettings() async {
+    if (!enabled) throw _error('Mihon 来源已停用，请先在扩展管理中启用已信任的插件');
+    if (isConfigurable == false) throw _error('此来源没有提供可配置设置');
+    return platformChannel.openMihonSettings(packageName, hostSourceId);
+  }
+
+  /// Resolve the real source homepage, or a manga's canonical website URL via
+  /// HttpSource.getMangaUrl. The host enforces publisher trust and enablement.
+  Future<Uri> websiteUri({MediaItem? item}) async {
+    final response = await _request(
+      operation: 'browserInfo',
+      manga: item == null ? null : _mangaJson(item),
+    );
+    return publicSourceWebsiteUri('${response['url'] ?? ''}');
+  }
 
   Future<bool> openWebSession() async {
     if (!enabled) throw _error('Mihon 来源已停用');
@@ -118,21 +137,34 @@ class MihonSource
       for (final row in rows) {
         final name = '${row['name'] ?? ''}';
         if (row['type'] == 'group') {
-          visit([
-            for (final child in row['state'] as List? ?? [])
-              if (child is Map) Map<String, Object?>.from(child),
-          ], genreGroup || RegExp(r'genre|tag|题材|題材|类型|類型', caseSensitive: false).hasMatch(name));
+          visit(
+            [
+              for (final child in row['state'] as List? ?? [])
+                if (child is Map) Map<String, Object?>.from(child),
+            ],
+            genreGroup ||
+                RegExp(
+                  r'genre|tag|题材|題材|类型|類型',
+                  caseSensitive: false,
+                ).hasMatch(name),
+          );
         } else if (genreGroup &&
             (row['type'] == 'check' || row['type'] == 'tri')) {
           tags[name] = SearchTag(id: name, label: name);
-        } else if (RegExp(r'genre|tag|题材|題材|类型|類型', caseSensitive: false).hasMatch(name)) {
+        } else if (RegExp(
+          r'genre|tag|题材|題材|类型|類型',
+          caseSensitive: false,
+        ).hasMatch(name)) {
           for (final value in row['values'] as List? ?? []) {
             final label = '$value';
-            if (label.isNotEmpty) tags[label] = SearchTag(id: label, label: label);
+            if (label.isNotEmpty) {
+              tags[label] = SearchTag(id: label, label: label);
+            }
           }
         }
       }
     }
+
     visit(await searchFilters(), false);
     return tags.values.toList(growable: false);
   }
@@ -164,7 +196,9 @@ class MihonSource
           continue;
         }
         final name = '${row['name'] ?? ''}';
-        final match = remaining.where((t) => t.toLowerCase() == name.toLowerCase()).firstOrNull;
+        final match = remaining
+            .where((t) => t.toLowerCase() == name.toLowerCase())
+            .firstOrNull;
         if (match != null && (row['type'] == 'tri' || row['type'] == 'check')) {
           row['state'] = row['type'] == 'tri' ? 1 : true;
           remaining.remove(match);
@@ -172,27 +206,37 @@ class MihonSource
           final values = row['values'] as List? ?? [];
           final selected = [
             for (final tag in remaining)
-              if (values.any((v) => '$v'.toLowerCase() == tag.toLowerCase())) tag,
+              if (values.any((v) => '$v'.toLowerCase() == tag.toLowerCase()))
+                tag,
           ];
           if (row['type'] == 'select' && selected.length == 1) {
-            row['state'] = values.indexWhere((v) => '$v'.toLowerCase() == selected.single.toLowerCase());
+            row['state'] = values.indexWhere(
+              (v) => '$v'.toLowerCase() == selected.single.toLowerCase(),
+            );
             remaining.remove(selected.single);
           } else if (row['type'] == 'multi' && selected.isNotEmpty) {
             row['state'] = [
               for (final value in values)
-                if (selected.any((t) => t.toLowerCase() == '$value'.toLowerCase())) value,
+                if (selected.any(
+                  (t) => t.toLowerCase() == '$value'.toLowerCase(),
+                ))
+                  value,
             ];
             remaining.removeAll(selected);
           }
         }
       }
     }
+
     apply(filters);
     if (remaining.isNotEmpty) {
       throw _error('本站没有对应的题材筛选：${remaining.join('、')}，请在来源搜索中选择其支持的标签');
     }
     return cataloguePage(
-      operation: 'search', query: keyword, page: page, filters: filters,
+      operation: 'search',
+      query: keyword,
+      page: page,
+      filters: filters,
     );
   }
 
@@ -351,12 +395,14 @@ class MihonSource
     );
   }
 
+  // Plugins receive source-owned metadata only. Local presentation overrides
+  // must never affect request construction, related matching or canonical URLs.
   Map<String, Object?> _mangaJson(MediaItem item) => <String, Object?>{
     'url': item.url ?? item.remoteId,
-    'title': item.title,
+    'title': item.sourceTitle,
     'thumbnailUrl': item.coverUrl,
-    'author': item.author,
-    'description': item.description,
+    'author': item.sourceAuthor,
+    'description': item.sourceDescription,
     'genre': item.tags.join(', '),
   };
 

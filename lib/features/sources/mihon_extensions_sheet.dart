@@ -12,6 +12,7 @@ import '../../core/source/mihon_repository.dart';
 import '../../core/source/source_filters.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/storage/preferences.dart';
+import '../manga/manga_extension_details_page.dart';
 
 const mihonDefaultRepositoryUrl =
     'https://raw.githubusercontent.com/HyperionHXH/Mihon-Extensions/main/repo/index.json';
@@ -437,9 +438,11 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   Widget build(BuildContext context) {
     final index = _index;
     final query = _filters.query.trim().toLowerCase();
-    final entries = index?.extensions
-        .where((entry) => entry.name.toLowerCase().contains(query))
-        .toList() ?? const <MihonExtension>[];
+    final entries =
+        index?.extensions
+            .where((entry) => entry.name.toLowerCase().contains(query))
+            .toList() ??
+        const <MihonExtension>[];
     final packages = <String>{..._installed.keys, ..._hostStatus.keys}.toList()
       ..sort();
     final installed = packages
@@ -477,9 +480,11 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                   ),
                 ],
               ),
-              Text(Platform.isAndroid
-                  ? 'Mihon / Komikku APK · 安装后需手动启用，并确认发布者。'
-                  : '当前平台不执行 APK。漫画浏览中的内置 MangaDex 可直接在线使用；这里可管理 APK 文件与仓库。'),
+              Text(
+                Platform.isAndroid
+                    ? 'Mihon / Komikku APK · 安装后需手动启用，并确认发布者。'
+                    : '当前平台不执行 APK。漫画浏览中的内置 MangaDex 可直接在线使用；这里可管理 APK 文件与仓库。',
+              ),
               const SizedBox(height: 12),
               SegmentedButton<_ExtensionSection>(
                 showSelectedIcon: false,
@@ -561,14 +566,13 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                     ],
                   ),
                 if (_searching)
-                TextFormField(
-                  autofocus: true,
-                  initialValue: _filters.query,
-                  decoration: const InputDecoration(
-                    labelText: '搜索插件名称',
+                  TextFormField(
+                    autofocus: true,
+                    initialValue: _filters.query,
+                    decoration: const InputDecoration(labelText: '搜索插件名称'),
+                    onChanged: (query) =>
+                        _setFilters(_filters.copyWith(query: query)),
                   ),
-                  onChanged: (query) => _setFilters(_filters.copyWith(query: query)),
-                ),
                 if (_section == _ExtensionSection.installed)
                   Expanded(
                     child: ListView(
@@ -631,6 +635,19 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
     return package.split('.').last;
   }
 
+  Future<void> _details(String package) async {
+    // Publish locally changed install/enable state before resolving its sources.
+    ref.invalidate(sourceRegistryProvider);
+    await ref.read(sourcesProvider.notifier).refresh();
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => MangaExtensionDetailsPage(packageName: package),
+      ),
+    );
+  }
+
   Widget _installedTile(String package) {
     final host = _hostStatus[package];
     final ready = host?['ok'] == true;
@@ -638,19 +655,30 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: const Icon(Icons.extension_outlined),
+      onTap: () => unawaited(_details(package)),
       title: Text(_packageName(package)),
       subtitle: Text(
         'v${_installed[package] ?? host?['versionName'] ?? host?['versionCode'] ?? '未知'} · ${sourceContentLabel(sourceNsfwFlag(host?['nsfw']))}\n'
         '${ready ? (enabled ? '已启用' : '已安装 · 已停用') : '宿主未加载，当前不可用'}\n$package',
       ),
-      trailing: Semantics(
-        label: '启用扩展 ${_packageName(package)}',
-        child: Switch(
-          value: enabled,
-          onChanged: ready && !_toggling
-              ? (value) => _toggle(package, value)
-              : null,
-        ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: '插件详情与来源设置',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => unawaited(_details(package)),
+          ),
+          Semantics(
+            label: '启用扩展 ${_packageName(package)}',
+            child: Switch(
+              value: enabled,
+              onChanged: ready && !_toggling
+                  ? (value) => _toggle(package, value)
+                  : null,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -675,6 +703,9 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
         : '已下载，等待 Mihon 宿主执行，当前不可用';
     return ListTile(
       contentPadding: EdgeInsets.zero,
+      onTap: downloaded || host != null
+          ? () => unawaited(_details(extension.packageName))
+          : null,
       leading: const Icon(Icons.extension_outlined),
       title: Text(extension.name),
       subtitle: Text(
@@ -687,6 +718,12 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       trailing: Wrap(
         crossAxisAlignment: WrapCrossAlignment.center,
         children: <Widget>[
+          if (downloaded || host != null)
+            IconButton(
+              tooltip: '插件详情与来源设置',
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () => unawaited(_details(extension.packageName)),
+            ),
           if (downloading)
             const SizedBox(
               width: 20,

@@ -170,7 +170,10 @@ class JsSource
     }
     // Legacy rules, like MixN's aggregate search, accept tag labels as online
     // keywords. Do not filter their incomplete cached result list on-device.
-    return search([...tags, if (keyword.isNotEmpty) keyword].join(' '), page: page);
+    return search(
+      [...tags, if (keyword.isNotEmpty) keyword].join(' '),
+      page: page,
+    );
   }
 
   @override
@@ -240,7 +243,8 @@ class JsSource
 
   /// 详情与目录一次取回（JS 的 `detail()` 同时返回两者），并按地址缓存，
   /// 避免详情页先取详情、再取目录时打两次请求。
-  Future<_JsDetail> _loadDetail(MediaItem item) async {
+  Future<_JsDetail> _loadDetail(MediaItem snapshot) async {
+    final item = snapshot.sourceSnapshot;
     final url = item.url ?? '';
     final cached = _detailCache[url];
     if (cached != null) return cached;
@@ -304,13 +308,13 @@ class JsSource
       sourceId: _id,
       remoteId: remoteId == null || remoteId.isEmpty ? base.remoteId : remoteId,
       type: MediaType.tryParse(raw['type']?.toString()) ?? base.type,
-      title: title == null || title.isEmpty ? base.title : title,
+      title: title == null || title.isEmpty ? base.sourceTitle : title,
       url: resolveUrl(rule.baseUrl, raw['url']?.toString()) ?? base.url,
       coverUrl:
           resolveUrl(rule.baseUrl, raw['coverUrl']?.toString()) ??
           base.coverUrl,
-      author: raw['author']?.toString() ?? base.author,
-      description: raw['description']?.toString() ?? base.description,
+      author: raw['author']?.toString() ?? base.sourceAuthor,
+      description: raw['description']?.toString() ?? base.sourceDescription,
       tags: raw.containsKey('tags') ? _tags(raw['tags']) : base.tags,
       rating: double.tryParse(raw['rating']?.toString() ?? '') ?? base.rating,
       status: raw['status']?.toString() ?? base.status,

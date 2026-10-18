@@ -23,6 +23,7 @@ import '../detail/anime_filter_dialog.dart';
 import '../detail/anime_info_repository.dart';
 import '../discover/widgets/media_item_card.dart';
 import '../library/data/library_providers.dart';
+import '../manga/manga_item_actions.dart';
 import '../manga/manga_source_page.dart';
 import '../sources/source_account_entries.dart';
 
@@ -758,7 +759,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               itemCount: row.items.length,
               separatorBuilder: (_, _) => const SizedBox(width: 12),
               itemBuilder: (_, index) {
-                final item = row.items[index];
+                final raw = row.items[index];
+                final metadata = ref.watch(
+                  mangaItemMetadataProvider((raw.sourceId, raw.remoteId)),
+                );
+                final item = raw.withMangaMetadata(
+                  metadata.asData?.value ?? raw.localMangaMetadata,
+                );
                 return SizedBox(
                   width: 124,
                   child: MediaItemCard(
@@ -766,6 +773,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                     sourceName: '',
                     onTap: () =>
                         context.push(AppRoutes.detailFor(item), extra: item),
+                    onLongPress: () => showMangaItemActions(context, ref, item),
                   ),
                 );
               },

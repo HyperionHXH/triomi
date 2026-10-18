@@ -1,24 +1,88 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:triomi/core/db/database_provider.dart';
+import 'package:triomi/core/router/app_router.dart';
+import 'package:triomi/core/source/http_client.dart';
+import 'package:triomi/core/source/source_providers.dart';
+import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/core/theme/app_theme.dart';
 import 'package:triomi/features/profile/profile_page.dart';
+import 'package:triomi/features/settings/settings_page.dart';
+import 'package:triomi/features/tracking/tracking_page.dart';
+
+import 'fixtures/fake_http_client.dart';
+import 'fixtures/fake_preferences.dart';
+import 'fixtures/test_database.dart';
 
 void main() {
-  testWidgets('我的保留单一来源入口并按本地、账号数据、设置排序', (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      theme: AppTheme.light(),
-      home: const ProfilePage(),
-    ));
-    expect(find.text('管理'), findsNothing);
-    expect(find.text('来源与规则管理'), findsOneWidget);
-    final labels = tester.widgetList<ListTile>(find.byType(ListTile))
-        .map((tile) => (tile.title! as Text).data)
-        .toList();
-    expect(labels.take(3), ['全部观看与阅读历史', '下载管理', '本地漫画库']);
-    expect(labels.indexOf('轻之国度 · 账号与签到'), lessThan(labels.indexOf('云同步')));
-    expect(labels.indexOf('备份与恢复'), lessThan(labels.indexOf('设置')));
-    for (final title in ['轻之国度 · 消息中心', '轻书架 · 账号与签到', '远端书架', '阅读字体', '弹幕设置']) {
-      expect(labels, contains(title));
-    }
+  testWidgets('顶部账号与设置进入可用设置，账号入口可继续导航并返回', (tester) async {
+    final db = openTestDatabase();
+    addTearDown(db.close);
+    final router = GoRouter(
+      initialLocation: AppRoutes.profile,
+      routes: [
+        GoRoute(
+          path: AppRoutes.profile,
+          builder: (_, _) => const ProfilePage(),
+        ),
+        GoRoute(
+          path: AppRoutes.settings,
+          builder: (_, _) => const SettingsPage(),
+        ),
+        GoRoute(
+          path: AppRoutes.tracking,
+          builder: (_, _) => const TrackingPage(),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          preferencesProvider.overrideWithValue(memoryPreferences()),
+          databaseProvider.overrideWithValue(db),
+          secureStoreProvider.overrideWithValue(MemorySecureStore()),
+          sourceHttpClientProvider.overrideWithValue(
+            FakeHttpClient(
+              (_) async => const SourceResponse(statusCode: 503, body: ''),
+            ),
+          ),
+        ],
+        child: MaterialApp.router(
+          theme: AppTheme.light(),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.tap(find.text('账号与设置'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsPage), findsOneWidget);
+    final account = find.widgetWithText(ListTile, '追踪账号');
+    await tester.ensureVisible(account);
+    await tester.tap(account);
+    await tester.pumpAndSettle();
+    expect(find.byType(TrackingPage), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('已绑定作品'),
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byType(TrackingPage),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('已绑定作品'), findsOneWidget);
+    expect(find.textContaining('还没有绑定作品'), findsOneWidget);
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsPage), findsOneWidget);
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.text('账号与设置'), findsOneWidget);
   });
 }

@@ -100,6 +100,42 @@ void main() {
     return s;
   }
 
+  test('update provider receives source-only manga rather than local display fields', () async {
+    await seed('s', 'source-title');
+    await library.setMangaMetadata(
+      's',
+      'source-title',
+      title: 'local-title',
+      author: 'local-author',
+      description: 'local-description',
+    );
+    var called = false;
+    add(
+      UpdateSource('s', (item) async {
+        called = true;
+        expect(item.title, 'source-title');
+        expect(item.author, isNull);
+        expect(item.description, isNull);
+        expect(item.localMangaMetadata, isNull);
+        return [
+          const Chapter(
+            sourceId: 's',
+            remoteId: 'source-title-old',
+            title: 'old',
+          ),
+        ];
+      }),
+    );
+    final updates = service();
+    await updates.enqueue();
+    await updates.run();
+    expect(called, isTrue);
+    expect(
+      (await library.itemByKey('s', 'source-title'))!.title,
+      'local-title',
+    );
+  });
+
   test('category update selection evaluates scoped dynamic rules instead of stale links', () async {
     await seed('s', 'included');
     await seed('s', 'excluded');
@@ -165,21 +201,23 @@ void main() {
       ['legacy'],
     );
     var calls = 0;
-    add(UpdateSource('s', (_) async {
-      calls++;
-      return [
-        const Chapter(sourceId: 's', remoteId: 'legacy-old', title: 'old'),
-        const Chapter(sourceId: 's', remoteId: 'legacy-new', title: 'new'),
-      ];
-    }));
+    add(
+      UpdateSource('s', (_) async {
+        calls++;
+        return [
+          const Chapter(sourceId: 's', remoteId: 'legacy-old', title: 'old'),
+          const Chapter(sourceId: 's', remoteId: 'legacy-new', title: 'new'),
+        ];
+      }),
+    );
     final updates = service();
     await updates.enqueue();
     await updates.run();
     expect(calls, 1);
     expect((await db.select(db.mangaUpdates).get()).single.status, 'success');
-    final category = await (db.select(db.categories)
-          ..where((row) => row.id.equals(categoryId)))
-        .getSingle();
+    final category = await (db.select(
+      db.categories,
+    )..where((row) => row.id.equals(categoryId))).getSingle();
     expect(category.hidden, isTrue);
   });
 

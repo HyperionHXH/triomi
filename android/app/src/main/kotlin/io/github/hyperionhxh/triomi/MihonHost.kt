@@ -154,9 +154,14 @@ class MihonHost(private val context: Context) {
                     mapOf("mangas" to source.fetchRelatedMangaList(mangaFrom(args["manga"])).map(::mangaMap))
                 }
                 "browserInfo" -> {
-                    require(source is HttpSource) { "source does not expose a website" }
-                    mapOf("url" to source.getHomeUrl(), "userAgent" to (source.headers["User-Agent"]
-                        ?: source.network.defaultUserAgentProvider()))
+                    require(source is HttpSource) { "此来源没有提供 HTTP 网站，无法在浏览器打开" }
+                    val manga = args["manga"]
+                    if (manga != null) {
+                        mapOf("url" to sourceWebsiteUrl(source.getMangaUrl(mangaFrom(manga))).toString())
+                    } else {
+                        mapOf("url" to sourceWebsiteUrl(source.getHomeUrl()).toString(), "userAgent" to (source.headers["User-Agent"]
+                            ?: source.network.defaultUserAgentProvider()))
+                    }
                 }
                 "detail" -> mangaMap(source.getMangaUpdate(mangaFrom(args["manga"]), emptyList(), true, false).manga)
                 "chapters" -> mapOf("chapters" to source.getMangaUpdate(mangaFrom(args["manga"]), emptyList(), false, true).chapters.map(::chapterMap))
@@ -370,7 +375,8 @@ class MihonHost(private val context: Context) {
     private fun sha256(file: File): String = file.inputStream().use { sha256(it.readBytes()) }
     private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
-    private fun sourceMap(source: Source) = mapOf("id" to source.id.toString(), "name" to source.name, "lang" to source.lang, "supportsLatest" to source.supportsLatest)
+    private fun sourceMap(source: Source) = mapOf("id" to source.id.toString(), "name" to source.name, "lang" to source.lang,
+        "supportsLatest" to source.supportsLatest, "configurable" to (source is ConfigurableSource))
 
     private fun declaredNsfw(info: android.content.pm.PackageInfo): Boolean? {
         val raw = info.applicationInfo?.metaData?.get("tachiyomi.extension.nsfw")

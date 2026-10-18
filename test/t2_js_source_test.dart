@@ -13,6 +13,7 @@ import 'package:triomi/core/source/rule_schema.dart';
 import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/source_repository.dart';
+import 'package:triomi/features/library/data/library_repository.dart';
 
 import 'fixtures/fake_http_client.dart';
 import 'fixtures/test_database.dart';
@@ -334,6 +335,65 @@ void main() {
       expect(chapters[1].title, '第 2 话');
       expect(chapters[1].locked, isTrue);
     });
+
+    for (final chaptersFirst in [false, true]) {
+      test(
+        'source-only metadata survives JS ${chaptersFirst ? 'chapter-first' : 'detail-first'} cache and reset',
+        () async {
+          final db = openTestDatabase();
+          addTearDown(db.close);
+          final library = LibraryRepository(db);
+          const rawItem = MediaItem(
+            sourceId: 'js-source',
+            remoteId: 'raw',
+            type: MediaType.manga,
+            title: '来源标题',
+            description: '来源简介',
+            url: 'https://example.com/manga/raw',
+          );
+          await library.addToLibrary(rawItem);
+          await library.setMangaMetadata(
+            'js-source',
+            'raw',
+            title: '自定义标题',
+            author: '自定义作者',
+            description: '自定义简介',
+          );
+          final local = (await library.itemByKey('js-source', 'raw'))!;
+          runtime.responses['detail'] = {
+            if (!chaptersFirst) 'item': {'status': '连载中'},
+            'chapters': [
+              {'remoteId': 'c1', 'title': '第1话'},
+            ],
+          };
+          if (chaptersFirst) await source.chapters(local);
+          final detail = await source.detail(local);
+          await source.chapters(local);
+          final payload = runtime.calls.single.args[1] as Map;
+          expect(payload['title'], '来源标题');
+          expect(payload['author'], isNull);
+          expect(payload['description'], '来源简介');
+          expect(payload.containsKey('localMangaMetadata'), isFalse);
+          expect(detail.title, '来源标题');
+          expect(detail.author, isNull);
+          expect(detail.description, '来源简介');
+          expect(detail.localMangaMetadata, isNull);
+          await library.cacheItem(detail);
+          expect((await library.itemByKey('js-source', 'raw'))!.title, '自定义标题');
+          await library.setMangaMetadata(
+            'js-source',
+            'raw',
+            title: null,
+            author: null,
+            description: null,
+          );
+          final reset = (await library.itemByKey('js-source', 'raw'))!;
+          expect(reset.title, '来源标题');
+          expect(reset.author, isNull);
+          expect(reset.description, '来源简介');
+        },
+      );
+    }
 
     test('正文：图片补全绝对地址，线路与弹幕地址映射正确', () async {
       runtime.responses['content'] = <String, Object?>{

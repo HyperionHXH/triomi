@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/media_type.dart';
 import '../../core/router/app_router.dart';
+import '../../core/source/mihon_source.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
@@ -16,7 +17,9 @@ import '../library/manga_updates_page.dart';
 import '../library/migration_plans_page.dart';
 import '../search/search_page.dart';
 import '../sources/sources_page.dart';
+import 'manga_extension_details_page.dart';
 import 'manga_extensions_page.dart';
+import 'manga_source_actions.dart';
 import 'manga_source_page.dart';
 
 class MangaWorkspacePage extends ConsumerStatefulWidget {
@@ -164,6 +167,35 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
     if (mounted) await ref.read(sourcesProvider.notifier).refresh();
   }
 
+  Future<void> _sourceActions(SourceEntry entry) async {
+    final source = entry.source;
+    final action = await showMangaSourceActionMenu(
+      context,
+      entry,
+      onExtensionDetails: source is MihonSource
+          ? () {
+              unawaited(
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => MangaExtensionDetailsPage(
+                      packageName: source.packageName,
+                    ),
+                  ),
+                ),
+              );
+            }
+          : null,
+    );
+    if (!mounted || action == null) return;
+    await performMangaSourceAction(context, entry, action);
+    if (mounted &&
+        action == MangaSourceAction.settings &&
+        source is! MihonSource) {
+      await ref.read(sourcesProvider.notifier).refresh();
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Column(
     children: [
@@ -242,7 +274,12 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
                         subtitle: Text(
                           '${entry.descriptor.lang} · ${entry.enabled ? '已启用' : '已停用'} · ${entry.source is SearchProvider ? '在线搜索 / 浏览' : '在线目录'}',
                         ),
-                        trailing: const Icon(Icons.chevron_right),
+                        trailing: IconButton(
+                          tooltip: '${entry.descriptor.name} 来源操作',
+                          icon: const Icon(Icons.more_vert),
+                          onPressed: () => unawaited(_sourceActions(entry)),
+                        ),
+                        onLongPress: () => unawaited(_sourceActions(entry)),
                         onTap: () => context.push(
                           MangaSourcePage.location(
                             entry.descriptor.id,

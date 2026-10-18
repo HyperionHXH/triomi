@@ -275,7 +275,7 @@ class MangaUpdateService {
       final library = LibraryRepository(db);
       final item = await library.itemByKey(row.sourceId, row.remoteId);
       if (item == null) throw StateError('作品缓存已移除');
-      final chapters = await source.chapters(item);
+      final chapters = await source.chapters(item.sourceSnapshot);
       if (_cancelled) {
         await _state(row, 'queued', null);
         return;

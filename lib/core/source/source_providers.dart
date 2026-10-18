@@ -93,11 +93,16 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
     }
     final sources = status['sources'];
     if (sources is! List || sources.isEmpty) {
-      metadataFailures.add(SourceFailure(
-        id: 'mihon:$packageName', name: '${status['name'] ?? packageName}',
-        message: '${status['hostError'] ?? status['error'] ?? 'APK 来源暂不可用；保留已安装记录'}',
-        lang: '${status['lang'] ?? ''}', nsfw: sourceNsfwFlag(status['nsfw']),
-      ));
+      metadataFailures.add(
+        SourceFailure(
+          id: 'mihon:$packageName',
+          name: '${status['name'] ?? packageName}',
+          message:
+              '${status['hostError'] ?? status['error'] ?? 'APK 来源暂不可用；保留已安装记录'}',
+          lang: '${status['lang'] ?? ''}',
+          nsfw: sourceNsfwFlag(status['nsfw']),
+        ),
+      );
       continue;
     }
     for (final raw in sources) {
@@ -105,12 +110,17 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
       final sourceId = '${raw['id'] ?? ''}';
       if (sourceId.isEmpty) continue;
       if (status['ok'] != true) {
-        metadataFailures.add(SourceFailure(
-          id: 'mihon:$packageName:$sourceId', name: '${raw['name'] ?? packageName}',
-          message: '${status['hostError'] ?? status['error'] ?? 'APK 宿主暂不可用'}',
-          lang: '${raw['lang'] ?? ''}', type: MediaType.manga,
-          nsfw: sourceNsfwFlag(raw['nsfw']) ?? sourceNsfwFlag(status['nsfw']),
-        ));
+        metadataFailures.add(
+          SourceFailure(
+            id: 'mihon:$packageName:$sourceId',
+            name: '${raw['name'] ?? packageName}',
+            message:
+                '${status['hostError'] ?? status['error'] ?? 'APK 宿主暂不可用'}',
+            lang: '${raw['lang'] ?? ''}',
+            type: MediaType.manga,
+            nsfw: sourceNsfwFlag(raw['nsfw']) ?? sourceNsfwFlag(status['nsfw']),
+          ),
+        );
         continue;
       }
       mihonAdapters.add(
@@ -120,11 +130,13 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
           name: '${raw['name'] ?? packageName}',
           lang: '${raw['lang'] ?? ''}',
           nsfw: sourceNsfwFlag(raw['nsfw']) ?? sourceNsfwFlag(status['nsfw']),
-          enabled: status['ok'] == true && enabledPackages.contains(packageName),
+          enabled:
+              status['ok'] == true && enabledPackages.contains(packageName),
           apkPath: status['stagedPath']?.toString(),
           versionCode: int.tryParse('${status['versionCode']}'),
           signerSha256: status['signerSha256']?.toString(),
           supportsLatest: raw['supportsLatest'] == true,
+          isConfigurable: raw['configurable'] as bool?,
         ),
       );
     }

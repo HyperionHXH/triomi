@@ -11,7 +11,7 @@ import android.content.res.Configuration
 import eu.kanade.tachiyomi.source.preferenceKey
 
 /** Render the real extension's own PreferenceScreen and persist its exact ABI keys. */
-class MihonSettingsActivity : AppCompatActivity() {
+class MihonSettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPreferenceStartScreenCallback {
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(androidx.appcompat.R.style.Theme_AppCompat_DayNight)
         super.onCreate(savedInstanceState)
@@ -30,7 +30,20 @@ class MihonSettingsActivity : AppCompatActivity() {
         }
     }
 
-    override fun onSupportNavigateUp(): Boolean { finish(); return true }
+    override fun onSupportNavigateUp(): Boolean {
+        if (!supportFragmentManager.popBackStackImmediate()) finish()
+        return true
+    }
+
+    override fun onPreferenceStartScreen(caller: PreferenceFragmentCompat,
+        screen: androidx.preference.PreferenceScreen): Boolean {
+        val args = Bundle(caller.requireArguments()).apply {
+            putString(PreferenceFragmentCompat.ARG_PREFERENCE_ROOT, screen.key)
+        }
+        supportFragmentManager.beginTransaction().replace(android.R.id.content,
+            SettingsFragment().apply { arguments = args }).addToBackStack(screen.key).commit()
+        return true
+    }
 
     class SettingsFragment : PreferenceFragmentCompat() {
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
@@ -41,9 +54,23 @@ class MihonSettingsActivity : AppCompatActivity() {
                 preferenceManager.sharedPreferencesName = source.preferenceKey()
                 preferenceScreen = preferenceManager.createPreferenceScreen(requireContext())
                 source.setupPreferenceScreen(preferenceScreen)
+                if (rootKey != null) {
+                    preferenceScreen = requireNotNull(findPreference<androidx.preference.PreferenceScreen>(rootKey)) {
+                        "插件没有提供此设置页面"
+                    }
+                }
+                if (preferenceScreen.preferenceCount == 0) {
+                    preferenceScreen.addPreference(androidx.preference.Preference(requireContext()).apply {
+                        title = "此来源没有提供可配置设置"
+                        isSelectable = false
+                    })
+                }
+                requireActivity().setResult(android.app.Activity.RESULT_OK)
                 (requireActivity() as AppCompatActivity).supportActionBar?.title = "${source.name} · 来源设置"
             } catch (error: Throwable) {
-                Toast.makeText(requireContext(), "无法打开来源设置：${error.javaClass.simpleName}", Toast.LENGTH_LONG).show()
+                val reason = generateSequence(error) { it.cause }.last().message ?: error.javaClass.simpleName
+                Toast.makeText(requireContext(), "无法打开来源设置：$reason", Toast.LENGTH_LONG).show()
+                requireActivity().setResult(android.app.Activity.RESULT_CANCELED, android.content.Intent().putExtra("error", reason))
                 requireActivity().finish()
             }
         }

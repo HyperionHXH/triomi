@@ -3,6 +3,29 @@
 #include <optional>
 #include <exception>
 #include <flutter/standard_method_codec.h>
+#include <shellapi.h>
+#include <winhttp.h>
+
+namespace {
+std::wstring ExternalWebsite(const std::string& text) {
+  if (text.empty() || text.find_first_of("\r\n\t\\") != std::string::npos ||
+      text.find('\0') != std::string::npos) return {};
+  const int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+      text.data(), static_cast<int>(text.size()), nullptr, 0);
+  if (!size) return {};
+  std::wstring url(size, L'\0');
+  MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
+      static_cast<int>(text.size()), url.data(), size);
+  URL_COMPONENTS parts{};
+  parts.dwStructSize = sizeof(parts);
+  parts.dwSchemeLength = parts.dwHostNameLength = parts.dwUserNameLength =
+      parts.dwPasswordLength = static_cast<DWORD>(-1);
+  if (!WinHttpCrackUrl(url.c_str(), static_cast<DWORD>(url.size()), 0, &parts) ||
+      (parts.nScheme != INTERNET_SCHEME_HTTP && parts.nScheme != INTERNET_SCHEME_HTTPS) ||
+      !parts.dwHostNameLength || parts.dwUserNameLength || parts.dwPasswordLength) return {};
+  return url;
+}
+}  // namespace
 
 #include "flutter/generated_plugin_registrant.h"
 #include "windows_backup.h"
@@ -54,6 +77,26 @@ bool FlutterWindow::OnCreate() {
             // Return an observable Task Scheduler result, not Android's done
             // channel. Engine/plugin teardown follows after the message loop.
             ::PostQuitMessage(*code);
+            return;
+          }
+          if (call.method_name() == "launchExternalUrl" && !backup_worker_) {
+            const auto* args = call.arguments() == nullptr ? nullptr :
+                std::get_if<flutter::EncodableMap>(call.arguments());
+            if (!args) { result->Error("invalid_url", "website URL is required"); return; }
+            const auto entry = args->find(flutter::EncodableValue("url"));
+            const auto* text = entry == args->end() ? nullptr : std::get_if<std::string>(&entry->second);
+            const auto url = text ? ExternalWebsite(*text) : std::wstring();
+            if (url.empty()) {
+              result->Error("invalid_url", "website must use HTTP(S) without credentials");
+              return;
+            }
+            const auto launched = reinterpret_cast<INT_PTR>(ShellExecuteW(
+                GetHandle(), L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+            if (launched <= 32) {
+              result->Error("browser_unavailable", "Windows could not open an external browser");
+            } else {
+              result->Success(flutter::EncodableValue(true));
+            }
             return;
           }
           if (call.method_name() == "scheduleLocalBackups" && !backup_worker_) {

@@ -29,6 +29,7 @@ import '../library/data/anime_identity_repository.dart';
 import '../library/data/library_providers.dart';
 import '../library/merged_manga_page.dart';
 import '../library/source_migration_page.dart';
+import '../manga/manga_item_actions.dart';
 import '../novel/data/lns/lns_source.dart';
 import '../novel/export/novel_export_service.dart';
 import '../novel/lk/book_comments_section.dart';
@@ -106,7 +107,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     if (widget.item.sourceId != 'bangumi-anime') {
       await _loadPlayback(
         widget.item,
-        preferredChapterId: selected?.item.sourceId == widget.item.sourceId &&
+        preferredChapterId:
+            selected?.item.sourceId == widget.item.sourceId &&
                 selected?.item.remoteId == widget.item.remoteId
             ? selected?.chapter?.remoteId
             : null,
@@ -150,9 +152,9 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       try {
         if (item.type != MediaType.anime) throw StateError('资料来源不属于当前工作区');
         final info = await owner.run(
-          () => ref.read(animeInfoRepositoryProvider).section(
-            item.remoteId, 'info', refresh: refresh,
-          ),
+          () => ref
+              .read(animeInfoRepositoryProvider)
+              .section(item.remoteId, 'info', refresh: refresh),
         );
         final row = info.rows.single;
         if (!mounted || generation != _generation || owner.cancelled) {
@@ -203,7 +205,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       var detail = item;
       final metadata = owner.run(() async {
         try {
-          detail = await provider.detail(item);
+          detail = await provider.detail(item.sourceSnapshot);
           if (detail.type != item.type ||
               detail.sourceId != item.sourceId ||
               detail.remoteId != item.remoteId) {
@@ -263,7 +265,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     _directoryError = null;
     try {
       final chapters = await _metadataOwner!.run(
-        () => (entry.source as DetailProvider).chapters(item),
+        () => (entry.source as DetailProvider).chapters(item.sourceSnapshot),
       );
       if (!mounted || generation != _generation) return;
       _publish(
@@ -300,7 +302,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     final selected = await showAnimeSources(context, _data.item ?? widget.item);
     if (!mounted || selected == null) return;
     await _loadPlayback(selected);
-    if (!mounted || _playback?.item?.sourceId != selected.sourceId ||
+    if (!mounted ||
+        _playback?.item?.sourceId != selected.sourceId ||
         _playback?.item?.remoteId != selected.remoteId ||
         _playback!.chapters.isEmpty) {
       return;
@@ -378,12 +381,13 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         }
         final source = entry.source as DetailProvider;
         // A playable provider may need hidden playlist ids from its detail.
-        final detail = await source.detail(cachedItem);
-        if (detail.sourceId != item.sourceId || detail.remoteId != item.remoteId ||
+        final detail = await source.detail(cachedItem.sourceSnapshot);
+        if (detail.sourceId != item.sourceId ||
+            detail.remoteId != item.remoteId ||
             detail.type != MediaType.anime) {
           throw StateError('播放来源返回的作品身份不一致');
         }
-        final chapters = await source.chapters(detail);
+        final chapters = await source.chapters(detail.sourceSnapshot);
         if (chapters.any((chapter) => chapter.sourceId != item.sourceId)) {
           throw StateError('播放目录包含其他来源的剧集');
         }
@@ -768,7 +772,9 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         await _loadPlayback(selected);
       } else {
         final refreshed = _load(refresh: true);
-        setState(() { _future = refreshed; });
+        setState(() {
+          _future = refreshed;
+        });
       }
     } catch (_) {
       _toast('当前平台无法打开站点验证；未宣称验证成功');
@@ -824,8 +830,24 @@ class _DetailPageState extends ConsumerState<DetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final data = _data;
-    final item = data.item ?? widget.item;
+    final rawItem = _data.item ?? widget.item;
+    final metadata = rawItem.type == MediaType.manga
+        ? ref.watch(
+            mangaItemMetadataProvider((rawItem.sourceId, rawItem.remoteId)),
+          )
+        : null;
+    final item = rawItem.type == MediaType.manga
+        ? rawItem.withMangaMetadata(
+            metadata?.asData?.value ?? rawItem.localMangaMetadata,
+          )
+        : rawItem;
+    final data = _DetailData(
+      item: item,
+      sourceName: _data.sourceName,
+      chapters: _data.chapters,
+      offline: _data.offline,
+      supportsContent: _data.supportsContent,
+    );
     final playable = item.type == MediaType.anime ? _playback : data;
     return PageScaffold(
       title: item.title,
@@ -834,9 +856,13 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           tooltip: '更多',
           onSelected: (value) {
             switch (value) {
+              case 'editManga':
+                unawaited(showMangaMetadataEditor(context, ref, item));
               case 'reload':
                 final refreshed = _load(refresh: true);
-                setState(() { _future = refreshed; });
+                setState(() {
+                  _future = refreshed;
+                });
               case 'download':
                 unawaited(_downloadOffline());
               case 'epub':
@@ -878,6 +904,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             }
           },
           itemBuilder: (_) => [
+            if (item.type == MediaType.manga)
+              const PopupMenuItem(value: 'editManga', child: Text('编辑漫画资料')),
             if (item.sourceId == 'bangumi-anime')
               const PopupMenuItem(value: 'info', child: Text('完整番剧资料')),
             if (playable != null &&
@@ -931,7 +959,9 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               trailing: TextButton(
                 onPressed: () {
                   final refreshed = _load(refresh: true);
-                  setState(() { _future = refreshed; });
+                  setState(() {
+                    _future = refreshed;
+                  });
                 },
                 child: const Text('重试资料'),
               ),
@@ -974,7 +1004,9 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                     unawaited(_loadPlayback(selected));
                   } else {
                     final refreshed = _load(refresh: true);
-                    setState(() { _future = refreshed; });
+                    setState(() {
+                      _future = refreshed;
+                    });
                   }
                 },
                 child: const Text('重试目录'),
@@ -1083,21 +1115,32 @@ class _AnimeHero extends StatelessWidget {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: SizedBox(width: 104, height: 156, child: MediaCover(url: item.coverUrl)),
+          child: SizedBox(
+            width: 104,
+            height: 156,
+            child: MediaCover(url: item.coverUrl),
+          ),
         ),
         const SizedBox(width: 16),
-        Expanded(child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(item.title, style: Theme.of(context).textTheme.titleLarge),
-            if (item.status?.isNotEmpty == true) Text(item.status!),
-            if (item.rating != null) Text('★ ${item.rating!.toStringAsFixed(1)} · Bangumi'),
-            const SizedBox(height: 12),
-            FilledButton.icon(onPressed: onPlay, icon: const Icon(Icons.play_arrow), label: const Text('开始 / 继续观看')),
-            const SizedBox(height: 4),
-            AnimeCollectionButton(item: item),
-          ],
-        )),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(item.title, style: Theme.of(context).textTheme.titleLarge),
+              if (item.status?.isNotEmpty == true) Text(item.status!),
+              if (item.rating != null)
+                Text('★ ${item.rating!.toStringAsFixed(1)} · Bangumi'),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: onPlay,
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('开始 / 继续观看'),
+              ),
+              const SizedBox(height: 4),
+              AnimeCollectionButton(item: item),
+            ],
+          ),
+        ),
       ],
     ),
   );
@@ -1320,7 +1363,8 @@ class _ChapterSection extends StatelessWidget {
     final target = item;
     if (target == null || index < 0 || index >= chapters.length) return;
     if (target.type == MediaType.anime &&
-        (!supportsContent || chapters[index].locked ||
+        (!supportsContent ||
+            chapters[index].locked ||
             chapters[index].sourceId != target.sourceId)) {
       return;
     }

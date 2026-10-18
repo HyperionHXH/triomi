@@ -23,6 +23,7 @@ class MainActivity : FlutterActivity() {
     private var mihonSessionPending = false
     private lateinit var mihonHost: MihonHost
     private var pendingFontResult: MethodChannel.Result? = null
+    private var pendingMihonSettingsResult: MethodChannel.Result? = null
     private var pendingBackupResult: MethodChannel.Result? = null
     private var pendingNotificationResult: MethodChannel.Result? = null
     private val mihonExecutor = Executors.newCachedThreadPool()
@@ -37,6 +38,20 @@ class MainActivity : FlutterActivity() {
     fun updateConsentCurrent(generation: Long): Boolean =
         generation == consentGeneration && nativeForeground && hasWindowFocus() &&
             !isFinishing && !isDestroyed
+
+    // UI-thread ownership includes asynchronous validation, not just the Activity.
+    internal fun reserveMihonSettingsResult(result: MethodChannel.Result): Boolean {
+        if (pendingMihonSettingsResult != null) return false
+        pendingMihonSettingsResult = result
+        return true
+    }
+
+    internal fun takeMihonSettingsResult(expected: MethodChannel.Result? = null): MethodChannel.Result? {
+        val pending = pendingMihonSettingsResult ?: return null
+        if (expected != null && pending !== expected) return null
+        pendingMihonSettingsResult = null
+        return pending
+    }
 
     private fun invalidateNativeConsent() {
         consentGeneration++
@@ -67,6 +82,20 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "triomi/platform")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "launchExternalUrl" -> {
+                        try {
+                            val url = sourceWebsiteUrl(requireNotNull(call.argument<String>("url")))
+                            check(updateConsentCurrent(updateConsentGeneration())) { "return to the app before opening a browser" }
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url.toString())).apply {
+                                addCategory(Intent.CATEGORY_BROWSABLE)
+                            })
+                            result.success(true)
+                        } catch (_: android.content.ActivityNotFoundException) {
+                            result.error("browser_unavailable", "没有可用的外部浏览器", null)
+                        } catch (_: Exception) {
+                            result.error("browser_unavailable", "无法打开来源网站；地址无效或应用不在前台", null)
+                        }
+                    }
                     "pickLocalComic" -> localComicPicker.pick(result, call.argument<Boolean>("directory") == true)
                     "cancelLocalComicPick" -> { localComicPicker.cancel(); result.success(null) }
                     "availableDiskBytes" -> {
@@ -290,22 +319,34 @@ class MainActivity : FlutterActivity() {
                             result.error("invalid_args", "source identity required", null)
                         } else if (!updateConsentCurrent(requestGeneration)) {
                             result.error("activity_inactive", "return to the app before opening source settings", null)
+                        } else if (!reserveMihonSettingsResult(result)) {
+                            result.error("settings_busy", "来源设置已打开", null)
                         } else {
-                            mihonExecutor.execute {
-                                try {
-                                    mihonHost.settingsSource(pkg, sourceId)
-                                    runOnUiThread {
-                                        if (!updateConsentCurrent(requestGeneration)) {
-                                            result.error("activity_inactive", "source settings consent expired", null)
-                                            return@runOnUiThread
+                            try {
+                                mihonExecutor.execute {
+                                    try {
+                                        mihonHost.settingsSource(pkg, sourceId)
+                                        runOnUiThread {
+                                            if (pendingMihonSettingsResult !== result) return@runOnUiThread
+                                            if (!updateConsentCurrent(requestGeneration)) {
+                                                takeMihonSettingsResult(result)?.error("activity_inactive", "source settings consent expired", null)
+                                                return@runOnUiThread
+                                            }
+                                            try {
+                                                startActivityForResult(Intent(this, MihonSettingsActivity::class.java)
+                                                    .putExtra("packageName", pkg).putExtra("sourceId", sourceId), REQUEST_MIHON_SETTINGS)
+                                            } catch (_: Exception) {
+                                                takeMihonSettingsResult(result)?.error("settings_unavailable", "无法启动插件来源设置", null)
+                                            }
                                         }
-                                        startActivity(Intent(this, MihonSettingsActivity::class.java)
-                                            .putExtra("packageName", pkg).putExtra("sourceId", sourceId))
-                                        result.success(true)
+                                    } catch (error: Throwable) {
+                                        runOnUiThread {
+                                            takeMihonSettingsResult(result)?.error("settings_unavailable", error.message, null)
+                                        }
                                     }
-                                } catch (error: Throwable) {
-                                    runOnUiThread { result.error("settings_unavailable", error.message, null) }
                                 }
+                            } catch (_: java.util.concurrent.RejectedExecutionException) {
+                                takeMihonSettingsResult(result)?.error("activity_inactive", "source settings validation was cancelled", null)
                             }
                         }
                     }
@@ -433,6 +474,7 @@ class MainActivity : FlutterActivity() {
         localComicPicker.close()
         if (::appUpdateHost.isInitialized) appUpdateHost.close()
         mihonWebSession?.close()
+        takeMihonSettingsResult()?.success(false)
         videoResolver?.cancel()
         downloadVideoResolver?.cancel()
         mihonExecutor.shutdownNow()
@@ -598,6 +640,15 @@ class MainActivity : FlutterActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (localComicPicker.onActivityResult(requestCode, resultCode, data)) return
         if (::appUpdateHost.isInitialized && appUpdateHost.onActivityResult(requestCode, resultCode, data)) return
+        if (requestCode == REQUEST_MIHON_SETTINGS) {
+            val pending = takeMihonSettingsResult()
+            if (resultCode == RESULT_OK) {
+                pending?.success(true)
+            } else {
+                pending?.error("settings_unavailable", data?.getStringExtra("error") ?: "插件来源设置未能打开", null)
+            }
+            return
+        }
         if (requestCode == REQUEST_PICK_BACKUP) {
             val pending = pendingBackupResult
             pendingBackupResult = null
@@ -730,5 +781,6 @@ class MainActivity : FlutterActivity() {
         private const val REQUEST_PICK_IMAGE = 4103
         private const val REQUEST_PICK_BACKUP = 4105
         private const val REQUEST_NOTIFICATION = 4104
+        private const val REQUEST_MIHON_SETTINGS = 4106
     }
 }

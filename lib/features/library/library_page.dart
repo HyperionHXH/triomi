@@ -15,6 +15,7 @@ import '../discover/widgets/media_item_card.dart';
 import '../downloads/data/download_providers.dart';
 import '../downloads/data/download_repository.dart';
 import '../local/local_comic_library_page.dart';
+import '../manga/manga_item_actions.dart';
 import '../search/search_page.dart';
 import 'data/library_preferences.dart';
 import 'data/library_providers.dart';
@@ -882,6 +883,8 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
               tooltip: '已选更多',
               onSelected: (value) {
                 switch (value) {
+                  case 'edit':
+                    unawaited(_editSelected());
                   case 'pin':
                     unawaited(_pinSelected(true));
                   case 'unpin':
@@ -893,6 +896,9 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
                 }
               },
               itemBuilder: (_) => [
+                if (widget.type == MediaType.manga &&
+                    _scopedSelection().length == 1)
+                  const PopupMenuItem(value: 'edit', child: Text('编辑漫画资料')),
                 const PopupMenuItem(value: 'pin', child: Text('置顶')),
                 const PopupMenuItem(value: 'unpin', child: Text('取消置顶')),
                 if (widget.type == MediaType.manga) ...[
@@ -906,6 +912,28 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
       ),
     ),
   );
+
+  Future<void> _editSelected() async {
+    final keys = _scopedSelection();
+    if (keys.length != 1) return;
+    await _retainVisibleSelection(keys);
+    if (!mounted || keys.length != 1) return;
+    final key = keys.single;
+    final item = await ref
+        .read(libraryRepositoryProvider)
+        .itemByKey(key.$1, key.$2);
+    if (!mounted || item == null || item.type != MediaType.manga) return;
+    final saved = await showMangaMetadataEditor(
+      context,
+      ref,
+      item,
+      stillInScope: () async {
+        await _retainVisibleSelection(keys);
+        return mounted && keys.length == 1 && _scopedSelection().length == 1;
+      },
+    );
+    if (saved && mounted) setState(_exitSelection);
+  }
 
   Future<void> _setMangaRead(bool read) async {
     final keys = _scopedSelection();

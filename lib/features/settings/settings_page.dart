@@ -27,6 +27,44 @@ class SettingsPage extends ConsumerWidget {
         ),
         children: <Widget>[
           SettingsGroup(
+            title: '账号',
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.account_circle_outlined),
+                title: const Text('轻之国度账号'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.lkAccount),
+              ),
+              ListTile(
+                leading: const Icon(Icons.account_circle_outlined),
+                title: const Text('轻书架账号'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.lnsAccount),
+              ),
+              ListTile(
+                leading: const Icon(Icons.account_circle_outlined),
+                title: const Text('其他来源账号'),
+                subtitle: const Text('在对应来源管理登录，不共享凭据'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.sources),
+              ),
+              ListTile(
+                leading: const Icon(Icons.sync_outlined),
+                title: const Text('追踪账号'),
+                subtitle: const Text('Bangumi / AniList'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.tracking),
+              ),
+              ListTile(
+                leading: const Icon(Icons.cloud_outlined),
+                title: const Text('云同步账号'),
+                subtitle: const Text('WebDAV 连接与同步'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.webdav),
+              ),
+            ],
+          ),
+          SettingsGroup(
             title: '界面',
             children: <Widget>[
               ListTile(
@@ -34,9 +72,12 @@ class SettingsPage extends ConsumerWidget {
                 title: const Text('封面与外观'),
                 subtitle: const Text('主题、图标、封面布局、密度与强调色'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.push(context, MaterialPageRoute<void>(
-                  builder: (_) => const CoverAppearanceSettingsPage(),
-                )),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const CoverAppearanceSettingsPage(),
+                  ),
+                ),
               ),
             ],
           ),
@@ -72,9 +113,12 @@ class SettingsPage extends ConsumerWidget {
                 title: const Text('缓存与存储'),
                 subtitle: const Text('预览缓存占用；清理前确认，保留下载和进度'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.push(context, MaterialPageRoute<void>(
-                  builder: (_) => const CacheManagementPage(),
-                )),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const CacheManagementPage(),
+                  ),
+                ),
               ),
             ],
           ),
@@ -86,9 +130,12 @@ class SettingsPage extends ConsumerWidget {
                 title: const Text('版本管理与应用更新'),
                 subtitle: const Text('GitHub 发布版本、更新说明、下载与安装'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.push(context, MaterialPageRoute<void>(
-                  builder: (_) => const AppUpdatePage(),
-                )),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AppUpdatePage(),
+                  ),
+                ),
               ),
               ListTile(
                 leading: const Icon(Icons.balance_outlined),
@@ -100,7 +147,8 @@ class SettingsPage extends ConsumerWidget {
                   showLicensePage(
                     context: context,
                     applicationName: 'Triomi',
-                    applicationVersion: '${package.version}+${package.buildNumber}',
+                    applicationVersion:
+                        '${package.version}+${package.buildNumber}',
                   );
                 },
               ),
@@ -167,4 +215,3 @@ class SettingsPage extends ConsumerWidget {
     }
   }
 }
-

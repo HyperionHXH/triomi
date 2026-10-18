@@ -9,8 +9,11 @@ import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/mihon_repository.dart';
+import 'package:triomi/core/source/mihon_source.dart';
 import 'package:triomi/core/source/source_providers.dart';
+import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/features/manga/manga_extension_details_page.dart';
 import 'package:triomi/features/sources/mihon_extensions_sheet.dart';
 
 import 'fixtures/fake_http_client.dart';
@@ -38,6 +41,13 @@ Map<String, Object?> extensionJson({
     },
   ],
 };
+
+class _InstalledSources extends SourceRegistryController {
+  _InstalledSources(this.snapshot);
+  final SourceRegistrySnapshot snapshot;
+  @override
+  Future<SourceRegistrySnapshot> build() async => snapshot;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -271,8 +281,10 @@ void main() {
     const host = MethodChannel('triomi/platform');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(host, (_) async => {'ok': true});
-    addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(host, null));
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(host, null),
+    );
     final semantics = tester.ensureSemantics();
     try {
       final preferences = memoryPreferences();
@@ -422,7 +434,10 @@ void main() {
       expect(find.byType(TextFormField), findsNothing);
       await tester.tap(find.byTooltip('搜索插件名称'));
       await tester.pumpAndSettle();
-      expect(tester.widget<TextFormField>(find.byType(TextFormField)).initialValue, 'English');
+      expect(
+        tester.widget<TextFormField>(find.byType(TextFormField)).initialValue,
+        'English',
+      );
       expect(find.widgetWithText(ListTile, 'MangaDex'), findsNothing);
       await tester.tap(find.text('浏览扩展'));
       await tester.pumpAndSettle();
@@ -439,10 +454,86 @@ void main() {
       expect(find.widgetWithText(ListTile, 'MangaDex'), findsOneWidget);
       expect(find.widgetWithText(ListTile, 'English'), findsOneWidget);
       expect(http.requests, hasLength(2));
-      expect(http.requests.every((request) => request.url == mihonDefaultRepositoryUrl), isTrue);
+      expect(
+        http.requests.every(
+          (request) => request.url == mihonDefaultRepositoryUrl,
+        ),
+        isTrue,
+      );
       expect(preferences.get<Object?>('mihon.enabledPackages'), enabled);
       expect(preferences.get<Object?>('mihon.installedPackages'), installed);
       expect(preferences.get<Object?>('mihon.hostStatus'), hostStatus);
+    },
+  );
+  testWidgets(
+    'installed plugin row and gear both open per-source details without changing enablement',
+    (tester) async {
+      const package = 'extension.installed';
+      final preferences = memoryPreferences();
+      await preferences.set('mihon.installedPackages', {package: '1.6.0'});
+      await preferences.set('mihon.enabledPackages', [package]);
+      await preferences.set('mihon.hostStatus', {
+        package: {
+          'ok': true,
+          'sources': [
+            {'id': '1', 'name': 'Installed comic source', 'lang': 'zh'},
+          ],
+        },
+      });
+      final source = MihonSource(
+        packageName: package,
+        hostSourceId: '1',
+        name: 'Installed comic source',
+        lang: 'zh',
+        enabled: true,
+        apkPath: null,
+        versionCode: 1,
+        signerSha256: null,
+        isConfigurable: false,
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            preferencesProvider.overrideWithValue(preferences),
+            sourcesProvider.overrideWith(
+              () => _InstalledSources(
+                SourceRegistrySnapshot(
+                  entries: [
+                    SourceEntry(
+                      descriptor: source.descriptor,
+                      source: source,
+                      enabled: true,
+                    ),
+                  ],
+                  failures: const [],
+                ),
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: MihonExtensionsSheet()),
+          ),
+        ),
+      );
+      for (var round = 0; round < 6; round++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      expect(find.byTooltip('插件详情与来源设置'), findsOneWidget);
+      await tester.tap(find.text('Installed comic source'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MangaExtensionDetailsPage), findsOneWidget);
+      expect(find.text('此来源没有提供可配置设置'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('插件详情与来源设置'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MangaExtensionDetailsPage), findsOneWidget);
+      expect(preferences.get<List<Object?>>('mihon.enabledPackages'), [
+        package,
+      ]);
     },
   );
 }

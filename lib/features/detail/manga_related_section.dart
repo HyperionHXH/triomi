@@ -37,7 +37,7 @@ class _MangaRelatedSectionState extends ConsumerState<MangaRelatedSection> {
           .firstOrNull
           ?.source;
       final items = source is MihonSource
-          ? await source.related(widget.item)
+          ? await source.related(widget.item.sourceSnapshot)
           : null;
       if (mounted) {
         setState(() {

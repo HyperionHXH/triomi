@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import '../source/source_website.dart';
+
 /// SAF 授权目录写入器（D49 合同）：写入 [fileName] 并返回系统实际创建的
 /// document URI（`DocumentsContract.createDocument` 的结果）。
 ///
@@ -28,6 +30,18 @@ class PlatformChannel {
   const PlatformChannel._();
 
   static const MethodChannel _channel = MethodChannel('triomi/platform');
+
+  Future<bool> launchExternalUrl(String url) async {
+    final uri = publicSourceWebsiteUri(url);
+    try {
+      return await _channel.invokeMethod<bool>('launchExternalUrl', {
+            'url': uri.toString(),
+          }) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
 
   /// Verify APK bytes and read publisher metadata without executing its DEX.
   Future<bool> openMihonSettings(String packageName, String sourceId) async {

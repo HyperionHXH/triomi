@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 
 import '../../../core/db/app_database.dart';
 import '../../../core/models/chapter.dart';
+import '../../../core/models/manga_metadata_override.dart';
 import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
 import 'library_category.dart';
@@ -71,11 +72,11 @@ class LibraryRepository {
             sourceId: item.sourceId,
             remoteId: item.remoteId,
             type: item.type,
-            title: item.title,
+            title: item.sourceTitle,
             url: Value(item.url),
             coverUrl: Value(item.coverUrl),
-            author: Value(item.author),
-            description: Value(item.description),
+            author: Value(item.sourceAuthor),
+            description: Value(item.sourceDescription),
             tagsJson: Value(item.tags.isEmpty ? null : jsonEncode(item.tags)),
             rating: Value(item.rating),
             status: Value(item.status),
@@ -93,6 +94,74 @@ class LibraryRepository {
     final row = await query.getSingleOrNull();
     return row == null ? null : _toItem(row);
   }
+
+  Stream<MangaMetadataOverride?> watchMangaMetadata((String, String) key) =>
+      (_db.select(_db.mediaItems)..where(
+            (t) =>
+                t.sourceId.equals(key.$1) &
+                t.remoteId.equals(key.$2) &
+                t.type.equalsValue(MediaType.manga),
+          ))
+          .watchSingleOrNull()
+          .map(
+            (row) =>
+                MangaMetadataOverride.readOptionalDetailJson(row?.detailJson),
+          );
+
+  Future<MediaItem> applyMangaMetadata(MediaItem item) async {
+    if (item.type != MediaType.manga) return item;
+    final cached = await itemByKey(item.sourceId, item.remoteId);
+    return item.withMangaMetadata(cached?.localMangaMetadata);
+  }
+
+  /// Only local fields change. Source fields, identity, library membership,
+  /// reading progress and other detail namespaces remain untouched.
+  Future<void> setMangaMetadata(
+    String sourceId,
+    String remoteId, {
+    required String? title,
+    required String? author,
+    required String? description,
+    MediaItem? initialItem,
+  }) => _db.transaction(() async {
+    final query = _db.select(_db.mediaItems)
+      ..where((t) => t.sourceId.equals(sourceId) & t.remoteId.equals(remoteId));
+    var row = await query.getSingleOrNull();
+    if (row == null && initialItem != null) {
+      if (initialItem.type != MediaType.manga ||
+          initialItem.sourceId != sourceId ||
+          initialItem.remoteId != remoteId) {
+        throw ArgumentError('初始漫画身份不一致');
+      }
+      await cacheItem(initialItem);
+      row = await query.getSingleOrNull();
+    }
+    if (row == null || row.type != MediaType.manga) {
+      throw StateError('漫画已不存在或不属于当前模块，未保存修改');
+    }
+    String? normalized(String? value) =>
+        value == null || value.trim().isEmpty ? null : value.trim();
+    final previous = MangaMetadataOverride.fromDetailJson(row.detailJson);
+    final now = DateTime.now();
+    final timestamp = previous != null && !now.isAfter(previous.updatedAt)
+        ? previous.updatedAt.add(const Duration(microseconds: 1))
+        : now;
+    final metadata = MangaMetadataOverride(
+      updatedAt: timestamp,
+      title: normalized(title),
+      author: normalized(author),
+      description: normalized(description),
+    );
+    final fields = MangaMetadataOverride.detailFields(row.detailJson);
+    fields[MangaMetadataOverride.detailKey] = metadata.toJson();
+    await (_db.update(_db.mediaItems)..where(
+          (t) =>
+              t.sourceId.equals(sourceId) &
+              t.remoteId.equals(remoteId) &
+              t.type.equalsValue(MediaType.manga),
+        ))
+        .write(MediaItemsCompanion(detailJson: Value(jsonEncode(fields))));
+  });
 
   Future<bool> isInLibrary(String sourceId, String remoteId) async {
     final query = _db.selectOnly(_db.libraryEntries)
@@ -833,6 +902,9 @@ class LibraryRepository {
     tags: _decodeTags(row.tagsJson),
     rating: row.rating,
     status: row.status,
+    localMangaMetadata: row.type == MediaType.manga
+        ? MangaMetadataOverride.readOptionalDetailJson(row.detailJson)
+        : null,
   );
 
   Chapter _toChapter(ChapterRow row) => Chapter(

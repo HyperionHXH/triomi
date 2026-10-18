@@ -18,6 +18,14 @@ import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.io.File
+import androidx.preference.Preference
+import androidx.preference.PreferenceGroup
+import androidx.preference.PreferenceManager
+import androidx.preference.TwoStatePreference
+import androidx.preference.ListPreference
+import androidx.appcompat.view.ContextThemeWrapper
+import eu.kanade.tachiyomi.source.preferenceKey
+import io.flutter.plugin.common.MethodChannel
 
 @RunWith(AndroidJUnit4::class)
 class MihonSessionTest {
@@ -151,6 +159,20 @@ class MihonSessionTest {
             try {
                 host.setEnabled(pkg, true)
                 assertEquals(true, host.request(args)["ok"])
+                // Public identity shapes only: canonicalization does not fetch
+                // manga details, authenticate, or require a real server record.
+                val relativeMangaUrl = when {
+                    pkg.contains("mangadex") -> "/manga/00000000-0000-4000-8000-000000000001"
+                    pkg.contains("eighteen") -> "/album/123456"
+                    else -> "/comic/triomi-browser-regression"
+                }
+                val mangaWebsite = host.request(args + ("manga" to mapOf(
+                    "url" to relativeMangaUrl, "title" to "Browser URL regression",
+                )))
+                assertEquals(true, mangaWebsite["ok"])
+                val canonical = sourceWebsiteUrl(mangaWebsite["url"] as String)
+                assertTrue("relative manga URL must use the real plugin's canonical URL", canonical.encodedPath.contains(relativeMangaUrl.substringAfterLast('/')))
+                assertFalse("external manga resolution must not return session/request metadata", mangaWebsite.containsKey("userAgent"))
                 assertEquals(false, host.inspect(path, pkg, version + 1, signer)["executable"])
                 assertEquals(false, host.inspect(path, pkg, version, "0".repeat(64))["executable"])
                 assertEquals("failed candidate must keep old runtime", true, host.request(args)["ok"])
@@ -160,10 +182,142 @@ class MihonSessionTest {
                     fail("disabled extension must reject browser and content requests")
                 } catch (expected: IllegalStateException) {
                     assertTrue(expected.message.orEmpty().contains("disabled"))
+                    try {
+                        host.request(args + ("manga" to mapOf("url" to relativeMangaUrl)))
+                        fail("disabled extension must reject canonical manga URL resolution")
+                    } catch (disabled: IllegalStateException) {
+                        assertTrue(disabled.message.orEmpty().contains("disabled"))
+                    }
                 }
             } finally {
                 host.setEnabled(pkg, wasEnabled)
             }
+        }
+    }
+
+    @Test fun realPluginPreferenceScreenWritesTheRuntimePreferenceStore() {
+        val pins = context.getSharedPreferences("mihon.host", Context.MODE_PRIVATE)
+        val packages = pins.all.keys.filter { it.startsWith("apk.") }.map { it.removePrefix("apk.") }
+        assertTrue("an installed trusted extension is required", packages.isNotEmpty())
+        var exercised = false
+        for (pkg in packages) {
+            lateinit var host: MihonHost
+            instrumentation.runOnMainSync { host = MihonHost(context) }
+            val previousEnabled = pins.getBoolean("enabled.$pkg", false)
+            try {
+                host.setEnabled(pkg, true)
+                val inspected = host.inspect(pins.getString("apk.$pkg", null), pkg,
+                    pins.getLong("version.$pkg", -1), pins.getString("signer.$pkg", null))
+                assertEquals("installed trusted APK must load", true, inspected["ok"])
+                for (row in (inspected["sources"] as List<*>).filterIsInstance<Map<*, *>>()) {
+                    if (row["configurable"] != true) continue
+                    val sourceId = row["id"].toString()
+                    val source = host.settingsSource(pkg, sourceId)
+                    val store = source.getSourcePreferences()
+                    instrumentation.runOnMainSync {
+                        val themed = ContextThemeWrapper(context, androidx.appcompat.R.style.Theme_AppCompat_DayNight)
+                        val manager = PreferenceManager(themed)
+                        manager.sharedPreferencesName = source.preferenceKey()
+                        val screen = manager.createPreferenceScreen(themed)
+                        source.setupPreferenceScreen(screen)
+                        fun preferences(group: PreferenceGroup): List<Preference> =
+                            (0 until group.preferenceCount).flatMap { index ->
+                                val pref = group.getPreference(index)
+                                listOf(pref) + if (pref is PreferenceGroup) preferences(pref) else emptyList()
+                            }
+                        val control = preferences(screen).firstOrNull {
+                            !it.key.isNullOrBlank() && it.isPersistent &&
+                                (it is TwoStatePreference || it is ListPreference && it.value != null)
+                        } ?: return@runOnMainSync
+                        val key = control.key
+                        val existed = store.contains(key)
+                        val old = store.all[key]
+                        try {
+                            // Re-select the current value: exercise the actual plugin UI
+                            // persistence without changing a user's site/line/account.
+                            when (control) {
+                                is TwoStatePreference -> {
+                                    control.isChecked = control.isChecked
+                                    assertEquals(control.isChecked, store.getBoolean(key, !control.isChecked))
+                                }
+                                is ListPreference -> {
+                                    control.value = control.value
+                                    assertEquals(control.value, store.getString(key, null))
+                                }
+                            }
+                            val recreated = MihonHost(context).settingsSource(pkg, sourceId)
+                            assertEquals(store.all[key], recreated.getSourcePreferences().all[key])
+                            exercised = true
+                        } finally {
+                            val restore = store.edit()
+                            if (!existed) restore.remove(key)
+                            else when (old) {
+                                is Boolean -> restore.putBoolean(key, old)
+                                is String -> restore.putString(key, old)
+                            }
+                            restore.commit()
+                        }
+                    }
+                }
+                host.setEnabled(pkg, false)
+                try {
+                    host.settingsSource(pkg, (inspected["sources"] as List<*>)
+                        .filterIsInstance<Map<*, *>>().first()["id"].toString())
+                    fail("disabled plugin must not execute a preferences screen")
+                } catch (expected: IllegalStateException) {
+                    assertTrue(expected.message.orEmpty().contains("disabled"))
+                }
+            } finally {
+                host.setEnabled(pkg, previousEnabled)
+            }
+        }
+        assertTrue("a real installed plugin must expose a persistable preference control", exercised)
+    }
+
+    @Test fun sourceBrowserRejectsCredentialUrlsButKeepsPublicNavigation() {
+        assertEquals("zh", sourceWebsiteUrl("https://example.org/?lang=zh#popular").queryParameter("lang"))
+        assertEquals("/comics?lang=zh&page=2", sourceWebsiteUrl("https://example.org/#/comics?lang=zh&page=2").fragment)
+        assertEquals("192.168.1.8", sourceWebsiteUrl("http://192.168.1.8:8080/comics").host)
+        for (url in listOf("file:///data/private", "https://user:password@example.org/",
+            "https://example.org/?access_token=private", "https://example.org/?X-Amz-Signature=private",
+            "https://example.org/#token=private", "https://example.org/#/login?token=private",
+            "https://example.org/#/login?lang=zh&access_token=private",
+            "https://example.org/#/login?%74oken=private",
+            "https://example.org/#/login?X-Amz-Signature=private",
+            "https://example.org/#token=private?view=popular")) {
+            try {
+                sourceWebsiteUrl(url)
+                fail("credential or non-website URL must be rejected")
+            } catch (_: IllegalArgumentException) { }
+        }
+    }
+
+    @Test fun settingsResultReservationRejectsReentryAndIgnoresLateCompletion() {
+        class ResultRecorder : MethodChannel.Result {
+            val completions = mutableListOf<String>()
+            override fun success(result: Any?) { completions.add("success:$result") }
+            override fun error(code: String, message: String?, details: Any?) { completions.add("error:$code") }
+            override fun notImplemented() { completions.add("notImplemented") }
+        }
+        instrumentation.runOnMainSync {
+            // Exercise the same ownership operations used before worker submission,
+            // on validation/launch failure, destruction and Activity result.
+            val activity = MainActivity()
+            val first = ResultRecorder()
+            val reentry = ResultRecorder()
+            assertTrue(activity.reserveMihonSettingsResult(first))
+            assertFalse(activity.reserveMihonSettingsResult(reentry))
+            assertNull("unrelated completion cannot clear the first caller", activity.takeMihonSettingsResult(reentry))
+            activity.takeMihonSettingsResult(first)?.error("settings_unavailable", null, null)
+            assertEquals(listOf("error:settings_unavailable"), first.completions)
+            assertNull("a worker cannot complete a caller twice", activity.takeMihonSettingsResult(first))
+            assertTrue("failure frees the pending slot", activity.reserveMihonSettingsResult(reentry))
+            assertNull("late first-worker callback cannot steal the new caller", activity.takeMihonSettingsResult(first))
+            activity.takeMihonSettingsResult()?.success(false)
+            assertEquals(listOf("success:false"), reentry.completions)
+            assertNull("late callback after destruction is ignored", activity.takeMihonSettingsResult(reentry))
+            assertTrue("a new Activity-result cycle can reserve again", activity.reserveMihonSettingsResult(first))
+            assertSame(first, activity.takeMihonSettingsResult())
         }
     }
 }

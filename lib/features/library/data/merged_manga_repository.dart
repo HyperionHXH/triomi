@@ -175,7 +175,9 @@ class MergedMangaRepository {
       var chapters = await library.loadChapters(item.sourceId, item.remoteId);
       if (entry?.source is DetailProvider) {
         try {
-          final fresh = await (entry!.source as DetailProvider).chapters(item);
+          final fresh = await (entry!.source as DetailProvider).chapters(
+            item.sourceSnapshot,
+          );
           if (fresh.isEmpty ||
               fresh.any(
                 (c) => c.sourceId != item.sourceId || c.remoteId.isEmpty,

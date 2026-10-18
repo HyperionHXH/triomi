@@ -482,7 +482,7 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
                 if (!current()) return;
                 try {
                   final fresh = await (provider as DetailProvider).chapters(
-                    view.item,
+                    view.item.sourceSnapshot,
                   );
                   if (!current()) return;
                   if (fresh.isEmpty) throw StateError('站点返回空目录，保留本地目录');

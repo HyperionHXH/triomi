@@ -72,6 +72,7 @@ class DeclarativeSource
 
   @override
   Future<MediaItem> detail(MediaItem item) async {
+    item = item.sourceSnapshot;
     final detailRule = rule.detail;
     if (detailRule == null) {
       throw _ruleMissing('detail', '规则没有定义详情');
@@ -87,6 +88,7 @@ class DeclarativeSource
 
   @override
   Future<List<Chapter>> chapters(MediaItem item) async {
+    item = item.sourceSnapshot;
     final chaptersRule = rule.detail?.chapters;
     if (chaptersRule == null) return const <Chapter>[];
 
@@ -372,13 +374,13 @@ class DeclarativeSource
       sourceId: item.sourceId,
       remoteId: item.remoteId,
       type: item.type,
-      title: mergedTitle?.isNotEmpty == true ? mergedTitle! : item.title,
+      title: mergedTitle?.isNotEmpty == true ? mergedTitle! : item.sourceTitle,
       url: item.url ?? resolveUrl(baseUrl, fields['url']),
       coverUrl:
           resolveUrl(baseUrl, fields['coverUrl'] ?? fields['cover']) ??
           item.coverUrl,
-      author: fields['author'] ?? item.author,
-      description: fields['description'] ?? item.description,
+      author: fields['author'] ?? item.sourceAuthor,
+      description: fields['description'] ?? item.sourceDescription,
       tags: fields.containsKey('tags') ? _splitTags(fields['tags']) : item.tags,
       rating: double.tryParse(fields['rating'] ?? '') ?? item.rating,
       status: fields['status'] ?? item.status,

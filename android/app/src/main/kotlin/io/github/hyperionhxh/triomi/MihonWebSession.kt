@@ -18,6 +18,22 @@ import android.widget.ProgressBar
 import eu.kanade.tachiyomi.network.AndroidCookieJar
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
+/** Validate a homepage before handing it to a browser; never export login URLs. */
+internal fun sourceWebsiteUrl(value: String): okhttp3.HttpUrl {
+    require(value.none { it <= ' ' || it == '\\' }) { "website URL contains invalid characters" }
+    val url = requireNotNull(value.toHttpUrlOrNull()) { "source website must use HTTP(S)" }
+    require(url.username.isEmpty() && url.password.isEmpty()) { "website URL must not contain credentials" }
+    val sensitive = Regex("(^|[_\\-.])(access.?token|refresh.?token|id.?token|token|auth|authorization|password|passwd|secret|credential|cookie|session|sessionid|jwt|signature|sig|api.?key|key)($|[_\\-.])", RegexOption.IGNORE_CASE)
+    require(url.queryParameterNames.none { sensitive.containsMatchIn(it) }) { "website URL contains authentication parameters" }
+    val fragment = url.fragment.orEmpty()
+    val fragmentParameters = listOf(fragment, fragment.substringAfter('?', ""))
+    require(fragmentParameters.none { parameters ->
+        ("https://source.invalid/?" + parameters).toHttpUrlOrNull()
+            ?.queryParameterNames?.any { sensitive.containsMatchIn(it) } == true
+    }) { "website URL contains authentication parameters" }
+    return url
+}
+
 /** Visible source login/verification. Completion means session saved, not challenge solved. */
 class MihonWebSession(
     private val activity: Activity,
@@ -25,7 +41,7 @@ class MihonWebSession(
     userAgent: String,
     private val onComplete: (Boolean) -> Unit,
 ) {
-    private val origin = requireNotNull(url.toHttpUrlOrNull()) { "source website must use HTTP(S)" }
+    private val origin = sourceWebsiteUrl(url)
     private val cookies = AndroidCookieJar(activity)
     private val dialog = Dialog(activity, android.R.style.Theme_Material_Light_NoActionBar)
     private val webView = WebView(activity)
@@ -92,7 +108,9 @@ class MihonWebSession(
         }
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-                request.url.toString().toHttpUrlOrNull() == null
+                request.url.toString().toHttpUrlOrNull()?.let {
+                    it.username.isNotEmpty() || it.password.isNotEmpty()
+                } ?: true
 
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                 status.visibility = android.view.View.GONE

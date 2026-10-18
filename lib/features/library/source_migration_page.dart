@@ -162,11 +162,11 @@ class _SourceMigrationPageState extends ConsumerState<SourceMigrationPage> {
     try {
       final provider = source.source as DetailProvider;
       final detail = await provider
-          .detail(item)
+          .detail(item.sourceSnapshot)
           .timeout(const Duration(seconds: 30));
       if (!mounted || generation != _generation) return;
       final chapters = await provider
-          .chapters(detail)
+          .chapters(detail.sourceSnapshot)
           .timeout(const Duration(seconds: 30));
       if (!mounted || generation != _generation) return;
       if (detail.sourceId != source.descriptor.id ||

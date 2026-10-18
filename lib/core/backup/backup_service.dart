@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../db/app_database.dart';
 import '../db/legacy_category_scopes.dart';
+import '../models/manga_metadata_override.dart';
 import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
 import '../platform/platform_channel.dart';
@@ -326,7 +327,9 @@ class BackupService {
     final histories = await database.select(database.histories).get();
     final chapters = await database.select(database.chapters).get();
     final animeLinks = await database.select(database.animeSourceLinks).get();
-    final animeSyncStates = await database.select(database.animeFollowSyncStates).get();
+    final animeSyncStates = await database
+        .select(database.animeFollowSyncStates)
+        .get();
     final mangaFeeds = await database.select(database.mangaFeeds).get();
     final mergedReferences = await database
         .select(database.mergedMangaReferences)
@@ -688,25 +691,54 @@ class BackupService {
 
   /// Optional in older backups. Account identity is a digest, never a WebDAV
   /// address, username, credential or trust decision.
-  static List<({String accountKey, String sourceId, String remoteId,
-    DateTime changedAt, bool deleted})> _animeSyncStatesOf(Map<String, Object?> payload) {
+  static List<
+    ({
+      String accountKey,
+      String sourceId,
+      String remoteId,
+      DateTime changedAt,
+      bool deleted,
+    })
+  >
+  _animeSyncStatesOf(Map<String, Object?> payload) {
     final raw = payload['animeFollowSyncStates'];
     if (raw == null) return const [];
     if (raw is! List) throw const FormatException('追番同步记录列表无效');
-    final rows = <({String accountKey, String sourceId, String remoteId,
-      DateTime changedAt, bool deleted})>[];
+    final rows =
+        <
+          ({
+            String accountKey,
+            String sourceId,
+            String remoteId,
+            DateTime changedAt,
+            bool deleted,
+          })
+        >[];
     final seen = <(String, String, String)>{};
     for (final node in raw) {
       if (node is! Map) throw const FormatException('追番同步记录无效');
-      final account = node['accountKey'], source = node['sourceId'], remote = node['remoteId'];
+      final account = node['accountKey'],
+          source = node['sourceId'],
+          remote = node['remoteId'];
       final date = _dateOf(node['changedAt']), deleted = node['deleted'];
-      if (account is! String || !RegExp(r'^[0-9a-f]{64}$').hasMatch(account) ||
-          source is! String || source.isEmpty || remote is! String || remote.isEmpty ||
-          date == null || deleted is! bool || !seen.add((account, source, remote))) {
+      if (account is! String ||
+          !RegExp(r'^[0-9a-f]{64}$').hasMatch(account) ||
+          source is! String ||
+          source.isEmpty ||
+          remote is! String ||
+          remote.isEmpty ||
+          date == null ||
+          deleted is! bool ||
+          !seen.add((account, source, remote))) {
         throw const FormatException('追番同步身份、时间、删除状态无效或重复；未修改本机数据');
       }
-      rows.add((accountKey: account, sourceId: source, remoteId: remote,
-        changedAt: date, deleted: deleted));
+      rows.add((
+        accountKey: account,
+        sourceId: source,
+        remoteId: remote,
+        changedAt: date,
+        deleted: deleted,
+      ));
     }
     return rows;
   }
@@ -888,8 +920,33 @@ class BackupService {
                           t.remoteId.equals(remoteId),
                     ))
                     .getSingleOrNull();
-            if (existing != null &&
-                !(existing.cachedAt ?? _oldestTimestamp).isBefore(cachedAt)) {
+            final preferIncomingCache =
+                existing == null ||
+                (existing.cachedAt ?? _oldestTimestamp).isBefore(cachedAt);
+            final incomingType = _typeOf(row['type']);
+            final mergeManga =
+                incomingType == MediaType.manga &&
+                (existing == null || existing.type == MediaType.manga);
+            final incomingDetails = row.containsKey('detailJson')
+                ? row['detailJson'] as String?
+                : existing?.detailJson;
+            final detailJson = mergeManga
+                ? MangaMetadataOverride.mergeDetails(
+                    local: existing?.detailJson,
+                    incoming: incomingDetails,
+                    preferIncomingCache: preferIncomingCache,
+                  )
+                : row['detailJson'] as String?;
+            if (!preferIncomingCache) {
+              if (mergeManga && detailJson != existing.detailJson) {
+                await (database.update(database.mediaItems)..where(
+                      (t) =>
+                          t.sourceId.equals(sourceId) &
+                          t.remoteId.equals(remoteId) &
+                          t.type.equalsValue(MediaType.manga),
+                    ))
+                    .write(MediaItemsCompanion(detailJson: Value(detailJson)));
+              }
               continue;
             }
             await database
@@ -898,7 +955,7 @@ class BackupService {
                   MediaItemsCompanion.insert(
                     sourceId: sourceId,
                     remoteId: remoteId,
-                    type: _typeOf(row['type']),
+                    type: incomingType,
                     title: '${row['title'] ?? remoteId}',
                     url: Value(row['url'] as String?),
                     coverUrl: Value(row['coverUrl'] as String?),
@@ -907,8 +964,8 @@ class BackupService {
                     tagsJson: Value(row['tagsJson'] as String?),
                     rating: Value((row['rating'] as num?)?.toDouble()),
                     status: Value(row['status'] as String?),
-                    detailJson: row.containsKey('detailJson')
-                        ? Value(row['detailJson'] as String?)
+                    detailJson: mergeManga || row.containsKey('detailJson')
+                        ? Value(detailJson)
                         : const Value.absent(),
                     cachedAt: Value(cachedAt),
                   ),
@@ -956,20 +1013,32 @@ class BackupService {
             libraryCount += 1;
           }
           for (final row in animeSyncStates) {
-            final existing = await (database.select(database.animeFollowSyncStates)..where((t) =>
-              t.accountKey.equals(row.accountKey) & t.sourceId.equals(row.sourceId) &
-              t.remoteId.equals(row.remoteId))).getSingleOrNull();
-            if (existing != null && (existing.changedAt.isAfter(row.changedAt) ||
-                existing.changedAt.isAtSameMomentAs(row.changedAt) &&
-                (existing.deleted || !row.deleted))) {
+            final existing =
+                await (database.select(database.animeFollowSyncStates)..where(
+                      (t) =>
+                          t.accountKey.equals(row.accountKey) &
+                          t.sourceId.equals(row.sourceId) &
+                          t.remoteId.equals(row.remoteId),
+                    ))
+                    .getSingleOrNull();
+            if (existing != null &&
+                (existing.changedAt.isAfter(row.changedAt) ||
+                    existing.changedAt.isAtSameMomentAs(row.changedAt) &&
+                        (existing.deleted || !row.deleted))) {
               continue;
             }
-            await database.into(database.animeFollowSyncStates).insertOnConflictUpdate(
-              AnimeFollowSyncStatesCompanion.insert(accountKey: row.accountKey,
-                sourceId: row.sourceId, remoteId: row.remoteId,
-                changedAt: row.changedAt, deleted: Value(row.deleted)));
+            await database
+                .into(database.animeFollowSyncStates)
+                .insertOnConflictUpdate(
+                  AnimeFollowSyncStatesCompanion.insert(
+                    accountKey: row.accountKey,
+                    sourceId: row.sourceId,
+                    remoteId: row.remoteId,
+                    changedAt: row.changedAt,
+                    deleted: Value(row.deleted),
+                  ),
+                );
           }
-
 
           for (final row in _listOf(payload['histories'])) {
             final sourceId = row['sourceId']?.toString();
