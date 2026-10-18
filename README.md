@@ -8,7 +8,7 @@
 
 ## 下载与安装
 
-到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.159) 下载 **v0.11.0-test.159**：
+到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.160) 下载 **v0.11.0-test.160**：
 
 | 文件 | 用途 |
 | --- | --- |
