@@ -8,7 +8,7 @@
 
 ## 下载与安装
 
-到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.158) 下载 **v0.11.0-test.158**：
+到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.159) 下载 **v0.11.0-test.159**：
 
 | 文件 | 用途 |
 | --- | --- |
@@ -21,6 +21,8 @@
 已有同签名版本可覆盖安装，勿卸载或清除数据；建议先在「我的 → 备份与恢复」导出本地备份。开发/Actions 验收包使用另一证书，不能直接覆盖正式包，遇到签名冲突不要通过卸载丢弃原数据。当前为测试版，不宣称完整全平台验收；详情见 [当前状态](docs/CURRENT_STATUS.md)。
 
 Windows 可任选 ZIP 或 MSI，不需要两个都装。MSI 默认安装到 `%LOCALAPPDATA%\Programs\Triomi`，不自动导入/删除旧 ZIP 目录；两种形式沿用同一应用数据目录。升级 MSI 前退出 Triomi，再运行新 MSI；卸载只移除安装文件和快捷方式，保留收藏、账号、设置及下载。MSI 目前没有 Windows Authenticode 发布者签名，系统可能提示未知发布者；请从本仓库 Release 下载并核对 SHA-256，Android 签名证书不能用于 Windows 签名。
+
+R159 进一步优化追番公开日历和封面直连；漫画书库改为四页签筛选与长按上下文操作，修复搜索框遮挡；移除小说书架刷新按钮，并修复LNS账号WebSocket端口与站点连接回退。完整Flutter1077项通过/3项跳过，最后边界46项定向通过、Python89项通过；本人LK/LNS无代理资料读取、Android实际筛选/选择及Windows真实窗口已验证，完整平台限制见[当前状态](docs/CURRENT_STATUS.md)。
 
 R158（0.11.0）补齐追番推荐、时间表、搜索与关联作品的手机三列；当前季直接读取完整日历，资料缓存优先、刷新真实联网。漫画搜索改为独立页面，本地查询可继续全局搜索并按插件分别展示结果。最终1056项Flutter通过/3项跳过、89项Python通过、静态检查零问题；参考Kazumi与Android Komikku，实测范围见[当前状态](docs/CURRENT_STATUS.md)。
 
