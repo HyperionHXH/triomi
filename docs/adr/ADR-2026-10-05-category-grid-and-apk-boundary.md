@@ -1,6 +1,6 @@
 # ADR 2026-10-05：类别独立、封面网格与APK来源边界
 
-状态：历史决定。混合发现/书架与“番剧（旧）”UI由[四工作区ADR](ADR-2026-10-16-four-independent-workspaces.md)替代；来源真实性、封面自适应、APK签名/平台限制及以下历史证据仍有效。
+状态：历史决定。混合发现/书架与“番剧（旧）”UI由[四工作区ADR](ADR-2026-10-16-four-independent-workspaces.md)替代；来源真实性、APK签名及以下历史证据保留。R165按用户明确要求以随包Suwayomi兼容运行时替代旧Windows不执行扩展的产品限制，边界见四工作区ADR。
 
 ## 决定
 
@@ -12,7 +12,7 @@
 
 用户仓库属于Mihon/Tachiyomi APK生态，增加Android原生APK宿主作为明确核心工作，而非继续扩充无关功能。JS规则与APK扩展是不同来源类型。APK运行必须通过签名/包/lib校验、稳定64位字符串身份、真实DEX/source-api调用和整个阅读流程验收。目录展示、下载APK、JS版MangaDex均不等于APK兼容完成。
 
-Windows暂不执行DEX，继续使用既有JS来源。复杂宿主、依赖/ABI与安装更新事务由Codex实现；GLM只负责明确契约上的目录展示与重复回归。
+历史Windows方案暂不执行DEX，继续使用JS来源；R165改为应用私有的Suwayomi/Java兼容宿主，Android原生宿主不变。桌面JAR身份独立于APK签名确认，不以目录展示、APK下载或JS来源成功代替真实插件执行验收。
 
 ## 影响与验收
 

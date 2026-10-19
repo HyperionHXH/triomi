@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +13,7 @@ import 'core/db/app_database.dart';
 import 'core/db/database_provider.dart';
 import 'core/source/js/runtime/js_worker_entrypoint.dart';
 import 'core/source/source_catalog.dart';
+import 'core/source/windows_mihon_host.dart';
 import 'core/storage/preferences.dart';
 import 'core/storage/secure_store.dart';
 import 'features/library/data/manga_update_background.dart';
@@ -76,6 +79,11 @@ Future<void> main([List<String> args = const []]) async {
       ),
     );
     return;
+  }
+  if (Platform.isWindows) {
+    await WindowsMihonHost.instance.configureProxy(
+      preferences.get<String>('network.sourceProxy') ?? '',
+    );
   }
 
   // 凭据安全存储：预载后立刻做一次性迁移（幂等），

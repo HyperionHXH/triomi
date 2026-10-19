@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/db/app_database.dart';
@@ -10,6 +11,7 @@ import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_descriptor.dart';
 import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
+import 'package:triomi/core/source/mihon_source.dart';
 import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
@@ -457,6 +459,42 @@ void main() {
     });
   });
 
+  test('restored desktop plugin downloads pass portable owning work without opening details', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final source = _OwningMihonSource();
+    final item = MediaItem(
+      sourceId: source.descriptor.id,
+      remoteId: '/2026',
+      type: MediaType.manga,
+      title: 'xkcd 2026',
+      url: '/2026',
+    );
+    await LibraryRepository(db).cacheItem(item);
+    // Queue snapshots survive restoration even when no runtime directory exists.
+    final row = await enqueueRow(item.sourceId, item.remoteId, '/1234/');
+    final http = FakeHttpClient(
+      (_) async => const SourceResponse(statusCode: 200, body: ''),
+    )..bytesHandler = (_) => [1, 2, 3];
+    await DownloadService(
+      repository: repository,
+      http: http,
+      preferences: preferences,
+    ).run(row: row, provider: source);
+    expect(source.owner?.sourceId, item.sourceId);
+    expect(source.owner?.remoteId, '/2026');
+    expect(source.owner?.url, '/2026');
+    expect(source.owner?.sourceTitle, 'xkcd 2026');
+    expect(source.requestedChapter?.remoteId, '/1234/');
+    final saved = (await rowById(row.id))!;
+    expect(saved.status, DownloadStatus.done.value);
+    final manifest = await DownloadManifest.read(saved.path!);
+    expect(
+      await File('${saved.path}/${manifest!.files.single}').readAsBytes(),
+      [1, 2, 3],
+    );
+  });
+
   group('仅 WiFi', () {
     test('wifiOnly 关闭时不做网络判断，任务照常执行', () async {
       final row = await enqueueRow('lk', '1', '1:1');
@@ -519,5 +557,28 @@ class StubContentProvider implements ContentProvider {
       );
     }
     return value;
+  }
+}
+
+class _OwningMihonSource extends MihonSource {
+  _OwningMihonSource()
+    : super(
+        packageName: 'xkcd',
+        hostSourceId: '123',
+        name: 'xkcd',
+        lang: 'en',
+        enabled: true,
+        apkPath: null,
+        versionCode: 1,
+        signerSha256: null,
+      );
+  MediaItem? owner;
+  Chapter? requestedChapter;
+
+  @override
+  Future<ChapterContent> content(Chapter chapter, {MediaItem? item}) async {
+    owner = item;
+    requestedChapter = chapter;
+    return const ChapterContent(images: ['https://xkcd.test/comic.png']);
   }
 }

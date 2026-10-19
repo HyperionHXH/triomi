@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../storage/preferences.dart';
+import 'windows_mihon_host.dart';
 
 /// Credentials are deliberately not accepted or persisted in a proxy URL.
 String normalizeSourceProxy(String value) {
@@ -29,7 +31,18 @@ class SourceProxyController extends Notifier<String> {
 
   Future<void> setProxy(String value) async {
     final proxy = normalizeSourceProxy(value);
-    await ref.read(preferencesProvider).set(key, proxy);
+    final previous = state;
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      await WindowsMihonHost.instance.configureProxy(proxy);
+    }
+    try {
+      await ref.read(preferencesProvider).set(key, proxy);
+    } catch (_) {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+        await WindowsMihonHost.instance.configureProxy(previous);
+      }
+      rethrow;
+    }
     state = proxy;
   }
 }

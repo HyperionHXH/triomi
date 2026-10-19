@@ -1,10 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/db/database_provider.dart';
 import '../../core/models/media_type.dart';
-import '../../core/platform/platform_channel.dart';
 import '../../core/source/http_client.dart';
 import '../../core/source/js/js_source.dart';
 import '../../core/source/kazumi_source.dart';
@@ -20,6 +20,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../downloads/data/download_repository.dart';
+import '../manga/windows_mihon_settings_page.dart';
 import 'catalog_sheet.dart';
 import 'kazumi_repositories_sheet.dart';
 import 'mihon_extensions_sheet.dart';
@@ -277,7 +278,12 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                         onAccount: entry.source is AccountProvider
                             ? () => _showAccountSheet(entry)
                             : null,
-                        onWebSession: entry.enabled
+                        onWebSession:
+                            entry.enabled &&
+                                !(entry.source is MihonSource &&
+                                    !kIsWeb &&
+                                    defaultTargetPlatform ==
+                                        TargetPlatform.windows)
                             ? switch (entry.source) {
                                 final MihonSource source =>
                                   () => _openMihonSession(source),
@@ -290,11 +296,10 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                             ? () async {
                                 final source = entry.source as MihonSource;
                                 try {
-                                  final opened = await platformChannel
-                                      .openMihonSettings(
-                                        source.packageName,
-                                        source.hostSourceId,
-                                      );
+                                  final opened = await openMihonPreferences(
+                                    context,
+                                    source,
+                                  );
                                   if (!opened && mounted) {
                                     _toast('当前平台不支持 APK 来源设置');
                                   }

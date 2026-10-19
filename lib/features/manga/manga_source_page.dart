@@ -585,7 +585,7 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
               title: Text(entry.descriptor.name),
               content: SingleChildScrollView(
                 child: SelectableText(
-                  '${entry.descriptor.id}\n语言：${entry.descriptor.lang}\n类型：${entry.descriptor.kind.label}\n版本：${entry.descriptor.version ?? '未提供'}\n${entry.enabled ? '已启用' : '已停用'}\n${entry.source is MihonSource ? 'APK 仅在支持的 Android 宿主执行，签名信任由扩展管理维护。' : '规则执行与会话属于此来源。'}',
+                  '${entry.descriptor.id}\n语言：${entry.descriptor.lang}\n类型：${entry.descriptor.kind.label}\n版本：${entry.descriptor.version ?? '未提供'}\n${entry.enabled ? '已启用' : '已停用'}\n${entry.source is MihonSource ? '插件由对应平台的兼容宿主执行；发布者与桌面代码信任由扩展管理分别维护。' : '规则执行与会话属于此来源。'}',
                 ),
               ),
               actions: [
@@ -659,9 +659,13 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
               icon: const Icon(Icons.language),
               enabled: !_sessionBusy,
               onSelected: (value) => unawaited(_action(value, entry)),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'browser', child: Text('在外部浏览器打开')),
-                PopupMenuItem(value: 'web', child: Text('应用内网页 / 会话验证')),
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'browser', child: Text('在外部浏览器打开')),
+                if (mangaSourceSupportsSession(entry))
+                  const PopupMenuItem(
+                    value: 'web',
+                    child: Text('应用内网页 / 会话验证'),
+                  ),
               ],
             ),
           PopupMenuButton<String>(
@@ -685,7 +689,11 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
               if (source is MihonSource ||
                   entry?.descriptor.baseUrl != null) ...[
                 const PopupMenuItem(value: 'browser', child: Text('在外部浏览器打开')),
-                const PopupMenuItem(value: 'web', child: Text('应用内网页 / 会话验证')),
+                if (entry != null && mangaSourceSupportsSession(entry))
+                  const PopupMenuItem(
+                    value: 'web',
+                    child: Text('应用内网页 / 会话验证'),
+                  ),
               ],
               const PopupMenuItem(value: 'extensions', child: Text('扩展管理')),
               if (entry != null)

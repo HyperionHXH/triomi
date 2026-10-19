@@ -28,6 +28,7 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
     quarter: (DateTime.now().month - 1) ~/ 3 + 1,
   );
   final _rows = <Map<String, Object?>>[];
+  final _scrollController = ScrollController();
   int _generation = 0, _offset = 0;
   int _weekday = DateTime.now().weekday;
   bool _busy = false, _more = true;
@@ -60,6 +61,7 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
   void dispose() {
     _generation++;
     _owner?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -94,10 +96,15 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
             for (final day in days) {
               for (final entry in day.items) {
                 _rows.add({
-                  'id': entry.id, 'type': 2, 'name_cn': entry.title,
-                  'images': {'large': entry.coverUrl}, 'date': entry.airDate,
+                  'id': entry.id,
+                  'type': 2,
+                  'name_cn': entry.title,
+                  'images': {'large': entry.coverUrl},
+                  'date': entry.airDate,
                   'rating': {
-                    'score': entry.rating, 'rank': entry.rank, 'total': entry.votes,
+                    'score': entry.rating,
+                    'rank': entry.rank,
+                    'total': entry.votes,
                   },
                   'weekday': {'id': day.weekday},
                 });
@@ -120,18 +127,21 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
       var more = true;
       while (more) {
         final page = await owner.run(
-          () => ref.read(bangumiPublicClientProvider).search(
-            filter: AnimePublicFilter(
-              tags: filter.tags,
-              // A currently broadcasting title can have premiered years ago.
-              year: currentSeason ? null : filter.year,
-              quarter: currentSeason ? null : filter.quarter,
-              minScore: currentSeason ? null : filter.minScore,
-              maxScore: currentSeason ? null : filter.maxScore,
-              sort: filter.sort,
-            ),
-            offset: offset, limit: 100,
-          ),
+          () => ref
+              .read(bangumiPublicClientProvider)
+              .search(
+                filter: AnimePublicFilter(
+                  tags: filter.tags,
+                  // A currently broadcasting title can have premiered years ago.
+                  year: currentSeason ? null : filter.year,
+                  quarter: currentSeason ? null : filter.quarter,
+                  minScore: currentSeason ? null : filter.minScore,
+                  maxScore: currentSeason ? null : filter.maxScore,
+                  sort: filter.sort,
+                ),
+                offset: offset,
+                limit: 100,
+              ),
         );
         if (!active()) return;
         if (page.hasMore && page.nextOffset <= offset) {
@@ -188,11 +198,16 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
       builder: (_) => AnimeFilterDialog(initial: _filter),
     );
     if (!mounted || filter == null) return;
-    final reuseWeek = _currentSeason && _calendarReady &&
-        filter.year == _filter.year && filter.quarter == _filter.quarter;
-    final sameTags = filter.tags.length == _filter.tags.length &&
+    final reuseWeek =
+        _currentSeason &&
+        _calendarReady &&
+        filter.year == _filter.year &&
+        filter.quarter == _filter.quarter;
+    final sameTags =
+        filter.tags.length == _filter.tags.length &&
         filter.tags.every(_filter.tags.contains);
     setState(() {
+      if (_scrollController.hasClients) _scrollController.jumpTo(0);
       unawaited(
         ref
             .read(preferencesProvider)
@@ -214,6 +229,10 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
   }
 
   void _setWeekday(int day) {
+    // The shared collection retains scroll state across rebuilds. A new day's
+    // full list must begin at its first title, not the previous day's tail.
+    if (day == _weekday) return;
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
     setState(() => _weekday = day);
     unawaited(ref.read(preferencesProvider).set('anime.calendar.weekday', day));
   }
@@ -262,13 +281,19 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
         final rating = row['rating'];
         return rating is Map ? double.tryParse('${rating[key]}') ?? 0 : 0;
       }
-      visible.sort((a, b) => switch (_filter.sort) {
-        'score' => number(b, 'score').compareTo(number(a, 'score')),
-        'rank' => (number(a, 'rank') > 0 ? number(a, 'rank') : double.infinity)
-            .compareTo(number(b, 'rank') > 0 ? number(b, 'rank') : double.infinity),
-        'date' => '${b['date'] ?? ''}'.compareTo('${a['date'] ?? ''}'),
-        _ => number(b, 'total').compareTo(number(a, 'total')),
-      });
+
+      visible.sort(
+        (a, b) => switch (_filter.sort) {
+          'score' => number(b, 'score').compareTo(number(a, 'score')),
+          'rank' =>
+            (number(a, 'rank') > 0 ? number(a, 'rank') : double.infinity)
+                .compareTo(
+                  number(b, 'rank') > 0 ? number(b, 'rank') : double.infinity,
+                ),
+          'date' => '${b['date'] ?? ''}'.compareTo('${a['date'] ?? ''}'),
+          _ => number(b, 'total').compareTo(number(a, 'total')),
+        },
+      );
     }
     final body = Column(
       children: [
@@ -338,6 +363,7 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
           child: RefreshIndicator(
             onRefresh: () => _load(reset: true, refresh: true),
             child: MediaItemCollection(
+              controller: _scrollController,
               items: [for (final row in visible) bangumiItem(row)],
               sourceName: 'Bangumi · 公开兼容季度资料',
               preferGrid: true,
@@ -359,11 +385,13 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
                           onPressed: () => _load(reset: true, refresh: true),
                           child: Text('$_error · 重试'),
                         )
-                      : Text(visible.isEmpty
-                          ? '没有符合条件的作品'
-                          : _currentSeason && _calendarReady
-                          ? '本周作品已加载'
-                          : '本季作品已加载'),
+                      : Text(
+                          visible.isEmpty
+                              ? '没有符合条件的作品'
+                              : _currentSeason && _calendarReady
+                              ? '本周作品已加载'
+                              : '本季作品已加载',
+                        ),
                 ),
               ),
             ),

@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/models/chapter.dart';
+import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/mihon_installer.dart';
@@ -32,6 +34,8 @@ void main() {
   });
 
   test('chapter lists pages immediately, then loads requested image through plugin', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     final image = File('${directory.path}/page.image');
     await image.writeAsBytes([1, 2, 3]);
     final operations = <String>[];
@@ -39,6 +43,11 @@ void main() {
       final args = call.arguments as Map;
       operations.add('${args['operation']}');
       if (args['operation'] == 'pages') {
+        expect(
+          args['manga'],
+          isNull,
+          reason: 'Android page requests retain the chapter-only contract',
+        );
         return {
           'ok': true,
           'pages': [
@@ -67,6 +76,12 @@ void main() {
         remoteId: '/chapter',
         title: 'Chapter',
         url: '/chapter',
+      ),
+      item: MediaItem(
+        sourceId: source.descriptor.id,
+        remoteId: '/owning-work',
+        type: MediaType.manga,
+        title: 'Owning work',
       ),
     );
     expect(content.images.length, 2);

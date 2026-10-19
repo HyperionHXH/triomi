@@ -66,6 +66,125 @@ bool FlutterWindow::OnCreate() {
         &flutter::StandardMethodCodec::GetInstance());
     platform_channel_->SetMethodCallHandler(
         [this](const auto& call, auto result) {
+          if (call.method_name() == "desktopMihonStart" ||
+              call.method_name() == "desktopMihonStop" ||
+              call.method_name() == "desktopMihonAlive" ||
+              call.method_name() == "desktopMihonTrackVerifier" ||
+              call.method_name() == "desktopMihonUntrackVerifier" ||
+              call.method_name() == "desktopMihonReplaceFile") {
+            if (worker_ || backup_worker_) {
+              result->Error("runtime_unavailable", "extension runtime is unavailable in workers");
+              return;
+            }
+            if (call.method_name() == "desktopMihonStop") {
+              mihon_runtime_.Stop();
+              result->Success(flutter::EncodableValue(true));
+              return;
+            }
+            if (call.method_name() == "desktopMihonAlive") {
+              result->Success(flutter::EncodableValue(mihon_runtime_.Alive()));
+              return;
+            }
+            const auto* args = call.arguments() == nullptr ? nullptr :
+                std::get_if<flutter::EncodableMap>(call.arguments());
+            if (call.method_name() == "desktopMihonTrackVerifier" ||
+                call.method_name() == "desktopMihonUntrackVerifier") {
+              int64_t pid = 0;
+              if (args) {
+                const auto entry = args->find(flutter::EncodableValue("pid"));
+                if (entry != args->end()) {
+                  if (const auto* value = std::get_if<int32_t>(&entry->second)) {
+                    pid = *value;
+                  } else if (const auto* wide_value = std::get_if<int64_t>(&entry->second)) {
+                    pid = *wide_value;
+                  }
+                }
+              }
+              bool success = false;
+              if (pid > 0 && pid <= static_cast<int64_t>(MAXDWORD)) {
+                success = call.method_name() == "desktopMihonTrackVerifier" ?
+                    mihon_runtime_.TrackVerifier(static_cast<DWORD>(pid)) :
+                    mihon_runtime_.UntrackVerifier(static_cast<DWORD>(pid));
+              }
+              result->Success(flutter::EncodableValue(success));
+              return;
+            }
+            if (call.method_name() == "desktopMihonReplaceFile") {
+              if (!args) {
+                result->Error("invalid_state_paths", "state source and destination are required");
+                return;
+              }
+              const auto source_entry = args->find(flutter::EncodableValue("source"));
+              const auto destination_entry = args->find(flutter::EncodableValue("destination"));
+              const auto* source = source_entry == args->end() ? nullptr :
+                  std::get_if<std::string>(&source_entry->second);
+              const auto* destination = destination_entry == args->end() ? nullptr :
+                  std::get_if<std::string>(&destination_entry->second);
+              if (!source || !destination) {
+                result->Error("invalid_state_paths", "state source and destination are required");
+                return;
+              }
+              std::string failure_stage;
+              DWORD error = ERROR_SUCCESS;
+              if (!DesktopMihonRuntime::ReplaceStateFile(
+                  *source, *destination, &failure_stage, &error)) {
+                result->Error("state_replace_failed",
+                    "could not atomically publish application runtime state: " +
+                        failure_stage + " (Win32 " + std::to_string(error) + ")",
+                    flutter::EncodableValue(flutter::EncodableMap{
+                        {flutter::EncodableValue("stage"), flutter::EncodableValue(failure_stage)},
+                        {flutter::EncodableValue("win32Error"),
+                         flutter::EncodableValue(static_cast<int64_t>(error))}}));
+                return;
+              }
+              result->Success(flutter::EncodableValue(true));
+              return;
+            }
+            if (!args) {
+              result->Error("invalid_root", "an absolute application data root is required");
+              return;
+            }
+            const auto entry = args->find(flutter::EncodableValue("root"));
+            const auto* root = entry == args->end() ? nullptr :
+                std::get_if<std::string>(&entry->second);
+            std::string proxy_host;
+            int64_t proxy_port = 0;
+            const auto host_entry = args->find(flutter::EncodableValue("proxyHost"));
+            const auto port_entry = args->find(flutter::EncodableValue("proxyPort"));
+            if (host_entry != args->end()) {
+              const auto* host = std::get_if<std::string>(&host_entry->second);
+              if (!host) {
+                result->Error("invalid_proxy", "proxy host must be a string");
+                return;
+              }
+              proxy_host = *host;
+            }
+            if (port_entry != args->end()) {
+              if (const auto* port = std::get_if<int32_t>(&port_entry->second)) {
+                proxy_port = *port;
+              } else if (const auto* wide_port = std::get_if<int64_t>(&port_entry->second)) {
+                proxy_port = *wide_port;
+              } else {
+                result->Error("invalid_proxy", "proxy port must be an integer");
+                return;
+              }
+            }
+            if ((proxy_host.empty() && proxy_port != 0) ||
+                (!proxy_host.empty() && (proxy_port < 1 || proxy_port > 65535))) {
+              result->Error("invalid_proxy", "proxy requires a host and port from 1 to 65535");
+              return;
+            }
+            DWORD pid = 0;
+            if (!root || !mihon_runtime_.Start(
+                *root, proxy_host, static_cast<int>(proxy_port), &pid)) {
+              result->Error("runtime_start_failed", "the bundled extension runtime could not start");
+              return;
+            }
+            result->Success(flutter::EncodableValue(flutter::EncodableMap{
+                {flutter::EncodableValue("pid"),
+                 flutter::EncodableValue(static_cast<int64_t>(pid))}}));
+            return;
+          }
           if (call.method_name() == "completeLocalBackup" && backup_worker_) {
             const auto* code = call.arguments() == nullptr ? nullptr :
                 std::get_if<int32_t>(call.arguments());
@@ -176,6 +295,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  mihon_runtime_.Stop();
   CloseWindowsWebSessions();
   platform_channel_.reset();
   if (flutter_controller_) {

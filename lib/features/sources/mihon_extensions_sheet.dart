@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/backup/apk_backup_files.dart';
+import '../../core/models/source_exception.dart';
 import '../../core/platform/platform_channel.dart';
 import '../../core/source/mihon_installer.dart';
 import '../../core/source/mihon_repository.dart';
@@ -35,6 +36,7 @@ enum _ExtensionSection { installed, browse, repositories }
 class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   MihonRepositoryIndex? _index;
   Object? _error;
+  final _installErrors = <String, String>{};
   bool _loading = false;
   SourceFilters _filters = const SourceFilters(language: 'zh');
   _ExtensionSection _section = _ExtensionSection.installed;
@@ -195,7 +197,10 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   Future<void> _download(MihonExtension extension) async {
     if (_downloading.contains(extension.packageName)) return;
     if (mounted) {
-      setState(() => _downloading.add(extension.packageName));
+      setState(() {
+        _downloading.add(extension.packageName);
+        _installErrors.remove(extension.packageName);
+      });
     }
     try {
       final probe =
@@ -210,14 +215,20 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
               return await showDialog<bool>(
                     context: context,
                     builder: (dialogContext) => AlertDialog(
-                      title: const Text('确认扩展发布者'),
+                      title: Text(
+                        candidate.desktopJarSha256 == null
+                            ? '确认扩展发布者'
+                            : '确认桌面扩展代码',
+                      ),
                       content: SingleChildScrollView(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              '${extension.name} 的 APK 签名已验证，但发布者与聚合仓库默认签名不同。确认发布者指纹后才能加载。',
+                              candidate.desktopJarSha256 == null
+                                  ? '${extension.name} 的 APK 签名已验证，但发布者与聚合仓库默认签名不同。确认发布者指纹后才能加载。'
+                                  : '${extension.name} 使用仓库提供的原生桌面 JAR，避免 APK 转换不兼容。APK 签名不为 JAR 背书；请同时核对桌面代码来源与独立指纹。扩展在本机执行，不是权限沙箱。',
                             ),
                             const SizedBox(height: 12),
                             Text('仓库：${_index?.sourceUrl ?? ''}'),
@@ -231,6 +242,14 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                                   ? '未提供'
                                   : candidate.repositorySigner,
                             ),
+                            if (candidate.desktopJarSha256 != null) ...[
+                              const SizedBox(height: 12),
+                              const Text('独立的桌面 JAR SHA-256'),
+                              SelectableText(candidate.desktopJarSha256!),
+                              const SizedBox(height: 8),
+                              const Text('桌面代码下载地址'),
+                              SelectableText(candidate.desktopJarUrl ?? ''),
+                            ],
                           ],
                         ),
                       ),
@@ -261,7 +280,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
           extension.packageName,
           true,
         );
-        if (Platform.isAndroid && !nativeOk) {
+        if (!nativeOk) {
           _enabled.remove(extension.packageName);
           await ref
               .read(preferencesProvider)
@@ -280,7 +299,13 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
         _toast('${extension.name}：$detail');
       }
     } catch (error) {
-      if (mounted) _toast('下载失败：$error');
+      if (mounted) {
+        setState(
+          () => _installErrors[extension.packageName] =
+              SourceException.sanitizeMessage('$error'),
+        );
+        _toast('扩展安装失败，点击插件查看原因后可重试');
+      }
     } finally {
       if (mounted) {
         setState(() => _downloading.remove(extension.packageName));
@@ -304,7 +329,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
         packageName,
         enabled,
       );
-      if (Platform.isAndroid && !nativeOk) {
+      if (!nativeOk) {
         await preferences.set(_mihonEnabledKey, _enabled.toList());
         if (mounted) _toast('宿主没有接受启用状态变更');
         return;
@@ -481,9 +506,11 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                 ],
               ),
               Text(
-                Platform.isAndroid
+                Platform.isWindows
+                    ? '桌面兼容运行时 · APK 核验发布者；原生 JAR 单独确认来源与指纹，安装后手动启用。'
+                    : Platform.isAndroid
                     ? 'Mihon / Komikku APK · 安装后需手动启用，并确认发布者。'
-                    : '当前平台不执行 APK。漫画浏览中的内置 MangaDex 可直接在线使用；这里可管理 APK 文件与仓库。',
+                    : '当前平台没有兼容的扩展运行时。',
               ),
               const SizedBox(height: 12),
               SegmentedButton<_ExtensionSection>(
@@ -693,7 +720,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
     final enabled = hostReady && savedEnabled;
     final type = extension.mediaType?.label ?? '漫画';
     final status = downloading
-        ? '正在下载 APK…'
+        ? '下载、核验并加载扩展中…'
         : !downloaded
         ? '尚未下载 APK'
         : hostReady
@@ -701,18 +728,36 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
         : savedEnabled
         ? '已保存启用偏好，但宿主未执行，当前不可用'
         : '已下载，等待 Mihon 宿主执行，当前不可用';
+    final installError = _installErrors[extension.packageName];
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      onTap: downloaded || host != null
+      onTap: installError != null
+          ? () => unawaited(
+              showDialog<void>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: Text('${extension.name} 安装失败'),
+                  content: SingleChildScrollView(
+                    child: SelectableText(installError),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('关闭'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : downloaded || host != null
           ? () => unawaited(_details(extension.packageName))
           : null,
       leading: const Icon(Icons.extension_outlined),
       title: Text(extension.name),
       subtitle: Text(
         '$type · v${extension.versionName} · ${sourceContentLabel(extension.declaredNsfw)}\n'
-        '${extension.sources.map((source) => '${source.name} (${sourceLanguageLabel(sourceLanguage(source.language))})').join('、')}\n$status',
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
+        '${extension.sources.map((source) => '${source.name} (${sourceLanguageLabel(sourceLanguage(source.language))})').join('、')}\n'
+        '${installError == null ? status : '安装失败 · 点击查看原因'}',
       ),
       isThreeLine: true,
       trailing: Wrap(

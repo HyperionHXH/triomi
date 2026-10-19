@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -81,6 +82,50 @@ void main() {
       expect(find.textContaining('此来源没有提供可配置设置'), findsNWidgets(2));
       expect(find.byType(MangaExtensionDetailsPage), findsOneWidget);
       expect(find.text('规则与来源设置'), findsNothing);
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            preferencesProvider.overrideWithValue(preferences),
+            sourcesProvider.overrideWith(
+              () => _Sources(
+                SourceRegistrySnapshot(entries: entries, failures: const []),
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: MangaExtensionDetailsPage(packageName: package),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('应用内网页 / 会话验证'), findsNothing);
+      expect(find.text('来源设置'), findsNWidgets(2));
+      expect(find.text('外部浏览器'), findsNWidgets(2));
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            preferencesProvider.overrideWithValue(preferences),
+            sourcesProvider.overrideWith(
+              () => _Sources(
+                SourceRegistrySnapshot(entries: entries, failures: const []),
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: MangaExtensionDetailsPage(packageName: package),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('应用内网页 / 会话验证'), findsNWidgets(2));
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
     },
   );
 

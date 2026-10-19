@@ -132,15 +132,16 @@ class _SourceSettingsTile extends StatelessWidget {
                     MangaSourceAction.browser,
                   ),
                 ),
-                TextButton.icon(
-                  icon: const Icon(Icons.language),
-                  label: const Text('应用内网页 / 会话验证'),
-                  onPressed: () => performMangaSourceAction(
-                    context,
-                    entry,
-                    MangaSourceAction.session,
+                if (mangaSourceSupportsSession(entry))
+                  TextButton.icon(
+                    icon: const Icon(Icons.language),
+                    label: const Text('应用内网页 / 会话验证'),
+                    onPressed: () => performMangaSourceAction(
+                      context,
+                      entry,
+                      MangaSourceAction.session,
+                    ),
                   ),
-                ),
               ],
             ),
           ],

@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../backup/apk_backup_files.dart';
@@ -18,6 +20,8 @@ class MihonPublisherCandidate {
     required this.packageName,
     required this.versionCode,
     required this.versionName,
+    this.desktopJarSha256,
+    this.desktopJarUrl,
   });
   final String actualSigner;
   final String repositorySigner;
@@ -25,6 +29,8 @@ class MihonPublisherCandidate {
   final String packageName;
   final int versionCode;
   final String versionName;
+  final String? desktopJarSha256;
+  final String? desktopJarUrl;
 }
 
 class MihonInstaller {
@@ -43,6 +49,9 @@ class MihonInstaller {
     );
     await directory.create(recursive: true);
     final candidateDirectory = await directory.createTemp('candidate-');
+    final desktop = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+    File? desktopJar;
+    String? desktopJarHash;
     final candidate = File('${candidateDirectory.path}/extension.apk');
     try {
       for (var attempt = 0; ; attempt++) {
@@ -55,6 +64,20 @@ class MihonInstaller {
         } on IOException {
           if (attempt >= 2) rethrow;
           await Future<void>.delayed(Duration(seconds: attempt + 1));
+        }
+      }
+      if (desktop && extension.jarUrl != null) {
+        desktopJar = File('${candidateDirectory.path}/extension.jar');
+        await _downloadUrl(
+          extension.jarUrl!,
+          extension.packageName,
+          desktopJar,
+        );
+        desktopJarHash = (await sha256.bind(desktopJar.openRead()).first)
+            .toString();
+        if (extension.jarSha256 != null &&
+            desktopJarHash != extension.jarSha256) {
+          throw StateError('桌面 JAR 内容指纹与仓库不一致');
         }
       }
       final metadata = await platformChannel.inspectMihonMetadata(
@@ -95,7 +118,9 @@ class MihonInstaller {
       }
       final declared =
           extension.publisherSignerSha256 ?? signerSha256.toLowerCase();
-      if (pinned == null && actualSigner != declared) {
+      final oldJarHash = old is Map ? old['desktopJarSha256'] : null;
+      if (pinned == null && actualSigner != declared ||
+          desktopJarHash != null && oldJarHash != desktopJarHash) {
         final accepted = await confirmPublisher?.call(
           MihonPublisherCandidate(
             actualSigner: actualSigner,
@@ -104,9 +129,11 @@ class MihonInstaller {
             packageName: extension.packageName,
             versionCode: extension.versionCode,
             versionName: extension.versionName,
+            desktopJarSha256: desktopJarHash,
+            desktopJarUrl: extension.jarUrl,
           ),
         );
-        if (accepted != true) throw StateError('扩展发布者与聚合仓库默认签名不同，尚未信任该发布者');
+        if (accepted != true) throw StateError('尚未确认扩展发布者或独立的桌面 JAR 指纹');
       }
       final status = await platformChannel.inspectMihonExtension(
         apkPath: '${metadata['stagedPath']}',
@@ -114,6 +141,8 @@ class MihonInstaller {
         versionCode: extension.versionCode,
         signerSha256: actualSigner,
         apkSha256: actualHash,
+        desktopJarPath: desktopJar?.path,
+        desktopJarSha256: desktopJarHash,
       );
       if (status['ok'] != true || status['executable'] != true) {
         throw StateError(
@@ -123,20 +152,30 @@ class MihonInstaller {
       // Carry declarations only after the APK identity/hash checks above.
       // This is display metadata, never permission to execute or enable.
       status['name'] = extension.name;
-      status['lang'] = extension.sources.map((source) => source.language).toSet().length == 1
-          ? extension.sources.first.language : '';
-      status['nsfw'] = extension.declaredNsfw == true || sourceNsfwFlag(metadata['nsfw']) == true
-          ? true : sourceNsfwFlag(metadata['nsfw']) ?? extension.declaredNsfw;
+      status['lang'] =
+          extension.sources.map((source) => source.language).toSet().length == 1
+          ? extension.sources.first.language
+          : '';
+      status['nsfw'] =
+          extension.declaredNsfw == true ||
+              sourceNsfwFlag(metadata['nsfw']) == true
+          ? true
+          : sourceNsfwFlag(metadata['nsfw']) ?? extension.declaredNsfw;
       final hostSources = status['sources'];
       if (hostSources is List) {
         status['sources'] = [
           for (final raw in hostSources)
-            if (raw is Map) <String, Object?>{
-              for (final entry in raw.entries) '${entry.key}': entry.value,
-              'nsfw': sourceNsfwFlag(metadata['nsfw']) == true ? true :
-                  extension.sources.where((source) => source.id == '${raw['id']}').firstOrNull?.nsfw ??
-                  sourceNsfwFlag(status['nsfw']),
-            },
+            if (raw is Map)
+              <String, Object?>{
+                for (final entry in raw.entries) '${entry.key}': entry.value,
+                'nsfw': sourceNsfwFlag(metadata['nsfw']) == true
+                    ? true
+                    : extension.sources
+                              .where((source) => source.id == '${raw['id']}')
+                              .firstOrNull
+                              ?.nsfw ??
+                          sourceNsfwFlag(status['nsfw']),
+              },
         ];
       }
       final installed = <String, Object?>{
@@ -164,21 +203,30 @@ class MihonInstaller {
   Future<Map<String, Object?>> activatePending(
     ApkBackupFiles files,
     String packageName, {
-    required Future<bool> Function(MihonPublisherCandidate candidate) confirmPublisher,
+    required Future<bool> Function(MihonPublisherCandidate candidate)
+    confirmPublisher,
   }) async {
     final metadata = await files.inspectPending(packageName);
-    final accepted = await confirmPublisher(MihonPublisherCandidate(
-      actualSigner: metadata['signerSha256'] as String,
-      repositorySigner: '',
-      apkHash: metadata['sha256'] as String,
-      packageName: metadata['packageName'] as String,
-      versionCode: metadata['versionCode'] as int,
-      versionName: metadata['versionName'] as String,
-    ));
+    final accepted = await confirmPublisher(
+      MihonPublisherCandidate(
+        actualSigner: metadata['signerSha256'] as String,
+        repositorySigner: '',
+        apkHash: metadata['sha256'] as String,
+        packageName: metadata['packageName'] as String,
+        versionCode: metadata['versionCode'] as int,
+        versionName: metadata['versionName'] as String,
+      ),
+    );
     if (!accepted) throw StateError('尚未确认恢复 APK 的发布者；文件保持停用');
     // Confirmation can take arbitrarily long; recheck catalogue and bytes.
     final current = await files.inspectPending(packageName);
-    for (final key in const ['sha256', 'signerSha256', 'versionCode', 'versionName', 'packageName']) {
+    for (final key in const [
+      'sha256',
+      'signerSha256',
+      'versionCode',
+      'versionName',
+      'packageName',
+    ]) {
       if (metadata[key] != current[key]) throw StateError('确认期间 APK 已改变，请重新确认');
     }
     final status = await platformChannel.inspectMihonExtension(
@@ -189,19 +237,24 @@ class MihonInstaller {
       apkSha256: current['sha256'] as String,
     );
     if (status['ok'] != true || status['executable'] != true) {
-      throw StateError('${status['hostError'] ?? status['error'] ?? 'APK 无法执行；保留待确认文件'}');
+      throw StateError(
+        '${status['hostError'] ?? status['error'] ?? 'APK 无法执行；保留待确认文件'}',
+      );
     }
     final restoredNsfw = sourceNsfwFlag(files.pending[packageName]?['nsfw']);
     final manifestNsfw = sourceNsfwFlag(current['nsfw']);
     status['nsfw'] = restoredNsfw == true || manifestNsfw == true
-        ? true : manifestNsfw ?? restoredNsfw;
+        ? true
+        : manifestNsfw ?? restoredNsfw;
     final installed = <String, Object?>{
-      ...?preferences.get<Map<dynamic, dynamic>>('mihon.installedPackages')
+      ...?preferences
+          .get<Map<dynamic, dynamic>>('mihon.installedPackages')
           ?.map((key, value) => MapEntry('$key', value)),
       packageName: current['versionName'],
     };
     final hostStatus = <String, Object?>{
-      ...?preferences.get<Map<dynamic, dynamic>>('mihon.hostStatus')
+      ...?preferences
+          .get<Map<dynamic, dynamic>>('mihon.hostStatus')
           ?.map((key, value) => MapEntry('$key', value)),
       packageName: status,
     };
@@ -213,28 +266,42 @@ class MihonInstaller {
     return status;
   }
 
-  Future<void> _download(MihonExtension extension, File candidate) async {
-    final stream = http is SecureRuleDownloadClient
+  Future<void> _download(MihonExtension extension, File candidate) =>
+      _downloadUrl(extension.apkUrl, extension.packageName, candidate);
+
+  Future<void> _downloadUrl(String url, String package, File candidate) async {
+    var stream = http is SecureRuleDownloadClient
         ? await (http as SecureRuleDownloadClient).downloadRuleBytes(
-            extension.apkUrl,
-            sourceId: 'mihon:${extension.packageName}',
+            url,
+            sourceId: 'mihon:$package',
           )
-        : await http.downloadBytes(
-            extension.apkUrl,
-            sourceId: 'mihon:${extension.packageName}',
-          );
+        : await http.downloadBytes(url, sourceId: 'mihon:$package');
     const limit = 64 * 1024 * 1024;
-    final output = await candidate.open(mode: FileMode.write);
-    var length = 0;
-    try {
-      await for (final chunk in stream.stream) {
-        length += chunk.length;
-        if (length > limit) throw StateError('APK 超过 64 MiB 限制');
-        await output.writeFrom(chunk);
+    for (var recovery = 0; ; recovery++) {
+      try {
+        // Every delivery attempt starts at byte zero. A partial primary body
+        // must never be concatenated with the complete API replacement.
+        final output = await candidate.open(mode: FileMode.write);
+        var length = 0;
+        try {
+          await for (final chunk in stream.stream) {
+            length += chunk.length;
+            if (length > limit) throw StateError('扩展文件超过 64 MiB');
+            await output.writeFrom(chunk);
+          }
+        } finally {
+          await output.close();
+        }
+        if (length == 0) throw StateError('扩展文件下载为空');
+        return;
+      } on DioException catch (error) {
+        if (recovery != 0 || http is! SecureRuleDownloadClient) rethrow;
+        stream = await (http as SecureRuleDownloadClient).downloadRuleBytes(
+          url,
+          sourceId: 'mihon:$package',
+          afterStreamFailure: error,
+        );
       }
-    } finally {
-      await output.close();
     }
-    if (length == 0) throw StateError('APK 下载为空');
   }
 }

@@ -5,7 +5,9 @@ import 'package:drift/drift.dart';
 
 import '../../../core/db/app_database.dart';
 import '../../../core/models/chapter.dart';
+import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
+import '../../library/data/library_repository.dart';
 
 /// 下载任务状态。
 enum DownloadStatus {
@@ -82,6 +84,9 @@ class DownloadRepository {
   DownloadRepository(this._db);
 
   final AppDatabase _db;
+
+  Future<MediaItem?> itemOf(String sourceId, String remoteId) =>
+      LibraryRepository(_db).itemByKey(sourceId, remoteId);
 
   // ------------------------------------------------------------ 任务读写
 

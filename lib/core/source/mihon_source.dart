@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/chapter.dart';
 import '../models/media_item.dart';
@@ -292,9 +293,14 @@ class MihonSource
   }
 
   @override
-  Future<ChapterContent> content(Chapter chapter) async {
+  Future<ChapterContent> content(Chapter chapter, {MediaItem? item}) async {
+    final desktop = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+    if (desktop && (item == null || item.sourceId != descriptor.id)) {
+      throw _error('漫画正文缺少同一来源的所属作品');
+    }
     final response = await _request(
       operation: 'pages',
+      manga: desktop ? _mangaJson(item!) : null,
       chapter: <String, Object?>{
         'url': chapter.url ?? chapter.remoteId,
         'name': chapter.title,

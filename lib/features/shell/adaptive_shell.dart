@@ -132,7 +132,7 @@ class AdaptiveShell extends ConsumerWidget {
   }
 }
 
-/// 桌面端侧边栏（Komikku 观感：无边框、选中项圆角高亮、底部固定设置入口）。
+/// 桌面端侧边栏：四个独立工作区与移动端保持一致。
 class _DesktopSidebar extends StatelessWidget {
   const _DesktopSidebar({required this.currentIndex, required this.onSelect});
 
@@ -148,8 +148,8 @@ class _DesktopSidebar extends StatelessWidget {
       width: AppSpacing.sidebarWidth,
       color: palette.sidebar,
       child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: ListView(
+          padding: EdgeInsets.zero,
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.fromLTRB(
@@ -165,7 +165,9 @@ class _DesktopSidebar extends StatelessWidget {
                     color: theme.colorScheme.primary,
                   ),
                   const SizedBox(width: AppSpacing.xs),
-                  Text('Triomi', style: theme.textTheme.titleMedium),
+                  Expanded(
+                    child: Text('Triomi', style: theme.textTheme.titleMedium),
+                  ),
                 ],
               ),
             ),
@@ -179,16 +181,6 @@ class _DesktopSidebar extends StatelessWidget {
                 selected: index == currentIndex,
                 onTap: () => onSelect(index),
               ),
-            const Spacer(),
-            _SidebarItem(
-              destination: const _ShellDestination(
-                label: '设置',
-                icon: Icons.settings_outlined,
-                selectedIcon: Icons.settings,
-              ),
-              selected: false,
-              onTap: () => context.push(AppRoutes.settings),
-            ),
             Padding(
               padding: const EdgeInsets.all(AppSpacing.md),
               child: Text(

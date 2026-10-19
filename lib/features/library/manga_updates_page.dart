@@ -224,10 +224,7 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
         ),
         if (_running) const LinearProgressIndicator(),
         if (_error != null)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(_error!),
-          ),
+          Padding(padding: const EdgeInsets.all(16), child: Text(_error!)),
         Expanded(
           child: library.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -236,12 +233,17 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) => Center(child: Text('更新列表读取失败：$error')),
               data: (records) {
-                final visible = records.where((row) =>
-                  (row.status == 'success' && row.added > 0) ||
-                  row.status == 'failed' ||
-                  row.status == 'deferred' ||
-                  (!_running && (row.status == 'queued' || row.status == 'running')),
-                ).toList();
+                final visible = records
+                    .where(
+                      (row) =>
+                          (row.status == 'success' && row.added > 0) ||
+                          row.status == 'failed' ||
+                          row.status == 'deferred' ||
+                          (!_running &&
+                              (row.status == 'queued' ||
+                                  row.status == 'running')),
+                    )
+                    .toList();
                 return RefreshIndicator(
                   onRefresh: _run,
                   child: ListView(
@@ -255,10 +257,14 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
                       for (final row in visible)
                         Builder(
                           builder: (context) {
-                            final item = items.where((entry) =>
-                              entry.item.sourceId == row.sourceId &&
-                              entry.item.remoteId == row.remoteId,
-                            ).firstOrNull?.item;
+                            final item = items
+                                .where(
+                                  (entry) =>
+                                      entry.item.sourceId == row.sourceId &&
+                                      entry.item.remoteId == row.remoteId,
+                                )
+                                .firstOrNull
+                                ?.item;
                             final failed = row.status != 'success';
                             return ListTile(
                               leading: failed
@@ -266,16 +272,22 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
                                   : SizedBox(
                                       width: 42,
                                       height: 56,
-                                      child: MediaCover(url: item?.coverUrl),
+                                      child: MediaCover(
+                                        url: item?.coverUrl,
+                                        sourceId: row.sourceId,
+                                      ),
                                     ),
                               title: Text(item?.title ?? row.remoteId),
                               subtitle: Text(
                                 '${sourceLabels[row.sourceId] ?? row.sourceId}\n'
                                 '${failed ? (row.error ?? '检查尚未完成，请刷新重新检查') : '新增 ${row.added} 章'}',
                               ),
-                              onTap: item == null ? null : () => context.push(
-                                AppRoutes.detailFor(item), extra: item,
-                              ),
+                              onTap: item == null
+                                  ? null
+                                  : () => context.push(
+                                      AppRoutes.detailFor(item),
+                                      extra: item,
+                                    ),
                             );
                           },
                         ),

@@ -23,6 +23,8 @@ import 'package:triomi/features/history/history_page.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/manga/manga_source_page.dart';
 import 'package:triomi/features/search/search_page.dart';
+import 'package:triomi/features/settings/settings_page.dart';
+import 'package:triomi/features/shell/adaptive_shell.dart';
 
 import 'fixtures/fake_http_client.dart';
 import 'fixtures/fake_preferences.dart';
@@ -74,7 +76,11 @@ class _RouteSourceRegistry extends SourceRegistryController {
     final source = _RouteMangaSource();
     return SourceRegistrySnapshot(
       entries: [
-        SourceEntry(descriptor: source.descriptor, source: source, enabled: true),
+        SourceEntry(
+          descriptor: source.descriptor,
+          source: source,
+          enabled: true,
+        ),
       ],
       failures: const [],
     );
@@ -236,33 +242,190 @@ void main() {
     },
   );
 
-  testWidgets('novel workspace keeps one top search and no local bookshelf query', (tester) async {
-    final router = AppRouter.create(initialLocation: '/novel');
-    try {
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp.router(theme: AppTheme.light(), routerConfig: router),
-      ));
-      await advance(tester);
-      expect(find.byTooltip('搜索小说'), findsOneWidget);
-      await tester.tap(find.text('书架'));
-      await advance(tester);
-      expect(find.byTooltip('搜索小说'), findsOneWidget);
-      expect(find.byType(TextField), findsNothing);
-      expect(find.byTooltip('筛选'), findsNothing);
-      await tester.tap(find.byTooltip('搜索小说'));
-      await advance(tester);
-      expect(find.byType(TextField), findsOneWidget);
-      expect(find.text('搜索小说'), findsWidgets);
-    } finally {
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.runAsync(() async {
+  testWidgets(
+    'four workspace destinations retain search and settings back stack across breakpoints',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(599, 900);
+      addTearDown(tester.view.reset);
+      final router = AppRouter.create(initialLocation: '/novel/search?q=first');
+      Finder destination(String label) => find.byWidgetPredicate(
+        (widget) =>
+            widget is Icon &&
+            (widget.semanticLabel == '切换到$label' ||
+                widget.semanticLabel == '已选中$label'),
+      );
+      try {
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp.router(
+              theme: AppTheme.light(),
+              routerConfig: router,
+            ),
+          ),
+        );
+        await advance(tester);
+        await tester.enterText(
+          find.byType(TextField).first,
+          'retained desktop draft',
+        );
+        for (final width in [599.0, 600.0, 1239.0, 1240.0, 1600.0]) {
+          tester.view.physicalSize = Size(width, 900);
+          await advance(tester);
+          final destinations = find.byWidgetPredicate(
+            (widget) =>
+                widget is Icon &&
+                (widget.semanticLabel?.startsWith('切换到') == true ||
+                    widget.semanticLabel?.startsWith('已选中') == true),
+          );
+          expect(destinations, findsNWidgets(4));
+          for (final label in ['追番', '漫画', '小说', '我的']) {
+            expect(destination(label), findsOneWidget);
+          }
+          expect(
+            tester
+                .widget<TextField>(find.byType(TextField).first)
+                .controller!
+                .text,
+            'retained desktop draft',
+          );
+          await tester.tap(destination('我的'));
+          await advance(tester);
+          final settings = find.widgetWithText(ListTile, '通用设置');
+          await tester.ensureVisible(settings);
+          await tester.tap(settings);
+          await advance(tester);
+          expect(find.byType(SettingsPage), findsOneWidget);
+          expect(router.canPop(), isTrue);
+          router.pop();
+          await advance(tester);
+          expect(
+            router.routeInformationProvider.value.uri.path,
+            AppRoutes.profile,
+          );
+          expect(find.byType(SettingsPage), findsNothing);
+          await tester.tap(destination('小说'));
+          await advance(tester);
+          expect(
+            tester
+                .widget<TextField>(find.byType(TextField).first)
+                .controller!
+                .text,
+            'retained desktop draft',
+          );
+        }
+        await tester.tap(destination('小说'));
+        await advance(tester);
+        expect(router.routeInformationProvider.value.uri.path, AppRoutes.novel);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.runAsync(() async {
+          router.dispose();
+          container.dispose();
+          await db.close();
+        });
+      }
+    },
+  );
+
+  testWidgets(
+    'short expanded sidebar scrolls to every workspace at large text',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1600, 240);
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final router = GoRouter(
+        initialLocation: '/anime',
+        routes: [
+          StatefulShellRoute.indexedStack(
+            builder: (_, _, shell) => AdaptiveShell(navigationShell: shell),
+            branches: [
+              for (final path in ['anime', 'manga', 'novel', 'profile'])
+                StatefulShellBranch(
+                  routes: [
+                    GoRoute(
+                      path: '/$path',
+                      builder: (_, _) => Center(child: Text('workspace $path')),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ],
+      );
+      try {
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp.router(
+              theme: AppTheme.light(),
+              routerConfig: router,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final personal = find.byWidgetPredicate(
+          (widget) => widget is Icon && widget.semanticLabel == '切换到我的',
+        );
+        await tester.scrollUntilVisible(
+          personal,
+          80,
+          scrollable: find.descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Scrollable),
+          ),
+        );
+        await tester.tap(personal);
+        await tester.pumpAndSettle();
+        expect(find.text('workspace profile'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
         router.dispose();
         container.dispose();
-        await db.close();
-      });
-    }
-  });
+        await tester.runAsync(db.close);
+      }
+    },
+  );
+
+  testWidgets(
+    'novel workspace keeps one top search and no local bookshelf query',
+    (tester) async {
+      final router = AppRouter.create(initialLocation: '/novel');
+      try {
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp.router(
+              theme: AppTheme.light(),
+              routerConfig: router,
+            ),
+          ),
+        );
+        await advance(tester);
+        expect(find.byTooltip('搜索小说'), findsOneWidget);
+        await tester.tap(find.text('书架'));
+        await advance(tester);
+        expect(find.byTooltip('搜索小说'), findsOneWidget);
+        expect(find.byType(TextField), findsNothing);
+        expect(find.byTooltip('筛选'), findsNothing);
+        await tester.tap(find.byTooltip('搜索小说'));
+        await advance(tester);
+        expect(find.byType(TextField), findsOneWidget);
+        expect(find.text('搜索小说'), findsWidgets);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.runAsync(() async {
+          router.dispose();
+          container.dispose();
+          await db.close();
+        });
+      }
+    },
+  );
 
   testWidgets(
     'history opens a detail snapshot above the root page and returns to history',
@@ -289,7 +452,10 @@ void main() {
         position: 1,
       );
       final router = AppRouter.create(
-        initialLocation: AppRoutes.searchFor(MediaType.manga, query: 'retained'),
+        initialLocation: AppRoutes.searchFor(
+          MediaType.manga,
+          query: 'retained',
+        ),
       );
       try {
         await tester.pumpWidget(
@@ -326,7 +492,10 @@ void main() {
           await advance(tester);
         }
         expect(
-          tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+          tester
+              .widget<TextField>(find.byType(TextField).first)
+              .controller!
+              .text,
           'retained',
         );
       } finally {
@@ -347,13 +516,18 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       container.dispose();
-      container = ProviderContainer(overrides: [
-        databaseProvider.overrideWithValue(db),
-        preferencesProvider.overrideWithValue(memoryPreferences()),
-        sourcesProvider.overrideWith(_RouteSourceRegistry.new),
-      ]);
+      container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          preferencesProvider.overrideWithValue(memoryPreferences()),
+          sourcesProvider.overrideWith(_RouteSourceRegistry.new),
+        ],
+      );
       final router = AppRouter.create(
-        initialLocation: AppRoutes.searchFor(MediaType.manga, query: 'retained'),
+        initialLocation: AppRoutes.searchFor(
+          MediaType.manga,
+          query: 'retained',
+        ),
       );
       try {
         await tester.pumpWidget(
@@ -366,10 +540,12 @@ void main() {
           ),
         );
         await advance(tester);
-        unawaited(router.push(
-          AppRoutes.detailFor(_RouteMangaSource.first),
-          extra: _RouteMangaSource.first,
-        ));
+        unawaited(
+          router.push(
+            AppRoutes.detailFor(_RouteMangaSource.first),
+            extra: _RouteMangaSource.first,
+          ),
+        );
         await advance(tester);
         expect(find.byType(DetailPage), findsOneWidget);
         await tester.tap(find.widgetWithText(ActionChip, 'Adventure'));
@@ -406,7 +582,10 @@ void main() {
         router.pop();
         await advance(tester);
         expect(
-          tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+          tester
+              .widget<TextField>(find.byType(TextField).first)
+              .controller!
+              .text,
           'retained',
         );
         expect(tester.takeException(), isNull);

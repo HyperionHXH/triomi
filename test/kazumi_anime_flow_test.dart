@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -46,6 +47,7 @@ class SecureFake extends FakeHttpClient implements SecureRuleDownloadClient {
   Future<SourceByteStream> downloadRuleBytes(
     String url, {
     required String sourceId,
+    DioException? afterStreamFailure,
   }) => downloadBytes(url, sourceId: sourceId);
 }
 
@@ -201,8 +203,11 @@ void main() {
           locked: i == 51,
         ),
     ];
-    expect(adjacentEpisodeIndex(chapters, 50, 1), 52,
-        reason: '自动下一集跳过锁定剧集，仍在本站同一播放列表');
+    expect(
+      adjacentEpisodeIndex(chapters, 50, 1),
+      52,
+      reason: '自动下一集跳过锁定剧集，仍在本站同一播放列表',
+    );
     expect(adjacentEpisodeIndex(chapters, 109, 1), isNull);
     int? selected;
     await tester.pumpWidget(
@@ -234,9 +239,15 @@ void main() {
       Chapter(sourceId: 'a', remoteId: 'a1', title: '甲一', volumeTitle: '列表甲'),
       Chapter(sourceId: 'a', remoteId: 'b1', title: '乙一', volumeTitle: '列表乙'),
     ];
-    Widget selector(int current) => MaterialApp(home: Scaffold(body: EpisodeSelector(
-      chapters: chapters, currentIndex: current, onSelected: (_) {},
-    )));
+    Widget selector(int current) => MaterialApp(
+      home: Scaffold(
+        body: EpisodeSelector(
+          chapters: chapters,
+          currentIndex: current,
+          onSelected: (_) {},
+        ),
+      ),
+    );
     await tester.pumpWidget(selector(0));
     expect(find.text('甲一'), findsOneWidget);
     await tester.pumpWidget(selector(1));

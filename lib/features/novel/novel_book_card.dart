@@ -51,6 +51,7 @@ class NovelBookCard extends StatelessWidget {
           await onReturn?.call();
         },
         onLongPress: onLongPress,
+        onSecondaryTap: onLongPress,
         child: Padding(
           padding: AppSpacing.card,
           child: Column(

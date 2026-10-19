@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -804,7 +805,11 @@ void main() {
     await repository.addToLibrary(manga);
     await repository.addToLibrary(other);
     await pumpLibrary(tester);
-    await tester.longPress(find.text('作品甲').first);
+    await tester.tap(
+      find.text('作品甲').first,
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('已选更多'));
     await tester.pumpAndSettle();

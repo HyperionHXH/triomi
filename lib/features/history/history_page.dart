@@ -64,7 +64,10 @@ class HistoryPage extends ConsumerWidget {
                   child: SizedBox(
                     width: 44,
                     height: 62,
-                    child: MediaCover(url: item?.coverUrl),
+                    child: MediaCover(
+                      url: item?.coverUrl,
+                      sourceId: entry.sourceId,
+                    ),
                   ),
                 ),
                 title: Text(

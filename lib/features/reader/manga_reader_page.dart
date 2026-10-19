@@ -12,6 +12,7 @@ import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/platform/platform_channel.dart';
+import '../../core/source/mihon_source.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/storage/preferences.dart';
@@ -272,7 +273,9 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
         );
       }
 
-      final content = await provider.content(chapter);
+      final content = provider is MihonSource
+          ? await provider.content(chapter, item: _owner(chapter))
+          : await provider.content(chapter);
       if (!mounted || seq != _requestSeq) return;
 
       if (content.images.isEmpty) {
@@ -422,7 +425,12 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           !mounted) {
         return;
       }
-      final content = await provider.content(_chapters[next]);
+      final content = provider is MihonSource
+          ? await provider.content(
+              _chapters[next],
+              item: _owner(_chapters[next]),
+            )
+          : await provider.content(_chapters[next]);
       if (seq != _requestSeq || !mounted) return;
       for (final url in content.images.take(count)) {
         if (!mounted) return;
@@ -465,10 +473,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   // ------------------------------------------------------------------ 翻页
 
   void _onScroll() {
-    if (!mounted ||
-        _isPaged ||
-        _restoring ||
-        _loading) {
+    if (!mounted || _isPaged || _restoring || _loading) {
       return;
     }
     final visible =

@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "win32_window.h"
+#include "desktop_mihon_runtime.h"
 
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
@@ -29,6 +30,7 @@ class FlutterWindow : public Win32Window {
   flutter::DartProject project_;
   bool worker_;
   bool backup_worker_;
+  DesktopMihonRuntime mihon_runtime_;
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;

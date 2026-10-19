@@ -14,6 +14,7 @@ add_executable(${BINARY_NAME} WIN32
   "windows_backup.cpp"
   "app_update.cpp"
   "windows_web_session.cpp"
+  "desktop_mihon_runtime.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
   "Runner.rc"
   "runner.exe.manifest"

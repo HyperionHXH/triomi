@@ -1,14 +1,18 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/db/app_database.dart';
 import '../../../core/models/chapter.dart';
+import '../../../core/models/media_item.dart';
+import '../../../core/models/media_type.dart';
 import '../../../core/models/source_exception.dart';
 import '../../../core/models/video_resolve_cancellation.dart';
 import '../../../core/platform/platform_channel.dart';
 import '../../../core/source/http_client.dart';
+import '../../../core/source/mihon_source.dart';
 import '../../../core/source/source_api.dart';
 import '../../../core/storage/preferences.dart';
 import 'download_repository.dart';
@@ -37,7 +41,8 @@ class DownloadService {
   final Future<PlaySource> Function(
     PlaySource source,
     VideoResolveCancellation cancellation,
-  )? resolveVideo;
+  )?
+  resolveVideo;
   final Future<String?> Function(String url)? videoCookieForUrl;
 
   /// 网络接口名枚举器（D30 seam）：默认直读 dart:io；测试注入替身。
@@ -137,7 +142,22 @@ class DownloadService {
       if (chapter.locked) {
         throw const _LockedChapterException();
       }
-      final content = await provider.content(chapter);
+      final content =
+          provider is MihonSource &&
+              !kIsWeb &&
+              defaultTargetPlatform == TargetPlatform.windows
+          ? await provider.content(
+              chapter,
+              item:
+                  await repository.itemOf(row.sourceId, row.remoteId) ??
+                  MediaItem(
+                    sourceId: row.sourceId,
+                    remoteId: row.remoteId,
+                    type: MediaType.manga,
+                    title: '',
+                  ),
+            )
+          : await provider.content(chapter);
       check();
       if (content.isEmpty) {
         throw StateError('正文为空（可能是锁定章节或选择器失配）');
@@ -181,12 +201,15 @@ class DownloadService {
       if (content.images.isNotEmpty) {
         final directory = await _imageDirectory(row);
         await repository.markPath(row.id, directory);
-        final checkpoint = await ImageDownloadCheckpoint.load(Directory(directory));
+        final checkpoint = await ImageDownloadCheckpoint.load(
+          Directory(directory),
+        );
         final files = <String>[];
         for (var index = 0; index < content.images.length; index++) {
           check();
           final url = content.images[index];
-          final name = '${(index + 1).toString().padLeft(4, '0')}${_extensionOf(url)}';
+          final name =
+              '${(index + 1).toString().padLeft(4, '0')}${_extensionOf(url)}';
           if (!await checkpoint.valid(name, url: url)) {
             final bytes = await http.fetchBytes(url, sourceId: row.sourceId);
             check();
@@ -223,11 +246,16 @@ class DownloadService {
       );
       await repository.markDone(row.id);
     } catch (error) {
-      if (error is DownloadPaused || error is VideoResolveCancelled || owner.isCancelled) {
+      if (error is DownloadPaused ||
+          error is VideoResolveCancelled ||
+          owner.isCancelled) {
         await repository.markPaused(
           row.id,
-          message: owner.isCancelled ? owner.reason :
-              error is VideoResolveCancelled ? error.message : null,
+          message: owner.isCancelled
+              ? owner.reason
+              : error is VideoResolveCancelled
+              ? error.message
+              : null,
         );
         return;
       }
@@ -246,12 +274,17 @@ class DownloadService {
 
   Future<String> _imageDirectory(DownloadRow row) async {
     final docs = await getApplicationDocumentsDirectory();
-    final root = await Directory('${docs.path}${Platform.pathSeparator}downloads').create(recursive: true);
+    final root = await Directory(
+      '${docs.path}${Platform.pathSeparator}downloads',
+    ).create(recursive: true);
     if (row.path != null &&
-        await FileSystemEntity.type(row.path!, followLinks: false) == FileSystemEntityType.directory) {
+        await FileSystemEntity.type(row.path!, followLinks: false) ==
+            FileSystemEntityType.directory) {
       final canonical = await Directory(row.path!).resolveSymbolicLinks();
       final rootPath = await root.resolveSymbolicLinks();
-      if (canonical.startsWith('$rootPath${Platform.pathSeparator}')) return canonical;
+      if (canonical.startsWith('$rootPath${Platform.pathSeparator}')) {
+        return canonical;
+      }
     }
     final dir = Directory(
       <String>[

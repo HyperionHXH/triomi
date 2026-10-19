@@ -41,6 +41,8 @@ class MihonExtension {
     this.nsfw,
     this.publisherSignerSha256,
     this.apkSha256,
+    this.jarUrl,
+    this.jarSha256,
   });
 
   final String name;
@@ -56,15 +58,24 @@ class MihonExtension {
 
   bool? get declaredNsfw {
     if (contentWarning?.trim().toLowerCase() == 'nsfw') return true;
-    if (nsfw == true || sources.any((source) => source.nsfw == true)) return true;
+    if (nsfw == true || sources.any((source) => source.nsfw == true)) {
+      return true;
+    }
     if (nsfw == false) return false;
-    if (sources.isNotEmpty && sources.every((source) => source.nsfw == false)) return false;
+    if (sources.isNotEmpty && sources.every((source) => source.nsfw == false)) {
+      return false;
+    }
     return null;
   }
 
   /// Per-extension publisher claim; distinct from the aggregator's default.
   final String? publisherSignerSha256;
   final String? apkSha256;
+
+  /// Native desktop bytecode has a separate origin/hash trust decision.
+  /// An APK's signing certificate does not authenticate these JAR bytes.
+  final String? jarUrl;
+  final String? jarSha256;
 
   MediaType? get mediaType {
     if (sources.isEmpty) return null;
@@ -98,16 +109,26 @@ class MihonRepositoryIndex {
     SourceContentRestriction content = SourceContentRestriction.all,
   }) {
     final filters = SourceFilters(
-      query: query, language: language,
-      type: type, content: content,
+      query: query,
+      language: language,
+      type: type,
+      content: content,
     );
     return extensions
-        .where((extension) => filters.matches(
-          languages: extension.sources.isEmpty ? const [''] : extension.sources.map((source) => source.language),
-          nsfw: extension.declaredNsfw,
-          mediaType: extension.mediaType,
-          searchText: [extension.name, extension.packageName, ...extension.sources.map((source) => source.name)],
-        ))
+        .where(
+          (extension) => filters.matches(
+            languages: extension.sources.isEmpty
+                ? const ['']
+                : extension.sources.map((source) => source.language),
+            nsfw: extension.declaredNsfw,
+            mediaType: extension.mediaType,
+            searchText: [
+              extension.name,
+              extension.packageName,
+              ...extension.sources.map((source) => source.name),
+            ],
+          ),
+        )
         .toList(growable: false);
   }
 }
@@ -202,6 +223,18 @@ abstract final class MihonRepositoryParser {
           '扩展 $packageName 的 APK 地址必须是 HTTPS',
         );
       }
+      final jarUrl = resources['jarUrl']?.toString().trim();
+      if (jarUrl != null && jarUrl.isNotEmpty) {
+        final jarUri = Uri.tryParse(jarUrl);
+        if (jarUri == null ||
+            jarUri.scheme != 'https' ||
+            jarUri.host.isEmpty ||
+            jarUri.userInfo.isNotEmpty) {
+          throw MihonRepositoryParseException(
+            '扩展 $packageName 的 JAR 地址必须是无凭据 HTTPS',
+          );
+        }
+      }
       extensions.add(
         MihonExtension(
           name: requiredText(node['name'], 'name'),
@@ -221,9 +254,13 @@ abstract final class MihonRepositoryParser {
             resources['sha256'] ?? node['sha256'],
             'APK SHA-256',
           ),
+          jarUrl: jarUrl == null || jarUrl.isEmpty ? null : jarUrl,
+          jarSha256: fingerprint(resources['jarSha256'], '桌面 JAR SHA-256'),
           contentWarning: '${node['contentWarning'] ?? ''}'.trim().isEmpty
               ? (sourceNsfwFlag(node['nsfw']) == true ||
-                    sources.any((source) => source.nsfw == true) ? 'NSFW' : null)
+                        sources.any((source) => source.nsfw == true)
+                    ? 'NSFW'
+                    : null)
               : '${node['contentWarning']}'.trim(),
         ),
       );

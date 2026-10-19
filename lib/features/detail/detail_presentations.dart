@@ -109,7 +109,10 @@ class _MangaHeader extends StatelessWidget {
                 child: SizedBox(
                   width: 112,
                   height: 168,
-                  child: MediaCover(url: item.coverUrl),
+                  child: MediaCover(
+                    url: item.coverUrl,
+                    sourceId: item.sourceId,
+                  ),
                 ),
               ),
               const SizedBox(width: 16),

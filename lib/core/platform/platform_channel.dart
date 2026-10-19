@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../models/source_exception.dart';
 import '../source/source_website.dart';
+import '../source/windows_mihon_host.dart';
 
 /// SAF 授权目录写入器（D49 合同）：写入 [fileName] 并返回系统实际创建的
 /// document URI（`DocumentsContract.createDocument` 的结果）。
@@ -30,6 +33,8 @@ class PlatformChannel {
   const PlatformChannel._();
 
   static const MethodChannel _channel = MethodChannel('triomi/platform');
+  static bool get _desktop =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
 
   Future<bool> launchExternalUrl(String url) async {
     final uri = publicSourceWebsiteUri(url);
@@ -62,6 +67,13 @@ class PlatformChannel {
     required int versionCode,
   }) async {
     try {
+      if (_desktop) {
+        return await WindowsMihonHost.instance.inspectMetadata(
+          apkPath,
+          packageName,
+          versionCode,
+        );
+      }
       final raw = await _channel.invokeMethod<Object?>('mihonInspectMetadata', {
         'apkPath': apkPath,
         'packageName': packageName,
@@ -75,6 +87,8 @@ class PlatformChannel {
       return {'ok': false, 'supported': false, 'error': '当前平台没有 Mihon 宿主'};
     } on PlatformException catch (error) {
       return {'ok': false, 'error': error.message ?? error.code};
+    } on Object catch (error) {
+      return {'ok': false, 'error': SourceException.sanitizeMessage('$error')};
     }
   }
 
@@ -87,8 +101,24 @@ class PlatformChannel {
     required int versionCode,
     String? signerSha256,
     String? apkSha256,
+    String? desktopJarPath,
+    String? desktopJarSha256,
   }) async {
     try {
+      if (_desktop) {
+        if (signerSha256 == null || apkSha256 == null) {
+          throw StateError('桌面扩展需要已确认的签名与内容指纹');
+        }
+        return await WindowsMihonHost.instance.inspectExtension(
+          path: apkPath,
+          package: packageName,
+          version: versionCode,
+          signer: signerSha256,
+          hash: apkSha256,
+          jarPath: desktopJarPath,
+          jarHash: desktopJarSha256,
+        );
+      }
       final raw = await _channel.invokeMethod<Object?>(
         'mihonInspect',
         <String, Object?>{
@@ -112,11 +142,16 @@ class PlatformChannel {
         'ok': false,
         'error': error.message ?? error.code,
       };
+    } on Object catch (error) {
+      return {'ok': false, 'error': SourceException.sanitizeMessage('$error')};
     }
   }
 
   Future<bool> setMihonEnabled(String packageName, bool enabled) async {
     try {
+      if (_desktop) {
+        return await WindowsMihonHost.instance.setEnabled(packageName, enabled);
+      }
       final raw = await _channel.invokeMethod<Object?>(
         'mihonSetEnabled',
         <String, Object?>{'packageName': packageName, 'enabled': enabled},
@@ -125,6 +160,8 @@ class PlatformChannel {
     } on PlatformException {
       return false;
     } on MissingPluginException {
+      return false;
+    } on Object {
       return false;
     }
   }
@@ -158,6 +195,22 @@ class PlatformChannel {
       'filters': ?filters,
     };
     try {
+      if (_desktop) {
+        if (sourceId == null) throw StateError('桌面扩展缺少来源身份');
+        return await WindowsMihonHost.instance.request(
+          package: packageName,
+          sourceId: sourceId,
+          operation: operation,
+          version: versionCode,
+          signer: signerSha256,
+          page: page,
+          query: query,
+          manga: manga,
+          chapter: chapter,
+          pageData: pageData,
+          filters: filters,
+        );
+      }
       final raw = await _channel.invokeMethod<Object?>('mihonRequest', args);
       if (raw is Map) {
         return <String, Object?>{
@@ -172,6 +225,8 @@ class PlatformChannel {
       };
     } on MissingPluginException {
       return const <String, Object?>{'ok': false, 'error': '当前平台没有 Mihon 宿主'};
+    } on Object catch (error) {
+      return {'ok': false, 'error': SourceException.sanitizeMessage('$error')};
     }
   }
 

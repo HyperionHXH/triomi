@@ -1,10 +1,13 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/media_type.dart';
 import '../models/source_exception.dart';
+import 'github_public_delivery.dart';
 import 'http_adapter_stub.dart' if (dart.library.io) 'http_adapter_io.dart';
+import 'windows_mihon_host.dart';
 
 /// 请求体类型。
 enum RequestBodyType {
@@ -144,9 +147,12 @@ abstract class SourceHttpClient {
 
 /// 基于 dio 的实现。
 abstract interface class SecureRuleDownloadClient {
+  /// [afterStreamFailure] requests the one alternate route after a staging
+  /// consumer has discarded a partial body. Unsupported recovery rethrows it.
   Future<SourceByteStream> downloadRuleBytes(
     String url, {
     required String sourceId,
+    DioException? afterStreamFailure,
   });
 }
 
@@ -157,7 +163,8 @@ class DioSourceHttpClient
     String proxy = '',
     this.defaultUserAgent = 'Triomi/0.1.0',
     this.timeout = const Duration(seconds: 20),
-  }) : _dio =
+  }) : _allowPublicGithubDelivery = proxy.isEmpty,
+       _dio =
            dio ??
            Dio(
              BaseOptions(
@@ -173,6 +180,13 @@ class DioSourceHttpClient
   final Dio _dio;
   final String defaultUserAgent;
   final Duration timeout;
+  final bool _allowPublicGithubDelivery;
+  late final GithubPublicDelivery _githubDelivery = GithubPublicDelivery(
+    _dio,
+    timeout: timeout,
+    userAgent: defaultUserAgent,
+    enabled: _allowPublicGithubDelivery,
+  );
 
   /// Check each redirect before issuing the next request, so HTTPS rules can
   /// never be fetched over HTTP (including an intermediate downgrade).
@@ -180,8 +194,60 @@ class DioSourceHttpClient
   Future<SourceByteStream> downloadRuleBytes(
     String url, {
     required String sourceId,
+    DioException? afterStreamFailure,
   }) async {
-    var uri = Uri.parse(url);
+    final uri = Uri.parse(url);
+    final cancellation = SourceRequestCancellation.current;
+    if (afterStreamFailure != null) {
+      return _recoverRuleDownload(
+        uri,
+        sourceId,
+        cancellation,
+        afterStreamFailure,
+      );
+    }
+    try {
+      return await _downloadRuleUri(uri, cancellation: cancellation);
+    } on DioException catch (error) {
+      return _recoverRuleDownload(uri, sourceId, cancellation, error);
+    }
+  }
+
+  Future<SourceByteStream> _recoverRuleDownload(
+    Uri uri,
+    String sourceId,
+    SourceRequestCancellation? cancellation,
+    DioException error,
+  ) async {
+    // An API stream has already used its one alternate delivery attempt.
+    final usedAlternate = error.requestOptions.headers.entries.any(
+      (entry) =>
+          entry.key.toLowerCase() == 'accept' &&
+          entry.value == 'application/octet-stream',
+    );
+    if (!sourceId.startsWith('mihon:') ||
+        usedAlternate ||
+        !GithubPublicDelivery.canRecover(error) ||
+        cancellation?.cancelled == true) {
+      throw error;
+    }
+    final alternate = await _githubDelivery.releaseAssetUri(
+      uri,
+      cancelToken: cancellation?.token,
+    );
+    if (alternate == null) throw error;
+    return _downloadRuleUri(
+      alternate,
+      cancellation: cancellation,
+      accept: 'application/octet-stream',
+    );
+  }
+
+  Future<SourceByteStream> _downloadRuleUri(
+    Uri uri, {
+    SourceRequestCancellation? cancellation,
+    String? accept,
+  }) async {
     for (var hop = 0; hop <= 5; hop++) {
       if (uri.scheme != 'https' ||
           uri.host.isEmpty ||
@@ -190,11 +256,12 @@ class DioSourceHttpClient
       }
       final response = await _dio.get<ResponseBody>(
         uri.toString(),
+        cancelToken: cancellation?.token,
         options: Options(
           followRedirects: false,
           validateStatus: (_) => true,
           responseType: ResponseType.stream,
-          headers: {'User-Agent': defaultUserAgent},
+          headers: {'User-Agent': defaultUserAgent, 'Accept': ?accept},
           connectTimeout: timeout,
           sendTimeout: timeout,
           receiveTimeout: timeout,
@@ -230,15 +297,19 @@ class DioSourceHttpClient
     required String sourceId,
   }) async {
     try {
-      final response = await _dio.request<String>(
-        request.url,
+      Future<Response<String>> sendTo(
+        String url, {
+        String? accept,
+      }) => _dio.request<String>(
+        url,
         data: request.bodyType == RequestBodyType.none ? null : request.body,
         options: Options(
           method: request.method.toUpperCase(),
-          followRedirects: request.followRedirects,
+          followRedirects: accept == null ? request.followRedirects : false,
           headers: <String, String>{
             'User-Agent': defaultUserAgent,
             ...request.headers,
+            'Accept': ?accept,
           },
           contentType: switch (request.bodyType) {
             RequestBodyType.json => Headers.jsonContentType,
@@ -253,6 +324,27 @@ class DioSourceHttpClient
         cancelToken:
             (request.cancellation ?? SourceRequestCancellation.current)?.token,
       );
+      late Response<String> response;
+      try {
+        response = await sendTo(request.url);
+      } on DioException catch (error) {
+        if (sourceId != 'mihon-repository' ||
+            request.method.toUpperCase() != 'GET' ||
+            request.bodyType != RequestBodyType.none ||
+            request.headers.isNotEmpty ||
+            !GithubPublicDelivery.canRecover(error) ||
+            (request.cancellation ?? SourceRequestCancellation.current)
+                    ?.cancelled ==
+                true) {
+          rethrow;
+        }
+        final alternate = _githubDelivery.indexUri(Uri.parse(request.url));
+        if (alternate == null) rethrow;
+        response = await sendTo(
+          alternate.toString(),
+          accept: 'application/vnd.github.raw+json',
+        );
+      }
 
       final result = SourceResponse(
         statusCode: response.statusCode ?? 0,
@@ -310,6 +402,14 @@ class DioSourceHttpClient
     String method = 'GET',
   }) async {
     try {
+      if (Uri.tryParse(url)?.scheme == 'mihon-cover') {
+        if (kIsWeb ||
+            defaultTargetPlatform != TargetPlatform.windows ||
+            method != 'GET') {
+          throw const FormatException('桌面扩展封面需要在原来源刷新后读取');
+        }
+        return await WindowsMihonHost.instance.coverBytes(url, sourceId);
+      }
       final response = await _dio.request<List<int>>(
         url,
         options: Options(

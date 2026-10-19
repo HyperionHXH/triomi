@@ -8,7 +8,7 @@
 
 ## 下载与安装
 
-到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.164) 下载 **v0.11.0-test.164**：
+到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.165) 下载 **v0.11.0-test.165**：
 
 | 文件 | 用途 |
 | --- | --- |
@@ -21,6 +21,10 @@
 已有同签名版本可覆盖安装，勿卸载或清除数据；建议先在「我的 → 备份与恢复」导出本地备份。开发/Actions 验收包使用另一证书，不能直接覆盖正式包，遇到签名冲突不要通过卸载丢弃原数据。当前为测试版，不宣称完整全平台验收；详情见 [当前状态](docs/CURRENT_STATUS.md)。
 
 Windows 可任选 ZIP 或 MSI，不需要两个都装。MSI 默认安装到 `%LOCALAPPDATA%\Programs\Triomi`，不自动导入/删除旧 ZIP 目录；两种形式沿用同一应用数据目录。升级 MSI 前退出 Triomi，再运行新 MSI；卸载只移除安装文件和快捷方式，保留收藏、账号、设置及下载。MSI 目前没有 Windows Authenticode 发布者签名，系统可能提示未知发布者；请从本仓库 Release 下载并核对 SHA-256，Android 签名证书不能用于 Windows 签名。
+
+R165 桌面一致性：Windows与Android共用「追番 / 漫画 / 小说 / 我的」四工作区，通用设置只从「我的」进入；时间表换星期/筛选回到列表顶部，整天作品正常滚动查看，不逐批点击。桌面右键作品复用手机长按操作。Windows随完整包提供私有Suwayomi与Java兼容运行时，无需另装Java或启动服务器；扩展APK发布者照常验签，配套桌面JAR独立确认来源与SHA-256，不把APK签名冒称为JAR签名。
+GitHub原始索引或下载入口超时时，漫画扩展改用GitHub官方公共API读取同一仓库及原声明的同版本资产；不替换为旧归档、不使用第三方代理或私有令牌。显式代理、认证请求、TLS错误和取消不走该回退。桌面包因随附兼容运行时而增大，必须完整下载。
+
 
 R164 修复手机本地漫画库空状态贴边和长句换行：统一居中图标、标题及说明，整页可滚动并避让底部导入按钮。弹幕调查更正为多条独立路径：来源自带弹幕、用户自己的文件、自托管兼容服务均不等于复用官方应用密钥；当前实际能力和未实现部分见[弹幕接入说明](docs/DANMAKU.md)，本版不展示不可用入口。
 
@@ -64,12 +68,12 @@ R155 已完成 Kazumi / Komikku / MixN 日常交互重做：番剧详情与选�
    在线来源与搜索结果长按作品可打开快捷操作；书库长按仍用于多选，单选后可从更多进入本地资料编辑。编辑只覆盖标题、作者、简介，保留来源身份和原资料；来源刷新不覆盖本地修改，可恢复来源资料。
 2. 更新只需刷新，检查期间显示进度条；没有新增章节则显示空结果，来源失败如实显示，不增加停止/失败重试/待更新控制区。
 3. 浏览按插件管理组织，「已安装 / 浏览 / 仓库」各司其职；插件仅按名称查找，作品搜索与插件搜索不混用。
-   已安装插件可进入详情并查看各语言来源；可配置来源打开插件提供的原生设置页。来源菜单区分外部浏览器与应用内站点验证，后者保留原有会话处理；不支持配置的插件会明确说明，不伪造设置。
-4. 在「仓库」添加 **Mihon / Tachiyomi 兼容 APK 仓库的 HTTPS `index.json`**；Kazumi 地址不能放在这里。Windows 可从规则与来源设置进入 JS/API 来源。
+   已安装插件可进入详情并查看各语言来源；可配置来源打开插件提供的真实设置页，Android使用原生PreferenceScreen，Windows使用兼容运行时的对应偏好。外部浏览器不传递认证信息；Windows桌面插件没有共享网页会话，不显示不支持的验证入口。
+4. 在「仓库」添加 **Mihon / Tachiyomi 兼容 APK 仓库的 HTTPS `index.json`**；Kazumi地址不能放在这里。Windows可安装兼容扩展，也保留JS/API来源。
 5. 来源页保留在线作品名称/标签搜索、原生来源筛选与分页；点击作品标签进入该来源在线题材搜索。首次安装核对实际发布者，已安装项手动启用后才执行。
 6. 作品详情按漫画组织封面、作者、状态、阅读/书架操作和简介标签；章节是带分隔的连续懒列表，正倒序仍保留真实阅读索引，无需通过每50章范围分页。日期、下载状态及上次读到位置仅显示已有真实记录。漫画合并与迁移不混入番剧菜单。
 
-Android 实际执行兼容 APK，不是把 APK 当 JS 规则。已验证部分 MangaDex、拷贝漫画、Webtoons、xkcd 等扩展，不承诺全仓库兼容；Windows **不执行 APK**，请使用漫画规则目录中的 JS/API 来源。GNOME/Linux Komikku 的 server 插件格式不同，不能混装。首次未知发布者需确认，备份不迁移信任；恢复的 APK 默认停用待核验。
+Android实际执行兼容APK；Windows通过随包的Suwayomi v2.4.2366优先加载仓库声明的桌面JAR，没有JAR时尝试APK转换，转换/ABI失败如实报错，不关闭字节码校验。不承诺全仓库兼容。运行时仅监听随机本地回环端口并使用每次启动生成的认证，随应用退出；第三方插件仍是可执行代码，不是完整权限沙箱。GNOME/Linux Komikku插件格式不同，不能混装。首次未知APK发布者及新增/改变的桌面JAR需分别确认；备份不迁移信任，恢复的APK默认停用待核验。只复制EXE会缺少运行时，必须使用完整ZIP/MSI。
 
 阅读器支持作品独立设置、条漫/分页、双页、裁边、滤镜、预载和进度恢复；离线内容跨设备需要明确选择包含媒体的备份。
 
@@ -171,9 +175,9 @@ lib/
 ## 环境与构建
 
 - Flutter stable（当前验证版本 3.47.5 / Dart 3.13.4）
-- JDK 17+、Android SDK 36（当前项目 compileSdk/targetSdk；minSdk24）
-- Visual Studio 2022「使用 C++ 的桌面开发」工作负载（构建 Windows 端时需要）
-- Python 3.12+ 与 .NET 10 SDK（生成 Windows ZIP/MSI 时需要；WiX 6.0.2 由仓库工具清单自动还原）
+- Android：JDK17+、Android SDK36（minSdk24）；Windows完整扩展运行时打包：Windows x64 JDK21，`JAVA_HOME`指向该JDK
+- Visual Studio 2022「使用C++的桌面开发」工作负载
+- Python3.12+、.NET10 SDK（ZIP/MSI与WiX6.0.2工具还原）
 
 ```powershell
 cd triomi
@@ -200,6 +204,8 @@ Windows 一条龙构建与打包（在仓库根目录运行）：
 ```
 
 默认输出在 `build/release/`：`triomi-windows.zip`、`triomi-windows.msi`、`triomi-windows.update.json` 和 `SHA256SUMS.txt`。可用 `-OutputDirectory` 指定输出目录，或通过 `-Flutter`、`-Python`、`-Dotnet` 指定工具路径；脚本失败立即停止，不发布半成品。MSI 使用稳定 UpgradeCode，版本映射为 `major.minor.build`（例如 `0.1.0+153` → `0.1.153`），build 必须持续递增且不超过65535；较旧 MSI 拒绝降级，同版可修复。已有 ZIP 不受 MSI 升级/卸载管理。
+Windows脚本会下载并固定校验Suwayomi、apksig，使用JDK21的`jlink`生成随包Java；用户运行时不需要Java环境变量。可用`-JavaHome`、`-RuntimeCache`指定构建环境；`-SuwayomiJar`/`-ApksigJar`允许离线提供与固定SHA-256一致的原件，不接受替代字节。默认缓存不进发布包；上游版本、校验值、MPL/Apache/OpenJDK许可及源码链接随`extension-runtime`分发。若直接`flutter run -d windows`调试插件，先用`tools/prepare_windows_extension_runtime.py --output build/windows/x64/runner/Debug/extension-runtime`准备调试目录。
+
 
 
 > **注意**：本机若设置了 `HTTP_PROXY` / `HTTPS_PROXY` 等代理环境变量，`flutter test`

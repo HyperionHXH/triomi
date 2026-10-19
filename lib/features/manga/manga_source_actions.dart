@@ -11,11 +11,17 @@ import '../../core/source/source_registry.dart';
 import '../../core/source/source_website.dart';
 import '../../core/source/windows_source_session.dart';
 import '../sources/sources_page.dart';
+import 'windows_mihon_settings_page.dart';
 
 enum MangaSourceAction { settings, browser, session }
 
 String mangaSourceSettingsLabel(SourceEntry entry) =>
     entry.source is MihonSource ? '插件来源设置' : '规则与来源设置';
+
+bool mangaSourceSupportsSession(SourceEntry entry) =>
+    !(entry.source is MihonSource &&
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.windows);
 
 Future<void> performMangaSourceAction(
   BuildContext context,
@@ -44,11 +50,15 @@ Future<void> performMangaSourceAction(
       return;
     }
     if (action == MangaSourceAction.settings) {
-      final opened = await (source as MihonSource).openSettings();
-      if (!opened) message('当前平台不执行 Mihon APK，无法打开插件来源设置');
+      final opened = await openMihonPreferences(context, source as MihonSource);
+      if (!opened) message('当前宿主无法打开此来源设置');
       return;
     }
     if (action == MangaSourceAction.session && source is MihonSource) {
+      if (!mangaSourceSupportsSession(entry)) {
+        message('桌面插件使用独立兼容运行时；网站登录请使用插件提供的来源设置，网页会话不冒充已同步');
+        return;
+      }
       final saved = await source.openWebSession();
       if (saved) message('应用内站点会话已保存；不与外部浏览器共享，不代表验证已通过');
       return;
@@ -125,13 +135,14 @@ Future<MangaSourceAction?> showMangaSourceActionMenu(
               onTap: () =>
                   Navigator.pop(sheetContext, MangaSourceAction.browser),
             ),
-            ListTile(
-              leading: const Icon(Icons.language),
-              title: const Text('应用内网页 / 会话验证'),
-              subtitle: const Text('使用此来源的应用内会话，与外部浏览器分开'),
-              onTap: () =>
-                  Navigator.pop(sheetContext, MangaSourceAction.session),
-            ),
+            if (mangaSourceSupportsSession(entry))
+              ListTile(
+                leading: const Icon(Icons.language),
+                title: const Text('应用内网页 / 会话验证'),
+                subtitle: const Text('使用此来源的应用内会话，与外部浏览器分开'),
+                onTap: () =>
+                    Navigator.pop(sheetContext, MangaSourceAction.session),
+              ),
           ],
         ],
       ),

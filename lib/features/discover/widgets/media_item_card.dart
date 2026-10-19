@@ -29,6 +29,7 @@ class MediaItemCollection extends StatelessWidget {
     this.onLongPressItem,
     this.badgeOf,
     this.footer,
+    this.controller,
     this.preferGrid = false,
   });
 
@@ -39,6 +40,7 @@ class MediaItemCollection extends StatelessWidget {
 
   /// 列表尾部的附加内容（如「已经到底了」提示、加载指示器）。
   final Widget? footer;
+  final ScrollController? controller;
   final bool preferGrid;
 
   /// 自定义点击行为；不传时默认进入详情页。
@@ -85,6 +87,7 @@ class MediaItemCollection extends StatelessWidget {
     };
     if (useList) {
       return ListView.builder(
+        controller: controller,
         key: PageStorageKey('media/list/$sourceName'),
         padding: padding,
         itemCount: items.length + extra,
@@ -129,6 +132,7 @@ class MediaItemCollection extends StatelessWidget {
             items.any((item) => item.type != MediaType.anime);
         final ratio = appearance.ratio(isAnime: !hasPortrait);
         return CustomScrollView(
+          controller: controller,
           key: PageStorageKey('media/grid/$sourceName'),
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
@@ -204,6 +208,7 @@ class MediaItemCard extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       onLongPress: onLongPress,
+      onSecondaryTap: onLongPress,
       borderRadius: AppRadius.cardRadius,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -303,6 +308,7 @@ class MediaItemRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       onLongPress: onLongPress,
+      onSecondaryTap: onLongPress,
       borderRadius: AppRadius.cardRadius,
       child: Padding(
         padding: EdgeInsets.symmetric(
