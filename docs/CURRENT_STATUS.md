@@ -23,6 +23,8 @@ R165发布：源码`5d2644d`与标签`v0.11.0-test.165`已推送，[Release](htt
 
 CI修正提交`8586818`的[远端运行](https://github.com/HyperionHXH/triomi/actions/runs/39243690834)：Android验收APK、Windows完整ZIP/MSI、Python工具及全部文档/编码检查均成功，analyze成功；Flutter首次远端全量为1119通过/93失败，不能称CI全绿。主要失败是runner临时目录使用`RUNNER~1`别名，严格真实路径检查按设计拒绝；测试job改用runner独立长路径临时目录，不放宽生产路径/链接检查。两处16GiB边界夹具在NTFS上先显式标记稀疏，避免实际分配；DNS回归不再假定本机80端口空闲，改用动态关闭端口。以上只调整测试/构建环境，不改变165应用字节。
 
+最终CI补验：`e779747`的[远端运行39247680801](https://github.com/HyperionHXH/triomi/actions/runs/39247680801)四个job全部成功：Windows ZIP/MSI、Android验收APK、Python工具及文档/编码扫描、analyze与完整Flutter测试；GitHub测试报告为`1212 tests passed`，analyze为`No issues found`。本机修正后的四组Windows真实文件/回环边界40项通过；干净Git副本不带local.properties仍通过89项Python。远端验收签名APK不替换正式证书Release资产，构建成功也不代替前述实际UI和阅读验收；发布标签与五项资产均保持原字节。
+
 
 
 
