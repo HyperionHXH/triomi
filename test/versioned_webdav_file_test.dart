@@ -161,6 +161,13 @@ void main() {
     final store = VersionedWebDavBackup(WebDavClient(http: http));
     final sparse = File('${fixture.root.path}/too-large.zip');
     final output = await sparse.open(mode: FileMode.writeOnly);
+    if (Platform.isWindows) {
+      final result = await Process.run('fsutil', ['sparse', 'setflag', sparse.path]);
+      if (result.exitCode != 0) {
+        await output.close();
+        throw StateError('Cannot create sparse boundary fixture: ${result.stderr}');
+      }
+    }
     await output.setPosition(VersionedWebDavBackup.maxFileSize);
     await output.writeByte(1);
     await output.close();

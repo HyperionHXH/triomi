@@ -165,6 +165,9 @@ void main() {
   });
 
   test('failed system-resolved LK route tries DoH alternatives', () async {
+    final reservation = await ServerSocket.bind(InternetAddress('127.0.0.2'), 0);
+    final unavailablePort = reservation.port;
+    await reservation.close();
     var queries = 0;
     final resolver = SourceDnsFallback(
       systemLookup: (_) async => [InternetAddress('127.0.0.2')],
@@ -174,7 +177,7 @@ void main() {
       },
     );
     final connection = connectWithDnsFallback(
-      Uri.parse('http://www.lightnovel.fun/'),
+      Uri.parse('http://www.lightnovel.fun:$unavailablePort/'),
       resolver,
     );
 

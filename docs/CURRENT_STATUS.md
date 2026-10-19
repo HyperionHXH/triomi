@@ -21,6 +21,8 @@ R165发布：源码`5d2644d`与标签`v0.11.0-test.165`已推送，[Release](htt
 
 发布后核查远端CI，首次Windows打包失败定位为`windows-latest`漂移到VS2026/MSVC14.51，`webview_windows`依赖的实验协程触发STL1011；本机VS2022最终包此前已成功构建并实跑。普通打包及Release job统一固定受支持的`windows-2022`/VS2022，不屏蔽诊断或替换已发布字节。Linux工具检查同时发现C110历史说明将未提交的本机local.properties误写为仓库文件引用，现明确为本机配置，不生成或提交该文件；修正不改变应用行为，远端后续结果另记。
 
+CI修正提交`8586818`的[远端运行](https://github.com/HyperionHXH/triomi/actions/runs/39243690834)：Android验收APK、Windows完整ZIP/MSI、Python工具及全部文档/编码检查均成功，analyze成功；Flutter首次远端全量为1119通过/93失败，不能称CI全绿。主要失败是runner临时目录使用`RUNNER~1`别名，严格真实路径检查按设计拒绝；测试job改用runner独立长路径临时目录，不放宽生产路径/链接检查。两处16GiB边界夹具在NTFS上先显式标记稀疏，避免实际分配；DNS回归不再假定本机80端口空闲，改用动态关闭端口。以上只调整测试/构建环境，不改变165应用字节。
+
 
 
 

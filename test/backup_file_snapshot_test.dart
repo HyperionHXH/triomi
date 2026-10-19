@@ -254,6 +254,13 @@ void main() {
     addTearDown(() => dir.delete(recursive: true));
     final file = File('${dir.path}/oversized.zip');
     final output = await file.open(mode: FileMode.writeOnly);
+    if (Platform.isWindows) {
+      final result = await Process.run('fsutil', ['sparse', 'setflag', file.path]);
+      if (result.exitCode != 0) {
+        await output.close();
+        throw StateError('Cannot create sparse boundary fixture: ${result.stderr}');
+      }
+    }
     await output.setPosition(VersionedWebDavBackup.maxFileSize);
     await output.writeByte(0);
     await output.close();

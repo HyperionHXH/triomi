@@ -15,7 +15,7 @@ env:
 jobs:
   # 静态检查 + 单元测试：这是硬门槛（analyze 必须零问题、测试必须全绿）。
   test:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,6 +26,13 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      - name: Use canonical Windows test temporary directory
+        shell: pwsh
+        run: |
+          $testTemp = Join-Path $env:RUNNER_TEMP 'triomi-test-temp'
+          New-Item -ItemType Directory -Force $testTemp | Out-Null
+          "TEMP=$testTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$testTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - run: flutter pub get
       - run: python tools/setup_quickjs_dll.py
       - run: flutter analyze
