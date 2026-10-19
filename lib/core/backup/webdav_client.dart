@@ -159,8 +159,7 @@ class WebDavClient {
     RemoteBackupInfo? expected,
   }) async {
     final tag = expected?.etag;
-    if (expected?.exists == true &&
-        (tag == null || !_validRevisionTag(tag))) {
+    if (expected?.exists == true && (tag == null || !_validRevisionTag(tag))) {
       throw StateError('远端不提供强ETag，不能安全覆盖；请选择新的备份文件名');
     }
     await ensureDirectory(config);
@@ -317,6 +316,7 @@ class WebDavClient {
           headers: <String, String>{..._authHeaders(config), 'Depth': '0'},
           body: null,
           bodyType: RequestBodyType.none,
+          checkStatus: false,
         ),
         sourceId: sourceId,
       );
@@ -328,7 +328,13 @@ class WebDavClient {
           message: 'WebDAV认证或目录权限不足',
         );
       }
-      if (response.statusCode == 404) {
+      // Jianguoyun reports a missing parent collection as 409 rather than 404.
+      // Only this specific DAV error denotes absence; other conflicts must fail.
+      if (status == 404 ||
+          (status == 409 &&
+              RegExp(
+                r'<(?:[A-Za-z_][\w.-]*:)?exception\b[^>]*>\s*AncestorsNotFound\s*</',
+              ).hasMatch(response.body))) {
         return const RemoteBackupInfo(exists: false);
       }
       if (!response.isSuccess && response.statusCode != 207) {

@@ -164,7 +164,6 @@ abstract final class AppRouter {
               initialType: MediaType.tryParse(
                 state.uri.queryParameters['type'],
               ),
-              initialAccountSourceId: state.uri.queryParameters['account'],
             ),
           ),
           GoRoute(

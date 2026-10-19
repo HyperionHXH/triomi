@@ -111,17 +111,20 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
                     hintText: 'https://dav.example.com/dav/',
                   ),
                 ),
+                const SizedBox(height: AppSpacing.md),
                 TextField(
                   controller: _userController,
                   enabled: _initialized && !_busy,
                   decoration: const InputDecoration(labelText: '用户名'),
                 ),
+                const SizedBox(height: AppSpacing.md),
                 TextField(
                   controller: _passwordController,
                   enabled: _initialized && !_busy,
                   obscureText: true,
                   decoration: const InputDecoration(labelText: '密码 / 应用密码'),
                 ),
+                const SizedBox(height: AppSpacing.md),
                 TextField(
                   controller: _pathController,
                   enabled: _initialized && !_busy,
@@ -130,6 +133,8 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
                     hintText: 'triomi',
                   ),
                 ),
+                if (!widget.animeCollectionOnly)
+                  const SizedBox(height: AppSpacing.md),
                 if (!widget.animeCollectionOnly)
                   TextField(
                     controller: _fileController,
@@ -140,13 +145,15 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
                     ),
                   ),
                 const SizedBox(height: AppSpacing.sm),
-                Row(
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.xs,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: <Widget>[
                     FilledButton(
                       onPressed: _busy ? null : _saveAndCheck,
                       child: const Text('保存并检测'),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
                     Text(
                       config.isConfigured ? '已配置' : '未配置',
                       style: Theme.of(context).textTheme.bodySmall,

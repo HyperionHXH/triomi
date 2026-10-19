@@ -211,6 +211,7 @@ class LkClient {
         }
       }
     }
+
     visit(data);
     return tags.values.toList(growable: false);
   }
@@ -1416,13 +1417,7 @@ class LkClient {
       id: _int(source, 'book_id', 'id'),
       title: _fallback(_string(source, 'title', 'book_title'), '未命名作品'),
       author: _string(source, 'author_name', 'author', 'authorName'),
-      summary: _string(
-        source,
-        'summary_short',
-        'summary',
-        'content_preview',
-        'intro',
-      ),
+      summary: _bookSummary(source),
       coverUrl: _nullable(
         _string(
           source,
@@ -1576,6 +1571,51 @@ Object? _pick(Map<Object?, Object?> map, List<String> keys) {
     if (value != null) return value;
   }
   return null;
+}
+
+/// 发现接口的简介有过多种形态：标量、嵌套 book/meta 对象及 HTML 文本。
+/// 只读取明确的简介字段，不把对象的 `toString()` 当作用户可见简介。
+String _bookSummary(Map<Object?, Object?> source) {
+  const keys = <String>[
+    'summary_short',
+    'summary',
+    'long_summary',
+    'longSummary',
+    'description',
+    'long_description',
+    'longDescription',
+    'introduction',
+    'synopsis',
+    'content_preview',
+    'intro',
+    'brief',
+  ];
+
+  String visit(Object? node, int depth) {
+    if (node is String) return node.trim();
+    if (node is num) return node.toString();
+    if (depth >= 3) return '';
+    if (node is Map) {
+      for (final key in keys) {
+        final value = node[key];
+        final text = visit(value, depth + 1);
+        if (text.isNotEmpty) return text;
+      }
+      for (final key in const <String>[
+        'book',
+        'book_info',
+        'bookInfo',
+        'meta',
+        'data',
+      ]) {
+        final text = visit(node[key], depth + 1);
+        if (text.isNotEmpty) return text;
+      }
+    }
+    return '';
+  }
+
+  return visit(source, 0);
 }
 
 Map<Object?, Object?>? _obj(

@@ -30,10 +30,9 @@ import 'source_filter_controls.dart';
 /// 三条导入路径：粘贴规则文本、从剪贴板、从 URL 拉取。
 /// 导入失败必须显示具体原因（哪一项校验没过），不能只提示「导入失败」。
 class SourcesPage extends ConsumerStatefulWidget {
-  const SourcesPage({super.key, this.initialType, this.initialAccountSourceId});
+  const SourcesPage({super.key, this.initialType});
 
   final MediaType? initialType;
-  final String? initialAccountSourceId;
 
   @override
   ConsumerState<SourcesPage> createState() => _SourcesPageState();
@@ -43,7 +42,6 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
   bool _busy = false;
   late SourceFilters _filters;
   late MediaType _type;
-  bool _accountOpened = false;
 
   @override
   void initState() {
@@ -132,28 +130,6 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
   @override
   Widget build(BuildContext context) {
     final sources = ref.watch(sourcesProvider);
-    final requestedAccount = widget.initialAccountSourceId;
-    final snapshot = sources.asData?.value;
-    if (!_accountOpened && requestedAccount != null && snapshot != null) {
-      _accountOpened = true;
-      final entry = snapshot.entries
-          .where(
-            (entry) =>
-                entry.descriptor.id == requestedAccount &&
-                entry.descriptor.type == _type &&
-                entry.source is AccountProvider,
-          )
-          .firstOrNull;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (entry != null) {
-          _showAccountSheet(entry);
-        } else {
-          _toast('该站点账号入口暂不可用，请检查来源状态');
-        }
-      });
-    }
-
     return PageScaffold(
       title: widget.initialType == null ? '来源管理' : '${_type.label}来源',
       actions: <Widget>[
@@ -524,9 +500,13 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setState) => AlertDialog(
+          scrollable: true,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.lg,
+          ),
           title: Text('${entry.descriptor.name} · 账号'),
           content: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Row(

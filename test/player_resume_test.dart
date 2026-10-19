@@ -108,6 +108,7 @@ void main() {
           await tester.pump();
         }
       }
+
       // Danmaku keeps scheduling frames during playback. Wait for route
       // transitions without requiring the entire player to become idle.
       Future<void> settleRoute() async {
@@ -204,7 +205,10 @@ void main() {
         'duration': 120000,
         'playing': true,
       });
-      final previous = find.widgetWithIcon(IconButton, Icons.skip_previous_rounded);
+      final previous = find.widgetWithIcon(
+        IconButton,
+        Icons.skip_previous_rounded,
+      );
       final next = find.widgetWithIcon(IconButton, Icons.skip_next_rounded);
       expect(tester.widget<IconButton>(previous).onPressed, isNull);
       expect(tester.widget<IconButton>(next).onPressed, isNotNull);
@@ -216,12 +220,23 @@ void main() {
       ]) {
         await tester.binding.setSurfaceSize(size);
         await tester.pump();
-        expect(tester.takeException(), isNull,
-            reason: 'transport must fit the actual video viewport at $size');
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'transport must fit the actual video viewport at $size',
+        );
         final y = tester.getCenter(find.byTooltip('暂停')).dy;
-        for (final control in [previous, next, find.byTooltip('字幕'), find.byTooltip('画中画')]) {
-          expect(tester.getCenter(control).dy, y,
-              reason: 'episode, playback, subtitle and PiP actions share one row');
+        for (final control in [
+          previous,
+          next,
+          find.byTooltip('字幕'),
+          find.byTooltip('画中画'),
+        ]) {
+          expect(
+            tester.getCenter(control).dy,
+            y,
+            reason: 'episode, playback, subtitle and PiP actions share one row',
+          );
         }
       }
       await tester.binding.setSurfaceSize(const Size(320, 700));
@@ -236,19 +251,28 @@ void main() {
       await settleRoute();
       await tester.tap(find.text('关闭字幕'));
       await settleRoute();
-      expect(nativeCalls.any((call) => call.method == 'selectSubtitle'), isTrue);
+      expect(
+        nativeCalls.any((call) => call.method == 'selectSubtitle'),
+        isTrue,
+      );
       await tester.tap(find.byTooltip('更多选项'));
       await settleRoute();
       expect(find.text('剧集'), findsOneWidget);
       expect(find.text('播放设置'), findsOneWidget);
-      expect(find.text('弹幕设置'), findsOneWidget);
+      expect(find.text('弹幕设置'), findsNothing);
       await tester.tap(find.text('倍速 · 1.0x'));
       await settleRoute();
       expect(find.text('1.5x'), findsOneWidget);
       await tester.tap(find.text('1.5x'));
       await settleRoute();
-      expect(nativeCalls.any((call) => call.method == 'setRate' &&
-          (call.arguments as Map)['rate'] == 1.5), isTrue);
+      expect(
+        nativeCalls.any(
+          (call) =>
+              call.method == 'setRate' &&
+              (call.arguments as Map)['rate'] == 1.5,
+        ),
+        isTrue,
+      );
       await tester.tap(find.byTooltip('全屏'));
       await tester.binding.setSurfaceSize(const Size(720, 320));
       await settleRoute();
@@ -276,8 +300,11 @@ void main() {
         'duration': 100000,
         'playing': true,
       });
-      expect(tester.widget<IconButton>(next).onPressed, isNull,
-          reason: 'manual next must also stop at the playlist boundary');
+      expect(
+        tester.widget<IconButton>(next).onPressed,
+        isNull,
+        reason: 'manual next must also stop at the playlist boundary',
+      );
       expect(tester.widget<IconButton>(previous).onPressed, isNotNull);
       await event('completed', {
         'position': 100000,

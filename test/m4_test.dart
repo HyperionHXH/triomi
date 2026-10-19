@@ -193,6 +193,26 @@ void main() {
       expect(book.tags, containsAll(<String>['奇幻', '轻小说']));
     });
 
+    test('booksPage 从嵌套简介字段保留发现卡片简介', () async {
+      final http = routingHttpClient({
+        '/home-feed-v1': jsonEncode({
+          'code': 0,
+          'data': {
+            'items': [
+              {
+                'book_id': 1002,
+                'title': '嵌套简介小说',
+                'book_info': {'description': '<p>外部作品简介</p>'},
+              },
+            ],
+          },
+        }),
+      });
+      final books = await clientOf(http).discover('hot', 1);
+
+      expect(books.single.summary, '<p>外部作品简介</p>');
+    });
+
     test('章节正文返回 HTML 与纯文本，锁定章节可被解锁记录覆盖', () async {
       // 解锁与目录请求都需要会话；直接预置一个已登录的 key。
       await preferences.set('lk.securityKey', 'k-test-session');

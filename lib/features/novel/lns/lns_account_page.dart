@@ -91,9 +91,7 @@ class _LnsAccountPageState extends ConsumerState<LnsAccountPage> {
   }
 
   Future<void> _manageAccount() async {
-    await context.push(
-      '${AppRoutes.sources}?type=novel&account=light-novel-shelf',
-    );
+    await context.push('${AppRoutes.sources}?type=novel');
     if (mounted) await _load();
   }
 
@@ -185,6 +183,8 @@ class _LnsAccountPageState extends ConsumerState<LnsAccountPage> {
                     children: <Widget>[
                       Text(
                         profile.userName.isEmpty ? '轻书架用户' : profile.userName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleMedium,
                       ),
                       const SizedBox(height: AppSpacing.xxs),

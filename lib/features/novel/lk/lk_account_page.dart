@@ -89,9 +89,7 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
   }
 
   Future<void> _manageAccount() async {
-    await context.push(
-      '${AppRoutes.sources}?type=novel&account=light-novel-kingdom',
-    );
+    await context.push('${AppRoutes.sources}?type=novel');
     if (mounted) await _load();
   }
 
@@ -198,6 +196,8 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
                     children: <Widget>[
                       Text(
                         profile.nickname,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleMedium,
                       ),
                       const SizedBox(height: AppSpacing.xxs),

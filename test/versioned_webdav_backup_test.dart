@@ -108,7 +108,8 @@ void main() {
       utf8.decode(files[Uri.parse(store.head(config).fileUrl).path]!),
     ) as Map;
     final hash = ((head['chunks'] as List).last as Map)['sha256'];
-    files['/dav/triomi/objects/$hash.bin'] = Uint8List(100);
+    files['${Uri.parse(config.directoryUrl).path}/objects/$hash.bin'] =
+        Uint8List(100);
     await expectLater(store.download(config), throwsFormatException);
   });
 }

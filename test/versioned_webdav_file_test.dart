@@ -9,25 +9,33 @@ import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
 
 void main() {
-  test('real Dio loopback streams a 257MiB file and reuses two objects', () async {
-    final fixture = await _LoopbackDav.open();
-    addTearDown(fixture.close);
-    final http = DioSourceHttpClient();
-    addTearDown(http.close);
-    final store = VersionedWebDavBackup(WebDavClient(http: http));
-    final config = fixture.config;
-    final source = await _patternFile(fixture.root, 257);
-    final sourceHash = await _hash(source);
+  test(
+    'real Dio loopback streams a 257MiB file and reuses two objects',
+    () async {
+      final fixture = await _LoopbackDav.open();
+      addTearDown(fixture.close);
+      final http = DioSourceHttpClient();
+      addTearDown(http.close);
+      final store = VersionedWebDavBackup(WebDavClient(http: http));
+      final config = fixture.config;
+      final source = await _patternFile(fixture.root, 257);
+      final sourceHash = await _hash(source);
 
-    await store.uploadFile(config, source.path, const RemoteBackupInfo(exists: false));
-    final destination = File('${fixture.root.path}/roundtrip.zip');
-    final result = await store.downloadToFile(config, destination);
+      await store.uploadFile(
+        config,
+        source.path,
+        const RemoteBackupInfo(exists: false),
+      );
+      final destination = File('${fixture.root.path}/roundtrip.zip');
+      final result = await store.downloadToFile(config, destination);
 
-    expect(result?.bytes, await source.length());
-    expect(result?.sha256, sourceHash);
-    expect(await _hash(destination), sourceHash);
-    expect(fixture.objectPaths.length, 2);
-  }, timeout: const Timeout(Duration(minutes: 2)));
+      expect(result?.bytes, await source.length());
+      expect(result?.sha256, sourceHash);
+      expect(await _hash(destination), sourceHash);
+      expect(fixture.objectPaths.length, 2);
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
   test('stale CAS keeps previous head and immutable revisions', () async {
     final fixture = await _LoopbackDav.open();
@@ -40,19 +48,28 @@ void main() {
     final first = await _smallFile(fixture.root, 'first.zip', <int>[1, 2, 3]);
     final second = await _smallFile(fixture.root, 'second.zip', <int>[4, 5, 6]);
 
-    await store.uploadFile(config, first.path, await client.stat(store.head(config)));
+    await store.uploadFile(
+      config,
+      first.path,
+      await client.stat(store.head(config)),
+    );
     final firstHead = await client.stat(store.head(config));
     final firstRevision = fixture.revisionPaths.single;
     final firstRevisionBytes = fixture.bytesAt(firstRevision);
     await store.uploadFile(config, second.path, firstHead);
-    final secondHeadBytes = fixture.bytesAt(Uri.parse(store.head(config).fileUrl).path);
+    final secondHeadBytes = fixture.bytesAt(
+      Uri.parse(store.head(config).fileUrl).path,
+    );
 
     final stale = await _smallFile(fixture.root, 'stale.zip', <int>[7, 8, 9]);
     await expectLater(
       store.uploadFile(config, stale.path, firstHead),
       throwsA(isA<SourceException>()),
     );
-    expect(fixture.bytesAt(Uri.parse(store.head(config).fileUrl).path), secondHeadBytes);
+    expect(
+      fixture.bytesAt(Uri.parse(store.head(config).fileUrl).path),
+      secondHeadBytes,
+    );
     expect(fixture.bytesAt(firstRevision), firstRevisionBytes);
   });
 
@@ -64,37 +81,69 @@ void main() {
     final client = WebDavClient(http: http);
     final store = VersionedWebDavBackup(client);
     final config = fixture.config;
-    final source = await _smallFile(fixture.root, 'valid.zip', List<int>.generate(32, (i) => i));
-    await store.uploadFile(config, source.path, await client.stat(store.head(config)));
+    final source = await _smallFile(
+      fixture.root,
+      'valid.zip',
+      List<int>.generate(32, (i) => i),
+    );
+    await store.uploadFile(
+      config,
+      source.path,
+      await client.stat(store.head(config)),
+    );
     final headPath = Uri.parse(store.head(config).fileUrl).path;
     final manifest = jsonDecode(utf8.decode(fixture.bytesAt(headPath))) as Map;
-    final hash = ((manifest['chunks'] as List).single as Map)['sha256'] as String;
-    final objectPath = '/dav/triomi/objects/$hash.bin';
+    final hash =
+        ((manifest['chunks'] as List).single as Map)['sha256'] as String;
+    final objectPath =
+        '${Uri.parse(config.directoryUrl).path}/objects/$hash.bin';
     final originalObject = fixture.bytesAt(objectPath);
 
     fixture.setBytes(objectPath, List<int>.filled(originalObject.length, 0));
     final corrupt = File('${fixture.root.path}/corrupt.zip');
-    await expectLater(store.downloadToFile(config, corrupt), throwsFormatException);
+    await expectLater(
+      store.downloadToFile(config, corrupt),
+      throwsFormatException,
+    );
     expect(await corrupt.exists(), isFalse);
 
     fixture.setBytes(objectPath, originalObject);
     fixture.delete(objectPath);
     final missing = File('${fixture.root.path}/missing.zip');
-    await expectLater(store.downloadToFile(config, missing), throwsFormatException);
+    await expectLater(
+      store.downloadToFile(config, missing),
+      throwsFormatException,
+    );
     expect(await missing.exists(), isFalse);
 
-    fixture.setBytes(objectPath, List<int>.filled(VersionedWebDavBackup.chunkSize + 1, 9));
+    fixture.setBytes(
+      objectPath,
+      List<int>.filled(VersionedWebDavBackup.chunkSize + 1, 9),
+    );
     final oversized = File('${fixture.root.path}/oversized.zip');
-    await expectLater(store.downloadToFile(config, oversized), throwsFormatException);
+    await expectLater(
+      store.downloadToFile(config, oversized),
+      throwsFormatException,
+    );
     expect(await oversized.exists(), isFalse);
 
     fixture.setBytes(objectPath, originalObject);
     fixture.setBytes(
       headPath,
-      utf8.encode(jsonEncode({'version': 1, 'size': 1, 'sha256': 'bad', 'chunks': const <Object?>[]})),
+      utf8.encode(
+        jsonEncode({
+          'version': 1,
+          'size': 1,
+          'sha256': 'bad',
+          'chunks': const <Object?>[],
+        }),
+      ),
     );
     final malformed = File('${fixture.root.path}/malformed.zip');
-    await expectLater(store.downloadToFile(config, malformed), throwsFormatException);
+    await expectLater(
+      store.downloadToFile(config, malformed),
+      throwsFormatException,
+    );
     expect(await malformed.exists(), isFalse);
 
     fixture.setBytes(headPath, fixture.manifestFor(source));
@@ -117,7 +166,11 @@ void main() {
     await output.close();
 
     await expectLater(
-      store.uploadFile(fixture.config, sparse.path, const RemoteBackupInfo(exists: false)),
+      store.uploadFile(
+        fixture.config,
+        sparse.path,
+        const RemoteBackupInfo(exists: false),
+      ),
       throwsFormatException,
     );
     expect(fixture.requests, 0);
@@ -157,7 +210,12 @@ class _LoopbackDav {
   static Future<_LoopbackDav> open() async {
     final root = await Directory.systemTemp.createTemp('triomi-dav-test-');
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final fixture = _LoopbackDav(server, root, <String, File>{}, <String, String>{});
+    final fixture = _LoopbackDav(
+      server,
+      root,
+      <String, File>{},
+      <String, String>{},
+    );
     server.listen(fixture._handle);
     return fixture;
   }
@@ -168,9 +226,10 @@ class _LoopbackDav {
     password: 'loopback-password',
   );
 
-
-  Iterable<String> get objectPaths => files.keys.where((path) => path.contains('/objects/'));
-  Iterable<String> get revisionPaths => files.keys.where((path) => path.contains('/revisions/'));
+  Iterable<String> get objectPaths =>
+      files.keys.where((path) => path.contains('/objects/'));
+  Iterable<String> get revisionPaths =>
+      files.keys.where((path) => path.contains('/revisions/'));
 
   List<int> bytesAt(String path) => files[path]!.readAsBytesSync();
 
@@ -187,15 +246,17 @@ class _LoopbackDav {
   List<int> manifestFor(File source) {
     final hash = sha256.convert(source.readAsBytesSync()).toString();
     final chunkHash = sha256.convert(source.readAsBytesSync()).toString();
-    return utf8.encode(jsonEncode({
-      'version': 1,
-      'createdAt': DateTime.now().toUtc().toIso8601String(),
-      'size': source.lengthSync(),
-      'sha256': hash,
-      'chunks': [
-        {'sha256': chunkHash, 'size': source.lengthSync()},
-      ],
-    }));
+    return utf8.encode(
+      jsonEncode({
+        'version': 1,
+        'createdAt': DateTime.now().toUtc().toIso8601String(),
+        'size': source.lengthSync(),
+        'sha256': hash,
+        'chunks': [
+          {'sha256': chunkHash, 'size': source.lengthSync()},
+        ],
+      }),
+    );
   }
 
   Future<void> _handle(HttpRequest request) async {
@@ -210,7 +271,9 @@ class _LoopbackDav {
       } else {
         request.response.statusCode = 207;
         request.response.headers.set('ETag', tags[path]!);
-        request.response.write('<d:getcontentlength>${existing.lengthSync()}</d:getcontentlength>');
+        request.response.write(
+          '<d:getcontentlength>${existing.lengthSync()}</d:getcontentlength>',
+        );
       }
     } else if (request.method == 'GET') {
       if (existing == null) {
@@ -229,8 +292,10 @@ class _LoopbackDav {
         return;
       }
     } else if (request.method == 'PUT') {
-      final conflict = request.headers.value('If-None-Match') == '*' && existing != null ||
-          request.headers.value('If-Match') != null && request.headers.value('If-Match') != tags[path];
+      final conflict =
+          request.headers.value('If-None-Match') == '*' && existing != null ||
+          request.headers.value('If-Match') != null &&
+              request.headers.value('If-Match') != tags[path];
       if (conflict) {
         request.response.statusCode = 412;
       } else {

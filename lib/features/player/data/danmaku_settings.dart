@@ -5,6 +5,10 @@ import '../../../core/storage/preferences.dart';
 import '../../../core/storage/secure_store.dart';
 import 'dandanplay_client.dart';
 
+/// 弹幕功能暂缓开放：当前版本不携带可核验的官方弹弹play应用凭据。
+/// 来源规则声明的外部弹幕地址保留在协议层，待合规接入方案确认后再开放播放器入口。
+const bool danmakuFeatureEnabled = false;
+
 /// 弹幕显示与过滤设置（对齐 Kazumi 的弹幕设置项，逐项持久化）。
 class DanmakuSettings {
   const DanmakuSettings({

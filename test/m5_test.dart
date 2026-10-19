@@ -11,6 +11,7 @@ import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
+import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/storage/cover_store.dart';
 import 'package:triomi/core/storage/preferences.dart';
@@ -290,6 +291,24 @@ void main() {
   });
 
   group('WebDAV 客户端', () {
+    test('坚果云缺少父目录可首次同步，其他409不能误判为空', () async {
+      var body =
+          '<d:error xmlns:d="DAV:" xmlns:s="http://ns.jianguoyun.com">'
+          '<s:exception>AncestorsNotFound</s:exception></d:error>';
+      final http = FakeHttpClient(
+        (_) async => SourceResponse(statusCode: 409, body: body),
+      );
+      final client = WebDavClient(http: http);
+      const config = WebDavConfig(
+        baseUrl: 'https://dav.example.test/dav/',
+        username: 'user',
+        password: 'password',
+      );
+      expect((await client.stat(config)).exists, isFalse);
+      body = '<d:error xmlns:d="DAV:"><d:conflict/></d:error>';
+      await expectLater(client.stat(config), throwsA(isA<SourceException>()));
+    });
+
     test('上传会先建目录再 PUT，并带上 Basic 认证头', () async {
       final http = FakeHttpClient((request) async {
         if (request.method == 'MKCOL') {

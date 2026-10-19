@@ -128,7 +128,7 @@ class LkSource
     // 并进简介尾部展示（每行一个版本）。
     final alternates = book.alternateVersions;
     final versionNote = alternates.isEmpty
-        ? ''
+        ? (fresh.description ?? item.description ?? '')
         : '${fresh.description ?? item.description ?? ''}\n\n同书版本：'
               '${alternates.map((version) => version.title).join('、')}';
     // 列表页带来的旧字段保留：详情接口缺的字段不从 item 上抹掉。

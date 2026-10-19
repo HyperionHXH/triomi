@@ -8,7 +8,7 @@
 
 ## 下载与安装
 
-到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.162) 下载 **v0.11.0-test.162**：
+到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.163) 下载 **v0.11.0-test.163**：
 
 | 文件 | 用途 |
 | --- | --- |
@@ -22,7 +22,7 @@
 
 Windows 可任选 ZIP 或 MSI，不需要两个都装。MSI 默认安装到 `%LOCALAPPDATA%\Programs\Triomi`，不自动导入/删除旧 ZIP 目录；两种形式沿用同一应用数据目录。升级 MSI 前退出 Triomi，再运行新 MSI；卸载只移除安装文件和快捷方式，保留收藏、账号、设置及下载。MSI 目前没有 Windows Authenticode 发布者签名，系统可能提示未知发布者；请从本仓库 Release 下载并核对 SHA-256，Android 签名证书不能用于 Windows 签名。
 
-R162（0.11.0+162）重做应用更新页：版本卡片、更新说明与历史版本选择，真实下载/暂存/核验阶段和可取消进度，Android 稍后/立即安装与系统权限交接，Windows 完整 ZIP 核验后打开位置。最终Flutter1176项通过/3项跳过、Python89项通过、静态检查零问题；实际更新器边界与平台验收见[当前状态](docs/CURRENT_STATUS.md)。
+R163 修复小说发现/详情简介字段兼容与账号入口自动弹窗；修复坚果云首次同步在父目录不存在时返回`409 AncestorsNotFound`而被误判为连接失败，保留Triomi独立同步目录，并用本机Kazumi配置完成只读联调；调整WebDAV表单间距、小说账号与本地漫画文件库文字边界。弹幕本版暂隐藏，接入调查与恢复条件见[弹幕暂缓说明](docs/DANMAKU.md)。
 
 R161（0.11.0+161）移除我的混合账号卡片，设置按追番、漫画、小说拆分；三类详情和菜单分别组织，漫画连续懒章节列表、小说真实分卷，三类均可显式选章下载。小说发现/书架增加卡片间距及边界，保留正常小说解锁和换源。专项Review闭合，最终Flutter1150项通过/3跳过、Python89项通过、静态检查零问题；Android保数据、200%暗色及Windows真实在线发现/宽窄窗口范围见[当前状态](docs/CURRENT_STATUS.md)。
 

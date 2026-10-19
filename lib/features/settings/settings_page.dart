@@ -15,6 +15,7 @@ import '../library/migration_plans_page.dart';
 import '../local/local_comic_library_page.dart';
 import '../manga/manga_extensions_page.dart';
 import '../novel/novel_workspace_page.dart';
+import '../player/data/danmaku_settings.dart';
 import 'app_update_page.dart';
 import 'cache_management_page.dart';
 import 'cover_appearance_settings_page.dart';
@@ -250,12 +251,13 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                   '番剧规则与来源',
                   '${AppRoutes.sources}?type=anime',
                 ),
-                route(
-                  Icons.speaker_notes_outlined,
-                  '弹幕设置',
-                  AppRoutes.danmakuSettings,
-                  subtitle: '显示、屏蔽词与弹弹play；播放选项在播放器内调整',
-                ),
+                if (danmakuFeatureEnabled)
+                  route(
+                    Icons.speaker_notes_outlined,
+                    '弹幕设置',
+                    AppRoutes.danmakuSettings,
+                    subtitle: '显示、屏蔽词与弹弹play；播放选项在播放器内调整',
+                  ),
               ],
             ),
           ],
