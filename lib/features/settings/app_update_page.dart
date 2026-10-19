@@ -3,12 +3,16 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/theme/app_tokens.dart';
+import '../../core/widgets/app_card.dart';
 import 'app_update_service.dart';
+import 'app_update_widgets.dart';
 
 /// Network checks and installation always require an explicit user action.
 class AppUpdatePage extends StatefulWidget {
   const AppUpdatePage({super.key, this.service});
   final AppUpdateService? service;
+
   @override
   State<AppUpdatePage> createState() => _AppUpdatePageState();
 }
@@ -19,242 +23,1230 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
   final _manifestPath = TextEditingController();
   AppUpdateInfo? _current;
   AppUpdateCandidate? _candidate;
+  AppUpdateCandidate? _handoffInFlight;
   List<AppUpdateRelease>? _releases;
   AppUpdateRelease? _selected;
   String? _message;
   String? _operation;
+  String? _operationTarget;
   AppUpdateProgress? _progress;
   AppUpdateCancellation? _token;
+  Future<void> Function()? _retry;
   final _progressClock = Stopwatch()..start();
   int _lastProgressAt = 0;
+  bool _failed = false;
+  bool _prompting = false;
+  bool _backPrompting = false;
+  bool _cancellable = true;
+  bool _handedOff = false;
+  bool _handoffWindows = false;
+  bool _unsupportedPlatform = false;
+
   bool get _busy => _operation != null;
+  bool get _locked => _busy || _prompting || _backPrompting;
+  bool get _android => _current?.platform == 'android';
+  bool get _windows => _current?.platform == 'windows';
+  bool get _supported => !_unsupportedPlatform && (_android || _windows);
+  String get _assetName =>
+      _windows ? 'triomi-windows.zip' : 'triomi-android.apk';
+
+  Object get _listStage {
+    if (_busy) {
+      return _token!;
+    }
+    if (_message != null) {
+      return 'result';
+    }
+    if (_handedOff) {
+      return 'handoff';
+    }
+    if (_candidate != null) {
+      return 'ready';
+    }
+    return 'overview';
+  }
 
   @override
   void initState() {
     super.initState();
     _service.onProgress = (progress) {
       final now = _progressClock.elapsedMilliseconds;
-      if (mounted && _busy && (now - _lastProgressAt >= 100 || progress.bytes == progress.total)) {
+      if (mounted &&
+          _busy &&
+          _token?.cancelled != true &&
+          (progress.phase != _progress?.phase ||
+              now - _lastProgressAt >= 100 ||
+              progress.bytes == progress.total)) {
         _lastProgressAt = now;
         setState(() => _progress = progress);
       }
     };
     _service.attachProgress();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCurrent());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadCurrent();
+    });
   }
+
   @override
   void dispose() {
+    _service.onProgress = null;
     final token = _token;
-    if (token != null) _service.cancel(token).catchError((Object _) {});
+    if (token != null && _cancellable) {
+      token.cancel();
+      _service.cancel(token).catchError((Object _) {});
+    }
     final candidate = _candidate;
-    if (candidate != null && candidate.offered.platform == 'android') {
+    // Once a launcher is reading the verified file, route disposal must not
+    // remove it. A failed launcher still cleans it below, even after disposal.
+    if (candidate != null &&
+        !_handedOff &&
+        !identical(candidate, _handoffInFlight)) {
       _service.discard(candidate).catchError((Object _) {});
     }
-    _zipPath.dispose(); _manifestPath.dispose();
+    _zipPath.dispose();
+    _manifestPath.dispose();
     _service.close();
     super.dispose();
   }
 
-  Future<void> _run(String operation, Future<void> Function(AppUpdateCancellation) action) async {
-    if (_busy) return;
+  Future<void> _run(
+    String operation,
+    Future<void> Function(AppUpdateCancellation) action, {
+    required String targetLabel,
+    Future<void> Function()? retry,
+    bool cancellable = true,
+  }) async {
+    if (!mounted || _busy) return;
     final token = AppUpdateCancellation();
-    setState(() { _operation = operation; _token = token; _progress = null; _message = null; });
-    try { await action(token); }
-    on AppUpdateCancelled { if (mounted) setState(() => _message = '操作已取消；未启动安装器，也未修改应用数据。'); }
-    on PlatformException catch (error) {
-      if (mounted) setState(() => _message = error.code == 'cancelled' ? '操作已取消；未启动安装器。' : (error.message ?? '系统更新操作失败；未安装'));
+    setState(() {
+      _operation = operation;
+      _operationTarget = targetLabel;
+      _token = token;
+      _cancellable = cancellable;
+      _progress = null;
+      _message = null;
+      _failed = false;
+      _retry = null;
+    });
+    try {
+      await action(token);
+    } on AppUpdateCancelled {
+      if (mounted) {
+        setState(() {
+          _message = '已取消本次操作，未启动安装器。应用和个人数据保持不变。';
+        });
+      }
+    } on PlatformException catch (error) {
+      _reportFailure(
+        error.code == 'cancelled'
+            ? '系统已取消本次操作，未安装更新。'
+            : error.message ?? '系统未能完成更新操作，尚未安装。',
+        retry,
+      );
+    } on FormatException catch (error) {
+      _reportFailure(error.message, retry);
+    } on HttpException catch (error) {
+      _reportFailure(error.message, retry);
+    } catch (_) {
+      _reportFailure('更新操作未完成。请检查网络、文件及可用空间；未安装或覆盖现有应用。', retry);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _operation = null;
+          _token = null;
+          _progress = null;
+        });
+      }
     }
-    on FormatException catch (error) { if (mounted) setState(() => _message = error.message); }
-    on HttpException catch (error) { if (mounted) setState(() => _message = error.message); }
-    catch (_) { if (mounted) setState(() => _message = '更新操作未完成；请检查网络、文件和可用磁盘空间。未安装或覆盖现有应用。'); }
-    finally { if (mounted) setState(() { _operation = null; _token = null; _progress = null; }); }
   }
-  Future<void> _loadCurrent() => _run('读取实际安装版本与字节散列', (token) async {
-    final current = await _service.current(); token.check();
-    if (mounted) setState(() => _current = current);
-  });
-  Future<void> _checkReleases() => _run('查询官方 GitHub 发布版本（包含测试版）', (token) async {
-    final current = await _service.current(); token.check();
-    final releases = await _service.releases(token); token.check();
-    if (mounted) {
-      setState(() {
-        _current = current; _releases = releases; _selected = releases.firstOrNull;
-        _message = releases.isEmpty ? '暂无可识别的发布版本。' : releases.first.isNewerThan(current)
-          ? '发现新版本 ${releases.first.tag}，可选择版本下载。'
-          : '当前构建 ${current.versionCode} 已是最新，或比公开发布版本更新。';
-      });
+
+  void _reportFailure(String message, Future<void> Function()? retry) {
+    if (!mounted) return;
+    setState(() {
+      _failed = true;
+      _message = message;
+      _retry = retry;
+    });
+  }
+
+  Future<AppUpdateInfo?> _readCurrent(AppUpdateCancellation token) async {
+    try {
+      final current = await _service.current();
+      token.check();
+      return current;
+    } on UnsupportedError {
+      token.check();
+      if (mounted) {
+        setState(() {
+          _unsupportedPlatform = true;
+          _current = null;
+        });
+      }
+      return null;
     }
-  });
-  Future<void> _acceptCandidate(AppUpdateCandidate? candidate) async {
-    if (candidate == null) { if (mounted) setState(() => _message = '已取消文件选择；未修改现有应用。'); return; }
-    final old = _candidate;
-    if (old != null) await _service.discard(old);
-    if (!mounted || _token?.cancelled == true) {
-      await _service.discard(candidate);
-      if (_token?.cancelled == true) throw const AppUpdateCancelled();
+  }
+
+  Future<void> _loadCurrent() async {
+    if (_unsupportedPlatform) {
       return;
     }
-    setState(() { _candidate = candidate; _current = candidate.current; });
+    await _run(
+      '正在读取当前版本',
+      (token) async {
+        final current = await _readCurrent(token);
+        if (current != null) {
+          _publishCurrent(current);
+        }
+      },
+      targetLabel: '当前安装版本',
+      retry: _loadCurrent,
+    );
   }
+
+  void _publishCurrent(AppUpdateInfo current) {
+    if (!mounted) return;
+    final candidate = _candidate;
+    final refreshed = candidate == null
+        ? null
+        : AppUpdateCandidate(
+            current: current,
+            offered: candidate.offered,
+            path: candidate.path,
+            bytes: candidate.bytes,
+            source: candidate.source,
+            decision: appUpdateDecision(
+              current,
+              candidate.offered,
+              signatureVerified: candidate.signatureVerified,
+            ),
+            signatureVerified: candidate.signatureVerified,
+            manifestPath: candidate.manifestPath,
+          );
+    setState(() {
+      _current = current;
+      _unsupportedPlatform =
+          current.platform != 'android' && current.platform != 'windows';
+      _candidate = refreshed;
+    });
+  }
+
+  Future<void> _checkReleases() async {
+    if (_unsupportedPlatform) {
+      return;
+    }
+    await _run(
+      '正在检查官方更新',
+      (token) async {
+        final current = await _readCurrent(token);
+        if (current == null) {
+          return;
+        }
+        _publishCurrent(current);
+        if (!_supported) {
+          return;
+        }
+        final releases = await _service.releases(token);
+        token.check();
+        if (mounted) {
+          setState(() {
+            _releases = releases;
+            _selected = releases.firstOrNull;
+            if (releases.isEmpty) {
+              _message = '官方仓库暂时没有可识别的发布版本，请稍后再检查。';
+            }
+          });
+        }
+      },
+      targetLabel: 'Triomi 官方更新',
+      retry: _checkReleases,
+    );
+  }
+
+  Future<void> _cancelActive() async {
+    final token = _token;
+    if (token == null || token.cancelled || !_cancellable) return;
+    token.cancel();
+    setState(() {});
+    try {
+      await _service.cancel(token);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _message = '已请求停止，正在等待当前系统操作结束。请留在此页。';
+        });
+      }
+    }
+  }
+
+  Future<T?> _prompt<T>(Future<T?> Function() show) async {
+    if (!mounted || _locked) return null;
+    setState(() => _prompting = true);
+    try {
+      return await show();
+    } finally {
+      if (mounted) setState(() => _prompting = false);
+    }
+  }
+
+  Future<bool?> _confirm(
+    String title,
+    String message,
+    String action, {
+    String? actionKey,
+  }) => _prompt(
+    () => showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        insetPadding: const EdgeInsets.all(AppSpacing.md),
+        constraints: const BoxConstraints(maxWidth: 560),
+        title: Text(title),
+        content: SizedBox(width: 480, child: Text(message)),
+        actions: [
+          TextButton(
+            key: const ValueKey('app-update-confirm-cancel'),
+            style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: actionKey == null ? null : ValueKey(actionKey),
+            style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(action),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  String? _releaseIssue(AppUpdateRelease release) {
+    final current = _current;
+    if (current == null) return '请先读取当前安装版本。';
+    if (!_supported) return '此平台请使用对应的平台发布渠道。';
+    if (release.versionCode < current.versionCode) {
+      return '这是较早的版本，为保护应用数据不提供降级。';
+    }
+    if (release.versionCode == current.versionCode) return '已安装此构建，无需重复安装。';
+    if (!release.assets.containsKey(_assetName)) {
+      return '此版本尚未提供 ${_windows ? 'Windows 完整 ZIP' : 'Android APK'}，可选择其他发布版本。';
+    }
+    if (_windows && !release.assets.containsKey('triomi-windows.update.json')) {
+      return '此版本尚未提供 Windows 完整成员清单，暂时无法安全更新。';
+    }
+    return null;
+  }
+
+  Future<void> _acceptCandidate(
+    AppUpdateCandidate? candidate,
+    AppUpdateCancellation token,
+  ) async {
+    if (candidate == null) {
+      token.check();
+      if (mounted) setState(() => _message = '已取消文件选择，未修改现有应用。');
+      return;
+    }
+    try {
+      token.check();
+      if (!mounted) {
+        await _service.discard(candidate);
+        return;
+      }
+      final old = _candidate;
+      if (old != null && !_handedOff) await _service.discard(old);
+      token.check();
+      if (!mounted) {
+        await _service.discard(candidate);
+        return;
+      }
+      setState(() {
+        _candidate = candidate;
+        _current = candidate.current;
+        _handedOff = false;
+      });
+    } catch (_) {
+      await _service.discard(candidate);
+      rethrow;
+    }
+  }
+
   Future<void> _downloadRelease() async {
     final release = _selected;
-    if (release == null || _current == null || !release.isNewerThan(_current!)) return;
-    final consent = await _confirm('下载 ${release.tag}？',
-      '从官方 GitHub $appUpdateRepository 下载${Platform.isAndroid ? '原签名 APK' : '完整 Windows ZIP 与成员清单'}。'
-      '将核对 GitHub 摘要 / SHA256SUMS、实际版本与字节。最多 512 MiB；不会自动安装。'
-      '${Platform.isWindows ? '\n\nWindows 发布包未签名，SHA-256 校验完整性不等同发布者签名。' : '\n\nAndroid 必须通过系统 APK 验签并匹配当前实际安装证书。'}', '下载并核验');
+    if (_locked || release == null || _releaseIssue(release) != null) return;
+    final consent = await _confirm(
+      '下载 ${release.version} · 构建 ${release.versionCode}',
+      '从官方 GitHub $appUpdateRepository 匿名下载${_windows ? '完整 Windows ZIP 与成员清单' : 'Android APK'}。'
+          '下载后将核对文件大小、SHA-256 和实际版本，最多 512 MiB，不会自动安装。\n\n'
+          '${_windows ? 'Windows 包未签名：完整性校验不等同发布者签名。' : 'Android 还需通过系统验签，并匹配当前实际安装证书。'}',
+      '下载并核验',
+      actionKey: 'app-update-download-confirm',
+    );
     if (consent != true || !mounted) return;
-    await _run('下载并核验官方更新包', (token) async {
-      await _acceptCandidate(await _service.downloadRelease(release, token));
-    });
+    AppUpdateCandidate? downloaded;
+    await _run(
+      '正在下载更新',
+      (token) async {
+        downloaded = await _service.downloadRelease(release, token);
+        await _acceptCandidate(downloaded, token);
+      },
+      targetLabel: '${release.version} · 构建 ${release.versionCode}',
+      retry: _downloadRelease,
+    );
+    if (mounted && identical(downloaded, _candidate)) {
+      await _offerReady(downloaded: true);
+    }
   }
-  Future<void> _pickApk() => _run('选择并静态核验 APK', (token) async {
-    await _acceptCandidate(await _service.pickApk(token));
-  });
-  Future<void> _windows() async {
-    final consent = await _confirm('核验本地 Windows 独立更新包？',
-      '只复制并验证 ZIP、外部完整性清单、所有成员及实际 EXE 版本。请自行确认文件来源。'
-      '不会运行候选或覆盖正在运行的 EXE。哈希不代表发布者签名。', '确认来源并核验');
+
+  Future<void> _pickApk() async {
+    AppUpdateCandidate? picked;
+    await _run(
+      '正在核验本地 APK',
+      (token) async {
+        picked = await _service.pickApk(token);
+        await _acceptCandidate(picked, token);
+      },
+      targetLabel: '本地更新包',
+      retry: _pickApk,
+    );
+    if (mounted && picked != null && identical(picked, _candidate)) {
+      await _offerReady();
+    }
+  }
+
+  Future<void> _windowsPackage() async {
+    final consent = await _confirm(
+      '核验本地 Windows 更新包',
+      '仅复制并核验 ZIP、外部完整性清单、所有成员和 EXE 实际版本。'
+          '请自行确认文件来源；哈希不代表发布者签名。不会运行候选文件或覆盖当前程序。',
+      '确认来源并核验',
+    );
     if (consent != true || !mounted) return;
-    await _run('核验 Windows ZIP 与所有成员', (token) async {
-      await _acceptCandidate(await _service.stageWindowsBundle(_zipPath.text.trim(), _manifestPath.text.trim(), token));
-    });
+    AppUpdateCandidate? staged;
+    await _run(
+      '正在核验 Windows 更新包',
+      (token) async {
+        staged = await _service.stageWindowsBundle(
+          _zipPath.text.trim(),
+          _manifestPath.text.trim(),
+          token,
+        );
+        await _acceptCandidate(staged, token);
+      },
+      targetLabel: '本地更新包',
+      retry: _windowsPackage,
+    );
+    if (mounted && staged != null && identical(staged, _candidate)) {
+      await _offerReady();
+    }
   }
-  Future<bool?> _confirm(String title, String message, String action) => showDialog<bool>(
-    context: context, builder: (context) => AlertDialog(title: Text(title),
-      content: SingleChildScrollView(child: SelectableText(message)), actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(action)),
-      ]));
-  Future<void> _install() async {
+
+  Future<void> _offerReady({bool downloaded = false}) async {
     final candidate = _candidate;
-    if (candidate == null || !candidate.canInstall || _busy) return;
-    bool allowed;
-    try { allowed = await _service.canInstall(); }
-    catch (_) { if (mounted) setState(() => _message = '无法读取系统安装权限；未启动安装器。'); return; }
-    if (!mounted) return;
+    if (candidate == null || !candidate.canInstall || _locked) return;
+    final consent = await _prompt(
+      () => showAppUpdateReadyDialog(
+        context,
+        candidate: candidate,
+        windows: candidate.offered.platform == 'windows',
+        downloaded: downloaded,
+      ),
+    );
+    if (consent != true || !mounted || !identical(candidate, _candidate)) {
+      return;
+    }
+    // This dialog is the app's explicit consent. The native installer still
+    // requires its own OS confirmation; do not add a second app confirmation.
+    if (candidate.offered.platform == 'android') {
+      await _install(candidate);
+    } else if (candidate.offered.platform == 'windows') {
+      await _handoff(candidate, windows: true);
+    }
+  }
+
+  Future<void> _install(AppUpdateCandidate candidate) async {
+    if (_locked || !candidate.canInstall || !identical(candidate, _candidate)) {
+      return;
+    }
+    bool allowed = false;
+    bool permissionRead = false;
+    await _run(
+      '正在读取系统安装权限',
+      (token) async {
+        allowed = await _service.canInstall();
+        token.check();
+        permissionRead = true;
+      },
+      targetLabel:
+          '${candidate.offered.version} · 构建 ${candidate.offered.versionCode}',
+      retry: _offerReady,
+    );
+    if (!mounted ||
+        !permissionRead ||
+        _failed ||
+        _backPrompting ||
+        !identical(candidate, _candidate)) {
+      return;
+    }
     if (!allowed) {
-      final open = await _confirm('允许 Triomi 请求安装',
-        '可打开仅针对 Triomi 的系统设置，由你自行授权。允许后返回此页，再次确认具体候选。', '打开系统设置');
+      final open = await _prompt(() => showAppUpdatePermissionDialog(context));
       if (open == true && mounted) {
-        await _run('打开未知来源系统设置', (_) => _service.openUnknownSources());
+        await _run(
+          '正在打开 Triomi 安装权限设置',
+          (_) => _service.openUnknownSources(),
+          targetLabel:
+              '${candidate.offered.version} · 构建 ${candidate.offered.versionCode}',
+          cancellable: false,
+        );
+        if (mounted && !_failed) {
+          setState(() {
+            _message = '返回后请再次点击安装并确认此更新包；不会自动启动安装。';
+          });
+        }
       }
       return;
     }
-    final consent = await _confirm('打开系统安装器？',
-      '当前：${_identity(candidate.current)}\n\n候选：${_identity(candidate.offered)}\n'
-      '来源：${candidate.source}\n\n交接前将再次核验。最终是否安装由系统和你决定，不清除应用数据。', '打开系统安装确认');
-    if (consent != true || !mounted) return;
-    await _run('再次核验并交给系统安装器', (_) async {
-      await _service.launchInstaller(candidate);
-      if (mounted) setState(() { _candidate = null; _message = '已打开系统安装器，尚未确认安装成功。暂存 APK 保留供系统读取。'; });
-    });
+    await _handoff(candidate, windows: false);
   }
-  Future<void> _revealWindows() async {
-    final candidate = _candidate;
-    if (candidate == null) return;
-    final consent = await _confirm('打开已核验的完整 Windows 包？',
-      '将在文件资源管理器中选中 ZIP。右键“全部解压缩”到一个新目录，然后关闭 Triomi，再从新目录运行 triomi.exe。'
-      '所有 DLL 和 data 文件必须保留在一起。请更新原快捷方式指向新目录。\n\n'
-      '不会覆盖正在运行的 EXE；原应用数据保留。此动作不代表已经安装。', '打开文件位置');
-    if (consent != true || !mounted) return;
-    await _run('重新核对 ZIP 并打开文件位置', (token) async {
-      await _service.revealWindowsBundle(candidate, token);
-      if (mounted) setState(() => _message = '已请求打开文件资源管理器。请解压到新目录，关闭 Triomi 后运行新目录中的 triomi.exe。尚未安装。');
-    });
+
+  Future<void> _handoff(
+    AppUpdateCandidate candidate, {
+    required bool windows,
+  }) async {
+    final alreadyHandedOff = _handedOff;
+    await _run(
+      windows ? '正在打开更新包位置' : '正在打开系统安装器',
+      (token) async {
+        _handoffInFlight = candidate;
+        try {
+          if (windows) {
+            await _service.revealWindowsBundle(candidate, token);
+          } else {
+            await _service.launchInstaller(candidate);
+          }
+          if (mounted) {
+            setState(() {
+              _handedOff = true;
+              _handoffWindows = windows;
+            });
+          }
+        } catch (_) {
+          if (!mounted && !alreadyHandedOff) await _service.discard(candidate);
+          rethrow;
+        } finally {
+          _handoffInFlight = null;
+        }
+      },
+      targetLabel:
+          '${candidate.offered.version} · 构建 ${candidate.offered.versionCode}',
+      retry: _offerReady,
+      cancellable: false,
+    );
   }
+
   Future<void> _discard() async {
     final candidate = _candidate;
     if (candidate == null) return;
-    await _run('移除本次更新暂存', (_) async {
-      await _service.discard(candidate);
-      if (mounted) setState(() { _candidate = null; _message = '已移除本次更新暂存，应用数据不变。'; });
-    });
+    await _run(
+      '正在移除更新暂存',
+      (_) async {
+        await _service.discard(candidate);
+        if (mounted) {
+          setState(() {
+            _candidate = null;
+            _message = '已移除本次更新包，应用和个人数据保持不变。';
+          });
+        }
+      },
+      targetLabel:
+          '${candidate.offered.version} · 构建 ${candidate.offered.versionCode}',
+      retry: _discard,
+    );
+  }
+
+  Future<void> _showHistory() async {
+    final releases = _releases;
+    if (_locked || releases == null || releases.isEmpty) return;
+    final selected = await _prompt(
+      () => showModalBottomSheet<AppUpdateRelease>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (context) => SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.78,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  0,
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '选择发布版本',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '关闭版本列表',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                child: Text('包含测试版。只允许更高构建，文件仍需下载后完整核验。'),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  itemCount: releases.length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(height: AppSpacing.xs),
+                  itemBuilder: (context, index) {
+                    final release = releases[index];
+                    final chosen = identical(release, _selected);
+                    return AppCard(
+                      key: ValueKey(
+                        'app-update-release-${release.versionCode}',
+                      ),
+                      onTap: () => Navigator.pop(context, release),
+                      child: Row(
+                        children: [
+                          Icon(
+                            chosen
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_unchecked,
+                            color: chosen
+                                ? Theme.of(context).colorScheme.primary
+                                : null,
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${release.version} · 构建 ${release.versionCode}',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                Text(
+                                  '${release.prerelease ? '测试版 · ' : ''}${_releaseDate(release.publishedAt)}',
+                                ),
+                                Text(
+                                  _releaseIssue(release) ?? '可下载更新',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (mounted && selected != null) {
+      setState(() {
+        _selected = selected;
+        _message = null;
+        _failed = false;
+        _retry = null;
+      });
+    }
+  }
+
+  Future<void> _showNotes(AppUpdateRelease release) async {
+    await _prompt(
+      () => showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('${release.version} · 更新说明'),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: SelectableText(
+                release.notes.isEmpty ? '此版本未提供更新说明。' : release.notes,
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _explainBusyBack() async {
+    if (_prompting || _backPrompting || !_busy) return;
+    setState(() => _backPrompting = true);
+    bool? cancel;
+    try {
+      cancel = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(_cancellable ? '更新操作正在进行' : '正在交给系统处理'),
+          content: SingleChildScrollView(
+            child: Text(
+              _cancellable
+                  ? '离开前请先取消当前操作，等待临时文件清理完成。也可以留在此页继续等待。'
+                  : '系统交接尚未返回，请留在此页等待，避免移除系统正在读取的更新包。',
+            ),
+          ),
+          actions: [
+            TextButton(
+              key: const ValueKey('app-update-back-wait'),
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('继续等待'),
+            ),
+            if (_cancellable)
+              FilledButton(
+                key: const ValueKey('app-update-back-cancel'),
+                style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('取消当前操作'),
+              ),
+          ],
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _backPrompting = false);
+    }
+    if (cancel == true && mounted && _busy) await _cancelActive();
   }
 
   @override
   Widget build(BuildContext context) {
-    final current = _current, candidate = _candidate, selected = _selected;
-    final android = Platform.isAndroid, windows = Platform.isWindows;
-    final assetName = android ? 'triomi-android.apk' : 'triomi-windows.zip';
-    return Scaffold(appBar: AppBar(title: const Text('版本管理'), actions: [
-      IconButton(tooltip: '重新读取安装身份', onPressed: _busy ? null : _loadCurrent, icon: const Icon(Icons.refresh)),
-    ]), body: ListView(padding: const EdgeInsets.all(16), children: [
-      const Text('官方仓库 HyperionHXH/triomi。点击检查后匿名查询 GitHub Releases，包含测试版；不携带来源账号、Cookie 或令牌，不自动安装。'),
-      if (_busy) Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(_operation!), const SizedBox(height: 8),
-          LinearProgressIndicator(value: _progress?.total == null || _progress!.total! <= 0 ? null
-            : (_progress!.bytes / _progress!.total!).clamp(0.0, 1.0)),
-          Text(_progress == null ? '正在处理；可取消。' : '${_progress!.phase}：${_progress!.bytes} 字节${_progress!.total == null ? '' : ' / ${_progress!.total}'}'),
-          TextButton(onPressed: _token?.cancelled == true ? null : () => _service.cancel(_token!), child: const Text('取消')),
-        ]))),
-      if (_message != null) Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: SelectableText(_message!)),
-      if (current != null) Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('已安装 ${current.version} · 构建 ${current.versionCode}'),
-          ExpansionTile(title: const Text('实际安装身份与散列'), children: [SelectableText(_identity(current))]),
-          if (android && current.signerSha256 != appUpdateProductionSigner)
-            const Text('当前安装证书与正式证书不同；正式 APK 无法覆盖，仍严格核对实际安装证书。'),
-        ]))),
-      if (android || windows) FilledButton.icon(onPressed: _busy ? null : _checkReleases,
-        icon: const Icon(Icons.system_update), label: const Text('检查 GitHub 新版本')),
-      if (_releases != null && _releases!.isNotEmpty) ...[
-        const SizedBox(height: 12),
-        DropdownButtonFormField<AppUpdateRelease>(key: ValueKey(_releases), initialValue: selected, isExpanded: true,
-          decoration: const InputDecoration(labelText: '选择发布版本（含测试版）'),
-          items: _releases!.map((release) => DropdownMenuItem(value: release,
-            child: Text('${release.tag}${release.prerelease ? ' · 测试版' : ''}', overflow: TextOverflow.ellipsis))).toList(),
-          onChanged: _busy ? null : (value) => setState(() => _selected = value)),
-      ],
-      if (selected != null) Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(selected.name, style: Theme.of(context).textTheme.titleMedium),
-          Text('发布：${selected.publishedAt}'),
-          Text(current == null ? '请先读取实际安装版本。' : selected.versionCode > current.versionCode
-            ? '可更新：构建 ${current.versionCode} → ${selected.versionCode}'
-            : selected.versionCode == current.versionCode ? '当前已安装此构建；不重复安装。' : '这是旧版本，不允许降级。'),
-          const SizedBox(height: 8), SelectableText(selected.notes.isEmpty ? '此版本未提供发布说明。' : selected.notes),
-          if (selected.assets[assetName] case final asset?) Text('完整更新包：${asset.name} · ${(asset.bytes / 1024 / 1024).toStringAsFixed(1)} MiB'),
-          FilledButton(onPressed: _busy || current == null || !selected.isNewerThan(current) ||
-              !selected.assets.containsKey(assetName) ? null : _downloadRelease,
-            child: Text(windows ? '下载并核验完整 Windows ZIP' : '下载并核验 APK')),
-        ]))),
-      if (candidate != null) Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('实际候选（尚未安装）'), SelectableText(_identity(candidate.offered)),
-          SelectableText('文件大小：${candidate.bytes} 字节\n来源：${candidate.source}'),
-          Text(_decision(candidate.decision)),
-          if (android && candidate.canInstall) FilledButton(onPressed: _busy ? null : _install, child: const Text('打开系统安装器')),
-          if (windows && candidate.canInstall) ...[
-            const Text('Windows ZIP 未签名。解压到新目录，关闭 Triomi 后运行新目录中的 triomi.exe；不覆盖正在运行的程序。'),
-            FilledButton.icon(onPressed: _busy ? null : _revealWindows, icon: const Icon(Icons.folder_open), label: const Text('打开文件位置，解压后更新')),
+    final current = _current;
+    final candidate = _candidate;
+    final selected = _selected;
+    final theme = Theme.of(context);
+    final latest = _releases?.firstOrNull;
+    final hasUpdate =
+        current != null && latest != null && latest.isNewerThan(current);
+    final status = _unsupportedPlatform
+        ? '请使用平台发布渠道'
+        : current == null
+        ? (_failed ? '当前版本暂时无法读取' : '正在了解当前版本')
+        : _releases == null
+        ? '尚未检查更新'
+        : latest == null
+        ? '暂时没有发布版本'
+        : hasUpdate
+        ? '有新版本等你体验'
+        : '当前已是最新构建';
+    final issue = selected == null ? null : _releaseIssue(selected);
+    return PopScope(
+      canPop: !_busy,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _explainBusyBack();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('应用更新'),
+          actions: [
+            if (!_unsupportedPlatform)
+              IconButton(
+                key: const ValueKey('app-update-refresh-current'),
+                tooltip: '重新读取当前安装版本',
+                onPressed: _locked ? null : _loadCurrent,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
           ],
-          TextButton(onPressed: _busy ? null : _discard, child: const Text('移除本次更新暂存')),
-        ]))),
-      if (android || windows) ExpansionTile(title: const Text('高级：核验本地更新包'), children: [
-        if (android) OutlinedButton.icon(onPressed: _busy ? null : _pickApk,
-          icon: const Icon(Icons.folder_open), label: const Text('选择本地 APK 并核验')),
-        if (windows) ...[
-          TextField(controller: _zipPath, enabled: !_busy, decoration: const InputDecoration(labelText: '可信本地 Windows ZIP 完整路径')),
-          TextField(controller: _manifestPath, enabled: !_busy, decoration: const InputDecoration(labelText: '对应 triomi-windows.update.json 完整路径')),
-          OutlinedButton(onPressed: _busy ? null : _windows, child: const Text('核验并暂存本地完整桌面包')),
-        ],
-      ]),
-      if (!android && !windows) const Text('当前平台请使用平台发布渠道。'),
-    ]));
+        ),
+        body: SafeArea(
+          top: false,
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 768),
+              child: ListView(
+                key: ValueKey(_listStage),
+                primary: false,
+                padding: const EdgeInsets.all(AppSpacing.md),
+                children: [
+                  if (_busy) ...[
+                    AppUpdateTransferView(
+                      versionLabel: _operationTarget!,
+                      operationLabel: _operation!,
+                      progress: _progress,
+                      onCancel: _cancellable ? _cancelActive : null,
+                      cancelling: _token?.cancelled == true,
+                    ),
+                  ],
+                  if (_message != null) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                _failed
+                                    ? Icons.error_outline_rounded
+                                    : Icons.info_outline_rounded,
+                                color: _failed
+                                    ? theme.colorScheme.error
+                                    : theme.colorScheme.primary,
+                              ),
+                              const SizedBox(width: AppSpacing.xs),
+                              Expanded(child: Text(_message!)),
+                            ],
+                          ),
+                          if (_retry != null) ...[
+                            const SizedBox(height: AppSpacing.xs),
+                            OutlinedButton.icon(
+                              key: const ValueKey('app-update-retry'),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(48, 48),
+                              ),
+                              onPressed: _locked ? null : _retry,
+                              icon: const Icon(Icons.refresh_rounded),
+                              label: const Text('重试这一步'),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (candidate != null && !_handedOff) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    AppUpdateReadyView(
+                      candidate: candidate,
+                      busy: _locked,
+                      onInstall: _android ? _offerReady : null,
+                      onRevealWindows: _windows ? _offerReady : null,
+                      onDiscard: _discard,
+                    ),
+                  ],
+                  if (_handedOff) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    AppUpdateHandoffView(
+                      windows: _handoffWindows,
+                      onRefreshCurrent: _locked ? null : _loadCurrent,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    if (candidate?.canInstall == true)
+                      OutlinedButton.icon(
+                        key: const ValueKey('app-update-handoff-reopen'),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(48, 48),
+                        ),
+                        onPressed: _locked ? null : _offerReady,
+                        icon: Icon(
+                          _handoffWindows
+                              ? Icons.folder_open_rounded
+                              : Icons.install_mobile_rounded,
+                        ),
+                        label: Text(
+                          _handoffWindows ? '再次打开更新包位置' : '需要时再次打开安装器',
+                        ),
+                      )
+                    else
+                      const Text('此更新包已不再适用于当前安装版本，无需再次交接。'),
+                  ],
+                  if (_busy ||
+                      _message != null ||
+                      candidate != null ||
+                      _handedOff)
+                    const SizedBox(height: AppSpacing.md),
+                  AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(AppSpacing.sm),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primaryContainer,
+                                borderRadius: AppRadius.cardRadius,
+                              ),
+                              child: Icon(
+                                Icons.auto_stories_rounded,
+                                size: 36,
+                                color: theme.colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Triomi',
+                                    style: theme.textTheme.headlineSmall
+                                        ?.copyWith(
+                                          fontWeight: AppTypography.strong,
+                                        ),
+                                  ),
+                                  const SizedBox(height: AppSpacing.xxs),
+                                  Text(
+                                    _unsupportedPlatform
+                                        ? '此平台不支持应用内更新'
+                                        : current == null
+                                        ? '正在读取已安装版本…'
+                                        : '${current.version} · 构建 ${current.versionCode}',
+                                    key: const ValueKey(
+                                      'app-update-installed-version',
+                                    ),
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              _failed
+                                  ? Icons.info_outline_rounded
+                                  : hasUpdate
+                                  ? Icons.new_releases_outlined
+                                  : _releases == null
+                                  ? Icons.tips_and_updates_outlined
+                                  : Icons.verified_outlined,
+                              color: _failed
+                                  ? theme.colorScheme.error
+                                  : theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: AppSpacing.xs),
+                            Expanded(
+                              child: Text(
+                                status,
+                                style: theme.textTheme.titleMedium,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          _unsupportedPlatform
+                              ? '请通过当前平台的发布渠道更新 Triomi。此处不提供应用内下载或安装。'
+                              : '仅在你点击时匿名检查官方 GitHub 发布（含测试版）。不发送来源账号、Cookie 或令牌，也不自动安装。',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        if (!_unsupportedPlatform &&
+                            (current == null || _supported)) ...[
+                          const SizedBox(height: AppSpacing.md),
+                          if (_releases == null &&
+                              candidate == null &&
+                              !_handedOff)
+                            FilledButton.icon(
+                              key: const ValueKey('app-update-check'),
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(48, 48),
+                              ),
+                              onPressed: _locked ? null : _checkReleases,
+                              icon: const Icon(Icons.sync_rounded),
+                              label: const Text('检查更新'),
+                            )
+                          else
+                            OutlinedButton.icon(
+                              key: const ValueKey('app-update-check'),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(48, 48),
+                              ),
+                              onPressed: _locked ? null : _checkReleases,
+                              icon: const Icon(Icons.sync_rounded),
+                              label: const Text('再次检查更新'),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (selected != null && !_unsupportedPlatform) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            identical(selected, latest) ? '最新发布' : '所选发布',
+                            style: theme.textTheme.titleSmall,
+                          ),
+                        ),
+                        TextButton.icon(
+                          key: const ValueKey('app-update-history'),
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(48, 48),
+                          ),
+                          onPressed: _locked ? null : _showHistory,
+                          icon: const Icon(Icons.history_rounded),
+                          label: const Text('其他版本'),
+                        ),
+                      ],
+                    ),
+                    AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Wrap(
+                            spacing: AppSpacing.xs,
+                            runSpacing: AppSpacing.xs,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                selected.version,
+                                style: theme.textTheme.headlineSmall?.copyWith(
+                                  fontWeight: AppTypography.strong,
+                                ),
+                              ),
+                              if (selected.prerelease)
+                                const Chip(
+                                  label: Text('测试版'),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                            ],
+                          ),
+                          Text(
+                            '构建 ${selected.versionCode} · ${_releaseDate(selected.publishedAt)}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          if (selected.name != selected.tag &&
+                              selected.name != selected.version) ...[
+                            const SizedBox(height: AppSpacing.xs),
+                            Text(
+                              selected.name,
+                              style: theme.textTheme.titleSmall,
+                            ),
+                          ],
+                          const SizedBox(height: AppSpacing.md),
+                          Container(
+                            padding: const EdgeInsets.all(AppSpacing.sm),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerLow,
+                              borderRadius: AppRadius.controlRadius,
+                            ),
+                            child: Text(
+                              issue ??
+                                  '构建 ${current!.versionCode} → ${selected.versionCode} · 可更新',
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          Text('更新内容', style: theme.textTheme.titleSmall),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            selected.notes.isEmpty
+                                ? '此版本未提供更新说明。'
+                                : selected.notes,
+                            maxLines: 5,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (selected.notes.isNotEmpty)
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  minimumSize: const Size(48, 48),
+                                ),
+                                onPressed: _locked
+                                    ? null
+                                    : () => _showNotes(selected),
+                                icon: const Icon(Icons.article_outlined),
+                                label: const Text('完整更新说明'),
+                              ),
+                            ),
+                          if (selected.assets[_assetName]
+                              case final asset?) ...[
+                            const SizedBox(height: AppSpacing.sm),
+                            Container(
+                              padding: const EdgeInsets.all(AppSpacing.sm),
+                              decoration: BoxDecoration(
+                                borderRadius: AppRadius.controlRadius,
+                                border: Border.all(
+                                  color: theme.colorScheme.outlineVariant,
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    _windows
+                                        ? Icons.desktop_windows_outlined
+                                        : Icons.android_rounded,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: AppSpacing.sm),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _windows
+                                              ? 'Windows 完整更新包'
+                                              : 'Android 安装包',
+                                          style: theme.textTheme.titleSmall,
+                                        ),
+                                        Text(
+                                          '${(asset.bytes / 1024 / 1024).toStringAsFixed(1)} MiB · ${_windows ? 'ZIP + 成员清单，未签名' : 'APK，核对实际安装签名'}',
+                                          style: theme.textTheme.bodySmall,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: AppSpacing.md),
+                          if (candidate == null)
+                            FilledButton(
+                              key: const ValueKey('app-update-download'),
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(48, 48),
+                              ),
+                              onPressed: _locked || issue != null
+                                  ? null
+                                  : _downloadRelease,
+                              child: const Text('下载更新'),
+                            )
+                          else
+                            OutlinedButton(
+                              key: const ValueKey('app-update-download'),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(48, 48),
+                              ),
+                              onPressed: _locked || issue != null
+                                  ? null
+                                  : _downloadRelease,
+                              child: const Text('重新下载此版本'),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (current != null) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    AppCard(
+                      padding: EdgeInsets.zero,
+                      child: ExpansionTile(
+                        leading: const Icon(Icons.verified_user_outlined),
+                        title: const Text('安装身份与安全信息'),
+                        subtitle: const Text('实际版本、证书及完整性校验'),
+                        childrenPadding: const EdgeInsets.fromLTRB(
+                          AppSpacing.md,
+                          0,
+                          AppSpacing.md,
+                          AppSpacing.md,
+                        ),
+                        children: [
+                          SelectableText(_currentIdentity(current)),
+                          if (_android &&
+                              current.signerSha256 !=
+                                  appUpdateProductionSigner) ...[
+                            const SizedBox(height: AppSpacing.sm),
+                            const Text(
+                              '当前证书与正式证书不同，正式 APK 无法直接覆盖。更新仍必须匹配实际安装证书，不会跳过验签。',
+                            ),
+                          ],
+                          const SizedBox(height: AppSpacing.sm),
+                          const Text(
+                            '官方仓库：HyperionHXH/triomi。SHA-256 仅核验文件完整性；Windows 包未作发布者签名。',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (_supported) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    ExpansionTile(
+                      key: const ValueKey('app-update-local-packages'),
+                      leading: const Icon(Icons.folder_open_outlined),
+                      title: const Text('本地更新包'),
+                      subtitle: const Text('高级选项 · 仍需完整核验'),
+                      childrenPadding: const EdgeInsets.all(AppSpacing.md),
+                      children: [
+                        if (_android)
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(48, 48),
+                            ),
+                            onPressed: _locked ? null : _pickApk,
+                            icon: const Icon(Icons.file_open_outlined),
+                            label: const Text('选择本地 APK'),
+                          ),
+                        if (_windows) ...[
+                          TextField(
+                            key: const ValueKey('app-update-local-zip'),
+                            controller: _zipPath,
+                            enabled: !_locked,
+                            decoration: const InputDecoration(
+                              labelText: '可信 Windows ZIP 完整路径',
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          TextField(
+                            key: const ValueKey('app-update-local-manifest'),
+                            controller: _manifestPath,
+                            enabled: !_locked,
+                            decoration: const InputDecoration(
+                              labelText: 'triomi-windows.update.json 完整路径',
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          OutlinedButton(
+                            key: const ValueKey('app-update-local-verify'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(48, 48),
+                            ),
+                            onPressed: _locked ? null : _windowsPackage,
+                            child: const Text('核验本地完整更新包'),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.lg),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
-String _identity(AppUpdateInfo info) => '${info.packageName}\n版本 ${info.version}（${info.versionCode}）\n'
-    '字节 SHA-256：${info.sha256}${info.artifactSha256 == null ? '' : '\nEXE SHA-256：${info.artifactSha256}'}\n'
+String _releaseDate(String value) {
+  final date = DateTime.tryParse(value)?.toLocal();
+  if (date == null) return '发布日期未提供';
+  return '${date.year} 年 ${date.month} 月 ${date.day} 日';
+}
+
+String _currentIdentity(AppUpdateInfo info) =>
+    '${info.packageName}\n'
+    '版本 ${info.version} · 构建 ${info.versionCode}\n'
+    '字节 SHA-256：${info.sha256}'
+    '${info.artifactSha256 == null ? '' : '\nEXE SHA-256：${info.artifactSha256}'}\n'
     '签名证书 SHA-256：${info.signerSha256 ?? 'Windows 未签名；仅核验完整性'}';
-String _decision(String value) => switch (value) {
-  'upgrade' => '核验通过：高版本候选。尚未安装。',
-  'wrongPackage' => '拒绝：包名或平台与当前应用不符。',
-  'wrongSigner' => '拒绝：签名未核验或与实际安装签名不符。',
-  'downgrade' => '拒绝：候选版本低于实际安装版本。',
-  'sameVersionChanged' => '拒绝：相同版本号的字节内容已改变。',
-  'alreadyInstalled' => '无需更新：相同版本和完全相同字节。',
-  _ => '拒绝：未知的核验结果。',
-};

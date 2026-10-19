@@ -8,7 +8,7 @@
 
 ## 下载与安装
 
-到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.160) 下载 **v0.11.0-test.160**：
+到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.162) 下载 **v0.11.0-test.162**：
 
 | 文件 | 用途 |
 | --- | --- |
@@ -22,6 +22,7 @@
 
 Windows 可任选 ZIP 或 MSI，不需要两个都装。MSI 默认安装到 `%LOCALAPPDATA%\Programs\Triomi`，不自动导入/删除旧 ZIP 目录；两种形式沿用同一应用数据目录。升级 MSI 前退出 Triomi，再运行新 MSI；卸载只移除安装文件和快捷方式，保留收藏、账号、设置及下载。MSI 目前没有 Windows Authenticode 发布者签名，系统可能提示未知发布者；请从本仓库 Release 下载并核对 SHA-256，Android 签名证书不能用于 Windows 签名。
 
+R162（0.11.0+162）重做应用更新页：版本卡片、更新说明与历史版本选择，真实下载/暂存/核验阶段和可取消进度，Android 稍后/立即安装与系统权限交接，Windows 完整 ZIP 核验后打开位置。最终Flutter1176项通过/3项跳过、Python89项通过、静态检查零问题；实际更新器边界与平台验收见[当前状态](docs/CURRENT_STATUS.md)。
 R161（0.11.0+161）移除我的混合账号卡片，设置按追番、漫画、小说拆分；三类详情和菜单分别组织，漫画连续懒章节列表、小说真实分卷，三类均可显式选章下载。小说发现/书架增加卡片间距及边界，保留正常小说解锁和换源。专项Review闭合，最终Flutter1150项通过/3跳过、Python89项通过、静态检查零问题；Android保数据、200%暗色及Windows真实在线发现/宽窄窗口范围见[当前状态](docs/CURRENT_STATUS.md)。
 
 R160 修复「我的 → 账号与设置」顶部卡片无法点击；漫画已安装插件整行/齿轮进入多来源详情，支持插件提供的真实设置、外部浏览器与应用内会话分离。在线列表长按提供作品操作，书库长按单选可编辑本地标题、作者、简介，刷新不覆盖修改且可恢复来源资料。最终Flutter1107项通过/3项跳过、Python89项通过、静态检查零问题；Android原设备及Windows新版本实操范围见[当前状态](docs/CURRENT_STATUS.md)。
@@ -242,7 +243,8 @@ Windows job 和本机使用同一个 `tools/package_windows.ps1`；release工作
 - 「设置 → 缓存与存储」清理前显示范围并确认，只清非活动图片内存或本机恢复封面；正文、字体、下载和进度保留。
 - 来源 HTTP 代理同时用于公开来源目录、封面、漫画图片及小说插图，维持正常 TLS 和现有超时；不自动给原生视频、Mihon APK 或 LNS 专用连接设置代理，也不复制账号 Cookie。
 - MangaDex 规则 1.0.4 起可在来源设置选择低流量图片；已有规则需通过来源目录显式升级，不覆盖自改规则，已缓存/下载图片不会自动重下。
-- 「设置 → 版本管理与应用更新」匿名检查官方 `HyperionHXH/triomi` GitHub Releases（含测试版），按实际构建号对比已安装版本，查看说明并选择更高版本下载。资产仅允许有界跳转到 GitHub 官方 CDN，核对 GitHub SHA-256 / SHA256SUMS；Android 再核验实际包名、版本及当前安装证书，明确确认后打开系统安装器，不静默安装。Windows 下载完整 ZIP 和配套清单，验证所有成员与实际 EXE 版本后可直接打开文件位置；解压到新目录，退出 Triomi 后运行其中 `triomi.exe`，不覆盖运行中的程序；应用数据沿用。Windows 包未签名，哈希只证明完整性。高级区保留本地 APK / ZIP 核验。
+- 「我的 → 通用设置 → 版本管理与应用更新」提供当前版本卡片、发布说明和历史版本选择；仅点击时匿名检查官方 `HyperionHXH/triomi` GitHub Releases（含测试版），按实际构建号允许更高版本。下载显示真实 MiB / 百分比，可取消或手动重试；下载、暂存、核验和系统交接分开显示，下载到100%不代表安装完成。证书、哈希和完整路径折叠到技术详情，本地 APK / ZIP 核验保留在高级区。
+- 资产仅允许有界跳转到 GitHub 官方 CDN，核对 GitHub SHA-256 / SHA256SUMS；Android 再核验实际包名、版本及当前安装证书，提供「稍后安装 / 立即安装」。需要权限时明确进入系统设置，返回后仍需再次确认，不自动续装；系统安装器启动只表示交接，可取消并重新读取实际版本。Windows 下载完整 ZIP 和配套清单，验证所有成员与实际 EXE 版本后打开文件位置；按页面步骤解压到新目录，退出 Triomi 后运行其中 `triomi.exe`，不覆盖运行中的程序，应用数据沿用。Windows 包未签名，哈希只证明完整性。
 
 当前已验证产物、实际设备证据与仍待验项目统一见 [CURRENT_STATUS](docs/CURRENT_STATUS.md)，不以功能入口或构建成功代表所有平台已验收。
 需要你配合的账号授权、云同步测试目录与实际手机 MixN 故障环境统一见 [USER_ASSISTANCE](docs/USER_ASSISTANCE.md)，无需发送密码或 token。
