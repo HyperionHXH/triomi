@@ -75,7 +75,8 @@ jobs:
 
   # Windows ZIP + per-user MSI from the same release tree.
   windows:
-    runs-on: windows-latest
+    # webview_windows requires VS2022; windows-latest now selects VS2026.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -176,7 +176,7 @@ lib/
 
 - Flutter stable（当前验证版本 3.47.5 / Dart 3.13.4）
 - Android：JDK17+、Android SDK36（minSdk24）；Windows完整扩展运行时打包：Windows x64 JDK21，`JAVA_HOME`指向该JDK
-- Visual Studio 2022「使用C++的桌面开发」工作负载
+- Visual Studio 2022「使用C++的桌面开发」工作负载；Windows打包/Release CI固定`windows-2022`，与本机已验证工具链一致。`windows-latest`已切到VS2026，现有WebView依赖的实验协程不能编译，不通过关闭诊断绕过。
 - Python3.12+、.NET10 SDK（ZIP/MSI与WiX6.0.2工具还原）
 
 ```powershell

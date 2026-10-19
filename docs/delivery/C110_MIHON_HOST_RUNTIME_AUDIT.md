@@ -59,7 +59,7 @@ MangaDex 1.6（包 `eu.kanade.tachiyomi.extension.all.mangadex`，versionCode `1
 - 空 `sources` 扩展不推导漫画/小说类型或来源能力；
 - 非 HTTPS 仓库地址在发出网络请求前被拒绝。
 
-验证环境：工作目录 `D:\noval_and_manga\triomi`，Flutter SDK 来自 `android/local.properties`（`C:\Users\MiunaH\.workbuddy\binaries\flutter\sdk`），命令前设置 `ANDROID_SDK_ROOT` 与 `ANDROID_HOME`。
+验证环境：工作目录 `D:\noval_and_manga\triomi`，Flutter SDK 来自本机 Android 构建配置（local.properties 不随仓库提交；SDK 为 `C:\Users\MiunaH\.workbuddy\binaries\flutter\sdk`），命令前设置 `ANDROID_SDK_ROOT` 与 `ANDROID_HOME`。
 
 ```text
 flutter test --no-pub test/mihon_repository_test.dart --plain-name "解析 Mihon extensionList 并按中文和类型筛选"  # 退出码 0，1 项

@@ -9,6 +9,8 @@
 
 两组Review已修复复核安装文件名冲突、失败/中断事务、重启并发、恢复作品目录/章节身份、过滤快照、封面消费者及不支持的会话入口。GitHub传输差分确认原入口超时而官方API可达，新增限定公共Mihon请求的同资源API回退，流式中断先截断临时文件再从零恢复；不绕过显式代理、认证、TLS或取消。普通Windows应用已实跑完整xkcd插件安装/设置/阅读，当前最终包、回归和发布状态继续只记录于CURRENT_STATUS。
 
+R165源码`5d2644d`与标签已推送，五项[公开资产](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.165)全部完整下载并核对本地/GitHub大小和SHA-256一致。发布后继续修正远端构建环境漂移：Windows打包与Release固定已验证的VS2022 runner，历史本机配置不再作为仓库文件引用；不改写发布标签或资产。实际回归、设备及CI证据边界见CURRENT_STATUS。
+
 
 ## 当前请求 R162：Kazumi式应用更新流程（0.11.0+162）
 
