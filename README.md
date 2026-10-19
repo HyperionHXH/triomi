@@ -8,7 +8,7 @@
 
 ## 下载与安装
 
-到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.163) 下载 **v0.11.0-test.163**：
+到 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.164) 下载 **v0.11.0-test.164**：
 
 | 文件 | 用途 |
 | --- | --- |
@@ -21,6 +21,8 @@
 已有同签名版本可覆盖安装，勿卸载或清除数据；建议先在「我的 → 备份与恢复」导出本地备份。开发/Actions 验收包使用另一证书，不能直接覆盖正式包，遇到签名冲突不要通过卸载丢弃原数据。当前为测试版，不宣称完整全平台验收；详情见 [当前状态](docs/CURRENT_STATUS.md)。
 
 Windows 可任选 ZIP 或 MSI，不需要两个都装。MSI 默认安装到 `%LOCALAPPDATA%\Programs\Triomi`，不自动导入/删除旧 ZIP 目录；两种形式沿用同一应用数据目录。升级 MSI 前退出 Triomi，再运行新 MSI；卸载只移除安装文件和快捷方式，保留收藏、账号、设置及下载。MSI 目前没有 Windows Authenticode 发布者签名，系统可能提示未知发布者；请从本仓库 Release 下载并核对 SHA-256，Android 签名证书不能用于 Windows 签名。
+
+R164 修复手机本地漫画库空状态贴边和长句换行：统一居中图标、标题及说明，整页可滚动并避让底部导入按钮。弹幕调查更正为多条独立路径：来源自带弹幕、用户自己的文件、自托管兼容服务均不等于复用官方应用密钥；当前实际能力和未实现部分见[弹幕接入说明](docs/DANMAKU.md)，本版不展示不可用入口。
 
 R163 修复小说发现/详情简介字段兼容与账号入口自动弹窗；修复坚果云首次同步在父目录不存在时返回`409 AncestorsNotFound`而被误判为连接失败，保留Triomi独立同步目录，并用本机Kazumi配置完成只读联调；调整WebDAV表单间距、小说账号与本地漫画文件库文字边界。弹幕本版暂隐藏，接入调查与恢复条件见[弹幕暂缓说明](docs/DANMAKU.md)。
 

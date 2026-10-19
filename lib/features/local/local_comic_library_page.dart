@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/backup/backup_artifact_recovery.dart';
 import '../../core/db/database_provider.dart';
 import '../../core/models/media_item.dart';
+import '../../core/widgets/page_scaffold.dart';
 import '../detail/detail_page.dart';
 import '../downloads/data/download_repository.dart';
 import '../library/data/library_providers.dart';
@@ -239,53 +240,62 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
         icon: const Icon(Icons.add),
         label: const Text('导入漫画'),
       ),
-      body: Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              '本地漫画 · 完全离线。图片保存在应用存储；跨设备请明确选择包含下载媒体的备份，只有目录的备份不能恢复图片。',
-            ),
-          ),
-          if (_busy)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  const LinearProgressIndicator(),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _progress == null
-                              ? '正在移除此导入'
-                              : '${_progress!.phase} · ${(_progress!.bytes / 1048576).toStringAsFixed(1)}MiB · ${_progress!.pages}页已校验',
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (_cancellation != null)
-                        TextButton(
-                          onPressed: () {
-                            _cancellation!.cancel();
-                            if (Platform.isAndroid) {
-                              _channel.invokeMethod<void>(
-                                'cancelLocalComicPick',
-                              );
-                            }
-                          },
-                          child: const Text('取消'),
-                        ),
-                    ],
-                  ),
-                ],
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  '本地漫画 · 完全离线。图片保存在应用存储；跨设备请明确选择包含下载媒体的备份，只有目录的备份不能恢复图片。',
+                ),
               ),
             ),
-          if (_notice != null)
-            Padding(padding: const EdgeInsets.all(16), child: Text(_notice!)),
-          Expanded(
-            child: StreamBuilder(
+            if (_busy)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      const LinearProgressIndicator(),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _progress == null
+                                  ? '正在移除此导入'
+                                  : '${_progress!.phase} · ${(_progress!.bytes / 1048576).toStringAsFixed(1)}MiB · ${_progress!.pages}页已校验',
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (_cancellation != null)
+                            TextButton(
+                              onPressed: () {
+                                _cancellation!.cancel();
+                                if (Platform.isAndroid) {
+                                  _channel.invokeMethod<void>(
+                                    'cancelLocalComicPick',
+                                  );
+                                }
+                              },
+                              child: const Text('取消'),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (_notice != null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(_notice!),
+                ),
+              ),
+            StreamBuilder(
               // Shelf removal does not remove an import or its private files.
               stream:
                   (database.select(database.mediaItems)..where(
@@ -305,67 +315,92 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
                       ),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
-                  return Center(child: Text('${snapshot.error}'));
+                  return SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 96),
+                      child: EmptyStateView(
+                        icon: Icons.error_outline,
+                        title: '无法读取本地漫画',
+                        message: '${snapshot.error}',
+                      ),
+                    ),
+                  );
                 }
                 if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
                 }
                 final items = snapshot.data!;
                 if (items.isEmpty) {
-                  return const Center(child: Text('尚未导入本地漫画。点击「导入漫画」选择原始文件。'));
+                  return const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: 96),
+                      child: EmptyStateView(
+                        icon: Icons.menu_book_outlined,
+                        title: '尚未导入本地漫画',
+                        message: '点击右下角「导入漫画」，选择漫画压缩包或图片目录。',
+                      ),
+                    ),
+                  );
                 }
-                return ListView.builder(
+                return SliverPadding(
                   padding: const EdgeInsets.only(bottom: 96),
-                  itemCount: items.length,
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    return ListTile(
-                      leading: const Icon(Icons.offline_pin_outlined),
-                      title: Text(
-                        item.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: FutureBuilder(
-                        future: DownloadRepository(ref.read(databaseProvider))
-                            .listForItem(localComicSourceId, item.remoteId),
-                        builder: (context, rows) {
-                          final entries = rows.data;
-                          final done =
-                              entries
-                                  ?.where((row) => row.status == 'done')
-                                  .length ??
-                              0;
-                          return Text(
-                            entries == null
-                                ? '本地漫画 · 离线'
-                                : done == entries.length && done > 0
-                                ? '本地漫画 · 离线 · $done章'
-                                : '本地漫画 · 仅目录 / 图片缺失；恢复包含媒体的备份',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          );
-                        },
-                      ),
-                      onTap: _busy
-                          ? null
-                          : () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => DetailPage(item: item),
+                  sliver: SliverList.builder(
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      return ListTile(
+                        leading: const Icon(Icons.offline_pin_outlined),
+                        title: Text(
+                          item.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: FutureBuilder(
+                          future: DownloadRepository(ref.read(databaseProvider))
+                              .listForItem(localComicSourceId, item.remoteId),
+                          builder: (context, rows) {
+                            final entries = rows.data;
+                            final done =
+                                entries
+                                    ?.where((row) => row.status == 'done')
+                                    .length ??
+                                0;
+                            return Text(
+                              entries == null
+                                  ? '本地漫画 · 离线'
+                                  : done == entries.length && done > 0
+                                  ? '本地漫画 · 离线 · $done章'
+                                  : '本地漫画 · 仅目录 / 图片缺失；恢复包含媒体的备份',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            );
+                          },
+                        ),
+                        onTap: _busy
+                            ? null
+                            : () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => DetailPage(item: item),
+                                ),
                               ),
-                            ),
-                      trailing: IconButton(
-                        tooltip: '移除此本地导入',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: _busy ? null : () => _remove(item),
-                      ),
-                    );
-                  },
+                        trailing: IconButton(
+                          tooltip: '移除此本地导入',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: _busy ? null : () => _remove(item),
+                        ),
+                      );
+                    },
+                  ),
                 );
               },
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
