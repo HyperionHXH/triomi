@@ -16,6 +16,8 @@ Documents/Application Support 根目录排除 iCloud 备份，持久业务数据
 
 首次源码提交 `380cfd9` 已推送到 origin/feat/ios，[macOS 运行39444028381](https://github.com/HyperionHXH/triomi/actions/runs/39444028381)已实际执行 SDK/CocoaPods 步骤，在 Xcode 阶段因备份锁 Swift 文件缺 Runner Sources 成员而失败，未生成 IPA。已补齐该成员、JS XCTest 文件定义和存储配置类型调用，后续构建结果另记；不把失败运行标为通过。
 
+第二次 [macOS 运行39445216095](https://github.com/HyperionHXH/triomi/actions/runs/39445216095)已通过 release 真机架构编译、IPA 校验打包和模拟器应用编译；XCTest 因测试文件缺 `import WebKit` 而停止，后续行为烟测及产物上传未执行。已补该测试导入；不能把已打包但未上传、未过烟测的中间文件当最终产物。
+
 ## 当前请求：R167移除本机可选xkcd并正式推送发布（0.11.0+167）
 
 用户明确要求推送发布，版本递增为0.11.0+167，沿用166正式Android签名与现有手动release工作流；不生成替代密钥，不修改旧标签或资产。源码`2a0f6ea`和标签`v0.11.0-test.167`已推送，正式[构建39401127876](https://github.com/HyperionHXH/triomi/actions/runs/39401127876)的Android、Windows和publish全部成功；[Release](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.167)已公开，非草稿预发布。
