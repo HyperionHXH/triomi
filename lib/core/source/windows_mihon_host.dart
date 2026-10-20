@@ -564,9 +564,9 @@ class WindowsMihonHost {
     await _prepare();
     final record = _records[package];
     if (record == null) return false;
-    // Startup reconciliation also publishes executable identities. Finish it
-    // before changing enabled state, so rollback cannot race that snapshot.
-    await _client();
+    // Disabling must remain available when a runtime payload is missing or an
+    // installed plugin cannot start. Enabling still proves the host can load.
+    if (enabled) await _client();
     final previous = record['enabled'];
     record['enabled'] = enabled;
     try {
@@ -576,6 +576,83 @@ class WindowsMihonHost {
       rethrow;
     }
     return true;
+  });
+
+  Future<bool> uninstall(String package) => _mutate(() async {
+    if (!RegExp(r'^[a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)+$')
+        .hasMatch(package)) {
+      throw const FormatException('扩展包身份无效');
+    }
+    await _prepare();
+    final record = _records[package];
+    final runtimeFile = record?['runtimeFile'] as String?;
+    if (runtimeFile != null &&
+        (p.basename(runtimeFile) != runtimeFile ||
+            p.extension(runtimeFile) != '.jar')) {
+      throw const FormatException('已安装扩展运行时文件名无效');
+    }
+    final started = _started;
+    if (started != null) {
+      try {
+        await (await started).uninstall(package);
+      } catch (_) {
+        // A broken/offline plugin must remain removable. Stop the owned JVM
+        // before removing its executable; reconciliation clears inert server
+        // metadata via the same uninstall API on the next successful startup.
+      }
+    }
+    await _stopClient();
+    final verified = Directory(p.join(_root.path, 'verified', package));
+    final quarantine = Directory(
+      p.join(_root.path, 'verified', '.uninstall-$package'),
+    );
+    if (await verified.exists()) {
+      if (await quarantine.exists()) await quarantine.delete(recursive: true);
+      await verified.rename(quarantine.path);
+    }
+    final runtimePath = runtimeFile == null
+        ? null
+        : p.join(_root.path, 'extensions', runtimeFile);
+    final runtime = runtimePath == null ? null : File(runtimePath);
+    final runtimeQuarantine = runtime == null
+        ? null
+        : File('${runtime.path}.uninstall-$package');
+    try {
+      if (runtime != null && await runtime.exists()) {
+        await runtime.rename(runtimeQuarantine!.path);
+      }
+      _records.remove(package);
+      try {
+        await _save();
+      } catch (_) {
+        if (record != null) _records[package] = record;
+        rethrow;
+      }
+      // A quarantine is outside the executable directory; if its final
+      // deletion fails, the uninstall remains safe and the next retry removes it.
+      if (runtimeQuarantine != null && await runtimeQuarantine.exists()) {
+        try {
+          await runtimeQuarantine.delete();
+        } catch (_) {}
+      }
+      if (await quarantine.exists()) {
+        try {
+          await quarantine.delete(recursive: true);
+        } catch (_) {}
+      }
+      return true;
+    } catch (_) {
+      if (runtimeQuarantine != null &&
+          await runtimeQuarantine.exists() &&
+          runtime != null &&
+          !await runtime.exists()) {
+        await runtimeQuarantine.rename(runtime.path);
+      }
+      if (await quarantine.exists() && !await verified.exists()) {
+        await quarantine.rename(verified.path);
+      }
+      rethrow;
+    }
   });
 
   Future<Map<String, Object?>> _active(

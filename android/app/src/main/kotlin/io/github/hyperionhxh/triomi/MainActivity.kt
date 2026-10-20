@@ -308,7 +308,21 @@ class MainActivity : FlutterActivity() {
                         if (packageName == null || enabled == null) {
                             result.error("invalid_args", "packageName and enabled are required", null)
                         } else {
-                            result.success(mihonHost.setEnabled(packageName, enabled))
+                            mihonExecutor.execute {
+                                val status = mihonHost.setEnabled(packageName, enabled)
+                                runOnUiThread { result.success(status) }
+                            }
+                        }
+                    }
+                    "mihonUninstall" -> {
+                        val packageName = call.argument<String>("packageName")
+                        if (packageName == null) {
+                            result.error("invalid_args", "packageName is required", null)
+                        } else {
+                            mihonExecutor.execute {
+                                val status = mihonHost.uninstall(packageName)
+                                runOnUiThread { result.success(status) }
+                            }
                         }
                     }
                     "mihonOpenSettings" -> {
@@ -449,7 +463,6 @@ class MainActivity : FlutterActivity() {
 
     override fun onPictureInPictureModeChanged(inPip: Boolean, configuration: android.content.res.Configuration) {
         super.onPictureInPictureModeChanged(inPip, configuration)
-        NativeVideoLifecycle.inPip = inPip
         NativeVideoLifecycle.active?.onPipChanged(inPip)
     }
 
@@ -462,6 +475,13 @@ class MainActivity : FlutterActivity() {
         mihonWebSession?.close()
         videoResolver?.cancel()
         downloadVideoResolver?.cancel()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Visible PiP is paused but started. Once stopped (including PiP
+        // dismissal), only explicit background audio may keep playing.
+        NativeVideoLifecycle.active?.onBackground(videoBackgroundAudio)
     }
 
     override fun onResume() {

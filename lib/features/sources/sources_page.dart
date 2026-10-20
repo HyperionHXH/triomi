@@ -20,6 +20,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../downloads/data/download_repository.dart';
+import '../manga/manga_extension_details_page.dart';
 import '../manga/windows_mihon_settings_page.dart';
 import 'catalog_sheet.dart';
 import 'kazumi_repositories_sheet.dart';
@@ -937,6 +938,17 @@ class _FailureTile extends StatelessWidget {
         vertical: AppSpacing.xxs,
       ),
       leading: Icon(Icons.error_outline, color: theme.colorScheme.error),
+      onTap: failure.id.startsWith('mihon:')
+          ? () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => MangaExtensionDetailsPage(
+                  packageName: failure.id.split(':')[1],
+                  diagnostic: failure.message,
+                ),
+              ),
+            )
+          : null,
       title: Text(failure.name),
       subtitle: Text(
         '${sourceLanguageLabel(sourceLanguage(failure.lang))} · ${sourceContentLabel(failure.nsfw)}\n来源无法加载：${failure.message}',

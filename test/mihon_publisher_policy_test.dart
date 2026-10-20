@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -148,5 +150,77 @@ void main() {
       throwsStateError,
     );
     expect(calls.map((c) => c.method), ['mihonInspectMetadata']);
+  });
+
+  test('uninstall uses native host and preserves unrelated user data and packages', () async {
+    final service = installer();
+    const package = 'org.example.remove';
+    const retained = 'org.example.keep';
+    await service.preferences.set('mihon.installedPackages', {package: '1', retained: '2'});
+    await service.preferences.set('mihon.enabledPackages', [package, retained]);
+    await service.preferences.set('mihon.hostStatus', {
+      package: {'signerSha256': publisherSigner},
+      retained: {'signerSha256': repositorySigner},
+    });
+    await service.preferences.set('source.account', {'private': 'fixture-only'});
+    await service.preferences.set('reader.progress', {'chapter': 7});
+    await service.preferences.set('mihon.repositories', ['https://manual.example/index.json']);
+    await service.uninstall(package);
+    expect(calls.map((call) => call.method), ['mihonUninstall']);
+    expect(calls.single.arguments, {'packageName': package});
+    expect(service.preferences.get<Object?>('mihon.installedPackages'), {retained: '2'});
+    expect(service.preferences.get<Object?>('mihon.enabledPackages'), [retained]);
+    expect(service.preferences.get<Object?>('mihon.hostStatus'), {
+      retained: {'signerSha256': repositorySigner},
+    });
+    expect(service.preferences.get<Object?>('source.account'), {'private': 'fixture-only'});
+    expect(service.preferences.get<Object?>('reader.progress'), {'chapter': 7});
+    expect(service.preferences.get<Object?>('mihon.repositories'), ['https://manual.example/index.json']);
+  });
+
+
+  test('concurrent uninstalls merge metadata after native completion', () async {
+    final service = installer();
+    const first = 'org.example.first';
+    const second = 'org.example.second';
+    await service.preferences.set('mihon.installedPackages', {
+      first: '1',
+      second: '2',
+    });
+    await service.preferences.set('mihon.enabledPackages', [first, second]);
+    await service.preferences.set('mihon.hostStatus', {
+      first: {'signerSha256': publisherSigner},
+      second: {'signerSha256': publisherSigner},
+    });
+    final firstNative = Completer<void>();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(hostChannel, (call) async {
+          calls.add(call);
+          if ((call.arguments as Map)['packageName'] == first) {
+            await firstNative.future;
+          }
+          return {'ok': true};
+        });
+    final removingFirst = service.uninstall(first);
+    await Future<void>.delayed(Duration.zero);
+    final removingSecond = service.uninstall(second);
+    firstNative.complete();
+    await Future.wait([removingFirst, removingSecond]);
+    expect(service.preferences.get<Object?>('mihon.installedPackages'), isEmpty);
+    expect(service.preferences.get<Object?>('mihon.enabledPackages'), isEmpty);
+    expect(service.preferences.get<Object?>('mihon.hostStatus'), isEmpty);
+  });
+  test('native uninstall rejection retains installed identity and enable preferences', () async {
+    final service = installer();
+    const package = 'org.example.remove';
+    await service.preferences.set('mihon.installedPackages', {package: '1'});
+    await service.preferences.set('mihon.enabledPackages', [package]);
+    await service.preferences.set('mihon.hostStatus', {package: {'signerSha256': publisherSigner}});
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(hostChannel, (_) async => {'ok': false});
+    await expectLater(service.uninstall(package), throwsStateError);
+    expect(service.preferences.get<Object?>('mihon.installedPackages'), {package: '1'});
+    expect(service.preferences.get<Object?>('mihon.enabledPackages'), [package]);
+    expect(service.preferences.get<Object?>('mihon.hostStatus'), {package: {'signerSha256': publisherSigner}});
   });
 }

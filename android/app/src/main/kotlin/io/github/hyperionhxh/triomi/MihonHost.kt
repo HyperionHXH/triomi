@@ -130,9 +130,94 @@ class MihonHost(private val context: Context) {
         }
     }
 
-    fun setEnabled(packageName: String, enabled: Boolean): Map<String, Any?> {
-        val persisted = prefs.edit().putBoolean("enabled.$packageName", enabled).commit()
-        return mapOf("ok" to persisted, "packageName" to packageName, "enabled" to enabled)
+    @Synchronized fun setEnabled(packageName: String, enabled: Boolean): Map<String, Any?> {
+        return try {
+            if (enabled) {
+                val extension = loaded[packageName] ?: loadPersisted(packageName, emptyMap<String, Any>())
+                require(extension != null) { "extension is not installed or cannot execute; reinstall it first" }
+            }
+            val persisted = prefs.edit().putBoolean("enabled.$packageName", enabled).commit()
+            mapOf("ok" to persisted, "packageName" to packageName, "enabled" to enabled)
+        } catch (error: Throwable) {
+            mapOf("ok" to false, "error" to rootMessage(error))
+        }
+    }
+
+    @Synchronized fun uninstall(packageName: String): Map<String, Any?> {
+        return try {
+            require(Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+$").matches(packageName)) { "invalid package identity" }
+            val staging = File(app.filesDir, "mihon-staging")
+            require(!java.nio.file.Files.isSymbolicLink(staging.toPath())) { "APK staging symlink is forbidden" }
+            val filenames = Regex("^${Regex.escape(packageName)}-[0-9a-f]{64}\\.apk$")
+            val staged = staging.listFiles()?.filter { filenames.matches(it.name) } ?: emptyList()
+            staged.forEach { file ->
+                require(!java.nio.file.Files.isSymbolicLink(file.toPath())) { "APK staging symlink is forbidden" }
+                require(file.isFile) { "staged extension is not a regular file" }
+            }
+            val quarantine = File(staging, ".uninstall-$packageName")
+            require(!java.nio.file.Files.isSymbolicLink(quarantine.toPath())) { "APK quarantine symlink is forbidden" }
+            if (quarantine.exists()) {
+                require(quarantine.isDirectory) { "APK quarantine is not a directory" }
+                quarantine.listFiles()?.forEach { file ->
+                    require(!java.nio.file.Files.isSymbolicLink(file.toPath())) { "APK quarantine symlink is forbidden" }
+                    require(file.delete()) { "unable to clear APK quarantine; retry uninstall" }
+                }
+            } else if (staged.isNotEmpty()) {
+                require(quarantine.mkdir()) { "unable to create APK quarantine" }
+            }
+            val moved = mutableListOf<Pair<File, File>>()
+            try {
+                staged.forEachIndexed { index, file ->
+                    val quarantined = File(quarantine, "$index.apk")
+                    require(file.renameTo(quarantined)) { "unable to quarantine staged extension; retry uninstall" }
+                    moved.add(file to quarantined)
+                }
+                val keys = listOf(
+                    "enabled.$packageName", "apk.$packageName", "signer.$packageName",
+                    "hash.$packageName", "version.$packageName",
+                )
+                val previous = keys.associateWith { prefs.all[it] }
+                val persisted = prefs.edit()
+                    .remove("enabled.$packageName")
+                    .remove("apk.$packageName")
+                    .remove("signer.$packageName")
+                    .remove("hash.$packageName")
+                    .remove("version.$packageName")
+                    .commit()
+                if (!persisted) {
+                    val restore = prefs.edit()
+                    keys.forEach(restore::remove)
+                    previous.forEach { (key, value) ->
+                        when (value) {
+                            is Boolean -> restore.putBoolean(key, value)
+                            is String -> restore.putString(key, value)
+                            is Int -> restore.putInt(key, value)
+                            is Long -> restore.putLong(key, value)
+                            is Float -> restore.putFloat(key, value)
+                            is Set<*> -> restore.putStringSet(key, value.filterIsInstance<String>().toSet())
+                        }
+                    }
+                    require(restore.commit()) { "unable to restore extension records after failed removal" }
+                }
+                require(persisted) { "unable to persist extension removal" }
+            } catch (error: Throwable) {
+                moved.asReversed().forEach { (original, quarantined) ->
+                    if (quarantined.exists()) require(quarantined.renameTo(original)) {
+                        "unable to restore staged extension after uninstall failure"
+                    }
+                }
+                if (quarantine.exists()) quarantine.delete()
+                throw error
+            }
+            loaded.remove(packageName)
+            // Quarantined APKs are inert. Failed cleanup is retryable on next removal.
+            quarantine.listFiles()?.forEach { it.delete() }
+            quarantine.delete()
+            // Source preferences, sessions, library and history are user data.
+            mapOf("ok" to true, "packageName" to packageName)
+        } catch (error: Throwable) {
+            mapOf("ok" to false, "error" to rootMessage(error))
+        }
     }
 
     fun request(args: Map<*, *>): Map<String, Any?> {

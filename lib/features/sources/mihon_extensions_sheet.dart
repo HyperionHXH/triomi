@@ -15,8 +15,6 @@ import '../../core/source/source_providers.dart';
 import '../../core/storage/preferences.dart';
 import '../manga/manga_extension_details_page.dart';
 
-const mihonDefaultRepositoryUrl =
-    'https://raw.githubusercontent.com/HyperionHXH/Mihon-Extensions/main/repo/index.json';
 const _mihonRepositoriesKey = 'mihon.repositories';
 const _mihonEnabledKey = 'mihon.enabledPackages';
 const _mihonInstalledKey = 'mihon.installedPackages';
@@ -40,7 +38,9 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   bool _loading = false;
   SourceFilters _filters = const SourceFilters(language: 'zh');
   _ExtensionSection _section = _ExtensionSection.installed;
-  bool _searching = false;
+  final _searchController = TextEditingController();
+  bool _savingRepositories = false;
+  int _repositoryGeneration = 0;
 
   void _setFilters(SourceFilters value) {
     setState(() => _filters = value);
@@ -57,6 +57,8 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       <String, Map<String, Object?>>{};
   final Set<String> _downloading = <String>{};
   bool _toggling = false;
+  final Set<String> _removing = <String>{};
+  final Map<String, MihonExtension> _failedExtensions = {};
   List<String> _repositories = <String>[];
   String? _selectedRepository;
   ApkBackupFiles? _apkFiles;
@@ -68,19 +70,27 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
     unawaited(_loadPreferences());
   }
 
+  @override
+  void dispose() {
+    _repositoryGeneration++;
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadPreferences() async {
     final preferences = ref.read(preferencesProvider);
     _filters = SourceFilters.fromJson(
       preferences.get<Object?>('sources.filters.mihon'),
       defaultLanguage: 'zh',
     ).copyWith(clearType: true);
+    _searchController.text = _filters.query;
     final rawRepositories = preferences.get<List<Object?>>(
       _mihonRepositoriesKey,
     );
     final repositories = <String>{
-      mihonDefaultRepositoryUrl,
-      for (final item in rawRepositories ?? const <Object?>[]) item.toString(),
-    }.where((item) => item.trim().isNotEmpty).toList();
+      for (final item in rawRepositories ?? const <Object?>[])
+        item.toString().trim(),
+    }.where((item) => item.isNotEmpty).toList();
     final rawEnabled = preferences.get<List<Object?>>(_mihonEnabledKey);
     final rawInstalled = preferences.get<Map<dynamic, dynamic>>(
       _mihonInstalledKey,
@@ -100,7 +110,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       _apkFiles = apkFiles;
       _pendingApks = pendingApks;
       _repositories = repositories;
-      _selectedRepository = repositories.first;
+      _selectedRepository = repositories.firstOrNull;
       _enabled.addAll(
         rawEnabled?.map((item) => item.toString()) ?? const <String>[],
       );
@@ -125,35 +135,41 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   }
 
   Future<void> _refresh() async {
-    if (!mounted || _repositories.isEmpty || _loading) return;
+    if (!mounted) return;
+    final generation = ++_repositoryGeneration;
+    final repository = _selectedRepository;
     setState(() {
-      _loading = true;
+      _index = null;
+      _loading = repository != null;
       _error = null;
     });
+    if (repository == null) return;
     try {
-      // 先使用第一个仓库；后续仓库可单独刷新，避免同名扩展静默覆盖。
-      final repository = _selectedRepository ?? _repositories.first;
       final index = await MihonRepositoryClient(
         ref.read(sourceHttpClientProvider),
       ).fetch(repository);
-      if (!mounted) return;
+      if (!mounted || generation != _repositoryGeneration) return;
       setState(() => _index = index);
     } catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error);
+      if (!mounted || generation != _repositoryGeneration) return;
+      setState(() => _error = SourceException.sanitizeMessage('$error'));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && generation == _repositoryGeneration) {
+        setState(() => _loading = false);
+      }
     }
   }
 
-  Future<void> _addRepository() async {
-    final controller = TextEditingController();
+  Future<void> _editRepository([String? previous]) async {
+    if (_savingRepositories) return;
+    var text = previous ?? '';
     final value = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('添加 Mihon 仓库'),
-        content: TextField(
-          controller: controller,
+        title: Text(previous == null ? '添加 Mihon 仓库' : '编辑 Mihon 仓库'),
+        content: TextFormField(
+          initialValue: text,
+          onChanged: (value) => text = value,
           autofocus: true,
           keyboardType: TextInputType.url,
           decoration: const InputDecoration(
@@ -167,35 +183,95 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: const Text('添加'),
+            onPressed: () => Navigator.of(dialogContext).pop(text),
+            child: Text(previous == null ? '添加' : '保存'),
           ),
         ],
       ),
     );
-    controller.dispose();
     final uri = Uri.tryParse(value?.trim() ?? '');
-    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
-      if (value != null && mounted) _toast('仓库地址必须是 HTTPS');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasFragment) {
+      if (value != null && mounted) _toast('仓库地址必须是无凭据、无片段的 HTTPS URL');
       return;
     }
-    if (!mounted || _repositories.contains(uri.toString())) return;
-    final repositories = <String>[..._repositories, uri.toString()];
-    await ref
-        .read(preferencesProvider)
-        .set(_mihonRepositoriesKey, repositories);
-    if (!mounted) return;
-    setState(() {
-      _repositories = repositories;
-      _selectedRepository = uri.toString();
-      _index = null;
-      _section = _ExtensionSection.browse;
-    });
-    await _refresh();
+    if (!mounted || value == null) return;
+    final repository = uri.toString();
+    if (_repositories.contains(repository) && repository != previous) {
+      _toast('此仓库已存在');
+      return;
+    }
+    final repositories = [
+      for (final item in _repositories)
+        if (item != previous) item,
+      repository,
+    ];
+    await _saveRepositories(repositories, selected: repository);
   }
 
-  Future<void> _download(MihonExtension extension) async {
-    if (_downloading.contains(extension.packageName)) return;
+  Future<void> _saveRepositories(
+    List<String> repositories, {
+    String? selected,
+  }) async {
+    if (_savingRepositories) return;
+    setState(() => _savingRepositories = true);
+    try {
+      await ref.read(preferencesProvider).set(_mihonRepositoriesKey, repositories);
+      if (!mounted) return;
+      setState(() {
+        _repositories = repositories;
+        _selectedRepository = selected ??
+            (repositories.contains(_selectedRepository)
+                ? _selectedRepository
+                : repositories.firstOrNull);
+        _index = null;
+        _error = null;
+        if (selected != null) _section = _ExtensionSection.browse;
+      });
+      unawaited(_refresh());
+    } catch (error) {
+      if (mounted) _toast('仓库保存失败：${SourceException.sanitizeMessage('$error')}');
+    } finally {
+      if (mounted) setState(() => _savingRepositories = false);
+    }
+  }
+
+  Future<void> _removeRepository(String repository) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('移除扩展仓库？'),
+        content: Text('$repository\n\n仅移除仓库地址，不卸载扩展，不删除书架或历史记录。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('移除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _saveRepositories([
+      for (final item in _repositories)
+        if (item != repository) item,
+    ]);
+  }
+
+  Future<void> _download(
+    MihonExtension extension,
+    MihonRepositoryIndex repository,
+  ) async {
+    if (_downloading.contains(extension.packageName) ||
+        _removing.contains(extension.packageName)) {
+      return;
+    }
     if (mounted) {
       setState(() {
         _downloading.add(extension.packageName);
@@ -209,7 +285,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
             preferences: ref.read(preferencesProvider),
           ).install(
             extension,
-            signerSha256: _index?.signingKey ?? '',
+            signerSha256: repository.signingKey,
             confirmPublisher: (candidate) async {
               if (!mounted) return false;
               return await showDialog<bool>(
@@ -231,7 +307,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                                   : '${extension.name} 使用仓库提供的原生桌面 JAR，避免 APK 转换不兼容。APK 签名不为 JAR 背书；请同时核对桌面代码来源与独立指纹。扩展在本机执行，不是权限沙箱。',
                             ),
                             const SizedBox(height: 12),
-                            Text('仓库：${_index?.sourceUrl ?? ''}'),
+                            Text('仓库：${repository.sourceUrl}'),
                             const SizedBox(height: 8),
                             const Text('扩展发布者 SHA-256'),
                             SelectableText(candidate.actualSigner),
@@ -272,6 +348,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
           );
       _installed[extension.packageName] = extension.versionName;
       _hostStatus[extension.packageName] = probe;
+      _failedExtensions.remove(extension.packageName);
       // A previously enabled package may be reinstalled/updated. Keep the
       // persisted preference authoritative, but only after the new APK has
       // passed the host executable probe. First-time installs remain disabled.
@@ -304,17 +381,22 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
           () => _installErrors[extension.packageName] =
               SourceException.sanitizeMessage('$error'),
         );
+        _failedExtensions[extension.packageName] = extension;
         _toast('扩展安装失败，点击插件查看原因后可重试');
       }
     } finally {
       if (mounted) {
+        ref.invalidate(sourceRegistryProvider);
         setState(() => _downloading.remove(extension.packageName));
       }
     }
   }
 
   Future<void> _toggle(String packageName, bool enabled) async {
-    if (_toggling) return;
+    if (_toggling || _downloading.contains(packageName) ||
+        _removing.contains(packageName)) {
+      return;
+    }
     final preferences = ref.read(preferencesProvider);
     setState(() => _toggling = true);
     try {
@@ -331,12 +413,13 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       );
       if (!nativeOk) {
         await preferences.set(_mihonEnabledKey, _enabled.toList());
-        if (mounted) _toast('宿主没有接受启用状态变更');
+        if (mounted) _toast('宿主没有接受启用状态变更；请打开插件详情检查兼容性，或重新安装完整的扩展运行时后重试');
         return;
       }
       _enabled
         ..clear()
         ..addAll(next);
+      ref.invalidate(sourceRegistryProvider);
     } catch (_) {
       await preferences.set(_mihonEnabledKey, _enabled.toList());
       if (mounted) _toast('启用状态保存失败，请重试');
@@ -344,6 +427,61 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       if (mounted) setState(() => _toggling = false);
     }
   }
+
+  Future<void> _removePackage(String packageName) async {
+    if (_downloading.contains(packageName) || _removing.contains(packageName)) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('卸载扩展？'),
+        content: Text(
+          '${_packageName(packageName)}\n\n移除扩展代码与启用状态，保留书架、阅读历史、下载和来源设置。再次安装需要重新核验发布者。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('卸载'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _removing.add(packageName));
+    final container = ProviderScope.containerOf(context, listen: false);
+    try {
+      await MihonInstaller(
+        http: ref.read(sourceHttpClientProvider),
+        preferences: ref.read(preferencesProvider),
+      ).uninstall(packageName, pendingFiles: _apkFiles);
+      container.invalidate(sourceRegistryProvider);
+      if (!mounted) return;
+      setState(() {
+        _enabled.remove(packageName);
+        _installed.remove(packageName);
+        _hostStatus.remove(packageName);
+        _installErrors.remove(packageName);
+        _failedExtensions.remove(packageName);
+        _pendingApks = _apkFiles?.pending.values.toList() ?? [];
+      });
+      _toast('扩展已卸载；书架和阅读历史已保留');
+    } catch (error) {
+      if (mounted) _toast('卸载失败：${SourceException.sanitizeMessage('$error')}');
+    } finally {
+      if (mounted) setState(() => _removing.remove(packageName));
+    }
+  }
+
+  Widget _removePackageButton(String packageName) => IconButton(
+    tooltip: '卸载扩展',
+    onPressed: _downloading.contains(packageName) || _removing.contains(packageName)
+        ? null
+        : () => unawaited(_removePackage(packageName)),
+    icon: const Icon(Icons.delete_outline),
+  );
 
   Future<void> _activatePending(Map<String, Object?> row) async {
     final packageName = row['packageName'] as String;
@@ -430,18 +568,25 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
         '恢复 APK · v${row['versionName']} (${row['versionCode']}) · ${sourceContentLabel(sourceNsfwFlag(row['nsfw']))} · 停用待确认\n'
         '${Platform.isAndroid ? '未执行扩展代码；需确认实际发布者' : '当前平台不支持执行；仅保存可移植 APK 字节'}',
       ),
-      trailing: busy
-          ? const SizedBox(
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (busy)
+            const SizedBox(
               width: 20,
               height: 20,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : TextButton(
-              onPressed: Platform.isAndroid
+          else
+            TextButton(
+              onPressed: Platform.isAndroid && !_removing.contains('${row['packageName']}')
                   ? () => unawaited(_activatePending(row))
                   : null,
               child: const Text('核验并加载'),
             ),
+          _removePackageButton('${row['packageName']}'),
+        ],
+      ),
     );
   }
 
@@ -468,13 +613,17 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
             .where((entry) => entry.name.toLowerCase().contains(query))
             .toList() ??
         const <MihonExtension>[];
-    final packages = <String>{..._installed.keys, ..._hostStatus.keys}.toList()
-      ..sort();
+    final packages = <String>{
+      ..._installed.keys,
+      ..._hostStatus.keys,
+      ..._enabled,
+      ..._installErrors.keys,
+    }.toList()..sort();
     final installed = packages
         .where((package) => _packageName(package).toLowerCase().contains(query))
         .toList();
     final pending = _pendingApks
-        .where((row) => '${row['name'] ?? ''}'.toLowerCase().contains(query))
+        .where((row) => '${row['packageName'] ?? ''}'.toLowerCase().contains(query))
         .toList();
     return SafeArea(
       child: Padding(
@@ -492,12 +641,6 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ),
-                  if (_section != _ExtensionSection.repositories)
-                    IconButton(
-                      tooltip: '搜索插件名称',
-                      icon: const Icon(Icons.search),
-                      onPressed: () => setState(() => _searching = !_searching),
-                    ),
                   IconButton(
                     tooltip: '关闭扩展管理',
                     onPressed: () => Navigator.pop(context),
@@ -511,6 +654,26 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                     : Platform.isAndroid
                     ? 'Mihon / Komikku APK · 安装后需手动启用，并确认发布者。'
                     : '当前平台没有兼容的扩展运行时。',
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  labelText: '搜索插件名称',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _filters.query.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: '清除插件搜索',
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            _setFilters(_filters.copyWith(query: ''));
+                          },
+                        ),
+                ),
+                onChanged: (query) =>
+                    _setFilters(_filters.copyWith(query: query)),
               ),
               const SizedBox(height: 12),
               SegmentedButton<_ExtensionSection>(
@@ -535,13 +698,13 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
               const SizedBox(height: 12),
               if (_section == _ExtensionSection.repositories) ...[
                 FilledButton.icon(
-                  onPressed: _addRepository,
+                  onPressed: _savingRepositories ? null : _editRepository,
                   icon: const Icon(Icons.add_link),
                   label: const Text('添加扩展仓库'),
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  '使用 Mihon / Tachiyomi APK 仓库 index.json；不是 Kazumi 规则地址。选择仓库后浏览并安装扩展。',
+                  '应用不提供仓库。请手动输入 Mihon / Tachiyomi APK 仓库 index.json；不是 Kazumi 规则地址。移除仓库不会卸载已安装扩展。',
                 ),
                 Expanded(
                   child: ListView(
@@ -554,14 +717,31 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                             Uri.tryParse(repository)?.host ?? repository,
                           ),
                           subtitle: Text(repository),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: _loading
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: '编辑扩展仓库',
+                                onPressed: _savingRepositories
+                                    ? null
+                                    : () => _editRepository(repository),
+                                icon: const Icon(Icons.edit_outlined),
+                              ),
+                              IconButton(
+                                tooltip: '移除扩展仓库',
+                                onPressed: _savingRepositories
+                                    ? null
+                                    : () => _removeRepository(repository),
+                                icon: const Icon(Icons.delete_outline),
+                              ),
+                            ],
+                          ),
+                          onTap: _savingRepositories
                               ? null
                               : () {
                                   setState(() {
                                     _selectedRepository = repository;
                                     _section = _ExtensionSection.browse;
-                                    _index = null;
                                   });
                                   unawaited(_refresh());
                                 },
@@ -579,8 +759,10 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                               _selectSection(_ExtensionSection.repositories),
                           icon: const Icon(Icons.inventory_2_outlined),
                           label: Text(
-                            Uri.tryParse(_selectedRepository ?? '')?.host ??
-                                '选择仓库',
+                            _selectedRepository == null
+                                ? '添加你自己的仓库'
+                                : Uri.tryParse(_selectedRepository!)?.host ??
+                                    _selectedRepository!,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -591,14 +773,6 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                         icon: const Icon(Icons.refresh),
                       ),
                     ],
-                  ),
-                if (_searching)
-                  TextFormField(
-                    autofocus: true,
-                    initialValue: _filters.query,
-                    decoration: const InputDecoration(labelText: '搜索插件名称'),
-                    onChanged: (query) =>
-                        _setFilters(_filters.copyWith(query: query)),
                   ),
                 if (_section == _ExtensionSection.installed)
                   Expanded(
@@ -631,11 +805,15 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                   Expanded(
                     child: ListView(
                       children: [
-                        for (final entry in entries) _extensionTile(entry),
+                        for (final entry in entries) _extensionTile(entry, index!),
                         if (entries.isEmpty && !_loading && _error == null)
-                          const Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Text('没有匹配的扩展，请调整插件名称。'),
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(
+                              _repositories.isEmpty
+                                  ? '尚未添加扩展仓库。请在“仓库”中手动添加地址；应用不会自动提供仓库。'
+                                  : '没有匹配的扩展，请调整插件名称。',
+                            ),
                           ),
                       ],
                     ),
@@ -650,6 +828,9 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   }
 
   String _packageName(String package) {
+    final declared = _hostStatus[package]?['name']?.toString() ??
+        _failedExtensions[package]?.name;
+    if (declared != null && declared.isNotEmpty) return declared;
     final raw = _hostStatus[package]?['sources'];
     if (raw is List) {
       final names = raw
@@ -665,12 +846,15 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   Future<void> _details(String package) async {
     // Publish locally changed install/enable state before resolving its sources.
     ref.invalidate(sourceRegistryProvider);
-    await ref.read(sourcesProvider.notifier).refresh();
+    ref.invalidate(sourcesProvider);
     if (!mounted) return;
     await Navigator.push(
       context,
       MaterialPageRoute<void>(
-        builder: (_) => MangaExtensionDetailsPage(packageName: package),
+        builder: (_) => MangaExtensionDetailsPage(
+          packageName: package,
+          diagnostic: _installErrors[package],
+        ),
       ),
     );
   }
@@ -679,6 +863,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
     final host = _hostStatus[package];
     final ready = host?['ok'] == true;
     final enabled = ready && _enabled.contains(package);
+    final busy = _downloading.contains(package) || _removing.contains(package);
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: const Icon(Icons.extension_outlined),
@@ -686,7 +871,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       title: Text(_packageName(package)),
       subtitle: Text(
         'v${_installed[package] ?? host?['versionName'] ?? host?['versionCode'] ?? '未知'} · ${sourceContentLabel(sourceNsfwFlag(host?['nsfw']))}\n'
-        '${ready ? (enabled ? '已启用' : '已安装 · 已停用') : '宿主未加载，当前不可用'}\n$package',
+        '${_installErrors.containsKey(package) ? '安装失败 · 点击查看原因' : ready ? (enabled ? '已启用' : '已安装 · 已停用') : '宿主未加载，当前不可用'}\n$package',
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -700,17 +885,24 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
             label: '启用扩展 ${_packageName(package)}',
             child: Switch(
               value: enabled,
-              onChanged: ready && !_toggling
+              onChanged: ready && !_toggling && !busy
                   ? (value) => _toggle(package, value)
                   : null,
             ),
           ),
+          _removePackageButton(package),
+          if (!ready && _enabled.contains(package))
+            IconButton(
+              tooltip: '清除启用偏好',
+              onPressed: busy || _toggling ? null : () => _toggle(package, false),
+              icon: const Icon(Icons.power_settings_new),
+            ),
         ],
       ),
     );
   }
 
-  Widget _extensionTile(MihonExtension extension) {
+  Widget _extensionTile(MihonExtension extension, MihonRepositoryIndex repository) {
     final downloaded =
         _installed[extension.packageName] == extension.versionName;
     final downloading = _downloading.contains(extension.packageName);
@@ -731,25 +923,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
     final installError = _installErrors[extension.packageName];
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      onTap: installError != null
-          ? () => unawaited(
-              showDialog<void>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: Text('${extension.name} 安装失败'),
-                  content: SingleChildScrollView(
-                    child: SelectableText(installError),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('关闭'),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : downloaded || host != null
+      onTap: installError != null || downloaded || host != null
           ? () => unawaited(_details(extension.packageName))
           : null,
       leading: const Icon(Icons.extension_outlined),
@@ -786,14 +960,17 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
           else
             IconButton(
               tooltip: downloaded ? '已下载但宿主未加载：请查看提示并修复兼容性' : '下载 APK',
-              onPressed: () => unawaited(_download(extension)),
+              onPressed: _removing.contains(extension.packageName)
+                  ? null
+                  : () => unawaited(_download(extension, repository)),
               icon: const Icon(Icons.download_outlined),
             ),
           Semantics(
             label: '启用扩展 ${extension.name}',
             child: Switch(
               value: enabled,
-              onChanged: hostReady && !_toggling
+              onChanged: hostReady && !_toggling &&
+                      !downloading && !_removing.contains(extension.packageName)
                   ? (value) => _toggle(extension.packageName, value)
                   : null,
             ),

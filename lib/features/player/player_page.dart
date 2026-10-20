@@ -109,6 +109,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   bool _chromeVisible = true;
   bool _danmakuOn = true;
   bool _fullscreen = false;
+  bool _episodesOpen = false;
+  bool _scrubbing = false;
+  Timer? _chromeTimer;
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   /// 播放倍速（0.5~3.0）。
   double _speed = 1.0;
@@ -142,6 +146,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         _awaitingPlaybackStart = false;
         _onNativeVideoState(state);
         unawaited(_applyControls());
+        _scheduleChromeHide();
       },
       onError: _onNativeVideoError,
       onCompleted: () => unawaited(_onCompleted()),
@@ -166,7 +171,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         if (mounted) setState(() => _duration = duration);
       });
       _playingSub = _player.stream.playing.listen((playing) {
-        if (mounted) setState(() => _playing = playing);
+        if (mounted) {
+          setState(() => _playing = playing);
+          _scheduleChromeHide();
+        }
       });
       _completedSub = _player.stream.completed.listen((completed) {
         if (completed) unawaited(_onCompleted());
@@ -192,14 +200,15 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       _chapters[_chapterIndex].sourceId == _item.sourceId;
 
   void _onPosition(Duration position) {
-    if (_awaitingPlaybackStart) return;
+    if (_awaitingPlaybackStart || _scrubbing) return;
     _position = position;
     _danmaku.update(position, playing: _playing);
     if (mounted) setState(() {});
   }
 
   void _onNativeVideoState(_NativeVideoState state) {
-    if (_awaitingPlaybackStart) return;
+    if (_awaitingPlaybackStart || _scrubbing) return;
+    final playingChanged = _playing != state.playing;
     _position = state.position;
     _duration = state.duration;
     _playing = state.playing;
@@ -210,6 +219,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     // frozen at the position where the stream was initially loaded.
     _danmaku.update(state.position, playing: state.playing);
     if (mounted) setState(() {});
+    if (playingChanged) _scheduleChromeHide();
   }
 
   void _onNativeVideoError(String message) {
@@ -217,7 +227,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _prepareTimer?.cancel();
     setState(() {
       _loading = false;
-      _error = message;
+      _error = SourceException.sanitizeMessage(message);
     });
   }
 
@@ -282,6 +292,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
             _loading = false;
             _chromeVisible = true;
           });
+          _scheduleChromeHide();
         }
         return;
       }
@@ -332,6 +343,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           _loading = false;
           _chromeVisible = true;
         });
+        _scheduleChromeHide();
       }
     } on SourceException catch (error) {
       if (mounted && seq == _loadSeq) {
@@ -344,9 +356,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       if (mounted && seq == _loadSeq) {
         setState(() {
           _loading = false;
-          _error = error is PlatformException
+          _error = SourceException.sanitizeMessage(error is PlatformException
               ? (error.message ?? '播放暂不可用，请重试或更换播放来源')
-              : '$error'.replaceFirst('Bad state: ', '');
+              : '$error'.replaceFirst('Bad state: ', ''));
         });
       }
     }
@@ -587,7 +599,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   // ---------------------------------------------------------------- 全屏
 
   Future<void> _setFullscreen(bool value) async {
-    setState(() => _fullscreen = value);
+    _scaffoldKey.currentState?.closeEndDrawer();
+    setState(() {
+      _fullscreen = value;
+      _episodesOpen = false;
+    });
     if (value) {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
@@ -656,12 +672,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
               style: const TextStyle(color: Colors.white),
             ),
           ),
-        if (!_loading &&
-            !_awaitingPlaybackStart &&
-            _error == null &&
-            _chromeVisible &&
-            !_inPip)
-          _buildChrome(),
+        if (!_inPip) _buildChrome(),
       ],
     );
     final episodes = Material(
@@ -697,46 +708,80 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       ),
     );
     return PopScope(
-      canPop: !_fullscreen,
+      canPop: !_fullscreen && !_episodesOpen,
       onPopInvokedWithResult: (didPop, _) async {
-        if (!didPop && _fullscreen) await _setFullscreen(false);
+        if (didPop) return;
+        if (_episodesOpen) {
+          _scaffoldKey.currentState?.closeEndDrawer();
+        } else if (_fullscreen) {
+          await _setFullscreen(false);
+        }
       },
       child: Scaffold(
-        backgroundColor: Colors.black,
-        body: SafeArea(
-          top: !_fullscreen,
-          bottom: !_fullscreen,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              if (_fullscreen || _inPip) return video;
-              if (constraints.maxWidth >= 900) {
-                return Row(
-                  children: [
-                    Expanded(child: video),
-                    SizedBox(width: 340, child: episodes),
-                  ],
-                );
-              }
-              return Column(
-                children: [
-                  SizedBox(
-                    height: (constraints.maxWidth * 9 / 16).clamp(
-                      0.0,
-                      constraints.maxHeight * .6,
-                    ),
-                    child: video,
+        key: _scaffoldKey,
+        endDrawerEnableOpenDragGesture: false,
+        onEndDrawerChanged: (open) {
+          setState(() => _episodesOpen = open);
+          if (!open) _scheduleChromeHide();
+        },
+        endDrawer: Drawer(
+          width: (MediaQuery.sizeOf(context).width * .85).clamp(0, 380),
+          child: SafeArea(
+            child: Column(
+              children: [
+                ListTile(
+                  title: const Text('选集'),
+                  trailing: IconButton(
+                    tooltip: '关闭选集',
+                    onPressed: () => _scaffoldKey.currentState?.closeEndDrawer(),
+                    icon: const Icon(Icons.close),
                   ),
-                  Expanded(child: episodes),
-                ],
-              );
-            },
+                ),
+                const Divider(height: 1),
+                Expanded(child: episodes),
+              ],
+            ),
           ),
+        ),
+        backgroundColor: Colors.black,
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final fillsWindow = _fullscreen ||
+                _inPip ||
+                constraints.maxWidth > constraints.maxHeight;
+            return SafeArea(
+              top: !_fullscreen && !_inPip,
+              bottom: !_fullscreen && !_inPip,
+              left: !_fullscreen && !_inPip,
+              right: !_fullscreen && !_inPip,
+              child: Column(
+                children: [
+                      Flexible(
+                        flex: fillsWindow ? 1 : 0,
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: fillsWindow
+                              ? double.infinity
+                              : (constraints.maxWidth * 9 / 16)
+                                  .clamp(0.0, constraints.maxHeight * .6),
+                          child: MouseRegion(
+                            onHover: (_) => _revealChrome(),
+                            child: video,
+                          ),
+                        ),
+                      ),
+                      if (!fillsWindow) Expanded(child: episodes),
+                    ],
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
   Future<void> _selectEpisode(int index) async {
+    _scaffoldKey.currentState?.closeEndDrawer();
     if (index == _chapterIndex ||
         index < 0 ||
         index >= _chapters.length ||
@@ -763,12 +808,13 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     await showAnimeSources(context, _item, replacePlayer: true);
   }
 
-  /// 手势：中间单击切换控制条；两侧单击 = ±10 秒；双击 = 播放/暂停。
+  /// A tap reveals controls everywhere; a double tap pauses/resumes.
   Widget _buildGestureArea() {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             Expanded(
               child: GestureDetector(
@@ -777,7 +823,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                 onLongPressEnd: (_) => _holdSpeed(false),
                 onVerticalDragUpdate: (details) =>
                     _adjustBrightness(details.delta.dy, constraints.maxHeight),
-                onTap: () => _skip(-10),
+                onTap: _toggleChrome,
                 onDoubleTap: _togglePlay,
               ),
             ),
@@ -785,7 +831,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
               behavior: HitTestBehavior.opaque,
               onLongPressStart: (_) => _holdSpeed(true),
               onLongPressEnd: (_) => _holdSpeed(false),
-              onTap: () => setState(() => _chromeVisible = !_chromeVisible),
+              onTap: _toggleChrome,
               onDoubleTap: _togglePlay,
               child: SizedBox(width: width * 0.34),
             ),
@@ -798,7 +844,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                     _adjustVolume(details.delta.dy, constraints.maxHeight),
                 onVerticalDragEnd: (_) =>
                     unawaited(_settings.save(_preferences)),
-                onTap: () => _skip(10),
+                onTap: _toggleChrome,
                 onDoubleTap: _togglePlay,
               ),
             ),
@@ -808,18 +854,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     );
   }
 
-  Future<void> _skip(int seconds) async {
-    final target = _position + Duration(seconds: seconds);
-    final clamped = target < Duration.zero ? Duration.zero : target;
-    if (_useNativeAndroidVideo) {
-      await _nativeVideoController.seek(clamped);
-    } else {
-      await _player.seek(clamped);
-    }
-    _danmaku.seek(clamped);
-  }
 
   Future<void> _togglePlay() async {
+    if (_loading || _awaitingPlaybackStart || _error != null) return;
+    _revealChrome();
     if (_useNativeAndroidVideo) {
       _playing
           ? await _nativeVideoController.pause()
@@ -827,6 +865,27 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     } else {
       _playing ? await _player.pause() : await _player.play();
     }
+  }
+
+  void _toggleChrome() {
+    _chromeTimer?.cancel();
+    setState(() => _chromeVisible = !_chromeVisible);
+    if (_chromeVisible) _scheduleChromeHide();
+  }
+
+  void _revealChrome() {
+    if (!_chromeVisible) setState(() => _chromeVisible = true);
+    _scheduleChromeHide();
+  }
+
+  void _scheduleChromeHide() {
+    _chromeTimer?.cancel();
+    if (!_playing || _loading || _awaitingPlaybackStart || _error != null || _episodesOpen || _scrubbing) return;
+    _chromeTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted && !_episodesOpen && !_scrubbing) {
+        setState(() => _chromeVisible = false);
+      }
+    });
   }
 
   Widget _buildChrome() {
@@ -845,7 +904,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= 600;
           final buttonWidth =
-              (constraints.maxWidth - 16) / (_useNativeAndroidVideo ? 7 : 6);
+              (constraints.maxWidth - 16) / ((_useNativeAndroidVideo ? 8 : 7) + (wide ? 1 : 0));
           final buttonSize = buttonWidth.clamp(24.0, 40.0);
           Widget button(String label, IconData icon, VoidCallback? onPressed) =>
               IconButton(
@@ -864,10 +923,13 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                 icon: Icon(icon),
               );
 
-          return AnimatedOpacity(
-            opacity: _chromeVisible ? 1 : 0,
-            duration: const Duration(milliseconds: 180),
-            child: Column(
+          final visible = _chromeVisible || _loading || _awaitingPlaybackStart || _error != null;
+          return IgnorePointer(
+            ignoring: !visible,
+            child: AnimatedOpacity(
+              opacity: visible ? 1 : 0,
+              duration: const Duration(milliseconds: 180),
+              child: Column(
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -935,33 +997,44 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                         Row(
                           children: [
                             Expanded(
-                              child: SliderTheme(
-                                data: SliderTheme.of(context).copyWith(
-                                  trackHeight: 3,
-                                  thumbShape: const RoundSliderThumbShape(
-                                    enabledThumbRadius: 6,
+                              child: SizedBox(
+                                height: 24,
+                                child: SliderTheme(
+                                  data: SliderTheme.of(context).copyWith(
+                                    trackHeight: 2,
+                                    trackShape: const RectangularSliderTrackShape(),
+                                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
                                   ),
-                                ),
-                                child: Slider(
-                                  value: _sliderValue,
-                                  max: _sliderMax,
-                                  onChanged: (value) {
-                                    final target = Duration(
-                                      milliseconds: value.round(),
-                                    );
-                                    setState(() => _position = target);
-                                  },
-                                  onChangeEnd: (value) async {
-                                    final target = Duration(
-                                      milliseconds: value.round(),
-                                    );
-                                    if (_useNativeAndroidVideo) {
-                                      await _nativeVideoController.seek(target);
-                                    } else {
-                                      await _player.seek(target);
-                                    }
-                                    _danmaku.seek(target);
-                                  },
+                                  child: Slider(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    value: _sliderValue,
+                                    max: _sliderMax,
+                                    onChangeStart: _loading || _awaitingPlaybackStart || _error != null
+                                        ? null : (_) {
+                                            _chromeTimer?.cancel();
+                                            setState(() => _scrubbing = true);
+                                          },
+                                    onChanged: _loading || _awaitingPlaybackStart || _error != null
+                                        ? null : (value) => setState(() =>
+                                            _position = Duration(milliseconds: value.round())),
+                                    onChangeEnd: (value) async {
+                                      final target = Duration(milliseconds: value.round());
+                                      try {
+                                        if (_useNativeAndroidVideo) {
+                                          await _nativeVideoController.seek(target);
+                                        } else {
+                                          await _player.seek(target);
+                                        }
+                                        _danmaku.seek(target);
+                                      } finally {
+                                        if (mounted) {
+                                          setState(() => _scrubbing = false);
+                                          _scheduleChromeHide();
+                                        }
+                                      }
+                                    },
+                                  ),
                                 ),
                               ),
                             ),
@@ -995,18 +1068,16 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                               next == null ? null : () => _switchChapter(1),
                             ),
                             const Spacer(),
-                            if (wide) ...[
                               button(
                                 '剧集',
                                 Icons.playlist_play_rounded,
                                 _showEpisodes,
                               ),
-                              button(
+                            if (wide) button(
                                 '倍速 · ${_speed}x',
                                 Icons.speed_rounded,
                                 _pickSpeed,
                               ),
-                            ],
                             button(
                               '字幕',
                               Icons.subtitles_outlined,
@@ -1030,8 +1101,6 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                                 ),
                                 onSelected: (action) {
                                   switch (action) {
-                                    case 'episodes':
-                                      _showEpisodes();
                                     case 'line':
                                       _pickLine();
                                     case 'speed':
@@ -1047,11 +1116,6 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                                   }
                                 },
                                 itemBuilder: (context) => [
-                                  if (!wide)
-                                    const PopupMenuItem(
-                                      value: 'episodes',
-                                      child: Text('剧集'),
-                                    ),
                                   if (_lines.length > 1)
                                     PopupMenuItem(
                                       value: 'line',
@@ -1099,6 +1163,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                   ),
                 ),
               ],
+            ),
             ),
           );
         },
@@ -1153,55 +1218,29 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         line: _lines[selected],
         startPosition: _position,
       );
-      if (mounted && seq == _loadSeq) setState(() => _loading = false);
+      if (mounted && seq == _loadSeq) {
+        setState(() => _loading = false);
+        _scheduleChromeHide();
+      }
     } catch (error) {
       if (mounted && seq == _loadSeq) {
         setState(() {
           _loading = false;
-          _error = '$error';
+          _error = SourceException.sanitizeMessage('$error');
         });
       }
     }
   }
 
   Future<void> _showEpisodes() async {
-    final selection =
-        await showModalBottomSheet<({int? index, bool changeSource})>(
-          context: context,
-          showDragHandle: true,
-          builder: (context) => SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () =>
-                        Navigator.of(context)
-                            .pop((index: null, changeSource: true)),
-                    icon: const Icon(Icons.travel_explore),
-                    label: const Text('更换播放来源'),
-                  ),
-                  EpisodeSelector(
-                    chapters: _chapters,
-                    currentIndex: _chapterIndex,
-                    onSelected: (index) =>
-                        Navigator.of(context)
-                            .pop((index: index, changeSource: false)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-    if (!mounted || selection == null) return;
-    if (selection.changeSource) {
-      await _changeSource();
-      return;
+    _chromeTimer?.cancel();
+    setState(() => _chromeVisible = true);
+    final scaffold = _scaffoldKey.currentState;
+    if (scaffold?.isEndDrawerOpen == true) {
+      scaffold?.closeEndDrawer();
+    } else {
+      scaffold?.openEndDrawer();
     }
-    final selected = selection.index;
-    if (selected != null) await _selectEpisode(selected);
   }
 
   /// 当前弹幕对应的弹弹play 剧集（手动搜索匹配后才有，用于发送弹幕）。
@@ -1676,6 +1715,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   void dispose() {
     _desktopResolve?.cancel('播放器已关闭');
     WidgetsBinding.instance.removeObserver(this);
+    _chromeTimer?.cancel();
     _prepareTimer?.cancel();
     _playerErrorSub?.cancel();
     _completedSub?.cancel();
@@ -1741,85 +1781,71 @@ class _VideoArea extends StatelessWidget {
   final VoidCallback onEpisodes;
 
   @override
-  Widget build(BuildContext context) {
-    if (error != null) {
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const Icon(Icons.error_outline, size: 40, color: Colors.white70),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              '播放加载失败',
-              style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(color: Colors.white),
-            ),
-            const SizedBox(height: AppSpacing.xxs),
-            Text(
-              error!,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: Colors.white70),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            OutlinedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('重试'),
-            ),
-            TextButton.icon(
-              onPressed: onEpisodes,
-              icon: const Icon(Icons.list, color: Colors.white70),
-              label: const Text(
-                '选择其他集数 / 线路',
-                style: TextStyle(color: Colors.white70),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // The media surface must stay mounted while preparation is pending.
-    return Stack(
-      fit: StackFit.expand,
-      children: <Widget>[
-        if (controller != null)
-          Video(
-            controller: controller!,
-            controls: null,
-            fit: switch (fit) {
-              'cover' => BoxFit.cover,
-              'fill' => BoxFit.fill,
-              _ => BoxFit.contain,
-            },
-            pauseUponEnteringBackgroundMode: !backgroundAudio,
-            resumeUponEnteringForegroundMode: !backgroundAudio,
-          )
-        else
-          _NativeAndroidVideoView(controller: nativeController),
-        if (loading)
-          ColoredBox(
-            color: Colors.black54,
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(color: Colors.white),
-                  const SizedBox(height: 12),
-                  const Text('正在加载视频…', style: TextStyle(color: Colors.white)),
-                  TextButton(
-                    onPressed: onEpisodes,
-                    child: const Text('选择剧集 / 更换来源'),
-                  ),
-                ],
-              ),
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: <Widget>[
+      if (controller != null)
+        Video(
+          controller: controller!,
+          controls: null,
+          fit: switch (fit) {
+            'cover' => BoxFit.cover,
+            'fill' => BoxFit.fill,
+            _ => BoxFit.contain,
+          },
+          pauseUponEnteringBackgroundMode: !backgroundAudio,
+          resumeUponEnteringForegroundMode: !backgroundAudio,
+        )
+      else
+        _NativeAndroidVideoView(controller: nativeController),
+      if (error != null) ...[
+        const ColoredBox(color: Colors.black87),
+        Positioned.fill(
+          top: 48,
+          bottom: 76,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('播放加载失败',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
+                const SizedBox(height: 8),
+                Text(error!, textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 12),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: onRetry,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('重试'),
+                    ),
+                    TextButton.icon(
+                      onPressed: onEpisodes,
+                      icon: const Icon(Icons.list),
+                      label: const Text('选择其他集数 / 线路'),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-      ],
-    );
-  }
+        ),
+      ] else if (loading)
+        const ColoredBox(
+          color: Colors.black54,
+          child: Center(
+            child: SizedBox.square(
+              dimension: 28,
+              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+            ),
+          ),
+        ),
+    ],
+  );
 }
 
 class _NativeVideoState {
@@ -1999,10 +2025,8 @@ class _NativeAndroidVideoViewState extends State<_NativeAndroidVideoView> {
 
   @override
   Widget build(BuildContext context) {
-    // SurfaceAndroidViewController lets Flutter select the hybrid-composition
-    // path for a SurfaceView.  A plain AndroidView may use a virtual display
-    // texture; that path is known to drop the VideoView's buffers on the API 35
-    // x86_64 emulator even though the same view renders in a native Activity.
+    // Keep the native TextureView in Android's view hierarchy so Media3 and
+    // Flutter controls are composed together without a virtual-display copy.
     return PlatformViewLink(
       viewType: 'triomi/native-video',
       surfaceFactory: (context, controller) {
@@ -2013,9 +2037,7 @@ class _NativeAndroidVideoViewState extends State<_NativeAndroidVideoView> {
         );
       },
       onCreatePlatformView: (params) {
-        // Force Hybrid Composition instead of TLHC/virtual-display fallback.
-        // VideoView owns a real Surface; on this API 35 emulator only the
-        // Android-view hierarchy compositor preserves its buffers.
+        // Retain the same hybrid-composition controller across layout changes.
         final controller = PlatformViewsService.initExpensiveAndroidView(
           id: params.id,
           viewType: 'triomi/native-video',

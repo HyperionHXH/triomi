@@ -172,8 +172,6 @@ void main() {
       await settle();
       expect(opens, isNotEmpty);
       expect(opens.last['startMilliseconds'], 71000);
-      expect(find.text('正在加载视频…'), findsOneWidget);
-      expect(find.text('选集 · 2 集'), findsOneWidget);
       await tester.pump(const Duration(seconds: 6));
       final unchanged = await tester.runAsync(
         () => repo.chapterPositionOf(item.sourceId, item.remoteId, 'ep1'),
@@ -188,17 +186,21 @@ void main() {
       final pause = Completer<void>();
       pendingPause = pause;
       final opensBeforeSelection = opens.length;
+      await tester.tap(find.byTooltip('剧集'));
+      await settleRoute();
       await tester.tap(find.widgetWithText(OutlinedButton, 'Episode 2'));
       await tester.pump();
-      expect(find.text('正在选择：Episode 2'), findsOneWidget);
       expect(opens.length, opensBeforeSelection);
       pause.complete();
       pendingPause = null;
       await settle();
+      await settleRoute();
       expect(opens.last['title'], contains('Episode 2'));
+      await tester.tap(find.byTooltip('剧集'));
+      await settleRoute();
       await tester.tap(find.widgetWithText(OutlinedButton, 'Episode 1'));
       await settle();
-      expect(find.text('正在选择：Episode 1'), findsOneWidget);
+      await settleRoute();
       expect(opens.last['startMilliseconds'], 71000);
       await event('prepared', {
         'position': 71000,
@@ -212,6 +214,8 @@ void main() {
       final next = find.widgetWithIcon(IconButton, Icons.skip_next_rounded);
       expect(tester.widget<IconButton>(previous).onPressed, isNull);
       expect(tester.widget<IconButton>(next).onPressed, isNotNull);
+      final playbackOpens = opens.length;
+      final playbackViews = channels.length;
       for (final size in [
         const Size(280, 640),
         const Size(320, 700),
@@ -220,6 +224,12 @@ void main() {
       ]) {
         await tester.binding.setSurfaceSize(size);
         await tester.pump();
+        expect(channels.length, playbackViews,
+            reason: 'rotation/resizing must retain the playing native surface');
+        expect(opens.length, playbackOpens,
+            reason: 'rotation/resizing must not reload or seek the media');
+        expect(tester.getSize(find.byType(Slider)).height, lessThanOrEqualTo(24),
+            reason: 'the seek track stays compact in portrait and landscape');
         expect(
           tester.takeException(),
           isNull,
@@ -241,9 +251,23 @@ void main() {
       }
       await tester.binding.setSurfaceSize(const Size(320, 700));
       await tester.pump();
-      await tester.tap(find.byTooltip('暂停'));
-      await tester.pump();
-      expect(nativeCalls.last.method, 'pause');
+      final seeksBeforeTap = nativeCalls.where((call) => call.method == 'seek').length;
+      final surface = find.byType(PlatformViewLink);
+      final leftPoint = tester.getRect(surface).centerLeft + const Offset(24, 0);
+      await tester.tapAt(leftPoint);
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(nativeCalls.where((call) => call.method == 'seek').length, seeksBeforeTap,
+          reason: 'a single tap at the edge must not change playback position');
+      final centerPoint = tester.getRect(surface).center;
+      await tester.tapAt(centerPoint);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(centerPoint);
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(nativeCalls.last.method, 'pause',
+          reason: 'double tap in the center pauses instead of passing to the platform view');
+      await event('state', {
+        'position': 71000, 'duration': 120000, 'playing': false,
+      });
       await tester.drag(find.byType(Slider), const Offset(30, 0));
       await tester.pump();
       expect(nativeCalls.any((call) => call.method == 'seek'), isTrue);
@@ -257,7 +281,6 @@ void main() {
       );
       await tester.tap(find.byTooltip('更多选项'));
       await settleRoute();
-      expect(find.text('剧集'), findsOneWidget);
       expect(find.text('播放设置'), findsOneWidget);
       expect(find.text('弹幕设置'), findsNothing);
       await tester.tap(find.text('倍速 · 1.0x'));
@@ -281,7 +304,6 @@ void main() {
       await tester.tap(find.byTooltip('退出全屏'));
       await tester.binding.setSurfaceSize(null);
       await settleRoute();
-      expect(find.text('正在加载视频…'), findsNothing);
       await event('completed', {
         'position': 120000,
         'duration': 120000,
@@ -373,7 +395,8 @@ void main() {
       await settle();
       await tester.pump(const Duration(seconds: 31));
       expect(find.textContaining('视频准备超时'), findsOneWidget);
-      expect(find.text('更换来源'), findsOneWidget);
+      expect(find.byType(BackButton), findsOneWidget,
+          reason: 'failure must retain an immediately usable exit');
       debugDefaultTargetPlatformOverride = null;
     },
   );

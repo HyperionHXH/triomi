@@ -12,10 +12,14 @@ void main() {
   const channel = MethodChannel('io.jns.webview.win');
   late List<String> calls;
   late Completer<Object?>? version;
+  late VideoResolveCancellation activeOwner;
+  Object? resolverError;
 
   setUp(() {
     calls = [];
     version = null;
+    activeOwner = VideoResolveCancellation();
+    resolverError = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
           calls.add(call.method);
@@ -26,6 +30,7 @@ void main() {
         });
   });
   tearDown(() {
+    activeOwner.dispose();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
   });
@@ -38,9 +43,9 @@ void main() {
             return TextButton(
               onPressed: () async {
                 try {
-                  await resolveWindowsVideo(context, line);
-                } on StateError {
-                  // Explicit user cancellation is a normal caller result.
+                  await resolveWindowsVideo(context, line, cancellation: activeOwner);
+                } catch (error) {
+                  resolverError = error;
                 }
               },
               child: const Text('播放'),
@@ -72,7 +77,7 @@ void main() {
   }
 
   testWidgets(
-    'unavailable browser stays cancellable without disposing an uninitialized plugin',
+    'unavailable browser returns a player error without inserting a modal route',
     (tester) async {
       await open(
         tester,
@@ -82,9 +87,12 @@ void main() {
           webPage: true,
         ),
       );
-      expect(find.textContaining('WebView2 Runtime'), findsOneWidget);
-      await tester.tap(find.byTooltip('取消解析'));
       await tester.pumpAndSettle();
+      expect(resolverError, isA<StateError>());
+      expect(activeOwner.isCancelled, isFalse,
+          reason: 'a browser failure must not turn a failed download into a paused one');
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.text('播放'), findsOneWidget);
       expect(calls, ['getWebViewVersion']);
       expect(tester.takeException(), isNull);
     },
@@ -102,7 +110,7 @@ void main() {
           webPage: true,
         ),
       );
-      await tester.tap(find.byTooltip('取消解析'));
+      activeOwner.cancel();
       await tester.pumpAndSettle();
       version!.complete('130.0');
       await tester.pumpAndSettle();
@@ -180,7 +188,7 @@ void main() {
         navigation.where((c) => c.method == 'executeScript'),
         hasLength(1),
       );
-      await tester.tap(find.byTooltip('取消解析'));
+      activeOwner.cancel();
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     },
@@ -202,9 +210,9 @@ void main() {
         ),
       ]) {
         await open(tester, line);
-        expect(find.byTooltip('取消解析'), findsOneWidget);
-        await tester.tap(find.byTooltip('取消解析'));
         await tester.pumpAndSettle();
+        expect(resolverError, isA<StateError>());
+        expect(find.byType(Dialog), findsNothing);
       }
       expect(calls, isEmpty);
       expect(tester.takeException(), isNull);
@@ -224,7 +232,7 @@ void main() {
           try {
             await resolveWindowsVideo(context,
               const PlaySource(name: 'page', url: 'https://site.test/play', webPage: true),
-              cancellation: owner, purpose: '下载');
+              cancellation: owner);
           } catch (error) {
             outcome = error;
           }
@@ -247,13 +255,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('background immediately cancels visible resolution', (tester) async {
+  testWidgets('background cancels automatic resolution without a route transition', (tester) async {
     version = Completer<Object?>();
     await open(tester,
       const PlaySource(name: 'page', url: 'https://site.test/play', webPage: true));
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pumpAndSettle();
-    expect(find.byTooltip('取消解析'), findsNothing);
+    expect(resolverError, isA<VideoResolveCancelled>());
     version!.complete('130.0');
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
@@ -307,7 +315,7 @@ void main() {
       onPressed: () async {
         result = await resolveWindowsVideo(context,
           const PlaySource(name: 'page', url: 'https://site.test/play', webPage: true,
-            headers: {'User-Agent': 'configured-browser'}), purpose: '下载');
+            headers: {'User-Agent': 'configured-browser'}));
       },
     ))));
     await tester.tap(find.text('下载'));
@@ -400,7 +408,7 @@ void main() {
         try {
           result = await resolveWindowsVideo(context,
             const PlaySource(name: 'page', url: 'https://site.test/play', webPage: true),
-            cancellation: owner, purpose: '下载');
+            cancellation: owner);
         } catch (error) {
           outcome = error;
         }
@@ -422,7 +430,6 @@ void main() {
     await pumpUntil(tester, () => closed.isCompleted, 'cancelled native browser close');
     expect(outcome, isNull, reason: 'cancellation must wait for native browser close');
     expect(result, isNull);
-    expect(find.byTooltip('取消解析'), findsNothing);
     closeRelease.complete();
     await pumpUntil(tester, () => outcome != null, 'cancelled resolution');
     expect(outcome, isA<VideoResolveCancelled>());

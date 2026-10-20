@@ -12,6 +12,7 @@ import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/source_repository.dart';
 import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/features/manga/manga_extension_details_page.dart';
 import 'package:triomi/features/sources/catalog_sheet.dart';
 import 'package:triomi/features/sources/sources_page.dart';
 
@@ -43,6 +44,39 @@ Map<String, Object?> _extension(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('failed Mihon source opens plugin diagnostics instead of a dead row', (tester) async {
+    final preferences = memoryPreferences();
+    const package = 'org.example.failed';
+    await preferences.set('sources.filters.manga', const SourceFilters().toJson());
+    await preferences.set('mihon.hostStatus', {
+      package: {'ok': false, 'name': 'Failed plugin', 'hostError': 'Runtime missing'},
+    });
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          preferencesProvider.overrideWithValue(preferences),
+          sourcesProvider.overrideWith(() => _SnapshotSources(
+            const SourceRegistrySnapshot(entries: [], failures: [
+              SourceFailure(
+                id: 'mihon:$package',
+                name: 'Failed plugin',
+                type: MediaType.manga,
+                message: 'Runtime missing',
+              ),
+            ]),
+          )),
+        ],
+        child: const MaterialApp(home: SourcesPage(initialType: MediaType.manga)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Failed plugin'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MangaExtensionDetailsPage), findsOneWidget);
+    expect(find.text(package), findsOneWidget);
+    expect(find.textContaining('Runtime missing'), findsWidgets);
+  });
 
   test('Mihon language/content/query/type intersect without classifying unknown declarations as safe', () {
     final index = MihonRepositoryParser.parse(

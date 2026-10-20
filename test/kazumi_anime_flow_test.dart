@@ -22,6 +22,7 @@ import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/features/detail/anime_info_repository.dart';
 import 'package:triomi/features/discover/anime_recommendations.dart';
 import 'package:triomi/features/player/episode_selector.dart';
+import 'package:triomi/features/sources/kazumi_repositories_sheet.dart';
 
 import 'fixtures/fake_http_client.dart';
 import 'fixtures/fake_preferences.dart';
@@ -61,8 +62,70 @@ Map<String, Object?> subject(int id) => {
   },
 };
 
+class _EmptySources extends SourceRegistryController {
+  @override
+  Future<SourceRegistrySnapshot> build() async =>
+      const SourceRegistrySnapshot(entries: [], failures: []);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('rule repositories start empty and manually removed URLs stay removed', (tester) async {
+    final preferences = memoryPreferences();
+    final db = openTestDatabase();
+    final http = SecureFake((request) async => SourceResponse(
+      statusCode: 200,
+      body: jsonEncode([{'name': 'Manual rule', 'version': '1.0'}]),
+      url: request.url,
+    ));
+    final registry = SourceRegistry(repository: SourceRepository(db), http: http);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      registry.dispose();
+      await db.close();
+    });
+    Future<void> open(int key) => tester.pumpWidget(
+      ProviderScope(
+        key: ValueKey(key),
+        overrides: [
+          preferencesProvider.overrideWithValue(preferences),
+          sourceRegistryProvider.overrideWithValue(registry),
+          sourcesProvider.overrideWith(_EmptySources.new),
+        ],
+        child: const MaterialApp(home: Scaffold(body: KazumiRepositoriesSheet())),
+      ),
+    );
+    await open(0);
+    await tester.pumpAndSettle();
+    expect(http.requests, isEmpty);
+    expect(preferences.get<Object?>('kazumi.repositories'), isNull);
+    await tester.tap(find.byTooltip('添加仓库'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)),
+      'https://manual.example/rules/',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '添加'));
+    for (var attempt = 0; attempt < 20; attempt++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(find.text('Manual rule'), findsOneWidget);
+    expect(preferences.get<Object?>('kazumi.repositories'), {
+      'https://manual.example/rules/index.json': true,
+    });
+    expect(http.requests.single.url, 'https://manual.example/rules/index.json');
+    await tester.tap(find.text('管理仓库 · 1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('移除仓库'));
+    await tester.pumpAndSettle();
+    expect(preferences.get<Map<dynamic, dynamic>>('kazumi.repositories'), isEmpty);
+    await open(1);
+    await tester.pumpAndSettle();
+    expect(preferences.get<Map<dynamic, dynamic>>('kazumi.repositories'), isEmpty);
+    expect(http.requests, hasLength(1));
+  });
   test('公开推荐分页始终保持同一排行榜及正确偏移', () async {
     final http = FakeHttpClient((r) async {
       return SourceResponse(

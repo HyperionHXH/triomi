@@ -10,8 +10,13 @@ import 'manga_source_actions.dart';
 /// An APK can contain many independently configurable sources. Package metadata
 /// is informational; every settings/browser action uses the real source host.
 class MangaExtensionDetailsPage extends ConsumerWidget {
-  const MangaExtensionDetailsPage({super.key, required this.packageName});
+  const MangaExtensionDetailsPage({
+    super.key,
+    required this.packageName,
+    this.diagnostic,
+  });
   final String packageName;
+  final String? diagnostic;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,6 +46,15 @@ class MangaExtensionDetailsPage extends ConsumerWidget {
               '发布者指纹：${host['signerSha256'] ?? '没有已验证的发布者记录'}',
             ),
           ),
+          if (diagnostic != null || host['ok'] != true)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SelectableText(
+                '${diagnostic ?? host['hostError'] ?? host['error'] ?? '当前没有可执行的插件来源。'}\n\n'
+                'Android 与 Windows 需要兼容的扩展运行时。Windows 请完整安装包含 extension-runtime 的应用包。'
+                '可返回扩展管理重试安装或卸载插件；移除仓库不会移除已安装插件，书架与历史记录不会被删除。',
+              ),
+            ),
           const Padding(
             padding: EdgeInsets.all(16),
             child: Text(
@@ -68,7 +82,7 @@ class MangaExtensionDetailsPage extends ConsumerWidget {
                     return Padding(
                       padding: const EdgeInsets.all(16),
                       child: Text(
-                        '${host['hostError'] ?? host['error'] ?? '当前没有可执行的插件来源。Mihon APK 仅由支持的 Android 宿主加载；未信任、待恢复或宿主不可用时不会执行插件设置。'}',
+                        '${host['hostError'] ?? host['error'] ?? '当前没有可执行的插件来源。Android / Windows 需要兼容宿主；未信任、待恢复或宿主不可用时不会执行插件设置。'}',
                       ),
                     );
                   }

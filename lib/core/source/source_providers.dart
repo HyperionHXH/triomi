@@ -18,6 +18,7 @@ import 'http_client.dart';
 import 'js/js_runtime.dart';
 import 'js/runtime/js_runtime_factory.dart';
 import 'mangadex_preferences.dart';
+import 'mihon_installer.dart';
 import 'mihon_source.dart';
 import 'network_proxy.dart';
 import 'source_api.dart';
@@ -100,6 +101,7 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
           message:
               '${status['hostError'] ?? status['error'] ?? 'APK 来源暂不可用；保留已安装记录'}',
           lang: '${status['lang'] ?? ''}',
+          type: MediaType.manga,
           nsfw: sourceNsfwFlag(status['nsfw']),
         ),
       );
@@ -242,20 +244,11 @@ class SourceRegistryController extends AsyncNotifier<SourceRegistrySnapshot> {
 
   Future<void> remove(String id) async {
     if (id.startsWith('mihon:')) {
-      await setEnabled(id, enabled: false);
-      final preferences = ref.read(preferencesProvider);
-      final statuses = <String, Object?>{
-        ...?preferences
-            .get<Map<dynamic, dynamic>>('mihon.hostStatus')
-            ?.map((k, v) => MapEntry('$k', v)),
-      }..remove(id.split(':')[1]);
-      await preferences.set('mihon.hostStatus', statuses);
-      final installed = <String, Object?>{
-        ...?preferences
-            .get<Map<dynamic, dynamic>>('mihon.installedPackages')
-            ?.map((k, v) => MapEntry('$k', v)),
-      }..remove(id.split(':')[1]);
-      await preferences.set('mihon.installedPackages', installed);
+      final packageName = id.split(':')[1];
+      await MihonInstaller(
+        http: ref.read(sourceHttpClientProvider),
+        preferences: ref.read(preferencesProvider),
+      ).uninstall(packageName);
       ref.invalidate(sourceRegistryProvider);
       await refresh();
       return;

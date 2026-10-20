@@ -165,6 +165,24 @@ class PlatformChannel {
       return false;
     }
   }
+  Future<bool> uninstallMihon(String packageName) async {
+    try {
+      if (_desktop) {
+        return await WindowsMihonHost.instance.uninstall(packageName);
+      }
+      final raw = await _channel.invokeMethod<Object?>(
+        'mihonUninstall',
+        <String, Object?>{'packageName': packageName},
+      );
+      return raw is Map && raw['ok'] == true;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    } on Object {
+      return false;
+    }
+  }
 
   Future<Map<String, Object?>> mihonRequest({
     required String packageName,

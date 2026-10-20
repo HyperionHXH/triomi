@@ -56,7 +56,6 @@ final downloadVideoResolverProvider = Provider<DownloadVideoResolver?>((ref) {
       context,
       source,
       cancellation: cancellation,
-      purpose: '下载',
     );
     return PlaySource(
       name: source.name,

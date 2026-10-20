@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -35,11 +37,37 @@ class MihonPublisherCandidate {
 
 class MihonInstaller {
   const MihonInstaller({required this.http, required this.preferences});
+  static Future<void>? _metadataTail;
+
+  Future<T> _withMetadataLock<T>(Future<T> Function() action) async {
+    final previous = _metadataTail;
+    final release = Completer<void>();
+    _metadataTail = release.future;
+    if (previous != null) await previous;
+    try {
+      return await action();
+    } finally {
+      release.complete();
+      if (identical(_metadataTail, release.future)) _metadataTail = null;
+    }
+  }
 
   final SourceHttpClient http;
   final Preferences preferences;
 
   Future<Map<String, Object?>> install(
+    MihonExtension extension, {
+    required String signerSha256,
+    Future<bool> Function(MihonPublisherCandidate candidate)? confirmPublisher,
+  }) => _withMetadataLock(
+    () => _install(
+      extension,
+      signerSha256: signerSha256,
+      confirmPublisher: confirmPublisher,
+    ),
+  );
+
+  Future<Map<String, Object?>> _install(
     MihonExtension extension, {
     required String signerSha256,
     Future<bool> Function(MihonPublisherCandidate candidate)? confirmPublisher,
@@ -179,14 +207,12 @@ class MihonInstaller {
         ];
       }
       final installed = <String, Object?>{
-        ...?preferences
-            .get<Map<dynamic, dynamic>>('mihon.installedPackages')
+        ...?preferences.get<Map<dynamic, dynamic>>('mihon.installedPackages')
             ?.map((key, value) => MapEntry('$key', value)),
         extension.packageName: extension.versionName,
       };
       final hostStatus = <String, Object?>{
-        ...?preferences
-            .get<Map<dynamic, dynamic>>('mihon.hostStatus')
+        ...?preferences.get<Map<dynamic, dynamic>>('mihon.hostStatus')
             ?.map((key, value) => MapEntry('$key', value)),
         extension.packageName: status,
       };
@@ -205,7 +231,7 @@ class MihonInstaller {
     String packageName, {
     required Future<bool> Function(MihonPublisherCandidate candidate)
     confirmPublisher,
-  }) async {
+  }) => _withMetadataLock(() async {
     final metadata = await files.inspectPending(packageName);
     final accepted = await confirmPublisher(
       MihonPublisherCandidate(
@@ -247,14 +273,12 @@ class MihonInstaller {
         ? true
         : manifestNsfw ?? restoredNsfw;
     final installed = <String, Object?>{
-      ...?preferences
-          .get<Map<dynamic, dynamic>>('mihon.installedPackages')
+      ...?preferences.get<Map<dynamic, dynamic>>('mihon.installedPackages')
           ?.map((key, value) => MapEntry('$key', value)),
       packageName: current['versionName'],
     };
     final hostStatus = <String, Object?>{
-      ...?preferences
-          .get<Map<dynamic, dynamic>>('mihon.hostStatus')
+      ...?preferences.get<Map<dynamic, dynamic>>('mihon.hostStatus')
           ?.map((key, value) => MapEntry('$key', value)),
       packageName: status,
     };
@@ -264,7 +288,61 @@ class MihonInstaller {
     // Loading is explicitly confirmed, but never enables a newly restored source.
     await files.removeActivated(packageName, current['sha256'] as String);
     return status;
-  }
+  });
+  /// Removes executable trust/installation records only. Reading data and each
+  /// source's own preferences live in separate stores and are never deleted.
+  Future<void> uninstall(
+    String packageName, {
+    ApkBackupFiles? pendingFiles,
+  }) => _withMetadataLock(() async {
+    if (!RegExp(r'^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$')
+        .hasMatch(packageName)) {
+      throw const FormatException('扩展包身份无效');
+    }
+    // Always ask the host: a failed install can leave staged native files
+    // without any corresponding Dart metadata.
+    if (!await platformChannel.uninstallMihon(packageName)) {
+      throw StateError('宿主未完成卸载，已保留安装记录。请关闭正在使用的插件后重试；Windows 需完整的 extension-runtime 安装。');
+    }
+    final pending = pendingFiles?.pending[packageName];
+    if (pending != null) {
+      await pendingFiles!.removeActivated(packageName, pending['sha256'] as String);
+    }
+    final installed = <String, Object?>{
+        ...?preferences.get<Map<dynamic, dynamic>>('mihon.installedPackages')
+            ?.map((key, value) => MapEntry('$key', value)),
+      }..remove(packageName);
+      final statuses = <String, Object?>{
+        ...?preferences.get<Map<dynamic, dynamic>>('mihon.hostStatus')
+            ?.map((key, value) => MapEntry('$key', value)),
+      }..remove(packageName);
+      final enabled = <String>{
+        for (final value
+            in preferences.get<List<Object?>>('mihon.enabledPackages') ?? [])
+          '$value',
+      }..remove(packageName);
+      const keys = [
+        'mihon.enabledPackages',
+        'mihon.hostStatus',
+        'mihon.installedPackages',
+      ];
+      final before = preferences.exportAll();
+      final previous = <String, Object?>{
+        for (final key in keys)
+          if (before.containsKey(key)) key: before[key],
+      };
+      final missing = keys.where((key) => !before.containsKey(key)).toSet();
+      try {
+        await preferences.set('mihon.enabledPackages', enabled.toList());
+        await preferences.set('mihon.hostStatus', statuses);
+        await preferences.set('mihon.installedPackages', installed);
+        await preferences.flush();
+      } catch (_) {
+        await preferences.restoreSubset(previous, missing);
+        await preferences.flush();
+        rethrow;
+      }
+    });
 
   Future<void> _download(MihonExtension extension, File candidate) =>
       _downloadUrl(extension.apkUrl, extension.packageName, candidate);

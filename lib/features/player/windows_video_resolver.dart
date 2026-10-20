@@ -15,13 +15,12 @@ class ResolvedDesktopVideo {
   final Map<String, String> headers;
 }
 
-/// The ordinary site/player runtime is visible and cancellable. Browser TLS,
-/// origin and authentication policies remain in force; no clearance solving.
+/// Resolves the ordinary site in a private viewport behind the player.
+/// TLS, origin, cookies and cancellation stay enforced without a modal step.
 Future<ResolvedDesktopVideo> resolveWindowsVideo(
   BuildContext context,
   PlaySource line, {
   VideoResolveCancellation? cancellation,
-  String purpose = '播放',
 }) async {
   final owner = cancellation ?? VideoResolveCancellation();
   if (!context.mounted || owner.isCancelled) {
@@ -31,66 +30,71 @@ Future<ResolvedDesktopVideo> resolveWindowsVideo(
   if (lifecycle != null && lifecycle != AppLifecycleState.resumed) {
     throw VideoResolveCancelled('请返回应用前台后继续网页解析');
   }
-  final navigator = Navigator.of(context, rootNavigator: true);
+  final overlay = Overlay.of(context, rootOverlay: true);
+  final result = Completer<ResolvedDesktopVideo>();
   final closed = Completer<void>();
-  var dialogCreated = false;
-  late final DialogRoute<ResolvedDesktopVideo> route;
-  void cancel() {
-    scheduleMicrotask(() {
-      if (navigator.mounted && route.isActive) navigator.removeRoute(route);
-    });
-  }
-  route = DialogRoute<ResolvedDesktopVideo>(
-    context: navigator.context,
-    barrierDismissible: false,
+  var created = false;
+  final entry = OverlayEntry(
     builder: (_) {
-      dialogCreated = true;
-      return _DesktopResolveDialog(
-        line: line,
-        owner: owner,
-        purpose: purpose,
-        onResolved: (result) {
-          if (route.isActive) navigator.removeRoute(route, result);
-        },
-        closed: closed,
+      created = true;
+      return Positioned.fill(
+        child: IgnorePointer(
+          child: ExcludeSemantics(
+            child: Opacity(
+              opacity: 0,
+              child: _DesktopVideoProbe(
+                line: line,
+                owner: owner,
+                closed: closed,
+                onResolved: (value) {
+                  if (!result.isCompleted) result.complete(value);
+                },
+                onError: (message) {
+                  if (!result.isCompleted) result.completeError(StateError(message));
+                },
+              ),
+            ),
+          ),
+        ),
       );
     },
   );
+  void cancel() {
+    if (!result.isCompleted) result.completeError(VideoResolveCancelled(owner.reason));
+  }
   owner.addListener(cancel);
+  overlay.insert(entry);
   try {
-    final result = await navigator.push(route);
-    await route.completed;
-    if (!dialogCreated && !closed.isCompleted) closed.complete();
-    await closed.future;
-    if (result == null || owner.isCancelled) {
-      throw VideoResolveCancelled(owner.reason);
-    }
-    return result;
+    return await result.future;
   } finally {
     owner.removeListener(cancel);
+    entry.remove();
+    entry.dispose();
+    if (!created && !closed.isCompleted) closed.complete();
+    await closed.future;
     if (cancellation == null) owner.dispose();
   }
 }
 
-class _DesktopResolveDialog extends StatefulWidget {
-  const _DesktopResolveDialog({
+class _DesktopVideoProbe extends StatefulWidget {
+  const _DesktopVideoProbe({
     required this.line,
     required this.owner,
-    required this.purpose,
     required this.closed,
     required this.onResolved,
+    required this.onError,
   });
   final PlaySource line;
   final VideoResolveCancellation owner;
-  final String purpose;
   final Completer<void> closed;
   final ValueChanged<ResolvedDesktopVideo> onResolved;
+  final ValueChanged<String> onError;
 
   @override
-  State<_DesktopResolveDialog> createState() => _DesktopResolveDialogState();
+  State<_DesktopVideoProbe> createState() => _DesktopVideoProbeState();
 }
 
-class _DesktopResolveDialogState extends State<_DesktopResolveDialog>
+class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
     with WidgetsBindingObserver {
   static Future<void>? _environment;
   static bool _environmentReady = false;
@@ -312,8 +316,10 @@ class _DesktopResolveDialogState extends State<_DesktopResolveDialog>
   void _fail(String message) {
     if (!mounted || _finished || _error != null) return;
     _deadline?.cancel();
+    _finished = true;
     if (_ready) unawaited(_web.stop().catchError((Object _) {}));
     setState(() => _error = message);
+    widget.onError(message);
   }
 
   Future<void> _disposeWeb() {
@@ -329,6 +335,7 @@ class _DesktopResolveDialogState extends State<_DesktopResolveDialog>
 
   @override
   void dispose() {
+    if (!_finished) widget.owner.cancel('播放页面已关闭');
     _finished = true;
     WidgetsBinding.instance.removeObserver(this);
     widget.owner.removeListener(_cancelBrowser);
@@ -348,41 +355,12 @@ class _DesktopResolveDialogState extends State<_DesktopResolveDialog>
   }
 
   @override
-  Widget build(BuildContext context) => Dialog(
-    child: SizedBox(
-      width: 900,
-      height: 600,
-      child: Column(
-        children: [
-          ListTile(
-            title: Text(_error ?? '正在为${widget.purpose}查找视频地址'),
-            subtitle: Text(
-              '${_httpUri(widget.line.url)?.host ?? ''} · 可手动操作网页；'
-              '${widget.purpose == '下载' ? '取消将暂停下载' : '可随时取消解析'}',
-            ),
-            trailing: IconButton(
-              tooltip: '取消解析',
-              onPressed: () => widget.owner.cancel(),
-              icon: const Icon(Icons.close),
-            ),
-          ),
-          Expanded(
-            child: _ready
-                ? Webview(
-                    _web,
-                    permissionRequested: (_, _, _) async =>
-                        WebviewPermissionDecision.deny,
-                  )
-                : Center(
-                    child: _error == null
-                        ? const CircularProgressIndicator()
-                        : const Text('关闭后可以重试或更换来源'),
-                  ),
-          ),
-        ],
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => _ready
+      ? Webview(
+          _web,
+          permissionRequested: (_, _, _) async => WebviewPermissionDecision.deny,
+        )
+      : const SizedBox.expand();
 
   static const _script = r'''
 (() => {

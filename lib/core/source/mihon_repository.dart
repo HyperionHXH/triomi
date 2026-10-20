@@ -143,12 +143,25 @@ class MihonRepositoryParseException implements Exception {
 }
 
 abstract final class MihonRepositoryParser {
-  static MihonRepositoryIndex parse(String text, {required String sourceUrl}) {
-    final Object? decoded;
+  static MihonRepositoryIndex parse(
+    String text, {
+    required String sourceUrl,
+    String? resourceUrl,
+  }) {
+    Object? decoded;
     try {
       decoded = jsonDecode(text);
     } on FormatException catch (error) {
       throw MihonRepositoryParseException('不是合法 JSON：${error.message}');
+    }
+    if (decoded is List) {
+      final base = Uri.parse(resourceUrl ?? sourceUrl).resolve('./');
+      decoded = <String, Object?>{
+        'extensions': [
+          for (final raw in decoded)
+            _legacyExtension(raw, base),
+        ],
+      };
     }
     if (decoded is! Map) {
       throw const MihonRepositoryParseException('根节点必须是对象');
@@ -207,6 +220,10 @@ abstract final class MihonRepositoryParser {
         );
       }
       final packageName = requiredText(node['packageName'], 'packageName');
+      if (!RegExp(r'^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$')
+          .hasMatch(packageName)) {
+        throw MihonRepositoryParseException('扩展 $packageName 的包名无效');
+      }
       String? fingerprint(Object? raw, String label) {
         if (raw == null) return null;
         final value = '$raw'.trim().toLowerCase();
@@ -218,7 +235,8 @@ abstract final class MihonRepositoryParser {
 
       final apkUrl = requiredText(resources['apkUrl'], 'resources.apkUrl');
       final apkUri = Uri.tryParse(apkUrl);
-      if (apkUri == null || apkUri.scheme != 'https') {
+      if (apkUri == null || apkUri.scheme != 'https' ||
+          apkUri.host.isEmpty || apkUri.userInfo.isNotEmpty) {
         throw MihonRepositoryParseException(
           '扩展 $packageName 的 APK 地址必须是 HTTPS',
         );
@@ -272,6 +290,43 @@ abstract final class MihonRepositoryParser {
       sourceUrl: sourceUrl,
     );
   }
+
+  static Map<String, Object?> _legacyExtension(Object? raw, Uri base) {
+    if (raw is! Map) {
+      throw const MihonRepositoryParseException('旧版扩展索引项目必须是对象');
+    }
+    final apk = '${raw['apk'] ?? ''}';
+    if (!RegExp(r'^[A-Za-z0-9._-]+\.apk$').hasMatch(apk)) {
+      throw const MihonRepositoryParseException('旧版 APK 文件名无效');
+    }
+    final version = '${raw['version'] ?? ''}';
+    final sources = raw['sources'];
+    return {
+      'name': '${raw['name'] ?? ''}'.replaceFirst(RegExp(r'^Tachiyomi: '), ''),
+      'packageName': raw['pkg'],
+      'versionName': version,
+      'versionCode': raw['code'],
+      'extensionLib': version.contains('.')
+          ? version.substring(0, version.lastIndexOf('.'))
+          : '',
+      'nsfw': raw['nsfw'],
+      'resources': {
+        'apkUrl': base.resolve('apk/$apk').toString(),
+        'iconUrl': base.resolve('icon/${raw['pkg']}.png').toString(),
+      },
+      'sources': [
+        if (sources is List)
+          for (final source in sources)
+            if (source is Map)
+              {
+                'id': source['id'],
+                'name': source['name'],
+                'language': source['lang'],
+                'homeUrl': source['baseUrl'] ?? '',
+              },
+      ],
+    };
+  }
 }
 
 class MihonRepositoryClient {
@@ -281,27 +336,99 @@ class MihonRepositoryClient {
 
   Future<MihonRepositoryIndex> fetch(String url) async {
     final uri = Uri.tryParse(url.trim());
-    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty || uri.hasFragment) {
       throw const SourceException(
         sourceId: 'mihon-repository',
         type: SourceErrorType.parse,
-        message: 'Mihon 仓库地址必须是 HTTPS',
+        message: 'Mihon 仓库地址必须是无凭据、无片段的 HTTPS URL',
       );
+    }
+    return _fetch(uri, sourceUrl: uri.toString());
+  }
+
+  Future<MihonRepositoryIndex> _fetch(
+    Uri uri, {
+    required String sourceUrl,
+    int depth = 0,
+  }) async {
+    if (depth > 2 || uri.scheme != 'https' || uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty || uri.hasFragment) {
+      throw const MihonRepositoryParseException('仓库扩展列表地址无效或重定向层级过多');
     }
     final response = await http.send(
       SourceRequest(url: uri.toString()),
       sourceId: 'mihon-repository',
     );
+    final transport = response.url.isEmpty ? uri : Uri.tryParse(response.url);
+    if (transport == null || transport.scheme != 'https' ||
+        transport.host.isEmpty || transport.userInfo.isNotEmpty ||
+        transport.hasFragment) {
+      throw const MihonRepositoryParseException('仓库响应地址必须是无凭据、无片段的 HTTPS URL');
+    }
+    final resource = _resourceUri(uri, transport);
     if (response.body.length > 16 * 1024 * 1024) {
-      throw const SourceException(
-        sourceId: 'mihon-repository',
-        type: SourceErrorType.parse,
-        message: '仓库索引超过 16 MiB 限制',
+      throw const MihonRepositoryParseException('仓库索引超过 16 MiB 限制');
+    }
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } on FormatException {
+      throw const MihonRepositoryParseException('请提供 JSON 仓库索引；不支持二进制或网页地址');
+    }
+    if (decoded is Map &&
+        decoded['extensions'] == null &&
+        (decoded['extensionList'] == null ||
+            decoded['extensionList'] is String)) {
+      final meta = decoded['meta'];
+      final next = decoded['extensionList'] ??
+          decoded['extensionListUrl'] ??
+          decoded['index_v2'] ??
+          (meta is Map ? 'index.min.json' : null);
+      if (next is! String || next.trim().isEmpty) {
+        throw const MihonRepositoryParseException('缺少扩展列表或 extensionListUrl');
+      }
+      final index = await _fetch(
+        resource.resolve(next.trim()),
+        sourceUrl: sourceUrl,
+        depth: depth + 1,
+      );
+      return MihonRepositoryIndex(
+        name: '${decoded['name'] ?? (meta is Map ? meta['name'] : null) ?? index.name}',
+        signingKey: '${decoded['signingKey'] ??
+            (meta is Map ? meta['signingKeyFingerprint'] : null) ?? index.signingKey}',
+        extensions: index.extensions,
+        sourceUrl: sourceUrl,
       );
     }
     return MihonRepositoryParser.parse(
       response.body,
-      sourceUrl: uri.toString(),
+      sourceUrl: sourceUrl,
+      resourceUrl: resource.toString(),
     );
+  }
+
+  static Uri _resourceUri(Uri requested, Uri transport) {
+    // GitHub recovery delivers the declared raw file via its contents API.
+    // Only this exact alternate route retains the raw file's relative base;
+    // ordinary redirects resolve against their final resource address.
+    final parts = requested.pathSegments;
+    if (requested.host == 'raw.githubusercontent.com' &&
+        requested.port == 443 &&
+        !requested.hasQuery &&
+        parts.length >= 4 &&
+        parts[2] != 'refs' &&
+        parts.every((part) => part.isNotEmpty)) {
+      final alternate = Uri(
+        scheme: 'https',
+        host: 'api.github.com',
+        pathSegments: [
+          'repos', parts[0], parts[1], 'contents', ...parts.skip(3),
+        ],
+        queryParameters: {'ref': parts[2]},
+      );
+      if (transport == alternate) return requested;
+    }
+    return transport;
   }
 }

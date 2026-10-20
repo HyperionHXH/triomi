@@ -28,6 +28,7 @@ void main() {
         'error': '当前平台没有 Mihon 宿主',
       });
       expect(await platformChannel.setMihonEnabled('pkg', true), isFalse);
+      expect(await platformChannel.uninstallMihon('pkg'), isFalse);
       expect(
         await platformChannel.openMihonSession(
           packageName: 'pkg',
@@ -44,6 +45,19 @@ void main() {
       );
     },
   );
+
+  test('extension uninstall forwards package identity and honors host failure', () async {
+    MethodCall? received;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      received = call;
+      return {'ok': false};
+    });
+    expect(await platformChannel.uninstallMihon('org.example.plugin'), isFalse);
+    expect(received?.method, 'mihonUninstall');
+    expect(received?.arguments, {'packageName': 'org.example.plugin'});
+    messenger.setMockMethodCallHandler(channel, (_) async => {'ok': true});
+    expect(await platformChannel.uninstallMihon('org.example.plugin'), isTrue);
+  });
 
   test(
     'Mihon request forwards operation and returns structured host result',

@@ -5,6 +5,11 @@ commit automatically. Keep reference repositories read-only. Specify the ADB
 device explicitly, preserve application data, and keep credentials out of
 source, APKs, logs, screenshots, and evidence.
 
+Never run Gradle `connected*AndroidTest` against a device whose application data
+must be preserved: the connected-test task may uninstall the target application
+during cleanup. Use a disposable emulator for instrumentation; update preserved
+devices only through an explicit serial-qualified `adb install -r`.
+
 ## Agent skills
 
 ### Issue tracker

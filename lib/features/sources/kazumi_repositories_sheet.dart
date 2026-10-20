@@ -34,12 +34,10 @@ class _KazumiRepositoriesSheetState
     final saved = ref
         .read(preferencesProvider)
         .get<Map<dynamic, dynamic>>(_key);
-    _repositories = saved == null
-        ? {KazumiRepository.mirror: true, KazumiRepository.official: true}
-        : {
-            for (final entry in saved.entries)
-              '${entry.key}': entry.value == true,
-          };
+    _repositories = {
+      for (final entry in saved?.entries ?? const <MapEntry<dynamic, dynamic>>[])
+        '${entry.key}': entry.value == true,
+    };
     _selected = _repositories.entries
         .where((entry) => entry.value)
         .map((entry) => entry.key)
@@ -63,7 +61,7 @@ class _KazumiRepositoriesSheetState
               .firstOrNull;
         }
       });
-      await _load();
+      unawaited(_load());
     } catch (_) {
       if (mounted) _toast('仓库设置保存失败，请重试');
     } finally {
@@ -215,13 +213,13 @@ class _KazumiRepositoriesSheetState
   }
 
   Future<void> _add() async {
-    final controller = TextEditingController();
+    var text = '';
     final value = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('添加番剧规则仓库'),
-        content: TextField(
-          controller: controller,
+        content: TextFormField(
+          onChanged: (value) => text = value,
           decoration: const InputDecoration(hintText: 'https://…/index.json'),
         ),
         actions: [
@@ -230,13 +228,12 @@ class _KazumiRepositoriesSheetState
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
+            onPressed: () => Navigator.pop(context, text),
             child: const Text('添加'),
           ),
         ],
       ),
     );
-    controller.dispose();
     if (value == null || !mounted) return;
     try {
       final url = KazumiRepository.normalize(value);
@@ -321,11 +318,7 @@ class _KazumiRepositoriesSheetState
                       DropdownMenuItem(
                         value: url,
                         child: Text(
-                          url == KazumiRepository.mirror
-                              ? 'Kazumi 官方规则 · GitCode 镜像'
-                              : url == KazumiRepository.official
-                              ? 'Kazumi 官方规则 · GitHub'
-                              : url,
+                          url,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),

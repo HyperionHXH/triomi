@@ -41,7 +41,6 @@ interface NativeVideoLifecycleOwner {
 }
 object NativeVideoLifecycle {
     var active: NativeVideoLifecycleOwner? = null
-    var inPip = false
 }
 class NativeVideoViewFactory(private val messenger: BinaryMessenger) :
     PlatformViewFactory(io.flutter.plugin.common.StandardMessageCodec.INSTANCE) {
@@ -73,7 +72,6 @@ private class NativeVideoPlatformView(
     private var surface: Surface? = null
     private var disposed = false
     private var announcedReady = false
-    private var resumeAfterSurface = false
     private var backgroundAudio = false
     private var fit = "contain"
     private var videoWidth = 0
@@ -158,7 +156,6 @@ private class NativeVideoPlatformView(
                     currentHeaders = call.argument<Map<String, String>>("headers") ?: emptyMap()
                     announcedReady = false
                     resumeOnForeground = false
-                    resumeAfterSurface = false
                     val position = (call.argument<Number>("startMilliseconds")?.toLong() ?: 0L).coerceAtLeast(0)
                     player.setMediaItem(MediaItem.Builder().setUri(uri)
                         .setMediaMetadata(MediaMetadata.Builder()
@@ -256,7 +253,7 @@ private class NativeVideoPlatformView(
     private var resumeOnForeground = false
     override fun onBackground(allowAudio: Boolean) {
         if (allowAudio) return
-        resumeOnForeground = player.playWhenReady
+        resumeOnForeground = resumeOnForeground || player.playWhenReady
         player.pause()
     }
     override fun onForeground() {
@@ -274,22 +271,18 @@ private class NativeVideoPlatformView(
     }
 
     override fun onSurfaceTextureAvailable(value: SurfaceTexture, width: Int, height: Int) {
-        surface?.release()
+        if (disposed) return
+        val previous = surface
         surface = Surface(value)
         player.setVideoSurface(surface)
-        if (resumeAfterSurface) {
-            resumeAfterSurface = false
-            player.play()
-        }
+        previous?.release()
         fitVideo()
     }
     override fun onSurfaceTextureSizeChanged(value: SurfaceTexture, width: Int, height: Int) = fitVideo()
     override fun onSurfaceTextureDestroyed(value: SurfaceTexture): Boolean {
-        player.clearVideoSurface()
-        if (!backgroundAudio && !NativeVideoLifecycle.inPip) {
-            resumeAfterSurface = player.playWhenReady || resumeOnForeground
-            player.pause()
-        }
+        // Surface replacement is not a playback lifecycle event. The activity
+        // owns background/PiP pauses; rotation must preserve playWhenReady.
+        if (!disposed) player.clearVideoSurface()
         surface?.release(); surface = null
         return true
     }
@@ -312,6 +305,7 @@ private class NativeVideoPlatformView(
         handler.removeCallbacks(ticker)
         channel.setMethodCallHandler(null)
         stopBackgroundService()
+        texture.surfaceTextureListener = null
         player.release()
         surface?.release(); surface = null
         root.removeAllViews()

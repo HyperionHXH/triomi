@@ -40,6 +40,27 @@ class MihonSessionTest {
         assertTrue("WebView cookie write completed", done.await(10, TimeUnit.SECONDS))
     }
 
+    @Test fun missingExtensionCannotBeEnabledAndRemovalPreservesSourcePreferences() {
+        lateinit var host: MihonHost
+        instrumentation.runOnMainSync { host = MihonHost(context) }
+        val packageName = "org.triomi.regression.removable"
+        val pins = context.getSharedPreferences("mihon.host", Context.MODE_PRIVATE)
+        val sourceSettings = context.getSharedPreferences("triomi.regression.source-settings", Context.MODE_PRIVATE)
+        sourceSettings.edit().putString("retained", "fixture-only").commit()
+        try {
+            assertEquals(false, host.setEnabled(packageName, true)["ok"])
+            assertFalse(pins.getBoolean("enabled.$packageName", false))
+            assertEquals(true, host.setEnabled(packageName, false)["ok"])
+            assertEquals(true, host.uninstall(packageName)["ok"])
+            assertEquals(true, host.uninstall(packageName)["ok"])
+            assertFalse(pins.contains("enabled.$packageName"))
+            assertEquals("fixture-only", sourceSettings.getString("retained", null))
+        } finally {
+            sourceSettings.edit().clear().commit()
+            host.uninstall(packageName)
+        }
+    }
+
     @Test fun browserCookieScopeLogoutAndRecreation() {
         val url = "https://triomi-session.invalid/".toHttpUrl()
         val jar = AndroidCookieJar(context)
