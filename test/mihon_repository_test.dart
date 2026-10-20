@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -606,6 +607,67 @@ void main() {
         .setMockMethodCallHandler(paths, null);
     await support.delete(recursive: true);
   });
+  testWidgets('missing Windows originals allow same-version reinstall without enabling', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    const package = 'eu.kanade.tachiyomi.extension.all.mangadex';
+    const repository = 'https://example.com/index.json';
+    final preferences = memoryPreferences();
+    const installed = {package: '1.6.0'};
+    const status = {
+      package: {
+        'ok': true,
+        'executable': true,
+        'name': 'MangaDex',
+        'versionCode': 106000,
+        'sources': [{'id': 'mangadex', 'name': 'MangaDex', 'lang': 'zh'}],
+      },
+    };
+    await preferences.set('mihon.installedPackages', installed);
+    await preferences.set('mihon.hostStatus', status);
+    await preferences.set('mihon.enabledPackages', <String>[]);
+    await preferences.set('mihon.repositories', [repository]);
+    final http = FakeHttpClient((request) async {
+      if (request.url == repository) {
+        return SourceResponse(
+          statusCode: 200,
+          body: jsonEncode({'extensions': [extensionJson()]}),
+        );
+      }
+      throw StateError('Stop at the production reinstall download boundary');
+    })..bytesHandler = (_) =>
+        throw StateError('Stop at the production reinstall download boundary');
+    await _openManagement(tester, preferences, http);
+    expect(find.textContaining('需重新安装'), findsOneWidget);
+    expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
+    expect(await tester.runAsync(() => Directory('${support.path}/mihon-desktop').exists()), isFalse);
+    expect(http.requests, isEmpty);
+    await tester.tap(find.text('浏览扩展'));
+    for (var round = 0; round < 6; round++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+    }
+    expect(find.byTooltip('重新安装扩展'), findsOneWidget);
+    await tester.tap(find.byTooltip('重新安装扩展'));
+    for (var round = 0; round < 6; round++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+    }
+    expect(http.requests.where((request) => request.url.endsWith('/mangadex.apk')), hasLength(1));
+    await tester.tap(find.text('已安装'));
+    await tester.pump();
+    await tester.tap(find.text('MangaDex'));
+    await tester.pumpAndSettle();
+    expect(find.byWidgetPredicate((widget) => widget is SelectableText &&
+        (widget.data?.contains('Stop at the production reinstall download boundary') ?? false)), findsOneWidget);
+    expect(preferences.get<List<Object?>>('mihon.enabledPackages'), isEmpty);
+    expect(preferences.get<Map<dynamic, dynamic>>('mihon.installedPackages'), installed);
+    expect(preferences.get<Map<dynamic, dynamic>>('mihon.hostStatus'), status);
+    expect(await tester.runAsync(() => Directory('${support.path}/mihon-desktop').exists()), isFalse);
+    await tester.pumpWidget(const SizedBox.shrink());
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   test('解析 Mihon extensionList 并按中文和类型筛选', () {
     final index = MihonRepositoryParser.parse(
       jsonEncode(<String, Object?>{

@@ -255,6 +255,21 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('desktop focus loss does not cancel a visible pending player', (tester) async {
+    version = Completer<Object?>();
+    await open(tester,
+      const PlaySource(name: 'page', url: 'https://site.test/play', webPage: true));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    expect(activeOwner.isCancelled, isFalse,
+        reason: 'a visible desktop window may be unfocused while its page resolves');
+    expect(resolverError, isNull);
+    activeOwner.cancel();
+    version!.complete('130.0');
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('background cancels automatic resolution without a route transition', (tester) async {
     version = Completer<Object?>();
     await open(tester,
@@ -302,6 +317,7 @@ void main() {
       return cookieRelease.future;
     });
     addTearDown(() {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       if (!cookieRelease.isCompleted) cookieRelease.complete('native=exact-target');
       if (!closeRelease.isCompleted) closeRelease.complete();
       messenger.setMockMethodCallHandler(view, null);
@@ -318,6 +334,7 @@ void main() {
             headers: {'User-Agent': 'configured-browser'}));
       },
     ))));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     await tester.tap(find.text('下载'));
     await pumpUntil(tester, () => loaded.isCompleted, 'player navigation');
     await tester.pumpAndSettle();

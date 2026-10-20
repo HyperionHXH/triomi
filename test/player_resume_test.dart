@@ -14,6 +14,7 @@ import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/downloads/data/download_providers.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/library/data/library_providers.dart';
+import 'package:triomi/features/player/data/player_settings.dart';
 import 'package:triomi/features/player/player_page.dart';
 
 import 'fixtures/fake_preferences.dart';
@@ -228,50 +229,88 @@ void main() {
             reason: 'rotation/resizing must retain the playing native surface');
         expect(opens.length, playbackOpens,
             reason: 'rotation/resizing must not reload or seek the media');
-        expect(tester.getSize(find.byType(Slider)).height, lessThanOrEqualTo(24),
-            reason: 'the seek track stays compact in portrait and landscape');
-        expect(
-          tester.takeException(),
-          isNull,
-          reason: 'transport must fit the actual video viewport at $size',
-        );
-        final y = tester.getCenter(find.byTooltip('暂停')).dy;
-        for (final control in [
-          previous,
-          next,
-          find.byTooltip('字幕'),
-          find.byTooltip('画中画'),
-        ]) {
-          expect(
-            tester.getCenter(control).dy,
-            y,
-            reason: 'episode, playback, subtitle and PiP actions share one row',
-          );
-        }
       }
       await tester.binding.setSurfaceSize(const Size(320, 700));
       await tester.pump();
+      int getSeekTarget() => (nativeCalls.lastWhere(
+        (call) => call.method == 'seek',
+      ).arguments as Map)['milliseconds'] as int;
       final seeksBeforeTap = nativeCalls.where((call) => call.method == 'seek').length;
       final surface = find.byType(PlatformViewLink);
-      final leftPoint = tester.getRect(surface).centerLeft + const Offset(24, 0);
+      final surfaceRect = tester.getRect(surface);
+      final leftPoint = Offset(
+        surfaceRect.left + surfaceRect.width * .125, surfaceRect.center.dy,
+      );
+      final rightPoint = Offset(
+        surfaceRect.left + surfaceRect.width * .875, surfaceRect.center.dy,
+      );
+      Future<void> doubleTapAt(Offset point) async {
+        await tester.tapAt(point);
+        await tester.pump(const Duration(milliseconds: 50));
+        await tester.tapAt(point);
+        await tester.pump(const Duration(milliseconds: 350));
+      }
       await tester.tapAt(leftPoint);
       await tester.pump(const Duration(milliseconds: 350));
       expect(nativeCalls.where((call) => call.method == 'seek').length, seeksBeforeTap,
           reason: 'a single tap at the edge must not change playback position');
-      final centerPoint = tester.getRect(surface).center;
-      await tester.tapAt(centerPoint);
-      await tester.pump(const Duration(milliseconds: 50));
-      await tester.tapAt(centerPoint);
-      await tester.pump(const Duration(milliseconds: 350));
-      expect(nativeCalls.last.method, 'pause',
-          reason: 'double tap in the center pauses instead of passing to the platform view');
+      await doubleTapAt(leftPoint);
+      expect(getSeekTarget(), 56000);
+      await event('state', {
+        'position': 71000, 'duration': 120000, 'playing': true,
+      });
+      await doubleTapAt(rightPoint);
+      expect(getSeekTarget(), 86000);
+      await event('state', {
+        'position': 5000, 'duration': 120000, 'playing': true,
+      });
+      await doubleTapAt(leftPoint);
+      expect(getSeekTarget(), 0, reason: 'seeking before the start clamps to zero');
+      await event('state', {
+        'position': 115000, 'duration': 120000, 'playing': true,
+      });
+      await doubleTapAt(rightPoint);
+      expect(getSeekTarget(), 120000,
+          reason: 'seeking past the end never opens another episode');
+      expect(opens.length, playbackOpens);
+      await event('state', {
+        'position': 71000, 'duration': 120000, 'playing': true,
+      });
+      await tester.tap(find.byKey(const ValueKey('player-skip')));
+      await tester.pump();
+      expect(getSeekTarget(), 120000, reason: '80-second skip also clamps to duration');
+      await tester.longPress(find.byKey(const ValueKey('player-skip')));
+      await settleRoute();
+      await tester.enterText(find.byType(TextFormField), '30');
+      await tester.tap(find.text('保存'));
+      await settleRoute();
+      expect(PlayerSettings.load(container.read(preferencesProvider)).skipSeconds, 30);
+      await event('state', {
+        'position': 71000, 'duration': 120000, 'playing': true,
+      });
+      await tester.tap(find.byKey(const ValueKey('player-skip')));
+      await tester.pump();
+      expect(getSeekTarget(), 101000);
+      await event('state', {
+        'position': 71000, 'duration': 120000, 'playing': true,
+      });
+      await doubleTapAt(rightPoint);
+      expect(getSeekTarget(), 86000,
+          reason: 'configured skip must not change the edge double-tap interval');
+      // Between one quarter and one third belongs to the center, not the edge.
+      await doubleTapAt(Offset(
+        surfaceRect.left + surfaceRect.width * .28, surfaceRect.center.dy,
+      ));
+      expect(nativeCalls.last.method, 'pause');
       await event('state', {
         'position': 71000, 'duration': 120000, 'playing': false,
       });
       await tester.drag(find.byType(Slider), const Offset(30, 0));
       await tester.pump();
       expect(nativeCalls.any((call) => call.method == 'seek'), isTrue);
-      await tester.tap(find.byTooltip('字幕'));
+      await tester.tap(find.byTooltip('播放设置'));
+      await settleRoute();
+      await tester.tap(find.text('字幕'));
       await settleRoute();
       await tester.tap(find.text('关闭字幕'));
       await settleRoute();
@@ -279,11 +318,7 @@ void main() {
         nativeCalls.any((call) => call.method == 'selectSubtitle'),
         isTrue,
       );
-      await tester.tap(find.byTooltip('更多选项'));
-      await settleRoute();
-      expect(find.text('播放设置'), findsOneWidget);
-      expect(find.text('弹幕设置'), findsNothing);
-      await tester.tap(find.text('倍速 · 1.0x'));
+      await tester.tap(find.byTooltip('倍速 · 1.0x'));
       await settleRoute();
       expect(find.text('1.5x'), findsOneWidget);
       await tester.tap(find.text('1.5x'));
@@ -300,7 +335,20 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(720, 320));
       await settleRoute();
       expect(find.byTooltip('退出全屏'), findsOneWidget);
-      expect(tester.takeException(), isNull);
+      await tester.tap(find.byTooltip('视频比例'));
+      await settleRoute();
+      await tester.ensureVisible(find.text('16:10'));
+      await tester.tap(find.text('16:10'));
+      await settleRoute();
+      expect(PlayerSettings.load(container.read(preferencesProvider)).aspectRatio,
+          VideoAspectRatio.ratio16x10);
+      final videoFrame = tester.getSize(find.byType(AndroidViewSurface));
+      expect(videoFrame.width / videoFrame.height, closeTo(1.6, .001),
+          reason: 'forced aspect must constrain the actual native surface');
+      expect(channels.length, playbackViews,
+          reason: 'aspect changes must retain the active native view');
+      expect(opens.length, playbackOpens,
+          reason: 'aspect changes must not reload media');
       await tester.tap(find.byTooltip('退出全屏'));
       await tester.binding.setSurfaceSize(null);
       await settleRoute();

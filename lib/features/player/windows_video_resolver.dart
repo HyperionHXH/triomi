@@ -27,8 +27,10 @@ Future<ResolvedDesktopVideo> resolveWindowsVideo(
     throw VideoResolveCancelled(owner.reason);
   }
   final lifecycle = WidgetsBinding.instance.lifecycleState;
-  if (lifecycle != null && lifecycle != AppLifecycleState.resumed) {
-    throw VideoResolveCancelled('请返回应用前台后继续网页解析');
+  if (lifecycle == AppLifecycleState.hidden ||
+      lifecycle == AppLifecycleState.paused ||
+      lifecycle == AppLifecycleState.detached) {
+    throw VideoResolveCancelled('请显示应用窗口后继续网页解析');
   }
   final overlay = Overlay.of(context, rootOverlay: true);
   final result = Completer<ResolvedDesktopVideo>();
@@ -150,8 +152,12 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) {
-      widget.owner.cancel('应用已进入后台，请返回前台后继续下载');
+    // Desktop inactive means visible but unfocused, not a hidden application.
+    // WebView2 focus changes and normal multitasking must not cancel the page.
+    if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      widget.owner.cancel('应用窗口已隐藏，请显示窗口后继续网页解析');
     }
   }
 

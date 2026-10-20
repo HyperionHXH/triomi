@@ -73,7 +73,7 @@ private class NativeVideoPlatformView(
     private var disposed = false
     private var announcedReady = false
     private var backgroundAudio = false
-    private var fit = "contain"
+    private var aspectRatio: Float? = null
     private var videoWidth = 0
     private var videoHeight = 0
     private val dataSource = ResolvingDataSource.Factory(
@@ -181,10 +181,10 @@ private class NativeVideoPlatformView(
                     player.volume = (call.argument<Number>("volume")?.toFloat() ?: 1f).coerceIn(0f, 1f)
                     result.success(null)
                 }
-                "setFit" -> {
-                    val value = call.argument<String>("fit") ?: "contain"
-                    require(value in listOf("contain", "cover", "fill"))
-                    fit = value; fitVideo(); result.success(null)
+                "setAspectRatio" -> {
+                    val value = call.argument<Number>("ratio")?.toFloat()
+                    require(value == null || value.isFinite() && value > 0)
+                    aspectRatio = value; fitVideo(); result.success(null)
                 }
                 "setBackgroundAudio" -> {
                     backgroundAudio = call.argument<Boolean>("enabled") == true
@@ -290,12 +290,11 @@ private class NativeVideoPlatformView(
     private fun fitVideo() {
         val width = texture.width.toFloat(); val height = texture.height.toFloat()
         if (videoWidth <= 0 || videoHeight <= 0 || width <= 0 || height <= 0) return
-        val scale = if (fit == "cover") maxOf(width / videoWidth, height / videoHeight)
-            else minOf(width / videoWidth, height / videoHeight)
+        val ratio = aspectRatio ?: (videoWidth.toFloat() / videoHeight)
+        val frameWidth = minOf(width, height * ratio)
+        val frameHeight = frameWidth / ratio
         texture.setTransform(Matrix().apply {
-            if (fit != "fill") {
-                setScale(videoWidth * scale / width, videoHeight * scale / height, width / 2, height / 2)
-            }
+            setScale(frameWidth / width, frameHeight / height, width / 2, height / 2)
         })
     }
     override fun dispose() {

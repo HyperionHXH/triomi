@@ -12,6 +12,15 @@ import 'package:path_provider/path_provider.dart';
 
 import 'suwayomi_client.dart';
 
+class WindowsMihonInstallationIssue {
+  const WindowsMihonInstallationIssue(
+    this.message, {
+    this.requiresReinstall = false,
+  });
+  final String message;
+  final bool requiresReinstall;
+}
+
 /// App-owned desktop host, not a connection to a user's external Suwayomi.
 /// The Windows job owns the JVM; credentials/port never enter portable records.
 class WindowsMihonHost {
@@ -28,6 +37,50 @@ class WindowsMihonHost {
   Future<void> _tail = Future.value(), _saving = Future.value();
   RandomAccessFile? _lock;
   String _proxy = '';
+
+  /// Presence is not execution/trust verification. This read-only check keeps
+  /// historical UI metadata from hiding the reinstall action after data loss.
+  static Future<WindowsMihonInstallationIssue?> installationIssue(
+    String package, {
+    required Directory root,
+  }) async {
+    const missing = WindowsMihonInstallationIssue(
+      '桌面扩展安装原件或本机状态缺失，需重新安装；保留书架、历史与原启用偏好。',
+      requiresReinstall: true,
+    );
+    try {
+      final state = File(p.join(root.path, 'state.json'));
+      final raw = jsonDecode(await state.readAsString());
+      final record = raw is Map ? raw[package] : null;
+      if (record is! Map) return missing;
+      final apk = record['stagedPath'];
+      final jar = record['desktopJarPath'];
+      final runtimeFile = record['runtimeFile'];
+      if (apk is! String ||
+          await File(apk).length() == 0 ||
+          jar != null && (jar is! String || await File(jar).length() == 0) ||
+          runtimeFile is! String ||
+          p.basename(runtimeFile) != runtimeFile ||
+          await File(p.join(root.path, 'extensions', runtimeFile)).length() == 0) {
+        return missing;
+      }
+      return null;
+    } on FileSystemException catch (error) {
+      // Only an explicit not-found error proves missing bytes. Permissions or
+      // transient I/O failures must not be presented as a removed installation.
+      if (error.osError?.errorCode == 2 || error.osError?.errorCode == 3) {
+        return missing;
+      }
+      return const WindowsMihonInstallationIssue(
+        '无法读取桌面扩展安装原件，当前不可用；请检查文件权限后重试。',
+      );
+    } on FormatException {
+      return const WindowsMihonInstallationIssue(
+        '桌面扩展本机安装状态损坏，需重新安装；不会从历史元数据恢复执行信任。',
+        requiresReinstall: true,
+      );
+    }
+  }
 
   Future<void> configureProxy(String value) => _mutate(() async {
     final uri = value.isEmpty ? null : Uri.tryParse(value);

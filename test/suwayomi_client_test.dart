@@ -7,6 +7,7 @@ import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/suwayomi_client.dart';
+import 'package:triomi/core/source/windows_mihon_host.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/library/data/manga_update_service.dart';
 import 'package:triomi/features/manga/manga_filter_snapshot.dart';
@@ -44,6 +45,110 @@ void main() {
     request.response.headers.contentType = ContentType.json;
     request.response.write(jsonEncode(value));
   }
+
+  test('installation presence checks never recreate missing runtime state', () async {
+    final root = Directory('${directory.path}/missing-runtime');
+    final issue = await WindowsMihonHost.installationIssue('org.example.plugin', root: root);
+    expect(issue?.requiresReinstall, isTrue);
+    expect(await root.exists(), isFalse);
+  });
+
+  test('installation presence checks require both verified originals and runtime JAR', () async {
+    const package = 'org.example.plugin';
+    final apk = File('${directory.path}/original.apk');
+    final jar = File('${directory.path}/original.jar');
+    final runtime = File('${directory.path}/extensions/runtime.jar');
+    await runtime.parent.create();
+    for (final file in [apk, jar, runtime]) {
+      await file.writeAsBytes([1]);
+    }
+    final state = File('${directory.path}/state.json');
+    await state.writeAsString(jsonEncode({
+      package: {'stagedPath': apk.path, 'desktopJarPath': jar.path, 'runtimeFile': 'runtime.jar'},
+    }));
+    final originalState = await state.readAsBytes();
+    expect(await WindowsMihonHost.installationIssue(package, root: directory), isNull);
+    await jar.delete();
+    expect(
+      (await WindowsMihonHost.installationIssue(package, root: directory))?.requiresReinstall,
+      isTrue,
+    );
+    expect(await state.readAsBytes(), originalState);
+    expect(await apk.exists(), isTrue);
+    expect(await runtime.exists(), isTrue);
+  });
+
+  test('non-missing filesystem errors do not claim the installation was removed', () async {
+    final state = Directory('${directory.path}/state.json');
+    await state.create();
+    final issue = await WindowsMihonHost.installationIssue('org.example.plugin', root: directory);
+    expect(issue, isNotNull);
+    expect(issue?.requiresReinstall, isFalse);
+    expect(await state.exists(), isTrue);
+  });
+
+  test('APK conversion failures identify the local compatibility stage', () async {
+    var installs = 0;
+    handle = (request) async {
+      installs++;
+      await request.drain<void>();
+      request.response.statusCode = 500;
+      request.response.write('Server Error');
+    };
+    final apk = File('${directory.path}/extension.apk');
+    await apk.writeAsBytes([1, 2, 3]);
+    await expectLater(
+      client.install(apk, nativeJar: false),
+      throwsA(
+        isA<UnsupportedError>().having(
+          (error) => error.message,
+          'compatibility stage',
+          allOf(contains('APK 转换或加载失败'), contains('不是来源网站的 HTTP 500')),
+        ),
+      ),
+    );
+    expect(installs, 1);
+  });
+
+  test('native JAR loading failures do not claim an APK conversion failure', () async {
+    handle = (request) async {
+      await request.drain<void>();
+      request.response.statusCode = 500;
+      request.response.write('Server Error');
+    };
+    final jar = File('${directory.path}/extension.jar');
+    await jar.writeAsBytes([1, 2, 3]);
+    await expectLater(
+      client.install(jar, nativeJar: true),
+      throwsA(
+        isA<UnsupportedError>().having(
+          (error) => error.message,
+          'compatibility stage',
+          allOf(contains('原生 JAR 加载失败'), isNot(contains('APK 转换或加载失败'))),
+        ),
+      ),
+    );
+  });
+
+  test('host authentication failures retain their transport status', () async {
+    handle = (request) async {
+      await request.drain<void>();
+      request.response.statusCode = 401;
+      request.response.write('Unauthorized');
+    };
+    final apk = File('${directory.path}/extension.apk');
+    await apk.writeAsBytes([1, 2, 3]);
+    await expectLater(
+      client.install(apk, nativeJar: false),
+      throwsA(
+        isA<DioException>().having(
+          (error) => error.response?.statusCode,
+          'host authentication status',
+          401,
+        ),
+      ),
+    );
+  });
 
   test(
     'identical chapter URLs remain source-qualified through image consumption',

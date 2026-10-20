@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -12,6 +13,7 @@ import '../../core/source/mihon_installer.dart';
 import '../../core/source/mihon_repository.dart';
 import '../../core/source/source_filters.dart';
 import '../../core/source/source_providers.dart';
+import '../../core/source/windows_mihon_host.dart';
 import '../../core/storage/preferences.dart';
 import '../manga/manga_extension_details_page.dart';
 
@@ -35,6 +37,10 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   MihonRepositoryIndex? _index;
   Object? _error;
   final _installErrors = <String, String>{};
+  final _installationIssues = <String, WindowsMihonInstallationIssue>{};
+  int _installationGeneration = 0;
+  bool _checkingInstallations =
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
   bool _loading = false;
   SourceFilters _filters = const SourceFilters(language: 'zh');
   _ExtensionSection _section = _ExtensionSection.installed;
@@ -73,11 +79,13 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   @override
   void dispose() {
     _repositoryGeneration++;
+    _installationGeneration++;
     _searchController.dispose();
     super.dispose();
   }
 
   Future<void> _loadPreferences() async {
+    final repositoryGeneration = _repositoryGeneration;
     final preferences = ref.read(preferencesProvider);
     _filters = SourceFilters.fromJson(
       preferences.get<Object?>('sources.filters.mihon'),
@@ -98,9 +106,10 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
     final rawHostStatus = preferences.get<Map<dynamic, dynamic>>(
       _mihonHostStatusKey,
     );
+    final support = await getApplicationSupportDirectory();
     final apkFiles = ApkBackupFiles(
       root: Directory(
-        '${await (await getApplicationSupportDirectory()).resolveSymbolicLinks()}/mihon-pending',
+        '${await support.resolveSymbolicLinks()}/mihon-pending',
       ),
       preferences: preferences,
     );
@@ -109,8 +118,10 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
     setState(() {
       _apkFiles = apkFiles;
       _pendingApks = pendingApks;
-      _repositories = repositories;
-      _selectedRepository = repositories.firstOrNull;
+      if (repositoryGeneration == _repositoryGeneration) {
+        _repositories = repositories;
+        _selectedRepository = repositories.firstOrNull;
+      }
       _enabled.addAll(
         rawEnabled?.map((item) => item.toString()) ?? const <String>[],
       );
@@ -127,11 +138,37 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
           };
         }
       }
-      if (_installed.isEmpty && _hostStatus.isEmpty && _pendingApks.isEmpty) {
+      if (repositoryGeneration == _repositoryGeneration &&
+          _installed.isEmpty && _hostStatus.isEmpty && _pendingApks.isEmpty) {
         _section = _ExtensionSection.browse;
       }
     });
+    unawaited(_refreshInstallationIssues(support));
     if (_section == _ExtensionSection.browse) await _refresh();
+  }
+
+  Future<void> _refreshInstallationIssues(Directory support) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) return;
+    final generation = ++_installationGeneration;
+    final issues = <String, WindowsMihonInstallationIssue>{};
+    for (final package in {..._installed.keys, ..._hostStatus.keys}) {
+      final issue = await WindowsMihonHost.installationIssue(
+        package,
+        root: Directory('${support.path}/mihon-desktop'),
+      );
+      if (issue != null) issues[package] = issue;
+    }
+    if (!mounted) return;
+    if (generation != _installationGeneration) {
+      unawaited(_refreshInstallationIssues(support));
+      return;
+    }
+    setState(() {
+      _checkingInstallations = false;
+      _installationIssues
+        ..clear()
+        ..addAll(issues);
+    });
   }
 
   Future<void> _refresh() async {
@@ -349,6 +386,8 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       _installed[extension.packageName] = extension.versionName;
       _hostStatus[extension.packageName] = probe;
       _failedExtensions.remove(extension.packageName);
+      _installationIssues.remove(extension.packageName);
+      _installationGeneration++;
       // A previously enabled package may be reinstalled/updated. Keep the
       // persisted preference authoritative, but only after the new APK has
       // passed the host executable probe. First-time installs remain disabled.
@@ -450,6 +489,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       ),
     );
     if (confirmed != true || !mounted) return;
+    _installationGeneration++;
     setState(() => _removing.add(packageName));
     final container = ProviderScope.containerOf(context, listen: false);
     try {
@@ -465,6 +505,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
         _hostStatus.remove(packageName);
         _installErrors.remove(packageName);
         _failedExtensions.remove(packageName);
+        _installationIssues.remove(packageName);
         _pendingApks = _apkFiles?.pending.values.toList() ?? [];
       });
       _toast('扩展已卸载；书架和阅读历史已保留');
@@ -853,7 +894,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       MaterialPageRoute<void>(
         builder: (_) => MangaExtensionDetailsPage(
           packageName: package,
-          diagnostic: _installErrors[package],
+          diagnostic: _installErrors[package] ?? _installationIssues[package]?.message,
         ),
       ),
     );
@@ -861,7 +902,9 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
 
   Widget _installedTile(String package) {
     final host = _hostStatus[package];
-    final ready = host?['ok'] == true;
+    final issue = _installationIssues[package];
+    final ready = !_checkingInstallations &&
+        host?['ok'] == true && !_installationIssues.containsKey(package);
     final enabled = ready && _enabled.contains(package);
     final busy = _downloading.contains(package) || _removing.contains(package);
     return ListTile(
@@ -871,7 +914,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       title: Text(_packageName(package)),
       subtitle: Text(
         'v${_installed[package] ?? host?['versionName'] ?? host?['versionCode'] ?? '未知'} · ${sourceContentLabel(sourceNsfwFlag(host?['nsfw']))}\n'
-        '${_installErrors.containsKey(package) ? '安装失败 · 点击查看原因' : ready ? (enabled ? '已启用' : '已安装 · 已停用') : '宿主未加载，当前不可用'}\n$package',
+        '${issue != null ? (issue.requiresReinstall ? '需重新安装 · 点击查看原因' : '本机安装暂不可读 · 点击查看原因') : _installErrors.containsKey(package) ? '安装失败 · 点击查看原因' : ready ? (enabled ? '已启用' : '已安装 · 已停用') : '宿主未加载，当前不可用'}\n$package',
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -907,12 +950,16 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
         _installed[extension.packageName] == extension.versionName;
     final downloading = _downloading.contains(extension.packageName);
     final host = _hostStatus[extension.packageName];
-    final hostReady = host?['ok'] == true;
+    final installationIssue = _installationIssues[extension.packageName];
+    final hostReady = !_checkingInstallations &&
+        host?['ok'] == true && installationIssue == null;
     final savedEnabled = _enabled.contains(extension.packageName);
     final enabled = hostReady && savedEnabled;
     final type = extension.mediaType?.label ?? '漫画';
     final status = downloading
         ? '下载、核验并加载扩展中…'
+        : installationIssue != null
+        ? (installationIssue.requiresReinstall ? '需重新安装 · 本机安装原件或状态缺失' : '本机安装暂不可读 · 请检查文件权限后重试')
         : !downloaded
         ? '尚未下载 APK'
         : hostReady
@@ -959,7 +1006,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
             )
           else
             IconButton(
-              tooltip: downloaded ? '已下载但宿主未加载：请查看提示并修复兼容性' : '下载 APK',
+              tooltip: installationIssue?.requiresReinstall == true ? '重新安装扩展' : downloaded ? '已下载但宿主未加载：请查看提示并修复兼容性' : '下载 APK',
               onPressed: _removing.contains(extension.packageName)
                   ? null
                   : () => unawaited(_download(extension, repository)),

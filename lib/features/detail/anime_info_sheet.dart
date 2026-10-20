@@ -35,8 +35,10 @@ class AnimeInfoSheet extends ConsumerStatefulWidget {
 
 class _InfoPartition {
   final rows = <Map<String, Object?>>[];
+  final pages = <int, List<Map<String, Object?>>>{};
   SourceRequestCancellation? owner;
   int offset = 0;
+  int? failedOffset;
   bool loaded = false, busy = false, more = false, cached = false;
   String? error;
 }
@@ -60,7 +62,32 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
   void initState() {
     super.initState();
     _section = widget.initialSection;
-    if (widget.item == null) unawaited(_load(reset: true));
+    if (_section != 'info' || widget.item == null) {
+      unawaited(_load(reset: true));
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant AnimeInfoSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.id != widget.id) {
+      for (final partition in _partitions.values) {
+        partition.owner?.cancel();
+      }
+      _partitions.clear();
+      _section = widget.initialSection;
+      _fullSummary = false;
+      _fullTags = false;
+    } else if (oldWidget.initialSection != widget.initialSection) {
+      _section = widget.initialSection;
+    } else {
+      return;
+    }
+    if (!_current.loaded &&
+        !_current.busy &&
+        (_section != 'info' || widget.item == null)) {
+      unawaited(_load(reset: true));
+    }
   }
 
   @override
@@ -71,10 +98,17 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
     super.dispose();
   }
 
-  Future<void> _load({bool reset = false, bool refresh = false}) async {
+  Future<void> _load({
+    bool reset = false,
+    bool refresh = false,
+    int? retryOffset,
+  }) async {
+    final id = widget.id;
+    final subject = widget.item;
     final section = _section;
     final partition = _current;
     if (partition.busy) return;
+    final offset = retryOffset ?? (reset ? 0 : partition.offset);
     final owner = partition.owner = SourceRequestCancellation();
     setState(() {
       partition.busy = true;
@@ -85,27 +119,35 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
         () => ref
             .read(animeInfoRepositoryProvider)
             .section(
-              widget.id,
+              id,
               section,
-              offset: reset ? 0 : partition.offset,
+              subject: subject,
+              offset: offset,
               refresh: refresh,
             ),
       );
       if (!mounted || owner.cancelled) return;
       setState(() {
-        if (reset) partition.rows.clear();
-        partition.rows.addAll(page.rows);
+        if (reset) partition.pages.clear();
+        partition.pages[offset] = page.rows;
+        partition.rows
+          ..clear()
+          ..addAll(partition.pages.values.expand((rows) => rows));
         partition.offset = page.nextOffset;
         partition.more = page.hasMore;
         partition.cached = page.cached;
         partition.loaded = true;
+        partition.failedOffset = page.refreshError == null ? null : offset;
         partition.error = page.refreshError == null
             ? null
             : _describe(page.refreshError!);
       });
     } catch (error) {
       if (mounted && !owner.cancelled) {
-        setState(() => partition.error = _describe(error));
+        setState(() {
+          partition.error = _describe(error);
+          partition.failedOffset = offset;
+        });
       }
     } finally {
       if (mounted && !owner.cancelled) {
@@ -308,6 +350,21 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
   static bool _isAnimeSubject(Map<String, Object?> row) =>
       int.tryParse('${row['type']}') == 2;
 
+  String _commentDate(Object? value) {
+    if (value is! num || value <= 0) return '';
+    final time = DateTime.fromMillisecondsSinceEpoch(value.toInt() * 1000)
+        .toLocal();
+    final elapsed = DateTime.now().difference(time);
+    if (!elapsed.isNegative) {
+      if (elapsed.inMinutes < 1) return '刚刚';
+      if (elapsed.inMinutes < 60) return '${elapsed.inMinutes} 分钟前';
+      if (elapsed.inHours < 24) return '${elapsed.inHours} 小时前';
+      if (elapsed.inDays == 1) return '昨天';
+      if (elapsed.inDays < 30) return '${elapsed.inDays} 天前';
+    }
+    return time.toString().split(' ').first;
+  }
+
   Widget _row(Map<String, Object?> row) {
     if (_section == 'episodes') {
       return ListTile(
@@ -328,43 +385,70 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
           : const <Object?, Object?>{};
       final body = row['comment'];
       final content = body is Map ? body['comment'] : body;
-      final rate = body is Map ? body['rate'] : row['rate'];
-      final updated = body is Map ? body['updatedAt'] : row['updatedAt'];
-      final date = updated is num && updated > 0
-          ? DateTime.fromMillisecondsSinceEpoch(updated.toInt() * 1000)
-                .toLocal()
-                .toString()
-                .split(' ')
-                .first
-          : '';
+      final rate = body is Map ? body['rate'] ?? row['rate'] : row['rate'];
+      final updated = body is Map
+          ? body['updatedAt'] ?? row['updatedAt']
+          : row['updatedAt'];
+      final date = _commentDate(updated);
+      final nickname = '${user['nickname'] ?? ''}'.trim();
+      final username = '${user['username'] ?? ''}'.trim();
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _portrait(user, avatar: true),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${user['nickname'] ?? user['username'] ?? 'Bangumi 用户'}',
-                    style: Theme.of(context).textTheme.titleSmall,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _portrait(user, avatar: true),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        nickname.isNotEmpty
+                            ? nickname
+                            : username.isNotEmpty
+                            ? username
+                            : 'Bangumi 用户',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      if (date.isNotEmpty)
+                        Text(date, style: Theme.of(context).textTheme.bodySmall),
+                    ],
                   ),
-                  if (date.isNotEmpty || (rate is num && rate > 0))
-                    Text(
-                      [
-                        date,
-                        if (rate is num && rate > 0) '★ $rate',
-                      ].where((s) => s.isNotEmpty).join(' · '),
-                      style: Theme.of(context).textTheme.bodySmall,
+                ),
+                if (rate is num && rate > 0) ...[
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message: '$rate / 10 分',
+                    child: Semantics(
+                      label: '$rate / 10 分',
+                      child: ExcludeSemantics(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (var star = 0; star < 5; star++)
+                              Icon(
+                                rate >= (star + 1) * 2
+                                    ? Icons.star_rounded
+                                    : rate > star * 2
+                                    ? Icons.star_half_rounded
+                                    : Icons.star_border_rounded,
+                                size: 16,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
-                  const SizedBox(height: 6),
-                  SelectableText('${content ?? ''}'),
+                  ),
                 ],
-              ),
+              ],
             ),
+            const SizedBox(height: 10),
+            SelectableText('${content ?? ''}'),
           ],
         ),
       );
@@ -487,9 +571,14 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
               children: [
                 Text(partition.error!),
                 TextButton.icon(
+                  key: ValueKey('anime-info-retry:$_section'),
                   onPressed: partition.busy
                       ? null
-                      : () => _load(reset: true, refresh: true),
+                      : () => _load(
+                          reset: partition.failedOffset == 0,
+                          refresh: true,
+                          retryOffset: partition.failedOffset,
+                        ),
                   icon: const Icon(Icons.refresh),
                   label: Text('重试${sections[_section]}'),
                 ),
@@ -508,7 +597,11 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
             child: Center(child: CircularProgressIndicator()),
           ),
         if (partition.more && !partition.busy && partition.error == null)
-          TextButton(onPressed: _load, child: const Text('加载更多')),
+          TextButton(
+            key: ValueKey('anime-info-more:$_section'),
+            onPressed: _load,
+            child: const Text('加载更多'),
+          ),
       ],
     );
     final constrained = Center(

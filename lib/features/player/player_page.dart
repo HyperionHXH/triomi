@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show min;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -112,6 +113,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   bool _episodesOpen = false;
   bool _scrubbing = false;
   Timer? _chromeTimer;
+  Timer? _seekFeedbackTimer;
+  int? _seekFeedbackSeconds;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   /// 播放倍速（0.5~3.0）。
@@ -395,7 +398,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     if (_useNativeAndroidVideo) {
       await _nativeVideoController.setRate(_speed);
       await _nativeVideoController.setVolume(_settings.volume);
-      await _nativeVideoController.setFit(_settings.fit);
+      await _nativeVideoController.setAspectRatio(_settings.aspectRatio.ratio);
       await _nativeVideoController.setBackgroundAudio(
         _settings.backgroundAudio,
       );
@@ -650,7 +653,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         _VideoArea(
           controller: _videoController,
           nativeController: _nativeVideoController,
-          fit: _settings.fit,
+          aspectRatio: _settings.aspectRatio.ratio,
           backgroundAudio: _settings.backgroundAudio,
           loading: _loading || _awaitingPlaybackStart,
           error: _error,
@@ -670,6 +673,35 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
             child: Text(
               '长按 ${_settings.holdSpeed}x',
               style: const TextStyle(color: Colors.white),
+            ),
+          ),
+        if (!_inPip)
+          IgnorePointer(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 160),
+              child: _seekFeedbackSeconds == null
+                  ? const SizedBox.shrink()
+                  : Align(
+                      key: ValueKey(_seekFeedbackSeconds),
+                      alignment: Alignment(
+                        _seekFeedbackSeconds! < 0 ? -.65 : .65, 0,
+                      ),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: .65),
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 10,
+                          ),
+                          child: Text(
+                            '${_seekFeedbackSeconds! < 0 ? '后退' : '快进'} ${_seekFeedbackSeconds!.abs()} 秒',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
             ),
           ),
         if (!_inPip) _buildChrome(),
@@ -808,50 +840,80 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     await showAnimeSources(context, _item, replacePlayer: true);
   }
 
-  /// A tap reveals controls everywhere; a double tap pauses/resumes.
+  /// Single tap reveals controls; the outer quarters double tap to seek.
   Widget _buildGestureArea() {
     return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onLongPressStart: (_) => _holdSpeed(true),
-                onLongPressEnd: (_) => _holdSpeed(false),
-                onVerticalDragUpdate: (details) =>
-                    _adjustBrightness(details.delta.dy, constraints.maxHeight),
-                onTap: _toggleChrome,
-                onDoubleTap: _togglePlay,
-              ),
+      builder: (context, constraints) => Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onLongPressStart: (_) => _holdSpeed(true),
+              onLongPressEnd: (_) => _holdSpeed(false),
+              onVerticalDragUpdate: (details) =>
+                  _adjustBrightness(details.delta.dy, constraints.maxHeight),
+              onTap: _toggleChrome,
+              onDoubleTap: () => _seekBy(const Duration(seconds: -15)),
             ),
-            GestureDetector(
+          ),
+          Expanded(
+            flex: 2,
+            child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onLongPressStart: (_) => _holdSpeed(true),
               onLongPressEnd: (_) => _holdSpeed(false),
               onTap: _toggleChrome,
               onDoubleTap: _togglePlay,
-              child: SizedBox(width: width * 0.34),
             ),
-            Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onLongPressStart: (_) => _holdSpeed(true),
-                onLongPressEnd: (_) => _holdSpeed(false),
-                onVerticalDragUpdate: (details) =>
-                    _adjustVolume(details.delta.dy, constraints.maxHeight),
-                onVerticalDragEnd: (_) =>
-                    unawaited(_settings.save(_preferences)),
-                onTap: _toggleChrome,
-                onDoubleTap: _togglePlay,
-              ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onLongPressStart: (_) => _holdSpeed(true),
+              onLongPressEnd: (_) => _holdSpeed(false),
+              onVerticalDragUpdate: (details) =>
+                  _adjustVolume(details.delta.dy, constraints.maxHeight),
+              onVerticalDragEnd: (_) =>
+                  unawaited(_settings.save(_preferences)),
+              onTap: _toggleChrome,
+              onDoubleTap: () => _seekBy(const Duration(seconds: 15)),
             ),
-          ],
-        );
-      },
+          ),
+        ],
+      ),
     );
+  }
+
+  Future<void> _seekBy(Duration delta) async {
+    if (_loading || _awaitingPlaybackStart || _error != null ||
+        _sliderMax <= 1) {
+      return;
+    }
+    final sequence = _loadSeq;
+    final target = Duration(
+      milliseconds: (_position + delta).inMilliseconds
+          .clamp(0, _sliderMax.toInt()),
+    );
+    _revealChrome();
+    _seekFeedbackTimer?.cancel();
+    setState(() {
+      _position = target;
+      _seekFeedbackSeconds = delta.inSeconds;
+    });
+    _seekFeedbackTimer = Timer(const Duration(milliseconds: 850), () {
+      if (mounted) setState(() => _seekFeedbackSeconds = null);
+    });
+    try {
+      if (_useNativeAndroidVideo) {
+        await _nativeVideoController.seek(target);
+      } else {
+        await _player.seek(target);
+      }
+      if (mounted && sequence == _loadSeq) _danmaku.seek(target);
+    } catch (_) {
+      if (mounted && sequence == _loadSeq) _toast('跳转未成功，请重试');
+    }
   }
 
 
@@ -902,26 +964,29 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     return Positioned.fill(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 600;
-          final buttonWidth =
-              (constraints.maxWidth - 16) / ((_useNativeAndroidVideo ? 8 : 7) + (wide ? 1 : 0));
-          final buttonSize = buttonWidth.clamp(24.0, 40.0);
-          Widget button(String label, IconData icon, VoidCallback? onPressed) =>
-              IconButton(
-                tooltip: label,
-                style: IconButton.styleFrom(
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                onPressed: onPressed,
-                constraints: BoxConstraints.tightFor(
-                  width: buttonSize,
-                  height: 40,
-                ),
-                padding: EdgeInsets.zero,
-                color: Colors.white,
-                disabledColor: Colors.white38,
-                icon: Icon(icon),
-              );
+          final buttonSize = ((constraints.maxWidth - 24) / 8)
+              .clamp(32.0, 48.0);
+          Widget button(
+            String label, IconData icon, VoidCallback? onPressed, {
+            bool prominent = false,
+          }) => IconButton(
+            tooltip: label,
+            style: IconButton.styleFrom(
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              backgroundColor: prominent
+                  ? Colors.white.withValues(alpha: .16) : null,
+              shape: const StadiumBorder(),
+            ),
+            onPressed: onPressed,
+            constraints: BoxConstraints.tightFor(
+              width: buttonSize, height: 44,
+            ),
+            padding: EdgeInsets.zero,
+            color: Colors.white,
+            disabledColor: Colors.white38,
+            iconSize: prominent ? 30 : 26,
+            icon: Icon(icon),
+          );
 
           final visible = _chromeVisible || _loading || _awaitingPlaybackStart || _error != null;
           return IgnorePointer(
@@ -962,6 +1027,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                           ),
                         ),
                       ),
+                      button(
+                        '播放设置', Icons.tune_rounded, _controlsSheet,
+                      ),
                       if (danmakuFeatureEnabled)
                         button(
                           _danmakuOn ? '关闭弹幕' : '开启弹幕',
@@ -978,7 +1046,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                 ),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.bottomCenter,
@@ -998,13 +1066,17 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                           children: [
                             Expanded(
                               child: SizedBox(
-                                height: 24,
+                                height: 32,
                                 child: SliderTheme(
                                   data: SliderTheme.of(context).copyWith(
-                                    trackHeight: 2,
-                                    trackShape: const RectangularSliderTrackShape(),
-                                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+                                    trackHeight: 4,
+                                    trackShape: const RoundedRectSliderTrackShape(),
+                                    activeTrackColor: Colors.white,
+                                    inactiveTrackColor: Colors.white30,
+                                    thumbColor: Colors.white,
+                                    overlayColor: Colors.white12,
+                                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
+                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
                                   ),
                                   child: Slider(
                                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1041,7 +1113,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                             Text(
                               '$positionText / $durationText',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: Colors.white,
+                                color: Colors.white, fontSize: 12,
+                                fontFeatures: const [FontFeature.tabularFigures()],
                               ),
                             ),
                           ],
@@ -1061,93 +1134,56 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                                   ? Icons.pause_rounded
                                   : Icons.play_arrow_rounded,
                               _togglePlay,
+                              prominent: true,
                             ),
                             button(
                               '下一集',
                               Icons.skip_next_rounded,
                               next == null ? null : () => _switchChapter(1),
                             ),
-                            const Spacer(),
-                              button(
-                                '剧集',
-                                Icons.playlist_play_rounded,
-                                _showEpisodes,
-                              ),
-                            if (wide) button(
-                                '倍速 · ${_speed}x',
-                                Icons.speed_rounded,
-                                _pickSpeed,
-                              ),
-                            button(
-                              '字幕',
-                              Icons.subtitles_outlined,
-                              _pickSubtitles,
-                            ),
-                            if (_useNativeAndroidVideo)
-                              button(
-                                '画中画',
-                                Icons.picture_in_picture_alt,
-                                _enterPip,
-                              ),
-                            SizedBox(
-                              width: buttonSize,
-                              height: 40,
-                              child: PopupMenuButton<String>(
-                                tooltip: '更多选项',
-                                padding: EdgeInsets.zero,
-                                icon: const Icon(
-                                  Icons.more_vert,
-                                  color: Colors.white,
-                                ),
-                                onSelected: (action) {
-                                  switch (action) {
-                                    case 'line':
-                                      _pickLine();
-                                    case 'speed':
-                                      _pickSpeed();
-                                    case 'settings':
-                                      _controlsSheet();
-                                    case 'danmakuSettings':
-                                      _showDanmakuSettings();
-                                    case 'searchDanmaku':
-                                      _searchDanmaku();
-                                    case 'sendDanmaku':
-                                      _sendDanmaku();
-                                  }
-                                },
-                                itemBuilder: (context) => [
-                                  if (_lines.length > 1)
-                                    PopupMenuItem(
-                                      value: 'line',
-                                      child: Text(
-                                        '线路 · ${_lines[_lineIndex].name}',
+                            Tooltip(
+                              message: '跳过 ${_settings.skipSeconds} 秒（长按设置）',
+                              child: GestureDetector(
+                                onLongPress: _pickSkipSeconds,
+                                onSecondaryTap: _pickSkipSeconds,
+                                child: SizedBox(
+                                  width: buttonSize,
+                                  height: 44,
+                                  child: TextButton(
+                                    key: const ValueKey('player-skip'),
+                                    style: TextButton.styleFrom(
+                                      padding: EdgeInsets.zero,
+                                      minimumSize: Size.zero,
+                                      foregroundColor: Colors.white,
+                                      shape: const StadiumBorder(),
+                                    ),
+                                    onPressed: _loading || _awaitingPlaybackStart ||
+                                            _error != null || _sliderMax <= 1
+                                        ? null
+                                        : () => _seekBy(
+                                            Duration(seconds: _settings.skipSeconds),
+                                          ),
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text('+${_settings.skipSeconds}s',
+                                        style: const TextStyle(
+                                          fontSize: 13, fontWeight: FontWeight.w700,
+                                        ),
                                       ),
                                     ),
-                                  if (!wide)
-                                    PopupMenuItem(
-                                      value: 'speed',
-                                      child: Text('倍速 · ${_speed}x'),
-                                    ),
-                                  const PopupMenuItem(
-                                    value: 'settings',
-                                    child: Text('播放设置'),
                                   ),
-                                  if (danmakuFeatureEnabled) ...[
-                                    const PopupMenuItem(
-                                      value: 'danmakuSettings',
-                                      child: Text('弹幕设置'),
-                                    ),
-                                    const PopupMenuItem(
-                                      value: 'searchDanmaku',
-                                      child: Text('搜索弹幕'),
-                                    ),
-                                    const PopupMenuItem(
-                                      value: 'sendDanmaku',
-                                      child: Text('发送弹幕'),
-                                    ),
-                                  ],
-                                ],
+                                ),
                               ),
+                            ),
+                            const Spacer(),
+                            button(
+                              '视频比例', Icons.aspect_ratio_rounded, _pickAspectRatio,
+                            ),
+                            button(
+                              '剧集', Icons.playlist_play_rounded, _showEpisodes,
+                            ),
+                            button(
+                              '倍速 · ${_speed}x', Icons.speed_rounded, _pickSpeed,
                             ),
                             button(
                               _fullscreen ? '退出全屏' : '全屏',
@@ -1181,6 +1217,93 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     return duration.inMilliseconds <= 0
         ? 1
         : duration.inMilliseconds.toDouble();
+  }
+
+  Future<void> _pickSkipSeconds() async {
+    _chromeTimer?.cancel();
+    var input = '${_settings.skipSeconds}';
+    String? error;
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, update) {
+          void submit() {
+            final seconds = int.tryParse(input);
+            if (seconds == null || seconds < 1 || seconds > 3600) {
+              update(() => error = '请输入 1–3600 之间的整数');
+              return;
+            }
+            Navigator.pop(context, seconds);
+          }
+
+          return AlertDialog(
+            title: const Text('跳过秒数'),
+            content: TextFormField(
+              initialValue: input,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: '每次跳过', suffixText: '秒',
+                helperText: '单击跳过，长按按钮可再次修改',
+                errorText: error,
+              ),
+              onChanged: (value) => input = value,
+              onFieldSubmitted: (_) => submit(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+              FilledButton(onPressed: submit, child: const Text('保存')),
+            ],
+          );
+        },
+      ),
+    );
+    if (!mounted) return;
+    if (selected != null) {
+      setState(() => _settings = _settings.copyWith(skipSeconds: selected));
+      await _settings.save(_preferences);
+    }
+    if (mounted) _scheduleChromeHide();
+  }
+
+  Future<void> _pickAspectRatio() async {
+    _chromeTimer?.cancel();
+    final selected = await showModalBottomSheet<VideoAspectRatio>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(title: Text('视频比例')),
+              for (final ratio in VideoAspectRatio.values)
+                ListTile(
+                  selected: _settings.aspectRatio == ratio,
+                  leading: Icon(_settings.aspectRatio == ratio
+                      ? Icons.radio_button_checked : Icons.radio_button_off),
+                  title: Text(ratio.label),
+                  onTap: () => Navigator.pop(context, ratio),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (selected != null) {
+      setState(() => _settings = _settings.copyWith(aspectRatio: selected));
+      await _settings.save(_preferences);
+      if (_useNativeAndroidVideo) {
+        await _nativeVideoController.setAspectRatio(selected.ratio);
+      }
+    }
+    if (mounted) _scheduleChromeHide();
   }
 
   Future<void> _pickLine() async {
@@ -1343,8 +1466,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   }
 
   Future<void> _controlsSheet() async {
+    _chromeTimer?.cancel();
     var settings = _settings;
-    await showModalBottomSheet<void>(
+    final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
       builder: (context) => StatefulBuilder(
@@ -1354,6 +1478,44 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
               mainAxisSize: MainAxisSize.min,
               children: [
                 const ListTile(title: Text('播放设置')),
+                ListTile(
+                  leading: const Icon(Icons.fast_forward_rounded),
+                  title: const Text('跳过秒数'),
+                  subtitle: Text('每次 ${settings.skipSeconds} 秒 · 也可长按跳过按钮修改'),
+                  onTap: () => Navigator.pop(context, 'skip'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.subtitles_rounded),
+                  title: const Text('字幕'),
+                  onTap: () => Navigator.pop(context, 'subtitles'),
+                ),
+                if (_useNativeAndroidVideo)
+                  ListTile(
+                    leading: const Icon(Icons.picture_in_picture_alt_rounded),
+                    title: const Text('画中画'),
+                    onTap: () => Navigator.pop(context, 'pip'),
+                  ),
+                if (_lines.length > 1)
+                  ListTile(
+                    leading: const Icon(Icons.alt_route_rounded),
+                    title: Text('线路 · ${_lines[_lineIndex].name}'),
+                    onTap: () => Navigator.pop(context, 'line'),
+                  ),
+                if (danmakuFeatureEnabled) ...[
+                  ListTile(
+                    title: const Text('弹幕设置'),
+                    onTap: () => Navigator.pop(context, 'danmakuSettings'),
+                  ),
+                  ListTile(
+                    title: const Text('搜索弹幕'),
+                    onTap: () => Navigator.pop(context, 'searchDanmaku'),
+                  ),
+                  ListTile(
+                    title: const Text('发送弹幕'),
+                    onTap: () => Navigator.pop(context, 'sendDanmaku'),
+                  ),
+                ],
+                const Divider(height: 24),
                 SwitchListTile(
                   title: const Text('同列表自动播放下一集'),
                   value: settings.autoNext,
@@ -1375,19 +1537,17 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                 ),
                 ListTile(
                   title: const Text('画面比例'),
-                  trailing: DropdownButton<String>(
-                    value: settings.fit,
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'contain',
-                        child: Text('原比例完整显示'),
-                      ),
-                      DropdownMenuItem(value: 'cover', child: Text('填满并裁边')),
-                      DropdownMenuItem(value: 'fill', child: Text('拉伸')),
+                  trailing: DropdownButton<VideoAspectRatio>(
+                    value: settings.aspectRatio,
+                    items: [
+                      for (final ratio in VideoAspectRatio.values)
+                        DropdownMenuItem(
+                          value: ratio, child: Text(ratio.label),
+                        ),
                     ],
                     onChanged: (value) {
                       if (value != null) {
-                        update(() => settings = settings.copyWith(fit: value));
+                        update(() => settings = settings.copyWith(aspectRatio: value));
                       }
                     },
                   ),
@@ -1433,7 +1593,18 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _settings = settings;
     await _settings.save(_preferences);
     await _applyControls();
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    switch (action) {
+      case 'skip': await _pickSkipSeconds();
+      case 'subtitles': await _pickSubtitles();
+      case 'pip': await _enterPip();
+      case 'line': await _pickLine();
+      case 'danmakuSettings': await _showDanmakuSettings();
+      case 'searchDanmaku': await _searchDanmaku();
+      case 'sendDanmaku': await _sendDanmaku();
+    }
+    if (mounted) _scheduleChromeHide();
   }
 
   Future<void> _pickSubtitles() async {
@@ -1733,6 +1904,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     }
     unawaited(_persistProgress());
     _progressTimer?.cancel();
+    _seekFeedbackTimer?.cancel();
     _positionSub?.cancel();
     _durationSub?.cancel();
     _playingSub?.cancel();
@@ -1763,7 +1935,7 @@ class _VideoArea extends StatelessWidget {
   const _VideoArea({
     required this.controller,
     required this.nativeController,
-    required this.fit,
+    required this.aspectRatio,
     required this.backgroundAudio,
     required this.loading,
     required this.error,
@@ -1774,7 +1946,7 @@ class _VideoArea extends StatelessWidget {
   final VideoController? controller;
   final _NativeAndroidVideoController nativeController;
   final bool loading;
-  final String fit;
+  final double? aspectRatio;
   final bool backgroundAudio;
   final String? error;
   final VoidCallback onRetry;
@@ -1784,20 +1956,28 @@ class _VideoArea extends StatelessWidget {
   Widget build(BuildContext context) => Stack(
     fit: StackFit.expand,
     children: <Widget>[
-      if (controller != null)
-        Video(
-          controller: controller!,
-          controls: null,
-          fit: switch (fit) {
-            'cover' => BoxFit.cover,
-            'fill' => BoxFit.fill,
-            _ => BoxFit.contain,
-          },
-          pauseUponEnteringBackgroundMode: !backgroundAudio,
-          resumeUponEnteringForegroundMode: !backgroundAudio,
-        )
-      else
-        _NativeAndroidVideoView(controller: nativeController),
+        LayoutBuilder(builder: (context, constraints) {
+          // Own frame geometry while retaining the same native view/controller.
+          // media_kit_video 2.0.1 cannot clear its cached aspectRatio via null.
+          final width = aspectRatio == null
+              ? constraints.maxWidth
+              : min(constraints.maxWidth, constraints.maxHeight * aspectRatio!);
+          return Center(
+            child: SizedBox(
+              width: width,
+              height: aspectRatio == null ? constraints.maxHeight : width / aspectRatio!,
+              child: controller == null
+                  ? _NativeAndroidVideoView(controller: nativeController)
+                  : Video(
+                      controller: controller!,
+                      controls: null,
+                      fit: aspectRatio == null ? BoxFit.contain : BoxFit.fill,
+                      pauseUponEnteringBackgroundMode: !backgroundAudio,
+                      resumeUponEnteringForegroundMode: !backgroundAudio,
+                    ),
+            ),
+          );
+        }),
       if (error != null) ...[
         const ColoredBox(color: Colors.black87),
         Positioned.fill(
@@ -1969,7 +2149,8 @@ class _NativeAndroidVideoController {
 
   Future<void> setVolume(double volume) =>
       _invoke('setVolume', {'volume': volume});
-  Future<void> setFit(String fit) => _invoke('setFit', {'fit': fit});
+  Future<void> setAspectRatio(double? ratio) =>
+      _invoke('setAspectRatio', {'ratio': ratio});
   Future<void> setBackgroundAudio(bool enabled) =>
       _invoke('setBackgroundAudio', {'enabled': enabled});
   Future<List<Map<Object?, Object?>>> subtitleTracks() async {

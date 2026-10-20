@@ -163,12 +163,15 @@ class AnimeInfoRepository {
     String id,
     String section, {
     int offset = 0,
+    MediaItem? subject,
     bool refresh = false,
   }) {
     final key = (id, section, offset, SourceRequestCancellation.current, refresh);
     return _inflight.putIfAbsent(key, () async {
       try {
-        return await _section(id, section, offset: offset, refresh: refresh);
+        return await _section(
+          id, section, offset: offset, refresh: refresh, subject: subject,
+        );
       } finally {
         unawaited(_inflight.remove(key));
       }
@@ -179,12 +182,22 @@ class AnimeInfoRepository {
     String id,
     String section, {
     int offset = 0,
+    MediaItem? subject,
     bool refresh = false,
   }) async {
     final query = db.select(
       db.mediaItems,
     )..where((t) => t.sourceId.equals('bangumi-anime') & t.remoteId.equals(id));
-    final item = await query.getSingleOrNull();
+    var item = await query.getSingleOrNull();
+    if (item == null && subject != null) {
+      if (subject.sourceId != 'bangumi-anime' ||
+          subject.remoteId != id ||
+          subject.type != MediaType.anime) {
+        throw ArgumentError('公开资料缓存的番剧身份不一致');
+      }
+      await LibraryRepository(db).cacheItem(subject);
+      item = await query.getSingleOrNull();
+    }
     if (SourceRequestCancellation.current?.cancelled == true) {
       throw StateError('公开资料请求已取消');
     }

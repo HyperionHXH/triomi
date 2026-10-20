@@ -66,15 +66,33 @@ class SuwayomiClient {
   }
 
   Future<void> install(File file, {required bool nativeJar}) async {
-    await _call(
-      '/api/v1/extension/install',
-      data: FormData.fromMap({
-        'file': await MultipartFile.fromFile(
-          file.path,
-          filename: file.uri.pathSegments.last,
-        ),
-      }),
-    );
+    try {
+      await _call(
+        '/api/v1/extension/install',
+        data: FormData.fromMap({
+          'file': await MultipartFile.fromFile(
+            file.path,
+            filename: file.uri.pathSegments.last,
+          ),
+        }),
+      );
+    } on DioException catch (error) {
+      // This endpoint converts/loads local bytes, not a source website request.
+      // Upstream returns only "Server Error" for verifier failures, so do not
+      // present its local HTTP 500 as evidence that the website is broken.
+      if (error.type != DioExceptionType.badResponse ||
+          error.response?.statusCode != 500) {
+        rethrow;
+      }
+      throw UnsupportedError(
+        nativeJar
+            ? 'Windows 扩展原生 JAR 加载失败；请检查其与当前桌面运行时的兼容性。'
+                  '这是本地安装阶段失败，不是来源网站的 HTTP 500。'
+            : 'Windows 扩展 APK 转换或加载失败；Android 可用不代表转换后的 JVM 字节码兼容。'
+                  '这是本地安装阶段失败，不是来源网站的 HTTP 500。'
+                  '若仓库提供原生 JAR，请重新安装并单独确认其来源与指纹；不会自动改用其他仓库或关闭 Java 验证。',
+      );
+    }
   }
 
   Future<void> uninstall(String package) async {

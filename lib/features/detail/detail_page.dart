@@ -820,6 +820,17 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       supportsContent: _data.supportsContent,
     );
     final playable = item.type == MediaType.anime ? _playback : data;
+    final association = item.type == MediaType.anime
+        ? ref.watch(animeSubjectProvider(item))
+        : null;
+    final associated = item.sourceId == 'bangumi-anime'
+        ? item
+        : association?.asData?.value;
+    final commentSubject = associated?.sourceId == 'bangumi-anime' &&
+            associated?.type == MediaType.anime &&
+            (int.tryParse(associated?.remoteId ?? '') ?? 0) > 0
+        ? associated
+        : null;
     return PageScaffold(
       title: item.title,
       actions: [
@@ -915,7 +926,29 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         slivers: [
           for (final section in <Widget>[
             if (item.type == MediaType.anime)
-              _AnimeHero(item: item, onPlay: _continueAnime)
+              _AnimeHero(
+                item: item,
+                onPlay: _continueAnime,
+                onComments: commentSubject == null
+                    ? null
+                    : () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        showDragHandle: true,
+                        builder: (_) => AnimeInfoSheet(
+                          id: commentSubject.remoteId,
+                          item: commentSubject,
+                          initialSection: 'comments',
+                        ),
+                      ),
+                commentsStatus: commentSubject != null
+                    ? null
+                    : association?.isLoading == true
+                    ? '正在读取 Bangumi 条目关联'
+                    : association?.hasError == true
+                    ? 'Bangumi 条目关联读取失败'
+                    : '尚未关联 Bangumi 条目，无法读取该作品的评论',
+              )
             else if (item.type == MediaType.manga)
               _MangaHeader(
                 data: data,

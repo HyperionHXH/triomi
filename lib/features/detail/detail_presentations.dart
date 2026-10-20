@@ -1,9 +1,16 @@
 part of 'detail_page.dart';
 
 class _AnimeHero extends StatelessWidget {
-  const _AnimeHero({required this.item, required this.onPlay});
+  const _AnimeHero({
+    required this.item,
+    required this.onPlay,
+    required this.onComments,
+    this.commentsStatus,
+  });
   final MediaItem item;
   final VoidCallback onPlay;
+  final VoidCallback? onComments;
+  final String? commentsStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -70,8 +77,18 @@ class _AnimeHero extends StatelessWidget {
                         label: const Text('开始 / 继续观看'),
                       ),
                       AnimeCollectionButton(item: item),
+                      OutlinedButton.icon(
+                        key: const ValueKey('anime-comments-entry'),
+                        onPressed: onComments,
+                        icon: const Icon(Icons.chat_bubble_outline),
+                        label: const Text('评论 / 吐槽'),
+                      ),
                     ],
                   ),
+                  if (commentsStatus != null) ...[
+                    const SizedBox(height: 8),
+                    Text(commentsStatus!, style: theme.textTheme.bodySmall),
+                  ],
                 ],
               ),
             ),

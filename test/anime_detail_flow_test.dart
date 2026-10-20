@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_descriptor.dart';
+import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/router/app_router.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_api.dart';
@@ -16,6 +18,7 @@ import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
+import 'package:triomi/features/detail/anime_info_repository.dart';
 import 'package:triomi/features/detail/anime_info_sheet.dart';
 import 'package:triomi/features/detail/detail_page.dart';
 import 'package:triomi/features/library/data/anime_identity_repository.dart';
@@ -82,9 +85,12 @@ class _Site implements SearchProvider, DetailProvider, ContentProvider {
       volumeTitle: '备用线路',
     ),
   ];
+  int contentRequests = 0;
   @override
-  Future<ChapterContent> content(Chapter chapter) =>
-      throw StateError('must only resolve after selecting a player episode');
+  Future<ChapterContent> content(Chapter chapter) {
+    contentRequests++;
+    throw StateError('must only resolve after selecting a player episode');
+  }
 }
 
 class _Sources extends SourceRegistryController {
@@ -339,5 +345,225 @@ void main() {
     expect(search.initialTags, ['科幻']);
     expect(search.initialQuery, isEmpty);
     expect(find.byType(TextField), findsOneWidget);
+  });
+
+  testWidgets('initial comments consume public Next data and cache without overview', (tester) async {
+    final db = openTestDatabase();
+    final http = FakeHttpClient((request) async {
+      final uri = Uri.parse(request.url);
+      expect(uri.host, 'next.bgm.tv');
+      expect(uri.path, '/p1/subjects/42/comments');
+      expect(uri.queryParameters, {'limit': '20', 'offset': '0'});
+      expect(request.headers.keys.map((key) => key.toLowerCase()), isNot(contains('authorization')));
+      return const SourceResponse(
+        statusCode: 200,
+        body: '{"total":1,"data":[{"id":5,"user":{"id":7,"nickname":"匿名读取样本","username":"sample","avatar":{}},"type":2,"rate":9,"comment":"Next公开正文","updatedAt":1700000000}]}',
+      );
+    });
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      sourceHttpClientProvider.overrideWithValue(http),
+    ]);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      container.dispose();
+      await db.close();
+    });
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: Scaffold(body: SingleChildScrollView(
+        child: AnimeInfoSheet(id: '42', item: subject, initialSection: 'comments', embedded: true),
+      ))),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Next公开正文'), findsOneWidget);
+    final page = await container.read(animeInfoRepositoryProvider).section('42', 'comments');
+    expect(page.cached, isTrue);
+    expect(page.rows.single['comment'], 'Next公开正文');
+    expect(http.requests, hasLength(1));
+  });
+
+  testWidgets('subject replacement cancels late comments and loads its own partition', (tester) async {
+    final db = openTestDatabase();
+    final oldResponse = Completer<SourceResponse>();
+    final http = FakeHttpClient((request) async {
+      if (Uri.parse(request.url).path.contains('/42/')) return oldResponse.future;
+      return const SourceResponse(statusCode: 200,
+        body: '{"total":1,"data":[{"user":{},"comment":"新条目正文","rate":0,"updatedAt":1700000000}]}');
+    });
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      sourceHttpClientProvider.overrideWithValue(http),
+    ]);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      container.dispose();
+      await db.close();
+    });
+    Widget sheet(String id) => UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(home: Scaffold(body: SingleChildScrollView(
+        child: AnimeInfoSheet(id: id,
+          item: MediaItem(sourceId: 'bangumi-anime', remoteId: id,
+            title: '番剧$id', type: MediaType.anime),
+          initialSection: 'comments', embedded: true),
+      ))),
+    );
+    await tester.pumpWidget(sheet('42'));
+    for (var attempt = 0; attempt < 20 && http.requests.isEmpty; attempt++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(http.requests, hasLength(1));
+    await tester.pumpWidget(sheet('43'));
+    await tester.pumpAndSettle();
+    expect(find.text('新条目正文'), findsOneWidget);
+    oldResponse.complete(const SourceResponse(statusCode: 200,
+      body: '{"total":1,"data":[{"user":{},"comment":"旧条目迟到正文","rate":0,"updatedAt":1700000000}]}'));
+    await tester.pumpAndSettle();
+    expect(find.text('旧条目迟到正文'), findsNothing);
+    expect(find.text('新条目正文'), findsOneWidget);
+  });
+
+  test('comment pages preserve raw offsets, cache failed refresh, and reject malformed responses', () async {
+    final db = openTestDatabase();
+    var unavailable = false;
+    var malformed = false;
+    final http = FakeHttpClient((request) async {
+      if (unavailable) return const SourceResponse(statusCode: 503, body: '{}');
+      if (malformed) return const SourceResponse(statusCode: 200, body: '{"message":"unavailable"}');
+      final offset = int.parse(Uri.parse(request.url).queryParameters['offset']!);
+      return SourceResponse(statusCode: 200, body: jsonEncode({
+        'total': 3,
+        'data': offset == 0
+          ? [{'user': <String, Object?>{}, 'comment': '第一条'}, {'user': <String, Object?>{}, 'comment': '第二条'}]
+          : [{'user': <String, Object?>{}, 'comment': {'comment': '第三条', 'rate': 8, 'updatedAt': 1700000000}}],
+      }));
+    });
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      sourceHttpClientProvider.overrideWithValue(http),
+    ]);
+    addTearDown(() async { container.dispose(); await db.close(); });
+    final repository = container.read(animeInfoRepositoryProvider);
+    final first = await repository.section('42', 'comments', subject: subject);
+    expect(first.nextOffset, 2);
+    expect(first.hasMore, isTrue);
+    final last = await repository.section('42', 'comments', offset: first.nextOffset);
+    expect(last.nextOffset, 3);
+    expect(last.hasMore, isFalse);
+    unavailable = true;
+    final cached = await repository.section('42', 'comments', offset: 2, refresh: true);
+    expect(cached.cached, isTrue);
+    expect(cached.refreshError, isA<SourceException>());
+    expect(cached.rows.single['comment'], isA<Map<String, Object?>>());
+    await expectLater(repository.section('43', 'comments'), throwsA(isA<SourceException>()));
+    unavailable = false;
+    malformed = true;
+    await expectLater(repository.section('43', 'comments'), throwsA(isA<FormatException>()));
+  });
+
+  testWidgets('mapped playback detail opens canonical comments without resolving playback', (tester) async {
+    final db = openTestDatabase();
+    final site = _Site();
+    await AnimeIdentityRepository(db).confirm(subject, site.item);
+    final http = FakeHttpClient((request) async {
+      final path = Uri.parse(request.url).path;
+      if (path.endsWith('/comments')) {
+        expect(path, '/p1/subjects/42/comments');
+        return const SourceResponse(statusCode: 200,
+          body: '{"total":1,"data":[{"user":{},"comment":"映射条目正文","rate":8,"updatedAt":1700000000}]}');
+      }
+      return const SourceResponse(statusCode: 200,
+        body: '{"id":42,"type":2,"name_cn":"原始作品","summary":"作品简介"}');
+    });
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      preferencesProvider.overrideWithValue(memoryPreferences()),
+      secureStoreProvider.overrideWithValue(MemorySecureStore()),
+      sourceHttpClientProvider.overrideWithValue(http),
+      sourcesProvider.overrideWith(() => _Sources(site)),
+    ]);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      container.dispose();
+      await db.close();
+    });
+    await tester.pumpWidget(UncontrolledProviderScope(container: container,
+      child: MaterialApp(home: DetailPage(item: site.item))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('anime-comments-entry')));
+    await tester.pumpAndSettle();
+    expect(find.text('映射条目正文'), findsOneWidget);
+    expect(site.contentRequests, 0);
+    expect(http.requests.where((r) => r.url.contains('/comments')), hasLength(1));
+  });
+
+  testWidgets('failed later comment page retries the same offset without duplicating rows', (tester) async {
+    final db = openTestDatabase();
+    var secondPageAttempts = 0;
+    final offsets = <String>[];
+    final http = FakeHttpClient((request) async {
+      final offset = Uri.parse(request.url).queryParameters['offset']!;
+      offsets.add(offset);
+      if (offset == '1' && ++secondPageAttempts == 1) {
+        return const SourceResponse(statusCode: 503, body: '{}');
+      }
+      return SourceResponse(statusCode: 200, body: jsonEncode({
+        'total': 2,
+        'data': [{'user': <String, Object?>{}, 'comment': offset == '0' ? '首页正文' : '末页正文'}],
+      }));
+    });
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      sourceHttpClientProvider.overrideWithValue(http),
+    ]);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      container.dispose();
+      await db.close();
+    });
+    await tester.pumpWidget(UncontrolledProviderScope(container: container,
+      child: const MaterialApp(home: Scaffold(body: SingleChildScrollView(
+        child: AnimeInfoSheet(id: '42', item: subject, initialSection: 'comments', embedded: true),
+      ))),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('anime-info-more:comments')));
+    await tester.pumpAndSettle();
+    expect(find.text('首页正文'), findsOneWidget);
+    expect(find.text('末页正文'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('anime-info-retry:comments')));
+    await tester.pumpAndSettle();
+    expect(offsets, ['0', '1', '1']);
+    expect(find.text('首页正文'), findsOneWidget);
+    expect(find.text('末页正文'), findsOneWidget);
+    expect(find.byKey(const ValueKey('anime-info-more:comments')), findsNothing);
+  });
+
+  testWidgets('unmapped playback identity never guesses a Bangumi comment id', (tester) async {
+    final db = openTestDatabase();
+    final site = _Site();
+    final http = FakeHttpClient((_) async =>
+      throw StateError('unmapped items must not request public comments'));
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      preferencesProvider.overrideWithValue(memoryPreferences()),
+      secureStoreProvider.overrideWithValue(MemorySecureStore()),
+      sourceHttpClientProvider.overrideWithValue(http),
+      sourcesProvider.overrideWith(() => _Sources(site)),
+    ]);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      container.dispose();
+      await db.close();
+    });
+    await tester.pumpWidget(UncontrolledProviderScope(container: container,
+      child: MaterialApp(home: DetailPage(item: site.item))));
+    await tester.pumpAndSettle();
+    final entry = tester.widget<OutlinedButton>(
+      find.byKey(const ValueKey('anime-comments-entry')));
+    expect(entry.onPressed, isNull);
+    expect(http.requests, isEmpty);
+    expect(site.contentRequests, 0);
   });
 }

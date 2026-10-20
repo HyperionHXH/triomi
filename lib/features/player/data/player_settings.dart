@@ -1,17 +1,32 @@
 import '../../../core/storage/preferences.dart';
 
+enum VideoAspectRatio {
+  original('原始比例', null),
+  ratio16x9('16:9', 16 / 9),
+  ratio4x3('4:3', 4 / 3),
+  ratio16x10('16:10', 16 / 10),
+  ratio21x9('21:9', 21 / 9),
+  ratio1x1('1:1', 1);
+
+  const VideoAspectRatio(this.label, this.ratio);
+  final String label;
+  final double? ratio;
+}
+
 class PlayerSettings {
   const PlayerSettings({
     this.speed = 1,
     this.holdSpeed = 2,
     this.autoNext = true,
-    this.fit = 'contain',
+    this.aspectRatio = VideoAspectRatio.original,
     this.backgroundAudio = false,
     this.volume = 1,
+    this.skipSeconds = 80,
   });
   final double speed, holdSpeed, volume;
   final bool autoNext, backgroundAudio;
-  final String fit;
+  final VideoAspectRatio aspectRatio;
+  final int skipSeconds;
   static const key = 'player.controls';
   static PlayerSettings load(Preferences preferences) {
     final raw = preferences.get<Map<dynamic, dynamic>>(key) ?? const {};
@@ -22,16 +37,16 @@ class PlayerSettings {
           : fallback;
     }
 
-    final fit = raw['fit'];
     return PlayerSettings(
       speed: number('speed', 1, .5, 3),
       holdSpeed: number('holdSpeed', 2, 1, 3),
       volume: number('volume', 1, 0, 1),
+      skipSeconds: number('skipSeconds', 80, 1, 3600).round(),
       autoNext: raw['autoNext'] != false,
       backgroundAudio: raw['backgroundAudio'] == true,
-      fit: const ['contain', 'cover', 'fill'].contains(fit)
-          ? fit as String
-          : 'contain',
+      aspectRatio: VideoAspectRatio.values
+          .where((value) => value.name == raw['aspectRatio'])
+          .firstOrNull ?? VideoAspectRatio.original,
     );
   }
 
@@ -41,14 +56,16 @@ class PlayerSettings {
     double? volume,
     bool? autoNext,
     bool? backgroundAudio,
-    String? fit,
+    VideoAspectRatio? aspectRatio,
+    int? skipSeconds,
   }) => PlayerSettings(
     speed: speed ?? this.speed,
     holdSpeed: holdSpeed ?? this.holdSpeed,
     volume: volume ?? this.volume,
     autoNext: autoNext ?? this.autoNext,
     backgroundAudio: backgroundAudio ?? this.backgroundAudio,
-    fit: fit ?? this.fit,
+    aspectRatio: aspectRatio ?? this.aspectRatio,
+    skipSeconds: skipSeconds ?? this.skipSeconds,
   );
   Future<void> save(Preferences preferences) => preferences.set(key, {
     'speed': speed,
@@ -56,6 +73,7 @@ class PlayerSettings {
     'volume': volume,
     'autoNext': autoNext,
     'backgroundAudio': backgroundAudio,
-    'fit': fit,
+    'aspectRatio': aspectRatio.name,
+    'skipSeconds': skipSeconds,
   });
 }
