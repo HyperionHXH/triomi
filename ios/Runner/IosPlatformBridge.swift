@@ -25,15 +25,18 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
   private var downloadOwners = Set<String>()
   private var originalBrightness: CGFloat?
 
-  init(messenger: FlutterBinaryMessenger) {
-    channel = FlutterMethodChannel(name: "triomi/platform", binaryMessenger: messenger)
+  init(messenger: FlutterBinaryMessenger, channelName: String = "triomi/platform") {
+    channel = FlutterMethodChannel(name: channelName, binaryMessenger: messenger)
     super.init()
     channel.setMethodCallHandler { [weak self] call, result in
       self?.handle(call, result: result)
     }
   }
 
-  deinit { IosBackupArtifactRegistry.releaseOwner(artifactOwner) }
+  deinit {
+    channel.setMethodCallHandler(nil)
+    IosBackupArtifactRegistry.releaseOwner(artifactOwner)
+  }
 
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any] ?? [:]

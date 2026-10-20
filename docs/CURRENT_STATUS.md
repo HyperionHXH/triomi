@@ -18,6 +18,8 @@ Documents/Application Support 根目录排除 iCloud 备份，持久业务数据
 
 第二次 [macOS 运行39445216095](https://github.com/HyperionHXH/triomi/actions/runs/39445216095)已通过 release 真机架构编译、IPA 校验打包和模拟器应用编译；XCTest 因测试文件缺 `import WebKit` 而停止，后续行为烟测及产物上传未执行。已补该测试导入；不能把已打包但未上传、未过烟测的中间文件当最终产物。
 
+第三次 [macOS 运行39446688364](https://github.com/HyperionHXH/triomi/actions/runs/39446688364)实际执行10项原生测试，其中8项通过：JS取消/超时/超限重载、Cookie域隔离与持久会话、flock、AVAudioSession、存储排除。导出和常亮两项因夹具向未启动的 FlutterEngine 注册通道触发断言，已改为运行中引擎的独立测试通道；没有跳过失败用例或放松产物门槛。
+
 ## 当前请求：R167移除本机可选xkcd并正式推送发布（0.11.0+167）
 
 用户明确要求推送发布，版本递增为0.11.0+167，沿用166正式Android签名与现有手动release工作流；不生成替代密钥，不修改旧标签或资产。源码`2a0f6ea`和标签`v0.11.0-test.167`已推送，正式[构建39401127876](https://github.com/HyperionHXH/triomi/actions/runs/39401127876)的Android、Windows和publish全部成功；[Release](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.167)已公开，非草稿预发布。

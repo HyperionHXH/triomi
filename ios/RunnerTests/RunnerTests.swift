@@ -7,6 +7,18 @@ import XCTest
 @testable import Runner
 
 final class RunnerTests: XCTestCase {
+  private func makeBridge() throws -> IosPlatformBridge {
+    let controllers = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap { $0.windows }
+      .compactMap { $0.rootViewController as? FlutterViewController }
+    let delegate = UIApplication.shared.delegate as? FlutterAppDelegate
+    let controller = try XCTUnwrap(controllers.first ??
+      (delegate?.window?.rootViewController as? FlutterViewController))
+    return IosPlatformBridge(messenger: controller.binaryMessenger,
+                             channelName: "triomi/platform-test-" + UUID().uuidString)
+  }
+
   private func invoke(_ bridge: IosPlatformBridge, _ method: String, _ arguments: Any? = nil) -> Any? {
     let done = expectation(description: method)
     var value: Any?
@@ -25,8 +37,7 @@ final class RunnerTests: XCTestCase {
     defer { try? files.removeItem(at: root) }
     let token = try IosExportDirectory.remember(root)
     defer { UserDefaults.standard.removeObject(forKey: "triomi.export-directory." + String(token.dropFirst("ios-bookmark:".count))) }
-    let firstEngine = FlutterEngine(name: "export-smoke-first")
-    let firstBridge = IosPlatformBridge(messenger: firstEngine.binaryMessenger)
+    let firstBridge = try makeBridge()
     let original = Data("first document".utf8)
     let firstValue = invoke(firstBridge, "writeToTree", ["treeUri": token, "fileName": "backup.zip", "bytes": FlutterStandardTypedData(bytes: original)])
     let first = try XCTUnwrap((firstValue as? String).flatMap(URL.init(string:)))
@@ -35,8 +46,7 @@ final class RunnerTests: XCTestCase {
 
     // A fresh bridge must resolve native persisted bookmark data, not retain a
     // picker URL in memory. A name collision returns the actual new document.
-    let secondEngine = FlutterEngine(name: "export-smoke-second")
-    let secondBridge = IosPlatformBridge(messenger: secondEngine.binaryMessenger)
+    let secondBridge = try makeBridge()
     let source = root.appendingPathComponent("source.zip")
     let replacement = Data("second document".utf8)
     try replacement.write(to: source)
@@ -155,9 +165,8 @@ final class RunnerTests: XCTestCase {
     XCTAssertEqual(try documents.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
   }
 
-  func testDownloadWakeOwnersDoNotReleaseReaderOrVideoWake() {
-    let engine = FlutterEngine(name: "wake-ownership")
-    let bridge = IosPlatformBridge(messenger: engine.binaryMessenger)
+  func testDownloadWakeOwnersDoNotReleaseReaderOrVideoWake() throws {
+    let bridge = try makeBridge()
     _ = invoke(bridge, "keepScreenOn", true)
     _ = invoke(bridge, "videoPolicy", ["owner": "video", "active": true])
     _ = invoke(bridge, "downloadWake", ["owner": "download-a", "active": true])
