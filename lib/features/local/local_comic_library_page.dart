@@ -31,6 +31,8 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
   bool _busy = false;
   String? _notice;
 
+  bool get _systemPicker => Platform.isAndroid || Platform.isIOS;
+
   Future<LocalComicImporter> _importer() async => LocalComicImporter(
     database: ref.read(databaseProvider),
     downloadRoot: Directory(
@@ -41,7 +43,7 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
   @override
   void dispose() {
     _cancellation?.cancel();
-    if (Platform.isAndroid && _busy) {
+    if (_systemPicker && _busy) {
       _channel.invokeMethod<void>('cancelLocalComicPick');
     }
     super.dispose();
@@ -67,7 +69,7 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
                 controller: titleController,
                 decoration: const InputDecoration(labelText: '作品名（必填）'),
               ),
-              if (!Platform.isAndroid) ...[
+              if (!_systemPicker) ...[
                 const SizedBox(height: 12),
                 TextField(
                   controller: pathController,
@@ -90,7 +92,7 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
             onPressed: () => Navigator.pop(dialog),
             child: const Text('取消'),
           ),
-          if (Platform.isAndroid)
+          if (_systemPicker)
             TextButton(
               onPressed: () {
                 final title = titleController.text.trim();
@@ -104,12 +106,12 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
             onPressed: () {
               final title = titleController.text.trim(),
                   path = pathController.text.trim();
-              if (title.isEmpty || (!Platform.isAndroid && path.isEmpty)) {
+              if (title.isEmpty || (!_systemPicker && path.isEmpty)) {
                 return;
               }
               Navigator.pop(dialog, (title, path));
             },
-            child: Text(Platform.isAndroid ? '选择系统文件' : '预览导入范围'),
+            child: Text(_systemPicker ? '选择系统文件' : '预览导入范围'),
           ),
         ],
       ),
@@ -128,7 +130,7 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
       _progress = const LocalComicProgress('等候系统选择 / 复制所选文件（大小由系统提供者决定）', 0, 0);
     });
     try {
-      if (Platform.isAndroid) {
+      if (_systemPicker) {
         pickerLease = await BackupArtifactGuard.acquireOperation();
         final selected = await _channel.invokeMapMethod<String, Object?>(
           'pickLocalComic',
@@ -274,7 +276,7 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
                             TextButton(
                               onPressed: () {
                                 _cancellation!.cancel();
-                                if (Platform.isAndroid) {
+                                if (_systemPicker) {
                                   _channel.invokeMethod<void>(
                                     'cancelLocalComicPick',
                                   );

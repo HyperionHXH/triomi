@@ -21,8 +21,8 @@ class CoverStore {
   File _file(String url) =>
       File('${directory.path}/${sha256.convert(utf8.encode(url))}.img');
 
-  /// Reject redirected roots. Android's exact user-zero OS alias is the only
-  /// permitted lexical/canonical difference; arbitrary links are never followed.
+  /// Reject redirected roots. Only Android's user-zero alias and iOS's
+  /// exact /var -> /private/var system prefix may preserve the entire suffix.
   Future<Directory?> verifiedDirectory() async {
     final type = await FileSystemEntity.type(directory.path, followLinks: false);
     if (type == FileSystemEntityType.notFound) return null;
@@ -39,6 +39,9 @@ class CoverStore {
           verified = true;
         }
       }
+    }
+    if (!verified && Platform.isIOS && supplied.startsWith('/var/')) {
+      verified = resolved == '/private$supplied';
     }
     if (!verified) throw const FileSystemException('封面目录被重定向');
     return Directory(resolved);

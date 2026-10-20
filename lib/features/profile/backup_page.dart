@@ -151,7 +151,9 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('每日自动本地备份'),
                   subtitle: Text(
-                    Platform.isWindows
+                    Platform.isIOS
+                        ? 'iOS 不保证每日定时执行；请手动导出到“文件”App，或在前台执行 WebDAV 同步。'
+                        : Platform.isWindows
                         ? 'Windows 每日 03:00 或登录后执行（仅当前用户登录且应用关闭时）；只备份元数据，不含封面、正文、媒体、规则、APK 或凭据，不联网、不上传，旧备份保留。'
                         : 'Android 约每日执行，电量不足延后；不联网取封面、不上传。授权目录不可用时回退私有目录；旧备份保留。',
                   ),
@@ -166,12 +168,13 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                   contentPadding: EdgeInsets.zero,
                   dense: true,
                   title: const Text('后台检查更新'),
-                  subtitle: const Text(
-                    '联网检查追番更新并通知；默认关闭，开启后需要通知权限，'
-                    '仅在 WiFi 下检查。',
+                  subtitle: Text(
+                    Platform.isIOS
+                        ? 'iOS 不提供 Android 周期任务；请在前台检查更新。fetch 声明不保证系统执行。'
+                        : '联网检查追番更新并通知；默认关闭，开启后需要通知权限，仅在 WiFi 下检查。',
                   ),
                   value: _backgroundCheck,
-                  onChanged: _busy ? null : _toggleBackgroundCheck,
+                  onChanged: _busy || Platform.isIOS ? null : _toggleBackgroundCheck,
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 ListTile(
@@ -213,7 +216,9 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                   onPressed: _busy ? null : _pickBackup,
                   icon: const Icon(Icons.file_open_outlined),
                   label: Text(
-                    Platform.isAndroid ? '选择备份 ZIP 恢复' : '从文件路径恢复 ZIP',
+                    Platform.isAndroid || Platform.isIOS
+                        ? '选择备份 ZIP 恢复'
+                        : '从文件路径恢复 ZIP',
                   ),
                 ),
               ],
@@ -426,7 +431,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     String? path;
     var temporary = false;
     try {
-      if (Platform.isAndroid) {
+      if (Platform.isAndroid || Platform.isIOS) {
         path = await const MethodChannel('triomi/platform')
             .invokeMethod<String>('pickBackupFile');
         temporary = path != null;

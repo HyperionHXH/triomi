@@ -35,6 +35,7 @@ import 'data/danmaku_overlay.dart';
 import 'data/danmaku_settings.dart';
 import 'data/player_settings.dart';
 import 'episode_selector.dart';
+import 'ios_video_controller.dart';
 import 'windows_video_resolver.dart';
 
 /// 播放器入参：作品 + 目录 + 从第几集开始。
@@ -64,11 +65,16 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     with WidgetsBindingObserver {
   late final Player _player;
   VideoController? _videoController;
+  late final IosVideoController _iosVideoController;
   late final _NativeAndroidVideoController _nativeVideoController;
 
   bool get _useNativeAndroidVideo =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-
+  bool get _isIOS =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+  bool get _useNativeVideo => _useNativeAndroidVideo || _isIOS;
+  VideoPlatformController get _activeNativeController =>
+      _isIOS ? _iosVideoController : _nativeVideoController;
   /// initState 里从 ref 取出保存；dispose 里写最后一次进度时用。
   LibraryRepository? _libraryRepository;
 
@@ -109,6 +115,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   bool _chromeVisible = true;
   bool _danmakuOn = true;
+  String? _sourceDanmakuUrl;
+  String? _danmakuError;
+  int _danmakuRequestSeq = 0;
   bool _fullscreen = false;
   bool _episodesOpen = false;
   bool _scrubbing = false;
@@ -157,7 +166,22 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         if (mounted) setState(() => _inPip = enabled);
       },
     );
-    if (!_useNativeAndroidVideo) {
+    _iosVideoController = IosVideoController(
+      onState: _onNativeVideoState,
+      onPrepared: (state) {
+        _prepareTimer?.cancel();
+        _awaitingPlaybackStart = false;
+        _onNativeVideoState(state);
+        unawaited(_applyControls());
+        _scheduleChromeHide();
+      },
+      onError: _onNativeVideoError,
+      onCompleted: () => unawaited(_onCompleted()),
+      onPip: (enabled) {
+        if (mounted) setState(() => _inPip = enabled);
+      },
+    );
+    if (!_useNativeVideo) {
       _player = Player();
       // Android uses a native SurfaceView because API35 x86_64 emulators
       // render media_kit's Flutter external texture as black. Desktop keeps
@@ -209,7 +233,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     if (mounted) setState(() {});
   }
 
-  void _onNativeVideoState(_NativeVideoState state) {
+  void _onNativeVideoState(NativeVideoState state) {
     if (_awaitingPlaybackStart || _scrubbing) return;
     final playingChanged = _playing != state.playing;
     _position = state.position;
@@ -254,10 +278,15 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       _lines = const <PlaySource>[];
       _lineIndex = 0;
     });
+    _danmaku.clear();
+    _sourceDanmakuUrl = null;
+    _danmakuError = null;
+    _danmakuEpisodeId = null;
+    ++_danmakuRequestSeq;
 
     try {
-      if (_useNativeAndroidVideo) {
-        await _nativeVideoController.pause();
+      if (_useNativeVideo) {
+        await _activeNativeController.pause();
       } else {
         await _player.pause();
       }
@@ -337,9 +366,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         line: _lines.first,
         startPosition: startPosition,
       );
-      if (danmakuFeatureEnabled) {
-        unawaited(_loadDanmaku(content.danmakuUrl));
-      }
+      if (!mounted || seq != _loadSeq) return;
+      _sourceDanmakuUrl = content.danmakuUrl;
+      unawaited(_loadDanmaku(content.danmakuUrl, sequence: seq));
 
       if (mounted && seq == _loadSeq) {
         setState(() {
@@ -395,20 +424,17 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   }
 
   Future<void> _applyControls() async {
-    if (_useNativeAndroidVideo) {
-      await _nativeVideoController.setRate(_speed);
-      await _nativeVideoController.setVolume(_settings.volume);
-      await _nativeVideoController.setAspectRatio(_settings.aspectRatio.ratio);
-      await _nativeVideoController.setBackgroundAudio(
-        _settings.backgroundAudio,
-      );
-      await const MethodChannel('triomi/platform')
-          .invokeMethod<void>('videoPolicy', {
-            'owner': _resolverOwner,
-            'active': true,
-            'pip': true,
-            'backgroundAudio': _settings.backgroundAudio,
-          });
+    if (_useNativeVideo) {
+      await _activeNativeController.setRate(_speed);
+      await _activeNativeController.setVolume(_settings.volume);
+      await _activeNativeController.setAspectRatio(_settings.aspectRatio.ratio);
+      await _activeNativeController.setBackgroundAudio(_settings.backgroundAudio);
+      await const MethodChannel('triomi/platform').invokeMethod<void>('videoPolicy', {
+        'owner': _resolverOwner,
+        'active': true,
+        'pip': true,
+        'backgroundAudio': _settings.backgroundAudio,
+      });
     } else {
       await _player.setRate(_speed);
       await _player.setVolume(_settings.volume * 100);
@@ -443,8 +469,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         if (!mounted || seq != _resolveSeq) return;
         url = result.url;
         headers = result.headers;
-      } else if (!_useNativeAndroidVideo) {
-        throw StateError('此来源的网页播放解析目前支持 Android，请选择直链来源');
+      } else if (!_useNativeVideo) {
+        throw StateError('此平台未提供网页播放解析，请选择直链来源');
       } else {
         final result = await const MethodChannel('triomi/platform')
             .invokeMapMethod<String, Object?>('resolveVideo', {
@@ -478,23 +504,21 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _position = startPosition;
     _duration = Duration.zero;
     _danmaku.seek(startPosition);
-    if (_useNativeAndroidVideo) {
+    if (_useNativeVideo) {
       _prepareTimer?.cancel();
       _prepareTimer = Timer(const Duration(seconds: 30), () {
         if (mounted && seq == _resolveSeq && _awaitingPlaybackStart) {
           _onNativeVideoError('视频准备超时，请重试或更换播放来源');
         }
       });
-      await _nativeVideoController.setUrl(
+      await _activeNativeController.setUrl(
         url,
         headers: headers,
         startPosition: startPosition,
         title: '${_item.title} · ${_chapter.title}',
       );
     } else {
-      await _player.open(
-        Media(url, httpHeaders: headers, start: startPosition),
-      );
+      await _player.open(Media(url, httpHeaders: headers, start: startPosition));
       if (!mounted || seq != _resolveSeq) return;
       await _player.play();
       await _videoController!.waitUntilFirstFrameRendered.timeout(
@@ -507,16 +531,28 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     await _applyControls();
   }
 
-  Future<void> _loadDanmaku(String? danmakuUrl) async {
+  Future<void> _loadDanmaku(String? danmakuUrl, {required int sequence}) async {
     if (danmakuUrl == null || danmakuUrl.isEmpty) return;
+    final request = ++_danmakuRequestSeq;
+    bool current() => mounted && sequence == _loadSeq &&
+        request == _danmakuRequestSeq;
     try {
       final response = await ref
           .read(sourceHttpClientProvider)
           .send(SourceRequest(url: danmakuUrl), sourceId: _item.sourceId);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError('HTTP ${response.statusCode}');
+      }
       final comments = DandanplayClient.parseCommentsBody(response.body);
-      if (mounted) _danmaku.load(comments);
-    } catch (_) {
-      // 弹幕拿不到不影响播放；入口仍在，用户可以手动重试。
+      if (!current()) return;
+      _danmaku.load(comments);
+      _danmaku.seek(_position);
+      setState(() => _danmakuError = null);
+    } catch (error) {
+      if (!current()) return;
+      final message = SourceException.sanitizeMessage('$error');
+      setState(() => _danmakuError = message);
+      _toast('来源弹幕加载失败，可在播放设置中重试：$message');
     }
   }
 
@@ -653,6 +689,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         _VideoArea(
           controller: _videoController,
           nativeController: _nativeVideoController,
+          iosController: _iosVideoController,
           aspectRatio: _settings.aspectRatio.ratio,
           backgroundAudio: _settings.backgroundAudio,
           loading: _loading || _awaitingPlaybackStart,
@@ -660,10 +697,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           onRetry: _load,
           onEpisodes: _showEpisodes,
         ),
-        if (danmakuFeatureEnabled &&
-            !_loading &&
-            !_awaitingPlaybackStart &&
-            _error == null)
+        if (!_loading && !_awaitingPlaybackStart && _error == null)
           DanmakuOverlay(controller: _danmaku),
         if (!_loading && !_awaitingPlaybackStart && _error == null && !_inPip)
           _buildGestureArea(),
@@ -829,8 +863,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   Future<void> _changeSource() async {
     await _persistProgress();
-    if (_useNativeAndroidVideo) {
-      await _nativeVideoController.pause();
+    if (_useNativeVideo) {
+      await _activeNativeController.pause();
     } else {
       await _player.pause();
     }
@@ -905,8 +939,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       if (mounted) setState(() => _seekFeedbackSeconds = null);
     });
     try {
-      if (_useNativeAndroidVideo) {
-        await _nativeVideoController.seek(target);
+      if (_useNativeVideo) {
+        await _activeNativeController.seek(target);
       } else {
         await _player.seek(target);
       }
@@ -920,10 +954,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   Future<void> _togglePlay() async {
     if (_loading || _awaitingPlaybackStart || _error != null) return;
     _revealChrome();
-    if (_useNativeAndroidVideo) {
+    if (_useNativeVideo) {
       _playing
-          ? await _nativeVideoController.pause()
-          : await _nativeVideoController.play();
+          ? await _activeNativeController.pause()
+          : await _activeNativeController.play();
     } else {
       _playing ? await _player.pause() : await _player.play();
     }
@@ -954,7 +988,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     final theme = Theme.of(context);
     final positionText = _format(_position);
     final durationText = _format(
-      _duration == Duration.zero && !_useNativeAndroidVideo
+      _duration == Duration.zero && !_useNativeVideo
           ? _player.state.duration
           : _duration,
     );
@@ -1030,7 +1064,6 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                       button(
                         '播放设置', Icons.tune_rounded, _controlsSheet,
                       ),
-                      if (danmakuFeatureEnabled)
                         button(
                           _danmakuOn ? '关闭弹幕' : '开启弹幕',
                           _danmakuOn
@@ -1093,8 +1126,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                                     onChangeEnd: (value) async {
                                       final target = Duration(milliseconds: value.round());
                                       try {
-                                        if (_useNativeAndroidVideo) {
-                                          await _nativeVideoController.seek(target);
+                                        if (_useNativeVideo) {
+                                          await _activeNativeController.seek(target);
                                         } else {
                                           await _player.seek(target);
                                         }
@@ -1211,7 +1244,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       _position.inMilliseconds.clamp(0, _sliderMax).toDouble();
 
   double get _sliderMax {
-    final duration = _duration == Duration.zero && !_useNativeAndroidVideo
+    final duration = _duration == Duration.zero && !_useNativeVideo
         ? _player.state.duration
         : _duration;
     return duration.inMilliseconds <= 0
@@ -1299,8 +1332,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     if (selected != null) {
       setState(() => _settings = _settings.copyWith(aspectRatio: selected));
       await _settings.save(_preferences);
-      if (_useNativeAndroidVideo) {
-        await _nativeVideoController.setAspectRatio(selected.ratio);
+      if (_useNativeVideo) {
+        await _activeNativeController.setAspectRatio(selected.ratio);
       }
     }
     if (mounted) _scheduleChromeHide();
@@ -1413,8 +1446,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       ),
     );
     if (selected == null) return;
-    if (_useNativeAndroidVideo) {
-      await _nativeVideoController.setRate(selected);
+    if (_useNativeVideo) {
+      await _activeNativeController.setRate(selected);
     } else {
       await _player.setRate(selected);
     }
@@ -1427,8 +1460,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     if (_holdingSpeed == enabled) return;
     _holdingSpeed = enabled;
     final speed = enabled ? _settings.holdSpeed : _speed;
-    if (_useNativeAndroidVideo) {
-      await _nativeVideoController.setRate(speed);
+    if (_useNativeVideo) {
+      await _activeNativeController.setRate(speed);
     } else {
       await _player.setRate(speed);
     }
@@ -1438,8 +1471,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   Future<void> _adjustVolume(double delta, double height) async {
     final volume = (_settings.volume - delta / height).clamp(0.0, 1.0);
     _settings = _settings.copyWith(volume: volume);
-    if (_useNativeAndroidVideo) {
-      await _nativeVideoController.setVolume(volume);
+    if (_useNativeVideo) {
+      await _activeNativeController.setVolume(volume);
     } else {
       await _player.setVolume(volume * 100);
     }
@@ -1447,7 +1480,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   }
 
   Future<void> _adjustBrightness(double delta, double height) async {
-    if (!_useNativeAndroidVideo) return;
+    if (!_useNativeVideo) return;
     _brightness = (_brightness - delta / height).clamp(.05, 1.0);
     await const MethodChannel('triomi/platform')
         .invokeMethod<void>('videoPolicy', {
@@ -1460,8 +1493,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   }
 
   Future<void> _enterPip() async {
-    final result = await const MethodChannel('triomi/platform')
-        .invokeMethod<bool>('enterVideoPip');
+    final result = _isIOS
+        ? await _iosVideoController.enterPip()
+        : await const MethodChannel('triomi/platform').invokeMethod<bool>('enterVideoPip');
     if (result != true) _toast('此设备不支持画中画');
   }
 
@@ -1489,7 +1523,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                   title: const Text('字幕'),
                   onTap: () => Navigator.pop(context, 'subtitles'),
                 ),
-                if (_useNativeAndroidVideo)
+                if (_useNativeVideo)
                   ListTile(
                     leading: const Icon(Icons.picture_in_picture_alt_rounded),
                     title: const Text('画中画'),
@@ -1501,20 +1535,24 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                     title: Text('线路 · ${_lines[_lineIndex].name}'),
                     onTap: () => Navigator.pop(context, 'line'),
                   ),
-                if (danmakuFeatureEnabled) ...[
+                ListTile(
+                  title: const Text('弹幕设置'),
+                  onTap: () => Navigator.pop(context, 'danmakuSettings'),
+                ),
+                if (_sourceDanmakuUrl?.isNotEmpty == true)
                   ListTile(
-                    title: const Text('弹幕设置'),
-                    onTap: () => Navigator.pop(context, 'danmakuSettings'),
+                    title: const Text('重新加载来源弹幕'),
+                    subtitle: Text(_danmakuError ?? '使用当前来源提供的弹幕，无需弹弹play凭据'),
+                    onTap: () => Navigator.pop(context, 'reloadDanmaku'),
                   ),
-                  ListTile(
-                    title: const Text('搜索弹幕'),
-                    onTap: () => Navigator.pop(context, 'searchDanmaku'),
-                  ),
-                  ListTile(
-                    title: const Text('发送弹幕'),
-                    onTap: () => Navigator.pop(context, 'sendDanmaku'),
-                  ),
-                ],
+                ListTile(
+                  title: const Text('搜索弹幕'),
+                  onTap: () => Navigator.pop(context, 'searchDanmaku'),
+                ),
+                ListTile(
+                  title: const Text('发送弹幕'),
+                  onTap: () => Navigator.pop(context, 'sendDanmaku'),
+                ),
                 const Divider(height: 24),
                 SwitchListTile(
                   title: const Text('同列表自动播放下一集'),
@@ -1526,7 +1564,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                 SwitchListTile(
                   title: const Text('后台音频'),
                   subtitle: Text(
-                    _useNativeAndroidVideo
+                    _useNativeVideo
                         ? '系统媒体通知与锁屏控制；退出播放器后停止'
                         : '最小化时继续音频；退出播放器后停止',
                   ),
@@ -1600,6 +1638,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       case 'subtitles': await _pickSubtitles();
       case 'pip': await _enterPip();
       case 'line': await _pickLine();
+      case 'reloadDanmaku':
+        await _loadDanmaku(_sourceDanmakuUrl, sequence: _loadSeq);
       case 'danmakuSettings': await _showDanmakuSettings();
       case 'searchDanmaku': await _searchDanmaku();
       case 'sendDanmaku': await _sendDanmaku();
@@ -1608,11 +1648,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   }
 
   Future<void> _pickSubtitles() async {
-    final native = _useNativeAndroidVideo
-        ? await _nativeVideoController.subtitleTracks()
+    final native = _useNativeVideo
+        ? await _activeNativeController.subtitleTracks()
         : null;
     if (!mounted) return;
-    final desktop = _useNativeAndroidVideo
+    final desktop = _useNativeVideo
         ? <SubtitleTrack>[]
         : _player.state.tracks.subtitle
               .where((t) => t.id != 'no' && t.id != 'auto')
@@ -1648,10 +1688,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       ),
     );
     if (!mounted || selected == null) return;
-    if (_useNativeAndroidVideo) {
-      await _nativeVideoController.selectSubtitle(
-        selected == 'no' ? null : selected,
-      );
+    if (_useNativeVideo) {
+      await _activeNativeController.selectSubtitle(selected == 'no' ? null : selected);
     } else {
       await _player.setSubtitleTrack(
         selected == 'no'
@@ -1665,6 +1703,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   /// 手动搜索弹幕（弹弹play）：按番剧名匹配，选中剧集后载入并记住 episodeId。
   Future<void> _searchDanmaku() async {
+    final chapterSequence = _loadSeq;
     final credentials = DandanplayCredentials.load(
       _preferences,
       ref.read(secureStoreProvider),
@@ -1693,15 +1732,17 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       return;
     }
 
+    var enteredKeyword = _item.title;
     final keyword = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('搜索弹幕'),
-        content: TextField(
+        content: TextFormField(
           autofocus: true,
-          controller: TextEditingController(text: _item.title),
+          initialValue: _item.title,
+          onChanged: (value) => enteredKeyword = value,
           decoration: const InputDecoration(hintText: '番剧名称'),
-          onSubmitted: (value) => Navigator.of(context).pop(value),
+          onFieldSubmitted: (value) => Navigator.of(context).pop(value),
         ),
         actions: <Widget>[
           TextButton(
@@ -1709,18 +1750,24 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(_item.title),
+            onPressed: () => Navigator.of(context).pop(enteredKeyword),
             child: const Text('搜索'),
           ),
         ],
       ),
     );
-    if (keyword == null || keyword.trim().isEmpty) return;
+    if (!mounted || chapterSequence != _loadSeq ||
+        keyword == null || keyword.trim().isEmpty) {
+      return;
+    }
+    final request = ++_danmakuRequestSeq;
+    bool current() => mounted && chapterSequence == _loadSeq &&
+        request == _danmakuRequestSeq;
 
     final client = ref.read(dandanplayClientProvider);
     try {
       final matches = await client.search(knowledgeKeyword(keyword));
-      if (!mounted) return;
+      if (!current()) return;
       if (matches.isEmpty) {
         _toast('没有匹配到弹幕，换个关键词试试');
         return;
@@ -1738,6 +1785,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         _toast('匹配结果里没有剧集');
         return;
       }
+      if (!mounted) return;
       final selected = await showModalBottomSheet<int>(
         context: context,
         showDragHandle: true,
@@ -1753,15 +1801,15 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           ),
         ),
       );
-      if (selected == null) return;
+      if (selected == null || !current()) return;
       final comments = await client.comments(selected);
-      if (!mounted) return;
+      if (!current()) return;
       _danmakuEpisodeId = selected;
       _danmaku.load(comments);
       _danmaku.seek(_position);
       _toast('已载入 ${comments.length} 条弹幕');
     } catch (error) {
-      _toast('弹幕搜索失败：$error');
+      if (current()) _toast('弹幕搜索失败：${SourceException.sanitizeMessage('$error')}');
     }
   }
 
@@ -1890,7 +1938,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _prepareTimer?.cancel();
     _playerErrorSub?.cancel();
     _completedSub?.cancel();
-    if (_useNativeAndroidVideo) {
+    if (_useNativeVideo) {
       unawaited(
         const MethodChannel('triomi/platform')
             .invokeMethod<void>('videoPolicy', {
@@ -1910,7 +1958,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _playingSub?.cancel();
     ++_loadSeq;
     ++_resolveSeq;
-    if (_useNativeAndroidVideo) {
+    if (_useNativeVideo) {
       unawaited(
         const MethodChannel('triomi/platform').invokeMethod<void>(
           'cancelVideoResolve',
@@ -1919,7 +1967,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       );
     }
     _nativeVideoController.dispose();
-    if (!_useNativeAndroidVideo) _player.dispose();
+    _iosVideoController.dispose();
+    if (!_useNativeVideo) _player.dispose();
     _danmaku.dispose();
     if (_fullscreen) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -1935,6 +1984,7 @@ class _VideoArea extends StatelessWidget {
   const _VideoArea({
     required this.controller,
     required this.nativeController,
+    required this.iosController,
     required this.aspectRatio,
     required this.backgroundAudio,
     required this.loading,
@@ -1945,6 +1995,7 @@ class _VideoArea extends StatelessWidget {
 
   final VideoController? controller;
   final _NativeAndroidVideoController nativeController;
+  final IosVideoController iosController;
   final bool loading;
   final double? aspectRatio;
   final bool backgroundAudio;
@@ -1966,15 +2017,17 @@ class _VideoArea extends StatelessWidget {
             child: SizedBox(
               width: width,
               height: aspectRatio == null ? constraints.maxHeight : width / aspectRatio!,
-              child: controller == null
-                  ? _NativeAndroidVideoView(controller: nativeController)
-                  : Video(
-                      controller: controller!,
-                      controls: null,
-                      fit: aspectRatio == null ? BoxFit.contain : BoxFit.fill,
-                      pauseUponEnteringBackgroundMode: !backgroundAudio,
-                      resumeUponEnteringForegroundMode: !backgroundAudio,
-                    ),
+              child: isIosVideoPlatform
+                  ? iosController.buildView()
+                  : controller == null
+                      ? _NativeAndroidVideoView(controller: nativeController)
+                      : Video(
+                          controller: controller!,
+                          controls: null,
+                          fit: aspectRatio == null ? BoxFit.contain : BoxFit.fill,
+                          pauseUponEnteringBackgroundMode: !backgroundAudio,
+                          resumeUponEnteringForegroundMode: !backgroundAudio,
+                        ),
             ),
           );
         }),
@@ -2028,19 +2081,8 @@ class _VideoArea extends StatelessWidget {
   );
 }
 
-class _NativeVideoState {
-  const _NativeVideoState({
-    required this.position,
-    required this.duration,
-    required this.playing,
-  });
 
-  final Duration position;
-  final Duration duration;
-  final bool playing;
-}
-
-class _NativeAndroidVideoController {
+class _NativeAndroidVideoController implements VideoPlatformController {
   _NativeAndroidVideoController({
     required this.onState,
     required this.onPrepared,
@@ -2049,8 +2091,8 @@ class _NativeAndroidVideoController {
     required this.onPip,
   });
 
-  final void Function(_NativeVideoState state) onState;
-  final void Function(_NativeVideoState state) onPrepared;
+  final void Function(NativeVideoState state) onState;
+  final void Function(NativeVideoState state) onPrepared;
   final void Function(String message) onError;
   final VoidCallback onCompleted;
   String _pendingTitle = 'Triomi';
@@ -2107,15 +2149,16 @@ class _NativeAndroidVideoController {
     }
   }
 
-  _NativeVideoState _stateFrom(Map<Object?, Object?> args) {
+  NativeVideoState _stateFrom(Map<Object?, Object?> args) {
     int number(String key) => (args[key] as num?)?.toInt() ?? 0;
-    return _NativeVideoState(
+    return NativeVideoState(
       position: Duration(milliseconds: number('position')),
       duration: Duration(milliseconds: number('duration')),
       playing: args['playing'] == true,
     );
   }
 
+  @override
   Future<void> setUrl(
     String url, {
     Map<String, String> headers = const {},
@@ -2137,22 +2180,30 @@ class _NativeAndroidVideoController {
     });
   }
 
+  @override
   Future<void> play() async => _invoke('play');
+  @override
   Future<void> pause() async => _invoke('pause');
 
+  @override
   Future<void> seek(Duration position) => _invoke('seek', <String, Object?>{
     'milliseconds': position.inMilliseconds,
   });
 
+  @override
   Future<void> setRate(double rate) =>
       _invoke('setRate', <String, Object?>{'rate': rate});
 
+  @override
   Future<void> setVolume(double volume) =>
       _invoke('setVolume', {'volume': volume});
+  @override
   Future<void> setAspectRatio(double? ratio) =>
       _invoke('setAspectRatio', {'ratio': ratio});
+  @override
   Future<void> setBackgroundAudio(bool enabled) =>
       _invoke('setBackgroundAudio', {'enabled': enabled});
+  @override
   Future<List<Map<Object?, Object?>>> subtitleTracks() async {
     final raw =
         await _channel?.invokeListMethod<Object?>('subtitleTracks') ?? [];
@@ -2162,6 +2213,7 @@ class _NativeAndroidVideoController {
     ];
   }
 
+  @override
   Future<void> selectSubtitle(String? id) =>
       _invoke('selectSubtitle', {'id': id});
 
@@ -2178,6 +2230,10 @@ class _NativeAndroidVideoController {
     _viewId = null;
   }
 
+  @override
+  Widget buildView() => _NativeAndroidVideoView(controller: this);
+
+  @override
   void dispose() {
     _disposed = true;
     _channel?.setMethodCallHandler(null);

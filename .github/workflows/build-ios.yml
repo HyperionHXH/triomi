@@ -1,0 +1,166 @@
+name: build-ios
+
+on:
+  push:
+    branches: [feat/ios, master, main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Resolve the repository's exact Flutter SDK
+        id: sdk
+        run: python tools/resolve_ios_toolchain.py --github-output "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.sdk.outputs.flutter-version }}
+          channel: stable
+          cache: true
+      - name: Check installed SDK and select CocoaPods integration
+        run: |
+          set -euo pipefail
+          python tools/resolve_ios_toolchain.py --verify-installed
+          flutter pub get
+      - name: Fingerprint the native dependency toolchain
+        id: native
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          pod --version
+          fingerprint="$( { xcodebuild -version; xcrun --sdk iphoneos --show-sdk-version; ruby --version; pod --version; } | shasum -a 256 | cut -d ' ' -f 1)"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods
+          key: ios-pods-${{ runner.os }}-${{ runner.arch }}-${{ steps.sdk.outputs.flutter-version }}-${{ steps.native.outputs.fingerprint }}-${{ hashFiles('pubspec.lock', 'ios/Podfile', 'ios/Podfile.lock') }}
+      - name: Install CocoaPods explicitly
+        working-directory: ios
+        run: pod install
+      - name: Build unsigned iOS device release
+        run: flutter build ios --release --no-codesign
+      - name: Validate and package the unsigned IPA
+        run: python tools/package_ios.py
+      - name: Select and boot an available iPhone simulator
+        id: simulator
+        run: |
+          set -euo pipefail
+          device="$(xcrun simctl list devices available --json | python -c 'import json,sys; groups=json.load(sys.stdin)["devices"]; devices=[device for runtime,group in sorted(groups.items(), reverse=True) if ".iOS-" in runtime for device in group if device["name"].startswith("iPhone") and device.get("isAvailable", False)]; assert devices, "No available iOS iPhone simulator"; print(devices[0]["udid"])')"
+          echo "udid=$device" >> "$GITHUB_OUTPUT"
+          state="$(xcrun simctl list devices --json | python -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(d["state"] for group in devices.values() for d in group if d["udid"] == sys.argv[1]))' "$device")"
+          if [ "$state" != Booted ]; then
+            xcrun simctl boot "$device"
+          fi
+          xcrun simctl bootstatus "$device" -b
+      - name: Prepare the debug simulator application
+        run: flutter build ios --simulator --debug
+      - name: Smoke-test the native bridge and JavaScriptCore on iOS
+        run: |
+          set -euo pipefail
+          xcodebuild test \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}' \
+            -only-testing:RunnerTests \
+            -resultBundlePath build/ios/NativeSmoke.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Exercise the Dart to native JavaScript runtime on iOS
+        run: flutter test integration_test/ios_js_runtime_test.dart -d '${{ steps.simulator.outputs.udid }}'
+      - name: Verify durable media, SQLite and Keychain through the real iOS plugins
+        run: flutter test integration_test/ios_storage_live_test.dart -d '${{ steps.simulator.outputs.udid }}'
+      - name: Decode and control actual video with the iOS native player
+        run: python tools/run_ios_video_smoke.py --device '${{ steps.simulator.outputs.udid }}'
+      - name: Upload the exact validated IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: triomi-ios-unsigned
+          path: build/ios/ipa/Triomi-iOS-Unsigned.ipa
+          if-no-files-found: error
+      - name: Upload native smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: triomi-ios-native-smoke
+          path: build/ios/NativeSmoke.xcresult
+          if-no-files-found: ignore
+
+  publish:
+    # PRs (including forks), branch pushes and manual builds never publish.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: triomi-ios-unsigned
+          path: artifacts
+      - name: Attach only the iOS IPA without replacing existing release assets
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        with:
+          script: |
+            const fs = require('fs');
+            const crypto = require('crypto');
+            const { owner, repo } = context.repo;
+            const tag = process.env.RELEASE_TAG;
+            const name = 'Triomi-iOS-Unsigned.ipa';
+            const data = fs.readFileSync(`artifacts/${name}`);
+            const digest = `sha256:${crypto.createHash('sha256').update(data).digest('hex')}`;
+            let release;
+            try {
+              release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              try {
+                release = (await github.rest.repos.createRelease({
+                  owner, repo, tag_name: tag,
+                  prerelease: tag.includes('-'), generate_release_notes: true,
+                  make_latest: 'false',
+                })).data;
+              } catch (createError) {
+                // release.yml may have created this same tag concurrently.
+                if (createError.status !== 422) throw createError;
+                release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data;
+              }
+            }
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              owner, repo, release_id: release.id, per_page: 100,
+            });
+            const existing = assets.find(asset => asset.name === name);
+            if (existing) {
+              if (existing.digest !== digest) {
+                throw new Error(`Refusing to replace existing ${name}: digest differs or is unavailable`);
+              }
+              core.info(`Identical IPA is already attached to ${tag}; leaving it unchanged.`);
+              return;
+            }
+            const uploaded = (await github.rest.repos.uploadReleaseAsset({
+              owner, repo, release_id: release.id, name, data,
+              headers: { 'content-type': 'application/octet-stream', 'content-length': data.length },
+            })).data;
+            if (uploaded.size !== data.length || (uploaded.digest && uploaded.digest !== digest)) {
+              throw new Error('GitHub release asset size/digest differs from the validated IPA');
+            }
+            core.info(`Attached ${name} (${digest}) to ${tag}; unrelated assets and release metadata were not modified.`);

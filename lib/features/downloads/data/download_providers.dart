@@ -42,8 +42,9 @@ typedef DownloadVideoResolver = Future<PlaySource> Function(
 
 final downloadVideoResolverProvider = Provider<DownloadVideoResolver?>((ref) {
   if (kIsWeb) return null;
-  if (defaultTargetPlatform == TargetPlatform.android) {
-    return _resolveAndroidVideo;
+  if (defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS) {
+    return _resolveNativeVideo;
   }
   if (defaultTargetPlatform != TargetPlatform.windows) return null;
   final contextForResolve = ref.watch(downloadResolveContextProvider);
@@ -74,82 +75,227 @@ final downloadServiceProvider = Provider<DownloadService>(
     videoCookieForUrl:
         !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
         ? WindowsSourceSession.videoCookies
+        : !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+        ? (url) => const MethodChannel('triomi/platform')
+            .invokeMethod<String>('videoCookieHeader', {'url': url})
         : null,
   ),
 );
 
-Future<PlaySource> _resolveAndroidVideo(
+Future<PlaySource> _resolveNativeVideo(
   PlaySource source,
   VideoResolveCancellation cancellation,
 ) async {
-  final raw = await const MethodChannel('triomi/platform')
-      .invokeMapMethod<String, Object?>('resolveDownloadVideo', {
+  const channel = MethodChannel('triomi/platform');
+  final ios = defaultTargetPlatform == TargetPlatform.iOS;
+  final requestId = UniqueKey().toString();
+  void cancel() {
+    if (ios) {
+      unawaited(channel.invokeMethod<void>('cancelDownloadVideoResolve', {
+        'requestId': requestId,
+      }));
+    }
+  }
+  if (cancellation.isCancelled) {
+    throw VideoResolveCancelled(cancellation.reason);
+  }
+  cancellation.addListener(cancel);
+  try {
+    final raw = await channel.invokeMapMethod<String, Object?>(
+      'resolveDownloadVideo',
+      {
         'url': source.url,
         'headers': source.headers,
         'unavailableVideoUrls': source.unavailableVideoUrls,
-      });
-  final url = raw?['url'] as String?;
-  final headers = raw?['headers'];
-  if (url == null || url.isEmpty) throw StateError('网页解析没有返回真实视频地址');
-  return PlaySource(
-    name: source.name,
-    url: url,
-    headers: {
-      if (headers is Map)
-        for (final entry in headers.entries) '${entry.key}': '${entry.value}',
-    },
-  );
+        if (ios) 'requestId': requestId,
+      },
+    );
+    if (cancellation.isCancelled) {
+      throw VideoResolveCancelled(cancellation.reason);
+    }
+    final url = raw?['url'] as String?;
+    final headers = raw?['headers'];
+    if (url == null || url.isEmpty) throw StateError('网页解析没有返回真实视频地址');
+    return PlaySource(
+      name: source.name,
+      url: url,
+      headers: {
+        if (headers is Map)
+          for (final entry in headers.entries) '${entry.key}': '${entry.value}',
+      },
+    );
+  } finally {
+    cancellation.removeListener(cancel);
+  }
 }
 
 /// 下载队列：串行执行、逐条刷新状态；WiFi 限制不满足时保持排队。
+const _lifecycleInterruptedMessage = '下载因应用进入后台中断，返回前台后自动继续';
+
 class DownloadController extends AsyncNotifier<List<DownloadGroup>>
     with WidgetsBindingObserver {
+  static const _platformChannel = MethodChannel('triomi/platform');
+  late final String _downloadWakeOwner = 'download:${UniqueKey()}';
   bool _pumping = false;
+  bool _resumeRequested = false;
   final _stopped = <int>{};
   final _resumeAfterStop = <int>{};
+  final _lifecycleInterrupted = <int>{};
+  final _explicitlyPaused = <int>{};
   String? _activeSource;
   int? _activeId;
   Completer<void>? _activeDone;
   bool _sourceAvailable = true;
   bool _disposed = false;
+  bool _lifecycleSuspended = false;
+  bool _downloadWakeOwned = false;
+  Future<void> _wakeOperation = Future<void>.value();
   VideoResolveCancellation? _activeResolve;
   late DownloadRepository _queueRepository;
   int _refreshGeneration = 0;
   int _queueGeneration = 0;
 
-  bool get _windows =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+  bool get _foregroundOnly =>
+      !kIsWeb && (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   DownloadRepository get _repository => _queueRepository;
 
   @override
-  Future<List<DownloadGroup>> build() {
+  Future<List<DownloadGroup>> build() async {
     _queueRepository = ref.read(downloadRepositoryProvider);
-    if (_windows) {
+    if (_foregroundOnly) {
       WidgetsBinding.instance.addObserver(this);
     }
     ref.onDispose(() {
       _disposed = true;
       WidgetsBinding.instance.removeObserver(this);
       _activeResolve?.cancel('下载队列已关闭，请重新打开下载页继续');
+      unawaited(_setDownloadWake(false));
     });
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      await _recoverInterruptedRows();
+      if (_disposed) return const [];
+    }
     ref.listen(sourcesProvider, (_, snapshot) {
       if (_activeSource == null || snapshot.asData == null) return;
       _sourceAvailable = snapshot.asData!.value.enabledEntries.any(
         (e) => e.descriptor.id == _activeSource,
       );
-      if (_windows && !_sourceAvailable) {
+      if (_foregroundOnly && !_sourceAvailable) {
         _activeResolve?.cancel('来源已停用或已移除，请启用来源后继续下载');
       }
     });
-    return _repository.grouped();
+    final result = await _repository.grouped();
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      final lifecycle = WidgetsBinding.instance.lifecycleState;
+      if (lifecycle == null || lifecycle == AppLifecycleState.resumed) {
+        await _resumeLifecycleInterrupted();
+        if (!_disposed) unawaited(_pump());
+      }
+    }
+    return result;
+  }
+
+  Future<void> _recoverInterruptedRows() async {
+    final groups = await _repository.grouped();
+    for (final group in groups) {
+      for (final entry in group.entries) {
+        if (entry.status == DownloadStatus.running) {
+          await _repository.markPaused(
+            entry.row.id,
+            message: _lifecycleInterruptedMessage,
+          );
+          _lifecycleInterrupted.add(entry.row.id);
+        }
+      }
+    }
+  }
+
+  Future<void> _setDownloadWake(bool active) {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
+      return Future<void>.value();
+    }
+    final next = _wakeOperation.catchError((_) {}).then((_) async {
+      if (_downloadWakeOwned == active) return;
+      try {
+        await _platformChannel.invokeMethod<void>('downloadWake', {
+          'owner': _downloadWakeOwner,
+          'active': active,
+        });
+        _downloadWakeOwned = active;
+      } catch (_) {
+        // Wake is an optimization; queue correctness must not depend on it.
+      }
+    });
+    _wakeOperation = next;
+    return next;
+  }
+
+  Future<void> _resumeLifecycleInterrupted() async {
+    final groups = await _repository.grouped();
+    final sourceSnapshot = await ref.read(sourcesProvider.future);
+    if (_disposed) return;
+    final enabledSources = sourceSnapshot.enabledEntries
+        .map((entry) => entry.descriptor.id).toSet();
+    for (final group in groups) {
+      for (final entry in group.entries) {
+        final id = entry.row.id;
+        if (_explicitlyPaused.contains(id)) continue;
+        if (entry.row.errorMessage == _lifecycleInterruptedMessage ||
+            _lifecycleInterrupted.contains(id)) {
+          if (defaultTargetPlatform == TargetPlatform.iOS &&
+              !enabledSources.contains(entry.row.sourceId)) {
+            _lifecycleInterrupted.remove(id);
+            await _repository.markPaused(id);
+            continue;
+          }
+          if (id == _activeId) {
+            _resumeAfterStop.add(id);
+            continue;
+          }
+          if (entry.status == DownloadStatus.paused) {
+            await _repository.markQueued(id);
+          }
+          _lifecycleInterrupted.remove(id);
+        }
+      }
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) {
-      _activeResolve?.cancel('应用已进入后台，请返回前台后继续下载');
+    if (defaultTargetPlatform != TargetPlatform.iOS) {
+      if (state != AppLifecycleState.resumed) {
+        _activeResolve?.cancel('应用已进入后台，请返回前台后继续下载');
+      }
+      return;
     }
+    if (state == AppLifecycleState.resumed) {
+      if (!_lifecycleSuspended) return;
+      _lifecycleSuspended = false;
+      unawaited(() async {
+        try {
+          await _resumeLifecycleInterrupted();
+          if (_disposed || _lifecycleSuspended) return;
+          await refresh();
+          if (!_disposed) unawaited(_pump());
+        } catch (_) {
+          // A failed source refresh must retain the durable interrupted job.
+        }
+      }());
+      return;
+    }
+    if (_lifecycleSuspended) return;
+    _lifecycleSuspended = true;
+    _queueGeneration++;
+    final activeId = _activeId;
+    if (activeId != null) {
+      _lifecycleInterrupted.add(activeId);
+      _stopped.add(activeId);
+      _activeResolve?.cancel('应用已进入后台，返回前台后自动继续下载');
+    }
+    unawaited(_setDownloadWake(false));
   }
 
   /// 把当前作品来源的未锁定章节加入队列（已完成的自动跳过）。
@@ -209,7 +355,12 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
 
   /// 继续执行队列（进入下载页时调用）。
   Future<void> resume() async {
+    await _resumeLifecycleInterrupted();
     await refresh();
+    if (_pumping) {
+      _resumeRequested = true;
+      return;
+    }
     unawaited(_pump());
   }
 
@@ -225,6 +376,8 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
         .where((row) => ids.contains(row.id))
         .toList();
     _stopped.addAll(rows.map((row) => row.id));
+    _explicitlyPaused.addAll(ids);
+    _lifecycleInterrupted.removeAll(ids);
     _resumeAfterStop.removeAll(rows.map((row) => row.id));
     final ownsActive = ids.contains(_activeId);
     final done = ownsActive ? _activeDone?.future : null;
@@ -233,14 +386,17 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
         _activeId != null &&
         !kIsWeb &&
         defaultTargetPlatform == TargetPlatform.android) {
-      await const MethodChannel('triomi/platform')
-          .invokeMethod<void>('cancelDownloadVideoResolve');
+      await _platformChannel.invokeMethod<void>('cancelDownloadVideoResolve');
     }
     for (final row in rows) {
       await _repository.markPaused(row.id);
     }
     await refresh();
     if (done != null) await done;
+    for (final row in rows) {
+      await _repository.markPaused(row.id);
+    }
+    await refresh();
   }
 
   Future<void> resumePaused({MediaType? type}) async {
@@ -256,6 +412,8 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
         if (ids.contains(entry.row.id) &&
             entry.status == DownloadStatus.paused) {
           await _repository.markQueued(entry.row.id);
+          _explicitlyPaused.remove(entry.row.id);
+          _lifecycleInterrupted.remove(entry.row.id);
         }
       }
     }
@@ -319,24 +477,35 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
 
   /// 串行跑队列：一次只处理一个任务，避免并发抢带宽。
   Future<void> _pump() async {
-    if (_pumping) return;
+    if (_pumping) {
+      _resumeRequested = true;
+      return;
+    }
     _pumping = true;
     var nativeLease = false;
+    var wakeLease = false;
     try {
       if (!kIsWeb && Platform.isAndroid) {
         nativeLease =
-            await const MethodChannel('triomi/platform')
-                .invokeMethod<bool>('beginDownloadQueue') ??
+            await _platformChannel.invokeMethod<bool>('beginDownloadQueue') ??
             false;
         if (!nativeLease) return;
       }
       final service = ref.read(downloadServiceProvider);
       while (!_disposed) {
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+          final lifecycle = WidgetsBinding.instance.lifecycleState;
+          if (lifecycle != null && lifecycle != AppLifecycleState.resumed) break;
+        }
         final generation = _queueGeneration;
         final pending = await _repository.pending();
         if (_disposed) break;
         if (generation != _queueGeneration) continue;
         if (pending.isEmpty) break;
+        if (!wakeLease && defaultTargetPlatform == TargetPlatform.iOS) {
+          await _setDownloadWake(true);
+          wakeLease = true;
+        }
         final row = pending.first;
         _activeId = row.id;
         final activeDone = _activeDone = Completer<void>();
@@ -363,16 +532,16 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
               row: row,
               provider: provider,
               cancellation: cancellation,
-              pauseUnavailableSource: _windows,
+              pauseUnavailableSource: _foregroundOnly,
               shouldContinue: () {
-                if (_windows) {
+                if (_foregroundOnly) {
                   final lifecycle = WidgetsBinding.instance.lifecycleState;
                   if (lifecycle != null &&
                       lifecycle != AppLifecycleState.resumed) {
                     throw VideoResolveCancelled('请返回应用前台，在下载页继续任务');
                   }
                 }
-                if (_windows && !_sourceAvailable) {
+                if (_foregroundOnly && !_sourceAvailable) {
                   throw VideoResolveCancelled('来源已停用或已移除，请启用来源后继续下载');
                 }
                 // Other platforms may finish the chapter already requested;
@@ -382,6 +551,21 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
             );
           } on Object {
             // 单条失败不影响队列；状态已由 service 写入。
+          }
+          if (_lifecycleInterrupted.contains(row.id)) {
+            final current = await _repository.findRow(
+              sourceId: row.sourceId,
+              remoteId: row.remoteId,
+              chapterRemoteId: row.chapterRemoteId,
+            );
+            if (current?.status == DownloadStatus.paused.value ||
+                current?.status == DownloadStatus.running.value) {
+              await _repository.markPaused(row.id,
+                  message: _lifecycleInterruptedMessage);
+            } else {
+              _lifecycleInterrupted.remove(row.id);
+              _resumeAfterStop.remove(row.id);
+            }
           }
         } catch (_) {
           // Registry refresh failure must preserve a resumable cached job.
@@ -396,7 +580,10 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
         }
         _stopped.remove(row.id);
         if (_resumeAfterStop.remove(row.id)) {
-          await _repository.markQueued(row.id);
+          if (!_explicitlyPaused.contains(row.id)) {
+            await _repository.markQueued(row.id);
+          }
+          _lifecycleInterrupted.remove(row.id);
         }
         if (_disposed) break;
         await refresh();
@@ -406,12 +593,18 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
         }
       }
     } finally {
+      if (wakeLease) {
+        await _setDownloadWake(false);
+      }
       if (nativeLease) {
-        await const MethodChannel('triomi/platform')
-            .invokeMethod<void>('endDownloadQueue');
+        await _platformChannel.invokeMethod<void>('endDownloadQueue');
       }
       _pumping = false;
       if (!_disposed) await refresh();
+      if (!_disposed && _resumeRequested) {
+        _resumeRequested = false;
+        unawaited(_pump());
+      }
     }
   }
 

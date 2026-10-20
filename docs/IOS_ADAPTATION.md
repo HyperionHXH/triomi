@@ -1,0 +1,75 @@
+# Triomi iOS 端适配改动说明与自签安装指南
+
+## 当前交付边界
+
+源码已补齐 iOS 15.0+ 工程、原生桥与未签名 IPA 流水线。本轮按用户授权在 `feat/ios` 开发、验证、提交并推送。Windows 本机不能执行 Xcode 或 iPhone 场景；云端构建结果和下载入口以 [CURRENT_STATUS.md](CURRENT_STATUS.md) 中记录的具体运行及 GitHub Actions 日志为准。不把静态检查或 Windows 测试称为「iOS 所有模块 100% 正常」。
+
+沿用 `pubspec.yaml` 的版本和现有应用图标；当前各端图标仍为仓库原有 Flutter 图案，没有另造 Triomi 美术资源。Bundle ID 为 `io.github.hyperionhxh.triomi`。
+
+## 依赖审计与实现
+
+| 组件 | iOS 路径与兼容性 |
+| --- | --- |
+| Flutter / Dart | 从原 Android、Windows 工作流读取相同的精确 Flutter 版本，目前 3.47.5；校验 Dart 满足 `^3.13.4`，不自动升级依赖 |
+| JS 来源规则 | 新增 `IosJsRuntime`，规则在非持久 WKWebView 的独立内容世界中经系统 JavaScriptCore 执行；不在应用进程申请 JIT、动态代码或私有 entitlement |
+| `flutter_js` | 保留 Android/Windows worker 用途；iOS 生产规则由独立 WebKit 适配器执行，不直接进入插件的同步 FFI 执行路径 |
+| 视频 | iOS 使用系统 AVPlayer/AVPlayerLayer，内嵌、后台音频与原生 PiP 共用一个播放器；不加载 iOS libmpv。网页地址通过 WKWebView 解析，Cookie 按域名/路径/Secure 作用域取回，取消释放所属解析器 |
+| SQLite / Hive | 实际使用 drift / drift_flutter、SQLite native assets 和 Hive CE；项目未使用 sqflite 或 isar。持久业务数据库、规则源码、正文及偏好沿用应用 Documents |
+| 文件路径 | path_provider Foundation 支持 iOS；持久媒体、本地漫画、数据库与设置写入 Documents/Application Support，目录设置 `isExcludedFromBackup=true` 排除 iCloud 备份；仅可重建的导入副本使用 Library/Caches |
+| 账号凭据 | flutter_secure_storage 使用 iOS Keychain；LK/LNS、Bangumi/AniList 沿用现有 Dart 服务，不把登录态写入 IPA |
+| 网络 / WebDAV | Dio、HTML/XPath、crypto、archive 等复用 Dart 实现；ATS 允许 HTTP，局域网 WebDAV 有网络用途说明。证书验证保持开启 |
+| Windows 专属库 | webview_windows、Windows 解码库仅在所属平台生效；iOS 使用原生 WebKit 和 AVFoundation |
+| Mihon 扩展 | Android APK/DEX 与 Windows JVM/Suwayomi 不是 iOS 可执行格式。iOS 不提供这些执行宿主，应使用兼容 JS/API 来源；恢复的 APK 字节不会因此成为可执行插件 |
+
+JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源权限和取消归属。调用 ID、会话 ID 和 Dart Zone 防止旧响应污染新调用；取消、超时、WebContent 终止、超限消息会撤销会话，下次请求重新加载。WebKit 公共 API 不提供立即杀死 PID 或固定内存预算，不能冒称具有 Android/Windows worker 的相同强杀保证。
+
+## 系统集成
+
+- CocoaPods 为项目级依赖管理方式；Podfile 最低 iOS 15.0，禁用 Bitcode，Runner 与测试使用同一部署边界。
+  iOS 14.0 与当前固定 Flutter 3.47.5 不兼容：SDK `packages/flutter_tools/bin/podhelper.rb` 中 Flutter Pod 的 `s.ios.deployment_target` 为 `15.0`。单独降低 Podfile 会造成不一致，因此保留 15.0，不借本次任务降级 Android/Windows 共用的 SDK。
+- `UIFileSharingEnabled`、`LSSupportsOpeningDocumentsInPlace` 开启。安装后通过「文件 → 浏览 → 我的 iPhone → Triomi」访问 Documents。不要手动删除/改写数据库和正在下载的文件；卸载应用会删除其沙盒，升级前可导出备份。
+- 补齐照片添加/读取、局域网用途说明；保存漫画图片调用系统照片授权与 Photos API。文件、图片、字体和漫画导入使用系统文档选择器，读取受安全作用域保护的 URL，再复制到应用私有目录；导出用书签保留所选文件夹授权。
+- `NSAllowsArbitraryLoads=true` 支持 HTTP 来源和 WebDAV；HTTP 内容及凭据没有 TLS 保护，敏感账号节点应选 HTTPS。
+- `UIBackgroundModes` 包含 `audio`、`fetch`；AVPlayer 持有独立音频会话租约，使用 `.playback/.moviePlayback`。播放设置开启后台音频后，切后台时脱离视频层而保留同一个播放器的音频；回前台重新挂接。未开启时挂起并保留用户播放/暂停意图，退出播放器释放会话。锁屏、系统中断及实际蓝牙设备仍需真机验证。
+  Apple 的 [allowBluetooth](https://developer.apple.com/documentation/avfaudio/avaudiosession/categoryoptions-swift.struct/allowbluetooth) 与 [allowAirPlay](https://developer.apple.com/documentation/avfaudio/avaudiosession/categoryoptions-swift.struct/allowairplay) 显式选项针对录音类别，不能照搬到 `.playback`；系统为播放类别提供相应输出路由。
+- 播放设置中的「画中画」通过 `AVPictureInPictureController` 启动系统 PiP，共用 AVPlayerLayer，不另开一条媒体流；设备/媒体不可用或启动失败返回明确结果。PiP 不包含 Flutter 自绘弹幕，支持的视频/音频格式受系统 AVPlayer 限制，不等同 libmpv 的全部容器/解码范围。
+- 活跃下载拥有独立常亮租约；完成、暂停、后台或销毁释放，不能关闭阅读器/播放器持有的常亮。系统挂起仍会停止 Dart 下载执行；回前台自动恢复仅因生命周期中断的任务及排队任务，不恢复用户手动暂停、已删除、已完成或停用来源的任务。冷启动恢复中断记录，沿用已有漫画检查点及视频断点文件。`fetch` 不承诺无限后台下载或准时定时任务。
+- 开启 `CADisableMinimumFrameDurationOnPhone`；是否达到 120Hz 仍由设备、系统节能策略及帧耗时决定。
+- 严格文件校验只接受 iOS 的精确 `/var/...` → `/private/var/...` 系统别名，不允许任意符号链接重定向。
+
+弹幕入口、来源弹幕加载与开关已恢复，并保护切集和异步请求归属。来源提供兼容数据无需官方应用凭据；官方搜索/发送仍需本人身份，不内置别人的 AppSecret。详见 [DANMAKU.md](DANMAKU.md)。
+
+## GitHub Actions 获取 IPA
+
+工作流：[build-ios.yml](../.github/workflows/build-ios.yml)。无需 Apple 证书、Team ID、描述文件或签名 Secret。
+
+1. 本次改动推送到 `feat/ios` 会自动触发；也可在 GitHub「Actions → build-ios → Run workflow」选择该分支手动运行。`on.push.branches` 明确包含 `feat/ios`、`master`、`main`，另保留 PR 和 `v*` Tag 触发。
+2. Runner 使用 `macos-latest`，从现有 build/release 工作流解析 Flutter 精确版本，运行 `flutter pub get`、缓存 CocoaPods、`pod install`。
+3. 执行 `flutter build ios --release --no-codesign`。`tools/package_ios.py` 检查 device arm64 Mach-O、版本、嵌入框架和未签名边界，将 `Runner.app` 复制进临时 `Payload/`，通过 `zip -r -y` 保留执行权限和框架链接。
+4. 运行 iPhone 模拟器 XCTest，以及 JS、持久化与真实视频 integration_test。`tools/run_ios_video_smoke.py` 启动仅监听 loopback 的夹具服务，让生产 PlayerPage 实际解码 30 秒视频并验证播放/暂停/跳转及来源弹幕开关；测试视频不进入 IPA。模拟器通过不替代真机 PiP、锁屏音频、照片权限及第三方账号验收。
+5. 全部成功后，在该次运行底部 **Artifacts → triomi-ios-unsigned** 下载外层 ZIP，解压取得 `Triomi-iOS-Unsigned.ipa`。不要把 GitHub 下载的外层 artifact ZIP 当成 IPA。
+6. 新 `v*` Tag 的成功构建会把同名 IPA 附加到该 Tag 的 Release；不会替换既有同名但不同摘要的资产。手动运行和普通分支不会发布 Release。打包日志包含 IPA SHA-256，可在 Windows 用 `Get-FileHash .\Triomi-iOS-Unsigned.ipa -Algorithm SHA256` 对照。
+
+## AltStore / SideStore / TrollStore 安装
+
+未签名 IPA 不能直接点开安装；安装工具必须完成自己的签名或受支持的安装处理。请使用官方工具，不需要为 Triomi 启用 JIT。
+
+| 工具 | 操作与限制 |
+| --- | --- |
+| AltStore Classic | 按[官方安装说明](https://faq.altstore.io/altstore-classic)在 Windows 安装 AltServer 和 AltStore；在 iPhone 的 AltStore「My Apps」点 `+`，选择解压得到的 IPA，以自己的 Apple 账号签名安装。免费账号一般 7 天到期并受活跃 App 数限制，需按[官方刷新说明](https://faq.altstore.io/altstore-classic/your-altstore)定期刷新；按系统提示信任开发者、启用开发者模式 |
+| SideStore | 先完成[官方安装及配对/VPN 前提](https://docs.sidestore.io/docs/installation/prerequisites)；官方当前要求 iOS 15+。开启所需本机 VPN，在 SideStore 导入 IPA 并使用自己的 Apple 账号签名；安装、更新与刷新均遵循该版本 SideStore 的网络/配对要求及免费签名期限 |
+| TrollStore | 仅适用于[官方列出的系统版本](https://github.com/opa334/TrollStore)：14.0 beta 2–16.6.1、16.7 RC (20H18)、17.0；Triomi 本身另要求 iOS 15+。设备已正确安装 TrollStore 时，通过系统分享或 TrollStore 的安装入口选择 IPA。不要据此认为 iOS 17.0.1+ 或任意新系统均支持；实际安装兼容性尚未由本轮真机验证 |
+
+覆盖升级请沿用同一安装工具、Apple 团队和稳定 Bundle ID；改换签名身份可能无法覆盖或失去原 Keychain 访问。先在「我的 → 备份与恢复」导出备份到沙盒外；恢复不会迁移账号秘密，需要重新登录。不要通过卸载来解决更新问题后才考虑备份。
+
+## 本轮验证
+
+- `flutter analyze --no-pub`：零问题。
+- `flutter test --no-pub`：1278 项通过，3 项跳过；包括 iOS 冷队列重建/回前台与手动暂停竞态、Android/iOS 弹幕切集迟到响应及开关、iOS APK 入口降级。
+- Python 工具测试：100 项通过；夹具媒体检查通过。
+- UI 文档扫描：0 error / 0 warning；交付文档扫描：0 error / 35 个历史模板 warning。
+- Swift 语法树、plist、工作流 YAML 可解析；这不等于 Xcode 编译或 Apple API 类型检查通过。
+- Windows 原生烟测：实际构建并启动 `triomi.exe`；Documents 内 SQLite/本地漫画/规则/Hive 重开、封面读取、凭据存储及备份互斥通过，iOS 网页解析用例按平台跳过。该证据不外推为 iOS 通过。
+- Windows 生产 PlayerPage 实际编译启动，以 loopback HTTP 解码现有 30 秒 MP4，位置推进/暂停保持、跳转、来源弹幕开关及恢复播放通过；这不是 iOS 原生 PiP 或真机目视证据。
+- Android 普通调试 APK 编译通过（未安装到设备）；本机初始解码库/SQLite 下载超时通过既有且摘要匹配的缓存解决。插件有现存 KGP 迁移 warning，未改动版本或关闭校验。
+- iOS 构建、模拟器/真机、侧载安装、真实 LK/LNS 登录、追踪/WebDAV 远端实写、后台音频和照片授权尚未执行。

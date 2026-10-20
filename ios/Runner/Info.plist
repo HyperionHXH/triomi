@@ -26,6 +26,26 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>将你选择保存的漫画页、小说插图和图片添加到照片图库。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>选择图片用于评论或本地阅读；仅处理你主动选择的内容。</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>连接你配置的局域网 WebDAV 服务器以备份和恢复阅读数据。</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>fetch</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

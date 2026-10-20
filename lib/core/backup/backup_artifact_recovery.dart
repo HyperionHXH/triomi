@@ -24,9 +24,9 @@ class BackupArtifactLease {
   }
 }
 
-/// Android uses one native JVM registry and one OS lock, not Dart's
-/// process-scoped POSIX locks. Windows locks are handle-scoped; the local count
-/// permits nested snapshots while another engine/process still cannot overlap.
+/// Android uses a native JVM registry; iOS uses a native registry with flock.
+/// Both exclude other engines as well as processes. Windows handle-scoped
+/// locks permit nested operations while cleanup remains exclusive.
 abstract final class BackupArtifactGuard {
   static const _channel = MethodChannel('triomi/backup-artifacts');
   static final _windows = <String, _WindowsLeaseState>{};
@@ -37,7 +37,7 @@ abstract final class BackupArtifactGuard {
   static Future<BackupArtifactLease> acquireOperation({Directory? lockDirectory}) async {
     // Preserve existing backup operations on unsupported desktops, but never
     // enable automatic deletion there without a genuine multi-engine guard.
-    if (!Platform.isAndroid && !Platform.isWindows) {
+    if (!Platform.isAndroid && !Platform.isWindows && !Platform.isIOS) {
       return BackupArtifactLease(() async {});
     }
     final deadline = Stopwatch()..start();
@@ -57,7 +57,7 @@ abstract final class BackupArtifactGuard {
       _acquire(true, lockDirectory);
 
   static Future<BackupArtifactLease?> _acquire(bool cleanup, Directory? root) async {
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.isIOS) {
       try {
         final token = await _channel.invokeMethod<String>('acquire', {'cleanup': cleanup});
         if (token == null) return null;
@@ -154,7 +154,9 @@ class BackupArtifactRoots {
     temporary: Directory.systemTemp,
     documents: await getApplicationDocumentsDirectory(),
     support: await getApplicationSupportDirectory(),
-    pickerCache: Platform.isAndroid ? await getTemporaryDirectory() : null,
+    pickerCache: Platform.isAndroid || Platform.isIOS
+        ? await getTemporaryDirectory()
+        : null,
   );
 }
 
@@ -350,6 +352,10 @@ String _verifiedCanonicalPath(String supplied, String resolved) {
         return canonical;
       }
     }
+  }
+  if (Platform.isIOS && path.startsWith('/var/') &&
+      canonical == '/private$path') {
+    return canonical;
   }
   throw const FileSystemException('Unverified artifact path alias');
 }

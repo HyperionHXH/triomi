@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/novel/data/lk/lk_client.dart';
@@ -90,6 +91,19 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
     final packageName = '${entry.key}';
     final status = entry.value;
     if (status is! Map) {
+      continue;
+    }
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      metadataFailures.add(
+        SourceFailure(
+          id: 'mihon:$packageName',
+          name: '${status['name'] ?? packageName}',
+          message: 'iOS 仅支持 JS / API 规则来源；Mihon APK / DEX 不能执行。原记录与离线数据保留。',
+          lang: '${status['lang'] ?? ''}',
+          type: MediaType.manga,
+          nsfw: sourceNsfwFlag(status['nsfw']),
+        ),
+      );
       continue;
     }
     final sources = status['sources'];

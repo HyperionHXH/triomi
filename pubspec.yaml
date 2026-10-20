@@ -26,10 +26,10 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
-  # JS 规则沙箱（Android 用 quickjs / iOS 用 JavaScriptCore，均为 dart-ffi）
+  # JS：Android/Windows 为进程 QuickJS；iOS 为隔离 WKWebView / JavaScriptCore。
   flutter_js: ^0.8.7
 
-  # 凭据安全存储（Android Keystore / Windows DPAPI）；T6 唯一新增插件
+  # 凭据安全存储（Android Keystore / Windows DPAPI / iOS Keychain）。
   flutter_secure_storage: ^9.2.4
   xpath_selector: ^3.0.2
   dio: ^5.11.1
@@ -43,6 +43,7 @@ dependencies:
   # Windows 桌面解码库（D28）：缺它 media_kit 桌面路径无法出画。
   # libs 包不可混用——桌面构建会按平台各自取用，互不影响 Android。
   media_kit_libs_windows_video: ^1.0.11
+  # iOS 使用系统 AVPlayer/AVPlayerLayer，不附带第二个 libmpv 解码器。
 
   # 导出（纯 Dart zip 实现，无平台插件）
   archive: ^4.0.7
@@ -61,6 +62,9 @@ dev_dependencies:
   analyzer: any
 
 flutter:
+  # flutter_js 等原生依赖仍使用 CocoaPods；项目级配置避免 pub get 混入 SPM。
+  config:
+    enable-swift-package-manager: false
   uses-material-design: true
   assets:
     - assets/rules/

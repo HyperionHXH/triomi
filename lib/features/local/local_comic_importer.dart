@@ -294,9 +294,10 @@ class LocalComicImporter {
         // Exact Android user-zero storage aliases are OS-owned. Any suffix
         // alias or arbitrary link still fails closed.
         final resolved = await Directory(part).resolveSymbolicLinks();
-        final allowed = Platform.isAndroid &&
+        final allowed = (Platform.isAndroid &&
             ((part == '/data/data' && resolved == '/data/user/0') ||
-             (part == '/data/user/0' && resolved == '/data/data'));
+             (part == '/data/user/0' && resolved == '/data/data'))) ||
+            (Platform.isIOS && part == '/var' && resolved == '/private/var');
         if (!allowed) throw const FormatException('不接受符号链接路径');
       }
       final parent = p.dirname(part); if (parent == part) break; part = parent;

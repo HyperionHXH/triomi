@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/db/app_database.dart';
@@ -337,8 +338,9 @@ void main() {
     await waitIdle();
     expect((await repository.grouped()).single.doneCount, 1);
   });
-  test('Windows pause waits for owned browser disposal before returning', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+  for (final platform in [TargetPlatform.windows, TargetPlatform.iOS]) {
+  test('$platform pause waits for owned browser disposal before returning', () async {
+    debugDefaultTargetPlatformOverride = platform;
     final source = QueueSource('web')..result = const ChapterContent(
       playSources: [PlaySource(name: 'page', url: 'https://site.test/play', webPage: true)],
     );
@@ -370,8 +372,8 @@ void main() {
     expect((await repository.grouped()).single.doneCount, 0);
   });
 
-  test('Windows source disable closes only active resolution and pauses job', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+  test('$platform source disable closes only active resolution and pauses job', () async {
+    debugDefaultTargetPlatformOverride = platform;
     final source = QueueSource('web')..result = const ChapterContent(
       playSources: [PlaySource(name: 'page', url: 'https://site.test/play', webPage: true)],
     );
@@ -398,8 +400,8 @@ void main() {
     expect(entry.row.errorMessage, contains('来源已停用'));
   });
 
-  test('Windows queue disposal cancels resolution and cannot publish late result', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+  test('$platform queue disposal cancels resolution and cannot publish late result', () async {
+    debugDefaultTargetPlatformOverride = platform;
     final source = QueueSource('web')..result = const ChapterContent(
       playSources: [PlaySource(name: 'page', url: 'https://site.test/play', webPage: true)],
     );
@@ -421,6 +423,7 @@ void main() {
     await waitIdle();
     expect((await repository.grouped()).single.entries.single.status, DownloadStatus.paused);
   });
+  }
   test('Windows missing root context pauses with an actionable explanation', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     final source = QueueSource('web')..result = const ChapterContent(
@@ -436,8 +439,9 @@ void main() {
     expect(entry.row.path, isNull);
   });
 
-  test('Windows deletion cancels browser and waits before deleting its job', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+  for (final platform in [TargetPlatform.windows, TargetPlatform.iOS]) {
+  test('$platform deletion cancels browser and waits before deleting its job', () async {
+    debugDefaultTargetPlatformOverride = platform;
     final source = QueueSource('web')..result = const ChapterContent(
       playSources: [PlaySource(name: 'page', url: 'https://site.test/play', webPage: true)],
     );
@@ -464,5 +468,65 @@ void main() {
     disposed.complete();
     await removing;
     expect(await repository.listForItem('web', 'book'), isEmpty);
+  });
+  }
+  for (final manualPause in [false, true]) {
+    test('iOS foreground return ${manualPause ? 'preserves explicit pause' : 'resumes interrupted chapter'} before stop settles', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      final binding = TestWidgetsFlutterBinding.ensureInitialized();
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      final source = QueueSource('ios-resume')
+        ..first = Completer<ChapterContent>();
+      await setup([source.entry()]);
+      await enqueue(source.id, ['chapter']);
+      final controller = container.read(downloadsProvider.notifier);
+      await controller.resume();
+      await waitUntil(() => source.requested.isNotEmpty);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      Future<void>? pausing;
+      if (manualPause) pausing = controller.pauseAll();
+      source.first!.complete(const ChapterContent(text: 'first interrupted response'));
+      await pausing;
+      await waitIdle();
+      final row = (await repository.listForItem(source.id, 'book')).single;
+      if (manualPause) {
+        expect(row.status, DownloadStatus.paused.value);
+        expect(source.requested, ['chapter']);
+      } else {
+        expect(row.status, DownloadStatus.done.value);
+        expect(source.requested, ['chapter', 'chapter']);
+        expect((await repository.localChapterContent(source.id, 'chapter'))?.text,
+            'downloaded content');
+      }
+    });
+  }
+
+  test('iOS cold queue rebuild resumes running row but not user-paused row', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    final binding = TestWidgetsFlutterBinding.ensureInitialized();
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final source = QueueSource('ios-cold');
+    await setup([source.entry()]);
+    await enqueue(source.id, ['interrupted', 'manual']);
+    final rows = await repository.listForItem(source.id, 'book');
+    await repository.markRunning(rows.first.id);
+    await repository.markPaused(rows.last.id);
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    container.dispose();
+    container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      preferencesProvider.overrideWithValue(memoryPreferences()),
+      sourceHttpClientProvider.overrideWithValue(FakeHttpClient(
+          (_) async => const SourceResponse(statusCode: 200, body: ''))),
+      sourcesProvider.overrideWith(() => QueueSources(
+          SourceRegistrySnapshot(entries: [source.entry()], failures: const []))),
+    ]);
+    await container.read(downloadsProvider.future);
+    await waitIdle();
+    final result = await repository.listForItem(source.id, 'book');
+    expect(result.first.status, DownloadStatus.done.value);
+    expect(result.last.status, DownloadStatus.paused.value);
+    expect(source.requested, ['interrupted']);
   });
 }

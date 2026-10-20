@@ -73,7 +73,9 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   @override
   void initState() {
     super.initState();
-    unawaited(_loadPreferences());
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
+      unawaited(_loadPreferences());
+    }
   }
 
   @override
@@ -647,6 +649,34 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
 
   @override
   Widget build(BuildContext context) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      return SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.code, size: 40),
+              const SizedBox(height: 16),
+              Text('iOS 使用 JS / API 规则来源',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              const Text(
+                'Mihon APK / DEX 扩展仅由 Android 或兼容桌面宿主执行，'
+                '不能在 iOS 安装或启用。请返回「规则与来源设置」，'
+                '通过规则目录或手动导入添加兼容的 JS / API 来源。'
+                '已有书架、历史与离线文件不会被删除。',
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('返回'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final index = _index;
     final query = _filters.query.trim().toLowerCase();
     final entries =

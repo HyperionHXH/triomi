@@ -1,6 +1,6 @@
 # ADR 001：JS 执行隔离与取消
 
-日期：2026-10-02；2026-10-10 C125 更新。决策：Android/Windows 生产 JS 已迁入可终止的 OS worker；其他平台明确报告暂不支持该隔离运行器。
+日期：2026-10-02；2026-10-10 C125 更新；iOS 适配增补。决策：Android/Windows 生产 JS 使用可终止的 OS worker；iOS 使用系统 WebKit WebContent 中的非持久 WKWebView 会话，不申请应用 JIT 权限。
 
 ## 证据
 
@@ -25,3 +25,11 @@ Windows 只启动自己的 triomi.exe worker 模式，隐藏窗口且跳过插�
 IPC 为 loopback TCP、随机 256bit token、generation/session/call ID、4 字节长度前缀 JSON。8MiB 上限在缓冲 payload 前检查，拆包/粘包保持顺序；无效帧关闭连接。超时/在途取消/连接损坏杀掉共享 worker 并使所有会话失效，各 runtime 下一次调用重新加载规则。晚到宿主响应及旧 generation 结果丢弃；规则日志不输出。共享进程故障会中断其他来源的在途调用，这是明确的取舍。
 
 所有无限循环验收均由独立 Python 宿主 watchdog 保护。API35、API26、Windows 真实 OS 进程均已通过顶层/函数/await 后无限循环、无限分配、递归错误、超长返回、乱序宿主请求、取消/晚到响应、其他会话重载和最终重启；API26最终无限分配约1999ms退出且其他会话恢复，见C125-js-api26.json。协议拆包/长度与无效 envelope 为真实 socket 回归。真实来源回归独立记录，不用恶意合成输入代表站点可用性。
+
+## iOS 适配决策
+
+iOS 工厂返回 `IosJsRuntime`，通过 `triomi/ios-js-runtime` 通道驱动原生 WebKit。每个会话使用独立内容世界和非持久数据存储，不加载第三方页面；CSP 阻止页面直接联网，来源 HTTP 与 HTML 选择器仍由 Dart 宿主执行。会话/调用 ID 和捕获的 Dart Zone 绑定宿主请求，旧响应及结束调用的孤儿请求不能进入后续调用。
+
+原生 deadline、取消、dispose、WebContent 终止及超限消息会撤销宿主能力并销毁会话，下一次调用重新加载规则。iOS 公共 WebKit API 不提供 PID 强杀或固定内存预算；销毁 WKWebView 不保证系统立刻终止 WebContent，不能沿用 Android/Windows 的等强终止主张。系统 WebKit 执行无需给应用授予 JIT entitlement，release Flutter 使用 AOT。
+
+新增真实 iOS XCTest 与 Dart integration_test，覆盖同步死循环期间原生响应、超时/取消/重载、HTTP/选择器、错误/JSON 边界及旧宿主响应。Windows 主机无法执行这些 Apple 运行时场景；它们已接入 `build-ios.yml` 模拟器门槛，尚未取得本轮云端或真机运行结果。实现与验收边界见 [iOS 适配指南](../IOS_ADAPTATION.md)。

@@ -156,7 +156,11 @@ class ApkBackupFiles {
         final androidSystemAlias = Platform.isAndroid &&
             ((alias == '/data/user/0' && resolved == '/data/data') ||
              (alias == '/data/data' && resolved == '/data/user/0'));
-        if (!androidSystemAlias) throw const FormatException('APK 父路径为符号链接');
+        final iosSystemAlias = Platform.isIOS &&
+            alias == '/var' && resolved == '/private/var';
+        if (!androidSystemAlias && !iosSystemAlias) {
+          throw const FormatException('APK 父路径为符号链接');
+        }
       }
       final next = parent.parent;
       if (p.equals(next.path, parent.path)) break;

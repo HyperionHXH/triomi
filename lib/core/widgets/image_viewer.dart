@@ -13,7 +13,7 @@ import 'source_network_image.dart';
 
 /// 全屏图片查看器：缩放拖动、系统返回退出、长按保存到相册。
 ///
-/// 小说插图与漫画页共用。零插件：保存走 MethodChannel（MediaStore）。
+/// 小说插图与漫画页共用。保存走原生 MediaStore / iOS Photos 通道。
 Future<void> showImageViewer(
   BuildContext context, {
   required String imageUrl,
@@ -122,7 +122,7 @@ class _ImageViewerPageState extends ConsumerState<_ImageViewerPage> {
 }
 
 /// 长按保存到相册：加载字节（本地读文件 / 网络走统一网络层）→
-/// MethodChannel（MediaStore）→ SnackBar 反馈。
+/// MethodChannel（MediaStore / Photos）→ SnackBar 反馈。
 Future<void> saveImageWithFeedback(
   BuildContext context, {
   required String imageUrl,
@@ -144,7 +144,7 @@ Future<void> saveImageWithFeedback(
   final fileName = 'triomi-${DateTime.now().millisecondsSinceEpoch}.png';
   final uri = await platformChannel.saveImageToGallery(bytes, fileName);
   if (!context.mounted) return;
-  _showToast(context, uri == null ? '保存失败' : '已保存到相册（Pictures/Triomi）');
+  _showToast(context, uri == null ? '保存失败' : '已保存到相册');
 }
 
 /// 加载图片字节：本地路径直接读文件；网络图走 [SourceHttpClient.fetchBytes]

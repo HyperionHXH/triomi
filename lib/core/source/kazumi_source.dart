@@ -279,7 +279,8 @@ class KazumiSource implements SearchProvider, DetailProvider, ContentProvider {
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
   bool get _windows =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
-  bool get _browserCookies => _android || _windows;
+  bool get _browserCookies => _android || _windows ||
+      (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS);
   bool _challenge(String body) {
     final config = rule.raw['antiCrawlerConfig'];
     if (config is! Map || config['enabled'] != true) return false;

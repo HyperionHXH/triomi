@@ -122,6 +122,22 @@ Future<void> _enterRepository(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('iOS extension management never offers APK installation or changes saved plugins', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final preferences = memoryPreferences();
+    await preferences.set('mihon.repositories', ['https://user.example/index.json']);
+    await preferences.set('mihon.enabledPackages', ['example.saved']);
+    final http = FakeHttpClient((_) async => throw StateError('iOS cannot install APKs'));
+    await _openManagement(tester, preferences, http);
+    expect(find.byType(TextFormField), findsNothing);
+    expect(find.byType(SegmentedButton), findsNothing);
+    expect(find.byType(Switch), findsNothing);
+    expect(http.requests, isEmpty);
+    expect(preferences.get<List<Object?>>('mihon.enabledPackages'), ['example.saved']);
+    expect(preferences.get<List<Object?>>('mihon.repositories'), ['https://user.example/index.json']);
+    debugDefaultTargetPlatformOverride = null;
+  });
   test('legacy index and separate store list preserve original repository identity', () async {
     final http = FakeHttpClient((request) async => SourceResponse(
       statusCode: 200,

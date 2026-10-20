@@ -69,7 +69,6 @@ void main() {
     });
     await tester.pump();
     expect(saved, bytes);
-    expect(find.text('已保存到相册（Pictures/Triomi）'), findsOneWidget);
     expect(http.requests, hasLength(1));
   });
   testWidgets('off-shelf local imports remain visible and removable from file library', (tester) async {

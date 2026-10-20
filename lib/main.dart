@@ -52,8 +52,8 @@ Future<void> main([List<String> args = const []]) async {
   }
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 播放器内核（libmpv）的原生初始化；必须在 runApp 之前。
-  MediaKit.ensureInitialized();
+  // iOS 使用系统 AVPlayer / PiP，不加载 libmpv。
+  if (!Platform.isIOS) MediaKit.ensureInitialized();
 
   // 设置存储（Hive）初始化完成后才启动 UI，避免页面读到未初始化的盒子。
   await Hive.initFlutter();

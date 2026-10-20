@@ -3,7 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'preferences.dart';
 
-/// 敏感凭据的安全存储（Android Keystore / Windows DPAPI）。
+/// 敏感凭据的安全存储（Android Keystore / Windows DPAPI / iOS Keychain）。
 ///
 /// 设计：初始化时把全部条目**预载进内存**，之后读写都是同步的——
 /// 凭据数量只有个位数，预载开销可忽略；这样 [LkClient.securityKey] 这类

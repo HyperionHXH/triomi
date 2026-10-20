@@ -1,5 +1,19 @@
 # Triomi 当前状态
 
+## 当前请求：feat/ios 完整适配、后台播放与推送构建
+
+工作区 `D:\noval_and_manga\triomi-ios`，分支 `feat/ios` 跟踪 `origin/feat/ios`；本轮已获用户明确授权提交和推送，不移动既有发布 Tag、不覆盖旧资产。Bundle ID 与图标保持既有工程一致。最低 iOS 保留 15.0：固定 Flutter 3.47.5 自带 Flutter Pod 明确要求 15.0，单改 Podfile 为 14.0 不可构建；没有借此降级 Android/Windows 共用 SDK。
+
+iOS 播放器已切换系统 AVPlayer/AVPlayerLayer，内嵌、后台音频与 `AVPictureInPictureController` 共用同一个播放器，不再加载 iOS libmpv。支持 HTTP/本地媒体、初始进度、播放/暂停、倍速、音量、画幅、字幕、原生 PiP 入口及中断/前后台意图恢复；音频用 `.playback/.moviePlayback` 和所有者租约，不使用该类别不允许的录音选项。PiP 不含 Flutter 弹幕，系统格式范围不等同 libmpv；锁屏、蓝牙、实体设备 PiP 仍需真机证据。
+
+Documents/Application Support 根目录排除 iCloud 备份，持久业务数据不移到临时目录。活跃下载持有独立常亮 owner，完成/暂停/后台/销毁释放，不影响阅读器/播放器常亮。回前台与冷启动自动恢复生命周期中断记录，停止屏障竞态不复活手动暂停、完成或停用来源任务；系统挂起期间不伪装为持续下载。APK/DEX 管理在 iOS 显示仅支持 JS/API 的降级页，恢复的旧 APK 状态不会变成可执行来源。
+
+弹幕入口、来源加载、开关、设置与本人凭据的官方匹配/发送恢复。切集清空并撤销旧请求归属，迟到响应不能覆盖新剧集；来源弹幕失败不终止视频，播放设置可重试。不借用或提取其他应用私有 AppSecret；[弹幕说明](DANMAKU.md) 和 [iOS 指南](IOS_ADAPTATION.md) 已更新。
+
+工作流显式监听 `feat/ios`，macos-latest 构建 release no-codesign，校验 arm64/版本/框架后按标准 Payload 打包。模拟器跑原生 XCTest、JS、持久化与生产 PlayerPage 实际视频/弹幕烟测，再上传 `Triomi-iOS-Unsigned.ipa`；Tag 发布仅附加新资产。当前提交前尚无本轮云端结果，不将配置或 Windows 输出称为 iOS 验收通过。
+
+本地最新：`flutter analyze --no-pub` 零问题；完整 Flutter 1278 通过/3 跳过，Python 工具 100 通过。Windows 生产播放器实际编译启动，loopback HTTP 解码 30 秒 MP4，位置推进、暂停保持、跳转、来源弹幕开关与恢复播放通过；桌面屏幕捕获被其他窗口遮挡，不记为目视视频验收。Android 普通调试 APK 本轮编译成功，未安装/操作设备；现存 KGP/CMake warning 保留。上轮 Documents/SQLite/Hive/凭据/备份互斥烟测保留其原范围。云端结果在完成后追加；真实账号远端实写和 iPhone 实体设备不冒称通过。
+
 ## 当前请求：R167移除本机可选xkcd并正式推送发布（0.11.0+167）
 
 用户明确要求推送发布，版本递增为0.11.0+167，沿用166正式Android签名与现有手动release工作流；不生成替代密钥，不修改旧标签或资产。源码`2a0f6ea`和标签`v0.11.0-test.167`已推送，正式[构建39401127876](https://github.com/HyperionHXH/triomi/actions/runs/39401127876)的Android、Windows和publish全部成功；[Release](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.167)已公开，非草稿预发布。
