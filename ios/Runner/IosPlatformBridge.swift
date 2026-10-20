@@ -64,7 +64,7 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
       if active { downloadOwners.insert(owner) } else { downloadOwners.remove(owner) }
       updateIdleTimer(); result(true)
     case "configureStorage":
-      do { result(try IosBackupArtifactRegistry.configureStorage()) }
+      do { result(try IosBackupArtifactGuard.configureStorage()) }
       catch { result(Self.failure("storage_configuration_failed", error)) }
     case "videoPolicy": configureVideo(args, result: result)
     case "enterVideoPip": result(false)

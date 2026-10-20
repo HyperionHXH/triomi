@@ -16,6 +16,7 @@
 		A10600010000000000000002 /* IosWebSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10600020000000000000002 /* IosWebSession.swift */; };
 		A10600010000000000000003 /* IosJsRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10600020000000000000003 /* IosJsRuntime.swift */; };
 		A10600010000000000000004 /* IosBackupArtifactGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10600020000000000000004 /* IosBackupArtifactGuard.swift */; };
+		A10600010000000000000005 /* IosJsRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10600020000000000000005 /* IosJsRuntimeTests.swift */; };
         A10600010000000000000006 /* IosVideoPlatformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10600020000000000000006 /* IosVideoPlatformView.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
@@ -58,6 +59,7 @@
 		A10600020000000000000002 /* IosWebSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosWebSession.swift; sourceTree = "<group>"; };
 		A10600020000000000000003 /* IosJsRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosJsRuntime.swift; sourceTree = "<group>"; };
 		A10600020000000000000004 /* IosBackupArtifactGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosBackupArtifactGuard.swift; sourceTree = "<group>"; };
+		A10600020000000000000005 /* IosJsRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosJsRuntimeTests.swift; sourceTree = "<group>"; };
         A10600020000000000000006 /* IosVideoPlatformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosVideoPlatformView.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
@@ -133,6 +135,7 @@
 				A10600020000000000000001 /* IosPlatformBridge.swift */,
 				A10600020000000000000002 /* IosWebSession.swift */,
 				A10600020000000000000003 /* IosJsRuntime.swift */,
+				A10600020000000000000004 /* IosBackupArtifactGuard.swift */,
                 A10600020000000000000006 /* IosVideoPlatformView.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
@@ -293,6 +296,7 @@
 				A10600010000000000000001 /* IosPlatformBridge.swift in Sources */,
 				A10600010000000000000002 /* IosWebSession.swift in Sources */,
 				A10600010000000000000003 /* IosJsRuntime.swift in Sources */,
+				A10600010000000000000004 /* IosBackupArtifactGuard.swift in Sources */,
                 A10600010000000000000006 /* IosVideoPlatformView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
