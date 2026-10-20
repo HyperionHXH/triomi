@@ -82,12 +82,8 @@ jobs:
             -only-testing:RunnerTests \
             -resultBundlePath build/ios/NativeSmoke.xcresult \
             CODE_SIGNING_ALLOWED=NO
-      - name: Exercise the Dart to native JavaScript runtime on iOS
-        run: flutter test integration_test/ios_js_runtime_test.dart -d '${{ steps.simulator.outputs.udid }}'
-      - name: Verify durable media, SQLite and Keychain through the real iOS plugins
-        run: flutter test integration_test/ios_storage_live_test.dart -d '${{ steps.simulator.outputs.udid }}'
-      - name: Decode and control actual video with the iOS native player
-        run: python tools/run_ios_video_smoke.py --device '${{ steps.simulator.outputs.udid }}'
+      - name: Exercise real iOS JS, durable storage and video with danmaku
+        run: python tools/run_ios_video_smoke.py --device '${{ steps.simulator.outputs.udid }}' --suite
       - name: Upload the exact validated IPA
         uses: actions/upload-artifact@v4
         with:

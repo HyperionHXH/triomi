@@ -20,6 +20,8 @@ Documents/Application Support 根目录排除 iCloud 备份，持久业务数据
 
 第三次 [macOS 运行39446688364](https://github.com/HyperionHXH/triomi/actions/runs/39446688364)实际执行10项原生测试，其中8项通过：JS取消/超时/超限重载、Cookie域隔离与持久会话、flock、AVAudioSession、存储排除。导出和常亮两项因夹具向未启动的 FlutterEngine 注册通道触发断言，已改为运行中引擎的独立测试通道；没有跳过失败用例或放松产物门槛。
 
+第四次 [macOS 运行39449835099](https://github.com/HyperionHXH/triomi/actions/runs/39449835099)原生 XCTest 10/10 通过，真实 Dart JS 超时重载通过。HTTP/选择器用例在取标题时误传 baseUrl，触发现有共享宿主的 URL 解析而断言失败；本地主机对相同宿主复现一致。已移除夹具取文本时多传的 baseUrl，保留原始标题断言，不修改 Android/Windows 选择器契约。CI 合并三组真实集成场景到一次模拟器启动，未删除用例或放松断言。
+
 ## 当前请求：R167移除本机可选xkcd并正式推送发布（0.11.0+167）
 
 用户明确要求推送发布，版本递增为0.11.0+167，沿用166正式Android签名与现有手动release工作流；不生成替代密钥，不修改旧标签或资产。源码`2a0f6ea`和标签`v0.11.0-test.167`已推送，正式[构建39401127876](https://github.com/HyperionHXH/triomi/actions/runs/39401127876)的Android、Windows和publish全部成功；[Release](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.167)已公开，非草稿预发布。

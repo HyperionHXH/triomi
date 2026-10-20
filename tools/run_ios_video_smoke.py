@@ -16,6 +16,8 @@ from dev_fixture_server import Handler
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--device', required=True)
+    parser.add_argument('--suite', action='store_true',
+                        help='Run all iOS JS, storage and player scenarios in one app')
     args = parser.parse_args()
     flutter = shutil.which('flutter')
     if flutter is None:
@@ -30,8 +32,10 @@ def main() -> int:
     thread.start()
     try:
         url = f'http://127.0.0.1:{server.server_port}/video/sample.mp4'
+        entrypoint = ('integration_test/ios_acceptance_test.dart' if args.suite
+                      else 'integration_test/ios_video_live_test.dart')
         return subprocess.run([
-            flutter, 'test', 'integration_test/ios_video_live_test.dart',
+            flutter, 'test', entrypoint,
             '-d', args.device, f'--dart-define=TRIOMI_VIDEO_URL={url}',
         ], cwd=root, check=False).returncode
     finally:

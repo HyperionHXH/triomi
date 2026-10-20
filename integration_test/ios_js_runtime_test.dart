@@ -89,7 +89,7 @@ async function search(keyword) {
       remoteId: 'a@data-id', title: 'a',
       url: {selector: 'a', attr: 'href', absolute: true}
     }, response.url),
-    triomi.value(response.body, 'h1', 'text', response.url),
+    triomi.value(response.body, 'h1', 'text'),
     triomi.values(response.body, 'img', 'src', response.url)
   ]);
   parsed[0][0].title += '|' + parsed[1] + '|' + parsed[2].length + '|' + invocations;
