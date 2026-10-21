@@ -30,14 +30,32 @@ def main() -> int:
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
+    output = root / 'build/ios/acceptance'
+    output.mkdir(parents=True, exist_ok=True)
+    log = output / 'flutter.log'
+    result = 1
     try:
         url = f'http://127.0.0.1:{server.server_port}/video/sample.mp4'
         entrypoint = ('integration_test/ios_acceptance_test.dart' if args.suite
                       else 'integration_test/ios_video_live_test.dart')
-        return subprocess.run([
-            flutter, 'test', entrypoint,
-            '-d', args.device, f'--dart-define=TRIOMI_VIDEO_URL={url}',
-        ], cwd=root, check=False).returncode
+        with log.open('w', encoding='utf-8') as stream:
+            try:
+                result = subprocess.run([
+                    flutter, 'test', '--no-pub', '--verbose', entrypoint,
+                    '-d', args.device, f'--dart-define=TRIOMI_VIDEO_URL={url}',
+                ], cwd=root, stdout=stream, stderr=subprocess.STDOUT,
+                    timeout=900, check=False).returncode
+            except subprocess.TimeoutExpired:
+                print('iOS acceptance exceeded its 15-minute host deadline.',
+                      flush=True)
+        if result:
+            subprocess.run([
+                'xcrun', 'simctl', 'io', args.device, 'screenshot',
+                str(output / 'failure.png'),
+            ], timeout=30, check=False)
+            print(log.read_text(encoding='utf-8', errors='replace')[-30000:],
+                  flush=True)
+        return result
     finally:
         server.shutdown()
         server.server_close()

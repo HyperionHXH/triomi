@@ -6,6 +6,8 @@
 
 当前工程的 Flutter Pod 最低要求 iOS 15.0，保留可构建的15而非表面改14；Bitcode关闭、系统权限、系统AVPlayer/PiP、WebKit JS、持久目录排除备份与独立常亮/续传沿用已接入路径。独立原生常亮 owner 不能改为与阅读/播放互相覆盖的全局 wakelock 开关。初读 `MediaItem` 时怀疑私有命名初始化参数不兼容，经项目实际Dart分析确认属于当前SDK支持语法，模型保持原实现，不做无证据的生产改动。
 
+首次视觉巡检运行39534843007已完成Release IPA打包和原生XCTest，但Flutter集成入口在Xcode构建完成后40分钟无测试输出，已主动取消，尚未产生页面截图。宿主补齐15分钟期限、完整verbose日志及失败现场截图；即使前置验收失败也继续采集视觉诊断，IPA上传仍要求两组验收全部通过，不降低门槛。
+
 ## 当前请求：feat/ios 完整适配、后台播放与推送构建
 
 工作区 `D:\noval_and_manga\triomi-ios`，分支 `feat/ios` 跟踪 `origin/feat/ios`；本轮已获用户明确授权提交和推送，不移动既有发布 Tag、不覆盖旧资产。Bundle ID 与图标保持既有工程一致。最低 iOS 保留 15.0：固定 Flutter 3.47.5 自带 Flutter Pod 明确要求 15.0，单改 Podfile 为 14.0 不可构建；没有借此降级 Android/Windows 共用 SDK。

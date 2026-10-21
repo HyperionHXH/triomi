@@ -86,8 +86,10 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
       - name: Exercise real iOS JS, durable storage and video with danmaku
         id: acceptance
+        timeout-minutes: 17
         run: python tools/run_ios_video_smoke.py --device '${{ steps.simulator.outputs.udid }}' --suite
       - name: Install the recording decoder when unavailable
+        if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
           if ! command -v ffprobe >/dev/null 2>&1; then
@@ -96,6 +98,7 @@ jobs:
           ffprobe -version
       - name: Capture the complete production iOS visual tour
         id: visual-tour
+        if: ${{ !cancelled() }}
         timeout-minutes: 22
         run: python tools/run_ios_visual_tour.py --device '${{ steps.simulator.outputs.udid }}'
       - name: Upload visual tour screenshots, recording and diagnostics
@@ -117,7 +120,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: triomi-ios-native-smoke
-          path: build/ios/NativeSmoke.xcresult
+          path: |
+            build/ios/NativeSmoke.xcresult
+            build/ios/acceptance/
           if-no-files-found: ignore
 
   publish:
