@@ -50,6 +50,14 @@ JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源�
 5. 全部成功后，在该次运行底部 **Artifacts → triomi-ios-unsigned** 下载外层 ZIP，解压取得 `Triomi-iOS-Unsigned.ipa`。不要把 GitHub 下载的外层 artifact ZIP 当成 IPA。
 6. 新 `v*` Tag 的成功构建会把同名 IPA 附加到该 Tag 的 Release；不会替换既有同名但不同摘要的资产。手动运行和普通分支不会发布 Release。打包日志包含 IPA SHA-256，可在 Windows 用 `Get-FileHash .\Triomi-iOS-Unsigned.ipa -Algorithm SHA256` 对照。
 
+### 云端全页面视觉巡检
+
+`tools/run_ios_visual_tour.py --device <明确的模拟器UDID>` 运行生产 TriomiApp 的路由巡检。宿主只监听127.0.0.1，收到已完成渲染的页面握手后调用同一UDID的 `simctl screenshot`；原生AVPlayer画面不会被Flutter截图漏掉。每张截图记录页面、顺序、尺寸与SHA-256，拒绝缺失、重名及相同帧。录屏由 `simctl recordVideo --codec=h264` 创建，结束发送SIGINT并等待封装，再用ffprobe解码核验。失败时保留截图、日志、manifest与录屏以定位，不把中间材料称为通过。
+
+视觉产物为 `triomi-ios-visual-tour`，包含 `screenshots/*.png`、`ios_ui_tour.mp4`、`manifest.json` 和日志；测试夹具不写进release IPA。七个基础文件名保持用户约定，并补充各媒体书架、阅读菜单、来源仓库及账号/同步等独立场景。账号保持未登录，不在截图、视频或日志输入真实秘密。
+
+运行成功后用 `gh run download <RUN_ID> -n triomi-ios-unsigned -D release_ios` 与 `gh run download <RUN_ID> -n triomi-ios-visual-tour -D release_ios` 拉回本地。逐张读取PNG，检查白屏、错误弹窗、溢出条与控件错位；同时检查录屏能解码。机器断言只证明命名、状态与帧有效性，不能替代视觉判断；当前实际检查结果以CURRENT_STATUS和本地视觉报告为准。
+
 ## AltStore / SideStore / TrollStore 安装
 
 未签名 IPA 不能直接点开安装；安装工具必须完成自己的签名或受支持的安装处理。请使用官方工具，不需要为 Triomi 启用 JIT。

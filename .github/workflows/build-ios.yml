@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: read
     defaults:
@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Validate the visual tour capture protocol
+        run: python -m unittest discover -s tools -p 'test_ios_visual_tour.py'
       - name: Resolve the repository's exact Flutter SDK
         id: sdk
         run: python tools/resolve_ios_toolchain.py --github-output "$GITHUB_OUTPUT"
@@ -83,8 +85,28 @@ jobs:
             -resultBundlePath build/ios/NativeSmoke.xcresult \
             CODE_SIGNING_ALLOWED=NO
       - name: Exercise real iOS JS, durable storage and video with danmaku
+        id: acceptance
         run: python tools/run_ios_video_smoke.py --device '${{ steps.simulator.outputs.udid }}' --suite
+      - name: Install the recording decoder when unavailable
+        run: |
+          set -euo pipefail
+          if ! command -v ffprobe >/dev/null 2>&1; then
+            brew install ffmpeg
+          fi
+          ffprobe -version
+      - name: Capture the complete production iOS visual tour
+        id: visual-tour
+        timeout-minutes: 22
+        run: python tools/run_ios_visual_tour.py --device '${{ steps.simulator.outputs.udid }}'
+      - name: Upload visual tour screenshots, recording and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: triomi-ios-visual-tour
+          path: build/ios/visual-tour/
+          if-no-files-found: warn
       - name: Upload the exact validated IPA
+        if: success() && steps.acceptance.outcome == 'success' && steps.visual-tour.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: triomi-ios-unsigned
