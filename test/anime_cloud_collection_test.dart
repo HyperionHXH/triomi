@@ -173,52 +173,66 @@ void main() {
     await expectLater(service.load(), throwsStateError);
   });
 
-  test('review edits patch only review fields and retain canonical season and existing state', () async {
+  test('review edits patch normalized NFC text and compare normalized readback', () async {
+    const submitted = '  A\u030Atrimmed  ';
+    const canonical = 'Åtrimmed';
     var written = false;
     final http = FakeHttpClient((request) async {
       if (request.url.endsWith('/v0/me')) return jsonResponse({'id': 99});
       if (request.method == 'GET') {
-        expect(request.url, 'https://bgm.test/v0/users/99/collections/13');
-        return jsonResponse({...collection(13, 4), 'rate': written ? 0 : 9,
-          'comment': written ? '' : '原短评', 'private': true, 'tags': ['保留标签']});
+        return jsonResponse({...collection(13, 3),
+          'rate': 6, 'comment': written ? canonical : '旧评论', 'private': false});
       }
       expect(request.method, 'PATCH');
-      expect(request.url, 'https://bgm.test/v0/users/-/collections/13');
-      expect(jsonDecode(request.body!), {'rate': 0, 'comment': '', 'private': true});
+      expect(jsonDecode(request.body!), {'rate': 6, 'comment': canonical, 'private': false});
       written = true;
       return const SourceResponse(statusCode: 204, body: '');
     });
-    final service = serviceFor(http);
-    final previous = (await service.status(secondSeason))!;
-    expect(previous.comment, '原短评');
-    expect(previous.private, isTrue);
-    final edited = await service.updateReview(secondSeason, rate: 0,
-      comment: '', private: previous.private, newStatus: 'doing');
-    expect(edited.type, 4);
-    expect(edited.epStatus, 4);
-    expect(edited.rate, 0);
-    expect(edited.comment, '');
+    final result = await serviceFor(http).updateReview(secondSeason, rate: 6,
+      comment: submitted, private: false);
+    expect(result.comment, canonical);
   });
 
-  test('first review creates only explicitly chosen collection status', () async {
+  test('Bangumi want collection is always written and read back with zero rating', () async {
+    var written = false;
+    final http = FakeHttpClient((request) async {
+      if (request.url.endsWith('/v0/me')) return jsonResponse({'id': 99});
+      if (request.method == 'GET') {
+        return jsonResponse({...collection(12, 1),
+          'rate': 0, 'comment': written ? '公开吐槽' : '', 'private': false});
+      }
+      expect(request.method, 'PATCH');
+      expect(jsonDecode(request.body!), {'rate': 0, 'comment': '公开吐槽', 'private': false});
+      written = true;
+      return const SourceResponse(statusCode: 204, body: '');
+    });
+    final result = await serviceFor(http).updateReview(firstSeason, rate: 9,
+      comment: ' 公开吐槽 ', private: false);
+    expect(result.localStatus, 'want');
+    expect(result.rate, 0);
+  });
+
+  test('creating a want review persists only zero rating', () async {
     var written = false;
     final http = FakeHttpClient((request) async {
       if (request.url.endsWith('/v0/me')) return jsonResponse({'id': 99});
       if (request.method == 'GET') {
         return written
-          ? jsonResponse({...collection(12, 1), 'rate': 7, 'comment': '新短评', 'private': false})
+          ? jsonResponse({...collection(12, 1), 'rate': 0, 'comment': '新短评', 'private': false})
           : const SourceResponse(statusCode: 404, body: '{}');
       }
       expect(request.method, 'POST');
-      expect(jsonDecode(request.body!), {'type': 1, 'rate': 7,
+      expect(jsonDecode(request.body!), {'type': 1, 'rate': 0,
         'comment': '新短评', 'private': false});
       written = true;
       return const SourceResponse(statusCode: 202, body: '');
     });
     final result = await serviceFor(http).updateReview(firstSeason,
-      rate: 7, comment: '新短评', private: false, newStatus: 'want');
-    expect(result.type, 1);
+      rate: 8, comment: '新短评', private: false, newStatus: 'want');
+    expect(result.rate, 0);
+    expect(result.localStatus, 'want');
   });
+
 
   test('account change while reading review prevents any review write', () async {
     var token = 'first-account';

@@ -118,7 +118,9 @@ class _AnimeDetailTabs extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Material(
+    return SizedBox(
+      height: _extent,
+      child: Material(
       color: Theme.of(context).colorScheme.surface,
       elevation: overlapsContent ? 2 : 0,
       child: SingleChildScrollView(
@@ -141,6 +143,7 @@ class _AnimeDetailTabs extends SliverPersistentHeaderDelegate {
               ),
             ),
         ]),
+      ),
       ),
     );
   }

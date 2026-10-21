@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:unorm_dart/unorm_dart.dart' as unicode;
 
 import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
@@ -174,14 +175,19 @@ class AnimeCollectionService {
       if (current == null && newStatus == null) {
         throw StateError('Bangumi 收藏已不存在，请重新打开并明确选择收藏状态。');
       }
+      final normalizedComment = unicode.nfc(comment.trim());
+      final isWant = current?.type == 1 ||
+          current == null && newStatus == 'want';
+      final effectiveRate = isWant ? 0 : rate;
       await _requests.run(() => client.updateReview(id, token: accountToken,
-        rate: rate, comment: comment, private: private,
+        rate: effectiveRate, comment: normalizedComment, private: private,
         newStatus: current == null ? newStatus : null));
       _check(accountToken);
       final confirmed = await _requests.run(() => client.collection(id, token: accountToken));
       _check(accountToken);
-      if (confirmed == null || confirmed.rate != rate ||
-          confirmed.comment != comment || confirmed.private != private) {
+      if (confirmed == null || confirmed.rate != effectiveRate ||
+          unicode.nfc(confirmed.comment.trim()) != normalizedComment ||
+          confirmed.private != private) {
         throw StateError('评分与吐槽已提交，但读回尚未确认；请重试读取或提交。');
       }
       return confirmed;

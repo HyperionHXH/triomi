@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +19,7 @@ import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
+import 'package:triomi/core/theme/app_theme.dart';
 import 'package:triomi/features/anime/data/anime_collection_service.dart';
 import 'package:triomi/features/detail/anime_info_repository.dart';
 import 'package:triomi/features/detail/anime_info_sheet.dart';
@@ -598,10 +600,18 @@ void main() {
       await db.close();
     });
     await tester.pumpWidget(UncontrolledProviderScope(container: container,
-      child: const MaterialApp(home: DetailPage(item: subject))));
+      child: MaterialApp(theme: AppTheme.light(), home: const DetailPage(item: subject))));
     await tester.pumpAndSettle();
     final comments = find.byKey(const ValueKey('anime-comments-entry'));
     expect(tester.getTopLeft(comments).dy, lessThan(150));
+    expect(tester.takeException(), isNull);
+    final header = tester.renderObject<RenderSliver>(find.byType(SliverPersistentHeader));
+    expect(header.geometry, isNotNull);
+    expect(header.geometry!.paintExtent, greaterThanOrEqualTo(header.geometry!.layoutExtent));
+    final viewport = tester.getRect(find.byType(CustomScrollView).first);
+    final heroButton = find.widgetWithText(FilledButton, '开始 / 继续观看');
+    expect(heroButton.hitTestable(), findsOneWidget);
+    expect(tester.getRect(heroButton).overlaps(viewport), isTrue);
     expect(http.requests.where((request) => request.url.contains('/comments')), isEmpty);
     await tester.tap(comments);
     await tester.pumpAndSettle();
@@ -655,7 +665,8 @@ void main() {
     await tester.tap(find.text('编辑'));
     await tester.pumpAndSettle();
     expect(find.text('原来的吐槽'), findsOneWidget);
-    expect(find.text('8 / 10 分'), findsOneWidget);
+    expect(tester.widget<DropdownButtonFormField<int>>(
+      find.byKey(const ValueKey('anime-review-rating'))).initialValue, 8);
     expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isTrue);
     await tester.enterText(find.byKey(const ValueKey('anime-review-comment')), '编辑后的吐槽');
     final submit = find.byKey(const ValueKey('anime-review-submit'));

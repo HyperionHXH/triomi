@@ -34,6 +34,7 @@ import 'data/dandanplay_client.dart';
 import 'data/danmaku_overlay.dart';
 import 'data/danmaku_settings.dart';
 import 'data/player_settings.dart';
+import 'episode_comments_panel.dart';
 import 'episode_selector.dart';
 import 'player_interaction_surface.dart';
 import 'windows_video_resolver.dart';
@@ -62,7 +63,7 @@ class PlayerPage extends ConsumerStatefulWidget {
 }
 
 class _PlayerPageState extends ConsumerState<PlayerPage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late final Player _player;
   VideoController? _videoController;
   late final _NativeAndroidVideoController _nativeVideoController;
@@ -119,6 +120,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   int _scrubRevision = 0;
   Timer? _chromeTimer;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  late final TabController _contentTabs;
+  int _panelSection = 0;
+  bool _commentsVisited = false;
+  bool _sidePanelLayout = false;
 
   /// 播放倍速（0.5~3.0）。
   double _speed = 1.0;
@@ -131,6 +136,14 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _contentTabs = TabController(length: 2, vsync: this);
+    _contentTabs.addListener(() {
+      if (_contentTabs.index == _panelSection) return;
+      setState(() {
+        _panelSection = _contentTabs.index;
+        if (_panelSection == 1) _commentsVisited = true;
+      });
+    });
     _chapterIndex = widget.args.initialIndex;
 
     // dispose() 里不能用 ref（Riverpod 3 会在卸载时封禁），
@@ -383,6 +396,15 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     } else if (_useNativeAndroidVideo) {
       unawaited(_readBrightness());
     }
+  }
+
+  @override
+  void didChangeMetrics() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _usesSidePanel || !_episodesOpen) return;
+      _scaffoldKey.currentState?.closeEndDrawer();
+      setState(() => _episodesOpen = false);
+    });
   }
 
   Future<void> _onCompleted() async {
@@ -736,7 +758,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         ),
       ),
     );
-    return PopScope(
+    return LayoutBuilder(builder: (context, layout) {
+      _sidePanelLayout = _fullscreen || layout.maxWidth > layout.maxHeight;
+      return PopScope(
       canPop: !_fullscreen && !_episodesOpen,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
@@ -754,13 +778,13 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           setState(() => _episodesOpen = open);
           if (!open) _scheduleChromeHide();
         },
-        endDrawer: Drawer(
+        endDrawer: _usesSidePanel ? Drawer(
           width: (MediaQuery.sizeOf(context).width * .85).clamp(0, 380),
           child: SafeArea(
             child: Column(
               children: [
                 ListTile(
-                  title: const Text('选集'),
+                  title: const Text('选集 / 评论'),
                   trailing: IconButton(
                     tooltip: '关闭选集',
                     onPressed: () => _scaffoldKey.currentState?.closeEndDrawer(),
@@ -768,11 +792,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                   ),
                 ),
                 const Divider(height: 1),
-                Expanded(child: episodes),
+                Expanded(child: _buildContentPanel(episodes)),
               ],
             ),
           ),
-        ),
+        ) : null,
         backgroundColor: Colors.black,
         body: LayoutBuilder(
           builder: (context, constraints) {
@@ -800,7 +824,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                           ),
                         ),
                       ),
-                      if (!fillsWindow) Expanded(child: episodes),
+                      if (!fillsWindow) Expanded(child: _buildContentPanel(episodes)),
                     ],
               ),
             );
@@ -808,7 +832,33 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         ),
       ),
     );
+    });
   }
+
+  Widget _buildContentPanel(Widget episodes) => Material(
+    color: Theme.of(context).colorScheme.surface,
+    child: Column(children: [
+      TabBar(
+        controller: _contentTabs,
+        tabs: const [
+          Tab(key: ValueKey('player-episodes-tab'), text: '选集'),
+          Tab(key: ValueKey('player-comments-tab'), text: '评论'),
+        ],
+      ),
+      Expanded(
+        child: IndexedStack(
+          index: _panelSection,
+          children: [
+            episodes,
+            if (_commentsVisited)
+              EpisodeCommentsPanel(item: _item, chapter: _chapter)
+            else
+              const SizedBox.shrink(),
+          ],
+        ),
+      ),
+    ]),
+  );
 
   Future<void> _selectEpisode(int index) async {
     _scaffoldKey.currentState?.closeEndDrawer();
@@ -1022,6 +1072,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                             color: Colors.white,
                           ),
                         ),
+                      ),
+                      button(
+                        '分集评论', Icons.chat_bubble_outline_rounded, _showComments,
                       ),
                       button(
                         '播放设置', Icons.tune_rounded, _controlsSheet,
@@ -1334,15 +1387,26 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     }
   }
 
+  bool get _usesSidePanel => !_inPip && _sidePanelLayout;
+
   Future<void> _showEpisodes() async {
+    _contentTabs.index = 0;
+    if (_usesSidePanel) _openContentDrawer();
+  }
+
+  void _showComments() {
+    _contentTabs.index = 1;
+    if (_usesSidePanel) _openContentDrawer();
+  }
+
+  void _openContentDrawer() {
     _chromeTimer?.cancel();
-    setState(() => _chromeVisible = true);
-    final scaffold = _scaffoldKey.currentState;
-    if (scaffold?.isEndDrawerOpen == true) {
-      scaffold?.closeEndDrawer();
-    } else {
-      scaffold?.openEndDrawer();
-    }
+    _clearTransientInput();
+    setState(() {
+      _chromeVisible = true;
+      _episodesOpen = true;
+    });
+    _scaffoldKey.currentState?.openEndDrawer();
   }
 
   /// 当前弹幕对应的弹弹play 剧集（手动搜索匹配后才有，用于发送弹幕）。
@@ -1880,6 +1944,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   @override
   void dispose() {
+    _contentTabs.dispose();
     _cancelScrub();
     if (_holdingSpeed) unawaited(_holdSpeed(false));
     ++_brightnessRevision;
