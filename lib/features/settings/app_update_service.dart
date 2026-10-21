@@ -190,7 +190,9 @@ class AppUpdateRelease {
     final releases = <AppUpdateRelease>[];
     final codes = <int>{};
     for (final item in raw) {
-      if (item is! Map || item['draft'] != false || item['tag_name'] is! String) {
+      if (item is! Map ||
+          item['draft'] != false ||
+          item['tag_name'] is! String) {
         continue;
       }
       final tag = item['tag_name'] as String;
@@ -264,6 +266,32 @@ class AppUpdateRelease {
     releases.sort((a, b) => b.versionCode.compareTo(a.versionCode));
     return releases;
   }
+}
+
+/// Finds the newest installable release for this platform without downloading
+/// or installing anything during the startup check.
+AppUpdateRelease? newestAppUpdateRelease(
+  AppUpdateInfo installed,
+  List<AppUpdateRelease> releases,
+) {
+  final asset = switch (installed.platform) {
+    'android' => 'triomi-android.apk',
+    'windows' => 'triomi-windows.zip',
+    _ => null,
+  };
+  if (asset == null) return null;
+  AppUpdateRelease? best;
+  for (final release in releases) {
+    if (!release.isNewerThan(installed) ||
+        !release.assets.containsKey(asset) ||
+        !release.assets.containsKey('SHA256SUMS.txt') ||
+        (installed.platform == 'windows' &&
+            !release.assets.containsKey('triomi-windows.update.json'))) {
+      continue;
+    }
+    if (best == null || release.versionCode > best.versionCode) best = release;
+  }
+  return best;
 }
 
 /// Only GitHub's official asset CDN is trusted across redirects. No wildcard

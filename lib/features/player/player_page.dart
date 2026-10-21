@@ -85,6 +85,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration>? _durationSub;
+  StreamSubscription<Duration>? _bufferSub;
   StreamSubscription<bool>? _playingSub;
   Timer? _progressTimer;
   StreamSubscription<String>? _playerErrorSub;
@@ -130,6 +131,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  Duration _bufferedPosition = Duration.zero;
   bool _playing = false;
 
   @override
@@ -175,10 +177,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       },
     );
     if (!_useNativeAndroidVideo) {
-      _player = Player();
-      // Android uses a native SurfaceView because API35 x86_64 emulators
-      // render media_kit's Flutter external texture as black. Desktop keeps
-      // the media_kit/libmpv path.
+      _player = Player(
+        configuration: const PlayerConfiguration(bufferSize: 128 * 1024 * 1024),
+      );
+      // media_kit defaults to a 32 MiB demux cache; a bounded 128 MiB budget
+      // gives high-bitrate streams room to prefetch without Kazumi's 1.5 GiB cap.
       _videoController = VideoController(
         _player,
         configuration: const VideoControllerConfiguration(
@@ -189,6 +192,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       _positionSub = _player.stream.position.listen(_onPosition);
       _durationSub = _player.stream.duration.listen((duration) {
         if (mounted) setState(() => _duration = duration);
+      });
+      _bufferSub = _player.stream.buffer.listen((buffer) {
+        if (mounted) setState(() => _bufferedPosition = buffer);
       });
       _playingSub = _player.stream.playing.listen((playing) {
         if (mounted) {
@@ -233,6 +239,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     final playingChanged = _playing != state.playing;
     _position = state.position;
     _duration = state.duration;
+    _bufferedPosition = state.bufferedPosition;
     _playing = state.playing;
     // Keep the danmaku clock driven by the same position source as the
     // Android native player.  Desktop receives this through media_kit's
@@ -380,9 +387,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       if (mounted && seq == _loadSeq) {
         setState(() {
           _loading = false;
-          _error = SourceException.sanitizeMessage(error is PlatformException
-              ? (error.message ?? '播放暂不可用，请重试或更换播放来源')
-              : '$error'.replaceFirst('Bad state: ', ''));
+          _error = SourceException.sanitizeMessage(
+            error is PlatformException
+                ? (error.message ?? '播放暂不可用，请重试或更换播放来源')
+                : '$error'.replaceFirst('Bad state: ', ''),
+          );
         });
       }
     }
@@ -513,6 +522,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     }
     _position = startPosition;
     _duration = Duration.zero;
+    _bufferedPosition = startPosition;
     _danmaku.seek(startPosition);
     if (_useNativeAndroidVideo) {
       _prepareTimer?.cancel();
@@ -685,8 +695,12 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       );
     }
     final video = PlayerInteractionSurface(
-      enabled: !_loading && !_awaitingPlaybackStart && _error == null &&
-          !_inPip && !_episodesOpen,
+      enabled:
+          !_loading &&
+          !_awaitingPlaybackStart &&
+          _error == null &&
+          !_inPip &&
+          !_episodesOpen,
       session: _loadSeq,
       position: _position,
       duration: Duration(milliseconds: _sliderMax.toInt()),
@@ -708,21 +722,21 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
-        _VideoArea(
-          controller: _videoController,
-          nativeController: _nativeVideoController,
-          aspectRatio: _settings.aspectRatio.ratio,
-          backgroundAudio: _settings.backgroundAudio,
-          loading: _loading || _awaitingPlaybackStart,
-          error: _error,
-          onRetry: _load,
-          onEpisodes: _showEpisodes,
-        ),
-        if (danmakuFeatureEnabled &&
-            !_loading &&
-            !_awaitingPlaybackStart &&
-            _error == null)
-          DanmakuOverlay(controller: _danmaku),
+          _VideoArea(
+            controller: _videoController,
+            nativeController: _nativeVideoController,
+            aspectRatio: _settings.aspectRatio.ratio,
+            backgroundAudio: _settings.backgroundAudio,
+            loading: _loading || _awaitingPlaybackStart,
+            error: _error,
+            onRetry: _load,
+            onEpisodes: _showEpisodes,
+          ),
+          if (danmakuFeatureEnabled &&
+              !_loading &&
+              !_awaitingPlaybackStart &&
+              _error == null)
+            DanmakuOverlay(controller: _danmaku),
         ],
       ),
     );
@@ -758,106 +772,120 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         ),
       ),
     );
-    return LayoutBuilder(builder: (context, layout) {
-      _sidePanelLayout = _fullscreen || layout.maxWidth > layout.maxHeight;
-      return PopScope(
-      canPop: !_fullscreen && !_episodesOpen,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
-        if (_episodesOpen) {
-          _scaffoldKey.currentState?.closeEndDrawer();
-        } else if (_fullscreen) {
-          await _setFullscreen(false);
-        }
-      },
-      child: Scaffold(
-        key: _scaffoldKey,
-        endDrawerEnableOpenDragGesture: false,
-        onEndDrawerChanged: (open) {
-          if (open) _clearTransientInput();
-          setState(() => _episodesOpen = open);
-          if (!open) _scheduleChromeHide();
-        },
-        endDrawer: _usesSidePanel ? Drawer(
-          width: (MediaQuery.sizeOf(context).width * .85).clamp(0, 380),
-          child: SafeArea(
-            child: Column(
-              children: [
-                ListTile(
-                  title: const Text('选集 / 评论'),
-                  trailing: IconButton(
-                    tooltip: '关闭选集',
-                    onPressed: () => _scaffoldKey.currentState?.closeEndDrawer(),
-                    icon: const Icon(Icons.close),
-                  ),
-                ),
-                const Divider(height: 1),
-                Expanded(child: _buildContentPanel(episodes)),
-              ],
-            ),
-          ),
-        ) : null,
-        backgroundColor: Colors.black,
-        body: LayoutBuilder(
-          builder: (context, constraints) {
-            final fillsWindow = _fullscreen ||
-                _inPip ||
-                constraints.maxWidth > constraints.maxHeight;
-            return SafeArea(
-              top: !_fullscreen && !_inPip,
-              bottom: !_fullscreen && !_inPip,
-              left: !_fullscreen && !_inPip,
-              right: !_fullscreen && !_inPip,
-              child: Column(
-                children: [
+    return LayoutBuilder(
+      builder: (context, layout) {
+        _sidePanelLayout = _fullscreen || layout.maxWidth > layout.maxHeight;
+        return PopScope(
+          canPop: !_fullscreen && !_episodesOpen,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            if (_episodesOpen) {
+              _scaffoldKey.currentState?.closeEndDrawer();
+            } else if (_fullscreen) {
+              await _setFullscreen(false);
+            }
+          },
+          child: Scaffold(
+            key: _scaffoldKey,
+            endDrawerEnableOpenDragGesture: false,
+            onEndDrawerChanged: (open) {
+              if (open) _clearTransientInput();
+              setState(() => _episodesOpen = open);
+              if (!open) _scheduleChromeHide();
+            },
+            endDrawer: _usesSidePanel
+                ? Drawer(
+                    width: (MediaQuery.sizeOf(context).width * .85).clamp(
+                      0,
+                      380,
+                    ),
+                    child: SafeArea(
+                      child: Column(
+                        children: [
+                          ListTile(
+                            title: const Text('选集 / 评论'),
+                            trailing: IconButton(
+                              tooltip: '关闭选集',
+                              onPressed: () =>
+                                  _scaffoldKey.currentState?.closeEndDrawer(),
+                              icon: const Icon(Icons.close),
+                            ),
+                          ),
+                          const Divider(height: 1),
+                          Expanded(child: _buildContentPanel(episodes)),
+                        ],
+                      ),
+                    ),
+                  )
+                : null,
+            backgroundColor: Colors.black,
+            body: LayoutBuilder(
+              builder: (context, constraints) {
+                final fillsWindow =
+                    _fullscreen ||
+                    _inPip ||
+                    constraints.maxWidth > constraints.maxHeight;
+                return SafeArea(
+                  top: !_fullscreen && !_inPip,
+                  bottom: !_fullscreen && !_inPip,
+                  left: !_fullscreen && !_inPip,
+                  right: !_fullscreen && !_inPip,
+                  child: Column(
+                    children: [
                       Flexible(
                         flex: fillsWindow ? 1 : 0,
                         child: SizedBox(
                           width: double.infinity,
                           height: fillsWindow
                               ? double.infinity
-                              : (constraints.maxWidth * 9 / 16)
-                                  .clamp(0.0, constraints.maxHeight * .6),
+                              : (constraints.maxWidth * 9 / 16).clamp(
+                                  0.0,
+                                  constraints.maxHeight * .6,
+                                ),
                           child: MouseRegion(
                             onHover: (_) => _revealChrome(),
                             child: video,
                           ),
                         ),
                       ),
-                      if (!fillsWindow) Expanded(child: _buildContentPanel(episodes)),
+                      if (!fillsWindow)
+                        Expanded(child: _buildContentPanel(episodes)),
                     ],
-              ),
-            );
-          },
-        ),
-      ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
-    });
   }
 
   Widget _buildContentPanel(Widget episodes) => Material(
     color: Theme.of(context).colorScheme.surface,
-    child: Column(children: [
-      TabBar(
-        controller: _contentTabs,
-        tabs: const [
-          Tab(key: ValueKey('player-episodes-tab'), text: '选集'),
-          Tab(key: ValueKey('player-comments-tab'), text: '评论'),
-        ],
-      ),
-      Expanded(
-        child: IndexedStack(
-          index: _panelSection,
-          children: [
-            episodes,
-            if (_commentsVisited)
-              EpisodeCommentsPanel(item: _item, chapter: _chapter)
-            else
-              const SizedBox.shrink(),
+    child: Column(
+      children: [
+        TabBar(
+          controller: _contentTabs,
+          tabs: const [
+            Tab(key: ValueKey('player-episodes-tab'), text: '选集'),
+            Tab(key: ValueKey('player-comments-tab'), text: '评论'),
           ],
         ),
-      ),
-    ]),
+        Expanded(
+          child: IndexedStack(
+            index: _panelSection,
+            children: [
+              episodes,
+              if (_commentsVisited)
+                EpisodeCommentsPanel(item: _item, chapter: _chapter)
+              else
+                const SizedBox.shrink(),
+            ],
+          ),
+        ),
+      ],
+    ),
   );
 
   Future<void> _selectEpisode(int index) async {
@@ -940,7 +968,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   Future<void> _seekBy(Duration delta) => _seekTo(_position + delta);
 
   Future<void> _seekTo(Duration position) async {
-    if (_loading || _awaitingPlaybackStart || _error != null ||
+    if (_loading ||
+        _awaitingPlaybackStart ||
+        _error != null ||
         _sliderMax <= 1) {
       return;
     }
@@ -961,7 +991,6 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       if (mounted && sequence == _loadSeq) _toast('跳转未成功，请重试');
     }
   }
-
 
   Future<void> _togglePlay() async {
     if (_loading || _awaitingPlaybackStart || _error != null) return;
@@ -988,7 +1017,14 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   void _scheduleChromeHide() {
     _chromeTimer?.cancel();
-    if (!_playing || _loading || _awaitingPlaybackStart || _error != null || _episodesOpen || _scrubbing) return;
+    if (!_playing ||
+        _loading ||
+        _awaitingPlaybackStart ||
+        _error != null ||
+        _episodesOpen ||
+        _scrubbing) {
+      return;
+    }
     _chromeTimer = Timer(const Duration(seconds: 4), () {
       if (mounted && !_episodesOpen && !_scrubbing) {
         setState(() => _chromeVisible = false);
@@ -1010,23 +1046,26 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     return Positioned.fill(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final buttonSize = ((constraints.maxWidth - 24) / 8)
-              .clamp(32.0, 48.0);
+          final buttonSize = ((constraints.maxWidth - 24) / 8).clamp(
+            32.0,
+            48.0,
+          );
           Widget button(
-            String label, IconData icon, VoidCallback? onPressed, {
+            String label,
+            IconData icon,
+            VoidCallback? onPressed, {
             bool prominent = false,
           }) => IconButton(
             tooltip: label,
             style: IconButton.styleFrom(
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               backgroundColor: prominent
-                  ? Colors.white.withValues(alpha: .16) : null,
+                  ? Colors.white.withValues(alpha: .16)
+                  : null,
               shape: const StadiumBorder(),
             ),
             onPressed: onPressed,
-            constraints: BoxConstraints.tightFor(
-              width: buttonSize, height: 44,
-            ),
+            constraints: BoxConstraints.tightFor(width: buttonSize, height: 44),
             padding: EdgeInsets.zero,
             color: Colors.white,
             disabledColor: Colors.white38,
@@ -1034,204 +1073,246 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
             icon: Icon(icon),
           );
 
-          final visible = _chromeVisible || _loading || _awaitingPlaybackStart || _error != null;
+          final visible =
+              _chromeVisible ||
+              _loading ||
+              _awaitingPlaybackStart ||
+              _error != null;
           return IgnorePointer(
             ignoring: !visible,
             child: AnimatedOpacity(
               opacity: visible ? 1 : 0,
               duration: const Duration(milliseconds: 180),
               child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.black54, Colors.transparent],
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.black54, Colors.transparent],
+                      ),
                     ),
-                  ),
-                  child: Row(
-                    children: [
-                      BackButton(
-                        color: Colors.white,
-                        onPressed: () async {
-                          if (_fullscreen) {
-                            await _setFullscreen(false);
-                          } else if (context.mounted) {
-                            Navigator.of(context).maybePop();
-                          }
-                        },
-                      ),
-                      Expanded(
-                        child: Text(
-                          '${_item.title} · ${_chapter.title}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      button(
-                        '分集评论', Icons.chat_bubble_outline_rounded, _showComments,
-                      ),
-                      button(
-                        '播放设置', Icons.tune_rounded, _controlsSheet,
-                      ),
-                      if (danmakuFeatureEnabled)
-                        button(
-                          _danmakuOn ? '关闭弹幕' : '开启弹幕',
-                          _danmakuOn
-                              ? Icons.speaker_notes_outlined
-                              : Icons.speaker_notes_off_outlined,
-                          () {
-                            setState(() => _danmakuOn = !_danmakuOn);
-                            _danmaku.enabled = _danmakuOn;
+                    child: Row(
+                      children: [
+                        BackButton(
+                          color: Colors.white,
+                          onPressed: () async {
+                            if (_fullscreen) {
+                              await _setFullscreen(false);
+                            } else if (context.mounted) {
+                              Navigator.of(context).maybePop();
+                            }
                           },
                         ),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [Colors.black54, Colors.transparent],
+                        Expanded(
+                          child: Text(
+                            '${_item.title} · ${_chapter.title}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        button(
+                          '分集评论',
+                          Icons.chat_bubble_outline_rounded,
+                          _showComments,
+                        ),
+                        button('播放设置', Icons.tune_rounded, _controlsSheet),
+                        if (danmakuFeatureEnabled)
+                          button(
+                            _danmakuOn ? '关闭弹幕' : '开启弹幕',
+                            _danmakuOn
+                                ? Icons.speaker_notes_outlined
+                                : Icons.speaker_notes_off_outlined,
+                            () {
+                              setState(() => _danmakuOn = !_danmakuOn);
+                              _danmaku.enabled = _danmakuOn;
+                            },
+                          ),
+                      ],
                     ),
                   ),
-                  child: SafeArea(
-                    top: false,
-                    bottom: _fullscreen,
-                    left: false,
-                    right: false,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: SizedBox(
-                                height: 32,
-                                child: SliderTheme(
-                                  data: SliderTheme.of(context).copyWith(
-                                    trackHeight: 4,
-                                    trackShape: const RoundedRectSliderTrackShape(),
-                                    activeTrackColor: Colors.white,
-                                    inactiveTrackColor: Colors.white30,
-                                    thumbColor: Colors.white,
-                                    overlayColor: Colors.white12,
-                                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
-                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-                                  ),
-                                  child: Slider(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                                    value: _sliderValue,
-                                    max: _sliderMax,
-                                    onChangeStart: _loading || _awaitingPlaybackStart || _error != null
-                                        ? null : (_) => _beginScrub(),
-                                    onChanged: _loading || _awaitingPlaybackStart || _error != null
-                                        ? null : (value) => _previewScrub(
-                                            Duration(milliseconds: value.round())),
-                                    onChangeEnd: (value) => _endScrub(
-                                      Duration(milliseconds: value.round())),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [Colors.black54, Colors.transparent],
+                      ),
+                    ),
+                    child: SafeArea(
+                      top: false,
+                      bottom: _fullscreen,
+                      left: false,
+                      right: false,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: SizedBox(
+                                  height: 32,
+                                  child: SliderTheme(
+                                    data: SliderTheme.of(context).copyWith(
+                                      trackHeight: 4,
+                                      trackShape:
+                                          const RoundedRectSliderTrackShape(),
+                                      activeTrackColor: Colors.white,
+                                      secondaryActiveTrackColor: Colors.white54,
+                                      inactiveTrackColor: Colors.white30,
+                                      thumbColor: Colors.white,
+                                      overlayColor: Colors.white12,
+                                      overlayShape:
+                                          const RoundSliderOverlayShape(
+                                            overlayRadius: 18,
+                                          ),
+                                      thumbShape: const RoundSliderThumbShape(
+                                        enabledThumbRadius: 8,
+                                      ),
+                                    ),
+                                    child: Slider(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
+                                      value: _sliderValue,
+                                      secondaryTrackValue: _bufferedSliderValue,
+                                      max: _sliderMax,
+                                      onChangeStart:
+                                          _loading ||
+                                              _awaitingPlaybackStart ||
+                                              _error != null
+                                          ? null
+                                          : (_) => _beginScrub(),
+                                      onChanged:
+                                          _loading ||
+                                              _awaitingPlaybackStart ||
+                                              _error != null
+                                          ? null
+                                          : (value) => _previewScrub(
+                                              Duration(
+                                                milliseconds: value.round(),
+                                              ),
+                                            ),
+                                      onChangeEnd: (value) => _endScrub(
+                                        Duration(milliseconds: value.round()),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            Text(
-                              '$positionText / $durationText',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: Colors.white, fontSize: 12,
-                                fontFeatures: const [FontFeature.tabularFigures()],
+                              Text(
+                                '$positionText / $durationText',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            button(
-                              '上一集',
-                              Icons.skip_previous_rounded,
-                              previous == null
-                                  ? null
-                                  : () => _switchChapter(-1),
-                            ),
-                            button(
-                              _playing ? '暂停' : '播放',
-                              _playing
-                                  ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded,
-                              _togglePlay,
-                              prominent: true,
-                            ),
-                            button(
-                              '下一集',
-                              Icons.skip_next_rounded,
-                              next == null ? null : () => _switchChapter(1),
-                            ),
-                            Tooltip(
-                              message: '跳过 ${_settings.skipSeconds} 秒（长按设置）',
-                              child: GestureDetector(
-                                onLongPress: _pickSkipSeconds,
-                                onSecondaryTap: _pickSkipSeconds,
-                                child: SizedBox(
-                                  width: buttonSize,
-                                  height: 44,
-                                  child: TextButton(
-                                    key: const ValueKey('player-skip'),
-                                    style: TextButton.styleFrom(
-                                      padding: EdgeInsets.zero,
-                                      minimumSize: Size.zero,
-                                      foregroundColor: Colors.white,
-                                      shape: const StadiumBorder(),
-                                    ),
-                                    onPressed: _loading || _awaitingPlaybackStart ||
-                                            _error != null || _sliderMax <= 1
-                                        ? null
-                                        : () => _seekBy(
-                                            Duration(seconds: _settings.skipSeconds),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              button(
+                                '上一集',
+                                Icons.skip_previous_rounded,
+                                previous == null
+                                    ? null
+                                    : () => _switchChapter(-1),
+                              ),
+                              button(
+                                _playing ? '暂停' : '播放',
+                                _playing
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
+                                _togglePlay,
+                                prominent: true,
+                              ),
+                              button(
+                                '下一集',
+                                Icons.skip_next_rounded,
+                                next == null ? null : () => _switchChapter(1),
+                              ),
+                              Tooltip(
+                                message: '跳过 ${_settings.skipSeconds} 秒（长按设置）',
+                                child: GestureDetector(
+                                  onLongPress: _pickSkipSeconds,
+                                  onSecondaryTap: _pickSkipSeconds,
+                                  child: SizedBox(
+                                    width: buttonSize,
+                                    height: 44,
+                                    child: TextButton(
+                                      key: const ValueKey('player-skip'),
+                                      style: TextButton.styleFrom(
+                                        padding: EdgeInsets.zero,
+                                        minimumSize: Size.zero,
+                                        foregroundColor: Colors.white,
+                                        shape: const StadiumBorder(),
+                                      ),
+                                      onPressed:
+                                          _loading ||
+                                              _awaitingPlaybackStart ||
+                                              _error != null ||
+                                              _sliderMax <= 1
+                                          ? null
+                                          : () => _seekBy(
+                                              Duration(
+                                                seconds: _settings.skipSeconds,
+                                              ),
+                                            ),
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          '+${_settings.skipSeconds}s',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
                                           ),
-                                    child: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text('+${_settings.skipSeconds}s',
-                                        style: const TextStyle(
-                                          fontSize: 13, fontWeight: FontWeight.w700,
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                            const Spacer(),
-                            button(
-                              '视频比例', Icons.aspect_ratio_rounded, _pickAspectRatio,
-                            ),
-                            button(
-                              '剧集', Icons.playlist_play_rounded, _showEpisodes,
-                            ),
-                            button(
-                              '倍速 · ${_speed}x', Icons.speed_rounded, _pickSpeed,
-                            ),
-                            button(
-                              _fullscreen ? '退出全屏' : '全屏',
-                              _fullscreen
-                                  ? Icons.fullscreen_exit_rounded
-                                  : Icons.fullscreen_rounded,
-                              () => _setFullscreen(!_fullscreen),
-                            ),
-                          ],
-                        ),
-                      ],
+                              const Spacer(),
+                              button(
+                                '视频比例',
+                                Icons.aspect_ratio_rounded,
+                                _pickAspectRatio,
+                              ),
+                              button(
+                                '剧集',
+                                Icons.playlist_play_rounded,
+                                _showEpisodes,
+                              ),
+                              button(
+                                '倍速 · ${_speed}x',
+                                Icons.speed_rounded,
+                                _pickSpeed,
+                              ),
+                              button(
+                                _fullscreen ? '退出全屏' : '全屏',
+                                _fullscreen
+                                    ? Icons.fullscreen_exit_rounded
+                                    : Icons.fullscreen_rounded,
+                                () => _setFullscreen(!_fullscreen),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
             ),
           );
         },
@@ -1242,6 +1323,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   double get _sliderValue =>
       _position.inMilliseconds.clamp(0, _sliderMax).toDouble();
 
+  double get _bufferedSliderValue => _bufferedPosition.inMilliseconds
+      .clamp(_sliderValue, _sliderMax)
+      .toDouble();
   double get _sliderMax {
     final duration = _duration == Duration.zero && !_useNativeAndroidVideo
         ? _player.state.duration
@@ -1276,7 +1360,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: InputDecoration(
-                labelText: '每次跳过', suffixText: '秒',
+                labelText: '每次跳过',
+                suffixText: '秒',
                 helperText: '单击跳过，长按按钮可再次修改',
                 errorText: error,
               ),
@@ -1317,8 +1402,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
               for (final ratio in VideoAspectRatio.values)
                 ListTile(
                   selected: _settings.aspectRatio == ratio,
-                  leading: Icon(_settings.aspectRatio == ratio
-                      ? Icons.radio_button_checked : Icons.radio_button_off),
+                  leading: Icon(
+                    _settings.aspectRatio == ratio
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                  ),
                   title: Text(ratio.label),
                   onTap: () => Navigator.pop(context, ratio),
                 ),
@@ -1602,12 +1690,16 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                     items: [
                       for (final ratio in VideoAspectRatio.values)
                         DropdownMenuItem(
-                          value: ratio, child: Text(ratio.label),
+                          value: ratio,
+                          child: Text(ratio.label),
                         ),
                     ],
                     onChanged: (value) {
                       if (value != null) {
-                        update(() => settings = settings.copyWith(aspectRatio: value));
+                        update(
+                          () =>
+                              settings = settings.copyWith(aspectRatio: value),
+                        );
                       }
                     },
                   ),
@@ -1656,13 +1748,20 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     if (!mounted) return;
     setState(() {});
     switch (action) {
-      case 'skip': await _pickSkipSeconds();
-      case 'subtitles': await _pickSubtitles();
-      case 'pip': await _enterPip();
-      case 'line': await _pickLine();
-      case 'danmakuSettings': await _showDanmakuSettings();
-      case 'searchDanmaku': await _searchDanmaku();
-      case 'sendDanmaku': await _sendDanmaku();
+      case 'skip':
+        await _pickSkipSeconds();
+      case 'subtitles':
+        await _pickSubtitles();
+      case 'pip':
+        await _enterPip();
+      case 'line':
+        await _pickLine();
+      case 'danmakuSettings':
+        await _showDanmakuSettings();
+      case 'searchDanmaku':
+        await _searchDanmaku();
+      case 'sendDanmaku':
+        await _sendDanmaku();
     }
     if (mounted) _scheduleChromeHide();
   }
@@ -1970,8 +2069,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _progressTimer?.cancel();
     _positionSub?.cancel();
     _durationSub?.cancel();
+    _bufferSub?.cancel();
     _playingSub?.cancel();
-    ++_loadSeq;
     ++_resolveSeq;
     if (_useNativeAndroidVideo) {
       unawaited(
@@ -2019,7 +2118,8 @@ class _VideoArea extends StatelessWidget {
   Widget build(BuildContext context) => Stack(
     fit: StackFit.expand,
     children: <Widget>[
-        LayoutBuilder(builder: (context, constraints) {
+      LayoutBuilder(
+        builder: (context, constraints) {
           // Own frame geometry while retaining the same native view/controller.
           // media_kit_video 2.0.1 cannot clear its cached aspectRatio via null.
           final width = aspectRatio == null
@@ -2028,7 +2128,9 @@ class _VideoArea extends StatelessWidget {
           return Center(
             child: SizedBox(
               width: width,
-              height: aspectRatio == null ? constraints.maxHeight : width / aspectRatio!,
+              height: aspectRatio == null
+                  ? constraints.maxHeight
+                  : width / aspectRatio!,
               child: controller == null
                   ? _NativeAndroidVideoView(controller: nativeController)
                   : Video(
@@ -2040,50 +2142,133 @@ class _VideoArea extends StatelessWidget {
                     ),
             ),
           );
-        }),
-      if (error != null) ...[
-        const ColoredBox(color: Colors.black87),
+        },
+      ),
+      if (error != null)
         Positioned.fill(
-          top: 48,
-          bottom: 76,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('播放加载失败',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
-                const SizedBox(height: 8),
-                Text(error!, textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70)),
-                const SizedBox(height: 12),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 12,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: onRetry,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('重试'),
+          child: ColoredBox(
+            color: Colors.black.withValues(alpha: 0.78),
+            child: SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 460),
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: const Color(0xF21B1D22),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.12),
+                        ),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Colors.black38,
+                            blurRadius: 32,
+                            offset: Offset(0, 16),
+                          ),
+                        ],
+                      ),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 56,
+                              height: 56,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.error
+                                    .withValues(alpha: 0.16),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.play_disabled_rounded,
+                                color: Theme.of(context).colorScheme.error,
+                                size: 28,
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            Text(
+                              '这一集暂时无法播放',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '检查网络后重试，或切换到其他线路与剧集。',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(color: Colors.white70),
+                            ),
+                            const SizedBox(height: 16),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                error!,
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: Colors.white70),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            Wrap(
+                              alignment: WrapAlignment.center,
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                FilledButton.icon(
+                                  onPressed: onRetry,
+                                  icon: const Icon(Icons.refresh_rounded),
+                                  label: const Text('重新加载'),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: onEpisodes,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: BorderSide(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.32,
+                                      ),
+                                    ),
+                                  ),
+                                  icon: const Icon(
+                                    Icons.video_library_outlined,
+                                  ),
+                                  label: const Text('选择其他集数 / 线路'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    TextButton.icon(
-                      onPressed: onEpisodes,
-                      icon: const Icon(Icons.list),
-                      label: const Text('选择其他集数 / 线路'),
-                    ),
-                  ],
+                  ),
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ] else if (loading)
+        )
+      else if (loading)
         const ColoredBox(
           color: Colors.black54,
           child: Center(
             child: SizedBox.square(
               dimension: 28,
-              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2,
+              ),
             ),
           ),
         ),
@@ -2095,11 +2280,13 @@ class _NativeVideoState {
   const _NativeVideoState({
     required this.position,
     required this.duration,
+    required this.bufferedPosition,
     required this.playing,
   });
 
   final Duration position;
   final Duration duration;
+  final Duration bufferedPosition;
   final bool playing;
 }
 
@@ -2175,6 +2362,7 @@ class _NativeAndroidVideoController {
     return _NativeVideoState(
       position: Duration(milliseconds: number('position')),
       duration: Duration(milliseconds: number('duration')),
+      bufferedPosition: Duration(milliseconds: number('bufferedPosition')),
       playing: args['playing'] == true,
     );
   }

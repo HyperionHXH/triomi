@@ -34,10 +34,12 @@ class _KazumiRepositoriesSheetState
     final saved = ref
         .read(preferencesProvider)
         .get<Map<dynamic, dynamic>>(_key);
-    _repositories = {
-      for (final entry in saved?.entries ?? const <MapEntry<dynamic, dynamic>>[])
-        '${entry.key}': entry.value == true,
-    };
+    _repositories = saved == null
+        ? {KazumiRepository.defaultRepository: true}
+        : {
+            for (final entry in saved.entries)
+              '${entry.key}': entry.value == true,
+          };
     _selected = _repositories.entries
         .where((entry) => entry.value)
         .map((entry) => entry.key)

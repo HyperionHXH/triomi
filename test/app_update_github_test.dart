@@ -84,6 +84,57 @@ void main() {
     expect(releases.first.isNewerThan(installed), false);
     expect(_parse(_release(code: 157)).isNewerThan(installed), true);
   });
+  test('startup update selects the newest complete package for the installed platform', () {
+    const android = AppUpdateInfo(
+      packageName: 'io.github.hyperionhxh.triomi',
+      versionCode: 156,
+      version: '0.1.0',
+      sha256: _hash,
+      platform: 'android',
+    );
+    final newer = _parse(
+      _release(
+        code: 160,
+        assets: [
+          _asset('triomi-android.apk', code: 160),
+          _asset('SHA256SUMS.txt', code: 160),
+        ],
+      ),
+    );
+    final older = _parse(
+      _release(
+        code: 158,
+        assets: [
+          _asset('triomi-android.apk', code: 158),
+          _asset('SHA256SUMS.txt', code: 158),
+        ],
+      ),
+    );
+    final incomplete = _parse(
+      _release(code: 170, assets: [_asset('triomi-android.apk', code: 170)]),
+    );
+    expect(newestAppUpdateRelease(android, [older, incomplete, newer]), newer);
+    expect(newestAppUpdateRelease(android, [incomplete]), isNull);
+
+    const windows = AppUpdateInfo(
+      packageName: 'io.github.hyperionhxh.triomi',
+      versionCode: 156,
+      version: '0.1.0',
+      sha256: _hash,
+      platform: 'windows',
+    );
+    final windowsPackage = _parse(
+      _release(
+        code: 161,
+        assets: [
+          _asset('triomi-windows.zip', code: 161),
+          _asset('triomi-windows.update.json', code: 161),
+          _asset('SHA256SUMS.txt', code: 161),
+        ],
+      ),
+    );
+    expect(newestAppUpdateRelease(windows, [windowsPackage]), windowsPackage);
+  });
   test('asset selection rejects foreign repo, foreign tag, duplicate, missing size and bad digest', () {
     for (final asset in [
       {

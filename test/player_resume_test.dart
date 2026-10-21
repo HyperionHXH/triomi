@@ -207,8 +207,20 @@ void main() {
       await event('prepared', {
         'position': 71000,
         'duration': 120000,
+        'bufferedPosition': 94000,
         'playing': true,
       });
+      final progressSlider = tester.widget<Slider>(
+        find.byWidgetPredicate(
+          (widget) => widget is Slider && widget.max == 120000,
+        ),
+      );
+      expect(
+        progressSlider.secondaryTrackValue,
+        greaterThan(progressSlider.value),
+        reason:
+            'the player must show network-buffered progress beyond playback',
+      );
       final previous = find.widgetWithIcon(
         IconButton,
         Icons.skip_previous_rounded,
@@ -226,24 +238,35 @@ void main() {
       ]) {
         await tester.binding.setSurfaceSize(size);
         await tester.pump();
-        expect(channels.length, playbackViews,
-            reason: 'rotation/resizing must retain the playing native surface');
-        expect(opens.length, playbackOpens,
-            reason: 'rotation/resizing must not reload or seek the media');
+        expect(
+          channels.length,
+          playbackViews,
+          reason: 'rotation/resizing must retain the playing native surface',
+        );
+        expect(
+          opens.length,
+          playbackOpens,
+          reason: 'rotation/resizing must not reload or seek the media',
+        );
       }
       await tester.binding.setSurfaceSize(const Size(320, 700));
       await tester.pump();
-      int getSeekTarget() => (nativeCalls.lastWhere(
-        (call) => call.method == 'seek',
-      ).arguments as Map)['milliseconds'] as int;
-      final seeksBeforeTap = nativeCalls.where((call) => call.method == 'seek').length;
+      int getSeekTarget() =>
+          (nativeCalls.lastWhere((call) => call.method == 'seek').arguments
+                  as Map)['milliseconds']
+              as int;
+      final seeksBeforeTap = nativeCalls
+          .where((call) => call.method == 'seek')
+          .length;
       final surface = find.byType(PlatformViewLink);
       final surfaceRect = tester.getRect(surface);
       final leftPoint = Offset(
-        surfaceRect.left + surfaceRect.width * .125, surfaceRect.center.dy,
+        surfaceRect.left + surfaceRect.width * .125,
+        surfaceRect.center.dy,
       );
       final rightPoint = Offset(
-        surfaceRect.left + surfaceRect.width * .875, surfaceRect.center.dy,
+        surfaceRect.left + surfaceRect.width * .875,
+        surfaceRect.center.dy,
       );
       Future<void> doubleTapAt(Offset point) async {
         await tester.tapAt(point);
@@ -251,60 +274,98 @@ void main() {
         await tester.tapAt(point);
         await tester.pump(const Duration(milliseconds: 350));
       }
+
       await tester.tapAt(leftPoint);
       await tester.pump(const Duration(milliseconds: 350));
-      expect(nativeCalls.where((call) => call.method == 'seek').length, seeksBeforeTap,
-          reason: 'a single tap at the edge must not change playback position');
+      expect(
+        nativeCalls.where((call) => call.method == 'seek').length,
+        seeksBeforeTap,
+        reason: 'a single tap at the edge must not change playback position',
+      );
       await doubleTapAt(leftPoint);
       expect(getSeekTarget(), 56000);
       await event('state', {
-        'position': 71000, 'duration': 120000, 'playing': true,
+        'position': 71000,
+        'duration': 120000,
+        'playing': true,
       });
       await doubleTapAt(rightPoint);
       expect(getSeekTarget(), 86000);
       await event('state', {
-        'position': 5000, 'duration': 120000, 'playing': true,
+        'position': 5000,
+        'duration': 120000,
+        'playing': true,
       });
       await doubleTapAt(leftPoint);
-      expect(getSeekTarget(), 0, reason: 'seeking before the start clamps to zero');
+      expect(
+        getSeekTarget(),
+        0,
+        reason: 'seeking before the start clamps to zero',
+      );
       await event('state', {
-        'position': 115000, 'duration': 120000, 'playing': true,
+        'position': 115000,
+        'duration': 120000,
+        'playing': true,
       });
       await doubleTapAt(rightPoint);
-      expect(getSeekTarget(), 120000,
-          reason: 'seeking past the end never opens another episode');
+      expect(
+        getSeekTarget(),
+        120000,
+        reason: 'seeking past the end never opens another episode',
+      );
       expect(opens.length, playbackOpens);
       await event('state', {
-        'position': 71000, 'duration': 120000, 'playing': true,
+        'position': 71000,
+        'duration': 120000,
+        'playing': true,
       });
       await tester.tap(find.byKey(const ValueKey('player-skip')));
       await tester.pump();
-      expect(getSeekTarget(), 120000, reason: '80-second skip also clamps to duration');
+      expect(
+        getSeekTarget(),
+        120000,
+        reason: '80-second skip also clamps to duration',
+      );
       await tester.longPress(find.byKey(const ValueKey('player-skip')));
       await settleRoute();
       await tester.enterText(find.byType(TextFormField), '30');
       await tester.tap(find.text('保存'));
       await settleRoute();
-      expect(PlayerSettings.load(container.read(preferencesProvider)).skipSeconds, 30);
+      expect(
+        PlayerSettings.load(container.read(preferencesProvider)).skipSeconds,
+        30,
+      );
       await event('state', {
-        'position': 71000, 'duration': 120000, 'playing': true,
+        'position': 71000,
+        'duration': 120000,
+        'playing': true,
       });
       await tester.tap(find.byKey(const ValueKey('player-skip')));
       await tester.pump();
       expect(getSeekTarget(), 101000);
       await event('state', {
-        'position': 71000, 'duration': 120000, 'playing': true,
+        'position': 71000,
+        'duration': 120000,
+        'playing': true,
       });
       await doubleTapAt(rightPoint);
-      expect(getSeekTarget(), 86000,
-          reason: 'configured skip must not change the edge double-tap interval');
+      expect(
+        getSeekTarget(),
+        86000,
+        reason: 'configured skip must not change the edge double-tap interval',
+      );
       // Between one quarter and one third belongs to the center, not the edge.
-      await doubleTapAt(Offset(
-        surfaceRect.left + surfaceRect.width * .28, surfaceRect.center.dy,
-      ));
+      await doubleTapAt(
+        Offset(
+          surfaceRect.left + surfaceRect.width * .28,
+          surfaceRect.center.dy,
+        ),
+      );
       expect(nativeCalls.last.method, 'pause');
       await event('state', {
-        'position': 71000, 'duration': 120000, 'playing': false,
+        'position': 71000,
+        'duration': 120000,
+        'playing': false,
       });
       // A preview is not played progress: the timer must not persist it, and
       // cancellation must leave both the decoder and the stored resume intact.
@@ -314,8 +375,9 @@ void main() {
         () => repo.chapterPositionOf(item.sourceId, item.remoteId, 'ep1'),
       );
       expect(storedBeforePreview, 71);
-      final seekCountBeforePreview =
-          nativeCalls.where((call) => call.method == 'seek').length;
+      final seekCountBeforePreview = nativeCalls
+          .where((call) => call.method == 'seek')
+          .length;
       final preview = await tester.startGesture(surfaceRect.center);
       await preview.moveBy(const Offset(60, 0));
       await tester.pump();
@@ -377,12 +439,17 @@ void main() {
       final beforeDiscussion = nativeCalls.length;
       await tester.tap(find.byKey(const ValueKey('player-comments-tab')));
       await settle();
-      expect(find.byKey(const ValueKey('player-comments-tab')).hitTestable(),
-          findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('player-comments-tab')).hitTestable(),
+        findsOneWidget,
+      );
       await tester.tap(find.byTooltip('剧集'));
       await settleRoute();
-      expect(find.byType(EpisodeCommentsPanel, skipOffstage: false), findsOneWidget,
-          reason: 'portrait controls must reuse the below-video panel');
+      expect(
+        find.byType(EpisodeCommentsPanel, skipOffstage: false),
+        findsOneWidget,
+        reason: 'portrait controls must reuse the below-video panel',
+      );
       expect(find.byTooltip('关闭选集'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('player-episodes-tab')));
       await settleRoute();
@@ -390,17 +457,32 @@ void main() {
       await settleRoute();
       await tester.tap(find.byTooltip('分集评论'));
       await settleRoute();
-      expect(find.byKey(const ValueKey('player-comments-tab')).hitTestable(),
-          findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('player-comments-tab')).hitTestable(),
+        findsOneWidget,
+      );
       await tester.tap(find.byTooltip('关闭选集'));
       await settleRoute();
-      expect(opens.length, playbackOpens,
-          reason: 'comment tabs and overlay must not reopen media');
-      expect(channels.length, playbackViews,
-          reason: 'comment layouts must retain the native video view');
-      expect(nativeCalls.skip(beforeDiscussion).where((call) =>
-        const {'open', 'seek', 'pause', 'play'}.contains(call.method)), isEmpty,
-        reason: 'discussion navigation must not interrupt playback');
+      expect(
+        opens.length,
+        playbackOpens,
+        reason: 'comment tabs and overlay must not reopen media',
+      );
+      expect(
+        channels.length,
+        playbackViews,
+        reason: 'comment layouts must retain the native video view',
+      );
+      expect(
+        nativeCalls
+            .skip(beforeDiscussion)
+            .where(
+              (call) =>
+                  const {'open', 'seek', 'pause', 'play'}.contains(call.method),
+            ),
+        isEmpty,
+        reason: 'discussion navigation must not interrupt playback',
+      );
       await tester.binding.setSurfaceSize(null);
       await settleRoute();
       await tester.tap(find.byTooltip('全屏'));
@@ -412,15 +494,26 @@ void main() {
       await tester.ensureVisible(find.text('16:10'));
       await tester.tap(find.text('16:10'));
       await settleRoute();
-      expect(PlayerSettings.load(container.read(preferencesProvider)).aspectRatio,
-          VideoAspectRatio.ratio16x10);
+      expect(
+        PlayerSettings.load(container.read(preferencesProvider)).aspectRatio,
+        VideoAspectRatio.ratio16x10,
+      );
       final videoFrame = tester.getSize(find.byType(AndroidViewSurface));
-      expect(videoFrame.width / videoFrame.height, closeTo(1.6, .001),
-          reason: 'forced aspect must constrain the actual native surface');
-      expect(channels.length, playbackViews,
-          reason: 'aspect changes must retain the active native view');
-      expect(opens.length, playbackOpens,
-          reason: 'aspect changes must not reload media');
+      expect(
+        videoFrame.width / videoFrame.height,
+        closeTo(1.6, .001),
+        reason: 'forced aspect must constrain the actual native surface',
+      );
+      expect(
+        channels.length,
+        playbackViews,
+        reason: 'aspect changes must retain the active native view',
+      );
+      expect(
+        opens.length,
+        playbackOpens,
+        reason: 'aspect changes must not reload media',
+      );
       await tester.tap(find.byTooltip('退出全屏'));
       await tester.binding.setSurfaceSize(null);
       await settleRoute();
@@ -487,6 +580,7 @@ void main() {
       await event('prepared', {
         'position': 120000,
         'duration': 180000,
+        'bufferedPosition': 160000,
         'playing': true,
       });
       await event('state', {
@@ -515,8 +609,18 @@ void main() {
       await settle();
       await tester.pump(const Duration(seconds: 31));
       expect(find.textContaining('视频准备超时'), findsOneWidget);
-      expect(find.byType(BackButton), findsOneWidget,
-          reason: 'failure must retain an immediately usable exit');
+      expect(find.text('这一集暂时无法播放'), findsOneWidget);
+      expect(find.text('重新加载'), findsOneWidget);
+      final failedOpens = opens.length;
+      await tester.tap(find.text('重新加载'));
+      await settle();
+      expect(opens.length, failedOpens + 1);
+      expect(find.text('这一集暂时无法播放'), findsNothing);
+      expect(
+        find.byType(BackButton),
+        findsOneWidget,
+        reason: 'failure must retain an immediately usable exit',
+      );
       debugDefaultTargetPlatformOverride = null;
     },
   );

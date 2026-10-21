@@ -71,20 +71,38 @@ class _EmptySources extends SourceRegistryController {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('rule repositories start empty and manually removed URLs stay removed', (tester) async {
+  testWidgets('default anime repository loads and removed URLs stay removed', (
+    tester,
+  ) async {
     final preferences = memoryPreferences();
     final db = openTestDatabase();
-    final http = SecureFake((request) async => SourceResponse(
-      statusCode: 200,
-      body: jsonEncode([{'name': 'Manual rule', 'version': '1.0'}]),
-      url: request.url,
-    ));
-    final registry = SourceRegistry(repository: SourceRepository(db), http: http);
+    final http = SecureFake(
+      (request) async => SourceResponse(
+        statusCode: 200,
+        body: jsonEncode([
+          {'name': 'Manual rule', 'version': '1.0'},
+        ]),
+        url: request.url,
+      ),
+    );
+    final registry = SourceRegistry(
+      repository: SourceRepository(db),
+      http: http,
+    );
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox.shrink());
       registry.dispose();
       await db.close();
     });
+    Future<void> settleRepository() async {
+      for (var attempt = 0; attempt < 20; attempt++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+    }
+
     Future<void> open(int key) => tester.pumpWidget(
       ProviderScope(
         key: ValueKey(key),
@@ -93,38 +111,71 @@ void main() {
           sourceRegistryProvider.overrideWithValue(registry),
           sourcesProvider.overrideWith(_EmptySources.new),
         ],
-        child: const MaterialApp(home: Scaffold(body: KazumiRepositoriesSheet())),
+        child: const MaterialApp(
+          home: Scaffold(body: KazumiRepositoriesSheet()),
+        ),
       ),
     );
     await open(0);
-    await tester.pumpAndSettle();
-    expect(http.requests, isEmpty);
-    expect(preferences.get<Object?>('kazumi.repositories'), isNull);
+    await tester.pump();
+    for (var attempt = 0; attempt < 20; attempt++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(
+      preferences.get<Map<dynamic, dynamic>>('kazumi.repositories'),
+      isNull,
+    );
+    expect(find.text('管理仓库 · 1'), findsOneWidget);
+    expect(http.requests.single.url, KazumiRepository.defaultRepository);
     await tester.tap(find.byTooltip('添加仓库'));
     await tester.pumpAndSettle();
     await tester.enterText(
-      find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)),
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      ),
       'https://manual.example/rules/',
     );
     await tester.tap(find.widgetWithText(FilledButton, '添加'));
     for (var attempt = 0; attempt < 20; attempt++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
       await tester.pump(const Duration(milliseconds: 20));
     }
     expect(find.text('Manual rule'), findsOneWidget);
     expect(preferences.get<Object?>('kazumi.repositories'), {
+      KazumiRepository.defaultRepository: true,
       'https://manual.example/rules/index.json': true,
     });
-    expect(http.requests.single.url, 'https://manual.example/rules/index.json');
-    await tester.tap(find.text('管理仓库 · 1'));
+    expect(http.requests.last.url, 'https://manual.example/rules/index.json');
+    await tester.tap(find.text('管理仓库 · 2'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('移除仓库').last);
+    await settleRepository();
+    expect(find.text('管理仓库 · 1'), findsOneWidget);
     await tester.tap(find.byTooltip('移除仓库'));
-    await tester.pumpAndSettle();
-    expect(preferences.get<Map<dynamic, dynamic>>('kazumi.repositories'), isEmpty);
+    await settleRepository();
+    expect(
+      preferences.get<Map<dynamic, dynamic>>('kazumi.repositories'),
+      isEmpty,
+    );
+    expect(
+      http.requests.last.url,
+      KazumiRepository.defaultRepository,
+      reason: 'selecting another repository reloads it after removal',
+    );
+    final requestsBeforeReopen = http.requests.length;
     await open(1);
     await tester.pumpAndSettle();
-    expect(preferences.get<Map<dynamic, dynamic>>('kazumi.repositories'), isEmpty);
-    expect(http.requests, hasLength(1));
+    expect(
+      preferences.get<Map<dynamic, dynamic>>('kazumi.repositories'),
+      isEmpty,
+    );
+    expect(http.requests, hasLength(requestsBeforeReopen));
   });
   test('公开推荐分页始终保持同一排行榜及正确偏移', () async {
     final http = FakeHttpClient((r) async {

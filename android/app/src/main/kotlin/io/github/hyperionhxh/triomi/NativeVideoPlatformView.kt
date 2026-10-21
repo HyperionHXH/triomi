@@ -232,6 +232,7 @@ private class NativeVideoPlatformView(
     private fun stateMap(): Map<String, Any> = mapOf(
         "position" to player.currentPosition.coerceAtLeast(0),
         "duration" to player.duration.coerceAtLeast(0),
+        "bufferedPosition" to player.bufferedPosition.coerceAtLeast(0),
         "playing" to player.isPlaying,
     )
     private fun emitState() = emit("state", stateMap())

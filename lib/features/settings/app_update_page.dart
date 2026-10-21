@@ -10,8 +10,9 @@ import 'app_update_widgets.dart';
 
 /// Network checks and installation always require an explicit user action.
 class AppUpdatePage extends StatefulWidget {
-  const AppUpdatePage({super.key, this.service});
+  const AppUpdatePage({super.key, this.service, this.initialRelease});
   final AppUpdateService? service;
+  final AppUpdateRelease? initialRelease;
 
   @override
   State<AppUpdatePage> createState() => _AppUpdatePageState();
@@ -201,6 +202,9 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
       targetLabel: '当前安装版本',
       retry: _loadCurrent,
     );
+    if (widget.initialRelease != null && mounted && !_unsupportedPlatform) {
+      await _checkReleases();
+    }
   }
 
   void _publishCurrent(AppUpdateInfo current) {
@@ -250,7 +254,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         if (mounted) {
           setState(() {
             _releases = releases;
-            _selected = releases.firstOrNull;
+            _selected = widget.initialRelease ?? releases.firstOrNull;
             if (releases.isEmpty) {
               _message = '官方仓库暂时没有可识别的发布版本，请稍后再检查。';
             }
