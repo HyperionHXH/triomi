@@ -305,6 +305,45 @@ void main() {
       await event('state', {
         'position': 71000, 'duration': 120000, 'playing': false,
       });
+      // A preview is not played progress: the timer must not persist it, and
+      // cancellation must leave both the decoder and the stored resume intact.
+      await tester.pump(const Duration(seconds: 6));
+      await settle();
+      final storedBeforePreview = await tester.runAsync(
+        () => repo.chapterPositionOf(item.sourceId, item.remoteId, 'ep1'),
+      );
+      expect(storedBeforePreview, 71);
+      final seekCountBeforePreview =
+          nativeCalls.where((call) => call.method == 'seek').length;
+      final preview = await tester.startGesture(surfaceRect.center);
+      await preview.moveBy(const Offset(60, 0));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('player-seek-hud')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 6));
+      await settle();
+      expect(
+        await tester.runAsync(
+          () => repo.chapterPositionOf(item.sourceId, item.remoteId, 'ep1'),
+        ),
+        storedBeforePreview,
+        reason: 'uncommitted video drag must not overwrite stored resume',
+      );
+      await preview.cancel();
+      await tester.pump(const Duration(seconds: 6));
+      await settle();
+      expect(
+        await tester.runAsync(
+          () => repo.chapterPositionOf(item.sourceId, item.remoteId, 'ep1'),
+        ),
+        storedBeforePreview,
+        reason: 'cancelled preview must persist the original played position',
+      );
+      expect(
+        nativeCalls.where((call) => call.method == 'seek').length,
+        seekCountBeforePreview,
+      );
+      expect(opens.length, playbackOpens);
+      expect(channels.length, playbackViews);
       await tester.drag(find.byType(Slider), const Offset(30, 0));
       await tester.pump();
       expect(nativeCalls.any((call) => call.method == 'seek'), isTrue);

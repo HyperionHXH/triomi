@@ -173,4 +173,80 @@ void main() {
     await expectLater(service.load(), throwsStateError);
   });
 
+  test('review edits patch only review fields and retain canonical season and existing state', () async {
+    var written = false;
+    final http = FakeHttpClient((request) async {
+      if (request.url.endsWith('/v0/me')) return jsonResponse({'id': 99});
+      if (request.method == 'GET') {
+        expect(request.url, 'https://bgm.test/v0/users/99/collections/13');
+        return jsonResponse({...collection(13, 4), 'rate': written ? 0 : 9,
+          'comment': written ? '' : '原短评', 'private': true, 'tags': ['保留标签']});
+      }
+      expect(request.method, 'PATCH');
+      expect(request.url, 'https://bgm.test/v0/users/-/collections/13');
+      expect(jsonDecode(request.body!), {'rate': 0, 'comment': '', 'private': true});
+      written = true;
+      return const SourceResponse(statusCode: 204, body: '');
+    });
+    final service = serviceFor(http);
+    final previous = (await service.status(secondSeason))!;
+    expect(previous.comment, '原短评');
+    expect(previous.private, isTrue);
+    final edited = await service.updateReview(secondSeason, rate: 0,
+      comment: '', private: previous.private, newStatus: 'doing');
+    expect(edited.type, 4);
+    expect(edited.epStatus, 4);
+    expect(edited.rate, 0);
+    expect(edited.comment, '');
+  });
+
+  test('first review creates only explicitly chosen collection status', () async {
+    var written = false;
+    final http = FakeHttpClient((request) async {
+      if (request.url.endsWith('/v0/me')) return jsonResponse({'id': 99});
+      if (request.method == 'GET') {
+        return written
+          ? jsonResponse({...collection(12, 1), 'rate': 7, 'comment': '新短评', 'private': false})
+          : const SourceResponse(statusCode: 404, body: '{}');
+      }
+      expect(request.method, 'POST');
+      expect(jsonDecode(request.body!), {'type': 1, 'rate': 7,
+        'comment': '新短评', 'private': false});
+      written = true;
+      return const SourceResponse(statusCode: 202, body: '');
+    });
+    final result = await serviceFor(http).updateReview(firstSeason,
+      rate: 7, comment: '新短评', private: false, newStatus: 'want');
+    expect(result.type, 1);
+  });
+
+  test('account change while reading review prevents any review write', () async {
+    var token = 'first-account';
+    final response = Completer<SourceResponse>();
+    final started = Completer<void>();
+    final http = FakeHttpClient((request) async {
+      if (request.url.endsWith('/v0/me')) return jsonResponse({'id': 99});
+      started.complete();
+      return response.future;
+    });
+    final service = serviceFor(http, token: () => token);
+    final saving = service.updateReview(firstSeason, rate: 9,
+      comment: '旧账号草稿', private: false, newStatus: 'doing');
+    final check = expectLater(saving, throwsStateError);
+    await started.future;
+    token = 'other-account';
+    response.complete(jsonResponse(collection(12, 3)));
+    await check;
+    expect(http.requests.every((request) => request.method == 'GET'), isTrue);
+  });
+
+  test('failed review read never creates a replacement collection', () async {
+    final http = FakeHttpClient((request) async => request.url.endsWith('/v0/me')
+      ? jsonResponse({'id': 99})
+      : const SourceResponse(statusCode: 403, body: '{}'));
+    await expectLater(serviceFor(http).updateReview(firstSeason, rate: 9,
+      comment: '草稿', private: false, newStatus: 'doing'), throwsA(isA<SourceException>()));
+    expect(http.requests.every((request) => request.method == 'GET'), isTrue);
+  });
+
 }

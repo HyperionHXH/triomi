@@ -79,6 +79,13 @@ class _DetailPageState extends ConsumerState<DetailPage> {
   String? _selectedEpisodeId;
   String? _metadataError, _directoryError;
   Map<String, Object?>? _animeOverview;
+  String _animeSection = 'info';
+  final _scrollController = ScrollController();
+
+  void _selectAnimeSection(String section) {
+    setState(() => _animeSection = section);
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+  }
 
   @override
   void initState() {
@@ -93,6 +100,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     _directoryGeneration++;
     _metadataOwner?.cancel();
     _directoryOwner?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -923,31 +931,65 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         ),
       ],
       child: CustomScrollView(
+        controller: _scrollController,
         slivers: [
+          if (item.type == MediaType.anime)
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _AnimeDetailTabs(
+                context: context,
+                section: _animeSection,
+                onSelected: _selectAnimeSection,
+              ),
+            ),
+          if (item.type == MediaType.anime && _animeSection != 'info')
+            SliverToBoxAdapter(
+              child: commentSubject != null
+                  ? AnimeInfoSheet(
+                      key: ValueKey('anime-section:${commentSubject.remoteId}'),
+                      id: commentSubject.remoteId,
+                      item: commentSubject,
+                      embedded: true,
+                      showSectionSelector: false,
+                      initialSection: _animeSection,
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(association?.isLoading == true
+                              ? '正在读取 Bangumi 条目关联…'
+                              : association?.hasError == true
+                              ? 'Bangumi 条目关联读取失败，请重试。'
+                              : '尚未关联 Bangumi 动画条目，不能确定这部作品的评论与评分。'),
+                          if (association?.hasError == true)
+                            TextButton(
+                              onPressed: () => ref.invalidate(animeSubjectProvider(item)),
+                              child: const Text('重试条目关联'),
+                            ),
+                          if (association?.isLoading != true) ...[
+                            const SizedBox(height: 12),
+                            const Text('在 Bangumi 搜索并打开正确季度的动画条目，再通过「选择来源」选择本站作品，即可保存关联。'),
+                            TextButton.icon(
+                              onPressed: () => SearchPage.open(context,
+                                type: MediaType.anime, sourceId: 'bangumi-anime',
+                                query: item.title),
+                              icon: const Icon(Icons.search),
+                              label: const Text('查找 Bangumi 动画条目'),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+            ),
+          if (item.type != MediaType.anime || _animeSection == 'info') ...[
           for (final section in <Widget>[
             if (item.type == MediaType.anime)
               _AnimeHero(
                 item: item,
                 onPlay: _continueAnime,
-                onComments: commentSubject == null
-                    ? null
-                    : () => showModalBottomSheet<void>(
-                        context: context,
-                        isScrollControlled: true,
-                        showDragHandle: true,
-                        builder: (_) => AnimeInfoSheet(
-                          id: commentSubject.remoteId,
-                          item: commentSubject,
-                          initialSection: 'comments',
-                        ),
-                      ),
-                commentsStatus: commentSubject != null
-                    ? null
-                    : association?.isLoading == true
-                    ? '正在读取 Bangumi 条目关联'
-                    : association?.hasError == true
-                    ? 'Bangumi 条目关联读取失败'
-                    : '尚未关联 Bangumi 条目，无法读取该作品的评论',
+                onComments: () => _selectAnimeSection('comments'),
               )
             else if (item.type == MediaType.manga)
               _MangaHeader(
@@ -1077,6 +1119,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                 item: item,
                 overview: _animeOverview,
                 embedded: true,
+                showSectionSelector: false,
               )
             else if (item.type == MediaType.anime &&
                 item.description?.isNotEmpty == true)
@@ -1090,6 +1133,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               BookCommentsSection(item: item),
           ])
             SliverToBoxAdapter(child: section),
+          ],
           const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.xl)),
         ],
       ),

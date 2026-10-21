@@ -8,6 +8,7 @@ import android.os.Build
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -142,6 +143,13 @@ class MainActivity : FlutterActivity() {
                             call.argument<String>("title") ?: "漫画更新", call.argument<String>("body") ?: "",
                             call.argument<String>("coverPath"))
                         result.success(true)
+                    }
+                    "getVideoBrightness" -> {
+                        val applicationBrightness = window.attributes.screenBrightness
+                        val brightness = if (applicationBrightness >= 0f) applicationBrightness
+                        else Settings.System.getInt(contentResolver,
+                            Settings.System.SCREEN_BRIGHTNESS, 128) / 255f
+                        result.success(brightness.coerceIn(.05f, 1f).toDouble())
                     }
                     "videoPolicy" -> {
                         val owner = call.argument<String>("owner")

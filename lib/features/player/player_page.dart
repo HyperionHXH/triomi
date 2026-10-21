@@ -35,6 +35,7 @@ import 'data/danmaku_overlay.dart';
 import 'data/danmaku_settings.dart';
 import 'data/player_settings.dart';
 import 'episode_selector.dart';
+import 'player_interaction_surface.dart';
 import 'windows_video_resolver.dart';
 
 /// 播放器入参：作品 + 目录 + 从第几集开始。
@@ -93,6 +94,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   bool _inPip = false;
   double _brightness = .5;
   bool _holdingSpeed = false;
+  bool _brightnessReady = false;
+  int _brightnessRevision = 0;
 
   late int _chapterIndex;
 
@@ -112,9 +115,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   bool _fullscreen = false;
   bool _episodesOpen = false;
   bool _scrubbing = false;
+  Duration? _scrubOrigin;
+  int _scrubRevision = 0;
   Timer? _chromeTimer;
-  Timer? _seekFeedbackTimer;
-  int? _seekFeedbackSeconds;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   /// 播放倍速（0.5~3.0）。
@@ -154,6 +157,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       onError: _onNativeVideoError,
       onCompleted: () => unawaited(_onCompleted()),
       onPip: (enabled) {
+        if (enabled) _clearTransientInput();
         if (mounted) setState(() => _inPip = enabled);
       },
     );
@@ -188,6 +192,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _progressTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       unawaited(_persistProgress());
     });
+
+    if (_useNativeAndroidVideo) unawaited(_readBrightness());
 
     unawaited(_load());
   }
@@ -228,6 +234,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   void _onNativeVideoError(String message) {
     if (!mounted) return;
     _prepareTimer?.cancel();
+    _clearTransientInput();
     setState(() {
       _loading = false;
       _error = SourceException.sanitizeMessage(message);
@@ -237,6 +244,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   // ---------------------------------------------------------------- 加载
 
   Future<void> _load() async {
+    _clearTransientInput();
     if (!_validSelection) {
       setState(() {
         _loading = false;
@@ -369,7 +377,12 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) unawaited(_persistProgress());
+    if (state != AppLifecycleState.resumed) {
+      if (mounted) setState(_clearTransientInput);
+      unawaited(_persistProgress());
+    } else if (_useNativeAndroidVideo) {
+      unawaited(_readBrightness());
+    }
   }
 
   Future<void> _onCompleted() async {
@@ -420,6 +433,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     PlaySource? line,
     Duration startPosition = Duration.zero,
   }) async {
+    _clearTransientInput();
     _prepareTimer?.cancel();
     _awaitingPlaybackStart = true;
     final seq = ++_resolveSeq;
@@ -525,6 +539,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   Future<void> _persistProgress() async {
     if (!_validSelection ||
         _loading ||
+        _scrubbing ||
         _error != null ||
         _awaitingPlaybackStart) {
       return;
@@ -647,9 +662,30 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         ),
       );
     }
-    final video = Stack(
-      fit: StackFit.expand,
-      children: <Widget>[
+    final video = PlayerInteractionSurface(
+      enabled: !_loading && !_awaitingPlaybackStart && _error == null &&
+          !_inPip && !_episodesOpen,
+      session: _loadSeq,
+      position: _position,
+      duration: Duration(milliseconds: _sliderMax.toInt()),
+      volume: _settings.volume,
+      brightness: _brightness,
+      brightnessEnabled: _useNativeAndroidVideo && _brightnessReady,
+      holdSpeed: _settings.holdSpeed,
+      onTap: _toggleChrome,
+      onTogglePlay: () => unawaited(_togglePlay()),
+      onSeek: (target) => unawaited(_seekTo(target)),
+      onScrubStart: _beginScrub,
+      onScrubUpdate: _previewScrub,
+      onScrubEnd: (target) => unawaited(_endScrub(target)),
+      onVolumeChanged: (value) => unawaited(_setAppVolume(value)),
+      onVolumeEnd: () => unawaited(_settings.save(_preferences)),
+      onBrightnessChanged: (value) => unawaited(_setBrightness(value)),
+      onHoldChanged: (enabled) => unawaited(_holdSpeed(enabled)),
+      controls: !_inPip ? _buildChrome() : null,
+      child: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
         _VideoArea(
           controller: _videoController,
           nativeController: _nativeVideoController,
@@ -665,47 +701,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
             !_awaitingPlaybackStart &&
             _error == null)
           DanmakuOverlay(controller: _danmaku),
-        if (!_loading && !_awaitingPlaybackStart && _error == null && !_inPip)
-          _buildGestureArea(),
-        if (_holdingSpeed && !_inPip)
-          Align(
-            alignment: Alignment.topCenter,
-            child: Text(
-              '长按 ${_settings.holdSpeed}x',
-              style: const TextStyle(color: Colors.white),
-            ),
-          ),
-        if (!_inPip)
-          IgnorePointer(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 160),
-              child: _seekFeedbackSeconds == null
-                  ? const SizedBox.shrink()
-                  : Align(
-                      key: ValueKey(_seekFeedbackSeconds),
-                      alignment: Alignment(
-                        _seekFeedbackSeconds! < 0 ? -.65 : .65, 0,
-                      ),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: .65),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 18, vertical: 10,
-                          ),
-                          child: Text(
-                            '${_seekFeedbackSeconds! < 0 ? '后退' : '快进'} ${_seekFeedbackSeconds!.abs()} 秒',
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                      ),
-                    ),
-            ),
-          ),
-        if (!_inPip) _buildChrome(),
-      ],
+        ],
+      ),
     );
     final episodes = Material(
       color: Theme.of(context).colorScheme.surface,
@@ -753,6 +750,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         key: _scaffoldKey,
         endDrawerEnableOpenDragGesture: false,
         onEndDrawerChanged: (open) {
+          if (open) _clearTransientInput();
           setState(() => _episodesOpen = open);
           if (!open) _scheduleChromeHide();
         },
@@ -840,70 +838,68 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     await showAnimeSources(context, _item, replacePlayer: true);
   }
 
-  /// Single tap reveals controls; the outer quarters double tap to seek.
-  Widget _buildGestureArea() {
-    return LayoutBuilder(
-      builder: (context, constraints) => Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onLongPressStart: (_) => _holdSpeed(true),
-              onLongPressEnd: (_) => _holdSpeed(false),
-              onVerticalDragUpdate: (details) =>
-                  _adjustBrightness(details.delta.dy, constraints.maxHeight),
-              onTap: _toggleChrome,
-              onDoubleTap: () => _seekBy(const Duration(seconds: -15)),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onLongPressStart: (_) => _holdSpeed(true),
-              onLongPressEnd: (_) => _holdSpeed(false),
-              onTap: _toggleChrome,
-              onDoubleTap: _togglePlay,
-            ),
-          ),
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onLongPressStart: (_) => _holdSpeed(true),
-              onLongPressEnd: (_) => _holdSpeed(false),
-              onVerticalDragUpdate: (details) =>
-                  _adjustVolume(details.delta.dy, constraints.maxHeight),
-              onVerticalDragEnd: (_) =>
-                  unawaited(_settings.save(_preferences)),
-              onTap: _toggleChrome,
-              onDoubleTap: () => _seekBy(const Duration(seconds: 15)),
-            ),
-          ),
-        ],
-      ),
-    );
+  void _beginScrub() {
+    if (_loading || _awaitingPlaybackStart || _error != null) return;
+    _chromeTimer?.cancel();
+    ++_scrubRevision;
+    setState(() {
+      _scrubOrigin = _position;
+      _scrubbing = true;
+    });
   }
 
-  Future<void> _seekBy(Duration delta) async {
+  void _previewScrub(Duration target) {
+    if (_scrubbing) setState(() => _position = target);
+  }
+
+  void _cancelScrub() {
+    if (!_scrubbing) return;
+    ++_scrubRevision;
+    _position = _scrubOrigin ?? _position;
+    _scrubOrigin = null;
+    _scrubbing = false;
+  }
+
+  void _clearTransientInput() {
+    _cancelScrub();
+    if (_holdingSpeed) unawaited(_holdSpeed(false));
+  }
+
+  Future<void> _endScrub(Duration? target) async {
+    if (!_scrubbing) return;
+    if (target == null) {
+      setState(_cancelScrub);
+      _scheduleChromeHide();
+      return;
+    }
+    final sequence = _loadSeq;
+    final revision = _scrubRevision;
+    try {
+      await _seekTo(target);
+    } finally {
+      if (mounted && sequence == _loadSeq && revision == _scrubRevision) {
+        setState(() {
+          _scrubbing = false;
+          _scrubOrigin = null;
+        });
+        _scheduleChromeHide();
+      }
+    }
+  }
+
+  Future<void> _seekBy(Duration delta) => _seekTo(_position + delta);
+
+  Future<void> _seekTo(Duration position) async {
     if (_loading || _awaitingPlaybackStart || _error != null ||
         _sliderMax <= 1) {
       return;
     }
     final sequence = _loadSeq;
     final target = Duration(
-      milliseconds: (_position + delta).inMilliseconds
-          .clamp(0, _sliderMax.toInt()),
+      milliseconds: position.inMilliseconds.clamp(0, _sliderMax.toInt()),
     );
     _revealChrome();
-    _seekFeedbackTimer?.cancel();
-    setState(() {
-      _position = target;
-      _seekFeedbackSeconds = delta.inSeconds;
-    });
-    _seekFeedbackTimer = Timer(const Duration(milliseconds: 850), () {
-      if (mounted) setState(() => _seekFeedbackSeconds = null);
-    });
+    setState(() => _position = target);
     try {
       if (_useNativeAndroidVideo) {
         await _nativeVideoController.seek(target);
@@ -1083,29 +1079,12 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                                     value: _sliderValue,
                                     max: _sliderMax,
                                     onChangeStart: _loading || _awaitingPlaybackStart || _error != null
-                                        ? null : (_) {
-                                            _chromeTimer?.cancel();
-                                            setState(() => _scrubbing = true);
-                                          },
+                                        ? null : (_) => _beginScrub(),
                                     onChanged: _loading || _awaitingPlaybackStart || _error != null
-                                        ? null : (value) => setState(() =>
-                                            _position = Duration(milliseconds: value.round())),
-                                    onChangeEnd: (value) async {
-                                      final target = Duration(milliseconds: value.round());
-                                      try {
-                                        if (_useNativeAndroidVideo) {
-                                          await _nativeVideoController.seek(target);
-                                        } else {
-                                          await _player.seek(target);
-                                        }
-                                        _danmaku.seek(target);
-                                      } finally {
-                                        if (mounted) {
-                                          setState(() => _scrubbing = false);
-                                          _scheduleChromeHide();
-                                        }
-                                      }
-                                    },
+                                        ? null : (value) => _previewScrub(
+                                            Duration(milliseconds: value.round())),
+                                    onChangeEnd: (value) => _endScrub(
+                                      Duration(milliseconds: value.round())),
                                   ),
                                 ),
                               ),
@@ -1435,20 +1414,37 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     if (mounted) setState(() {});
   }
 
-  Future<void> _adjustVolume(double delta, double height) async {
-    final volume = (_settings.volume - delta / height).clamp(0.0, 1.0);
-    _settings = _settings.copyWith(volume: volume);
+  Future<void> _setAppVolume(double value) async {
+    final volume = value.clamp(0.0, 1.0);
+    setState(() => _settings = _settings.copyWith(volume: volume));
     if (_useNativeAndroidVideo) {
       await _nativeVideoController.setVolume(volume);
     } else {
       await _player.setVolume(volume * 100);
     }
-    if (mounted) setState(() {});
   }
 
-  Future<void> _adjustBrightness(double delta, double height) async {
-    if (!_useNativeAndroidVideo) return;
-    _brightness = (_brightness - delta / height).clamp(.05, 1.0);
+  Future<void> _readBrightness() async {
+    final revision = _brightnessRevision;
+    try {
+      final value = await const MethodChannel('triomi/platform')
+          .invokeMethod<double>('getVideoBrightness');
+      if (!mounted || revision != _brightnessRevision || value == null) return;
+      setState(() {
+        _brightness = value.clamp(.05, 1.0);
+        _brightnessReady = true;
+      });
+    } on PlatformException {
+      // Brightness remains unavailable rather than displaying an invented value.
+    } on MissingPluginException {
+      // Unsupported platforms do not mutate system brightness.
+    }
+  }
+
+  Future<void> _setBrightness(double value) async {
+    if (!_useNativeAndroidVideo || !_brightnessReady) return;
+    ++_brightnessRevision;
+    setState(() => _brightness = value.clamp(.05, 1.0));
     await const MethodChannel('triomi/platform')
         .invokeMethod<void>('videoPolicy', {
           'owner': _resolverOwner,
@@ -1884,6 +1880,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   @override
   void dispose() {
+    _cancelScrub();
+    if (_holdingSpeed) unawaited(_holdSpeed(false));
+    ++_brightnessRevision;
     _desktopResolve?.cancel('播放器已关闭');
     WidgetsBinding.instance.removeObserver(this);
     _chromeTimer?.cancel();
@@ -1904,7 +1903,6 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     }
     unawaited(_persistProgress());
     _progressTimer?.cancel();
-    _seekFeedbackTimer?.cancel();
     _positionSub?.cancel();
     _durationSub?.cancel();
     _playingSub?.cancel();

@@ -155,6 +155,40 @@ class AnimeCollectionService {
     _writes = operation.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return operation;
   }
+
+  Future<BangumiCollection> updateReview(MediaItem item, {
+    required int rate, required String comment, required bool private,
+    String? newStatus,
+  }) {
+    if (rate < 0 || rate > 10 ||
+        newStatus != null && !animeCollectionStatuses.containsKey(newStatus)) {
+      throw ArgumentError('评分或收藏状态无效');
+    }
+    final accountToken = _accountToken();
+    final operation = _writes.then((_) async {
+      _check(accountToken);
+      final id = await _subject(item);
+      _check(accountToken);
+      final current = await _requests.run(() => client.collection(id, token: accountToken));
+      _check(accountToken);
+      if (current == null && newStatus == null) {
+        throw StateError('Bangumi 收藏已不存在，请重新打开并明确选择收藏状态。');
+      }
+      await _requests.run(() => client.updateReview(id, token: accountToken,
+        rate: rate, comment: comment, private: private,
+        newStatus: current == null ? newStatus : null));
+      _check(accountToken);
+      final confirmed = await _requests.run(() => client.collection(id, token: accountToken));
+      _check(accountToken);
+      if (confirmed == null || confirmed.rate != rate ||
+          confirmed.comment != comment || confirmed.private != private) {
+        throw StateError('评分与吐槽已提交，但读回尚未确认；请重试读取或提交。');
+      }
+      return confirmed;
+    });
+    _writes = operation.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return operation;
+  }
 }
 
 final _bangumiAccountChangesProvider = StreamProvider<Object?>((ref) =>
