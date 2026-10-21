@@ -181,16 +181,49 @@ final class RunnerTests: XCTestCase {
     XCTAssertFalse(UIApplication.shared.isIdleTimerDisabled)
   }
 
-  func testVideoBrightnessReadsSystemAndRestoresOnRelease() throws {
+  func testVideoBrightnessReportsActualSystemValue() throws {
+    let bridge = try makeBridge()
+    let actual = try XCTUnwrap(invoke(bridge, "getVideoBrightness") as? Double)
+    XCTAssertEqual(actual, Double(UIScreen.main.brightness), accuracy: 0.001)
+    XCTAssertTrue((0...1).contains(actual))
+  }
+
+  func testVideoBrightnessRestoresOnReleaseWhenDisplaySupportsChanges() throws {
     let bridge = try makeBridge()
     let original = UIScreen.main.brightness
-    defer { _ = invoke(bridge, "videoPolicy", ["owner": "brightness-test", "active": false]) }
-    let before = try XCTUnwrap(invoke(bridge, "getVideoBrightness") as? Double)
-    XCTAssertEqual(before, Double(original), accuracy: 0.001)
+    let before = Double(original)
+    defer {
+      _ = invoke(bridge, "videoPolicy", ["owner": "brightness-test", "active": false])
+      UIScreen.main.brightness = original
+    }
+    UIScreen.main.brightness = 0.35
+    let directChange = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+      abs(Double(UIScreen.main.brightness) - 0.35) < 0.01
+    }, object: nil)
+    let supported = XCTWaiter.wait(for: [directChange], timeout: 3) == .completed
+    #if targetEnvironment(simulator)
+    if !supported {
+      throw XCTSkip("Direct UIScreen brightness setter is unsupported by this simulator; actual value is \(UIScreen.main.brightness). Physical display mutation remains unverified.")
+    }
+    #endif
+    XCTAssertTrue(supported, "Direct UIScreen brightness changes must work before checking bridge mutation")
+    UIScreen.main.brightness = original
+    let baseline = expectation(for: NSPredicate { _, _ in
+      abs(Double(UIScreen.main.brightness) - before) < 0.01
+    }, evaluatedWith: nil)
+    wait(for: [baseline], timeout: 5)
     _ = invoke(bridge, "videoPolicy", ["owner": "brightness-test", "active": true, "brightness": 0.35])
+    let changed = expectation(for: NSPredicate { _, _ in
+      abs(Double(UIScreen.main.brightness) - 0.35) < 0.01
+    }, evaluatedWith: nil)
+    wait(for: [changed], timeout: 5)
     let adjusted = try XCTUnwrap(invoke(bridge, "getVideoBrightness") as? Double)
     XCTAssertEqual(adjusted, 0.35, accuracy: 0.01)
     _ = invoke(bridge, "videoPolicy", ["owner": "brightness-test", "active": false])
+    let restored = expectation(for: NSPredicate { _, _ in
+      abs(Double(UIScreen.main.brightness) - before) < 0.01
+    }, evaluatedWith: nil)
+    wait(for: [restored], timeout: 5)
     XCTAssertEqual(Double(UIScreen.main.brightness), before, accuracy: 0.01)
   }
 

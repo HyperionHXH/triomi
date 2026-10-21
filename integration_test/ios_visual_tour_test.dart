@@ -13,6 +13,7 @@ import 'package:triomi/core/router/app_router.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
+import 'package:triomi/features/novel/novel_shelf_view.dart';
 import 'package:triomi/features/novel/reader/novel_reader_page.dart';
 import 'package:triomi/features/player/data/danmaku_overlay.dart';
 import 'package:triomi/features/player/player_page.dart';
@@ -131,9 +132,11 @@ void main() {
     await go(AppRoutes.novel);
     await until(() => find.text(fixtures.item(MediaType.novel).title).evaluate().isNotEmpty,
         'independent novel shelf must be populated');
-    expect(find.textContaining('登录'), findsNothing,
+    final novelShelf = find.byType(NovelShelfView);
+    expect(find.descendant(of: novelShelf,
+        matching: find.textContaining(RegExp('已登录|未登录|登录后'))), findsNothing,
         reason: '小说书架不展示账号状态；账号只从设置管理');
-    expect(find.byIcon(Icons.login), findsNothing);
+    expect(find.descendant(of: novelShelf, matching: find.byIcon(Icons.login)), findsNothing);
     await screenshot('01_novel_shelf.png', AppRoutes.novel, '小说独立书架，含真实本地收藏与封面');
 
     // Rules, JS management, Kazumi repository and iOS Mihon fallback.
