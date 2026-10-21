@@ -17,6 +17,17 @@ Kazumi 参考实现桌面 mpv 缓冲上限为 1.5 GiB，media_kit 当前默认�
 
 已推送修复提交 `c4bb696`（包含此前顶部紧凑倍速提示提交），标签 `v0.11.0-test.169`；[正式发布流水线39609802212](https://github.com/HyperionHXH/triomi/actions/runs/39609802212) 的 Android、Windows、publish 三任务成功，[公开预发布169](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.169) 已发布，五项资产完整下载后大小、GitHub SHA-256及SHA256SUMS全部匹配，Windows更新清单450成员逐项核验一致。APK包名正确、versionCode169，apksigner验签通过且生产证书指纹仍为 `731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309`。公开Windows EXE ProductVersion=`0.11.0+169`、MSI只读检查ProductVersion=`0.11.169`，未安装MSI、不影响现有实例。APK SHA-256=`6d4604541981fd1d1ecd74ea7e5e9aa3366dbc31fd15d450f61faf089286ebbd`，ZIP=`67b7c190deb569bc2971b5da4f16836245f12db8a34ed42f8a2bd0f0938fb91b`，MSI=`3b12bbab6777dfb66c630409b839db90314404e90941ce0fc22b22ecd2d607e2`。
 
+发布后对当前源码额外复核：四项相关回归文件共68项通过。使用生产 `KazumiSource + DioSourceHttpClient`、与当前官方索引相同版本的规则，对三站公开搜索“葬送的芙莉莲”进行单轮实际网络探测（独立主机无账户/浏览器Cookie桥，不绕过验证）；三站均得到搜索、目录和HTTP200播放入口：
+
+| 来源/规则版本 | 搜索含网络(ms) | 目录含网络(ms) | 本地内容分类(ms) | 首个播放页HTTP(ms) | 目录集数 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 7sefun 1.3 | 897 | 804 | 0 | 616 | 20 |
+| MXdm 2.4 | 816 | 264 | 0 | 253 | 40 |
+| sorani 1.0 | 977 | 314 | 0 | 1941 | 28 |
+
+这轮可见的耗时主要在站点网络/播放页而不是本地播放链接分类；三站都仍需网页JS解析，因此不能把HTTP200当视频首帧/稳定播放成功。首次独立探针还观察到raw.githubusercontent.com两次12秒规则下载超时，随后一次1.35秒成功；该现象发生在仓库分发阶段，不是已装来源的播放卡顿原因。未拿不同网络的快照比较冒充同条件Kazumi基准，也未宣称缓存扩容能修复远端慢站。失败交互另参考[VLC Android固定版本的`encounteredError`](https://code.videolan.org/videolan/vlc-android/-/blob/fe2833f50e526e9f5367b5e2b7ec23074a80b437/application/vlc-android/src/org/videolan/vlc/gui/video/VideoPlayerActivity.kt)：其单确认按钮直接离开播放器；本应用保留观看上下文并提供重试/选集线路，错误说明置于深色视频卡片，不照搬退出式对话框。
+
+
 
 ## 当前请求：长按倍速提示缩小（未构建）
 
