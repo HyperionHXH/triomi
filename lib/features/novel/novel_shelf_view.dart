@@ -19,7 +19,6 @@ import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../library/data/library_providers.dart';
 import '../library/data/library_repository.dart';
-import '../sources/source_account_entries.dart';
 import 'data/lk/lk_source.dart';
 import 'novel_book_card.dart';
 import 'reader/chapter_font.dart';
@@ -147,7 +146,7 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
   bool _registryChanged = false;
   bool _remoteRegistryFailed = false;
   final _remoteSummary = <String, String>{};
-  final _remoteAccountRoutes = <String, String>{};
+  final _remoteAuthFailures = <String>{};
   // Membership is an authenticated session snapshot, not a local favourite.
   final _remoteShelves = <String, List<MediaItem>>{};
   final _remoteProviders = <String, RemoteShelfProvider>{};
@@ -178,7 +177,7 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
           _clearRemote(id);
         }
         _remoteSummary.clear();
-        _remoteAccountRoutes.clear();
+        _remoteAuthFailures.clear();
         _refreshGeneration++;
         _refreshing = false;
       });
@@ -241,11 +240,6 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
       ref.read(_localNovelsProvider.future),
       if (!_downloaded) _refreshRemote(),
     ]);
-  }
-
-  Future<void> _openAccount(String route) async {
-    await context.push(route);
-    if (mounted) await _refreshRemote();
   }
 
   Future<void> _removeRemote(MediaItem item) async {
@@ -313,7 +307,7 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
       _refreshing = true;
       _remoteRegistryFailed = false;
       _remoteSummary.clear();
-      _remoteAccountRoutes.clear();
+      _remoteAuthFailures.clear();
     });
     try {
       final snapshot = await ref.read(sourcesProvider.future);
@@ -338,8 +332,6 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
             if (mounted) {
               setState(() {
                 _clearRemote(sourceId);
-                _remoteSummary[name] = '未登录，登录后显示本站收藏';
-                _remoteAccountRoutes[name] = accountRouteFor(sourceId);
               });
             }
             return;
@@ -423,7 +415,7 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
                   _remoteShelves.remove(sourceId);
                   _remoteUnread.removeWhere((key, _) => key.$1 == sourceId);
                   _remoteSummary[name] = warnings.join('；');
-                  _remoteAccountRoutes[name] = accountRouteFor(sourceId);
+                  _remoteAuthFailures.add(sourceId);
                 } else {
                   _remoteStale.add(sourceId);
                 }
@@ -458,7 +450,7 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
               if (authenticationFailed && currentSession()) {
                 setState(() {
                   _remoteSummary[name] = warnings.join('；');
-                  _remoteAccountRoutes[name] = accountRouteFor(sourceId);
+                  _remoteAuthFailures.add(sourceId);
                   if (!provider.isLoggedIn) {
                     _remoteShelves.remove(sourceId);
                     _remoteUnread.removeWhere((key, _) => key.$1 == sourceId);
@@ -521,9 +513,9 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
           if (!current()) return;
           setState(() {
             if (authenticationFailed) {
-              _remoteAccountRoutes[name] = accountRouteFor(sourceId);
+              _remoteAuthFailures.add(sourceId);
             } else {
-              _remoteAccountRoutes.remove(name);
+              _remoteAuthFailures.remove(sourceId);
             }
             _remoteSummary[name] = [
               if (shelfCount != null) '站点收藏 $shelfCount 本（未自动加入本机收藏）',
@@ -740,17 +732,6 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
                         for (final summary in _remoteSummary.entries) ...[
                           const SizedBox(height: 8),
                           Text('${summary.key}：${summary.value}'),
-                          if (_remoteAccountRoutes.containsKey(summary.key))
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: TextButton.icon(
-                                onPressed: () => _openAccount(
-                                  _remoteAccountRoutes[summary.key]!,
-                                ),
-                                icon: const Icon(Icons.login),
-                                label: Text('${summary.key}账号'),
-                              ),
-                            ),
                         ],
                       if (error != null)
                         Padding(
@@ -787,13 +768,13 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
                           (_downloaded ||
                               (!_remoteRegistryFailed &&
                                   _remoteStale.isEmpty &&
-                                  _remoteAccountRoutes.isEmpty)))
+                                  _remoteAuthFailures.isEmpty)))
                         Padding(
                           padding: const EdgeInsets.all(24),
                           child: Text(
                             _downloaded
                                 ? '暂无可离线阅读的小说。下载章节正文与所需字体后显示在这里。'
-                                : '书架暂无收藏。登录站点同步收藏，或在作品详情加入本机收藏。',
+                                : '书架暂无收藏。在作品详情加入本机收藏，或通过右上角设置管理站点收藏。',
                           ),
                         ),
                     ],

@@ -181,6 +181,19 @@ final class RunnerTests: XCTestCase {
     XCTAssertFalse(UIApplication.shared.isIdleTimerDisabled)
   }
 
+  func testVideoBrightnessReadsSystemAndRestoresOnRelease() throws {
+    let bridge = try makeBridge()
+    let original = UIScreen.main.brightness
+    defer { _ = invoke(bridge, "videoPolicy", ["owner": "brightness-test", "active": false]) }
+    let before = try XCTUnwrap(invoke(bridge, "getVideoBrightness") as? Double)
+    XCTAssertEqual(before, Double(original), accuracy: 0.001)
+    _ = invoke(bridge, "videoPolicy", ["owner": "brightness-test", "active": true, "brightness": 0.35])
+    let adjusted = try XCTUnwrap(invoke(bridge, "getVideoBrightness") as? Double)
+    XCTAssertEqual(adjusted, 0.35, accuracy: 0.01)
+    _ = invoke(bridge, "videoPolicy", ["owner": "brightness-test", "active": false])
+    XCTAssertEqual(Double(UIScreen.main.brightness), before, accuracy: 0.01)
+  }
+
   func testPlaybackAudioSessionActivatesWithSupportedCategory() throws {
     try IosVideoAudioSession.acquire(-100)
     try IosVideoAudioSession.acquire(-101)

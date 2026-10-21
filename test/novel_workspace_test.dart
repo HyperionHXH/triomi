@@ -227,6 +227,27 @@ void main() {
     });
   }
 
+  for (final hasLocalBook in [false, true]) {
+    shelfTest(
+      'logged-out sources do not expose account status on shelf (local: $hasLocalBook)',
+      (tester) async {
+        final source = _NovelSource('lk', loggedIn: false);
+        if (hasLocalBook) {
+          await repository.addToLibrary(_book('lk', 'local', '本机收藏小说'));
+        }
+        await pumpShelf(tester, sources: [source]);
+        expect(find.textContaining('登录'), findsNothing);
+        expect(find.byIcon(Icons.login), findsNothing);
+        expect(source.shelfCalls, 0);
+        if (hasLocalBook) {
+          expect(find.text('本机收藏小说'), findsOneWidget);
+        } else {
+          expect(find.textContaining('书架暂无收藏'), findsOneWidget);
+        }
+      },
+    );
+  }
+
   shelfTest(
     'downloaded novels require readable bodies and fonts, and remain media scoped',
     (tester) async {

@@ -12,6 +12,8 @@ class BangumiCollection {
     required this.type,
     required this.epStatus,
     this.rate,
+    this.comment = '',
+    this.private = false,
   });
 
   final int subjectId;
@@ -23,6 +25,8 @@ class BangumiCollection {
   final int epStatus;
 
   final int? rate;
+  final String comment;
+  final bool private;
 
   /// 规范化的本地状态。
   String get localStatus => TrackStatusMap.bangumiLocal[type] ?? 'doing';
@@ -272,6 +276,8 @@ class BangumiClient {
       type: type!,
       epStatus: _int(map['ep_status']) ?? 0,
       rate: _int(map['rate']),
+      comment: map['comment'] is String ? map['comment'] as String : '',
+      private: map['private'] == true,
     );
   }
 
@@ -325,6 +331,30 @@ class BangumiClient {
         'rate': ?rate,
         'comment': ?comment,
         'ep_status': ?watchedEpisodes,
+      },
+      expectNoContent: true,
+    );
+  }
+
+  /// Update only review fields; PATCH leaves status, tags and progress intact.
+  /// A new collection requires an explicitly chosen status.
+  Future<void> updateReview(
+    int subjectId, {
+    required String token,
+    required int rate,
+    required String comment,
+    required bool private,
+    String? newStatus,
+  }) async {
+    await _json(
+      '/v0/users/-/collections/$subjectId',
+      method: newStatus == null ? 'PATCH' : 'POST',
+      token: token,
+      body: <String, Object?>{
+        if (newStatus != null) 'type': TrackStatusMap.bangumiTypeOf(newStatus),
+        'rate': rate,
+        'comment': comment,
+        'private': private,
       },
       expectNoContent: true,
     );

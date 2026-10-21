@@ -173,4 +173,94 @@ void main() {
     await expectLater(service.load(), throwsStateError);
   });
 
+  test('review edits patch normalized NFC text and compare normalized readback', () async {
+    const submitted = '  A\u030Atrimmed  ';
+    const canonical = 'Åtrimmed';
+    var written = false;
+    final http = FakeHttpClient((request) async {
+      if (request.url.endsWith('/v0/me')) return jsonResponse({'id': 99});
+      if (request.method == 'GET') {
+        return jsonResponse({...collection(13, 3),
+          'rate': 6, 'comment': written ? canonical : '旧评论', 'private': false});
+      }
+      expect(request.method, 'PATCH');
+      expect(jsonDecode(request.body!), {'rate': 6, 'comment': canonical, 'private': false});
+      written = true;
+      return const SourceResponse(statusCode: 204, body: '');
+    });
+    final result = await serviceFor(http).updateReview(secondSeason, rate: 6,
+      comment: submitted, private: false);
+    expect(result.comment, canonical);
+  });
+
+  test('Bangumi want collection is always written and read back with zero rating', () async {
+    var written = false;
+    final http = FakeHttpClient((request) async {
+      if (request.url.endsWith('/v0/me')) return jsonResponse({'id': 99});
+      if (request.method == 'GET') {
+        return jsonResponse({...collection(12, 1),
+          'rate': 0, 'comment': written ? '公开吐槽' : '', 'private': false});
+      }
+      expect(request.method, 'PATCH');
+      expect(jsonDecode(request.body!), {'rate': 0, 'comment': '公开吐槽', 'private': false});
+      written = true;
+      return const SourceResponse(statusCode: 204, body: '');
+    });
+    final result = await serviceFor(http).updateReview(firstSeason, rate: 9,
+      comment: ' 公开吐槽 ', private: false);
+    expect(result.localStatus, 'want');
+    expect(result.rate, 0);
+  });
+
+  test('creating a want review persists only zero rating', () async {
+    var written = false;
+    final http = FakeHttpClient((request) async {
+      if (request.url.endsWith('/v0/me')) return jsonResponse({'id': 99});
+      if (request.method == 'GET') {
+        return written
+          ? jsonResponse({...collection(12, 1), 'rate': 0, 'comment': '新短评', 'private': false})
+          : const SourceResponse(statusCode: 404, body: '{}');
+      }
+      expect(request.method, 'POST');
+      expect(jsonDecode(request.body!), {'type': 1, 'rate': 0,
+        'comment': '新短评', 'private': false});
+      written = true;
+      return const SourceResponse(statusCode: 202, body: '');
+    });
+    final result = await serviceFor(http).updateReview(firstSeason,
+      rate: 8, comment: '新短评', private: false, newStatus: 'want');
+    expect(result.rate, 0);
+    expect(result.localStatus, 'want');
+  });
+
+
+  test('account change while reading review prevents any review write', () async {
+    var token = 'first-account';
+    final response = Completer<SourceResponse>();
+    final started = Completer<void>();
+    final http = FakeHttpClient((request) async {
+      if (request.url.endsWith('/v0/me')) return jsonResponse({'id': 99});
+      started.complete();
+      return response.future;
+    });
+    final service = serviceFor(http, token: () => token);
+    final saving = service.updateReview(firstSeason, rate: 9,
+      comment: '旧账号草稿', private: false, newStatus: 'doing');
+    final check = expectLater(saving, throwsStateError);
+    await started.future;
+    token = 'other-account';
+    response.complete(jsonResponse(collection(12, 3)));
+    await check;
+    expect(http.requests.every((request) => request.method == 'GET'), isTrue);
+  });
+
+  test('failed review read never creates a replacement collection', () async {
+    final http = FakeHttpClient((request) async => request.url.endsWith('/v0/me')
+      ? jsonResponse({'id': 99})
+      : const SourceResponse(statusCode: 403, body: '{}'));
+    await expectLater(serviceFor(http).updateReview(firstSeason, rate: 9,
+      comment: '草稿', private: false, newStatus: 'doing'), throwsA(isA<SourceException>()));
+    expect(http.requests.every((request) => request.method == 'GET'), isTrue);
+  });
+
 }

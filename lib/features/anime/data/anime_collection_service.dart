@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:unorm_dart/unorm_dart.dart' as unicode;
 
 import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
@@ -152,6 +153,45 @@ class AnimeCollectionService {
       _check(accountToken);
     });
     // A failed write must not poison the next explicit user attempt.
+    _writes = operation.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return operation;
+  }
+
+  Future<BangumiCollection> updateReview(MediaItem item, {
+    required int rate, required String comment, required bool private,
+    String? newStatus,
+  }) {
+    if (rate < 0 || rate > 10 ||
+        newStatus != null && !animeCollectionStatuses.containsKey(newStatus)) {
+      throw ArgumentError('评分或收藏状态无效');
+    }
+    final accountToken = _accountToken();
+    final operation = _writes.then((_) async {
+      _check(accountToken);
+      final id = await _subject(item);
+      _check(accountToken);
+      final current = await _requests.run(() => client.collection(id, token: accountToken));
+      _check(accountToken);
+      if (current == null && newStatus == null) {
+        throw StateError('Bangumi 收藏已不存在，请重新打开并明确选择收藏状态。');
+      }
+      final normalizedComment = unicode.nfc(comment.trim());
+      final isWant = current?.type == 1 ||
+          current == null && newStatus == 'want';
+      final effectiveRate = isWant ? 0 : rate;
+      await _requests.run(() => client.updateReview(id, token: accountToken,
+        rate: effectiveRate, comment: normalizedComment, private: private,
+        newStatus: current == null ? newStatus : null));
+      _check(accountToken);
+      final confirmed = await _requests.run(() => client.collection(id, token: accountToken));
+      _check(accountToken);
+      if (confirmed == null || confirmed.rate != effectiveRate ||
+          unicode.nfc(confirmed.comment.trim()) != normalizedComment ||
+          confirmed.private != private) {
+        throw StateError('评分与吐槽已提交，但读回尚未确认；请重试读取或提交。');
+      }
+      return confirmed;
+    });
     _writes = operation.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return operation;
   }

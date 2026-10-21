@@ -70,7 +70,8 @@ void main() {
         }
         return null;
       });
-      messenger.setMockMethodCallHandler(const MethodChannel('triomi/platform'), (_) async => true);
+      messenger.setMockMethodCallHandler(const MethodChannel('triomi/platform'),
+          (call) async => call.method == 'getVideoBrightness' ? 0.5 : true);
       Future<void> settle() async {
         for (var i = 0; i < 12; i++) {
           await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));

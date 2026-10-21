@@ -70,6 +70,7 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
       do { result(try IosBackupArtifactGuard.configureStorage()) }
       catch { result(Self.failure("storage_configuration_failed", error)) }
     case "videoPolicy": configureVideo(args, result: result)
+    case "getVideoBrightness": result(Double(UIScreen.main.brightness))
     case "enterVideoPip": result(false)
     case "saveImageToGallery": saveImage(args, result: result)
     case "launchExternalUrl":

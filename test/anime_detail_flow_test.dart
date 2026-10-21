@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -18,12 +19,16 @@ import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
+import 'package:triomi/core/theme/app_theme.dart';
+import 'package:triomi/features/anime/data/anime_collection_service.dart';
 import 'package:triomi/features/detail/anime_info_repository.dart';
 import 'package:triomi/features/detail/anime_info_sheet.dart';
+import 'package:triomi/features/detail/anime_review_dialog.dart';
 import 'package:triomi/features/detail/detail_page.dart';
 import 'package:triomi/features/library/data/anime_identity_repository.dart';
 import 'package:triomi/features/player/player_page.dart';
 import 'package:triomi/features/search/search_page.dart';
+import 'package:triomi/features/tracking/data/bangumi_client.dart';
 
 import 'fixtures/fake_http_client.dart';
 import 'fixtures/fake_preferences.dart';
@@ -560,10 +565,119 @@ void main() {
     await tester.pumpWidget(UncontrolledProviderScope(container: container,
       child: MaterialApp(home: DetailPage(item: site.item))));
     await tester.pumpAndSettle();
-    final entry = tester.widget<OutlinedButton>(
+    final entry = tester.widget<ChoiceChip>(
       find.byKey(const ValueKey('anime-comments-entry')));
-    expect(entry.onPressed, isNull);
+    expect(entry.onSelected, isNotNull);
+    await tester.tap(find.byKey(const ValueKey('anime-comments-entry')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('尚未关联 Bangumi 动画条目'), findsOneWidget);
+    expect(find.text('查找 Bangumi 动画条目'), findsOneWidget);
     expect(http.requests, isEmpty);
     expect(site.contentRequests, 0);
+  });
+
+  testWidgets('normal anime detail exposes pinned comments independently of failed overview', (tester) async {
+    final db = openTestDatabase();
+    final site = _Site();
+    final http = FakeHttpClient((request) async {
+      if (request.url.contains('/comments')) {
+        expect(Uri.parse(request.url).path, '/p1/subjects/42/comments');
+        return const SourceResponse(statusCode: 200,
+          body: '{"total":0,"data":[]}');
+      }
+      return const SourceResponse(statusCode: 503, body: '{}');
+    });
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      preferencesProvider.overrideWithValue(memoryPreferences()),
+      secureStoreProvider.overrideWithValue(MemorySecureStore()),
+      sourceHttpClientProvider.overrideWithValue(http),
+      sourcesProvider.overrideWith(() => _Sources(site)),
+    ]);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      container.dispose();
+      await db.close();
+    });
+    await tester.pumpWidget(UncontrolledProviderScope(container: container,
+      child: MaterialApp(theme: AppTheme.light(), home: const DetailPage(item: subject))));
+    await tester.pumpAndSettle();
+    final comments = find.byKey(const ValueKey('anime-comments-entry'));
+    expect(tester.getTopLeft(comments).dy, lessThan(150));
+    expect(tester.takeException(), isNull);
+    final header = tester.renderObject<RenderSliver>(find.byType(SliverPersistentHeader));
+    expect(header.geometry, isNotNull);
+    expect(header.geometry!.paintExtent, greaterThanOrEqualTo(header.geometry!.layoutExtent));
+    final viewport = tester.getRect(find.byType(CustomScrollView).first);
+    final heroButton = find.widgetWithText(FilledButton, '开始 / 继续观看');
+    expect(heroButton.hitTestable(), findsOneWidget);
+    expect(tester.getRect(heroButton).overlaps(viewport), isTrue);
+    expect(http.requests.where((request) => request.url.contains('/comments')), isEmpty);
+    await tester.tap(comments);
+    await tester.pumpAndSettle();
+    expect(find.text('暂无公开吐槽'), findsOneWidget);
+    expect(find.byKey(const ValueKey('anime-review-entry')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('anime-review-entry')));
+    await tester.pumpAndSettle();
+    expect(find.text('连接自己的 Bangumi 账号'), findsOneWidget);
+    expect(http.requests.every((request) => request.method == 'GET'), isTrue);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('播放来源'), findsNothing);
+    expect(site.contentRequests, 0);
+    await tester.tap(find.byKey(const ValueKey('anime-detail-tab:info')));
+    await tester.pumpAndSettle();
+    expect(find.text('播放来源'), findsOneWidget);
+  });
+
+  testWidgets('own review editor reads existing rating privacy and retries failed save with draft intact', (tester) async {
+    var attempts = 0;
+    final http = FakeHttpClient((request) async {
+      if (request.url.endsWith('/v0/me')) {
+        return const SourceResponse(statusCode: 200, body: '{"id":99}');
+      }
+      if (request.method == 'GET') {
+        return SourceResponse(statusCode: 200,
+          body: jsonEncode({'subject_id':42,'type':2,'ep_status':9,'rate':8,
+            'comment': attempts > 1 ? '编辑后的吐槽' : '原来的吐槽','private':true}));
+      }
+      expect(request.method, 'PATCH');
+      expect(request.url, 'https://bgm.test/v0/users/-/collections/42');
+      expect(jsonDecode(request.body!), {'rate':8,'comment':'编辑后的吐槽','private':true});
+      if (++attempts == 1) return const SourceResponse(statusCode: 503, body: '{}');
+      return const SourceResponse(statusCode: 204, body: '');
+    });
+    final service = AnimeCollectionService(
+      client: BangumiClient(http: http, baseUrl: 'https://bgm.test'),
+      token: () => 'fixture-token', canonical: (item) async => item);
+    final container = ProviderContainer(overrides: [
+      animeCollectionServiceProvider.overrideWithValue(service),
+    ]);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      container.dispose();
+      service.dispose();
+    });
+    await tester.pumpWidget(UncontrolledProviderScope(container: container,
+      child: MaterialApp(home: Scaffold(body: Builder(builder: (context) =>
+        TextButton(onPressed: () => showDialog<BangumiCollection>(context: context,
+          builder: (_) => const AnimeReviewDialog(item: subject)), child: const Text('编辑')))))));
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+    expect(find.text('原来的吐槽'), findsOneWidget);
+    expect(tester.widget<DropdownButtonFormField<int>>(
+      find.byKey(const ValueKey('anime-review-rating'))).initialValue, 8);
+    expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isTrue);
+    await tester.enterText(find.byKey(const ValueKey('anime-review-comment')), '编辑后的吐槽');
+    final submit = find.byKey(const ValueKey('anime-review-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('503'), findsOneWidget);
+    expect(find.text('编辑后的吐槽'), findsOneWidget);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(attempts, 2);
+    expect(find.byType(AnimeReviewDialog), findsNothing);
   });
 }

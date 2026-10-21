@@ -131,6 +131,9 @@ void main() {
     await go(AppRoutes.novel);
     await until(() => find.text(fixtures.item(MediaType.novel).title).evaluate().isNotEmpty,
         'independent novel shelf must be populated');
+    expect(find.textContaining('登录'), findsNothing,
+        reason: '小说书架不展示账号状态；账号只从设置管理');
+    expect(find.byIcon(Icons.login), findsNothing);
     await screenshot('01_novel_shelf.png', AppRoutes.novel, '小说独立书架，含真实本地收藏与封面');
 
     // Rules, JS management, Kazumi repository and iOS Mihon fallback.

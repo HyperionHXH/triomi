@@ -91,6 +91,40 @@ class BangumiPublicClient {
     return BangumiV0Adapter.list(value);
   }
 
+  /// All episode types, including specials, for explicit discussion selection.
+  Future<List<Map<String, Object?>>> allEpisodes(String subjectId) async {
+    final rows = <Map<String, Object?>>[];
+    var offset = 0;
+    while (true) {
+      final raw = await _getJson(
+        '$v0Base/episodes?subject_id=${Uri.encodeQueryComponent(subjectId)}'
+        '&limit=100&offset=$offset',
+      );
+      if (raw is! Map || raw['data'] is! List) {
+        throw const FormatException('Bangumi 分集列表格式无效');
+      }
+      final page = BangumiV0Adapter.list(raw);
+      final count = (raw['data'] as List).length;
+      rows.addAll(page);
+      offset += count;
+      final total = raw['total'];
+      if (total is num ? offset >= total : count < 100) return rows;
+      if (count == 0) throw const FormatException('Bangumi 分集列表分页中断');
+    }
+  }
+
+  /// Episode discussions are a complete array of threads with nested replies,
+  /// unlike subject short reviews (`data` plus `total`). No account is required.
+  Future<List<Map<String, Object?>>> episodeComments(String episodeId) async {
+    final raw = await _getJson(
+      '$nextBase/episodes/${Uri.encodeComponent(episodeId)}/comments',
+    );
+    if (raw is! List || raw.any((row) => row is! Map)) {
+      throw const FormatException('Bangumi 分集讨论格式无效');
+    }
+    return [for (final row in raw) Map<String, Object?>.from(row as Map)];
+  }
+
   /// Search uses the official-compatible v0 filter body. Tags are sent as an
   /// option list (not a free-form text field) and all paging is bounded.
   Future<BangumiPublicPage> search({

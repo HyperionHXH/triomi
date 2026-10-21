@@ -5,12 +5,10 @@ class _AnimeHero extends StatelessWidget {
     required this.item,
     required this.onPlay,
     required this.onComments,
-    this.commentsStatus,
   });
   final MediaItem item;
   final VoidCallback onPlay;
   final VoidCallback? onComments;
-  final String? commentsStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -78,17 +76,12 @@ class _AnimeHero extends StatelessWidget {
                       ),
                       AnimeCollectionButton(item: item),
                       OutlinedButton.icon(
-                        key: const ValueKey('anime-comments-entry'),
                         onPressed: onComments,
                         icon: const Icon(Icons.chat_bubble_outline),
                         label: const Text('评论 / 吐槽'),
                       ),
                     ],
                   ),
-                  if (commentsStatus != null) ...[
-                    const SizedBox(height: 8),
-                    Text(commentsStatus!, style: theme.textTheme.bodySmall),
-                  ],
                 ],
               ),
             ),
@@ -97,6 +90,66 @@ class _AnimeHero extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AnimeDetailTabs extends SliverPersistentHeaderDelegate {
+  _AnimeDetailTabs({required BuildContext context,
+    required this.section, required this.onSelected}) {
+    final style = Theme.of(context).chipTheme.labelStyle ??
+        Theme.of(context).textTheme.labelLarge ?? const TextStyle(fontSize: 14);
+    final painter = TextPainter(
+      text: TextSpan(text: '评论 / 吐槽', style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    // Label height, chip padding, touch target and outer gutters.
+    _extent = (painter.height + 40).clamp(64.0, double.infinity);
+    painter.dispose();
+  }
+  final String section;
+  final ValueChanged<String> onSelected;
+  late final double _extent;
+
+  @override
+  double get minExtent => _extent;
+  @override
+  double get maxExtent => _extent;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return SizedBox(
+      height: _extent,
+      child: Material(
+      color: Theme.of(context).colorScheme.surface,
+      elevation: overlapsContent ? 2 : 0,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(children: [
+          for (final entry in const {
+            'info': '概览', 'comments': '评论 / 吐槽', 'characters': '角色',
+            'subjects': '关联', 'persons': '制作人员',
+          }.entries)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                key: ValueKey(entry.key == 'comments'
+                    ? 'anime-comments-entry' : 'anime-detail-tab:${entry.key}'),
+                label: Text(entry.value),
+                selected: section == entry.key,
+                showCheckmark: false,
+                onSelected: (_) => onSelected(entry.key),
+              ),
+            ),
+        ]),
+      ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _AnimeDetailTabs oldDelegate) => true;
 }
 
 class _MangaHeader extends StatelessWidget {

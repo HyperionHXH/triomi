@@ -15,6 +15,7 @@ import 'package:triomi/features/downloads/data/download_providers.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/library/data/library_providers.dart';
 import 'package:triomi/features/player/data/player_settings.dart';
+import 'package:triomi/features/player/episode_comments_panel.dart';
 import 'package:triomi/features/player/player_page.dart';
 
 import 'fixtures/fake_preferences.dart';
@@ -305,6 +306,45 @@ void main() {
       await event('state', {
         'position': 71000, 'duration': 120000, 'playing': false,
       });
+      // A preview is not played progress: the timer must not persist it, and
+      // cancellation must leave both the decoder and the stored resume intact.
+      await tester.pump(const Duration(seconds: 6));
+      await settle();
+      final storedBeforePreview = await tester.runAsync(
+        () => repo.chapterPositionOf(item.sourceId, item.remoteId, 'ep1'),
+      );
+      expect(storedBeforePreview, 71);
+      final seekCountBeforePreview =
+          nativeCalls.where((call) => call.method == 'seek').length;
+      final preview = await tester.startGesture(surfaceRect.center);
+      await preview.moveBy(const Offset(60, 0));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('player-seek-hud')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 6));
+      await settle();
+      expect(
+        await tester.runAsync(
+          () => repo.chapterPositionOf(item.sourceId, item.remoteId, 'ep1'),
+        ),
+        storedBeforePreview,
+        reason: 'uncommitted video drag must not overwrite stored resume',
+      );
+      await preview.cancel();
+      await tester.pump(const Duration(seconds: 6));
+      await settle();
+      expect(
+        await tester.runAsync(
+          () => repo.chapterPositionOf(item.sourceId, item.remoteId, 'ep1'),
+        ),
+        storedBeforePreview,
+        reason: 'cancelled preview must persist the original played position',
+      );
+      expect(
+        nativeCalls.where((call) => call.method == 'seek').length,
+        seekCountBeforePreview,
+      );
+      expect(opens.length, playbackOpens);
+      expect(channels.length, playbackViews);
       await tester.drag(find.byType(Slider), const Offset(30, 0));
       await tester.pump();
       expect(nativeCalls.any((call) => call.method == 'seek'), isTrue);
@@ -331,6 +371,38 @@ void main() {
         ),
         isTrue,
       );
+      // In-page discussion must remain parallel to the same live decoder.
+      await tester.binding.setSurfaceSize(const Size(400, 800));
+      await settleRoute();
+      final beforeDiscussion = nativeCalls.length;
+      await tester.tap(find.byKey(const ValueKey('player-comments-tab')));
+      await settle();
+      expect(find.byKey(const ValueKey('player-comments-tab')).hitTestable(),
+          findsOneWidget);
+      await tester.tap(find.byTooltip('剧集'));
+      await settleRoute();
+      expect(find.byType(EpisodeCommentsPanel, skipOffstage: false), findsOneWidget,
+          reason: 'portrait controls must reuse the below-video panel');
+      expect(find.byTooltip('关闭选集'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('player-episodes-tab')));
+      await settleRoute();
+      await tester.binding.setSurfaceSize(const Size(900, 600));
+      await settleRoute();
+      await tester.tap(find.byTooltip('分集评论'));
+      await settleRoute();
+      expect(find.byKey(const ValueKey('player-comments-tab')).hitTestable(),
+          findsOneWidget);
+      await tester.tap(find.byTooltip('关闭选集'));
+      await settleRoute();
+      expect(opens.length, playbackOpens,
+          reason: 'comment tabs and overlay must not reopen media');
+      expect(channels.length, playbackViews,
+          reason: 'comment layouts must retain the native video view');
+      expect(nativeCalls.skip(beforeDiscussion).where((call) =>
+        const {'open', 'seek', 'pause', 'play'}.contains(call.method)), isEmpty,
+        reason: 'discussion navigation must not interrupt playback');
+      await tester.binding.setSurfaceSize(null);
+      await settleRoute();
       await tester.tap(find.byTooltip('全屏'));
       await tester.binding.setSurfaceSize(const Size(720, 320));
       await settleRoute();
