@@ -413,6 +413,47 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
         ),
       );
 
+  Widget _speedHud() => Positioned(
+    top: 25,
+    left: 0,
+    right: 0,
+    child: IgnorePointer(
+      child: Center(
+        child: Container(
+          key: const ValueKey('player-speed-hud'),
+          width: 94,
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: .78),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white24),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.speed_rounded, color: Colors.white, size: 15),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '${widget.holdSpeed}x',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
   static String _time(Duration value) {
     final seconds = value.inSeconds;
     final minutes = seconds ~/ 60;
@@ -479,13 +520,7 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
               ),
             ),
           ),
-        if (_active && _holding)
-          _hud(
-            Icons.speed_rounded,
-            '长按 ${widget.holdSpeed}x',
-            1,
-            const ValueKey('player-speed-hud'),
-          ),
+        if (_active && _holding) _speedHud(),
         if (_active && _seekTarget != null)
           _hud(
             _seekDelta.isNegative

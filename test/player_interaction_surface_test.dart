@@ -321,7 +321,14 @@ void main() {
       );
       await tester.pump(kLongPressTimeout + const Duration(milliseconds: 10));
       expect(key.currentState!.holds, [true]);
-      expect(find.text('长按 2.5x'), findsOneWidget);
+      final speedHud = tester.getRect(
+        find.byKey(const ValueKey('player-speed-hud')),
+      );
+      expect(speedHud.width, lessThan(150));
+      expect(speedHud.height, lessThan(40));
+      expect(speedHud.center.dx, closeTo(area.center.dx, 1));
+      expect(speedHud.top, lessThan(area.top + 48));
+      expect(find.text('2.5x'), findsOneWidget);
       await mouse.up();
       await tester.pump();
       expect(key.currentState!.holds, [true, false]);
