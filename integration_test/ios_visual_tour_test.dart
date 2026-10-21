@@ -55,7 +55,11 @@ void main() {
       expect(name, matches(RegExp(r'^[A-Za-z0-9._-]+\.png$')));
       final request = await client.postUrl(base.resolve('/__tour/capture'));
       request.headers.contentType = ContentType.json;
-      request.write(jsonEncode({'name': name, 'route': route, 'description': description}));
+      final bodyBytes = utf8.encode(jsonEncode({
+        'name': name, 'route': route, 'description': description,
+      }));
+      request.contentLength = bodyBytes.length;
+      request.add(bodyBytes);
       final response = await request.close();
       final body = await utf8.decoder.bind(response).join();
       expect(response.statusCode, HttpStatus.ok, reason: 'capture $name rejected: $body');
