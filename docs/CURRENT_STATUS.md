@@ -10,6 +10,8 @@
 
 运行39541010026已进入真实生产书架，但截图握手因Dart默认chunked请求被宿主Content-Length边界拒绝；现显式发送UTF-8字节长度。前置集成详细日志确认卡在Waiting for VM Service，失败截图为空白启动面；在XCTest与Flutter集成之间重启一次性模拟器以隔离原生测试进程，保持应用数据与全部断言不变，等待新云端运行验证。
 
+运行39543941072保存了6张真实页面截图和可解码H.264录屏，发现生产规则导入面板在退出动画期间提前释放文本控制器，云端与本地回归均复现。控制器现由面板State持有并随真正卸载释放，异步剪贴板返回也检查mounted。模拟器重启未解决前置VM Service等待，移除无效重启，并补采Runner系统日志继续定位；未将部分截图记为全量通过。
+
 ## 当前请求：feat/ios 完整适配、后台播放与推送构建
 
 工作区 `D:\noval_and_manga\triomi-ios`，分支 `feat/ios` 跟踪 `origin/feat/ios`；本轮已获用户明确授权提交和推送，不移动既有发布 Tag、不覆盖旧资产。Bundle ID 与图标保持既有工程一致。最低 iOS 保留 15.0：固定 Flutter 3.47.5 自带 Flutter Pod 明确要求 15.0，单改 Podfile 为 14.0 不可构建；没有借此降级 Android/Windows 共用 SDK。

@@ -683,104 +683,129 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
     _toast('已移除「${entry.descriptor.name}」');
   }
 
-  Future<void> _showImportSheet() async {
-    final controller = TextEditingController();
-    final urlController = TextEditingController();
+  Future<void> _showImportSheet() => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => _SourceImportSheet(
+      type: _type,
+      onImportText: _importFromText,
+      onImportUrl: _importFromUrl,
+    ),
+  );
+}
 
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.only(
-          left: AppSpacing.lg,
-          right: AppSpacing.lg,
-          top: AppSpacing.md,
-          bottom: MediaQuery.viewInsetsOf(sheetContext).bottom + AppSpacing.lg,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+class _SourceImportSheet extends StatefulWidget {
+  const _SourceImportSheet({
+    required this.type,
+    required this.onImportText,
+    required this.onImportUrl,
+  });
+
+  final MediaType type;
+  final Future<void> Function(String) onImportText;
+  final Future<void> Function(String) onImportUrl;
+
+  @override
+  State<_SourceImportSheet> createState() => _SourceImportSheetState();
+}
+
+class _SourceImportSheetState extends State<_SourceImportSheet> {
+  final _text = TextEditingController();
+  final _url = TextEditingController();
+
+  @override
+  void dispose() {
+    _text.dispose();
+    _url.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(
+      left: AppSpacing.lg,
+      right: AppSpacing.lg,
+      top: AppSpacing.md,
+      bottom: MediaQuery.viewInsetsOf(context).bottom + AppSpacing.lg,
+    ),
+    child: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Text(
+            '导入${widget.type.label}规则',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            '此处导入规则 JSON；番剧规则仓库、漫画 APK 扩展请使用对应入口。来源类型以规则实际声明为准。',
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: context.palette.mutedForeground),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _text,
+            maxLines: 6,
+            minLines: 4,
+            decoration: InputDecoration(
+              hintText: '{"id": "my-source", "name": "我的来源", "type": "${widget.type.name}", ...}',
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
             children: <Widget>[
-              Text(
-                '导入${_type.label}规则',
-                style: Theme.of(context).textTheme.titleMedium,
+              TextButton.icon(
+                onPressed: () async {
+                  final data = await Clipboard.getData(Clipboard.kTextPlain);
+                  if (mounted) _text.text = data?.text ?? '';
+                },
+                icon: const Icon(Icons.content_paste, size: 18),
+                label: const Text('粘贴'),
               ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                '此处导入规则 JSON；番剧规则仓库、漫画 APK 扩展请使用对应入口。来源类型以规则实际声明为准。',
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: context.palette.mutedForeground),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              TextField(
-                controller: controller,
-                maxLines: 6,
-                minLines: 4,
-                decoration: InputDecoration(
-                  hintText:
-                      '{"id": "my-source", "name": "我的来源", "type": "${_type.name}", ...}',
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Row(
-                children: <Widget>[
-                  TextButton.icon(
-                    onPressed: () async {
-                      final data = await Clipboard.getData(
-                        Clipboard.kTextPlain,
-                      );
-                      controller.text = data?.text ?? '';
-                    },
-                    icon: const Icon(Icons.content_paste, size: 18),
-                    label: const Text('粘贴'),
-                  ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: () async {
-                      final text = controller.text;
-                      if (text.trim().isEmpty) return;
-                      Navigator.of(sheetContext).pop();
-                      await _importFromText(text);
-                    },
-                    child: const Text('导入'),
-                  ),
-                ],
-              ),
-              const Divider(height: AppSpacing.xl),
-              Text('从远程地址拉取', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: AppSpacing.xs),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: TextField(
-                      controller: urlController,
-                      decoration: const InputDecoration(
-                        hintText: 'https://example.com/my-rule.json',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  FilledButton.tonal(
-                    onPressed: () async {
-                      final url = urlController.text.trim();
-                      if (url.isEmpty) return;
-                      Navigator.of(sheetContext).pop();
-                      await _importFromUrl(url);
-                    },
-                    child: const Text('拉取'),
-                  ),
-                ],
+              const Spacer(),
+              FilledButton(
+                onPressed: () {
+                  final text = _text.text;
+                  if (text.trim().isEmpty) return;
+                  final submit = widget.onImportText;
+                  Navigator.of(context).pop();
+                  submit(text);
+                },
+                child: const Text('导入'),
               ),
             ],
           ),
-        ),
+          const Divider(height: AppSpacing.xl),
+          Text('从远程地址拉取', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: AppSpacing.xs),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: TextField(
+                  controller: _url,
+                  decoration: const InputDecoration(
+                    hintText: 'https://example.com/my-rule.json',
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              FilledButton.tonal(
+                onPressed: () {
+                  final url = _url.text.trim();
+                  if (url.isEmpty) return;
+                  final submit = widget.onImportUrl;
+                  Navigator.of(context).pop();
+                  submit(url);
+                },
+                child: const Text('拉取'),
+              ),
+            ],
+          ),
+        ],
       ),
-    );
-
-    controller.dispose();
-    urlController.dispose();
-  }
+    ),
+  );
 }
 
 class _SourceTile extends StatelessWidget {

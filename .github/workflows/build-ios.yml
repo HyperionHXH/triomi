@@ -84,12 +84,6 @@ jobs:
             -only-testing:RunnerTests \
             -resultBundlePath build/ios/NativeSmoke.xcresult \
             CODE_SIGNING_ALLOWED=NO
-      - name: Isolate Flutter integration from the native XCTest process
-        run: |
-          set -euo pipefail
-          xcrun simctl shutdown '${{ steps.simulator.outputs.udid }}'
-          xcrun simctl boot '${{ steps.simulator.outputs.udid }}'
-          xcrun simctl bootstatus '${{ steps.simulator.outputs.udid }}' -b
       - name: Exercise real iOS JS, durable storage and video with danmaku
         id: acceptance
         timeout-minutes: 17

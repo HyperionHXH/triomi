@@ -53,6 +53,13 @@ def main() -> int:
                 'xcrun', 'simctl', 'io', args.device, 'screenshot',
                 str(output / 'failure.png'),
             ], timeout=30, check=False)
+            with (output / 'simulator.log').open('w', encoding='utf-8') as stream:
+                subprocess.run([
+                    'xcrun', 'simctl', 'spawn', args.device, 'log', 'show',
+                    '--last', '20m', '--style', 'compact', '--info', '--debug',
+                    '--predicate', 'process == "Runner"',
+                ], stdout=stream, stderr=subprocess.STDOUT, timeout=60,
+                    check=False)
             print(log.read_text(encoding='utf-8', errors='replace')[-30000:],
                   flush=True)
         return result
