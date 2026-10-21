@@ -12,6 +12,12 @@ Kazumi 参考实现桌面 mpv 缓冲上限为 1.5 GiB，media_kit 当前默认�
 回归状态：全量 Flutter 1297 项通过、3 项跳过；播放器续播/缓冲条、默认 Kazumi 仓库及用户移除行为、更新版本筛选与启动弹窗双尺寸测试通过。首轮暴露的调试模式启动检查计时器问题已修复后重跑全量通过。
 
 `flutter analyze --no-pub` 零问题；Python 工具89项通过。Windows release 和 Android 验收 release 均编译成功，APK 包名及版本码169已核对。Android 验收构建显式设置 SDK 环境及 `--android-project-arg=triomiAcceptanceSigning=true`，不作为正式签名包发布。正式包通过 GitHub 既有生产签名 Secrets 构建，不读取或输出密值。本机未连接 Android 设备，未做真机播放验收；Windows 本机 MSI 打包受缺少 .NET SDK 限制，正式打包由带 .NET 10 SDK 的既有发布工作流完成。
+
+真实 Windows Flutter 引擎隔离烟测已完成：1100px 桌面与360px手机宽度分别渲染更新弹窗，中文字体/内容/双按钮截图无溢出，关闭后的返回意图符合预期；不打开 Hive/SQLite、不影响现有实例。正常实例启动因已有用户实例而按单写者保护返回32，未强杀用户进程；改用临时无资料 UI 入口的独立引擎渲染，完成后删除入口，不将其称为 Android 真机或整个应用旅程验收。参考源码：[Kazumi缓冲进度条](https://github.com/Predidit/Kazumi/blob/main/lib/pages/player/player_progress_bar.dart)、[缓存策略](https://github.com/Predidit/Kazumi/blob/main/lib/services/player/playback_cache_policy.dart)、[启动检查](https://github.com/Predidit/Kazumi/blob/main/lib/services/update/startup_update_check.dart)。
+
+已推送修复提交 `c4bb696`（包含此前顶部紧凑倍速提示提交），标签 `v0.11.0-test.169`；[正式发布流水线39609802212](https://github.com/HyperionHXH/triomi/actions/runs/39609802212) 的 Android、Windows、publish 三任务成功，[公开预发布169](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.169) 已发布，五项资产完整下载后大小、GitHub SHA-256及SHA256SUMS全部匹配，Windows更新清单450成员逐项核验一致。APK包名正确、versionCode169，apksigner验签通过且生产证书指纹仍为 `731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309`。公开Windows EXE ProductVersion=`0.11.0+169`、MSI只读检查ProductVersion=`0.11.169`，未安装MSI、不影响现有实例。APK SHA-256=`6d4604541981fd1d1ecd74ea7e5e9aa3366dbc31fd15d450f61faf089286ebbd`，ZIP=`67b7c190deb569bc2971b5da4f16836245f12db8a34ed42f8a2bd0f0938fb91b`，MSI=`3b12bbab6777dfb66c630409b839db90314404e90941ce0fc22b22ecd2d607e2`。
+
+
 ## 当前请求：长按倍速提示缩小（未构建）
 
 按用户反馈修复长按倍速提示过大：不再复用居中230px通用进度HUD，改为视频顶部居中94px宽的单行小标签（小速度图标与当前倍速），位置参照Kazumi `PlayerSpeedHud` 的顶部25px；亮度、音量和进度反馈不变，长按及释放恢复倍速逻辑不变。现有鼠标长按回归新增尺寸和顶部位置断言，修改前实测宽230px失败，修复后交互专项12项通过、局部静态分析零问题；360/720px双尺寸触摸/鼠标临时渲染烟测通过并已移除，截图确认位置及占用范围，测试字体为占位字形，不冒称真机字体视觉验收。按要求只提交源码，不编译Android/Windows包、不触发发布，当前公开168包不包含此后续修复。
