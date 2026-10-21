@@ -9,8 +9,8 @@
 - [x] 核对生产路由与原生适配，保留 Flutter Pod 要求的 iOS15 边界及既有系统常亮 owner。
 - [x] 真实 TriomiApp 独立页面巡检、明确标注的小说/漫画/视频夹具、截图握手与异常门槛。
 - [x] 同一模拟器UDID原生截图、H.264录屏正常封装、文件哈希与manifest、Actions视觉产物。
-- [ ] 本地完整检查后推送，读取云端失败并修复至全部门槛通过。
-- [ ] 下载IPA/全部PNG/MP4到release_ios，逐张视觉验收并记录准确覆盖及限制。
+- [x] 本地analyze零问题、Flutter1279通过/3跳过、Python109通过；推送并修复云端失败，运行39547378733全部门槛通过。
+- [x] IPA/35张PNG/191秒MP4下载到release_ios，逐张读取截图无可见异常，哈希匹配且录屏完整解码1041帧；详见本地VISUAL_ACCEPTANCE.md及CURRENT_STATUS的验收边界。
 
 
 ## 当前请求：iOS 适配与未签名 IPA

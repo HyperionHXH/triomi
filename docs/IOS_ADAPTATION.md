@@ -56,7 +56,7 @@ JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源�
 
 视觉产物为 `triomi-ios-visual-tour`，包含 `screenshots/*.png`、`ios_ui_tour.mp4`、`manifest.json` 和日志；测试夹具不写进release IPA。七个基础文件名保持用户约定，并补充各媒体书架、阅读菜单、来源仓库及账号/同步等独立场景。账号保持未登录，不在截图、视频或日志输入真实秘密。
 
-运行成功后用 `gh run download <RUN_ID> -n triomi-ios-unsigned -D release_ios` 与 `gh run download <RUN_ID> -n triomi-ios-visual-tour -D release_ios` 拉回本地。逐张读取PNG，检查白屏、错误弹窗、溢出条与控件错位；同时检查录屏能解码。机器断言只证明命名、状态与帧有效性，不能替代视觉判断；当前实际检查结果以CURRENT_STATUS和本地视觉报告为准。
+已通过的运行：[39547378733](https://github.com/HyperionHXH/triomi/actions/runs/39547378733)，源码 `9d4a5ff`。运行成功后用 `gh run download <RUN_ID> -n triomi-ios-unsigned -D release_ios/ipa` 与 `gh run download <RUN_ID> -n triomi-ios-visual-tour -D release_ios/visual-tour` 拉回本地。本轮35张PNG已逐张打开检查，未发现白屏、错误弹窗、黄黑溢出条或明显布局错位；录屏191.021667秒，本地完整解码1041帧。全部截图及录屏哈希与manifest一致，具体逐张结果在本地 `release_ios/VISUAL_ACCEPTANCE.md`；机器断言不替代视觉判断，截图仅覆盖对应可见区域。
 
 ## AltStore / SideStore / TrollStore 安装
 
@@ -73,11 +73,12 @@ JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源�
 ## 本轮验证
 
 - `flutter analyze --no-pub`：零问题。
-- `flutter test --no-pub`：1278 项通过，3 项跳过；包括 iOS 冷队列重建/回前台与手动暂停竞态、Android/iOS 弹幕切集迟到响应及开关、iOS APK 入口降级。
-- Python 工具测试：100 项通过；夹具媒体检查通过。
+- `flutter test --no-pub`：1279 项通过，3 项跳过；包括 iOS 冷队列重建/回前台与手动暂停竞态、Android/iOS 弹幕切集迟到响应及开关、iOS APK 入口降级，以及本轮规则导入面板退出动画控制器生命周期回归。
+- Python 工具测试：109 项通过；夹具媒体检查通过。
 - UI 文档扫描：0 error / 0 warning；交付文档扫描：0 error / 35 个历史模板 warning。
 - Swift 语法树、plist、工作流 YAML 可解析；这不等于 Xcode 编译或 Apple API 类型检查通过。
 - Windows 原生烟测：实际构建并启动 `triomi.exe`；Documents 内 SQLite/本地漫画/规则/Hive 重开、封面读取、凭据存储及备份互斥通过，iOS 网页解析用例按平台跳过。该证据不外推为 iOS 通过。
 - Windows 生产 PlayerPage 实际编译启动，以 loopback HTTP 解码现有 30 秒 MP4，位置推进/暂停保持、跳转、来源弹幕开关及恢复播放通过；这不是 iOS 原生 PiP 或真机目视证据。
 - Android 普通调试 APK 编译通过（未安装到设备）；本机初始解码库/SQLite 下载超时通过既有且摘要匹配的缓存解决。插件有现存 KGP 迁移 warning，未改动版本或关闭校验。
-- iOS 构建、模拟器/真机、侧载安装、真实 LK/LNS 登录、追踪/WebDAV 远端实写、后台音频和照片授权尚未执行。
+- iOS 云端运行39547378733全部通过：Release真机无签名构建与IPA校验、原生XCTest10项、真实JS/存储/视频集成5项、生产UI巡检35张截图及录屏上传。本地IPA SHA-256为 `cacfaaf55fc133aec2b0c6e28e7143e20e10621ad0dfabcd4dc01ab693a8c47b`，与云端打包日志一致。
+- 实体iPhone侧载、真实LK/LNS登录、追踪/WebDAV远端实写、锁屏音频、真机PiP、120Hz和照片授权尚未验证；模拟器与夹具通过不等于这些场景已通过。首次VM Service等待根因未证实，保留有界诊断，不宣称确定性根治。

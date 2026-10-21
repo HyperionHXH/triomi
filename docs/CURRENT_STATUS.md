@@ -2,7 +2,7 @@
 
 ## 当前请求：iOS 全页面视觉巡检与本地证据闭环
 
-本轮在既有原生/JS/存储/视频验收门槛之后追加生产页面视觉巡检。覆盖真实 TriomiApp 路由、独立页面状态截图及原生模拟器录屏；小说、漫画、番剧与搜索数据使用明确标注的隔离夹具，账号页保持未登录，不能作为真实远端服务或实体设备验收。最终证据下载到 git 忽略的 `release_ios/`，截图必须逐张读取后才记为视觉通过；目前处于云端失败修复循环，不预先给出通过结论。
+本轮生产页面巡检已闭环：源码 `9d4a5ff11b2a827e799de8db921b393b83fd3b70` 的 [macOS 运行39547378733](https://github.com/HyperionHXH/triomi/actions/runs/39547378733) 于2026-10-21全部通过，原生XCTest 10/10、真实JS/存储/视频集成5/5、35个页面状态及IPA上传均成功。已将IPA、35张PNG、录屏及日志下载到 `release_ios/`，逐张打开PNG后未发现白屏、错误弹窗、黄黑溢出条或明显布局错位；账号页保持未登录，内容为明确标注的隔离夹具，不外推真实账号、所有页面或实体设备验收。
 
 当前工程的 Flutter Pod 最低要求 iOS 15.0，保留可构建的15而非表面改14；Bitcode关闭、系统权限、系统AVPlayer/PiP、WebKit JS、持久目录排除备份与独立常亮/续传沿用已接入路径。独立原生常亮 owner 不能改为与阅读/播放互相覆盖的全局 wakelock 开关。初读 `MediaItem` 时怀疑私有命名初始化参数不兼容，经项目实际Dart分析确认属于当前SDK支持语法，模型保持原实现，不做无证据的生产改动。
 
@@ -11,6 +11,8 @@
 运行39541010026已进入真实生产书架，但截图握手因Dart默认chunked请求被宿主Content-Length边界拒绝；现显式发送UTF-8字节长度。前置集成详细日志确认卡在Waiting for VM Service，失败截图为空白启动面；在XCTest与Flutter集成之间重启一次性模拟器以隔离原生测试进程，保持应用数据与全部断言不变，等待新云端运行验证。
 
 运行39543941072保存了6张真实页面截图和可解码H.264录屏，发现生产规则导入面板在退出动画期间提前释放文本控制器，云端与本地回归均复现。控制器现由面板State持有并随真正卸载释放，异步剪贴板返回也检查mounted。模拟器重启未解决前置VM Service等待，移除无效重启，并补采Runner系统日志继续定位；未将部分截图记为全量通过。
+
+最终本地：analyze零问题、完整Flutter1279通过/3跳过、Python109通过。`release_ios/ipa/Triomi-iOS-Unsigned.ipa` 为0.11.0+167、11,971,333字节，SHA-256 `cacfaaf55fc133aec2b0c6e28e7143e20e10621ad0dfabcd4dc01ab693a8c47b` 与云端日志一致；ZIP完整性和Info.plist关键声明核验通过。35张截图逐项大小/哈希匹配manifest，`release_ios/visual-tour/ios_ui_tour.mp4` 为191.021667秒H.264，本地完整解码1041帧与云端ffprobe相同。逐张结论、修复过程及限制见本地 `release_ios/VISUAL_ACCEPTANCE.md`。VM Service等待在最终运行未复现，但内部根因未证实，不将无效重启或单次成功称为确定性根治。
 
 ## 当前请求：feat/ios 完整适配、后台播放与推送构建
 
@@ -22,9 +24,9 @@ Documents/Application Support 根目录排除 iCloud 备份，持久业务数据
 
 弹幕入口、来源加载、开关、设置与本人凭据的官方匹配/发送恢复。切集清空并撤销旧请求归属，迟到响应不能覆盖新剧集；来源弹幕失败不终止视频，播放设置可重试。不借用或提取其他应用私有 AppSecret；[弹幕说明](DANMAKU.md) 和 [iOS 指南](IOS_ADAPTATION.md) 已更新。
 
-工作流显式监听 `feat/ios`，macos-latest 构建 release no-codesign，校验 arm64/版本/框架后按标准 Payload 打包。模拟器跑原生 XCTest、JS、持久化与生产 PlayerPage 实际视频/弹幕烟测，再上传 `Triomi-iOS-Unsigned.ipa`；Tag 发布仅附加新资产。当前提交前尚无本轮云端结果，不将配置或 Windows 输出称为 iOS 验收通过。
+工作流显式监听 `feat/ios`，macos-latest 构建 release no-codesign，校验 arm64/版本/框架后按标准 Payload 打包。模拟器跑原生 XCTest、JS、持久化与生产 PlayerPage 实际视频/弹幕烟测，再上传 `Triomi-iOS-Unsigned.ipa`；Tag 发布仅附加新资产。云端运行39547378733已完成全部门槛并上传最终 IPA 与视觉证据；详见本节首段和本地报告，不将模拟器/夹具结果外推为实体设备或真实账号验收。
 
-本地最新：`flutter analyze --no-pub` 零问题；完整 Flutter 1278 通过/3 跳过，Python 工具 100 通过。Windows 生产播放器实际编译启动，loopback HTTP 解码 30 秒 MP4，位置推进、暂停保持、跳转、来源弹幕开关与恢复播放通过；桌面屏幕捕获被其他窗口遮挡，不记为目视视频验收。Android 普通调试 APK 本轮编译成功，未安装/操作设备；现存 KGP/CMake warning 保留。上轮 Documents/SQLite/Hive/凭据/备份互斥烟测保留其原范围。云端结果在完成后追加；真实账号远端实写和 iPhone 实体设备不冒称通过。
+本地最新：`flutter analyze --no-pub` 零问题；完整 Flutter 1279 通过/3 跳过，Python 工具 109 通过。Windows 生产播放器实际编译启动，loopback HTTP 解码 30 秒 MP4，位置推进、暂停保持、跳转、来源弹幕开关与恢复播放通过；桌面屏幕捕获被其他窗口遮挡，不记为目视视频验收。Android 普通调试 APK 本轮编译成功，未安装/操作设备；现存 KGP/CMake warning 保留。上轮 Documents/SQLite/Hive/凭据/备份互斥烟测保留其原范围。真实账号远端实写和 iPhone 实体设备不冒称通过。
 
 首次源码提交 `380cfd9` 已推送到 origin/feat/ios，[macOS 运行39444028381](https://github.com/HyperionHXH/triomi/actions/runs/39444028381)已实际执行 SDK/CocoaPods 步骤，在 Xcode 阶段因备份锁 Swift 文件缺 Runner Sources 成员而失败，未生成 IPA。已补齐该成员、JS XCTest 文件定义和存储配置类型调用，后续构建结果另记；不把失败运行标为通过。
 
