@@ -413,6 +413,72 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
         ),
       );
 
+  Widget _levelHud() => Positioned(
+    top: 25,
+    left: 0,
+    right: 0,
+    child: IgnorePointer(
+      child: Center(
+        child: Container(
+          key: const ValueKey('player-level-hud'),
+          width: 200,
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: .82),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.white24),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: const BoxDecoration(
+                  color: Colors.white12,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _levelHudBrightness!
+                      ? Icons.brightness_6_rounded
+                      : (_levelHudValue == 0
+                            ? Icons.volume_off_rounded
+                            : Icons.volume_up_rounded),
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_levelHudBrightness! ? '亮度' : '音量'} ${(_levelHudValue * 100).round()}%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    LinearProgressIndicator(
+                      value: _levelHudValue.clamp(0.0, 1.0),
+                      minHeight: 3,
+                      borderRadius: BorderRadius.circular(2),
+                      color: Colors.white,
+                      backgroundColor: Colors.white30,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
   Widget _speedHud() => Positioned(
     top: 25,
     left: 0,
@@ -533,17 +599,7 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
                 : 0,
             const ValueKey('player-seek-hud'),
           ),
-        if (_active && _levelHudBrightness != null)
-          _hud(
-            _levelHudBrightness!
-                ? Icons.brightness_6_rounded
-                : (_levelHudValue == 0
-                      ? Icons.volume_off_rounded
-                      : Icons.volume_up_rounded),
-            '${_levelHudBrightness! ? '亮度' : '音量'} ${(_levelHudValue * 100).round()}%',
-            _levelHudValue,
-            const ValueKey('player-level-hud'),
-          ),
+        if (_active && _levelHudBrightness != null) _levelHud(),
         if (widget.controls != null) widget.controls!,
       ],
     ),

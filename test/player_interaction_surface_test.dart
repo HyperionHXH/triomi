@@ -174,46 +174,64 @@ void main() {
     },
   );
 
-  testWidgets(
-    'both halves show actual level and progress then persist app volume',
-    (tester) async {
-      final key = GlobalKey<_PlayerHarnessState>();
-      await tester.pumpWidget(_PlayerHarness(key: key));
-      await tester.pump();
-      final area = tester.getRect(
-        find.byKey(const ValueKey('player-blank-input')),
-      );
-      var drag = await tester.startGesture(area.center - const Offset(60, 0));
-      await drag.moveBy(const Offset(0, -80));
-      await tester.pump();
-      expect(key.currentState!.brightness, closeTo(.7, .001));
-      expect(find.text('亮度 70%'), findsOneWidget);
-      expect(
-        tester
-            .widget<LinearProgressIndicator>(
-              find.byType(LinearProgressIndicator),
-            )
-            .value,
-        closeTo(.7, .001),
-      );
-      await drag.up();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.text('亮度 70%'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 1));
-      expect(find.byKey(const ValueKey('player-level-hud')), findsNothing);
-      drag = await tester.startGesture(area.center + const Offset(60, 0));
-      await drag.moveBy(const Offset(0, 80));
-      await tester.pump();
-      expect(key.currentState!.volume, closeTo(.3, .001));
-      expect(find.text('音量 30%'), findsOneWidget);
-      await drag.up();
-      await tester.pump();
-      expect(key.currentState!.saves, 1);
-      expect(key.currentState!.seeks, isEmpty);
-      await tester.pumpWidget(const SizedBox());
-      await tester.pump(const Duration(milliseconds: 50));
-    },
-  );
+  for (final size in [const Size(360, 640), const Size(1280, 720)]) {
+    testWidgets(
+      'both halves keep a compact top HUD and persist actual levels at $size',
+      (tester) async {
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final key = GlobalKey<_PlayerHarnessState>();
+        await tester.pumpWidget(_PlayerHarness(key: key));
+        await tester.pump();
+        final area = tester.getRect(
+          find.byKey(const ValueKey('player-blank-input')),
+        );
+        void expectCompactLevelHud() {
+          final hud = tester.getRect(
+            find.byKey(const ValueKey('player-level-hud')),
+          );
+          expect(hud.width, lessThanOrEqualTo(200));
+          expect(hud.height, lessThanOrEqualTo(48));
+          expect(hud.center.dx, closeTo(area.center.dx, 1));
+          expect(hud.top, inInclusiveRange(area.top + 16, area.top + 32));
+          expect(hud.bottom, lessThan(area.center.dy));
+          expect(tester.takeException(), isNull);
+        }
+
+        var drag = await tester.startGesture(area.center - const Offset(60, 0));
+        await drag.moveBy(const Offset(0, -80));
+        await tester.pump();
+        expect(key.currentState!.brightness, closeTo(.7, .001));
+        expect(find.text('亮度 70%'), findsOneWidget);
+        expectCompactLevelHud();
+        expect(
+          tester
+              .widget<LinearProgressIndicator>(
+                find.byType(LinearProgressIndicator),
+              )
+              .value,
+          closeTo(.7, .001),
+        );
+        await drag.up();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.text('亮度 70%'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.byKey(const ValueKey('player-level-hud')), findsNothing);
+        drag = await tester.startGesture(area.center + const Offset(60, 0));
+        await drag.moveBy(const Offset(0, 80));
+        await tester.pump();
+        expect(key.currentState!.volume, closeTo(.3, .001));
+        expect(find.text('音量 30%'), findsOneWidget);
+        expectCompactLevelHud();
+        await drag.up();
+        await tester.pump();
+        expect(key.currentState!.saves, 1);
+        expect(key.currentState!.seeks, isEmpty);
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(milliseconds: 50));
+      },
+    );
+  }
 
   for (final direction in [
     LogicalKeyboardKey.arrowLeft,
