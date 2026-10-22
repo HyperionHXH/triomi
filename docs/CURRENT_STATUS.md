@@ -1,8 +1,8 @@
 # Triomi 当前状态
 
-## 当前请求：R172 MixN近期同步、紧凑提示与缓存控制（0.12.0+172，正式构建中）
+## 当前请求：R172 MixN近期同步、紧凑提示与缓存控制（已发布0.12.0+172）
 
-本轮按用户要求提交推送并发布`v0.12.0-test.172`；正式构建及资产校验完成前，不把本地Debug/Profile验收当作已发布正式包。本轮对照的MixN近期改动不在主分支，而在`feature/multi-source-foundation`：`89cbfe40d1d240fbd266bbb3ae120b407e788d65`（2026-10-22 12:35:51 +08:00，分页及作者搜索）及`d8a23c0e5c40026f44d796344618e4cf8c63429d`（16:08:08 +08:00，作者补全与有界缓存）；10月21日没有该窗口内的上游提交。另对齐10月15日账号成长/签到`253079fba2d492e29909a54ed300120ca75d16e9`与成功路由优先思路`f178c1a44a5c7f76d06b4177e147d006db8f78e3`。
+用户追加要求推送编译后，修复提交`99aab0e`与标签`v0.12.0-test.172`已推送；[正式发布流水线39795109827](https://github.com/HyperionHXH/triomi/actions/runs/39795109827)成功，Android正式签名、Windows ZIP/MSI与publish任务完成。[172公开预发布](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-test.172)提供五项资产，公开字节验证结果另记。本轮对照的MixN近期改动不在主分支，而在`feature/multi-source-foundation`：`89cbfe40d1d240fbd266bbb3ae120b407e788d65`（2026-10-22 12:35:51 +08:00，分页及作者搜索）及`d8a23c0e5c40026f44d796344618e4cf8c63429d`（16:08:08 +08:00，作者补全与有界缓存）；10月21日没有该窗口内的上游提交。另对齐10月15日账号成长/签到`253079fba2d492e29909a54ed300120ca75d16e9`与成功路由优先思路`f178c1a44a5c7f76d06b4177e147d006db8f78e3`。
 
 - LNS标题/作者组合搜索使用官方引号模式，去掉把上传者`UserName`误作作者的回退；发现/书架/搜索按需补全真实作者与简介，原卡片身份和已显示内容不丢。详情/目录/列表共享有界缓存（64项、512 Ki字符、5分钟、四并发、8秒期限）及在途合并；官方文件下载权限仍独立实时读取。正文专用字体改成原子返回`{family,data}`，编码副本32 MiB/128项LRU；Flutter原生字体无法安全卸载，不把编码缓存上限冒称引擎字体总内存上限。
 - LK/LNS显示站点真实等级/经验，区分成长等级和访问等级；签到后读回权威资料，轻书架奖励只使用前后差值，无法读回就显示未知，不伪造零奖励。小说左右分页与卡片均跟随手指，取消回弹而不保存目标页，原点击/键盘/章节边界不变。内置小说站连接只在当前DNS答案内优先上次成功地址，不替换URL/Host/SNI，不添加旧IP或绕过TLS/代理。
@@ -19,7 +19,9 @@
 参考：[Kazumi固定版本缓存策略](https://github.com/Predidit/Kazumi/blob/b935bd448a9c80f91062871781d74a93b51586a0/lib/services/player/playback_cache_policy.dart)默认1500 MiB、低内存模式2 MiB，并随计费网络/低内存设置调整；[图片缓存统计与清理](https://github.com/Predidit/Kazumi/blob/b935bd448a9c80f91062871781d74a93b51586a0/lib/services/storage/image_cache_service.dart)。本项目Android为Java堆内Media3，不直接照搬1500 MiB以免OOM；持续预载与容量保护是两层独立约束。[mpv缓存语义](https://mpv.io/manual/master/)、[WebView clearCache](https://developer.android.com/reference/android/webkit/WebView#clearCache(boolean))与[WebView2选择性清理](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2profile2?view=webview2-1.0.3537.50)用于核对磁盘/内存及会话保护边界。
 普通应用实际巡检覆盖Windows公开推荐/时间表/番剧详情/轻之国度发现、Android推荐/时间表/小说公开列表及滚动；桌面真实鼠标拖动阅读器从1/10到2/10，短拖回弹与原位置保持。Android真实视频拖动和Windows键盘跳转的小提示均在顶部。不使用调试模拟器帧耗时证明发布版零卡顿；未用真实账号执行签到/付费/整书下载，也没有所有来源或全手机矩阵的可达/流畅承诺。
 
-最终验证：Flutter **1340通过/3跳过**（跳过仍为OS文件链接权限等平台限制），`flutter analyze --no-pub` **零问题**，Python工具 **89通过**，编码检查零错误、文档扫描无error。独立API35设备通过 **21项** Media3缓冲预算/释放后继续加载、原生表面生命周期及网页解析回归；没有使用`connectedAndroidTest`操作用户设备。Windows普通主入口Profile与Android普通主入口Debug均构建成功；最终Android正常`main`在自有模拟器实际载入公开推荐/封面、启动维护无未处理异常。没有构建/发布正式签名Release，也未修改版本号。三个临时Dart入口、六分钟媒体夹具及自有服务/模拟器随后清理。
+修复阶段验证：Flutter **1340通过/3跳过**（跳过仍为OS文件链接权限等平台限制），`flutter analyze --no-pub` **零问题**，Python工具 **89通过**，编码检查零错误、文档扫描无error。独立API35设备通过 **21项** Media3缓冲预算/释放后继续加载、原生表面生命周期及网页解析回归；没有使用`connectedAndroidTest`操作用户设备。Windows普通主入口Profile与Android普通主入口Debug均构建成功；Android正常`main`在自有模拟器实际载入公开推荐/封面、启动维护无未处理异常。三个临时Dart入口、六分钟媒体夹具及自有服务/模拟器已清理。随后按用户追加指令把版本升至172并通过正式发布流水线；本地修复阶段实操不扩算成最终公开APK在所有设备的完整验收。
+
+172发布字节核验完成：五项公开资产全部完整下载，本地大小/SHA-256与GitHub资产摘要及`SHA256SUMS.txt`逐项一致；Windows ZIP的450成员全部重算与更新清单一致，解压总字节341,188,369B。APK包名`io.github.hyperionhxh.triomi`、versionName=`0.12.0`、versionCode=`172`，`apksigner verify`通过，签名证书SHA-256仍为`731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309`，可覆盖166及之后同签名正式版，不需卸载/清数据。APK SHA-256=`d272d00874c3e0cdc60c7d954b81442b9cf2d5ffcdd78c97e74fe3c6b2a17f3d`；Windows ZIP=`21ae3fc6c36bfae3850d2f23267f1ac57ed666b7a4153d26310195eb6abb89c1`、MSI=`150cf5ba4e51ed19fb385461b7918130eba587d84ee65212ecf62aa370f9b6c1`。本次未对用户手机安装、清数据或卸载，最终实机体验由用户随后试用。
 
 
 ## 当前请求：R171 双击交互及 Kazumi 获取/播放兼容（0.12.0+171）
