@@ -34,7 +34,6 @@ class AppearanceSettings {
       coverAppearance: coverAppearance ?? this.coverAppearance,
     );
   }
-
 }
 
 class AppearanceController extends Notifier<AppearanceSettings> {
@@ -56,20 +55,24 @@ class AppearanceController extends Notifier<AppearanceSettings> {
       },
       usesLargeIcons: prefs.get<bool>(_keyLargeIcons) ?? false,
       accentPalette: _storedEnum(
-        AppAccentPalette.values, prefs.get<String>(_keyAccent),
+        AppAccentPalette.values,
+        prefs.get<String>(_keyAccent),
         AppAccentPalette.blue,
       ),
       coverAppearance: CoverAppearance(
         shape: _storedEnum(
-          CoverShape.values, prefs.get<String>(_keyCoverShape),
+          CoverShape.values,
+          prefs.get<String>(_keyCoverShape),
           CoverShape.portrait,
         ),
         layout: _storedEnum(
-          CoverLayout.values, prefs.get<String>(_keyCoverLayout),
+          CoverLayout.values,
+          prefs.get<String>(_keyCoverLayout),
           CoverLayout.adaptive,
         ),
         density: _storedEnum(
-          CoverDensity.values, prefs.get<String>(_keyCoverDensity),
+          CoverDensity.values,
+          prefs.get<String>(_keyCoverDensity),
           CoverDensity.compact,
         ),
       ),
@@ -80,7 +83,6 @@ class AppearanceController extends Notifier<AppearanceSettings> {
     state = state.copyWith(themeMode: mode);
     await ref.read(preferencesProvider).set(_keyThemeMode, mode.name);
   }
-
 
   Future<void> setUsesLargeIcons({required bool value}) async {
     state = state.copyWith(usesLargeIcons: value);
@@ -129,6 +131,24 @@ class AppearanceController extends Notifier<AppearanceSettings> {
 final appearanceProvider =
     NotifierProvider<AppearanceController, AppearanceSettings>(
       AppearanceController.new,
+    );
+
+/// Only the automatic startup check; manual version checks remain independent.
+class AutomaticAppUpdateCheckController extends Notifier<bool> {
+  @override
+  bool build() => ref.watch(preferencesProvider).automaticAppUpdateCheckEnabled;
+
+  Future<void> setEnabled(bool enabled) async {
+    await ref
+        .read(preferencesProvider)
+        .set(Preferences.automaticAppUpdateCheckKey, enabled);
+    state = enabled;
+  }
+}
+
+final automaticAppUpdateCheckProvider =
+    NotifierProvider<AutomaticAppUpdateCheckController, bool>(
+      AutomaticAppUpdateCheckController.new,
     );
 
 T _storedEnum<T extends Enum>(List<T> values, String? name, T fallback) {

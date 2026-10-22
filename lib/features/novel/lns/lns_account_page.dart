@@ -26,8 +26,10 @@ class _LnsAccountPageState extends ConsumerState<LnsAccountPage> {
   LnsProfile? _profile;
   bool _loading = true;
   bool _claiming = false;
+  bool _claimSucceeded = false;
   bool _notLoggedIn = false;
   String? _error;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -36,15 +38,16 @@ class _LnsAccountPageState extends ConsumerState<LnsAccountPage> {
   }
 
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
     setState(() {
-      _loading = true;
+      _loading = _profile == null;
       _error = null;
       _notLoggedIn = false;
     });
     try {
       final source = await loadLnsSource(ref);
       if (!source.isLoggedIn) {
-        if (!mounted) return;
+        if (!mounted || generation != _loadGeneration) return;
         setState(() {
           _notLoggedIn = true;
           _loading = false;
@@ -52,13 +55,14 @@ class _LnsAccountPageState extends ConsumerState<LnsAccountPage> {
         return;
       }
       final profile = await source.profile();
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _profile = profile;
+        _claimSucceeded = profile.signedToday;
         _loading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = _describe(error);
         _loading = false;
@@ -67,13 +71,31 @@ class _LnsAccountPageState extends ConsumerState<LnsAccountPage> {
   }
 
   Future<void> _claim() async {
+    if (_claiming || _claimSucceeded) return;
+    final generation = ++_loadGeneration;
     setState(() => _claiming = true);
     try {
       final source = await loadLnsSource(ref);
       final result = await source.claimSign();
-      // 余额与连续天数以站点返回为准，签完重新拉一次资料。
-      await _load();
-      if (mounted) _toast('签到成功，获得 ${result.reward} 轻币');
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() => _claimSucceeded = true);
+      if (result.profile case final profile?) {
+        setState(() {
+          _profile = profile;
+          _error = null;
+        });
+      }
+      final rewards = <String>[
+        if (result.reward != null) '${result.reward} 轻币',
+        if (result.experienceReward != null) '${result.experienceReward} 经验',
+      ];
+      _toast(
+        result.profile == null
+            ? '签到成功，资料刷新失败，请刷新确认余额与经验'
+            : rewards.isEmpty
+            ? '签到成功，资料已同步'
+            : '签到成功，获得 ${rewards.join('、')}',
+      );
     } catch (error) {
       if (mounted) _toast('签到失败：${_describe(error)}');
     } finally {
@@ -91,8 +113,14 @@ class _LnsAccountPageState extends ConsumerState<LnsAccountPage> {
   }
 
   Future<void> _manageAccount() async {
+    _loadGeneration++;
     await context.push('${AppRoutes.sources}?type=novel');
-    if (mounted) await _load();
+    if (!mounted) return;
+    setState(() {
+      _profile = null;
+      _claimSucceeded = false;
+    });
+    await _load();
   }
 
   @override
@@ -129,7 +157,7 @@ class _LnsAccountPageState extends ConsumerState<LnsAccountPage> {
         ),
       );
     }
-    if (_error != null) {
+    if (_error != null && _profile == null) {
       return EmptyStateView(
         icon: Icons.cloud_off_outlined,
         title: '资料加载失败',
@@ -147,6 +175,11 @@ class _LnsAccountPageState extends ConsumerState<LnsAccountPage> {
       child: ListView(
         padding: const EdgeInsets.only(bottom: AppSpacing.xl),
         children: <Widget>[
+          if (_error != null)
+            ListTile(
+              title: Text('资料刷新失败：$_error'),
+              trailing: TextButton(onPressed: _load, child: const Text('重试')),
+            ),
           if (profile != null) _profileCard(profile),
           if (profile != null) _signCard(profile),
         ],
@@ -204,7 +237,34 @@ class _LnsAccountPageState extends ConsumerState<LnsAccountPage> {
               children: <Widget>[
                 _stat('轻币', '${profile.coin}', highlight: true),
                 _stat('连续签到', '${profile.signInStreak} 天'),
+                if (profile.experience != null)
+                  _stat('经验', '${profile.experience}'),
               ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              '成长等级 ${profile.growthLevel == null ? '未提供' : 'Lv.${profile.growthLevel}'}'
+              ' · 访问等级 ${profile.level == null ? '未提供' : 'Lv.${profile.level}'}',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              profile.experience == null
+                  ? '来源未提供经验数据'
+                  : profile.maxLevel
+                  ? '累计经验 ${profile.experience} · 已达最高等级'
+                  : '累计经验 ${profile.experience}'
+                        '${profile.nextLevelExp == null ? ' · 来源未提供升级门槛' : ' · 下一级 ${profile.nextLevelExp}'}',
+              style: theme.textTheme.bodySmall,
+            ),
+            if (profile.experienceFraction case final fraction?) ...[
+              const SizedBox(height: AppSpacing.xs),
+              LinearProgressIndicator(value: fraction),
+            ],
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              '每日签到累积经验，连签有额外奖励；实际奖励以来源资料为准。',
+              style: theme.textTheme.bodySmall,
             ),
           ],
         ),
@@ -238,7 +298,7 @@ class _LnsAccountPageState extends ConsumerState<LnsAccountPage> {
   Widget _signCard(LnsProfile profile) {
     final theme = Theme.of(context);
     final palette = context.palette;
-    final signedToday = profile.signedToday;
+    final signedToday = profile.signedToday || _claimSucceeded;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(

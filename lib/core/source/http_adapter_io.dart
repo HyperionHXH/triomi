@@ -133,9 +133,14 @@ ConnectionTask<Socket> connectWithDnsFallback(
     final resolved = await resolver.lookup(transportUri.host);
     if (cancelled) throw const SocketException('Connection cancelled');
 
-    active = connectLkAddresses(transportUri, resolved);
+    active = connectLkAddresses(
+      transportUri,
+      resolver._preferSuccessful(uri.host, resolved),
+    );
     try {
-      return await active!.socket;
+      final socket = await active!.socket;
+      resolver._rememberSuccessful(uri.host, socket.remoteAddress);
+      return socket;
     } catch (error) {
       active?.cancel();
       if (cancelled) rethrow;
@@ -147,9 +152,14 @@ ConnectionTask<Socket> connectWithDnsFallback(
           .toList(growable: false);
       if (alternatives.isEmpty) rethrow;
 
-      active = connectLkAddresses(transportUri, alternatives);
+      active = connectLkAddresses(
+        transportUri,
+        resolver._preferSuccessful(uri.host, alternatives),
+      );
       try {
-        return await active!.socket;
+        final socket = await active!.socket;
+        resolver._rememberSuccessful(uri.host, socket.remoteAddress);
+        return socket;
       } catch (_) {
         active?.cancel();
         rethrow;
@@ -174,6 +184,29 @@ class SourceDnsFallback {
   final Future<Map<String, dynamic>> Function(Uri)? query;
   final _cache =
       <String, ({DateTime expires, List<InternetAddress> addresses})>{};
+  // A process-local preference, not an alternate DNS cache. Only addresses in
+  // the current answer may be reordered; changed DNS always wins. The built-in
+  // host allowlist bounds this map and keeps unrelated sites/proxies untouched.
+  final _successful = <String, InternetAddress>{};
+
+  List<InternetAddress> _preferSuccessful(
+    String host,
+    List<InternetAddress> current,
+  ) {
+    final preferred = _successful[host];
+    if (preferred == null) return current;
+    final index = current.indexWhere((a) => a.address == preferred.address);
+    if (index < 0) {
+      _successful.remove(host);
+      return current;
+    }
+    if (index == 0) return current;
+    return [current[index], ...current.take(index), ...current.skip(index + 1)];
+  }
+
+  void _rememberSuccessful(String host, InternetAddress address) {
+    if (allowedHosts.contains(host)) _successful[host] = address;
+  }
 
   Future<List<InternetAddress>> lookup(String host) async {
     try {

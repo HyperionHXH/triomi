@@ -58,6 +58,27 @@ add_subdirectory("runner")
 include(flutter/generated_plugins.cmake)
 add_dependencies(${BINARY_NAME} webview_windows_DEPENDENCIES_DOWNLOAD)
 
+# The plugin pins SDK 1.0.1210.39, which predates Profile2 HTTP-only cache
+# clearing. Keep its dependency untouched; the runner owns a separate SDK pin.
+# Do not upgrade packages in the shared plugin/Pub cache or race its downloader.
+# Reuse the plugin's resolved cache entry, not a second PATH search (Flutter's
+# build environment may no longer expose nuget.exe on PATH at MSBuild time).
+if(NUGET AND EXISTS "${NUGET}")
+  get_filename_component(TRIOMI_NUGET "${NUGET}" ABSOLUTE)
+elseif(EXISTS "${CMAKE_BINARY_DIR}/nuget.exe")
+  set(TRIOMI_NUGET "${CMAKE_BINARY_DIR}/nuget.exe")
+else()
+  message(FATAL_ERROR "WebView2 requires the NuGet executable resolved by webview_windows")
+endif()
+add_custom_target(triomi_webview_sdk ALL
+  COMMAND "${TRIOMI_NUGET}" install Microsoft.Web.WebView2
+    -Version 1.0.3537.50 -ExcludeVersion
+    -OutputDirectory "${CMAKE_BINARY_DIR}/triomi-webview-packages"
+  VERBATIM
+)
+add_dependencies(triomi_webview_sdk webview_windows_DEPENDENCIES_DOWNLOAD)
+add_dependencies(${BINARY_NAME} triomi_webview_sdk)
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

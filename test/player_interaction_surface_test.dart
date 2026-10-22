@@ -7,7 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/features/player/player_interaction_surface.dart';
 
 class _PlayerHarness extends StatefulWidget {
-  const _PlayerHarness({super.key});
+  const _PlayerHarness({super.key, this.topToolbar = false});
+  final bool topToolbar;
 
   @override
   State<_PlayerHarness> createState() => _PlayerHarnessState();
@@ -55,6 +56,7 @@ class _PlayerHarnessState extends State<_PlayerHarness> {
             brightness: brightness,
             brightnessEnabled: true,
             holdSpeed: 2.5,
+            seekHudTop: widget.topToolbar ? 58 : 25,
             onTap: () {},
             onTogglePlay: () => toggles++,
             onSeek: (target) => setState(() {
@@ -76,35 +78,49 @@ class _PlayerHarnessState extends State<_PlayerHarness> {
             onVolumeEnd: () => saves++,
             onBrightnessChanged: (value) => setState(() => brightness = value),
             onHoldChanged: holds.add,
-            controls: Align(
-              alignment: Alignment.bottomCenter,
-              child: SizedBox(
-                height: 90,
-                child: Column(
-                  children: [
-                    Slider(
-                      focusNode: sliderFocus,
-                      value: position.inSeconds.toDouble(),
-                      max: duration.inSeconds.toDouble(),
-                      onChanged: (_) =>
-                          throw StateError('Slider consumed arrow'),
+            controls: Stack(
+              children: [
+                if (widget.topToolbar)
+                  const Align(
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      key: ValueKey('player-test-toolbar'),
+                      height: 48,
+                      width: double.infinity,
+                      child: ColoredBox(color: Colors.red),
                     ),
-                    SizedBox(
-                      height: 40,
-                      child: Row(
-                        children: [
-                          TextButton(
-                            focusNode: buttonFocus,
-                            onPressed: () {},
-                            child: const Text('Control'),
+                  ),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: SizedBox(
+                    height: 90,
+                    child: Column(
+                      children: [
+                        Slider(
+                          focusNode: sliderFocus,
+                          value: position.inSeconds.toDouble(),
+                          max: duration.inSeconds.toDouble(),
+                          onChanged: (_) =>
+                              throw StateError('Slider consumed arrow'),
+                        ),
+                        SizedBox(
+                          height: 40,
+                          child: Row(
+                            children: [
+                              TextButton(
+                                focusNode: buttonFocus,
+                                onPressed: () {},
+                                child: const Text('Control'),
+                              ),
+                              Expanded(child: TextField(focusNode: textFocus)),
+                            ],
                           ),
-                          Expanded(child: TextField(focusNode: textFocus)),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
             child: const ColoredBox(color: Colors.black),
           ),
@@ -175,6 +191,63 @@ void main() {
   );
 
   for (final size in [const Size(360, 640), const Size(1280, 720)]) {
+    testWidgets('scrubbing keeps progress in a compact top capsule at $size', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final key = GlobalKey<_PlayerHarnessState>();
+      await tester.pumpWidget(_PlayerHarness(key: key));
+      await tester.pump();
+      final area = tester.getRect(
+        find.byKey(const ValueKey('player-blank-input')),
+      );
+      final drag = await tester.startGesture(area.center - const Offset(80, 0));
+      await drag.moveBy(const Offset(60, 0));
+      await tester.pump();
+      final hud = tester.getRect(find.byKey(const ValueKey('player-seek-hud')));
+      expect(hud.width, lessThanOrEqualTo(200));
+      expect(hud.height, lessThanOrEqualTo(48));
+      expect(hud.center.dx, closeTo(area.center.dx, 1));
+      expect(hud.top, inInclusiveRange(area.top + 16, area.top + 32));
+      expect(hud.bottom, lessThan(area.center.dy));
+      expect(key.currentState!.seeks, isEmpty);
+      expect(find.textContaining('2:'), findsWidgets);
+      await drag.up();
+      await tester.pump();
+      expect(key.currentState!.seeks.single, key.currentState!.position);
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(seconds: 2));
+    });
+    testWidgets('seek feedback stays below visible top controls at $size', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final key = GlobalKey<_PlayerHarnessState>();
+      await tester.pumpWidget(_PlayerHarness(key: key, topToolbar: true));
+      await tester.pump();
+      final area = tester.getRect(
+        find.byKey(const ValueKey('player-blank-input')),
+      );
+      final gesture = await tester.startGesture(
+        area.center - const Offset(80, 0),
+      );
+      await gesture.moveBy(const Offset(60, 0));
+      await tester.pump();
+      final hud = tester.getRect(find.byKey(const ValueKey('player-seek-hud')));
+      expect(hud.width, lessThanOrEqualTo(200));
+      final toolbar = tester.getRect(
+        find.byKey(const ValueKey('player-test-toolbar')),
+      );
+      expect(hud.top, greaterThanOrEqualTo(toolbar.bottom + 8));
+      expect(hud.height, lessThanOrEqualTo(48));
+      expect(hud.center.dx, closeTo(area.center.dx, 1));
+      expect(hud.bottom, lessThan(area.center.dy));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
     testWidgets(
       'both halves keep a compact top HUD and persist actual levels at $size',
       (tester) async {

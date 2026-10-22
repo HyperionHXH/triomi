@@ -40,7 +40,7 @@ target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib" "taskschd.lib" "ole32.lib" "oleaut32.lib" "advapi32.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "version.lib" "shell32.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "winhttp.lib"
-  "${CMAKE_BINARY_DIR}/packages/Microsoft.Web.WebView2/build/native/Microsoft.Web.WebView2.targets")
+  "${CMAKE_BINARY_DIR}/triomi-webview-packages/Microsoft.Web.WebView2/build/native/Microsoft.Web.WebView2.targets")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

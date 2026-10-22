@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -18,6 +19,7 @@ import 'core/storage/preferences.dart';
 import 'core/storage/secure_store.dart';
 import 'features/library/data/manga_update_background.dart';
 import 'features/schedule/data/background_update_check.dart';
+import 'features/settings/cache_management_service.dart';
 import 'features/sources/catalog_sheet.dart';
 
 /// 后台更新检查的引擎入口（T7-7）。
@@ -119,4 +121,7 @@ Future<void> main([List<String> args = const []]) async {
       child: const TriomiApp(),
     ),
   );
+  // Disposable HTTP data is maintained without delaying the first frame.
+  // Explicit downloads, restored content and browser sessions are retained.
+  unawaited(CacheManagementService.runAutomaticMaintenance(database));
 }

@@ -80,6 +80,29 @@ class MainActivity : FlutterActivity() {
             "triomi/native-video",
             NativeVideoViewFactory(flutterEngine.dartExecutor.binaryMessenger),
         )
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "triomi/cache-management")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "browserStorageRoots" -> result.success(listOf(
+                        File(applicationInfo.dataDir, "app_webview").path,
+                        File(cacheDir, "WebView").path,
+                    ))
+                    "clearBrowserHttpCache" -> {
+                        // WebView owns the HTTP cache. Never recursively delete
+                        // its profile or call CookieManager/WebStorage clearing.
+                        try {
+                            android.webkit.WebView(this).apply {
+                                clearCache(true)
+                                destroy()
+                            }
+                            result.success(true)
+                        } catch (_: Exception) {
+                            result.error("cache_unavailable", "网页 HTTP 缓存未完成清理", null)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "triomi/platform")
             .setMethodCallHandler { call, result ->
                 when (call.method) {

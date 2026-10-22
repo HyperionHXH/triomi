@@ -41,14 +41,16 @@ class _TriomiAppState extends ConsumerState<TriomiApp> {
     }
     if (!mounted) return;
 
-    final service = AppUpdateService();
-    final cancellation = AppUpdateCancellation();
     try {
-      final current = await service.current();
-      final releases = await service.releases(cancellation);
-      cancellation.check();
-      final update = newestAppUpdateRelease(current, releases);
-      if (!mounted || update == null) return;
+      final preferences = ref.read(preferencesProvider);
+      final result = await checkStartupAppUpdate(preferences);
+      if (!mounted ||
+          result == null ||
+          !ref.read(preferencesProvider).automaticAppUpdateCheckEnabled) {
+        return;
+      }
+      final current = result.current;
+      final update = result.release;
       final dismissedTag = ref
           .read(preferencesProvider)
           .get<String>('app-update.dismissed.${current.platform}');
@@ -78,8 +80,6 @@ class _TriomiAppState extends ConsumerState<TriomiApp> {
       }
     } catch (_) {
       // A startup network failure must not block or interrupt the home screen.
-    } finally {
-      service.close();
     }
   }
 

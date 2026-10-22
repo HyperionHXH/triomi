@@ -19,6 +19,7 @@ import '../player/data/danmaku_settings.dart';
 import 'app_update_page.dart';
 import 'cache_management_page.dart';
 import 'cover_appearance_settings_page.dart';
+import 'settings_controller.dart';
 
 /// 通用设置；界面外观与阅读器排版分别在独立页面配置。
 class SettingsPage extends ConsumerWidget {
@@ -88,6 +89,16 @@ class SettingsPage extends ConsumerWidget {
           SettingsGroup(
             title: '关于',
             children: <Widget>[
+              SwitchListTile(
+                key: const ValueKey('automatic-app-update-check'),
+                secondary: const Icon(Icons.update_outlined),
+                title: const Text('启动时检查应用更新'),
+                subtitle: const Text('仅检查新版本，不自动下载或安装；关闭后仍可手动检查'),
+                value: ref.watch(automaticAppUpdateCheckProvider),
+                onChanged: (enabled) => ref
+                    .read(automaticAppUpdateCheckProvider.notifier)
+                    .setEnabled(enabled),
+              ),
               ListTile(
                 leading: const Icon(Icons.system_update_outlined),
                 title: const Text('版本管理与应用更新'),

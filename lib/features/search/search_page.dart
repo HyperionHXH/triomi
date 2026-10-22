@@ -25,6 +25,7 @@ import '../discover/widgets/media_item_card.dart';
 import '../library/data/library_providers.dart';
 import '../manga/manga_item_actions.dart';
 import '../manga/manga_source_page.dart';
+import '../novel/novel_list_metadata.dart';
 import '../sources/source_account_entries.dart';
 
 /// Each query owns a fixed media scope and independent per-source results.
@@ -782,12 +783,28 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         if (row.items.isNotEmpty && !isManga) ...[
           SizedBox(
             height: 380,
-            child: MediaItemCollection(
-              items: row.items,
-              sourceName: descriptor.name,
-              preferGrid: widget.type == MediaType.anime,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-            ),
+            child: widget.type == MediaType.novel
+                ? ListView.builder(
+                    itemCount: row.items.length,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemBuilder: (_, index) => NovelListMetadata(
+                      item: row.items[index],
+                      builder: (item) => MediaItemRow(
+                        item: item,
+                        sourceName: descriptor.name,
+                        onTap: () => context.push(
+                          AppRoutes.detailFor(item),
+                          extra: item,
+                        ),
+                      ),
+                    ),
+                  )
+                : MediaItemCollection(
+                    items: row.items,
+                    sourceName: descriptor.name,
+                    preferGrid: widget.type == MediaType.anime,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
           ),
         ],
         if (!isManga && row.page > 0 && row.hasMore && row.error == null)

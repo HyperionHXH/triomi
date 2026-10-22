@@ -18,6 +18,7 @@ class LkProfile {
     this.fansCount,
     this.followingCount,
     this.postCount,
+    this.experience,
   });
 
   final int uid;
@@ -31,8 +32,38 @@ class LkProfile {
   final String levelName;
   final int? level;
 
+  static const levelNames = [
+    '平民',
+    '骑士',
+    '勋爵',
+    '子爵',
+    '伯爵',
+    '侯爵',
+    '公爵',
+    '王爵',
+    '皇帝',
+  ];
+
+  String get displayLevelName {
+    if (levelName.trim().isNotEmpty) return levelName;
+    final current = level;
+    return current != null && current >= 1 && current <= levelNames.length
+        ? levelNames[current - 1]
+        : '';
+  }
+
+  double? get levelFraction {
+    final current = level;
+    return current != null && current >= 1 && current <= levelNames.length
+        ? (current - 1) / (levelNames.length - 1)
+        : null;
+  }
+
   /// 轻币余额。
   final int coin;
+
+  /// LK 官网返回的累计经验；未提供升级门槛，不据此推算进度。
+  final int? experience;
 
   /// 粉丝数 / 关注数 / 发布数；站点未返回时为 null（不是 0）。
   final int? fansCount;

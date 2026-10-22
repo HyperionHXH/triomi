@@ -1,5 +1,26 @@
 # Triomi 当前状态
 
+## 当前请求：R172 MixN近期同步、紧凑提示与缓存控制（0.12.0+172，正式构建中）
+
+本轮按用户要求提交推送并发布`v0.12.0-test.172`；正式构建及资产校验完成前，不把本地Debug/Profile验收当作已发布正式包。本轮对照的MixN近期改动不在主分支，而在`feature/multi-source-foundation`：`89cbfe40d1d240fbd266bbb3ae120b407e788d65`（2026-10-22 12:35:51 +08:00，分页及作者搜索）及`d8a23c0e5c40026f44d796344618e4cf8c63429d`（16:08:08 +08:00，作者补全与有界缓存）；10月21日没有该窗口内的上游提交。另对齐10月15日账号成长/签到`253079fba2d492e29909a54ed300120ca75d16e9`与成功路由优先思路`f178c1a44a5c7f76d06b4177e147d006db8f78e3`。
+
+- LNS标题/作者组合搜索使用官方引号模式，去掉把上传者`UserName`误作作者的回退；发现/书架/搜索按需补全真实作者与简介，原卡片身份和已显示内容不丢。详情/目录/列表共享有界缓存（64项、512 Ki字符、5分钟、四并发、8秒期限）及在途合并；官方文件下载权限仍独立实时读取。正文专用字体改成原子返回`{family,data}`，编码副本32 MiB/128项LRU；Flutter原生字体无法安全卸载，不把编码缓存上限冒称引擎字体总内存上限。
+- LK/LNS显示站点真实等级/经验，区分成长等级和访问等级；签到后读回权威资料，轻书架奖励只使用前后差值，无法读回就显示未知，不伪造零奖励。小说左右分页与卡片均跟随手指，取消回弹而不保存目标页，原点击/键盘/章节边界不变。内置小说站连接只在当前DNS答案内优先上次成功地址，不替换URL/Host/SNI，不添加旧IP或绕过TLS/代理。
+- 视频退进反馈200逻辑像素宽、约42像素高，顶部显示；控制栏显示时避开48像素标题栏。原音量/亮度/长按倍速提示保留。
+- 两端持续向本集结尾预载，不再由短时间窗停止；Windows明确关闭mpv磁盘缓存、压缩包前向内存128 MiB，Android为应用堆上限1/8且最多128 MiB，回看缓存0。达到字节预算后随播放释放继续补充；高码率整集可能超过预算，不能承诺全部整集常驻。没有新增自动离线下载。
+- 网页HTTP响应缓存按全局128 MiB/最早写入7天策略在冷启动后维护；设置提供实际用量、确认清理及清理后重测。只调用Android `WebView.clearCache(true)`与WebView2 `ClearBrowsingData(DISK_CACHE)`，不删Cookies/DOM、下载/续传、正文/字体、账号、来源、备份及待安装更新。存储扫描可取消，不完整统计不显示为完整用量。Windows原生清理使用独立固定WebView2 SDK 1.0.3537.50，不修改Pub插件缓存。
+- 通用设置增加“启动时检查应用更新”，既有安装默认开启；关闭时不创建启动网络客户端，进行中关闭会取消并阻止晚到弹窗，手动检查保持独立。不会自动下载或安装。
+
+空间调查与实际证据：普通在线小说阅读不调用`saveChapterContent`，持久正文来自显式下载或备份恢复，不能据空间增长自动删除。171桌面450文件固定安装负载341,099,361B，其中扩展运行时250,278,794B，不属于逐集视频缓存；私有JAR首次重建后校验复用。media_kit默认`cache-on-disk=yes`是mpv文档描述的潜在追加磁盘缓存风险，但本机六分钟HLS对照只观察到报告写入221B/220B、可见临时文件0B，没有复现视频负载写盘，不能认定它就是用户历史增长的唯一根因。
+
+实际烟测使用独立临时资料与新建API35模拟器，未写入/清除用户资料：18,266,832B六分钟动态HLS，Android暂停在2879ms后继续缓冲到360000ms（约19.7秒），Windows暂停2500ms时缓冲359916ms/总360000ms；均为生产内核加自建媒体，不冒充真实站点测速。Android持久目录中85,348 KiB为调试`flutter_assets`固定负载，播放后HTTP缓存仅188 KiB，没有新增18 MiB视频文件。真实2 MiB网页响应烟测：Windows HTTP类别2,953,608→819,592B、Android2,098,497→168B，双端合成HttpOnly Cookie前后保持；Windows烟测先显式关闭第三方Webview后宿主正常退出0，直接带活跃插件销毁的临时入口曾异常退出，未把该入口失败冒充生产缓存页面故障。
+
+
+参考：[Kazumi固定版本缓存策略](https://github.com/Predidit/Kazumi/blob/b935bd448a9c80f91062871781d74a93b51586a0/lib/services/player/playback_cache_policy.dart)默认1500 MiB、低内存模式2 MiB，并随计费网络/低内存设置调整；[图片缓存统计与清理](https://github.com/Predidit/Kazumi/blob/b935bd448a9c80f91062871781d74a93b51586a0/lib/services/storage/image_cache_service.dart)。本项目Android为Java堆内Media3，不直接照搬1500 MiB以免OOM；持续预载与容量保护是两层独立约束。[mpv缓存语义](https://mpv.io/manual/master/)、[WebView clearCache](https://developer.android.com/reference/android/webkit/WebView#clearCache(boolean))与[WebView2选择性清理](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2profile2?view=webview2-1.0.3537.50)用于核对磁盘/内存及会话保护边界。
+普通应用实际巡检覆盖Windows公开推荐/时间表/番剧详情/轻之国度发现、Android推荐/时间表/小说公开列表及滚动；桌面真实鼠标拖动阅读器从1/10到2/10，短拖回弹与原位置保持。Android真实视频拖动和Windows键盘跳转的小提示均在顶部。不使用调试模拟器帧耗时证明发布版零卡顿；未用真实账号执行签到/付费/整书下载，也没有所有来源或全手机矩阵的可达/流畅承诺。
+
+最终验证：Flutter **1340通过/3跳过**（跳过仍为OS文件链接权限等平台限制），`flutter analyze --no-pub` **零问题**，Python工具 **89通过**，编码检查零错误、文档扫描无error。独立API35设备通过 **21项** Media3缓冲预算/释放后继续加载、原生表面生命周期及网页解析回归；没有使用`connectedAndroidTest`操作用户设备。Windows普通主入口Profile与Android普通主入口Debug均构建成功；最终Android正常`main`在自有模拟器实际载入公开推荐/封面、启动维护无未处理异常。没有构建/发布正式签名Release，也未修改版本号。三个临时Dart入口、六分钟媒体夹具及自有服务/模拟器随后清理。
+
 
 ## 当前请求：R171 双击交互及 Kazumi 获取/播放兼容（0.12.0+171）
 

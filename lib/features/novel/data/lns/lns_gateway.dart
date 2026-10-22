@@ -131,6 +131,12 @@ class LnsProfile {
     required this.coin,
     required this.signInStreak,
     required this.signedToday,
+    this.level,
+    this.growthLevel,
+    this.experience,
+    this.currentLevelExp,
+    this.nextLevelExp,
+    this.maxLevel = false,
   });
 
   final int id;
@@ -138,14 +144,40 @@ class LnsProfile {
   final int coin;
   final int signInStreak;
   final bool signedToday;
+  final int? level;
+  final int? growthLevel;
+  final int? experience;
+  final int? currentLevelExp;
+  final int? nextLevelExp;
+  final bool maxLevel;
+
+  double? get experienceFraction {
+    final total = experience;
+    if (total == null) return null;
+    if (maxLevel) return 1;
+    final start = currentLevelExp;
+    final end = nextLevelExp;
+    if (start == null || end == null || total < start || end <= start) {
+      return null;
+    }
+    return ((total - start) / (end - start)).clamp(0.0, 1.0);
+  }
 }
 
 /// 签到结果。
 class LnsCheckInResult {
-  const LnsCheckInResult({required this.reward, required this.streak});
+  const LnsCheckInResult({
+    this.reward,
+    required this.streak,
+    this.experienceReward,
+    this.profile,
+  });
 
-  final int reward;
+  /// Only a before/after profile delta is authoritative, not SignIn.Reward.
+  final int? reward;
   final int streak;
+  final int? experienceReward;
+  final LnsProfile? profile;
 }
 
 /// 远端书架条目类型。
@@ -242,8 +274,13 @@ class LnsGateway {
   }
 
   Future<LnsBookPage> search(String query, int page, int pageSize) async {
+    final keyword = query.trim();
     final result = await _invoke('GetBookList', <String, Object?>{
-      'KeyWords': query.trim(),
+      // Official exact mode matches title or author; quote plain input so an
+      // author name is not treated as a title-only fuzzy query.
+      'KeyWords': keyword.startsWith('"') && keyword.endsWith('"')
+          ? keyword
+          : '"$keyword"',
       'Page': page < 1 ? 1 : page,
       'Size': pageSize.clamp(1, 50),
       'IgnoreJapanese': false,
@@ -284,7 +321,7 @@ class LnsGateway {
     final extra = objOf(book, const <String>['Extra', 'extra']);
     final classification = extra == null
         ? null
-        : objOf(extra, const <String>['classification']);
+        : objOf(extra, const <String>['classification', 'Classification']);
 
     final chapters = _parseCatalog(<Map<Object?, Object?>>[
       book,
@@ -312,15 +349,10 @@ class LnsGateway {
         strOf(book, const <String>['Cover', 'cover', 'CoverUrl', 'coverUrl']),
       ),
       authorName:
-          strOf(book, const <String>[
-            'Author',
-            'author',
-            'UserName',
-            'userName',
-          ]) ??
+          strOf(book, const <String>['Author', 'author']) ??
           (classification == null
               ? null
-              : strOf(classification, const <String>['author'])),
+              : strOf(classification, const <String>['author', 'Author'])),
       introduction: cleanShelfHtml(
         asOptionalText(
               pick(book, const <String>[
@@ -494,12 +526,29 @@ class LnsGateway {
     );
     final growth =
         objOf(response, const <String>['Growth']) ?? const <Object?, Object?>{};
+    int? nonNegative(Map<Object?, Object?> node, String key) {
+      final value = int.tryParse('${node[key] ?? ''}');
+      return value != null && value >= 0 ? value : null;
+    }
+
+    final level =
+        nonNegative(growth, 'Level') ?? nonNegative(response, 'Level');
+    final nextLevel = nonNegative(growth, 'NextLevelExp');
+    final currentLevel = nonNegative(growth, 'CurrentLevelExp');
+    final experience = nonNegative(growth, 'Exp');
     return LnsProfile(
       id: intOf(response, const <String>['Id']) ?? 0,
       userName: strOf(response, const <String>['UserName']) ?? '',
       coin: intOf(growth, const <String>['Coin']) ?? 0,
       signInStreak: intOf(growth, const <String>['SignStreak']) ?? 0,
       signedToday: boolOf(growth, const <String>['TodaySigned']) ?? false,
+      level: level,
+      growthLevel: nonNegative(growth, 'GrowthLevel'),
+      experience: experience,
+      currentLevelExp: currentLevel,
+      nextLevelExp: nextLevel,
+      maxLevel:
+          growth.containsKey('NextLevelExp') && growth['NextLevelExp'] == null,
     );
   }
 
@@ -509,7 +558,7 @@ class LnsGateway {
       '签到结果',
     );
     return LnsCheckInResult(
-      reward: intOf(response, const <String>['Reward']) ?? 0,
+      reward: null,
       streak: intOf(response, const <String>['Streak']) ?? 0,
     );
   }
@@ -641,6 +690,18 @@ class LnsGateway {
     );
   }
 
+  String? _bookAuthor(Map<Object?, Object?> book) {
+    final author = strOf(book, const <String>['Author', 'author']);
+    if (author != null) return author;
+    final extra = objOf(book, const <String>['Extra', 'extra']);
+    final classification = extra == null
+        ? null
+        : objOf(extra, const <String>['classification', 'Classification']);
+    return classification == null
+        ? null
+        : strOf(classification, const <String>['author', 'Author']);
+  }
+
   List<LnsBook> _toBooks(List<Map<Object?, Object?>> nodes) => <LnsBook>[
     for (final node in nodes)
       LnsBook(
@@ -650,12 +711,7 @@ class LnsGateway {
         coverUrl: normalizeShelfCoverUrl(
           strOf(node, const <String>['Cover', 'cover', 'CoverUrl', 'coverUrl']),
         ),
-        authorName: strOf(node, const <String>[
-          'UserName',
-          'userName',
-          'Author',
-          'author',
-        ]),
+        authorName: _bookAuthor(node),
         introduction: cleanShelfHtml(
           asOptionalText(
                 pick(node, const <String>[

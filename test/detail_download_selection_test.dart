@@ -803,12 +803,8 @@ class _FixtureFontChannel extends LnsFontChannel {
         ),
       );
   @override
-  Future<void> ensure(String fontUrl) async {
+  Future<({String family, String data})> load(String fontUrl) async {
     expect(fontUrl, '/font/offline.ttf');
+    return (family: 'fixture-font-family', data: 'AAEAAAAAAAA=');
   }
-
-  @override
-  String? familyFor(String fontUrl) => 'fixture-font-family';
-  @override
-  String? dataFor(String fontUrl) => 'AAEAAAAAAAA=';
 }

@@ -26,6 +26,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.SubtitleView
@@ -47,6 +48,31 @@ class NativeVideoViewFactory(private val messenger: BinaryMessenger) :
     PlatformViewFactory(io.flutter.plugin.common.StandardMessageCodec.INSTANCE) {
     override fun create(context: Context, viewId: Int, args: Any?): PlatformView =
         NativeVideoPlatformView(context, viewId, messenger)
+}
+
+/** Transient compressed packets, not a disk cache or a download queue. */
+@UnstableApi
+internal object PlaybackBufferPolicy {
+    // Leave most of the app heap for Flutter, source runtimes and the decoder.
+    fun memoryBudgetBytes(maxHeapBytes: Long): Int =
+        (maxHeapBytes / 8).coerceIn(C.DEFAULT_BUFFER_SEGMENT_SIZE.toLong(), 128L * 1024 * 1024).toInt()
+
+    fun createLoadControl(maxHeapBytes: Long = Runtime.getRuntime().maxMemory()): DefaultLoadControl =
+        DefaultLoadControl.Builder()
+            // Both bounds must be long: a short minimum would stop refilling
+            // a byte-full buffer until only that short lookahead remained.
+            .setBufferDurationsMsForStreaming(
+                Int.MAX_VALUE, Int.MAX_VALUE,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS)
+            .setBufferDurationsMsForLocalPlayback(
+                Int.MAX_VALUE, Int.MAX_VALUE,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_FOR_LOCAL_PLAYBACK_MS,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_FOR_LOCAL_PLAYBACK_MS)
+            .setTargetBufferBytes(memoryBudgetBytes(maxHeapBytes))
+            .setPrioritizeTimeOverSizeThresholds(false)
+            .setBackBuffer(0, false)
+            .build()
 }
 
 /** Media3 with the already verified hybrid-composition TextureView surface. */
@@ -89,6 +115,7 @@ private class NativeVideoPlatformView(
         spec.withRequestHeaders(headers)
     }
     private val player = ExoPlayer.Builder(context)
+        .setLoadControl(PlaybackBufferPolicy.createLoadControl())
         .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource))
         .setAudioAttributes(AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)

@@ -798,13 +798,24 @@ class LkClient {
           'rank_name',
           'role_name',
         ),
-        group == null ? '' : _string(group, 'name', 'title'),
+        _string2(
+          levelNode == null ? '' : _string(levelNode, 'name'),
+          group == null ? '' : _string(group, 'name', 'title'),
+        ),
       ),
+      experience: _pickNonNegative(profile, const <String>[
+        'exp',
+        'experience',
+      ]),
       level:
-          _pickPositive(profile, const <String>['level']) ??
+          _pickPositive(profile, const <String>[
+            'level',
+            'level_id',
+            'levelId',
+          ]) ??
           (levelNode == null
               ? null
-              : _pickPositive(levelNode, const <String>['level'])),
+              : _pickPositive(levelNode, const <String>['level', 'id'])),
       coin: coin,
       fansCount:
           _pickPositive(stats, const <String>[

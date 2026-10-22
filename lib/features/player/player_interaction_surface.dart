@@ -30,6 +30,7 @@ class PlayerInteractionSurface extends StatefulWidget {
     required this.onHoldChanged,
     required this.child,
     this.controls,
+    this.seekHudTop = 25,
   });
 
   final bool enabled;
@@ -54,6 +55,9 @@ class PlayerInteractionSurface extends StatefulWidget {
   final ValueChanged<bool> onHoldChanged;
   final Widget child;
   final Widget? controls;
+
+  /// Keeps seek feedback below visible player chrome.
+  final double seekHudTop;
 
   @override
   State<PlayerInteractionSurface> createState() =>
@@ -377,37 +381,60 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
   }
 
   Widget _hud(IconData icon, String label, double progress, Key key) =>
-      IgnorePointer(
-        child: Center(
-          child: Container(
-            key: key,
-            width: 230,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: .82),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: Colors.white, size: 30),
-                const SizedBox(height: 8),
-                Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontFeatures: [FontFeature.tabularFigures()],
+      Positioned(
+        top: key == const ValueKey('player-seek-hud') ? widget.seekHudTop : 25,
+        left: 0,
+        right: 0,
+        child: IgnorePointer(
+          child: Center(
+            child: Container(
+              key: key,
+              width: 200,
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: .82),
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: Colors.white12,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: Colors.white, size: 20),
                   ),
-                ),
-                const SizedBox(height: 10),
-                LinearProgressIndicator(
-                  value: progress.clamp(0.0, 1.0),
-                  color: Colors.white,
-                  backgroundColor: Colors.white30,
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          maxLines: 2,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        LinearProgressIndicator(
+                          value: progress.clamp(0.0, 1.0),
+                          minHeight: 3,
+                          borderRadius: BorderRadius.circular(2),
+                          color: Colors.white,
+                          backgroundColor: Colors.white30,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import '../../../../core/models/chapter.dart';
@@ -23,10 +24,15 @@ class LnsSource
     implements
         DiscoverProvider,
         SearchProvider,
-        DetailProvider,
+        ListMetadataProvider,
         ContentProvider,
         RemoteShelfProvider {
-  LnsSource({required this.gateway, required this.auth, this.fontChannel});
+  LnsSource({
+    required this.gateway,
+    required this.auth,
+    this.fontChannel,
+    DateTime Function()? metadataClock,
+  }) : _detailCache = _LnsDetailCache(clock: metadataClock);
 
   static const String id = lnsSourceId;
 
@@ -38,6 +44,22 @@ class LnsSource
   final LnsGateway gateway;
   final LnsAuth auth;
   final LnsFontChannel? fontChannel;
+  final _LnsDetailCache _detailCache;
+  String? _metadataAccount;
+  int _accountGeneration = 0;
+
+  /// Volatile list metadata only. Downloads and their font data are untouched.
+  void clearMetadataCache() {
+    _detailCache.clear();
+    fontChannel?.clearTemporaryData();
+    _metadataAccount = auth.accessToken();
+  }
+
+  Future<LnsBookDetail> _bookDetail(int bookId) {
+    if (_metadataAccount != auth.accessToken()) clearMetadataCache();
+    return _detailCache.get(bookId, () => gateway.getBookDetail(bookId));
+  }
+
   // Permissions may change with the session or uploader's settings. Never
   // cache a full chapter directory merely to display the download notice.
   Future<LnsBookDetail> officialDownloadPermission(MediaItem item) =>
@@ -126,7 +148,7 @@ class LnsSource
 
   @override
   Future<MediaItem> detail(MediaItem item) async {
-    final detail = await gateway.getBookDetail(_idOf(item));
+    final detail = await _bookDetail(_idOf(item));
     return MediaItem(
       sourceId: item.sourceId,
       remoteId: item.remoteId,
@@ -145,9 +167,31 @@ class LnsSource
   }
 
   @override
+  Future<MediaItem> listMetadata(MediaItem item) async {
+    final metadata = await detail(item);
+    return MediaItem(
+      sourceId: item.sourceId,
+      remoteId: item.remoteId,
+      type: item.type,
+      title: item.title,
+      url: item.url,
+      coverUrl: item.coverUrl,
+      author: item.author?.trim().isNotEmpty == true
+          ? item.author
+          : metadata.author,
+      description: item.description?.trim().isNotEmpty == true
+          ? item.description
+          : metadata.description,
+      tags: item.tags,
+      rating: item.rating,
+      status: item.status,
+    );
+  }
+
+  @override
   Future<List<Chapter>> chapters(MediaItem item) async {
     final bookId = _idOf(item);
-    final detail = await gateway.getBookDetail(bookId);
+    final detail = await _bookDetail(bookId);
     if (detail.chapters.isEmpty) {
       throw SourceException(
         sourceId: id,
@@ -178,6 +222,7 @@ class LnsSource
     // 也绝不把混淆正文当成正常内容渲染。
     final fontUrl = detail.fontUrl;
     String? fontFamily;
+    String? fontData;
     if (fontUrl != null && fontUrl.isNotEmpty) {
       if (fontChannel == null) {
         throw const SourceException(
@@ -186,15 +231,14 @@ class LnsSource
           message: '轻书架正文需要专用字体，字体通道不可用',
         );
       }
-      await fontChannel!.ensure(fontUrl);
-      // 字体注册好后把 family 交给阅读器：站点替换过字形，
-      // 不用这个字体渲染出来就是乱码。
-      fontFamily = fontChannel!.familyFor(fontUrl);
+      final font = await fontChannel!.load(fontUrl);
+      fontFamily = font.family;
+      fontData = font.data;
     }
     return ChapterContent(
       html: detail.html.isNotEmpty ? detail.html : null,
       fontFamily: fontFamily,
-      fontData: fontUrl == null ? null : fontChannel?.dataFor(fontUrl),
+      fontData: fontData,
     );
   }
 
@@ -205,19 +249,25 @@ class LnsSource
 
   @override
   Future<void> restoreSession() async {
+    _accountGeneration++;
     await auth.restore();
+    clearMetadataCache();
     gateway.resetConnection();
   }
 
   @override
   Future<void> login(String account, String password) async {
+    _accountGeneration++;
     await auth.login(account, password);
+    clearMetadataCache();
     gateway.resetConnection();
   }
 
   @override
   Future<void> logout() async {
+    _accountGeneration++;
     await auth.logout();
+    clearMetadataCache();
     gateway.resetConnection();
   }
 
@@ -290,7 +340,7 @@ class LnsSource
     if (!auth.isLoggedIn) return;
     final bookId = _idOf(item);
     final (_, sortNumber) = _chapterKeyOf(chapter);
-    final detail = await gateway.getBookDetail(bookId);
+    final detail = await _bookDetail(bookId);
     final target = detail.chapters
         .where((entry) => entry.sortNumber == sortNumber)
         .firstOrNull;
@@ -304,7 +354,40 @@ class LnsSource
 
   Future<LnsProfile> profile() => gateway.getProfile();
 
-  Future<LnsCheckInResult> claimSign() => gateway.checkIn();
+  /// Sign in, then reconcile the authoritative profile. The SignIn payload's
+  /// reward is not trusted because deployments have returned stale values.
+  Future<LnsCheckInResult> claimSign() async {
+    final generation = _accountGeneration;
+    final before = await gateway.getProfile();
+    if (generation != _accountGeneration) throw StateError('轻书架账号已更改');
+    final signed = await gateway.checkIn();
+    if (generation != _accountGeneration) throw StateError('轻书架账号已更改');
+    LnsProfile? after;
+    try {
+      after = await gateway.getProfile();
+      if (generation != _accountGeneration) throw StateError('轻书架账号已更改');
+    } catch (_) {
+      // The sign-in already succeeded; do not turn a follow-up read failure
+      // into a failed claim or expose an unverified reward amount.
+    }
+    if (generation != _accountGeneration) throw StateError('轻书架账号已更改');
+    if (SourceRequestCancellation.current?.cancelled == true) {
+      throw StateError('轻书架签到结果已取消');
+    }
+    final coinDelta = after == null ? null : after.coin - before.coin;
+    final experienceDelta =
+        after?.experience == null || before.experience == null
+        ? null
+        : after!.experience! - before.experience!;
+    return LnsCheckInResult(
+      reward: coinDelta != null && coinDelta >= 0 ? coinDelta : null,
+      streak: after?.signInStreak ?? signed.streak,
+      experienceReward: experienceDelta != null && experienceDelta >= 0
+          ? experienceDelta
+          : null,
+      profile: after,
+    );
+  }
 
   // ---------------------------------------------------------------- 内部
 
@@ -381,6 +464,112 @@ class LnsSource
   }
 }
 
+/// Coalesces detail/catalog/list reads without persisting account permissions.
+/// At most four loads run, and cached public metadata is bounded by age/weight.
+class _LnsDetailCache {
+  _LnsDetailCache({DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now;
+
+  final DateTime Function() _clock;
+  final _entries =
+      <int, ({LnsBookDetail detail, DateTime expires, int weight})>{};
+  final _flights = <int, Future<LnsBookDetail>>{};
+  final _owners = <SourceRequestCancellation>{};
+  final _waiters = <Completer<void>>[];
+  int _characters = 0, _active = 0, _generation = 0;
+
+  void clear() {
+    _generation++;
+    _entries.clear();
+    _flights.clear();
+    _characters = 0;
+    for (final owner in _owners) {
+      owner.cancel('轻书架元数据缓存已清理');
+    }
+  }
+
+  Future<LnsBookDetail> get(int id, Future<LnsBookDetail> Function() load) {
+    final cached = _entries.remove(id);
+    if (cached != null) {
+      if (cached.expires.isAfter(_clock())) {
+        _entries[id] = cached;
+        return Future.value(cached.detail);
+      }
+      _characters -= cached.weight;
+    }
+    final existing = _flights[id];
+    if (existing != null) return existing;
+    final generation = _generation;
+    late final Future<LnsBookDetail> flight;
+    flight = _load(id, generation, load).whenComplete(() {
+      if (identical(_flights[id], flight)) _flights.remove(id);
+    });
+    _flights[id] = flight;
+    return flight;
+  }
+
+  Future<LnsBookDetail> _load(
+    int id,
+    int generation,
+    Future<LnsBookDetail> Function() load,
+  ) async {
+    if (_active >= 4) {
+      final waiter = Completer<void>();
+      _waiters.add(waiter);
+      await waiter.future;
+    } else {
+      _active++;
+    }
+    final owner = SourceRequestCancellation();
+    _owners.add(owner);
+    try {
+      if (generation != _generation) throw StateError('轻书架元数据请求已取消');
+      final detail = await owner
+          .run(load)
+          .timeout(
+            const Duration(seconds: 8),
+            onTimeout: () {
+              owner.cancel('轻书架元数据请求超时');
+              throw TimeoutException('轻书架元数据请求超时');
+            },
+          );
+      if (generation != _generation || owner.cancelled) {
+        throw StateError('轻书架元数据请求已取消');
+      }
+      if (detail.id != id) throw StateError('轻书架元数据作品身份不一致');
+      final weight =
+          detail.title.length +
+          (detail.coverUrl?.length ?? 0) +
+          (detail.authorName?.length ?? 0) +
+          detail.introduction.length +
+          detail.tags.fold<int>(0, (sum, tag) => sum + tag.length) +
+          detail.chapters.fold<int>(
+            0,
+            (sum, chapter) => sum + chapter.title.length + 32,
+          );
+      if (weight <= 512 * 1024) {
+        _entries[id] = (
+          detail: detail,
+          expires: _clock().add(const Duration(minutes: 5)),
+          weight: weight,
+        );
+        _characters += weight;
+        while (_entries.length > 64 || _characters > 512 * 1024) {
+          _characters -= _entries.remove(_entries.keys.first)!.weight;
+        }
+      }
+      return detail;
+    } finally {
+      _owners.remove(owner);
+      if (_waiters.isEmpty) {
+        _active--;
+      } else {
+        _waiters.removeAt(0).complete();
+      }
+    }
+  }
+}
+
 /// 服务端专用字体通道（B7）。
 ///
 /// 轻书架正文依赖站点下发的字体，不加载会显示乱码。这里只做**数据通道**：
@@ -390,20 +579,31 @@ class LnsFontChannel {
     required this.http,
     this.sourceId = lnsSourceId,
     this.apiOrigin = lnsApiOrigin,
-  });
+    this.maxCacheBytes = maxMemoryBytes,
+    Future<String> Function(String data)? registerFont,
+  }) : _registerFont = registerFont ?? ChapterFont.register;
 
   final SourceHttpClient http;
   final String sourceId;
+  final int maxCacheBytes;
+  final Future<String> Function(String data) _registerFont;
 
   /// 站点下发的地址可能是相对路径，用它补成绝对地址。
   final String apiOrigin;
 
-  /// fontUrl → 已注册的 fontFamily。
-  final Map<String, String> _registered = <String, String>{};
-  final Map<String, String> _data = <String, String>{};
+  /// Only encoded payload copies are evictable. Flutter has no font-unload API;
+  /// ChapterFont keeps engine registrations deduplicated by their content hash.
+  static const maxMemoryBytes = 32 * 1024 * 1024;
+  final _cache = <String, ({String family, String data})>{};
+  final _flights = <String, Future<({String family, String data})>>{};
+  int _cacheBytes = 0;
+  int _cacheGeneration = 0;
 
-  String? familyFor(String fontUrl) => _registered[fontUrl];
-  String? dataFor(String fontUrl) => _data[fontUrl];
+  void clearTemporaryData() {
+    _cacheGeneration++;
+    _cache.clear();
+    _cacheBytes = 0;
+  }
 
   /// 站点给的 `fontUrl` 形如 `/font/xxx.woff2`（相对路径），
   /// 直接丢给 HTTP 层会报 URI 错误——按 API 源站补全。
@@ -426,9 +626,28 @@ class LnsFontChannel {
     return uri.replace(path: '$path.ttf').toString();
   }
 
-  /// 确保字体已下载并注册；失败抛来源错误（调用方不得回退到混淆正文）。
-  Future<void> ensure(String fontUrl) async {
-    if (_registered.containsKey(fontUrl)) return;
+  /// Return the payload directly so concurrent eviction cannot strip the font
+  /// between registering it and persisting a downloaded chapter.
+  Future<({String family, String data})> load(String fontUrl) {
+    final cached = _cache.remove(fontUrl);
+    if (cached != null) {
+      _cache[fontUrl] = cached;
+      return Future.value(cached);
+    }
+    final existing = _flights[fontUrl];
+    if (existing != null) return existing;
+    late final Future<({String family, String data})> flight;
+    flight = _load(fontUrl, _cacheGeneration).whenComplete(() {
+      if (identical(_flights[fontUrl], flight)) _flights.remove(fontUrl);
+    });
+    _flights[fontUrl] = flight;
+    return flight;
+  }
+
+  Future<({String family, String data})> _load(
+    String fontUrl,
+    int generation,
+  ) async {
     final bytes = await http.fetchBytes(
       absoluteUrl(engineFontUrl(fontUrl)),
       sourceId: sourceId,
@@ -454,7 +673,7 @@ class LnsFontChannel {
     final encoded = base64Encode(bytes);
     final String family;
     try {
-      family = await ChapterFont.register(encoded);
+      family = await _registerFont(encoded);
     } catch (error) {
       throw SourceException(
         sourceId: sourceId,
@@ -463,8 +682,19 @@ class LnsFontChannel {
         cause: error,
       );
     }
-    _registered[fontUrl] = family;
-    _data[fontUrl] = encoded;
+    final font = (family: family, data: encoded);
+    final weight = (fontUrl.length + family.length + encoded.length) * 2;
+    if (generation == _cacheGeneration && weight <= maxCacheBytes) {
+      _cache[fontUrl] = font;
+      _cacheBytes += weight;
+      while (_cacheBytes > maxCacheBytes || _cache.length > 128) {
+        final key = _cache.keys.first;
+        final removed = _cache.remove(key)!;
+        _cacheBytes -=
+            (key.length + removed.family.length + removed.data.length) * 2;
+      }
+    }
+    return font;
   }
 
   /// TTF / TrueType / OTF 的 magic（与 Mixn 的判断一致）。

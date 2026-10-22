@@ -33,6 +33,7 @@ import '../tracking/data/tracking_providers.dart';
 import 'data/dandanplay_client.dart';
 import 'data/danmaku_overlay.dart';
 import 'data/danmaku_settings.dart';
+import 'data/playback_buffer_policy.dart';
 import 'data/player_settings.dart';
 import 'episode_comments_panel.dart';
 import 'episode_selector.dart';
@@ -178,10 +179,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     );
     if (!_useNativeAndroidVideo) {
       _player = Player(
-        configuration: const PlayerConfiguration(bufferSize: 128 * 1024 * 1024),
+        configuration: const PlayerConfiguration(
+          bufferSize: playbackForwardBufferBytes,
+        ),
       );
-      // media_kit defaults to a 32 MiB demux cache; a bounded 128 MiB budget
-      // gives high-bitrate streams room to prefetch without Kazumi's 1.5 GiB cap.
       _videoController = VideoController(
         _player,
         configuration: const VideoControllerConfiguration(
@@ -545,6 +546,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         title: '${_item.title} · ${_chapter.title}',
       );
     } else {
+      await applyDesktopPlaybackBufferPolicy(_player.platform as NativePlayer);
+      if (!mounted || seq != _resolveSeq) return;
       await _player.open(
         Media(url, httpHeaders: headers, start: startPosition),
       );
@@ -724,6 +727,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       onVolumeChanged: (value) => unawaited(_setAppVolume(value)),
       onVolumeEnd: () => unawaited(_settings.save(_preferences)),
       onBrightnessChanged: (value) => unawaited(_setBrightness(value)),
+      seekHudTop: _chromeVisible ? 58 : 25,
       onHoldChanged: (enabled) => unawaited(_holdSpeed(enabled)),
       controls: !_inPip ? _buildChrome() : null,
       child: Stack(
@@ -1633,6 +1637,15 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
               mainAxisSize: MainAxisSize.min,
               children: [
                 const ListTile(title: Text('播放设置')),
+                ListTile(
+                  leading: const Icon(Icons.memory_outlined),
+                  title: const Text('持续预载本集 · 有界内存'),
+                  subtitle: Text(
+                    '${_useNativeAndroidVideo ? '应用堆上限的 1/8，最多 128 MiB' : '最多 128 MiB'}'
+                    '（不含解码器）。向本集结尾加载，满额后随播放释放并继续。'
+                    '退出即释放，不写入离线下载；离线观看请使用下载管理。',
+                  ),
+                ),
                 ListTile(
                   leading: const Icon(Icons.fast_forward_rounded),
                   title: const Text('跳过秒数'),

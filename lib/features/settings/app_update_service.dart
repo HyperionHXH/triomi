@@ -11,6 +11,8 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/storage/preferences.dart';
+
 const appUpdateProductionSigner =
     '9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077';
 const appUpdateMaxBytes = 512 * 1024 * 1024;
@@ -294,6 +296,63 @@ AppUpdateRelease? newestAppUpdateRelease(
   return best;
 }
 
+/// The preference is checked before even creating a client. Manual checks on
+/// AppUpdatePage deliberately do not pass through this startup-only gate.
+Future<({AppUpdateInfo current, AppUpdateRelease release})?>
+checkStartupAppUpdate(
+  Preferences preferences, {
+  AppUpdateService Function()? createService,
+}) async {
+  if (!preferences.automaticAppUpdateCheckEnabled) return null;
+  final service = (createService ?? AppUpdateService.new)();
+  final cancellation = AppUpdateCancellation();
+  final disabled = Completer<void>();
+  final subscription = preferences
+      .watch(Preferences.automaticAppUpdateCheckKey)
+      .listen((value) {
+        if (value == false) {
+          cancellation.cancel();
+          if (!disabled.isCompleted) disabled.complete();
+        }
+      });
+  try {
+    final current = await Future.any<AppUpdateInfo?>([
+      service.current(),
+      disabled.future.then<AppUpdateInfo?>((_) => null),
+    ]);
+    if (current == null ||
+        cancellation.cancelled ||
+        !preferences.automaticAppUpdateCheckEnabled) {
+      return null;
+    }
+    final releases = await Future.any<Object?>([
+      service.releases(cancellation),
+      disabled.future.then<Object?>((_) => null),
+    ]);
+    if (!preferences.automaticAppUpdateCheckEnabled ||
+        cancellation.cancelled ||
+        releases == null) {
+      return null;
+    }
+    cancellation.check();
+    final release = newestAppUpdateRelease(
+      current,
+      releases as List<AppUpdateRelease>,
+    );
+    if (!preferences.automaticAppUpdateCheckEnabled) return null;
+    return release == null ? null : (current: current, release: release);
+  } on AppUpdateCancelled {
+    if (!cancellation.cancelled) rethrow;
+    return null;
+  } finally {
+    try {
+      await subscription.cancel();
+    } finally {
+      service.close();
+    }
+  }
+}
+
 /// Only GitHub's official asset CDN is trusted across redirects. No wildcard
 /// suffixes, arbitrary ports, credentials, fragments or HTTPS downgrades.
 bool appUpdateTrustedRedirect(Uri uri, Uri original) =>
@@ -410,9 +469,11 @@ class AppUpdateService {
   /// Explicit owned root for desktop staging (production defaults to support).
   final Directory? windowsUpdateRoot;
   void Function(AppUpdateProgress)? onProgress;
+  bool _progressAttached = false;
 
   void attachProgress() {
     if (!Platform.isAndroid) return;
+    _progressAttached = true;
     _native.setMethodCallHandler((call) async {
       if (call.method == 'progress' && call.arguments is Map) {
         final raw = call.arguments as Map;
@@ -428,7 +489,10 @@ class AppUpdateService {
   }
 
   void close() {
-    if (Platform.isAndroid) _native.setMethodCallHandler(null);
+    if (_progressAttached) {
+      _progressAttached = false;
+      _native.setMethodCallHandler(null);
+    }
     _dio.close(force: true);
   }
 
