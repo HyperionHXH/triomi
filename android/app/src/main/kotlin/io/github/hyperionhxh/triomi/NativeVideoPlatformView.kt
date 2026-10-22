@@ -16,6 +16,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
@@ -152,12 +153,15 @@ private class NativeVideoPlatformView(
                     val uri = Uri.parse(url)
                     require(uri.scheme in listOf("http", "https", "file", "content"))
                     require(uri.userInfo == null)
+                    val mimeType = call.argument<String>("mimeType")
+                    require(mimeType == null || mimeType == "application/vnd.apple.mpegurl")
                     currentUrl = url
                     currentHeaders = call.argument<Map<String, String>>("headers") ?: emptyMap()
                     announcedReady = false
                     resumeOnForeground = false
                     val position = (call.argument<Number>("startMilliseconds")?.toLong() ?: 0L).coerceAtLeast(0)
                     player.setMediaItem(MediaItem.Builder().setUri(uri)
+                        .setMimeType(if (mimeType == null) null else MimeTypes.APPLICATION_M3U8)
                         .setMediaMetadata(MediaMetadata.Builder()
                             .setTitle(call.argument<String>("title") ?: "Triomi").build())
                         .build(), position)

@@ -556,17 +556,8 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
                   behavior: HitTestBehavior.opaque,
                   dragStartBehavior: DragStartBehavior.down,
                   onTap: widget.onTap,
-                  onDoubleTapDown: (details) =>
-                      _doubleTapX = details.localPosition.dx,
                   onDoubleTap: () {
-                    if (!_active) return;
-                    if (_doubleTapX < constraints.maxWidth / 4) {
-                      _seekRelative(-15);
-                    } else if (_doubleTapX > constraints.maxWidth * .75) {
-                      _seekRelative(15);
-                    } else {
-                      widget.onTogglePlay();
-                    }
+                    if (_active) widget.onTogglePlay();
                   },
                   onHorizontalDragStart: _startScrub,
                   onHorizontalDragUpdate: (details) =>
@@ -604,8 +595,6 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
       ],
     ),
   );
-
-  double _doubleTapX = 0;
 
   @override
   void dispose() {

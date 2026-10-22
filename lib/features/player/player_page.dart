@@ -471,6 +471,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _desktopResolve?.cancel('已切换播放线路');
     _desktopResolve = null;
     var headers = line?.headers ?? const <String, String>{};
+    String? mimeType = line?.mimeType;
     if (line?.webPage == true) {
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
         final owner = _desktopResolve = VideoResolveCancellation();
@@ -488,6 +489,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         if (!mounted || seq != _resolveSeq) return;
         url = result.url;
         headers = result.headers;
+        mimeType = result.mimeType;
       } else if (!_useNativeAndroidVideo) {
         throw StateError('此来源的网页播放解析目前支持 Android，请选择直链来源');
       } else {
@@ -497,6 +499,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
               'requestId': _resolverOwner,
               'headers': headers,
               'unavailableVideoUrls': line!.unavailableVideoUrls,
+              'useLegacyParser': line.useLegacyParser,
             });
         if (!mounted || seq != _resolveSeq) return;
         final resolved = result?['url']?.toString();
@@ -504,6 +507,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           throw StateError('播放页未解析到视频地址');
         }
         url = resolved;
+        if (result?['mimeType'] == 'application/vnd.apple.mpegurl') {
+          mimeType = 'application/vnd.apple.mpegurl';
+        }
         final rawHeaders = result?['headers'];
         headers = {
           if (rawHeaders is Map)
@@ -534,6 +540,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       await _nativeVideoController.setUrl(
         url,
         headers: headers,
+        mimeType: mimeType,
         startPosition: startPosition,
         title: '${_item.title} · ${_chapter.title}',
       );
@@ -2308,6 +2315,7 @@ class _NativeAndroidVideoController {
   MethodChannel? _channel;
   int? _viewId;
   String? _pendingUrl;
+  String? _pendingMimeType;
   Map<String, String> _pendingHeaders = const {};
   Duration _pendingStartPosition = Duration.zero;
   bool _disposed = false;
@@ -2350,6 +2358,7 @@ class _NativeAndroidVideoController {
         setUrl(
           url,
           headers: _pendingHeaders,
+          mimeType: _pendingMimeType,
           startPosition: _pendingStartPosition,
           title: _pendingTitle,
         ).catchError((Object error) => onError('打开视频失败：$error')),
@@ -2370,12 +2379,14 @@ class _NativeAndroidVideoController {
   Future<void> setUrl(
     String url, {
     Map<String, String> headers = const {},
+    String? mimeType,
     Duration startPosition = Duration.zero,
     String title = 'Triomi',
   }) async {
     if (_disposed) return;
     _pendingUrl = url;
     _pendingHeaders = headers;
+    _pendingMimeType = mimeType;
     _pendingStartPosition = startPosition;
     _pendingTitle = title;
     final channel = _channel;
@@ -2383,6 +2394,7 @@ class _NativeAndroidVideoController {
     await channel.invokeMethod<void>('setUrl', <String, Object?>{
       'url': url,
       'headers': headers,
+      'mimeType': ?mimeType,
       'startMilliseconds': startPosition.inMilliseconds,
       'title': title,
     });

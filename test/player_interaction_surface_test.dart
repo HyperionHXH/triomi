@@ -436,7 +436,7 @@ void main() {
     },
   );
   testWidgets(
-    'double taps keep outer-quarter fifteen-second seek and middle pause',
+    'double taps toggle playback across the full surface without seeking',
     (tester) async {
       final key = GlobalKey<_PlayerHarnessState>();
       await tester.pumpWidget(_PlayerHarness(key: key));
@@ -451,11 +451,9 @@ void main() {
         await tester.tapAt(point);
         await tester.pump(const Duration(milliseconds: 350));
       }
-      expect(key.currentState!.seeks, [
-        const Duration(seconds: 105),
-        const Duration(seconds: 120),
-      ]);
-      expect(key.currentState!.toggles, 1);
+      expect(key.currentState!.seeks, isEmpty);
+      expect(key.currentState!.position, const Duration(seconds: 120));
+      expect(key.currentState!.toggles, 3);
       await tester.pumpWidget(const SizedBox());
     },
   );

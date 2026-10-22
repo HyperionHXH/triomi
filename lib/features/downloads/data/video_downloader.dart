@@ -31,6 +31,7 @@ class VideoDownloader {
   final bool Function()? shouldContinue;
   final int concurrency;
   final Future<int?> Function(String directory)? availableBytes;
+
   /// Exact URL lookup preserves native cookie domain/path/secure scoping.
   final Future<String?> Function(String url)? cookieForUrl;
   static const fileNameStem = 'video';
@@ -38,12 +39,13 @@ class VideoDownloader {
   Future<String> download({
     required String url,
     required String directory,
+    String? mimeType,
     FutureOr<void> Function(double progress)? onProgress,
   }) async {
     final uri = _uri(url);
     final dir = Directory(directory);
     await dir.create(recursive: true);
-    return isHlsUrl(url)
+    return mimeType == 'application/vnd.apple.mpegurl' || isHlsUrl(url)
         ? _hls(uri, dir, onProgress)
         : _progressive(uri, dir, onProgress);
   }
@@ -130,6 +132,7 @@ class VideoDownloader {
     }
     throw _error('视频重定向次数过多');
   }
+
   String _hash(String text) => sha256.convert(utf8.encode(text)).toString();
   Future<String> _fileHash(File file) async =>
       (await sha256.bind(file.openRead()).first).toString();
@@ -260,8 +263,10 @@ class VideoDownloader {
         continue;
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw _error('HLS 列表 HTTP ${response.statusCode}',
-            type: SourceErrorType.network);
+        throw _error(
+          'HLS 列表 HTTP ${response.statusCode}',
+          type: SourceErrorType.network,
+        );
       }
       loaded = response;
       break;

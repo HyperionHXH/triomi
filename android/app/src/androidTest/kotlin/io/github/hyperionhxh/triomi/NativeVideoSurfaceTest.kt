@@ -4,12 +4,15 @@ import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.TextureView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.flutter.plugin.common.BinaryMessenger
+import io.flutter.plugin.common.MethodCall
+import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.platform.PlatformView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -156,5 +159,34 @@ class NativeVideoSurfaceTest {
         assertEquals(null, surface())
         attach()
         assertEquals("A disposed view must not create another Surface", null, surface())
+    }
+
+    @Test fun explicitHlsMimeSupportsExtensionlessMediaAndDoesNotLeakToNextItem() = withView {
+        val methods = view as MethodChannel.MethodCallHandler
+        var error: String? = null
+        val reply = object : MethodChannel.Result {
+            override fun success(result: Any?) = Unit
+            override fun error(code: String, message: String?, details: Any?) { error = code }
+            override fun notImplemented() { error = "not_implemented" }
+        }
+        methods.onMethodCall(MethodCall("setUrl", mapOf("url" to "file:///triomi-fixture/manifest", "mimeType" to "application/vnd.apple.mpegurl")), reply)
+        assertEquals(null, error)
+        assertEquals(MimeTypes.APPLICATION_M3U8, player.currentMediaItem!!.localConfiguration!!.mimeType)
+        methods.onMethodCall(MethodCall("setUrl", mapOf("url" to "file:///triomi-fixture/video.mp4")), reply)
+        assertEquals(null, error)
+        assertEquals(null, player.currentMediaItem!!.localConfiguration!!.mimeType)
+    }
+
+    @Test fun arbitraryHtmlMimeIsRejectedBeforeReplacingCurrentItem() = withView {
+        val item = player.currentMediaItem
+        var error: String? = null
+        val reply = object : MethodChannel.Result {
+            override fun success(result: Any?) = Unit
+            override fun error(code: String, message: String?, details: Any?) { error = code }
+            override fun notImplemented() = Unit
+        }
+        (view as MethodChannel.MethodCallHandler).onMethodCall(MethodCall("setUrl", mapOf("url" to "file:///triomi-fixture/page", "mimeType" to "text/html")), reply)
+        assertEquals("native_video_error", error)
+        assertSame(item, player.currentMediaItem)
     }
 }

@@ -182,7 +182,9 @@ class DownloadService {
               http: http,
               sourceId: row.sourceId,
               headers: source.headers,
-              cookieForUrl: resolvedFromPage ? videoCookieForUrl : null,
+              cookieForUrl: resolvedFromPage && !source.omitCookies
+                  ? videoCookieForUrl
+                  : null,
               shouldContinue: () {
                 check();
                 return true;
@@ -190,6 +192,7 @@ class DownloadService {
               availableBytes: platformChannel.availableDiskBytes,
             ).download(
               url: source.url,
+              mimeType: source.mimeType,
               directory: directory,
               onProgress: (value) => repository.markProgress(row.id, value),
             );

@@ -142,6 +142,141 @@ void main() {
     );
   });
 
+  test('API 9 sourceTemplate opens the detail page and preserves raw API IDs', () async {
+    for (final template in [
+      'https://anime.test/index.php/vod/detail/id/@source.html',
+      'https://anime.test/GV@source/',
+      'https://anime.test/view/@source?again=@source',
+      'https://anime.test/anime/@source.html',
+      '',
+    ]) {
+      final raw = apiRule();
+      raw['api'] = '9';
+      raw['baseURL'] = 'https://anime.test/media/';
+      raw['chapterMode'] = 'xpath';
+      raw['chapterRoads'] = "//ul[@class='episodes']";
+      raw['chapterResult'] = '//li/a';
+      (raw['searchApiConfig']! as Map)['sourceTemplate'] = template;
+      final http = FakeHttpClient(
+        (request) async => SourceResponse(
+          statusCode: 200,
+          body: Uri.parse(request.url).path == '/search'
+              ? '{"data":[{"id":"42","name":"result"}]}'
+              : '<ul class="episodes"><li><a href="/play/42/1">1</a></li></ul>',
+        ),
+      );
+      final source = KazumiSource(
+        rule: KazumiRule.parse(jsonEncode(raw)),
+        http: http,
+      );
+      final item = (await source.search('result')).single;
+      final expectedUrl = template.isEmpty
+          ? 'https://anime.test/media/42'
+          : template.replaceAll('@source', '42');
+      expect(item.remoteId, template.isEmpty ? '42' : expectedUrl);
+      expect(item.url, expectedUrl);
+      expect(await source.detail(item), same(item));
+      final chapters = await source.chapters(item);
+      expect(http.requests.last.url, expectedUrl);
+      expect(chapters.single.url, 'https://anime.test/play/42/1');
+      await source.content(chapters.single);
+      expect(
+        http.requests,
+        hasLength(2),
+        reason: 'detail/content need no extra request',
+      );
+    }
+  });
+
+  test('sourceTemplate encodes IDs once and rejects unsafe or missing placeholders', () async {
+    final raw = apiRule();
+    (raw['searchApiConfig']! as Map)['sourceTemplate'] =
+        'https://anime.test/GV@source/';
+    final source = KazumiSource(
+      rule: KazumiRule.parse(jsonEncode(raw)),
+      http: FakeHttpClient(
+        (_) async => const SourceResponse(
+          statusCode: 200,
+          body: '{"data":[{"id":"a/b &?#","name":"result"}]}',
+        ),
+      ),
+    );
+    final item = (await source.search('result')).single;
+    final uri = Uri.parse(item.remoteId);
+    expect(uri.pathSegments, ['GVa/b &?#', '']);
+    expect(uri.hasQuery, isFalse);
+    expect(uri.hasFragment, isFalse);
+    for (final template in [
+      'https://anime.test/detail',
+      'http://anime.test/@source',
+      'https://user:password@anime.test/@source',
+      'javascript:@source',
+    ]) {
+      (raw['searchApiConfig']! as Map)['sourceTemplate'] = template;
+      expect(
+        () => KazumiRule.parse(jsonEncode(raw)),
+        throwsA(isA<RuleFormatException>()),
+      );
+    }
+  });
+
+  test('dalvdm API 9 replay requests the official detail template instead of a 404 ID path', () async {
+    // Observed official response: list[0].id=236; /236 returns 404,
+    // /index.php/vod/detail/id/236.html returns playlist3 episode links.
+    final raw = {
+      ...apiRule(),
+      'api': '9',
+      'name': 'dalvdm',
+      'baseURL': 'https://www.sbdl.cc/',
+      'searchApiConfig': {
+        'request': {
+          'url': 'https://www.sbdl.cc/index.php/ajax/suggest',
+          'query': {'mid': '1', 'wd': '@keyword'},
+        },
+        'listPath': r'$.list[*]',
+        'namePath': r'$.name',
+        'sourcePath': r'$.id',
+        'sourceTemplate':
+            'https://www.sbdl.cc/index.php/vod/detail/id/@source.html',
+      },
+      'chapterMode': 'xpath',
+      'chapterRoads':
+          "//div[starts-with(@id, 'playlist')][contains(@class, 'lists-box')]",
+      'chapterResult': ".//a[contains(@href, '/index.php/vod/play/')]",
+    };
+    final http = FakeHttpClient((request) async {
+      final path = Uri.parse(request.url).path;
+      return switch (path) {
+        '/index.php/ajax/suggest' => const SourceResponse(
+          statusCode: 200,
+          body: '{"list":[{"id":236,"name":"result"}]}',
+        ),
+        '/index.php/vod/detail/id/236.html' => const SourceResponse(
+          statusCode: 200,
+          body:
+              '<div id="playlist3" class="tab-pane lists-box fade in">'
+              '<div class="listitem"><a href="/index.php/vod/play/id/236/sid/3/nid/1.html">1</a></div>'
+              '</div>',
+        ),
+        _ => const SourceResponse(statusCode: 404, body: ''),
+      };
+    });
+    final source = KazumiSource(
+      rule: KazumiRule.parse(jsonEncode(raw)),
+      http: http,
+    );
+    final item = (await source.search('result')).single;
+    final chapters = await source.chapters(item);
+    expect(
+      chapters.single.url,
+      'https://www.sbdl.cc/index.php/vod/play/id/236/sid/3/nid/1.html',
+    );
+    expect(http.requests.map((request) => Uri.parse(request.url).path), [
+      '/index.php/ajax/suggest',
+      '/index.php/vod/detail/id/236.html',
+    ]);
+  });
+
   test('JSONPath脚本/HTTP地址拒绝，跨站重定向不泄漏头，降级拒绝', () async {
     final badPath = apiRule();
     (badPath['searchApiConfig']! as Map)['listPath'] = r'$.data[?(@.secret)]';
@@ -203,31 +338,50 @@ void main() {
       if (r.url.endsWith('/private/result')) {
         expect(r.headers['Authorization'], 'consumer-fixture-token');
       } else if (r.url.contains('other.test') || r.url.endsWith('/final')) {
-        expect(r.headers.keys.map((key) => key.toLowerCase()), isNot(contains('authorization')));
+        expect(
+          r.headers.keys.map((key) => key.toLowerCase()),
+          isNot(contains('authorization')),
+        );
       }
       if (r.url.endsWith('/search')) {
-        return const SourceResponse(statusCode: 307, body: '',
-            headers: {'location': '/private/result'});
+        return const SourceResponse(
+          statusCode: 307,
+          body: '',
+          headers: {'location': '/private/result'},
+        );
       }
       if (r.url.endsWith('/private/result')) {
-        return const SourceResponse(statusCode: 303, body: '',
-            headers: {'location': 'https://other.test/redirect'});
+        return const SourceResponse(
+          statusCode: 303,
+          body: '',
+          headers: {'location': 'https://other.test/redirect'},
+        );
       }
       if (r.url.contains('other.test')) {
-        return const SourceResponse(statusCode: 302, body: '',
-            headers: {'location': 'https://anime.test/final'});
+        return const SourceResponse(
+          statusCode: 302,
+          body: '',
+          headers: {'location': 'https://anime.test/final'},
+        );
       }
-      return const SourceResponse(statusCode: 200,
-          body: '{"data":[{"id":1,"name":"result"}]}');
+      return const SourceResponse(
+        statusCode: 200,
+        body: '{"data":[{"id":1,"name":"result"}]}',
+      );
     });
-    final source = KazumiSource(rule: KazumiRule.parse(jsonEncode(raw)), http: http);
+    final source = KazumiSource(
+      rule: KazumiRule.parse(jsonEncode(raw)),
+      http: http,
+    );
     expect((await source.search('query')).single.remoteId, '1');
     expect(http.requests[1].url, 'https://anime.test/private/result');
     expect(http.requests[1].method, 'POST');
     expect(http.requests[1].body, http.requests[0].body);
     for (final request in http.requests.skip(2)) {
-      expect(request.headers.keys.map((key) => key.toLowerCase()),
-          isNot(contains('authorization')));
+      expect(
+        request.headers.keys.map((key) => key.toLowerCase()),
+        isNot(contains('authorization')),
+      );
     }
   });
 

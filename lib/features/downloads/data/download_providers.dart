@@ -61,6 +61,8 @@ final downloadVideoResolverProvider = Provider<DownloadVideoResolver?>((ref) {
       name: source.name,
       url: result.url,
       headers: result.headers,
+      mimeType: result.mimeType,
+      omitCookies: result.omitCookies,
     );
   };
 });
@@ -87,6 +89,7 @@ Future<PlaySource> _resolveAndroidVideo(
         'url': source.url,
         'headers': source.headers,
         'unavailableVideoUrls': source.unavailableVideoUrls,
+        'useLegacyParser': source.useLegacyParser,
       });
   final url = raw?['url'] as String?;
   final headers = raw?['headers'];
@@ -94,6 +97,10 @@ Future<PlaySource> _resolveAndroidVideo(
   return PlaySource(
     name: source.name,
     url: url,
+    mimeType: raw?['mimeType'] == 'application/vnd.apple.mpegurl'
+        ? 'application/vnd.apple.mpegurl'
+        : null,
+    omitCookies: raw?['omitCookies'] == true,
     headers: {
       if (headers is Map)
         for (final entry in headers.entries) '${entry.key}': '${entry.value}',

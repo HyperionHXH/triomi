@@ -10,9 +10,16 @@ import '../../core/models/video_resolve_cancellation.dart';
 import '../../core/source/windows_source_session.dart';
 
 class ResolvedDesktopVideo {
-  const ResolvedDesktopVideo(this.url, this.headers);
+  const ResolvedDesktopVideo(
+    this.url,
+    this.headers, {
+    this.mimeType,
+    this.omitCookies = false,
+  });
   final String url;
   final Map<String, String> headers;
+  final String? mimeType;
+  final bool omitCookies;
 }
 
 /// Resolves the ordinary site in a private viewport behind the player.
@@ -52,7 +59,9 @@ Future<ResolvedDesktopVideo> resolveWindowsVideo(
                   if (!result.isCompleted) result.complete(value);
                 },
                 onError: (message) {
-                  if (!result.isCompleted) result.completeError(StateError(message));
+                  if (!result.isCompleted) {
+                    result.completeError(StateError(message));
+                  }
                 },
               ),
             ),
@@ -62,8 +71,11 @@ Future<ResolvedDesktopVideo> resolveWindowsVideo(
     },
   );
   void cancel() {
-    if (!result.isCompleted) result.completeError(VideoResolveCancelled(owner.reason));
+    if (!result.isCompleted) {
+      result.completeError(VideoResolveCancelled(owner.reason));
+    }
   }
+
   owner.addListener(cancel);
   overlay.insert(entry);
   try {
@@ -103,7 +115,11 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
   final _web = WebviewController();
   StreamSubscription<dynamic>? _messages;
   StreamSubscription<WebErrorStatus>? _errors;
-  StreamSubscription<LoadingState>? _loading;
+  StreamSubscription<String>? _urls;
+  Uri? _documentUrl;
+  Uri? _parentDocument;
+  Uri? _parent;
+  bool _enteredPlayer = false;
   Timer? _deadline;
   bool _ready = false;
   bool _initialized = false;
@@ -199,10 +215,21 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
       await _web.setUserAgent(_agent);
       if (!mounted || _finished) return;
       _messages = _web.webMessage.listen(_onMessage);
-      _errors = _web.onLoadError.listen((_) {
+      _urls = _web.url.listen((value) => _documentUrl = _httpUri(value));
+      _errors = _web.onLoadError.listen((status) {
+        // Following the parent link deliberately cancels its remaining load.
+        // Certificate, connection and destination failures still fail normally.
+        if (_enteredPlayer &&
+            (status == WebErrorStatus.WebErrorStatusOperationCanceled ||
+                (status == WebErrorStatus.WebErrorStatusConnectionAborted &&
+                    _documentUrl == _parentDocument))) {
+          return;
+        }
         _fail('播放页加载失败，请重试或换来源');
       });
-      await _web.addScriptToExecuteOnDocumentCreated(_script);
+      await _web.addScriptToExecuteOnDocumentCreated(
+        'window.__triomiLegacyParser = ${widget.line.useLegacyParser};\n$_script',
+      );
       if (!mounted || _finished || _error != null) {
         await _disposeWeb();
         return;
@@ -210,33 +237,9 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
       setState(() => _ready = true);
       // The plugin cannot set arbitrary headers. Navigate through a link in
       // the real parent document so its normal referrer policy applies.
-      final parent = _httpUri(headers['referer']);
-      if (parent != null && parent != _httpUri(widget.line.url)) {
-        var navigated = false;
-        _loading = _web.loadingState.listen((state) {
-          if (state != LoadingState.navigationCompleted ||
-              navigated ||
-              !mounted ||
-              _finished ||
-              _error != null) {
-            return;
-          }
-          navigated = true;
-          unawaited(
-            _web
-                .executeScript(
-                  '(() => { const a = document.createElement("a"); '
-                  'a.href = ${jsonEncode(widget.line.url)}; '
-                  'a.target = "_self"; document.body.appendChild(a); a.click(); })();',
-                )
-                .catchError((Object _) {
-                  _fail('播放页导航失败，请重试或换来源');
-                  return null;
-                }),
-          );
-        });
-      }
-      await _web.loadUrl((parent ?? _httpUri(widget.line.url)!).toString());
+      _parent = _httpUri(headers['referer']);
+      if (_parent == _httpUri(widget.line.url)) _parent = null;
+      await _web.loadUrl((_parent ?? _httpUri(widget.line.url)!).toString());
     } catch (error) {
       _fail(
         error is StateError ? error.message.toString() : '网页播放组件暂不可用，请重试或更换来源',
@@ -258,6 +261,23 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
     }
   }
 
+  void _enterPlayer() {
+    if (_enteredPlayer || _parent == null || !mounted || _finished) return;
+    _enteredPlayer = true;
+    unawaited(
+      _web
+          .executeScript(
+            '(() => { const a = document.createElement("a"); '
+            'a.href = ${jsonEncode(widget.line.url)}; '
+            'a.target = "_self"; document.body.appendChild(a); a.click(); })();',
+          )
+          .catchError((Object _) {
+            _fail('播放页导航失败，请重试或换来源');
+            return null;
+          }),
+    );
+  }
+
   Future<void> _onMessage(dynamic message) async {
     if (!mounted || _finished || _capturing || _error != null) return;
     if (message is String) {
@@ -267,17 +287,36 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
         return;
       }
     }
-    if (message is! Map || message['type'] != 'triomi-media') return;
-    final uri = _httpUri(message['url']?.toString());
-    if (_httpUri(widget.line.url)?.scheme == 'https' && uri?.scheme != 'https') {
+    if (message is! Map) return;
+    if (message['type'] == 'triomi-parent-ready') {
+      final page = _httpUri(message['page']?.toString());
+      // Compare against the native top-level URL to allow real redirects,
+      // never a frame's claimed parent or a downgrade of the HTTPS parent.
+      if (_parent != null &&
+          page != null &&
+          (_parent!.scheme != 'https' || page.scheme == 'https') &&
+          (page.removeFragment() == _parent?.removeFragment() ||
+              page.removeFragment() == _documentUrl?.removeFragment())) {
+        _parentDocument = page.removeFragment();
+        _enterPlayer();
+      }
       return;
     }
-    // A webpage, blob or arbitrary postMessage is never treated as a stream.
+    if (message['type'] != 'triomi-media') return;
+    final uri = _httpUri(message['url']?.toString());
+    if (_httpUri(widget.line.url)?.scheme == 'https' &&
+        uri?.scheme != 'https') {
+      return;
+    }
+    final hls = message['mimeType'] == 'application/vnd.apple.mpegurl';
+    // An extensionless URL requires observed media evidence, never a plain link.
     if (uri == null ||
-        !RegExp(
-          r'\.(m3u8|mp4|m4v)$',
-          caseSensitive: false,
-        ).hasMatch(uri.path)) {
+        (!hls &&
+            message['evidence'] != 'video' &&
+            !RegExp(
+              r'\.(m3u8|mp4|m4v)$',
+              caseSensitive: false,
+            ).hasMatch(uri.path))) {
       return;
     }
     final url = uri.toString();
@@ -298,19 +337,29 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
     final referer = _httpUri(message['referer']?.toString());
     _capturing = true;
     try {
-      final cookie = await WindowsSourceSession.videoCookies(url);
-      if (!mounted || _finished || _error != null || widget.owner.isCancelled) return;
+      final cookie = message['omitCookies'] == true
+          ? null
+          : await WindowsSourceSession.videoCookies(url);
+      if (!mounted || _finished || _error != null || widget.owner.isCancelled) {
+        return;
+      }
       _finished = true;
       _deadline?.cancel();
       widget.onResolved(
-        ResolvedDesktopVideo(url, {
-          'User-Agent': _agent,
-          if (page != null && referer != null &&
-              (referer.toString() == '${page.origin}/' ||
-                  referer.toString() == page.removeFragment().toString()))
-            'Referer': referer.toString(),
-          if (cookie != null && cookie.isNotEmpty) 'Cookie': cookie,
-        }),
+        ResolvedDesktopVideo(
+          url,
+          {
+            'User-Agent': _agent,
+            if (page != null &&
+                referer != null &&
+                (referer.toString() == '${page.origin}/' ||
+                    referer.toString() == page.removeFragment().toString()))
+              'Referer': referer.toString(),
+            if (cookie != null && cookie.isNotEmpty) 'Cookie': cookie,
+          },
+          mimeType: hls ? 'application/vnd.apple.mpegurl' : null,
+          omitCookies: message['omitCookies'] == true,
+        ),
       );
     } catch (_) {
       _fail('无法读取网页会话，请关闭后重试');
@@ -348,7 +397,7 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
     _deadline?.cancel();
     unawaited(_messages?.cancel());
     unawaited(_errors?.cancel());
-    unawaited(_loading?.cancel());
+    unawaited(_urls?.cancel());
     unawaited(() async {
       try {
         if (_creating != null) await _initializing;
@@ -364,7 +413,8 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
   Widget build(BuildContext context) => _ready
       ? Webview(
           _web,
-          permissionRequested: (_, _, _) async => WebviewPermissionDecision.deny,
+          permissionRequested: (_, _, _) async =>
+              WebviewPermissionDecision.deny,
         )
       : const SizedBox.expand();
 
@@ -372,15 +422,21 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
 (() => {
   if (window.__triomiMedia) return;
   window.__triomiMedia = true;
+  const hls = 'application/vnd.apple.mpegurl';
+  const isHls = type => /^(application|audio)\/(vnd\.apple\.mpegurl|x-mpegurl|mpegurl)(?:;|$)/i.test(type || '');
   if (window === window.top) window.addEventListener('message', e => {
     if (e.source === window || !/^https?:\/\//.test(e.origin) ||
         !e.data || e.data.type !== 'triomi-frame-media') return;
     window.chrome.webview.postMessage({...e.data,type:'triomi-media'});
   });
-  const report = input => {
+  const reported = new Map();
+  const report = (input, evidence = '', mimeType = '', omitCookies = false) => {
     try {
+      if (typeof input !== 'string' || !input.trim()) return;
       const u = new URL(input, location.href);
-      if (!/^https?:$/.test(u.protocol) || !/\.(m3u8|mp4|m4v)$/i.test(u.pathname)) return;
+      if (!/^https?:$/.test(u.protocol) ||
+          (reported.has(u.href) && (!mimeType || reported.get(u.href))) ||
+          (mimeType !== hls && evidence !== 'video' && !/\.(m3u8|mp4|m4v)$/i.test(u.pathname))) return;
       const policy = document.referrerPolicy || 'strict-origin-when-cross-origin';
       const same = u.origin === location.origin;
       const downgrade = location.protocol === 'https:' && u.protocol === 'http:';
@@ -388,30 +444,107 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
       if (policy === 'unsafe-url' || (same && policy !== 'no-referrer')) ref = location.href.split('#')[0];
       else if (policy === 'origin' || policy === 'origin-when-cross-origin' ||
         (!downgrade && policy === 'strict-origin') || (!downgrade && policy === 'strict-origin-when-cross-origin')) ref = location.origin + '/';
-      const media = {url:u.href,referer:ref,page:location.href};
-      // WebView2's top-level WebMessageReceived does not receive frame events.
-      // Document-start scripts run in frames too; relay only HTTP(S) origins.
+      reported.set(u.href, mimeType);
+      const media = {url:u.href,referer:ref,page:location.href,evidence,mimeType,omitCookies};
       if (window === window.top) window.chrome.webview.postMessage({...media,type:'triomi-media'});
       else window.top.postMessage({...media,type:'triomi-frame-media'},'*');
     } catch (_) {}
   };
+  const responseRequests = new WeakMap();
+  const clone = Response.prototype.clone;
+  Response.prototype.clone = function() {
+    const response = clone.call(this), metadata = responseRequests.get(this);
+    if (metadata) responseRequests.set(response, metadata);
+    return response;
+  };
+  const text = Response.prototype.text;
+  Response.prototype.text = function() {
+    const url = this.url, metadata = responseRequests.get(this) || {};
+    return text.call(this).then(body => {
+      if (body.trim().startsWith('#EXTM3U')) report(url, 'manifest', hls, metadata.omit);
+      return body;
+    });
+  };
   const nativeFetch = window.fetch;
-  window.fetch = function() {
+  window.fetch = function(input, init) {
+    const request = input instanceof Request ? input.url : String(input);
+    const credentials = init && init.credentials || (input instanceof Request ? input.credentials : 'same-origin');
+    let omit = credentials === 'omit';
+    try { omit = omit || credentials === 'same-origin' && new URL(request, location.href).origin !== location.origin; } catch (_) {}
     return nativeFetch.apply(this, arguments).then(r => {
-      if (/\.(m3u8|mp4|m4v)(?:[?#]|$)/i.test(r.url)) report(r.url);
+      const url = r.url || request;
+      try { omit = omit || credentials === 'same-origin' && new URL(url, location.href).origin !== location.origin; } catch (_) {}
+      responseRequests.set(r, {omit});
+      if (isHls(r.headers.get('content-type'))) report(url, 'mime', hls, omit);
+      else {
+        report(url, '', '', omit);
+        if (r.body && r.type !== 'opaque') {
+          try {
+            const reader = r.clone().body.getReader();
+            const timer = setTimeout(() => { reader.cancel().catch(() => {}); }, 5000);
+            const decoder = new TextDecoder();
+            let prefix = '', bytes = 0;
+            const read = () => reader.read().then(part => {
+              if (part.value) {
+                bytes += part.value.byteLength;
+                prefix += decoder.decode(part.value.subarray(0, Math.max(0, 512 - prefix.length)), {stream:true});
+              }
+              const trimmed = prefix.trimStart();
+              if (trimmed.startsWith('#EXTM3U')) {
+                clearTimeout(timer);
+                reader.cancel().catch(() => {});
+                report(url, 'manifest', hls, omit);
+              } else if (part.done || bytes >= 512 || trimmed.length >= 7) {
+                clearTimeout(timer);
+                reader.cancel().catch(() => {});
+              } else return read();
+            }).catch(() => { clearTimeout(timer); });
+            read();
+          } catch (_) {}
+        }
+      }
       return r;
     });
   };
   const open = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function() {
-    this.addEventListener('load', () => report(this.responseURL));
+  XMLHttpRequest.prototype.open = function(method, input) {
+    const request = new URL(input, location.href);
+    this.addEventListener('load', () => {
+      try {
+        const url = this.responseURL || request.href;
+        const omit = !this.withCredentials && (request.origin !== location.origin || new URL(url).origin !== location.origin);
+        if (isHls(this.getResponseHeader('content-type')) ||
+            ((!this.responseType || this.responseType === 'text') && this.responseText.trim().startsWith('#EXTM3U')) ||
+            (this.responseType === 'arraybuffer' && this.response instanceof ArrayBuffer &&
+              new TextDecoder().decode(new Uint8Array(this.response, 0, Math.min(512, this.response.byteLength))).trim().startsWith('#EXTM3U'))) {
+          report(url, 'manifest', hls, omit);
+        } else if (this.responseType === 'blob' && this.response instanceof Blob) {
+          this.response.slice(0,512).text().then(t => {
+            if (t.trim().startsWith('#EXTM3U')) report(url, 'manifest', hls, omit);
+          }).catch(() => {});
+        } else report(url, '', '', omit);
+      } catch (_) {}
+    }, {once:true});
     return open.apply(this, arguments);
   };
-  const scan = () => document.querySelectorAll('video,video source').forEach(v => report(v.currentSrc || v.src));
-  document.addEventListener('DOMContentLoaded', () => {
-    new MutationObserver(scan).observe(document,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});
-    scan(); setInterval(scan, 500);
-  });
+  const scan = () => {
+    document.querySelectorAll('video,video source').forEach(v =>
+      report(v.currentSrc || v.src, 'video', isHls(v.type) ? hls : ''));
+    if (window.__triomiLegacyParser) document.querySelectorAll('iframe[src]').forEach(frame => {
+      try {
+        const url = new URL(frame.src, location.href);
+        for (const value of url.searchParams.values()) report(value);
+      } catch (_) {}
+    });
+  };
+  const ready = () => {
+    if (window === window.top) window.chrome.webview.postMessage({type:'triomi-parent-ready',page:location.href});
+    scan();
+  };
+  new MutationObserver(scan).observe(document,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready, {once:true});
+  else ready();
+  setInterval(scan, 500);
 })();
 ''';
 }

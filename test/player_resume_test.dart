@@ -282,37 +282,21 @@ void main() {
         seeksBeforeTap,
         reason: 'a single tap at the edge must not change playback position',
       );
-      await doubleTapAt(leftPoint);
-      expect(getSeekTarget(), 56000);
-      await event('state', {
-        'position': 71000,
-        'duration': 120000,
-        'playing': true,
-      });
-      await doubleTapAt(rightPoint);
-      expect(getSeekTarget(), 86000);
-      await event('state', {
-        'position': 5000,
-        'duration': 120000,
-        'playing': true,
-      });
-      await doubleTapAt(leftPoint);
-      expect(
-        getSeekTarget(),
-        0,
-        reason: 'seeking before the start clamps to zero',
-      );
-      await event('state', {
-        'position': 115000,
-        'duration': 120000,
-        'playing': true,
-      });
-      await doubleTapAt(rightPoint);
-      expect(
-        getSeekTarget(),
-        120000,
-        reason: 'seeking past the end never opens another episode',
-      );
+      for (final point in [leftPoint, rightPoint]) {
+        await doubleTapAt(point);
+        expect(nativeCalls.last.method, 'pause');
+        expect(
+          nativeCalls.where((call) => call.method == 'seek').length,
+          seeksBeforeTap,
+          reason:
+              'edge double taps toggle playback without a fifteen-second seek',
+        );
+        await event('state', {
+          'position': 71000,
+          'duration': 120000,
+          'playing': true,
+        });
+      }
       expect(opens.length, playbackOpens);
       await event('state', {
         'position': 71000,
@@ -348,13 +332,16 @@ void main() {
         'duration': 120000,
         'playing': true,
       });
+      final seekCountBeforeDoubleTap = nativeCalls
+          .where((call) => call.method == 'seek')
+          .length;
       await doubleTapAt(rightPoint);
+      expect(nativeCalls.last.method, 'pause');
       expect(
-        getSeekTarget(),
-        86000,
-        reason: 'configured skip must not change the edge double-tap interval',
+        nativeCalls.where((call) => call.method == 'seek').length,
+        seekCountBeforeDoubleTap,
+        reason: 'configured skip does not turn double taps into seeking',
       );
-      // Between one quarter and one third belongs to the center, not the edge.
       await doubleTapAt(
         Offset(
           surfaceRect.left + surfaceRect.width * .28,
