@@ -8,7 +8,7 @@
 
 ## 下载与安装
 
-源码版本为 **0.12.0+171**；本轮发布目标为 [v0.12.0-test.171](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-test.171)，构建及资产核验状态见[当前状态](docs/CURRENT_STATUS.md)。**Android从166起更换正式签名，不能直接覆盖165及更早的旧签名版本**，166及后续正式版沿用同一证书可覆盖更新。迁移前务必阅读下方说明。资产类型：
+当前源码与已发布测试版为 **0.12.0+171**：[v0.12.0-test.171](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-test.171)。双端构建、公开资产校验及验收范围见[当前状态](docs/CURRENT_STATUS.md)。**Android从166起更换正式签名，不能直接覆盖165及更早的旧签名版本**，166及后续正式版沿用同一证书可覆盖更新。迁移前务必阅读下方说明。资产类型：
 
 | 文件 | 用途 |
 | --- | --- |

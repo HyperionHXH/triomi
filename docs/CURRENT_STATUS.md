@@ -15,9 +15,14 @@
 
 最终验证：完整Flutter **1305项通过/3项跳过**，`flutter analyze --no-pub`零问题，Python工具 **89项通过**，编码零错误、文档扫描无错误。独立新建API35模拟器的最终网页解析/Media3生命周期回归 **19项通过**，未使用或清理用户设备。Windows真实WebView2从含3秒慢图的父页进入播放页，578ms取得无后缀HLS，media_kit实际显示320×180动态测试图，位置3000ms、缓冲11958ms；Android实际解析同一HLS并显示动态真帧，缓冲推进到12000ms，左右双击依次暂停/恢复（2723ms→3163ms），两次切换、零seek。均是生产组件加自建媒体夹具，不冒充真实站点首帧或完整手机矩阵。临时烟测入口及自有HTTP服务已清理。
 
-独立复核补齐四处消费边界：空video不再把当前HTML页面误认为视频；DOM source的HLS类型保留；真实父页重定向以原生顶层URL验证；fetch省略凭据的策略一直传到下载，禁止重新附加Cookie。提前离开父页产生的原生ConnectionAborted仅在仍指向已确认父文档时忽略，目的页证书/网络失败仍报错；回归同时覆盖父页取消与TLS失败。最终发布字节核验在完成后补记。
+独立复核补齐四处消费边界：空video不再把当前HTML页面误认为视频；DOM source的HLS类型保留；真实父页重定向以原生顶层URL验证；fetch省略凭据的策略一直传到下载，禁止重新附加Cookie。提前离开父页产生的原生ConnectionAborted仅在仍指向已确认父文档时忽略，目的页证书/网络失败仍报错；回归同时覆盖父页取消与TLS失败。
 
 边界：不把GiriGiriLove挑战HTML、HTTP200入口或兼容导入等同于可播放，不添加验证绕过，也没有“所有来源与Kazumi同速”的证据。额外生产Dart公开API9探针在下载固定官方规则快照阶段遇到网络异常，独立读取raw.githubusercontent.com也超时，未进入搜索/目录链路，未记为在线成功；前述三站详情路径比较是另一次公开HTTP观测，不能合并冒称整条应用实网成功。
+
+修复提交 `e443f04` 已推送master，标签 `v0.12.0-test.171`；[正式流水线39715302611](https://github.com/HyperionHXH/triomi/actions/runs/39715302611)的Android、Windows、publish三任务均成功，[公开预发布171](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-test.171)含APK、完整ZIP、MSI、更新清单及SHA256SUMS。五项公开资产全部完整下载，大小、GitHub SHA-256及SHA256SUMS逐项一致，Windows更新清单450个成员重算后完全一致。公开EXE ProductVersion=`0.12.0+171`，MSI只读ProductVersion=`0.12.171`；未安装MSI或启动公开Windows主程序访问用户资料。
+
+公开APK包名 `io.github.hyperionhxh.triomi`、versionName=`0.12.0`、versionCode=`171`，apksigner验签通过，生产证书SHA-256仍为 `731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309`，可覆盖166之后同签名正式版。APK SHA-256=`d99008acc70f7dc6dc62e97fca339c2b02af2a70d1cca8ffc5b9bcd2e0f2053f`，ZIP=`d0dfd46b2b1699f8f1cc9d931642f3aff59324094e4161b8bf34e1a85da70bfa`，MSI=`dbb220b137d94509b9fe277fb1f5386a0251b33e34b801742017abcabf54a6b3`。独立临时API35移除自有debug验收包后安装最终公开APK，普通主入口实际载入推荐、三列真实封面，系统包信息读取171；不是物理手机或全部来源播放验收，原用户设备与资料不变。
+
 
 
 ## 当前请求：紧凑音量/亮度手势提示（源码0.12.0+170）
