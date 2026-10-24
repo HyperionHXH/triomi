@@ -221,6 +221,100 @@ void main() {
         reason:
             'the player must show network-buffered progress beyond playback',
       );
+      await tester.tap(find.byTooltip('播放设置'));
+      await settleRoute();
+      Future<void> menuTap(String id) async {
+        final entry = find.byKey(ValueKey('player-menu-$id'));
+        await tester.ensureVisible(entry);
+        await tester.tap(entry);
+        await settle();
+        await settleRoute();
+      }
+
+      await menuTap('speed');
+      await menuTap('speed-1.5');
+      expect(
+        (nativeCalls.lastWhere((call) => call.method == 'setRate').arguments
+            as Map)['rate'],
+        1.5,
+      );
+      expect(
+        PlayerSettings.load(container.read(preferencesProvider)).speed,
+        1.5,
+      );
+      await menuTap('back');
+      await menuTap('ratio');
+      await menuTap('ratio-ratio4x3');
+      expect(
+        (nativeCalls
+                .lastWhere((call) => call.method == 'setAspectRatio')
+                .arguments
+            as Map)['ratio'],
+        closeTo(4 / 3, .0001),
+      );
+      expect(
+        PlayerSettings.load(container.read(preferencesProvider)).aspectRatio,
+        VideoAspectRatio.ratio4x3,
+      );
+      await menuTap('back');
+      await menuTap('preferences');
+      await menuTap('auto-next');
+      await menuTap('background-audio');
+      expect(
+        (nativeCalls
+                .lastWhere((call) => call.method == 'setBackgroundAudio')
+                .arguments
+            as Map)['enabled'],
+        isTrue,
+      );
+      expect(
+        PlayerSettings.load(container.read(preferencesProvider)).autoNext,
+        isFalse,
+      );
+      // The native playing event must not re-arm chrome hiding under the menu.
+      await event('state', {
+        'position': 71000,
+        'duration': 120000,
+        'playing': true,
+      });
+      await tester.pump(const Duration(seconds: 5));
+      final chrome = find.ancestor(
+        of: find.byTooltip('播放设置'),
+        matching: find.byType(AnimatedOpacity),
+      );
+      expect(tester.widget<AnimatedOpacity>(chrome).opacity, 1);
+      await tester.binding.handlePopRoute();
+      await settleRoute();
+      expect(find.byKey(const ValueKey('player-menu-back')), findsNothing);
+      await tester.pump(const Duration(seconds: 5));
+      expect(tester.widget<AnimatedOpacity>(chrome).opacity, 0);
+      // Restore the fixture's settings, then prove a consumed outside tap does
+      // not pause playback or hide the controls under the closing anchor.
+      await tester.tapAt(tester.getCenter(find.byType(PlatformViewLink)));
+      await settleRoute();
+      await tester.tap(find.byTooltip('播放设置'));
+      await settleRoute();
+      await menuTap('preferences');
+      await menuTap('auto-next');
+      await menuTap('background-audio');
+      final pauses = nativeCalls.where((call) => call.method == 'pause').length;
+      await tester.tapAt(const Offset(12, 80));
+      await settleRoute();
+      expect(find.byKey(const ValueKey('player-menu-back')), findsNothing);
+      expect(
+        nativeCalls.where((call) => call.method == 'pause').length,
+        pauses,
+      );
+      expect(tester.widget<AnimatedOpacity>(chrome).opacity, 1);
+      await tester.tap(find.byTooltip('播放设置'));
+      await settleRoute();
+      await menuTap('speed');
+      await menuTap('speed-1.0');
+      await menuTap('back');
+      await menuTap('ratio');
+      await menuTap('ratio-original');
+      await tester.binding.handlePopRoute();
+      await settleRoute();
       final previous = find.widgetWithIcon(
         IconButton,
         Icons.skip_previous_rounded,

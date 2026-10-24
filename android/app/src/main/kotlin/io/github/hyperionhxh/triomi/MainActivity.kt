@@ -106,6 +106,23 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "triomi/platform")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "resolveSystemProxy" -> {
+                        val url = call.argument<String>("url")
+                        if (url == null) {
+                            result.error("system_proxy_failed", "系统代理请求地址无效", null)
+                        } else {
+                            mihonExecutor.execute {
+                                try {
+                                    val route = resolveSystemProxy(url)
+                                    runOnUiThread { result.success(route) }
+                                } catch (_: Exception) {
+                                    runOnUiThread {
+                                        result.error("system_proxy_failed", "无法读取系统代理配置", null)
+                                    }
+                                }
+                            }
+                        }
+                    }
                     "launchExternalUrl" -> {
                         try {
                             val url = sourceWebsiteUrl(requireNotNull(call.argument<String>("url")))

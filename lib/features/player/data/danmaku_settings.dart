@@ -1,301 +1,470 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/source/source_providers.dart';
 import '../../../core/storage/preferences.dart';
-import '../../../core/storage/secure_store.dart';
-import 'dandanplay_client.dart';
+import '../../../core/text/zh_converter.dart';
 
-/// 弹幕功能暂缓开放：当前版本不携带可核验的官方弹弹play应用凭据。
-/// 来源规则声明的外部弹幕地址保留在协议层，待合规接入方案确认后再开放播放器入口。
-const bool danmakuFeatureEnabled = false;
+const bool danmakuFeatureEnabled = true;
 
-/// 弹幕显示与过滤设置（对齐 Kazumi 的弹幕设置项，逐项持久化）。
+/// A validated rule. Regex evaluation happens when the episode/filter changes,
+/// never in the animation ticker. The deliberately restricted regex grammar
+/// permits one variable repetition and no groups, alternatives or backreferences.
+class DanmakuShieldRule {
+  const DanmakuShieldRule({
+    required this.text,
+    this.isRegex = false,
+    this.enabled = true,
+  });
+
+  static const maxRules = 256;
+  static const maxLength = 128;
+  static const maxTextLength = 512;
+  final String text;
+  final bool isRegex;
+  final bool enabled;
+
+  DanmakuShieldRule copyWith({String? text, bool? isRegex, bool? enabled}) =>
+      DanmakuShieldRule(
+        text: text ?? this.text,
+        isRegex: isRegex ?? this.isRegex,
+        enabled: enabled ?? this.enabled,
+      );
+
+  static DanmakuShieldRule parse(String input) {
+    final text = input.trim();
+    final regex =
+        text.length >= 2 && text.startsWith('/') && text.endsWith('/');
+    return DanmakuShieldRule(
+      text: regex ? text.substring(1, text.length - 1) : text,
+      isRegex: regex,
+    );
+  }
+
+  String? get validationError {
+    if (text.trim().isEmpty) return '规则不能为空';
+    if (text.length > maxLength) return '规则最多 $maxLength 个字符';
+    if (!isRegex) return null;
+    var inClass = false;
+    var variableRepeats = 0;
+    for (var i = 0; i < text.length; i++) {
+      final char = text[i];
+      if (char == r'\') {
+        if (++i >= text.length) return '正则表达式末尾缺少转义字符';
+        if ('123456789kgpP'.contains(text[i])) return '不支持反向引用或扩展字符属性';
+        continue;
+      }
+      if (char == '[' && !inClass) {
+        inClass = true;
+        continue;
+      }
+      if (char == ']' && inClass) {
+        inClass = false;
+        continue;
+      }
+      if (inClass) continue;
+      if ('()|'.contains(char)) return '安全正则不支持分组、择一或环视';
+      if ('*+?'.contains(char)) variableRepeats++;
+      if (char == '{') {
+        final end = text.indexOf('}', i + 1);
+        if (end < 0) return '重复次数缺少右括号';
+        final range = text.substring(i + 1, end).split(',');
+        if (range.length > 2) return '重复次数格式无效';
+        final min = int.tryParse(range.first);
+        final max = range.length == 1 ? min : int.tryParse(range.last);
+        if (min == null || max == null || min < 0 || max < min || max > 64) {
+          return '重复次数须为 0–64 的有限范围';
+        }
+        if (min != max) variableRepeats++;
+        i = end;
+      }
+      if (variableRepeats > 1) return '安全正则最多允许一个可变重复项';
+    }
+    try {
+      RegExp(text);
+    } on FormatException {
+      return '正则表达式无效';
+    }
+    return null;
+  }
+
+  Map<String, Object?> toJson() => {
+    'text': text,
+    'isRegex': isRegex,
+    'enabled': enabled,
+  };
+
+  static DanmakuShieldRule? fromJson(Object? value) {
+    if (value is String) return parse(value);
+    if (value is! Map || value['text'] is! String) return null;
+    return DanmakuShieldRule(
+      text: value['text'] as String,
+      isRegex: value['isRegex'] == true,
+      enabled: value['enabled'] != false,
+    );
+  }
+}
+
+class _ShieldMatcher {
+  _ShieldMatcher(DanmakuSettings settings)
+    : keywords = [
+        ...settings.blockedWords.where((word) => word.isNotEmpty),
+        for (final rule in settings.shieldRules)
+          if (rule.enabled && !rule.isRegex && rule.validationError == null)
+            rule.text,
+      ],
+      regexes = [
+        for (final rule in settings.shieldRules)
+          if (rule.enabled && rule.isRegex && rule.validationError == null)
+            RegExp(rule.text),
+      ];
+  final List<String> keywords;
+  final List<RegExp> regexes;
+
+  final Map<String, bool> _results = {};
+  bool matches(String text) {
+    final cached = _results[text];
+    if (cached != null) return cached;
+    final matches =
+        keywords.any(text.contains) ||
+        regexes.any((rule) => rule.hasMatch(text));
+    if (_results.length >= 2048) _results.clear();
+    _results[text] = matches;
+    return matches;
+  }
+}
+
+/// Display settings shared by the settings page and the live player panel.
+/// Existing fontScale/speedScale keys remain readable and writable for backups.
 class DanmakuSettings {
   const DanmakuSettings({
     this.enabled = true,
     this.opacity = 0.9,
-    this.fontScale = 1.0,
-    this.speedScale = 1.0,
+    this.fontScale = 1,
+    this.speedScale = 1,
+    this._fontSize,
+    this._durationSeconds,
+    this.area = 1,
+    this.lineHeight = 1.6,
+    this.fontWeight = 4,
+    this.followVideoRate = true,
     this.showScroll = true,
     this.showTop = true,
     this.showBottom = true,
+    this.showColor = true,
+    this.outline = true,
+    this.outlineWidth = 1,
+    this.massive = false,
+    this.maxActive = 120,
+    this.mergeDuplicates = false,
+    this.conversion = ZhConversionMode.off,
     this.blockedWords = const <String>[],
     this.blockedUsers = const <String>[],
+    this.shieldRules = const <DanmakuShieldRule>[],
   });
 
   final bool enabled;
-
-  /// 不透明度（0.2~1.0）。
   final double opacity;
-
-  /// 字号缩放（0.6~1.6）。
   final double fontScale;
-
-  /// 速度倍率（0.5~2.0，越大滚动越快、停留越短）。
   final double speedScale;
-
+  final double? _fontSize;
+  final double? _durationSeconds;
+  double get fontSize => _bounded(_fontSize ?? 16 * fontScale, 10, 48, 16);
+  double get durationSeconds =>
+      _bounded(_durationSeconds ?? 9 / speedScale, 2, 16, 9);
+  final double area;
+  final double lineHeight;
+  final int fontWeight;
+  final bool followVideoRate;
   final bool showScroll;
   final bool showTop;
   final bool showBottom;
-
-  /// 屏蔽词：弹幕文本包含任一即过滤。
+  final bool showColor;
+  final bool outline;
+  final double outlineWidth;
+  final bool massive;
+  final int maxActive;
+  final bool mergeDuplicates;
+  final ZhConversionMode conversion;
   final List<String> blockedWords;
-
-  /// 按用户 ID 屏蔽（弹弹play 的 p 字段第 4 段）。
   final List<String> blockedUsers;
+  final List<DanmakuShieldRule> shieldRules;
 
-  /// 滚动弹幕停留时长（基础 9 秒，除以速度倍率）。
-  int get scrollDurationMs => (9000 / speedScale).round();
-
-  /// 顶部/底部弹幕停留时长。
-  int get staticDurationMs => (4200 / speedScale).round();
+  static const duplicateWindowMs = 5000;
+  static final _matchers = Expando<_ShieldMatcher>();
+  int get scrollDurationMs => (durationSeconds * 1000).round();
+  int get staticDurationMs => _durationSeconds == null
+      ? (_bounded(4.2 / speedScale, 2, 16, 4.2) * 1000).round()
+      : scrollDurationMs;
 
   DanmakuSettings copyWith({
     bool? enabled,
     double? opacity,
     double? fontScale,
     double? speedScale,
+    double? fontSize,
+    double? durationSeconds,
+    double? area,
+    double? lineHeight,
+    int? fontWeight,
+    bool? followVideoRate,
     bool? showScroll,
     bool? showTop,
     bool? showBottom,
+    bool? showColor,
+    bool? outline,
+    double? outlineWidth,
+    bool? massive,
+    int? maxActive,
+    bool? mergeDuplicates,
+    ZhConversionMode? conversion,
     List<String>? blockedWords,
     List<String>? blockedUsers,
+    List<DanmakuShieldRule>? shieldRules,
   }) => DanmakuSettings(
     enabled: enabled ?? this.enabled,
-    opacity: opacity ?? this.opacity,
-    fontScale: fontScale ?? this.fontScale,
-    speedScale: speedScale ?? this.speedScale,
+    opacity: _bounded(opacity ?? this.opacity, 0.1, 1, 0.9),
+    fontScale: _bounded(fontScale ?? this.fontScale, 0.1, 3, 1),
+    speedScale: _bounded(speedScale ?? this.speedScale, 0.5, 2, 1),
+    fontSize: fontSize ?? (fontScale == null ? _fontSize : null),
+    durationSeconds:
+        durationSeconds ?? (speedScale == null ? _durationSeconds : null),
+    area: _bounded(area ?? this.area, 0, 1, 1),
+    lineHeight: _bounded(lineHeight ?? this.lineHeight, 0, 3, 1.6),
+    fontWeight: (fontWeight ?? this.fontWeight).clamp(1, 9).toInt(),
+    followVideoRate: followVideoRate ?? this.followVideoRate,
     showScroll: showScroll ?? this.showScroll,
     showTop: showTop ?? this.showTop,
     showBottom: showBottom ?? this.showBottom,
-    blockedWords: blockedWords ?? this.blockedWords,
-    blockedUsers: blockedUsers ?? this.blockedUsers,
+    showColor: showColor ?? this.showColor,
+    outline: outline ?? this.outline,
+    outlineWidth: _bounded(outlineWidth ?? this.outlineWidth, 0.1, 3, 1),
+    massive: massive ?? this.massive,
+    maxActive: (maxActive ?? this.maxActive).clamp(20, 300).toInt(),
+    mergeDuplicates: mergeDuplicates ?? this.mergeDuplicates,
+    conversion: conversion ?? this.conversion,
+    blockedWords: List.unmodifiable(blockedWords ?? this.blockedWords),
+    blockedUsers: List.unmodifiable(blockedUsers ?? this.blockedUsers),
+    shieldRules: List.unmodifiable(
+      (shieldRules ?? this.shieldRules).take(DanmakuShieldRule.maxRules),
+    ),
   );
 
-  /// 一条弹幕是否被设置过滤掉。
   bool filters(String text, {String? user}) {
-    if (blockedWords.any(text.contains)) return true;
+    if (text.length > DanmakuShieldRule.maxTextLength) return true;
     if (user != null && user.isNotEmpty && blockedUsers.contains(user)) {
       return true;
     }
-    return false;
+    final matcher = _matchers[this] ??= _ShieldMatcher(this);
+    return matcher.matches(text);
   }
 
-  // ---------------------------------------------------------------- 持久化
-
-  static const String _enabledKey = 'danmaku.enabled';
-  static const String _opacityKey = 'danmaku.opacity';
-  static const String _fontScaleKey = 'danmaku.fontScale';
-  static const String _speedScaleKey = 'danmaku.speedScale';
-  static const String _showScrollKey = 'danmaku.showScroll';
-  static const String _showTopKey = 'danmaku.showTop';
-  static const String _showBottomKey = 'danmaku.showBottom';
-  static const String _blockedWordsKey = 'danmaku.blockedWords';
-  static const String _blockedUsersKey = 'danmaku.blockedUsers';
-
-  static DanmakuSettings load(Preferences preferences) => DanmakuSettings(
-    enabled: preferences.get<bool>(_enabledKey) ?? true,
-    opacity: (preferences.get<double>(_opacityKey) ?? 0.9).clamp(0.2, 1.0),
-    fontScale: (preferences.get<double>(_fontScaleKey) ?? 1.0).clamp(0.6, 1.6),
-    speedScale: (preferences.get<double>(_speedScaleKey) ?? 1.0).clamp(
-      0.5,
-      2.0,
-    ),
-    showScroll: preferences.get<bool>(_showScrollKey) ?? true,
-    showTop: preferences.get<bool>(_showTopKey) ?? true,
-    showBottom: preferences.get<bool>(_showBottomKey) ?? true,
-    blockedWords: _stringList(preferences.get<List<Object?>>(_blockedWordsKey)),
-    blockedUsers: _stringList(preferences.get<List<Object?>>(_blockedUsersKey)),
+  /// Reset appearance/playback only; all legacy and new block rules survive.
+  DanmakuSettings restoreDefaults() => DanmakuSettings(
+    blockedWords: List.unmodifiable(blockedWords),
+    blockedUsers: List.unmodifiable(blockedUsers),
+    shieldRules: List.unmodifiable(shieldRules),
   );
 
-  Future<void> save(Preferences preferences) async {
-    await preferences.set(_enabledKey, enabled);
-    await preferences.set(_opacityKey, opacity);
-    await preferences.set(_fontScaleKey, fontScale);
-    await preferences.set(_speedScaleKey, speedScale);
-    await preferences.set(_showScrollKey, showScroll);
-    await preferences.set(_showTopKey, showTop);
-    await preferences.set(_showBottomKey, showBottom);
-    await preferences.set(_blockedWordsKey, blockedWords);
-    await preferences.set(_blockedUsersKey, blockedUsers);
+  String exportShieldRules() => const JsonEncoder.withIndent('  ').convert({
+    'version': 1,
+    'rules': [
+      for (final word in blockedWords) DanmakuShieldRule(text: word).toJson(),
+      for (final rule in shieldRules) rule.toJson(),
+    ],
+  });
+
+  /// JSON list/object or one Kazumi-style keyword /regex/ per line.
+  /// Invalid imports are atomic: nothing is changed until every rule is valid.
+  DanmakuSettings importShieldRules(String input) {
+    if (input.length > 128 * 1024) throw const FormatException('导入内容过大');
+    final trimmed = input.trim();
+    Object? decoded;
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      decoded = jsonDecode(trimmed);
+      if (decoded is Map) decoded = decoded['rules'];
+      if (decoded is! List) throw const FormatException('缺少规则列表');
+    } else {
+      decoded = const LineSplitter()
+          .convert(input)
+          .where((line) => line.trim().isNotEmpty)
+          .toList();
+    }
+    final imported = <DanmakuShieldRule>[];
+    for (final value in decoded as List) {
+      final rule = DanmakuShieldRule.fromJson(value);
+      final error = rule?.validationError;
+      if (rule == null || error != null) {
+        throw FormatException(error ?? '规则格式无效');
+      }
+      if (blockedWords.contains(rule.text) && !rule.isRegex) continue;
+      if ([
+        ...shieldRules,
+        ...imported,
+      ].any((item) => item.text == rule.text && item.isRegex == rule.isRegex)) {
+        continue;
+      }
+      imported.add(rule);
+      if (shieldRules.length + imported.length > DanmakuShieldRule.maxRules) {
+        throw const FormatException('最多保存 256 条屏蔽规则');
+      }
+    }
+    return copyWith(shieldRules: [...shieldRules, ...imported]);
   }
 
-  static List<String> _stringList(List<Object?>? raw) => <String>[
-    for (final item in raw ?? const <Object?>[])
-      if (item != null && item.toString().trim().isNotEmpty)
-        item.toString().trim(),
+  Map<String, Object?> toJson() => {
+    'danmaku.enabled': enabled,
+    'danmaku.opacity': _bounded(opacity, 0.1, 1, 0.9),
+    'danmaku.fontScale': _bounded(fontScale, 0.1, 3, 1),
+    'danmaku.speedScale': _bounded(speedScale, 0.5, 2, 1),
+    if (_fontSize != null) 'danmaku.fontSize': fontSize,
+    if (_durationSeconds != null) 'danmaku.durationSeconds': durationSeconds,
+    'danmaku.area': _bounded(area, 0, 1, 1),
+    'danmaku.lineHeight': _bounded(lineHeight, 0, 3, 1.6),
+    'danmaku.fontWeight': fontWeight.clamp(1, 9),
+    'danmaku.followVideoRate': followVideoRate,
+    'danmaku.showScroll': showScroll,
+    'danmaku.showTop': showTop,
+    'danmaku.showBottom': showBottom,
+    'danmaku.showColor': showColor,
+    'danmaku.outline': outline,
+    'danmaku.outlineWidth': _bounded(outlineWidth, 0.1, 3, 1),
+    'danmaku.massive': massive,
+    'danmaku.maxActive': maxActive.clamp(20, 300),
+    'danmaku.mergeDuplicates': mergeDuplicates,
+    'danmaku.conversion': conversion.name,
+    'danmaku.blockedWords': blockedWords,
+    'danmaku.blockedUsers': blockedUsers,
+    'danmaku.shieldRules': [for (final rule in shieldRules) rule.toJson()],
+  };
+
+  static const _keys = [
+    'enabled',
+    'opacity',
+    'fontScale',
+    'speedScale',
+    'fontSize',
+    'durationSeconds',
+    'area',
+    'lineHeight',
+    'fontWeight',
+    'followVideoRate',
+    'showScroll',
+    'showTop',
+    'showBottom',
+    'showColor',
+    'outline',
+    'outlineWidth',
+    'massive',
+    'maxActive',
+    'mergeDuplicates',
+    'conversion',
+    'blockedWords',
+    'blockedUsers',
+    'shieldRules',
   ];
+
+  static DanmakuSettings fromJson(Map<String, Object?> json) {
+    Object? value(String key) => json['danmaku.$key'];
+    double number(String key, double fallback) =>
+        value(key) is num ? (value(key) as num).toDouble() : fallback;
+    bool flag(String key, bool fallback) =>
+        value(key) is bool ? value(key) as bool : fallback;
+    List<String> strings(String key) => [
+      if (value(key) is List)
+        for (final item in value(key) as List)
+          if (item is String && item.trim().isNotEmpty) item.trim(),
+    ];
+    final conversion = ZhConversionMode.values.where(
+      (mode) => mode.name == value('conversion'),
+    );
+    final rawRules = value('shieldRules');
+    return DanmakuSettings(
+      enabled: flag('enabled', true),
+      opacity: number('opacity', 0.9),
+      fontScale: _bounded(number('fontScale', 1), 0.1, 3, 1),
+      speedScale: _bounded(number('speedScale', 1), 0.5, 2, 1),
+      fontSize: value('fontSize') is num ? number('fontSize', 16) : null,
+      durationSeconds: value('durationSeconds') is num
+          ? number('durationSeconds', 9)
+          : null,
+      area: number('area', 1),
+      lineHeight: number('lineHeight', 1.6),
+      fontWeight: _bounded(number('fontWeight', 4), 1, 9, 4).round(),
+      followVideoRate: flag('followVideoRate', true),
+      showScroll: flag('showScroll', true),
+      showTop: flag('showTop', true),
+      showBottom: flag('showBottom', true),
+      showColor: flag('showColor', true),
+      outline: flag('outline', true),
+      outlineWidth: number('outlineWidth', 1),
+      massive: flag('massive', false),
+      maxActive: _bounded(number('maxActive', 120), 20, 300, 120).round(),
+      mergeDuplicates: flag('mergeDuplicates', false),
+      conversion: conversion.isEmpty ? ZhConversionMode.off : conversion.first,
+      blockedWords: strings('blockedWords'),
+      blockedUsers: strings('blockedUsers'),
+      shieldRules: [
+        if (rawRules is List)
+          for (final raw in rawRules.take(DanmakuShieldRule.maxRules))
+            if (DanmakuShieldRule.fromJson(raw) case final rule?)
+              // Preserve unsafe/imported rules disabled and editable, never run them.
+              rule.validationError == null
+                  ? rule
+                  : rule.copyWith(enabled: false),
+      ],
+    ).copyWith();
+  }
+
+  static DanmakuSettings load(Preferences preferences) => fromJson({
+    for (final key in _keys)
+      'danmaku.$key': preferences.get<Object?>('danmaku.$key'),
+  });
+
+  Future<void> save(Preferences preferences) async {
+    final values = toJson();
+    for (final key in _keys) {
+      final fullKey = 'danmaku.$key';
+      if (values.containsKey(fullKey)) {
+        await preferences.set(fullKey, values[fullKey]);
+      } else {
+        await preferences.remove(fullKey);
+      }
+    }
+  }
+
+  static double _bounded(
+    double value,
+    double min,
+    double max,
+    double fallback,
+  ) => value.isFinite ? value.clamp(min, max).toDouble() : fallback;
 }
 
-/// 弹幕设置（跨页面共享的可变状态）。
 class DanmakuSettingsController extends Notifier<DanmakuSettings> {
+  Future<void> _saving = Future<void>.value();
+
   @override
   DanmakuSettings build() =>
       DanmakuSettings.load(ref.watch(preferencesProvider));
 
-  Future<void> update(DanmakuSettings next) async {
-    state = next;
-    await next.save(ref.read(preferencesProvider));
+  Future<void> update(DanmakuSettings next) {
+    final normalized = next.copyWith();
+    state = normalized;
+    final preferences = ref.read(preferencesProvider);
+    // Keep rapid live slider writes ordered; an earlier failure cannot prevent
+    // subsequent user edits from being saved.
+    _saving = _saving.then(
+      (_) => normalized.save(preferences),
+      onError: (Object _, StackTrace _) => normalized.save(preferences),
+    );
+    return _saving;
   }
+
+  Future<void> restoreDefaults() => update(state.restoreDefaults());
 }
 
 final danmakuSettingsProvider =
     NotifierProvider<DanmakuSettingsController, DanmakuSettings>(
       DanmakuSettingsController.new,
     );
-
-/// 弹弹play 凭据（AppId / AppSecret，用于弹幕匹配与发送；不落日志）。
-class DandanplayCredentials {
-  const DandanplayCredentials({
-    this.appId = '',
-    this.appSecret = '',
-    this.token = '',
-  });
-
-  final String appId;
-  final String appSecret;
-
-  /// 发送弹幕需要用户 token（弹弹play 的账号授权码）。
-  final String token;
-
-  bool get isConfigured => appId.isNotEmpty && appSecret.isNotEmpty;
-
-  bool get canSend => isConfigured && token.isNotEmpty;
-
-  /// 应用自己的弹弹play 凭据（Triomi 注册的应用）。
-  ///
-  /// 用户没填自己的凭据时用它，这样**「拿弹幕」开箱可用**（与 Kazumi 的做法
-  /// 一致：Kazumi 也是内置了自己注册的那对凭据）；**发弹幕仍然需要用户自己的
-  /// 账号 token**。留空则维持旧行为（要求用户自填）。
-  ///
-  /// 可以在构建时注入，避免把值写进仓库：
-  /// `--dart-define=TRIOMI_DANDANPLAY_APP_ID=xxx --dart-define=TRIOMI_DANDANPLAY_APP_SECRET=yyy`
-  static const String builtInAppId = String.fromEnvironment(
-    'TRIOMI_DANDANPLAY_APP_ID',
-  );
-  static const String builtInAppSecret = String.fromEnvironment(
-    'TRIOMI_DANDANPLAY_APP_SECRET',
-  );
-
-  /// 内置凭据是否可用（未注入时 false，界面仍走「请先配置」的老路）。
-  static bool get hasBuiltIn =>
-      builtInAppId.isNotEmpty && builtInAppSecret.isNotEmpty;
-
-  DandanplayCredentials copyWith({
-    String? appId,
-    String? appSecret,
-    String? token,
-  }) => DandanplayCredentials(
-    appId: appId ?? this.appId,
-    appSecret: appSecret ?? this.appSecret,
-    token: token ?? this.token,
-  );
-
-  static const String appIdKey = 'danmaku.dandanplay.appId';
-  static const String appSecretKey = 'danmaku.dandanplay.appSecret';
-  static const String tokenKey = 'danmaku.dandanplay.token';
-
-  /// 机密字段（appSecret / token）从安全存储读，Hive 里的旧值（迁移前
-  /// 备份）作回退；appId 非机密，留在 Hive。
-  ///
-  /// 用户没填 AppId/AppSecret 时回退到应用内置的那对（[hasBuiltIn]）。
-  static DandanplayCredentials load(
-    Preferences preferences,
-    SecureStore secureStore,
-  ) {
-    final userAppId = preferences.get<String>(appIdKey) ?? '';
-    final userAppSecret =
-        secureStore.get(appSecretKey) ??
-        preferences.get<String>(appSecretKey) ??
-        '';
-    return DandanplayCredentials(
-      appId: userAppId.isNotEmpty ? userAppId : builtInAppId,
-      appSecret: userAppSecret.isNotEmpty ? userAppSecret : builtInAppSecret,
-      token:
-          secureStore.get(tokenKey) ?? preferences.get<String>(tokenKey) ?? '',
-    );
-  }
-
-  Future<void> save(Preferences preferences, SecureStore secureStore) async {
-    await preferences.set(appIdKey, appId);
-    await secureStore.set(appSecretKey, appSecret);
-    await secureStore.set(tokenKey, token);
-  }
-}
-
-class DandanplayCredentialsController extends Notifier<DandanplayCredentials> {
-  @override
-  DandanplayCredentials build() => DandanplayCredentials.load(
-    ref.watch(preferencesProvider),
-    ref.watch(secureStoreProvider),
-  );
-
-  /// 保存凭据。**落盘的是用户填的原值，state 里放的是「生效值」**。
-  ///
-  /// 两者必须分开：用户把 AppId/AppSecret 清空时，落盘要留空（保持「用户没填」的语义），
-  /// 但 state 必须退回内置凭据——否则弹幕设置页会显示「未配置」、`dandanplayClientProvider`
-  /// 也真的拿不到内置值，**要重启 App 才恢复**（设备实测踩到的）。规则与
-  /// [DandanplayCredentials.load] 保持一致。
-  Future<void> update(DandanplayCredentials next) async {
-    state = DandanplayCredentials(
-      appId: next.appId.isNotEmpty
-          ? next.appId
-          : DandanplayCredentials.builtInAppId,
-      appSecret: next.appSecret.isNotEmpty
-          ? next.appSecret
-          : DandanplayCredentials.builtInAppSecret,
-      token: next.token,
-    );
-    await next.save(
-      ref.read(preferencesProvider),
-      ref.read(secureStoreProvider),
-    );
-  }
-
-  /// 用账号密码登录弹弹play，成功后把 token 写回凭据并持久化。
-  ///
-  /// 失败抛 [SourceException]（由界面提示），token 保持原值。
-  /// 密码**不落盘、不落日志**——只作为本次请求参数传给客户端，
-  /// 持久化内容里只有 appId / appSecret / token。
-  Future<String?> login(String userName, String password) async {
-    // 不走 dandanplayClientProvider：本控制器属于 credentials provider，
-    // 而 client provider watch 凭据，read 会构成循环依赖（见其文档）。
-    final client = DandanplayClient(
-      http: ref.read(sourceHttpClientProvider),
-      appId: state.appId,
-      appSecret: state.appSecret,
-      baseUrl: dandanplayBaseUrl,
-    );
-    final token = await client.login(userName: userName, password: password);
-    await update(state.copyWith(token: token));
-    return token;
-  }
-}
-
-final dandanplayCredentialsProvider =
-    NotifierProvider<DandanplayCredentialsController, DandanplayCredentials>(
-      DandanplayCredentialsController.new,
-    );
-
-/// 弹弹play 的服务地址；可被 `--dart-define=TRIOMI_DANDANPLAY_BASE` 覆盖
-/// （模拟器没有外网时指向夹具服务，验证登录与发送全链路）。
-const String dandanplayBaseUrl = String.fromEnvironment(
-  'TRIOMI_DANDANPLAY_BASE',
-  defaultValue: 'https://api.dandanplay.net',
-);
-
-/// 弹弹play 客户端（凭据变化时重建）。
-///
-/// 注意：凭据控制器**不能** read 本 provider——它自身就在 credentials
-/// provider 里，而本 provider watch 凭据，会构成循环依赖
-/// （Riverpod 3 的 debug assert 会直接抛 CircularDependencyError）。
-/// 控制器里需要 client 时自行用 [dandanplayBaseUrl] 构造。
-final dandanplayClientProvider = Provider<DandanplayClient>((ref) {
-  final credentials = ref.watch(dandanplayCredentialsProvider);
-  return DandanplayClient(
-    http: ref.watch(sourceHttpClientProvider),
-    appId: credentials.appId,
-    appSecret: credentials.appSecret,
-    baseUrl: dandanplayBaseUrl,
-  );
-});

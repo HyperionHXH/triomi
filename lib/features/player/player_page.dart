@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -16,28 +15,30 @@ import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/models/video_resolve_cancellation.dart';
-import '../../core/router/app_router.dart';
-import '../../core/source/http_client.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
 import '../../core/storage/preferences.dart';
-import '../../core/storage/secure_store.dart';
 import '../../core/theme/app_tokens.dart';
 import '../detail/anime_source_sheet.dart';
 import '../downloads/data/download_providers.dart';
 import '../library/data/anime_identity_repository.dart';
 import '../library/data/library_providers.dart';
 import '../library/data/library_repository.dart';
+import '../search/search_page.dart';
 import '../tracking/data/tracking_providers.dart';
-import 'data/dandanplay_client.dart';
+import 'danmaku_settings_page.dart';
+import 'danmaku_sources_panel.dart';
 import 'data/danmaku_overlay.dart';
+import 'data/danmaku_session.dart';
 import 'data/danmaku_settings.dart';
+import 'data/hybrid_danmaku_client.dart';
 import 'data/playback_buffer_policy.dart';
 import 'data/player_settings.dart';
 import 'episode_comments_panel.dart';
 import 'episode_selector.dart';
 import 'player_interaction_surface.dart';
+import 'player_menu.dart';
 import 'windows_video_resolver.dart';
 
 /// 播放器入参：作品 + 目录 + 从第几集开始。
@@ -83,6 +84,12 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   late final Preferences _preferences;
   late final DanmakuController _danmaku;
   late DanmakuSettings _danmakuSettings;
+  late final DanmakuSession _danmakuSession;
+  ProviderSubscription<AsyncValue<MediaItem>>? _danmakuAssociation;
+  ProviderSubscription<HybridDanmakuClient>? _danmakuClient;
+  ProviderSubscription<DanmakuSettings>? _danmakuDisplay;
+  MediaItem? _danmakuSubject;
+  String? _danmakuAssociationError;
 
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration>? _durationSub;
@@ -117,6 +124,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   bool _danmakuOn = true;
   bool _fullscreen = false;
   bool _episodesOpen = false;
+  bool _menuOpen = false;
+  bool _menuActionActive = false;
+  final _menuController = MenuController();
   bool _scrubbing = false;
   Duration? _scrubOrigin;
   int _scrubRevision = 0;
@@ -157,9 +167,37 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _settings = PlayerSettings.load(_preferences);
     _speed = _settings.speed;
     _trackingReporter = ref.read(progressReporterProvider);
-    _danmakuSettings = DanmakuSettings.load(_preferences);
+    _danmakuSettings = ref.read(danmakuSettingsProvider);
     _danmaku = DanmakuController(settings: _danmakuSettings);
     _danmakuOn = _danmakuSettings.enabled;
+    _danmakuSession = DanmakuSession(
+      client: ref.read(hybridDanmakuClientProvider),
+      preferences: _preferences,
+    );
+    _danmakuSession.addListener(_refreshDanmaku);
+    _danmakuSession.setEnabled(_danmakuOn);
+    _danmakuDisplay = ref.listenManual(danmakuSettingsProvider, (_, settings) {
+      if (!mounted) return;
+      setState(() {
+        _danmakuSettings = settings;
+        _danmakuOn = settings.enabled;
+      });
+      _danmaku.applySettings(settings);
+      _danmakuSession.setEnabled(settings.enabled);
+    });
+    _danmakuClient = ref.listenManual(hybridDanmakuClientProvider, (_, client) {
+      _danmakuSession.replaceClient(client);
+    });
+    _danmakuAssociation = ref.listenManual(animeSubjectProvider(_item), (
+      _,
+      next,
+    ) {
+      _danmakuSubject = next.asData?.value;
+      _danmakuAssociationError = next.hasError
+          ? 'Bangumi 条目关联读取失败，请重新查找关联'
+          : null;
+      _configureDanmaku();
+    }, fireImmediately: true);
 
     _nativeVideoController = _NativeAndroidVideoController(
       onState: _onNativeVideoState,
@@ -200,6 +238,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       _playingSub = _player.stream.playing.listen((playing) {
         if (mounted) {
           setState(() => _playing = playing);
+          _updateDanmakuClock();
           _scheduleChromeHide();
         }
       });
@@ -231,7 +270,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   void _onPosition(Duration position) {
     if (_awaitingPlaybackStart || _scrubbing) return;
     _position = position;
-    _danmaku.update(position, playing: _playing);
+    _danmaku.update(
+      position,
+      playing: _playing,
+      rate: _holdingSpeed ? _settings.holdSpeed : _speed,
+    );
     if (mounted) setState(() {});
   }
 
@@ -247,7 +290,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     // position stream; the TextureView path reports it over the method
     // channel instead. Without this update, Android danmaku would remain
     // frozen at the position where the stream was initially loaded.
-    _danmaku.update(state.position, playing: state.playing);
+    _danmaku.update(
+      state.position,
+      playing: state.playing,
+      rate: _holdingSpeed ? _settings.holdSpeed : _speed,
+    );
     if (mounted) setState(() {});
     if (playingChanged) _scheduleChromeHide();
   }
@@ -266,6 +313,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   Future<void> _load() async {
     _clearTransientInput();
+    _configureDanmaku(force: true);
     if (!_validSelection) {
       setState(() {
         _loading = false;
@@ -366,9 +414,6 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         line: _lines.first,
         startPosition: startPosition,
       );
-      if (danmakuFeatureEnabled) {
-        unawaited(_loadDanmaku(content.danmakuUrl));
-      }
 
       if (mounted && seq == _loadSeq) {
         setState(() {
@@ -440,6 +485,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   }
 
   Future<void> _applyControls() async {
+    if (!mounted) return;
+    _updateDanmakuClock();
     if (_useNativeAndroidVideo) {
       await _nativeVideoController.setRate(_speed);
       await _nativeVideoController.setVolume(_settings.volume);
@@ -447,6 +494,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       await _nativeVideoController.setBackgroundAudio(
         _settings.backgroundAudio,
       );
+      if (!mounted) return;
       await const MethodChannel('triomi/platform')
           .invokeMethod<void>('videoPolicy', {
             'owner': _resolverOwner,
@@ -456,6 +504,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           });
     } else {
       await _player.setRate(_speed);
+      if (!mounted) return;
       await _player.setVolume(_settings.volume * 100);
     }
   }
@@ -563,17 +612,111 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     await _applyControls();
   }
 
-  Future<void> _loadDanmaku(String? danmakuUrl) async {
-    if (danmakuUrl == null || danmakuUrl.isEmpty) return;
-    try {
-      final response = await ref
-          .read(sourceHttpClientProvider)
-          .send(SourceRequest(url: danmakuUrl), sourceId: _item.sourceId);
-      final comments = DandanplayClient.parseCommentsBody(response.body);
-      if (mounted) _danmaku.load(comments);
-    } catch (_) {
-      // 弹幕拿不到不影响播放；入口仍在，用户可以手动重试。
+  void _configureDanmaku({bool force = false}) {
+    if (!_validSelection) return;
+    final subject = _danmakuSubject;
+    final id =
+        subject?.sourceId == 'bangumi-anime' &&
+            subject?.type == MediaType.anime &&
+            (int.tryParse(subject?.remoteId ?? '') ?? 0) > 0
+        ? subject!.remoteId
+        : null;
+    final unique =
+        _chapter.number != null &&
+        _chapters
+                .where(
+                  (chapter) =>
+                      chapter.number == _chapter.number &&
+                      !DanmakuSession.specialChapter(chapter),
+                )
+                .length ==
+            1;
+    _danmakuSession.configure(
+      item: _item,
+      chapter: _chapter,
+      canonicalSubjectId: id,
+      allowAutomatic: unique,
+      error: _danmakuAssociationError,
+      force: force,
+    );
+  }
+
+  void _updateDanmakuClock() => _danmaku.update(
+    _position,
+    playing: _playing,
+    rate: _holdingSpeed ? _settings.holdSpeed : _speed,
+  );
+
+  void _refreshDanmaku() {
+    // Anchor before loading: late responses may not replay already passed text.
+    _danmaku.seek(_position);
+    _danmaku.load(_danmakuSession.comments);
+  }
+
+  Future<void> _setDanmakuEnabled(bool enabled) async {
+    if (!mounted) return;
+    await ref
+        .read(danmakuSettingsProvider.notifier)
+        .update(_danmakuSettings.copyWith(enabled: enabled));
+  }
+
+  Future<void> _showDanmakuSources() => _showDanmakuPanel(
+    (context) => DanmakuSourcesPanel(
+      session: _danmakuSession,
+      onEnabledChanged: _setDanmakuEnabled,
+      onAssociate: () {
+        Navigator.pop(context);
+        SearchPage.open(
+          this.context,
+          type: MediaType.anime,
+          sourceId: 'bangumi-anime',
+          query: _item.title,
+        );
+      },
+    ),
+  );
+
+  Future<void> _showDanmakuPanel(WidgetBuilder builder) {
+    final size = MediaQuery.sizeOf(context);
+    if (size.width >= 600 && size.width > size.height) {
+      return showDialog<void>(
+        context: context,
+        builder: (context) => Dialog(
+          alignment: Alignment.centerRight,
+          insetPadding: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.horizontal(left: Radius.circular(28)),
+          ),
+          child: SizedBox(
+            width: min(440, size.width * .46),
+            height: double.infinity,
+            child: SafeArea(
+              child: Column(
+                children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton(
+                      tooltip: '关闭弹幕面板',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ),
+                  Expanded(child: builder(context)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
     }
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 560),
+      builder: builder,
+    );
   }
 
   // ---------------------------------------------------------------- 进度
@@ -643,6 +786,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       _toast(delta > 0 ? '已经是最后一集' : '已经是第一集');
       return;
     }
+    _danmakuSession.restart(fetch: false);
     await _persistProgress();
     if (!mounted) return;
     setState(() => _chapterIndex = target);
@@ -787,9 +931,13 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       builder: (context, layout) {
         _sidePanelLayout = _fullscreen || layout.maxWidth > layout.maxHeight;
         return PopScope(
-          canPop: !_fullscreen && !_episodesOpen,
+          canPop: !_fullscreen && !_episodesOpen && !_menuOpen,
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
+            if (_menuOpen) {
+              _menuController.close();
+              return;
+            }
             if (_episodesOpen) {
               _scaffoldKey.currentState?.closeEndDrawer();
             } else if (_fullscreen) {
@@ -908,6 +1056,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         _chapters[index].sourceId != _item.sourceId) {
       return;
     }
+    _danmakuSession.restart(fetch: false);
     await _persistProgress();
     if (!mounted) return;
     setState(() => _chapterIndex = index);
@@ -915,6 +1064,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   }
 
   Future<void> _changeSource() async {
+    _danmakuSession.restart(fetch: false);
     await _persistProgress();
     if (_useNativeAndroidVideo) {
       await _nativeVideoController.pause();
@@ -1016,6 +1166,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   }
 
   void _toggleChrome() {
+    if (_menuOpen || _menuActionActive) return;
     _chromeTimer?.cancel();
     setState(() => _chromeVisible = !_chromeVisible);
     if (_chromeVisible) _scheduleChromeHide();
@@ -1033,11 +1184,17 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         _awaitingPlaybackStart ||
         _error != null ||
         _episodesOpen ||
+        _menuOpen ||
+        _menuActionActive ||
         _scrubbing) {
       return;
     }
     _chromeTimer = Timer(const Duration(seconds: 4), () {
-      if (mounted && !_episodesOpen && !_scrubbing) {
+      if (mounted &&
+          !_episodesOpen &&
+          !_scrubbing &&
+          !_menuOpen &&
+          !_menuActionActive) {
         setState(() => _chromeVisible = false);
       }
     });
@@ -1132,17 +1289,28 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                           Icons.chat_bubble_outline_rounded,
                           _showComments,
                         ),
-                        button('播放设置', Icons.tune_rounded, _controlsSheet),
+                        PlayerMenu(
+                          controller: _menuController,
+                          settings: _settings,
+                          nativeAndroid: _useNativeAndroidVideo,
+                          lineName: _lines.length > 1
+                              ? _lines[_lineIndex].name
+                              : null,
+                          danmakuEnabled: danmakuFeatureEnabled,
+                          danmakuOn: _danmakuOn,
+                          onSettingsChanged: _changeMenuSettings,
+                          onAction: _runMenuAction,
+                          onVisibilityChanged: _menuVisibilityChanged,
+                          builder: (context, toggle) =>
+                              button('播放设置', Icons.tune_rounded, toggle),
+                        ),
                         if (danmakuFeatureEnabled)
                           button(
                             _danmakuOn ? '关闭弹幕' : '开启弹幕',
                             _danmakuOn
                                 ? Icons.speaker_notes_outlined
                                 : Icons.speaker_notes_off_outlined,
-                            () {
-                              setState(() => _danmakuOn = !_danmakuOn);
-                              _danmaku.enabled = _danmakuOn;
-                            },
+                            () => unawaited(_setDanmakuEnabled(!_danmakuOn)),
                           ),
                       ],
                     ),
@@ -1460,6 +1628,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       ),
     );
     if (!mounted || selected == null || selected == _lineIndex) return;
+    _configureDanmaku(force: true);
     final seq = _loadSeq;
     setState(() {
       _lineIndex = selected;
@@ -1507,9 +1676,6 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     });
     _scaffoldKey.currentState?.openEndDrawer();
   }
-
-  /// 当前弹幕对应的弹弹play 剧集（手动搜索匹配后才有，用于发送弹幕）。
-  int? _danmakuEpisodeId;
 
   // ---------------------------------------------------------------- 倍速
 
@@ -1561,6 +1727,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       await _player.setRate(selected);
     }
     if (mounted) setState(() => _speed = selected);
+    if (mounted) _updateDanmakuClock();
     _settings = _settings.copyWith(speed: selected);
     await _settings.save(_preferences);
   }
@@ -1569,6 +1736,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     if (_holdingSpeed == enabled) return;
     _holdingSpeed = enabled;
     final speed = enabled ? _settings.holdSpeed : _speed;
+    _updateDanmakuClock();
     if (_useNativeAndroidVideo) {
       await _nativeVideoController.setRate(speed);
     } else {
@@ -1624,166 +1792,74 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     if (result != true) _toast('此设备不支持画中画');
   }
 
-  Future<void> _controlsSheet() async {
+  void _menuVisibilityChanged(bool open) {
+    if (!mounted) return;
     _chromeTimer?.cancel();
-    var settings = _settings;
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => StatefulBuilder(
-        builder: (context, update) => SafeArea(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const ListTile(title: Text('播放设置')),
-                ListTile(
-                  leading: const Icon(Icons.memory_outlined),
-                  title: const Text('持续预载本集 · 有界内存'),
-                  subtitle: Text(
-                    '${_useNativeAndroidVideo ? '应用堆上限的 1/8，最多 128 MiB' : '最多 128 MiB'}'
-                    '（不含解码器）。向本集结尾加载，满额后随播放释放并继续。'
-                    '退出即释放，不写入离线下载；离线观看请使用下载管理。',
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.fast_forward_rounded),
-                  title: const Text('跳过秒数'),
-                  subtitle: Text('每次 ${settings.skipSeconds} 秒 · 也可长按跳过按钮修改'),
-                  onTap: () => Navigator.pop(context, 'skip'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.subtitles_rounded),
-                  title: const Text('字幕'),
-                  onTap: () => Navigator.pop(context, 'subtitles'),
-                ),
-                if (_useNativeAndroidVideo)
-                  ListTile(
-                    leading: const Icon(Icons.picture_in_picture_alt_rounded),
-                    title: const Text('画中画'),
-                    onTap: () => Navigator.pop(context, 'pip'),
-                  ),
-                if (_lines.length > 1)
-                  ListTile(
-                    leading: const Icon(Icons.alt_route_rounded),
-                    title: Text('线路 · ${_lines[_lineIndex].name}'),
-                    onTap: () => Navigator.pop(context, 'line'),
-                  ),
-                if (danmakuFeatureEnabled) ...[
-                  ListTile(
-                    title: const Text('弹幕设置'),
-                    onTap: () => Navigator.pop(context, 'danmakuSettings'),
-                  ),
-                  ListTile(
-                    title: const Text('搜索弹幕'),
-                    onTap: () => Navigator.pop(context, 'searchDanmaku'),
-                  ),
-                  ListTile(
-                    title: const Text('发送弹幕'),
-                    onTap: () => Navigator.pop(context, 'sendDanmaku'),
-                  ),
-                ],
-                const Divider(height: 24),
-                SwitchListTile(
-                  title: const Text('同列表自动播放下一集'),
-                  value: settings.autoNext,
-                  onChanged: (value) => update(
-                    () => settings = settings.copyWith(autoNext: value),
-                  ),
-                ),
-                SwitchListTile(
-                  title: const Text('后台音频'),
-                  subtitle: Text(
-                    _useNativeAndroidVideo
-                        ? '系统媒体通知与锁屏控制；退出播放器后停止'
-                        : '最小化时继续音频；退出播放器后停止',
-                  ),
-                  value: settings.backgroundAudio,
-                  onChanged: (value) => update(
-                    () => settings = settings.copyWith(backgroundAudio: value),
-                  ),
-                ),
-                ListTile(
-                  title: const Text('画面比例'),
-                  trailing: DropdownButton<VideoAspectRatio>(
-                    value: settings.aspectRatio,
-                    items: [
-                      for (final ratio in VideoAspectRatio.values)
-                        DropdownMenuItem(
-                          value: ratio,
-                          child: Text(ratio.label),
-                        ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        update(
-                          () =>
-                              settings = settings.copyWith(aspectRatio: value),
-                        );
-                      }
-                    },
-                  ),
-                ),
-                ListTile(
-                  title: const Text('长按倍速'),
-                  trailing: DropdownButton<double>(
-                    value: settings.holdSpeed,
-                    items: [
-                      for (final speed in [1.0, 1.5, 2.0, 2.5, 3.0])
-                        DropdownMenuItem(
-                          value: speed,
-                          child: Text('${speed}x'),
-                        ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        update(
-                          () => settings = settings.copyWith(holdSpeed: value),
-                        );
-                      }
-                    },
-                  ),
-                ),
-                ListTile(title: Text('音量 ${(settings.volume * 100).round()}%')),
-                Slider(
-                  value: settings.volume,
-                  onChanged: (value) =>
-                      update(() => settings = settings.copyWith(volume: value)),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('应用设置'),
-                ),
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+    setState(() {
+      _menuOpen = open;
+      _chromeVisible = true;
+    });
+    if (!open) _scheduleChromeHide();
+  }
+
+  Future<void> _changeMenuSettings(PlayerSettings settings) async {
     if (!mounted) return;
-    _settings = settings;
-    await _settings.save(_preferences);
-    await _applyControls();
-    if (!mounted) return;
-    setState(() {});
-    switch (action) {
-      case 'skip':
-        await _pickSkipSeconds();
-      case 'subtitles':
-        await _pickSubtitles();
-      case 'pip':
-        await _enterPip();
-      case 'line':
-        await _pickLine();
-      case 'danmakuSettings':
-        await _showDanmakuSettings();
-      case 'searchDanmaku':
-        await _searchDanmaku();
-      case 'sendDanmaku':
-        await _sendDanmaku();
+    final previous = _settings;
+    setState(() {
+      _settings = settings;
+      _speed = settings.speed;
+    });
+    try {
+      await _applyControls();
+      if (!mounted) return;
+      await settings.save(_preferences);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _settings = previous;
+          _speed = previous.speed;
+        });
+      }
+      rethrow;
     }
-    if (mounted) _scheduleChromeHide();
+  }
+
+  Future<void> _runMenuAction(PlayerMenuAction action) async {
+    if (!mounted || _menuActionActive) return;
+    _chromeTimer?.cancel();
+    setState(() => _menuActionActive = true);
+    try {
+      // Let the anchor close and restore focus before presenting another route.
+      await Future<void>.value();
+      if (!mounted) return;
+      switch (action) {
+        case PlayerMenuAction.skip:
+          await _pickSkipSeconds();
+        case PlayerMenuAction.subtitles:
+          await _pickSubtitles();
+        case PlayerMenuAction.pip:
+          await _enterPip();
+        case PlayerMenuAction.line:
+          await _pickLine();
+        case PlayerMenuAction.episodes:
+          await _showEpisodes();
+        case PlayerMenuAction.retry:
+          await _load();
+        case PlayerMenuAction.danmakuSettings:
+          await _showDanmakuSettings();
+        case PlayerMenuAction.danmakuSources:
+          await _showDanmakuSources();
+        case PlayerMenuAction.toggleDanmaku:
+          await _setDanmakuEnabled(!_danmakuOn);
+      }
+    } catch (_) {
+      if (mounted) _toast('操作未能完成，请重试');
+    } finally {
+      if (mounted) {
+        setState(() => _menuActionActive = false);
+        _scheduleChromeHide();
+      }
+    }
   }
 
   Future<void> _pickSubtitles() async {
@@ -1842,212 +1918,12 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   // ---------------------------------------------------------------- 弹幕设置
 
-  /// 手动搜索弹幕（弹弹play）：按番剧名匹配，选中剧集后载入并记住 episodeId。
-  Future<void> _searchDanmaku() async {
-    final credentials = DandanplayCredentials.load(
-      _preferences,
-      ref.read(secureStoreProvider),
-    );
-    if (!credentials.isConfigured) {
-      final go = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('需要弹弹play 凭据'),
-          content: const Text('弹幕搜索与发送需要在「我的 → 弹幕设置」填写你自己的 AppId 与 AppSecret。'),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('知道了'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('去设置'),
-            ),
-          ],
-        ),
-      );
-      if (go == true && mounted) {
-        await context.push(AppRoutes.danmakuSettings);
-      }
-      return;
-    }
-
-    final keyword = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('搜索弹幕'),
-        content: TextField(
-          autofocus: true,
-          controller: TextEditingController(text: _item.title),
-          decoration: const InputDecoration(hintText: '番剧名称'),
-          onSubmitted: (value) => Navigator.of(context).pop(value),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(_item.title),
-            child: const Text('搜索'),
-          ),
-        ],
-      ),
-    );
-    if (keyword == null || keyword.trim().isEmpty) return;
-
-    final client = ref.read(dandanplayClientProvider);
-    try {
-      final matches = await client.search(knowledgeKeyword(keyword));
-      if (!mounted) return;
-      if (matches.isEmpty) {
-        _toast('没有匹配到弹幕，换个关键词试试');
-        return;
-      }
-      // 把所有剧集摊平成一列，用户直接选集。
-      final options = <({int episodeId, String label})>[
-        for (final match in matches)
-          for (final episode in match.episodes)
-            (
-              episodeId: episode.episodeId,
-              label: '${match.title} · ${episode.title}',
-            ),
-      ];
-      if (options.isEmpty) {
-        _toast('匹配结果里没有剧集');
-        return;
-      }
-      final selected = await showModalBottomSheet<int>(
-        context: context,
-        showDragHandle: true,
-        builder: (context) => SafeArea(
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: options.length,
-            itemBuilder: (context, index) => ListTile(
-              leading: const Icon(Icons.comment_outlined),
-              title: Text(options[index].label),
-              onTap: () => Navigator.of(context).pop(options[index].episodeId),
-            ),
-          ),
-        ),
-      );
-      if (selected == null) return;
-      final comments = await client.comments(selected);
-      if (!mounted) return;
-      _danmakuEpisodeId = selected;
-      _danmaku.load(comments);
-      _danmaku.seek(_position);
-      _toast('已载入 ${comments.length} 条弹幕');
-    } catch (error) {
-      _toast('弹幕搜索失败：$error');
-    }
-  }
-
-  /// 关键词清洗：去掉季/集等后缀，提升匹配率。
-  static String knowledgeKeyword(String raw) => raw
-      .replaceAll(RegExp(r'第\s*\d+\s*[集话話]'), '')
-      .replaceAll(RegExp(r'[【\[（(].*?[】\]）)]'), '')
-      .trim();
-
-  Future<void> _showDanmakuSettings() async {
-    final updated = await showModalBottomSheet<DanmakuSettings>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => _DanmakuSettingsSheet(settings: _danmakuSettings),
-    );
-    if (updated == null) return;
-    setState(() {
-      _danmakuSettings = updated;
-      _danmakuOn = updated.enabled;
-    });
-    _danmaku.applySettings(updated);
-    await updated.save(_preferences);
-  }
-
-  /// 发送弹幕（需要弹弹play 凭据；未配置时给出明确指引）。
-  Future<void> _sendDanmaku() async {
-    final credentials = DandanplayCredentials.load(
-      _preferences,
-      ref.read(secureStoreProvider),
-    );
-    if (!credentials.canSend) {
-      final go = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('发送弹幕需要账号'),
-          content: const Text(
-            '弹弹play 要求用你自己的 AppId / AppSecret 与账号 token 发送弹幕。'
-            '到「我的 → 弹幕设置」填写后即可发送。',
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('知道了'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('去设置'),
-            ),
-          ],
-        ),
-      );
-      if (go == true && mounted) {
-        await context.push(AppRoutes.danmakuSettings);
-      }
-      return;
-    }
-
-    final episodeId = _danmakuEpisodeId;
-    if (episodeId == null) {
-      _toast('当前剧集没有匹配到弹弹play 剧集，无法发送');
-      return;
-    }
-
-    final controller = TextEditingController();
-    final text = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('发送弹幕'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 100,
-          decoration: const InputDecoration(
-            hintText: '在此输入弹幕内容',
-            counterText: '',
-          ),
-          onSubmitted: (value) => Navigator.of(context).pop(value),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('发送'),
-          ),
-        ],
-      ),
-    );
-    if (text == null || text.trim().isEmpty) return;
-
-    try {
-      await ref
-          .read(dandanplayClientProvider)
-          .sendComment(
-            episodeId: episodeId,
-            text: text.trim(),
-            timeSeconds: _position.inMilliseconds / 1000,
-            token: credentials.token,
-          );
-      _toast('弹幕已发送');
-    } catch (error) {
-      _toast('发送失败：$error');
-    }
-  }
+  Future<void> _showDanmakuSettings() => _showDanmakuPanel(
+    (context) => SizedBox(
+      height: MediaQuery.sizeOf(context).height * .82,
+      child: const DanmakuSettingsPanel(inPlayer: true),
+    ),
+  );
 
   static String _format(Duration duration) {
     final total = duration.inSeconds;
@@ -2063,6 +1939,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   @override
   void dispose() {
+    _danmakuAssociation?.close();
+    _danmakuClient?.close();
+    _danmakuDisplay?.close();
+    _danmakuSession.removeListener(_refreshDanmaku);
+    _danmakuSession.dispose();
     _contentTabs.dispose();
     _cancelScrub();
     if (_holdingSpeed) unawaited(_holdSpeed(false));
@@ -2511,164 +2392,6 @@ class _NativeAndroidVideoViewState extends State<_NativeAndroidVideoView> {
         controller.create();
         return controller;
       },
-    );
-  }
-}
-
-/// 弹幕设置抽屉：开关 / 不透明度 / 字号 / 速度 / 显示类型 / 屏蔽词。
-class _DanmakuSettingsSheet extends StatefulWidget {
-  const _DanmakuSettingsSheet({required this.settings});
-
-  final DanmakuSettings settings;
-
-  @override
-  State<_DanmakuSettingsSheet> createState() => _DanmakuSettingsSheetState();
-}
-
-class _DanmakuSettingsSheetState extends State<_DanmakuSettingsSheet> {
-  late DanmakuSettings _draft = widget.settings;
-  late final TextEditingController _wordController = TextEditingController();
-
-  @override
-  void dispose() {
-    _wordController.dispose();
-    super.dispose();
-  }
-
-  void _addWord() {
-    final word = _wordController.text.trim();
-    if (word.isEmpty) return;
-    if (_draft.blockedWords.contains(word)) {
-      _wordController.clear();
-      return;
-    }
-    setState(() {
-      _draft = _draft.copyWith(
-        blockedWords: <String>[..._draft.blockedWords, word],
-      );
-    });
-    _wordController.clear();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          0,
-          AppSpacing.lg,
-          AppSpacing.lg,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text('弹幕设置', style: theme.textTheme.titleSmall),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(_draft),
-                  child: const Text('应用'),
-                ),
-              ],
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _draft.enabled,
-              title: const Text('显示弹幕'),
-              onChanged: (value) =>
-                  setState(() => _draft = _draft.copyWith(enabled: value)),
-            ),
-            Text('不透明度 ${(_draft.opacity * 100).round()}%'),
-            Slider(
-              value: _draft.opacity,
-              min: 0.2,
-              max: 1.0,
-              divisions: 8,
-              onChanged: (value) =>
-                  setState(() => _draft = _draft.copyWith(opacity: value)),
-            ),
-            Text('字号 ${_draft.fontScale.toStringAsFixed(1)}x'),
-            Slider(
-              value: _draft.fontScale,
-              min: 0.6,
-              max: 1.6,
-              divisions: 10,
-              onChanged: (value) =>
-                  setState(() => _draft = _draft.copyWith(fontScale: value)),
-            ),
-            Text('速度 ${_draft.speedScale.toStringAsFixed(1)}x'),
-            Slider(
-              value: _draft.speedScale,
-              min: 0.5,
-              max: 2.0,
-              divisions: 15,
-              onChanged: (value) =>
-                  setState(() => _draft = _draft.copyWith(speedScale: value)),
-            ),
-            Wrap(
-              spacing: AppSpacing.xs,
-              children: <Widget>[
-                FilterChip(
-                  label: const Text('滚动'),
-                  selected: _draft.showScroll,
-                  onSelected: (value) => setState(
-                    () => _draft = _draft.copyWith(showScroll: value),
-                  ),
-                ),
-                FilterChip(
-                  label: const Text('顶部'),
-                  selected: _draft.showTop,
-                  onSelected: (value) =>
-                      setState(() => _draft = _draft.copyWith(showTop: value)),
-                ),
-                FilterChip(
-                  label: const Text('底部'),
-                  selected: _draft.showBottom,
-                  onSelected: (value) => setState(
-                    () => _draft = _draft.copyWith(showBottom: value),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text('屏蔽词（弹幕包含即隐藏）', style: theme.textTheme.bodySmall),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: TextField(
-                    controller: _wordController,
-                    decoration: const InputDecoration(hintText: '输入屏蔽词'),
-                    onSubmitted: (_) => _addWord(),
-                  ),
-                ),
-                IconButton(onPressed: _addWord, icon: const Icon(Icons.add)),
-              ],
-            ),
-            Wrap(
-              spacing: AppSpacing.xs,
-              children: <Widget>[
-                for (final word in _draft.blockedWords)
-                  InputChip(
-                    label: Text(word),
-                    onDeleted: () => setState(
-                      () => _draft = _draft.copyWith(
-                        blockedWords: <String>[
-                          for (final item in _draft.blockedWords)
-                            if (item != word) item,
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

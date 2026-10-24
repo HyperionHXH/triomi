@@ -9,7 +9,6 @@ import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/declarative_source.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/rule_schema.dart';
-import 'package:triomi/features/player/data/dandanplay_client.dart';
 import 'package:triomi/features/schedule/data/bangumi_schedule_client.dart';
 
 import 'fixtures/fake_http_client.dart';
@@ -78,19 +77,29 @@ void main() {
       expect(client.fetchWeekly(), throwsException);
     });
 
-    test('default calendar uses the public mirror directly without credentials', () async {
-      final http = FakeHttpClient((_) async => SourceResponse(
-        statusCode: 200, body: calendarJson,
-      ));
-      final days = await BangumiScheduleClient(http: http).fetchWeekly();
-      expect(days.single.items, hasLength(2));
-      expect(http.requests, hasLength(1));
-      expect(http.requests.single.url, BangumiScheduleClient.mirrorUrl);
-      expect(http.requests.single.headers.keys
-          .map((key) => key.toLowerCase()),
-          isNot(anyOf(contains('authorization'), contains('cookie'),
-              contains('x-appid'), contains('x-signature'))));
-    });
+    test(
+      'default calendar uses the public mirror directly without credentials',
+      () async {
+        final http = FakeHttpClient(
+          (_) async => SourceResponse(statusCode: 200, body: calendarJson),
+        );
+        final days = await BangumiScheduleClient(http: http).fetchWeekly();
+        expect(days.single.items, hasLength(2));
+        expect(http.requests, hasLength(1));
+        expect(http.requests.single.url, BangumiScheduleClient.mirrorUrl);
+        expect(
+          http.requests.single.headers.keys.map((key) => key.toLowerCase()),
+          isNot(
+            anyOf(
+              contains('authorization'),
+              contains('cookie'),
+              contains('x-appid'),
+              contains('x-signature'),
+            ),
+          ),
+        );
+      },
+    );
 
     test('cancelled weekly request neither accepts late results nor starts fallback', () async {
       final pending = Completer<SourceResponse>();
@@ -110,53 +119,18 @@ void main() {
       expect(client.usedBaseUrl, isNull);
     });
 
-    test('HTTP failure cannot masquerade as an empty successful calendar', () async {
-      final http = FakeHttpClient((_) async =>
-          const SourceResponse(statusCode: 503, body: '[]'));
-      await expectLater(
-        BangumiScheduleClient(http: http).fetchWeekly(),
-        throwsA(isA<SourceException>()),
-      );
-    });
-  });
-
-  group('弹弹play 弹幕解析', () {
-    test('解析 p 字段的时间/模式/颜色，跳过无效条目', () {
-      final body = jsonEncode(<String, Object?>{
-        'code': 0,
-        'comments': <Object?>[
-          <String, Object?>{'p': '1.5,1,16744448,100', 'm': '滚动弹幕'},
-          <String, Object?>{'p': '2.0,5,16777215,100', 'm': '顶部弹幕'},
-          <String, Object?>{'p': '3.0,4,65280,100', 'm': '底部弹幕'},
-          <String, Object?>{'p': '4.0,1,16777215,100', 'm': ''},
-          <String, Object?>{'m': '缺 p 字段'},
-          <String, Object?>{'p': 'abc,1,0,1', 'm': '时间非法'},
-        ],
-      });
-
-      final comments = DandanplayClient.parseCommentsBody(body);
-      expect(comments, hasLength(3));
-      expect(comments[0].time, 1.5);
-      expect(comments[0].mode, 1);
-      expect(comments[0].color, 16744448);
-      expect(comments[1].mode, 5);
-      expect(comments[2].mode, 4);
-      expect(comments[2].color, 65280);
-    });
-
-    test('坏 JSON 返回空列表而不是抛异常（弹幕缺失不影响播放）', () {
-      expect(DandanplayClient.parseCommentsBody('{{{'), isEmpty);
-    });
-
-    test('签名是 28 字符的 Base64（SHA1 摘要）', () {
-      final signature = DandanplayClient.sign(
-        '/api/v2/search/episodes',
-        appId: 'testId',
-        appSecret: 'testSecret',
-        timestamp: '1700000000',
-      );
-      expect(signature.length, 28);
-    });
+    test(
+      'HTTP failure cannot masquerade as an empty successful calendar',
+      () async {
+        final http = FakeHttpClient(
+          (_) async => const SourceResponse(statusCode: 503, body: '[]'),
+        );
+        await expectLater(
+          BangumiScheduleClient(http: http).fetchWeekly(),
+          throwsA(isA<SourceException>()),
+        );
+      },
+    );
   });
 
   group('番剧声明式规则：播放线路与弹幕', () {
@@ -256,15 +230,6 @@ void main() {
 
       // 弹幕地址里的 {id} 渲染为章节 remoteId
       expect(content.danmakuUrl, 'http://fixture.local/danmaku/101-1.json');
-
-      // 弹幕地址返回的数据可以被同一个解析器消费（播放器就是这么接的）
-      final response = await http.send(
-        SourceRequest(url: content.danmakuUrl!),
-        sourceId: 'fixture-anime',
-      );
-      final comments = DandanplayClient.parseCommentsBody(response.body);
-      expect(comments, hasLength(1));
-      expect(comments.first.text, '测试弹幕');
     });
 
     test('Chapter.parseNumber 兼容「第 12.5 话」', () {

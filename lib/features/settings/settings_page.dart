@@ -60,7 +60,7 @@ class SettingsPage extends ConsumerWidget {
                 title: const Text('来源 HTTP 代理'),
                 subtitle: Text(
                   ref.watch(sourceProxyProvider).isEmpty
-                      ? '未设置 · 使用默认网络'
+                      ? '未填写 · 跟随系统网络与代理'
                       : ref.watch(sourceProxyProvider),
                 ),
                 onTap: () => _editProxy(context, ref),
@@ -147,7 +147,7 @@ class SettingsPage extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  '用于规则与轻之国度的 HTTP 请求。轻书架专用连接、APK 来源和原生视频不使用此设置。清空可恢复默认网络。',
+                  '用于公开番剧资料、评论、来源规则与轻之国度等 HTTP 请求。填写时优先使用此代理；清空后，Windows/Android 跟随系统已配置的代理，系统未配置则直连。轻书架专用连接与原生视频不使用此设置。',
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextField(

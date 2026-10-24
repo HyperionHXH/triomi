@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 
 import 'lk_tls_socket.dart';
+import 'system_proxy_adapter.dart';
 
 // Only built-in novel-site hosts use this fallback. TLS still authenticates the
 // original URL hostname; DNS results never replace the URL, Host or SNI.
@@ -19,29 +20,34 @@ const sourceDnsHosts = {
 
 void configureSourceHttpAdapter(Dio dio, {String proxy = ''}) {
   final resolver = SourceDnsFallback();
-  dio.httpClientAdapter = IOHttpClientAdapter(
-    createHttpClient: () {
-      final client = HttpClient();
-      if (proxy.isNotEmpty) {
-        final uri = Uri.parse(proxy);
-        final host = uri.host.contains(':') ? '[${uri.host}]' : uri.host;
-        client.findProxy = (_) => 'PROXY $host:${uri.port}';
-      }
-      client.connectionFactory = (uri, proxyHost, proxyPort) async {
-        if (proxyHost != null || !sourceDnsHosts.contains(uri.host)) {
-          if (proxyHost == null && uri.scheme == 'https') {
-            return SecureSocket.startConnect(uri.host, uri.port);
-          }
-          return Socket.startConnect(
-            proxyHost ?? uri.host,
-            proxyPort ?? uri.port,
-          );
+  HttpClient createClient() {
+    final client = HttpClient();
+    if (proxy.isNotEmpty) {
+      final uri = Uri.parse(proxy);
+      final host = uri.host.contains(':') ? '[${uri.host}]' : uri.host;
+      client.findProxy = (_) => 'PROXY $host:${uri.port}';
+    }
+    client.connectionFactory = (uri, proxyHost, proxyPort) async {
+      if (proxyHost != null || !sourceDnsHosts.contains(uri.host)) {
+        if (proxyHost == null && uri.scheme == 'https') {
+          return SecureSocket.startConnect(uri.host, uri.port);
         }
-        return connectWithDnsFallback(uri, resolver);
-      };
-      return client;
-    },
-  );
+        return Socket.startConnect(
+          proxyHost ?? uri.host,
+          proxyPort ?? uri.port,
+        );
+      }
+      return connectWithDnsFallback(uri, resolver);
+    };
+    return client;
+  }
+
+  // Explicit application settings take precedence over the user's OS route.
+  // Android VPN routing stays in the OS; Wi-Fi/PAC settings use the same bridge.
+  dio.httpClientAdapter =
+      proxy.isEmpty && (Platform.isWindows || Platform.isAndroid)
+      ? SystemProxyHttpClientAdapter(createClient: createClient)
+      : IOHttpClientAdapter(createHttpClient: createClient);
 }
 
 /// Each attempt owns its TCP/TLS socket until it is handed to HttpClient.

@@ -349,6 +349,87 @@ void main() {
   );
 
   testWidgets(
+    'connection replacement retries failed comments on the selected episode',
+    (tester) async {
+      final oldHttp = FakeHttpClient((request) async {
+        if (Uri.parse(request.url).path == '/v0/episodes') {
+          return response({
+            'total': 1,
+            'data': [episode(1002, 2)],
+          });
+        }
+        return const SourceResponse(statusCode: 503, body: '{}');
+      });
+      final container = await mount(tester, oldHttp);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('本集评论加载失败'), findsOneWidget);
+      final replacement = FakeHttpClient((request) async {
+        expectSync(Uri.parse(request.url).path, '/p1/episodes/1002/comments');
+        return response([comment('切换连接后恢复讨论', 200)]);
+      });
+      container.updateOverrides([
+        databaseProvider.overrideWithValue(container.read(databaseProvider)),
+        sourceHttpClientProvider.overrideWithValue(replacement),
+      ]);
+      for (
+        var attempt = 0;
+        attempt < 30 && find.text('切换连接后恢复讨论').evaluate().isEmpty;
+        attempt++
+      ) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      expect(find.text('切换连接后恢复讨论'), findsOneWidget);
+      expect(find.textContaining('本集评论加载失败'), findsNothing);
+      expect(replacement.requests, hasLength(1));
+    },
+  );
+
+  testWidgets(
+    'connection replacement cancels pending comments and rejects late old response',
+    (tester) async {
+      final pending = Completer<SourceResponse>();
+      final oldHttp = FakeHttpClient((request) async {
+        if (Uri.parse(request.url).path == '/v0/episodes') {
+          return response({
+            'total': 1,
+            'data': [episode(1002, 2)],
+          });
+        }
+        return pending.future;
+      });
+      final container = await mount(tester, oldHttp);
+      for (
+        var attempt = 0;
+        attempt < 30 && oldHttp.requests.length < 2;
+        attempt++
+      ) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      expect(oldHttp.requests, hasLength(2));
+      final replacement = FakeHttpClient(
+        (_) async => response([comment('新连接讨论', 200)]),
+      );
+      container.updateOverrides([
+        databaseProvider.overrideWithValue(container.read(databaseProvider)),
+        sourceHttpClientProvider.overrideWithValue(replacement),
+      ]);
+      for (
+        var attempt = 0;
+        attempt < 30 && find.text('新连接讨论').evaluate().isEmpty;
+        attempt++
+      ) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      expect(oldHttp.requests.last.cancellation!.cancelled, isTrue);
+      expect(find.text('新连接讨论'), findsOneWidget);
+      pending.complete(response([comment('旧连接迟到讨论', 100)]));
+      await tester.pumpAndSettle();
+      expect(find.text('旧连接迟到讨论'), findsNothing);
+      expect(find.text('新连接讨论'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'empty discussion is distinguished from malformed protocol response',
     (tester) async {
       var malformed = true;

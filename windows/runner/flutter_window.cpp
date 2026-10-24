@@ -5,6 +5,10 @@
 #include <flutter/standard_method_codec.h>
 #include <shellapi.h>
 #include <winhttp.h>
+#include <future>
+#include <chrono>
+#include <vector>
+#include <thread>
 
 namespace {
 std::wstring ExternalWebsite(const std::string& text) {
@@ -25,6 +29,90 @@ std::wstring ExternalWebsite(const std::string& text) {
       !parts.dwHostNameLength || parts.dwUserNameLength || parts.dwPasswordLength) return {};
   return url;
 }
+
+std::string ProxyText(const wchar_t* text) {
+  if (!text) return {};
+  const int size = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+  if (size <= 1) return {};
+  std::string result(size, '\0');
+  WideCharToMultiByte(CP_UTF8, 0, text, -1, result.data(), size, nullptr, nullptr);
+  result.pop_back();
+  return result;
+}
+
+struct SystemProxyRoute {
+  flutter::EncodableMap value;
+  std::string error;
+};
+
+SystemProxyRoute ResolveSystemProxy(const std::string& text) {
+  const auto url = ExternalWebsite(text);
+  if (url.empty()) {
+    return {{}, "System proxy requires a public HTTP(S) URL"};
+  }
+  WINHTTP_CURRENT_USER_IE_PROXY_CONFIG config{};
+  if (!WinHttpGetIEProxyConfigForCurrentUser(&config)) {
+    const DWORD error = GetLastError();
+    if (error == ERROR_FILE_NOT_FOUND) {
+      return {{{flutter::EncodableValue("direct"), flutter::EncodableValue(true)}}, {}};
+    }
+    return {{}, "Cannot read Windows proxy configuration"};
+  }
+  std::string proxy = ProxyText(config.lpszProxy);
+  std::string bypass = ProxyText(config.lpszProxyBypass);
+  DWORD automatic_error = ERROR_SUCCESS;
+  bool direct = proxy.empty();
+  if (config.lpszAutoConfigUrl || config.fAutoDetect) {
+    HINTERNET session = WinHttpOpen(L"Triomi system proxy resolver",
+        WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_NO_PROXY_NAME,
+        WINHTTP_NO_PROXY_BYPASS, 0);
+    if (session) {
+      WinHttpSetTimeouts(session, 2000, 2000, 2000, 2000);
+      WINHTTP_AUTOPROXY_OPTIONS options{};
+      if (config.lpszAutoConfigUrl) {
+        options.dwFlags |= WINHTTP_AUTOPROXY_CONFIG_URL;
+        options.lpszAutoConfigUrl = config.lpszAutoConfigUrl;
+      }
+      if (config.fAutoDetect) {
+        options.dwFlags |= WINHTTP_AUTOPROXY_AUTO_DETECT;
+        options.dwAutoDetectFlags = WINHTTP_AUTO_DETECT_TYPE_DHCP |
+                                    WINHTTP_AUTO_DETECT_TYPE_DNS_A;
+      }
+      // Never use the user's Windows credentials to fetch a PAC script.
+      options.fAutoLogonIfChallenged = FALSE;
+      WINHTTP_PROXY_INFO info{};
+      if (WinHttpGetProxyForUrl(session, url.c_str(), &options, &info)) {
+        proxy = ProxyText(info.lpszProxy);
+        bypass = ProxyText(info.lpszProxyBypass);
+        direct = info.dwAccessType == WINHTTP_ACCESS_TYPE_NO_PROXY;
+      } else {
+        automatic_error = GetLastError();
+      }
+      if (info.lpszProxy) GlobalFree(info.lpszProxy);
+      if (info.lpszProxyBypass) GlobalFree(info.lpszProxyBypass);
+      WinHttpCloseHandle(session);
+    } else {
+      automatic_error = GetLastError();
+    }
+  }
+  if (config.lpszProxy) GlobalFree(config.lpszProxy);
+  if (config.lpszProxyBypass) GlobalFree(config.lpszProxyBypass);
+  if (config.lpszAutoConfigUrl) GlobalFree(config.lpszAutoConfigUrl);
+  if (automatic_error != ERROR_SUCCESS && proxy.empty() &&
+      automatic_error != ERROR_WINHTTP_AUTODETECTION_FAILED) {
+    return {{}, "Windows automatic proxy resolution failed"};
+  }
+  return {{{flutter::EncodableValue("direct"), flutter::EncodableValue(direct)},
+    {flutter::EncodableValue("proxy"), flutter::EncodableValue(proxy)},
+    {flutter::EncodableValue("bypass"), flutter::EncodableValue(bypass)}}, {}};
+}
+
+constexpr UINT_PTR kProxyTimer = 0x5450;
+struct PendingProxy {
+  std::future<SystemProxyRoute> route;
+  std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result;
+};
+std::vector<PendingProxy> pending_proxies;
 }  // namespace
 
 #include "flutter/generated_plugin_registrant.h"
@@ -66,6 +154,30 @@ bool FlutterWindow::OnCreate() {
         &flutter::StandardMethodCodec::GetInstance());
     platform_channel_->SetMethodCallHandler(
         [this](const auto& call, auto result) {
+          if (call.method_name() == "resolveSystemProxy") {
+            const auto* args = call.arguments() == nullptr ? nullptr :
+                std::get_if<flutter::EncodableMap>(call.arguments());
+            const std::string* url = nullptr;
+            if (args) {
+              const auto entry = args->find(flutter::EncodableValue("url"));
+              if (entry != args->end()) url = std::get_if<std::string>(&entry->second);
+            }
+            if (!url) {
+              result->Error("invalid_url", "Missing system proxy URL");
+              return;
+            }
+            auto promise = std::make_shared<std::promise<SystemProxyRoute>>();
+            pending_proxies.push_back({promise->get_future(), std::move(result)});
+            std::thread([promise, target = *url]() {
+              try {
+                promise->set_value(ResolveSystemProxy(target));
+              } catch (...) {
+                promise->set_exception(std::current_exception());
+              }
+            }).detach();
+            SetTimer(GetHandle(), kProxyTimer, 15, nullptr);
+            return;
+          }
           if (call.method_name() == "desktopMihonStart" ||
               call.method_name() == "desktopMihonStop" ||
               call.method_name() == "desktopMihonAlive" ||
@@ -297,6 +409,8 @@ bool FlutterWindow::OnCreate() {
 void FlutterWindow::OnDestroy() {
   mihon_runtime_.Stop();
   CloseWindowsWebSessions();
+  KillTimer(GetHandle(), kProxyTimer);
+  pending_proxies.clear();
   platform_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -309,6 +423,27 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (message == WM_TIMER && wparam == kProxyTimer) {
+    for (auto it = pending_proxies.begin(); it != pending_proxies.end();) {
+      if (it->route.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+        ++it;
+        continue;
+      }
+      try {
+        const auto route = it->route.get();
+        if (route.error.empty()) {
+          it->result->Success(flutter::EncodableValue(route.value));
+        } else {
+          it->result->Error("system_proxy_failed", route.error);
+        }
+      } catch (...) {
+        it->result->Error("system_proxy_failed", "Windows proxy resolution failed");
+      }
+      it = pending_proxies.erase(it);
+    }
+    if (pending_proxies.empty()) KillTimer(hwnd, kProxyTimer);
+    return 0;
+  }
   if (message == WM_SIZE) WindowsWebSessionOnResize();
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
