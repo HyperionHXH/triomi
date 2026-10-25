@@ -396,7 +396,7 @@ def run_tour(session: TourSession) -> int:
         print(f'Capturing iOS visual tour to {session.output}', flush=True)
         with (session.output / 'flutter.log').open('wb') as log:
             result = subprocess.run(
-                [flutter, 'test', 'integration_test/ios_visual_tour_test.dart',
+                [flutter, 'test', '--no-pub', '--verbose', 'integration_test/ios_visual_tour_test.dart',
                  '-d', session.device, f'--dart-define=TRIOMI_TOUR_BASE_URL={base}',
                  f'--dart-define=TRIOMI_VIDEO_URL={base}/video/sample.mp4'],
                 cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,

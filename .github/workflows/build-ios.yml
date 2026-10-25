@@ -109,11 +109,23 @@ jobs:
             brew install ffmpeg
           fi
           ffprobe -version
+      - name: Isolate visual tour from the preceding Flutter test engine
+        id: tour-simulator
+        if: ${{ !cancelled() && steps.flutter-simulator.outputs.udid != '' }}
+        run: |
+          set -euo pipefail
+          previous='${{ steps.flutter-simulator.outputs.udid }}'
+          xcrun simctl shutdown "$previous"
+          read -r device_type runtime < <(xcrun simctl list devices --json | python -c 'import json,sys; groups=json.load(sys.stdin)["devices"]; print(next(d["deviceTypeIdentifier"]+" "+runtime for runtime,devices in groups.items() for d in devices if d["udid"]==sys.argv[1]))' "$previous")
+          device="$(xcrun simctl create Triomi-Visual-Tour "$device_type" "$runtime")"
+          echo "udid=$device" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device" -b
       - name: Capture the complete production iOS visual tour
         id: visual-tour
-        if: ${{ !cancelled() && steps.flutter-simulator.outputs.udid != '' }}
+        if: ${{ !cancelled() && steps.tour-simulator.outputs.udid != '' }}
         timeout-minutes: 22
-        run: python tools/run_ios_visual_tour.py --device '${{ steps.flutter-simulator.outputs.udid }}'
+        run: python tools/run_ios_visual_tour.py --device '${{ steps.tour-simulator.outputs.udid }}'
       - name: Upload visual tour screenshots, recording and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
