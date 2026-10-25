@@ -10,7 +10,9 @@
 
 收尾审查修复公共加速切换误销毁下载连接池：通用传输保持实例、每请求读取当前策略，公共资料消费者独立刷新；真实loopback在切换前后保持同一下载流并成功读取后续请求。ECH的DoH引导复用普通适配器，按完整DoH URL执行系统PAC，不套用Next域名的DIRECT决定；本地代理实际收到DNS CONNECT。更新候选的显式删除失败保留页面所有权，页面销毁则只放弃所有权而保护安装器读取；同路径交接可在进程重启后重试，未知旧租约不阻止清理本进程新建候选。
 
-应用内更新留存、Android媒体音量原生测试共19项通过；Flutter全量测试1453项通过、4项跳过，`flutter analyze --no-pub`零问题。双端烟测均使用独立临时资料与自建媒体，未触碰用户手机。Android Debug APK与Windows Profile构建成功。源码提交`ddc6823`已推送；按用户要求继续升至`0.12.0+174`并创建Release，发布资产待流水线核验。
+本轮日常验证：应用内更新留存、Android媒体音量原生测试共19项通过；Flutter全量测试1453项通过、4项跳过，`flutter analyze --no-pub`零问题。Android Debug APK与Windows Profile构建成功。源码提交`ddc6823`已推送；发布版本元数据`0.12.0+174`提交`4b9eaec`与标签`v0.12.0-test.174`已推送，正式签名Android及Windows ZIP/MSI流水线[40182350865](https://github.com/HyperionHXH/triomi/actions/runs/40182350865)正在构建并发布。发布资产完成后再补核验结果。
+
+交付约定：用户要求此后每次推送都创建新Release。后续推送源码后，必须递增Android build number、建立不重复的`v0.12.0-test.<build>`标签，运行`.github/workflows/release.yml`并核验Android APK、Windows ZIP/MSI、更新清单及校验和；不得把“已推送提交”称作“已发布”。
 
 ## 当前请求：R173 菜单、评论与三源弹幕（已发布0.12.0+173）
 
