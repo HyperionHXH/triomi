@@ -8,7 +8,6 @@ def run_integration(flutter, root, device, entrypoint, defines, log, timeout):
     deadline = time.monotonic() + timeout
     commands = [
         [flutter, 'build', 'ios', '--simulator', '--debug', '--no-pub',
-         '--track-widget-creation',
          '--target', entrypoint,
          '--dart-define=INTEGRATION_TEST_SHOULD_REPORT_RESULTS_TO_NATIVE=true',
          *[f'--dart-define={value}' for value in defines]],
