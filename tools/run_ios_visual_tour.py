@@ -24,6 +24,7 @@ from urllib.parse import urlparse
 import zlib
 
 from dev_fixture_server import Handler
+from ios_integration_runner import run_integration
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -395,16 +396,14 @@ def run_tour(session: TourSession) -> int:
         recorder.start()
         print(f'Capturing iOS visual tour to {session.output}', flush=True)
         with (session.output / 'flutter.log').open('wb') as log:
-            result = subprocess.run(
-                [flutter, 'test', '--no-pub', '--verbose', 'integration_test/ios_visual_tour_test.dart',
-                 '-d', session.device, f'--dart-define=TRIOMI_TOUR_BASE_URL={base}',
-                 f'--dart-define=TRIOMI_VIDEO_URL={base}/video/sample.mp4'],
-                cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
-                check=False, timeout=TOUR_TIMEOUT_SECONDS,
+            code = run_integration(
+                flutter, ROOT, session.device, 'integration_test/ios_visual_tour_test.dart',
+                [f'TRIOMI_TOUR_BASE_URL={base}', f'TRIOMI_VIDEO_URL={base}/video/sample.mp4'],
+                log, TOUR_TIMEOUT_SECONDS,
             )
-        session.manifest['flutter_exit_code'] = result.returncode
-        if result.returncode != 0:
-            session.fail(f'Flutter visual tour failed with exit {result.returncode}; see flutter.log')
+        session.manifest['flutter_exit_code'] = code
+        if code != 0:
+            session.fail(f'Flutter visual tour failed with exit {code}; see flutter.log')
             print('\n'.join((session.output / 'flutter.log').read_text(
                 encoding='utf-8', errors='replace').splitlines()[-120:]),
                 file=sys.stderr, flush=True)

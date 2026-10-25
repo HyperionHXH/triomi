@@ -11,6 +11,7 @@ import subprocess
 import threading
 
 from dev_fixture_server import Handler
+from ios_integration_runner import run_integration
 
 
 def main() -> int:
@@ -40,11 +41,10 @@ def main() -> int:
                       else 'integration_test/ios_video_live_test.dart')
         with log.open('w', encoding='utf-8') as stream:
             try:
-                result = subprocess.run([
-                    flutter, 'test', '--no-pub', '--verbose', entrypoint,
-                    '-d', args.device, f'--dart-define=TRIOMI_VIDEO_URL={url}',
-                ], cwd=root, stdout=stream, stderr=subprocess.STDOUT,
-                    timeout=900, check=False).returncode
+                result = run_integration(
+                    flutter, root, args.device, entrypoint,
+                    [f'TRIOMI_VIDEO_URL={url}'], stream, 900,
+                )
             except subprocess.TimeoutExpired:
                 print('iOS acceptance exceeded its 15-minute host deadline.',
                       flush=True)
