@@ -269,7 +269,7 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                   Icons.speaker_notes_outlined,
                   '弹幕设置',
                   AppRoutes.danmakuSettings,
-                  subtitle: '来源提供的弹幕无需凭据；弹弹play 搜索/发送需填写自己的账号凭据',
+                  subtitle: 'B站、Animeko、Gamer 独立只读弹幕池；匹配与偏移在播放器中设置，不提供发送',
                 ),
               ],
             ),

@@ -689,19 +689,24 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         displayColor: _settings.theme.foreground,
       ),
     );
-    return Theme(
-      data: readerTheme,
-      child: Scaffold(
-        backgroundColor: _settings.theme.background,
-        body: SafeArea(
-          child: Focus(
-            autofocus: true,
-            onKeyEvent: _handleKey,
-            child: Stack(
-              children: <Widget>[
-                _buildBody(),
-                if (_chromeVisible || !_hasReadableContent) _buildChrome(),
-              ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: _settings.theme == NovelTheme.dark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
+      child: Theme(
+        data: readerTheme,
+        child: Scaffold(
+          backgroundColor: _settings.theme.background,
+          body: SafeArea(
+            child: Focus(
+              autofocus: true,
+              onKeyEvent: _handleKey,
+              child: Stack(
+                children: <Widget>[
+                  _buildBody(),
+                  if (_chromeVisible || !_hasReadableContent) _buildChrome(),
+                ],
+              ),
             ),
           ),
         ),
