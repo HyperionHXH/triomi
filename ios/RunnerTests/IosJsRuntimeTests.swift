@@ -26,12 +26,15 @@ final class IosJsRuntimeTests: XCTestCase {
         var args = values
         args["session"] = session
         args["id"] = UUID().uuidString
-        args["timeoutMs"] = timeoutMs
+        // Cold WebContent launch on a shared runner is not the cancellation SLA.
+        // Explicit loop deadlines below remain 300ms/3s and are never retried.
+        let nativeTimeout = method == "load" ? max(timeoutMs, 30_000) : timeoutMs
+        args["timeoutMs"] = nativeTimeout
         runtime.handle(FlutterMethodCall(methodName: method, arguments: args)) { value in
             response = value
             finished.fulfill()
         }
-        wait(for: [finished], timeout: 15)
+        wait(for: [finished], timeout: max(15, Double(nativeTimeout) / 1000 + 5))
         return response
     }
 

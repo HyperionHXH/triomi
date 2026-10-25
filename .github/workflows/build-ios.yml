@@ -81,13 +81,26 @@ jobs:
             -scheme Runner \
             -configuration Debug \
             -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}' \
+            -parallel-testing-enabled NO \
             -only-testing:RunnerTests \
             -resultBundlePath build/ios/NativeSmoke.xcresult \
             CODE_SIGNING_ALLOWED=NO
+      - name: Isolate Flutter acceptance from native WebContent stress tests
+        id: flutter-simulator
+        if: ${{ !cancelled() && steps.simulator.outputs.udid != '' }}
+        run: |
+          set -euo pipefail
+          native='${{ steps.simulator.outputs.udid }}'
+          xcrun simctl shutdown "$native"
+          read -r device_type runtime < <(xcrun simctl list devices --json | python -c 'import json,sys; groups=json.load(sys.stdin)["devices"]; print(next(d["deviceTypeIdentifier"]+" "+runtime for runtime,devices in groups.items() for d in devices if d["udid"]==sys.argv[1]))' "$native")
+          device="$(xcrun simctl create Triomi-Flutter-Acceptance "$device_type" "$runtime")"
+          echo "udid=$device" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device" -b
       - name: Exercise real iOS JS, durable storage and video with danmaku
         id: acceptance
         timeout-minutes: 17
-        run: python tools/run_ios_video_smoke.py --device '${{ steps.simulator.outputs.udid }}' --suite
+        run: python tools/run_ios_video_smoke.py --device '${{ steps.flutter-simulator.outputs.udid }}' --suite
       - name: Install the recording decoder when unavailable
         if: ${{ !cancelled() && steps.simulator.outputs.udid != '' }}
         run: |
@@ -98,9 +111,9 @@ jobs:
           ffprobe -version
       - name: Capture the complete production iOS visual tour
         id: visual-tour
-        if: ${{ !cancelled() && steps.simulator.outputs.udid != '' }}
+        if: ${{ !cancelled() && steps.flutter-simulator.outputs.udid != '' }}
         timeout-minutes: 22
-        run: python tools/run_ios_visual_tour.py --device '${{ steps.simulator.outputs.udid }}'
+        run: python tools/run_ios_visual_tour.py --device '${{ steps.flutter-simulator.outputs.udid }}'
       - name: Upload visual tour screenshots, recording and diagnostics
         if: always()
         uses: actions/upload-artifact@v4

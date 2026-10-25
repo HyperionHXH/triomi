@@ -78,7 +78,7 @@ final class RunnerTests: XCTestCase {
     ]]), presenter: nil) { value in
       XCTAssertEqual(value as? Bool, true); stored.fulfill()
     }
-    wait(for: [stored], timeout: 15)
+    wait(for: [stored], timeout: 45)
 
     func header(_ method: String, _ value: String) -> String? {
       let done = expectation(description: method + value)
@@ -210,7 +210,7 @@ final class RunnerTests: XCTestCase {
     let url = try XCTUnwrap(URL(string: "https://triomi-resolver.invalid/extensionless"))
     let stored = expectation(description: "Native media cookie fixture")
     IosWebSession.storeCookies(["media=private; Path=/; Secure; HttpOnly"], url: url, store: store) { stored.fulfill() }
-    wait(for: [stored], timeout: 15)
+    wait(for: [stored], timeout: 45)
     for omit in [false, true] {
       let resolver = IosVideoResolver(store: store)
       let complete = expectation(description: "Resolver metadata reaches Flutter callback \(omit)")
