@@ -11,7 +11,6 @@ import '../../core/widgets/page_scaffold.dart';
 import '../library/data/library_providers.dart';
 import 'data/tracking_models.dart';
 import 'data/tracking_providers.dart';
-import 'data/tracking_service.dart';
 import 'tracking_sync_page.dart';
 
 /// 追踪账号：配置 Bangumi / AniList 的 access token，查看已绑定作品。
@@ -178,8 +177,8 @@ class _TrackingPageState extends ConsumerState<TrackingPage> {
                 // 登录后点「创建个人令牌」填名称与有效期就能复制。
                 ? '到 next.bgm.tv/demo/access-token 生成个人令牌：登录后点「创建个人令牌」，'
                       '填名称与有效期即可复制（不用创建应用，也没有审核）。'
-                      '官方 api.bgm.tv 连不上时会自动改走镜像 api.bgmapi.com，'
-                      '此时 token 也会发给该镜像（仅作确认用，不写日志）。'
+                      '账号、搜索与进度只连接官方 api.bgm.tv，不向公共镜像发送令牌。'
+                      '官方连不上时请检查网络或设置代理。'
                 : '到 anilist.co → Settings → Developer → Create New Token 生成个人令牌'
                       '（不用创建应用，也没有审核）。',
             style: Theme.of(context).textTheme.bodySmall,
@@ -245,25 +244,15 @@ class _TrackingPageState extends ConsumerState<TrackingPage> {
       await service.setToken(kind, token);
       final name = await service.verify(kind);
       if (!mounted) return;
-      setState(() => _status[kind] = '连接正常：$name${_mirrorNote(service, kind)}');
+      setState(() => _status[kind] = '连接正常：$name');
       ref.invalidate(allTrackingBindingsProvider);
     } catch (error) {
       if (!mounted) return;
-      setState(
-        () => _status[kind] = '连接失败：$error${_mirrorNote(service, kind)}',
-      );
+      setState(() => _status[kind] = '连接失败：$error');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
-
-  /// 官方不可达而走了镜像时的补充说明：token 被发给了第三方，必须讲清。
-  static String _mirrorNote(
-    TrackingService service,
-    TrackingServiceKind kind,
-  ) => kind == TrackingServiceKind.bangumi && service.bangumiUsedFallback
-      ? '（官方 api.bgm.tv 不可达，本次请求走了镜像 api.bgmapi.com）'
-      : '';
 
   Future<void> _clear(TrackingServiceKind kind) async {
     await ref.read(trackingServiceProvider).clearToken(kind);

@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../core/models/media_type.dart';
 import '../../core/router/app_router.dart';
+import '../../core/source/bangumi_route_policy.dart';
 import '../../core/source/network_proxy.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/theme/app_tokens.dart';
@@ -55,6 +56,28 @@ class SettingsPage extends ConsumerWidget {
           SettingsGroup(
             title: '网络与存储',
             children: <Widget>[
+              SwitchListTile(
+                key: const ValueKey('public-network-acceleration'),
+                secondary: const Icon(Icons.public_rounded),
+                title: const Text('公共网络加速'),
+                subtitle: const Text(
+                  '公开番剧资料、封面与官方规则库使用镜像；评论使用官方 ECH 连接。关闭后访问官方地址。账号和原始视频不改道，已配置的代理优先。',
+                ),
+                value: ref.watch(bangumiMirrorEnabledProvider),
+                onChanged: (enabled) async {
+                  try {
+                    await ref
+                        .read(bangumiMirrorEnabledProvider.notifier)
+                        .setEnabled(enabled);
+                  } catch (_) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('网络设置未保存，请重试')),
+                      );
+                    }
+                  }
+                },
+              ),
               ListTile(
                 leading: const Icon(Icons.wifi_outlined),
                 title: const Text('来源 HTTP 代理'),
@@ -150,7 +173,7 @@ class SettingsPage extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  '用于公开番剧资料、评论、来源规则与轻之国度等 HTTP 请求。填写时优先使用此代理；清空后，Windows/Android 跟随系统已配置的代理，系统未配置则直连。轻书架专用连接与原生视频不使用此设置。',
+                  '用于公开番剧资料、评论、来源规则与轻之国度等 HTTP 请求。填写时优先使用此代理；清空后，Windows/Android/iOS 跟随系统已配置的代理，系统未配置则直连。轻书架专用连接与原生视频不使用此设置。',
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextField(

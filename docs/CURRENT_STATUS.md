@@ -1,5 +1,13 @@
 # Triomi 当前状态
 
+## 当前请求：主线174同步、逐图验收与独立iOS Release
+
+发布前主线又推进至`6cf55e4`（0.12.0+174），因此追加合并公共网络加速/ECH、更新空间分类与系统音量，不把173候选当作最新包发布。保留iOS AVPlayer/PiP、WebKit JS、下载生命周期、持久沙盒与小说书架账号入口边界。最终云端运行、公开Release与本地逐图验收证据在完成后记录于本节。
+
+173候选`9f62e8b`的[运行40194653535](https://github.com/HyperionHXH/triomi/actions/runs/40194653535)全部通过：原生19项（18通过/1硬件亮度跳过）、真实JS/存储/视频集成与53状态巡检；本地Flutter1438通过/3跳过、Python109通过。下载53张PNG逐张读取后发现夜间小说状态栏对比不足、追番设置仍残留旧弹弹play凭据/发送说明，已修正并加状态栏切换回归。该候选未发布，不用它替代174的最终验收。
+
+模拟器集成现使用官方`FLTIntegrationTestRunner`原生XCTest结果通道，不再依赖宿主VM Service发现；原生压力测试、Dart集成、视觉巡检各用隔离的一次性模拟器。仅模拟器XCTest启用ad-hoc签名以实际访问Keychain；真机Release保持`--no-codesign`。语义开关在测试基线前开启并最终还原，不跳过语义泄漏断言或凭据真实读写。
+
 ## 当前请求：同步主线173并视觉验收后发布iOS
 
 主线同步基准为 `origin/master` 的 `945a0a8`（0.12.0+173），包含R169–R173默认仓库、Kazumi API9/无后缀HLS解析、MixN近期同步/阅读跟手、缓存治理、紧凑菜单/评论和三源只读弹幕。保留iOS AVPlayer/PiP、WebKit JS、持久数据与下载常亮/回前台恢复，以及小说书架不展示登录状态的既有修正。
@@ -62,6 +70,19 @@ Documents/Application Support 根目录排除 iCloud 备份，持久业务数据
 第四次 [macOS 运行39449835099](https://github.com/HyperionHXH/triomi/actions/runs/39449835099)原生 XCTest 10/10 通过，真实 Dart JS 超时重载通过。HTTP/选择器用例在取标题时误传 baseUrl，触发现有共享宿主的 URL 解析而断言失败；本地主机对相同宿主复现一致。已移除夹具取文本时多传的 baseUrl，保留原始标题断言，不修改 Android/Windows 选择器契约。CI 合并三组真实集成场景到一次模拟器启动，未删除用例或放松断言。
 
 第五次 [macOS 运行39453571279](https://github.com/HyperionHXH/triomi/actions/runs/39453571279)（提交 d25f796）全部通过：原生 XCTest、合并后的 JS/存储/视频真实集成用例、未签名 IPA 校验打包与上传（triomi-ios-unsigned 11.4 MB）。feat/ios 的 iOS 适配、后台播放与无签名构建闭环完成，可从该 Run 的 Artifacts 下载 IPA 侧载。
+## 当前请求：Android 系统音量、公共网络加速与更新空间（已推送，0.12.0+174发布中）
+
+用户手机报告总占用约903MB、应用支持目录758.6MB；无法读取该手机目录，不将报告改写为本机实测，也不把所有空间归因于视频缓存。源码确认 `AppUpdateHost.discard` 对已交给安装器的APK返回成功但永久保留 `filesDir/app-update/install` 副本；正常Dart finally只清理下载中间文件，进程被结束仍可能遗留。现改为独立的 incoming/install 留存策略：安装交接期间保留、安装结果回调释放，启动维护清理已安装/过期/孤儿文件，显式清理只删明确可回收项；不触碰下载、备份、账号或用户手动文件。
+
+本轮对照Kazumi HEAD `7c708fa3f688a1ea709c7c2947bf7aaa13af9558`及10月23日 `b2bd7ae0d0b7e65616298847a1fce42e53664eb1`，迁移可选规则镜像、共享ECH匿名传输、连接释放以及既有持续缓冲/紧凑播放器体验，不复制需要签名的私有评论镜像。Bangumi官方v0与Next评论在本机无代理直连超时；公开镜像可达。设置新增“公共网络加速”，只作用于公开元数据、封面、规则和官方Next评论，账号、私有请求、原始视频及自定义仓库保持原路由；关闭后仍走官方直连，失败会真实显示，不伪造空成功。
+
+隔离API35 Android无代理实际验证：subject=400602、subject评论20条、episode评论282条、搜索3条、热门3条、规则17条均成功；关闭加速后官方直连请求按超时显示错误。Windows生产烟测使用DIRECT ECH适配器，同样获得上述公开数据；Windows未宣称完成真实鼠标菜单点击。Android生产播放器实际读写系统 `STREAM_MUSIC`：5/15→按键6/15→手势7/15，换集及重开保持；桌面仍保留原应用音量增益，未被系统轮询覆盖。
+
+收尾审查修复公共加速切换误销毁下载连接池：通用传输保持实例、每请求读取当前策略，公共资料消费者独立刷新；真实loopback在切换前后保持同一下载流并成功读取后续请求。ECH的DoH引导复用普通适配器，按完整DoH URL执行系统PAC，不套用Next域名的DIRECT决定；本地代理实际收到DNS CONNECT。更新候选的显式删除失败保留页面所有权，页面销毁则只放弃所有权而保护安装器读取；同路径交接可在进程重启后重试，未知旧租约不阻止清理本进程新建候选。
+
+本轮日常验证：应用内更新留存、Android媒体音量原生测试共19项通过；Flutter全量测试1453项通过、4项跳过，`flutter analyze --no-pub`零问题。Android Debug APK与Windows Profile构建成功。源码提交`ddc6823`已推送；发布版本元数据`0.12.0+174`提交`4b9eaec`与标签`v0.12.0-test.174`已推送，正式签名Android及Windows ZIP/MSI流水线[40182350865](https://github.com/HyperionHXH/triomi/actions/runs/40182350865)正在构建并发布。发布资产完成后再补核验结果。
+
+交付约定：用户要求此后每次推送都创建新Release。后续推送源码后，必须递增Android build number、建立不重复的`v0.12.0-test.<build>`标签，运行`.github/workflows/release.yml`并核验Android APK、Windows ZIP/MSI、更新清单及校验和；不得把“已推送提交”称作“已发布”。
 ## 当前请求：R173 菜单、评论与三源弹幕（已发布0.12.0+173）
 
 用户要求菜单/评论修复后研究弹幕，选择B站＋Animeko并追加非B站覆盖与Kazumi功能；后续明确本轮只做观看与设置、不做发送。现新增Gamer动画疯，三源独立组合，双端实网可见；修复提交`531cd92`与标签`v0.12.0-test.173`已推送，[173预发布](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-test.173)五项资产已完整核验。

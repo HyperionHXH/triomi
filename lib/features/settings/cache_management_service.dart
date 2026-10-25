@@ -85,6 +85,9 @@ class StorageSummary {
     this.profiles,
     this.supportBytes, {
     this.updateBytes = 0,
+    this.updateIncomingBytes = 0,
+    this.updateInstallBytes = 0,
+    this.extensionBytes = 0,
     this.managedRuntimeBytes = 0,
   });
   final List<BrowserCacheProfile> profiles;
@@ -92,7 +95,17 @@ class StorageSummary {
   /// Entire support directory, including retained runtimes, sessions and updates.
   final int supportBytes;
   final int updateBytes;
+
+  /// Subsets of [updateBytes], never added again to the support total.
+  final int updateIncomingBytes;
+  final int updateInstallBytes;
+  final int extensionBytes;
   final int managedRuntimeBytes;
+  int get otherSupportBytes =>
+      (supportBytes - updateBytes - managedRuntimeBytes - extensionBytes).clamp(
+        0,
+        supportBytes,
+      );
   int get browserHttpBytes =>
       profiles.fold(0, (sum, profile) => sum + profile.httpBytes);
 }
@@ -386,7 +399,13 @@ class CacheManagementService {
       }
     }
     _checkCancellation(cancellation);
-    final categories = {'app-update': 0, 'mihon-desktop/runtime': 0};
+    final categories = {
+      'app-update': 0,
+      'app-update/incoming': 0,
+      'app-update/install': 0,
+      'mihon-extensions': 0,
+      'mihon-desktop/runtime': 0,
+    };
     final support = includeSupport
         ? await _directoryBytes(
             await _support(),
@@ -400,6 +419,9 @@ class CacheManagementService {
       List.unmodifiable(profiles),
       support?.bytes ?? 0,
       updateBytes: categories['app-update']!,
+      updateIncomingBytes: categories['app-update/incoming']!,
+      updateInstallBytes: categories['app-update/install']!,
+      extensionBytes: categories['mihon-extensions']!,
       managedRuntimeBytes: categories['mihon-desktop/runtime']!,
     );
   }

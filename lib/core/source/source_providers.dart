@@ -15,6 +15,8 @@ import '../models/source_exception.dart';
 import '../platform/platform_channel.dart';
 import '../storage/preferences.dart';
 import '../storage/secure_store.dart';
+import 'bangumi_public_client.dart';
+import 'bangumi_route_policy.dart';
 import 'http_client.dart';
 import 'js/js_runtime.dart';
 import 'js/runtime/js_runtime_factory.dart';
@@ -27,9 +29,13 @@ import 'source_filters.dart';
 import 'source_registry.dart';
 import 'source_repository.dart';
 
-/// 来源网络层（全应用共用一个连接池）。
+/// 来源网络层（全应用共用一个连接池）。公共加速只动态切换路由，不销毁
+/// 这个连接池，避免打断正在进行的下载/阅读任务。
 final sourceHttpClientProvider = Provider<SourceHttpClient>((ref) {
-  final client = DioSourceHttpClient(proxy: ref.watch(sourceProxyProvider));
+  final client = DioSourceHttpClient(
+    proxy: ref.watch(sourceProxyProvider),
+    bangumiRoutesResolver: () => ref.read(bangumiRoutePolicyProvider),
+  );
   ref.onDispose(client.close);
   return client;
 });
@@ -160,6 +166,7 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
   final registry = SourceRegistry(
     repository: ref.watch(sourceRepositoryProvider),
     http: ref.watch(sourceHttpClientProvider),
+    bangumiPublicClient: ref.watch(bangumiPublicClientProvider),
     jsRuntimeFactory: ref.watch(sourceJsRuntimeFactoryProvider),
     jsContentOptions: (id) => id == 'mangadex'
         ? mangaDexContentOptions(preferences)

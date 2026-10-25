@@ -9,8 +9,6 @@ import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
 import android.provider.Settings
-import android.system.Os
-import android.system.OsConstants
 import androidx.core.content.FileProvider
 import com.android.apksig.ApkVerifier
 import io.flutter.plugin.common.BinaryMessenger
@@ -19,28 +17,27 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
-import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Static APK verification only. Never loads candidate classes or silently installs. */
 class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMessenger) {
     private val channel = MethodChannel(messenger, "triomi/app-update")
-    private val executor = Executors.newSingleThreadExecutor()
+    private val executor = updateExecutor
     private val cancelled = AtomicBoolean(false)
     private var busy = false
     private var picker: MethodChannel.Result? = null
     @Volatile private var input: InputStream? = null
-    private var handedOff: String? = null
     @Volatile private var activeStaged: File? = null
+    @Volatile private var closed = false
+    @Volatile private var installerPrepared: File? = null
+    @Volatile private var activeIncomingPath: String? = null
     private var lastProgress = 0L
-    private val root = File(activity.filesDir, "app-update")
-    private val installRoot = File(root, "install")
-    private val incomingRoot = File(root, "incoming")
+    private val retention = AppUpdateRetention(activity.cacheDir, activity.filesDir,
+        installed = { installedIdentity() }, inspect = { file -> archiveIdentity(file) })
 
     init {
-        installRoot.mkdirs()
-        incomingRoot.mkdirs()
+        // Heavy maintenance is explicitly requested by Dart after its first frame.
         channel.setMethodCallHandler(::handle)
     }
 
@@ -53,9 +50,21 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
                 result.success(true)
             }
             "current" -> work(result) { current() }
-            "stagingDirectory" -> {
-                try { validateDirectory(incomingRoot); result.success(incomingRoot.canonicalPath) }
-                catch (_: Exception) { result.error("invalid_stage", "更新暂存目录无效", null) }
+            "storageInfo" -> storageWork(result) { retention.storageInfo().asMap() }
+            "maintainStorage" -> storageWork(result) { retention.maintain(clear = call.argument<Boolean>("clear") == true).asMap() }
+            "pendingCandidate" -> work(result) {
+                retention.pendingCandidate()?.let { inspect(it, "仍待系统安装器处理的更新包", null) } ?: emptyMap()
+            }
+            "beginIncoming" -> work(result) {
+                val file = retention.beginIncoming()
+                activeIncomingPath = file.absolutePath
+                mapOf("path" to file.canonicalPath)
+            }
+            "finishIncoming" -> storageWork(result) {
+                val path = requireNotNull(call.argument<String>("path"))
+                val removed = retention.finishIncoming(path)
+                if (activeIncomingPath == path) activeIncomingPath = null
+                mapOf("removed" to removed)
             }
             "pickApk" -> {
                 if (busy) result.error("busy", "已有更新操作正在进行", null)
@@ -77,18 +86,19 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
                 }
             }
             "inspect" -> work(result) {
-                val original = ownedIncoming(requireNotNull(call.argument<String>("path")))
+                val original = requireNotNull(call.argument<String>("path"))
                 val expected = call.argument<String>("sha256")
                 require(expected == null || HASH.matches(expected)) { "预期 SHA-256 必须是完整 64 位小写散列" }
-                val staged = copy(original.inputStream(), original.length())
+                val staged = retention.copyIncoming(original) { source, target ->
+                    copy(source.inputStream(), source.length(), target)
+                }
                 try { inspect(staged, call.argument<String>("source") ?: "用户选择的本地文件", expected) }
-                catch (error: Throwable) { staged.delete(); throw error }
+                catch (error: Throwable) { retention.releaseCandidate(staged); throw error }
             }
-            "discard" -> {
-                try {
-                    val file = ownedInstall(requireNotNull(call.argument<String>("path")))
-                    result.success(file.canonicalPath == handedOff || file.delete())
-                } catch (_: Exception) { result.success(false) }
+            "discard" -> storageWork(result) {
+                mapOf("removed" to retention.releaseCandidate(
+                    File(requireNotNull(call.argument<String>("path"))),
+                    relinquish = call.argument<Boolean>("relinquish") == true))
             }
             "canInstall" -> result.success(Build.VERSION.SDK_INT < 26 || activity.packageManager.canRequestPackageInstalls())
             "openUnknownSources" -> {
@@ -107,23 +117,27 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
                 work(result, after = { metadata ->
                     require(metadata["decision"] == "upgrade") { "只允许已核验的新版本进入安装器" }
                     require(Build.VERSION.SDK_INT < 26 || activity.packageManager.canRequestPackageInstalls()) { "请先在系统设置中自行允许此应用安装，再重新确认" }
-                    val file = ownedInstall(metadata["path"] as String)
+                    val file = File(metadata["path"] as String)
                     val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.app-update", file)
-                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                    val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                         setDataAndType(uri, "application/vnd.android.package-archive")
                         clipData = ClipData.newRawUri("Triomi verified update", uri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        putExtra(Intent.EXTRA_RETURN_RESULT, true)
                     }
                     require(activity.updateConsentCurrent(generation)) { "安装确认已因失焦或重新锁定过期；请解锁后重新确认" }
-                    activity.startActivity(intent)
-                    handedOff = file.canonicalPath
+                    activity.startActivityForResult(intent, REQUEST_INSTALL_APK)
+                    installerPrepared = null
                     mapOf("launched" to true)
                 }) {
                     require(call.argument<Boolean>("consent") == true) { "必须明确确认系统安装器交接" }
-                    val file = ownedInstall(requireNotNull(call.argument<String>("path")))
+                    val file = retention.candidate(requireNotNull(call.argument<String>("path")))
                     val expected = requireNotNull(call.argument<String>("sha256"))
                     require(HASH.matches(expected)) { "无效的确认散列" }
-                    inspect(file, "已确认的暂存 APK", expected)
+                    val metadata = inspect(file, "已确认的暂存 APK", expected)
+                    require(metadata["decision"] == "upgrade") { "只允许已核验的新版本进入安装器" }
+                    installerPrepared = if (retention.beginHandoff(file)) file else null
+                    metadata
                 }
             }
             else -> result.notImplemented()
@@ -131,6 +145,16 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
     }
 
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode == REQUEST_INSTALL_APK) {
+            executor.execute {
+                val released = runCatching { retention.finishHandoff(); retention.maintain() }.isSuccess
+                activity.runOnUiThread {
+                    if (!closed) channel.invokeMethod("installerFinished", mapOf(
+                        "installed" to (resultCode == Activity.RESULT_OK), "released" to released))
+                }
+            }
+            return true
+        }
         if (requestCode != REQUEST_PICK_APK) return false
         val result = picker ?: return true
         picker = null
@@ -156,9 +180,20 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
             val stream = requireNotNull(activity.contentResolver.openInputStream(uri)) { "无法读取所选 APK" }
             val staged = copy(stream, size)
             try { inspect(staged, "用户通过系统文件选择器选择：$name", null) }
-            catch (error: Throwable) { staged.delete(); throw error }
+            catch (error: Throwable) { retention.releaseCandidate(staged); throw error }
         }
         return true
+    }
+
+    private fun storageWork(result: MethodChannel.Result, block: () -> Map<String, Any?>) {
+        executor.execute {
+            try {
+                val value = block()
+                activity.runOnUiThread { result.success(value) }
+            } catch (_: Exception) {
+                activity.runOnUiThread { result.error("update_storage", "无法安全读取或清理更新暂存", null) }
+            }
+        }
     }
 
     private fun work(result: MethodChannel.Result, after: ((Map<String, Any?>) -> Map<String, Any?>)? = null, block: () -> Map<String, Any?>) {
@@ -172,11 +207,15 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
                 activity.runOnUiThread {
                     try {
                         checkCancelled()
+                        check(!closed) { "更新页面所属活动已关闭" }
                         result.success(after?.invoke(value) ?: value)
                         activeStaged = null
                     }
                     catch (_: Cancelled) { cleanupCancelled(); result.error("cancelled", "操作已取消；未启动安装器", null) }
-                    catch (error: Exception) { result.error("update_rejected", error.message ?: "更新交接失败", null) }
+                    catch (error: Exception) {
+                        cleanupCancelled()
+                        result.error("update_rejected", error.message ?: "更新交接失败", null)
+                    }
                     finally { busy = false }
                 }
             } catch (_: Cancelled) {
@@ -202,6 +241,20 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
         )
     }
 
+    private fun installedIdentity(): AppUpdateRetention.Identity {
+        val info = activity.packageManager.getPackageInfo(activity.packageName, signingFlags())
+        val signers = if (Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners else @Suppress("DEPRECATION") info.signatures
+        require(signers?.size == 1) { "当前应用必须只有一个实际安装签名" }
+        return AppUpdateRetention.Identity(info.packageName, version(info), digest(signers!!.single().toByteArray()))
+    }
+
+    private fun archiveIdentity(file: File): AppUpdateRetention.Identity {
+        require(file.length() in 1..MAX_APK_BYTES) { "更新暂存大小无效" }
+        val signer = verifiedSigner(file, Build.VERSION.SDK_INT)
+        val info = requireNotNull(activity.packageManager.getPackageArchiveInfo(file.path, 0))
+        return AppUpdateRetention.Identity(info.packageName, version(info), signer)
+    }
+
     private fun inspect(file: File, source: String, expected: String?): Map<String, Any?> {
         checkCancelled()
         val hash = fileHash(file)
@@ -223,13 +276,12 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
         )
     }
 
-    private fun copy(stream: InputStream, expectedSize: Long?): File {
-        val target = File(installRoot, "${UUID.randomUUID()}.apk")
+    private fun copy(stream: InputStream, expectedSize: Long?, target: File = retention.newCandidate()): File {
         activeStaged = target
         var size = 0L
         input = stream
         try {
-            validateDirectory(installRoot)
+            retention.candidateForWrite(target)
             stream.use { source -> target.outputStream().use { out ->
                 val buffer = ByteArray(128 * 1024)
                 while (true) {
@@ -249,29 +301,10 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
             require(target.setWritable(false, false)) { "无法保护暂存 APK" }
             target.setExecutable(false, false)
             return target
-        } catch (error: Throwable) { target.delete(); if (cancelled.get()) throw Cancelled(); throw error }
+        } catch (error: Throwable) { retention.releaseCandidate(target); if (cancelled.get()) throw Cancelled(); throw error }
         finally { input = null }
     }
 
-    private fun ownedIncoming(path: String): File = ownedFile(path, incomingRoot)
-    private fun ownedInstall(path: String): File = ownedFile(path, installRoot)
-    private fun ownedFile(path: String, directory: File): File {
-        val raw = File(path).absoluteFile
-        val file = raw.canonicalFile
-        validateDirectory(directory)
-        require(raw.parentFile?.canonicalFile == directory.canonicalFile && file.parentFile == directory.canonicalFile &&
-            !OsConstants.S_ISLNK(Os.lstat(raw.path).st_mode) &&
-            OsConstants.S_ISREG(Os.lstat(file.path).st_mode) &&
-            file.isFile && file.length() in 1..MAX_APK_BYTES) { "更新文件必须是应用专用暂存目录中的普通文件" }
-        return file
-    }
-
-    private fun validateDirectory(directory: File) {
-        require(root.canonicalFile.parentFile == activity.filesDir.canonicalFile &&
-            directory.canonicalFile.parentFile == root.canonicalFile && directory.isDirectory &&
-            !OsConstants.S_ISLNK(Os.lstat(root.path).st_mode) &&
-            !OsConstants.S_ISLNK(Os.lstat(directory.path).st_mode)) { "更新暂存目录路径别名被拒绝" }
-    }
 
     private fun fileHash(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -286,7 +319,19 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
     private fun version(info: PackageInfo): Long = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()
     private fun signingFlags() = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
     private fun checkCancelled() { if (cancelled.get()) throw Cancelled() }
-    private fun cleanupCancelled() { activeStaged?.let { if (it.canonicalPath != handedOff) it.delete() }; activeStaged = null }
+    private fun cleanupCancelled() {
+        val staged = activeStaged
+        val prepared = installerPrepared
+        val incoming = activeIncomingPath
+        activeIncomingPath = null
+        activeStaged = null
+        installerPrepared = null
+        executor.execute {
+            if (prepared != null) runCatching { retention.finishHandoff() }
+            if (staged != null) runCatching { retention.releaseCandidate(staged) }
+            if (incoming != null) runCatching { retention.finishIncoming(incoming) }
+        }
+    }
     private fun progress(phase: String, bytes: Long, total: Long?) {
         val now = android.os.SystemClock.elapsedRealtime()
         if (phase == "copy" && now - lastProgress < 100 && bytes != total) return
@@ -294,16 +339,19 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
         activity.runOnUiThread { channel.invokeMethod("progress", mapOf("phase" to phase, "bytes" to bytes, "total" to total)) }
     }
     fun close() {
+        closed = true
         cancelled.set(true)
         runCatching { input?.close() }
         picker?.error("cancelled", "APK 选择已取消", null)
         picker = null
         channel.setMethodCallHandler(null)
-        executor.shutdown()
+        executor.execute { retention.close() }
     }
     private class Cancelled : RuntimeException()
     companion object {
         const val REQUEST_PICK_APK = 8641
+        private val updateExecutor = Executors.newSingleThreadExecutor()
+        const val REQUEST_INSTALL_APK = 8642
         const val MAX_APK_BYTES = 512L * 1024 * 1024
         const val PRODUCTION_SIGNER = "9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077"
         private val HASH = Regex("^[a-f0-9]{64}$")

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/source/bangumi_route_policy.dart';
 import '../../../core/source/http_client.dart';
 import '../../../core/source/source_providers.dart';
 import '../data/bangumi_schedule_client.dart';
@@ -9,20 +10,21 @@ export '../data/bangumi_schedule_client.dart' show ScheduleDay, ScheduleEntry;
 /// 调试覆盖：模拟器无外网时用 --dart-define 指到夹具服务。
 const String _scheduleBase = String.fromEnvironment(
   'TRIOMI_SCHEDULE_BASE',
-  defaultValue: BangumiScheduleClient.mirrorUrl,
+  defaultValue: '',
 );
 
 /// 每日放送数据源。
 ///
-/// 与推荐共用公开镜像的 Next 放送表，保留全部七天；失败可回退旧版官方表。
-/// 请求有界并遵从用户网络策略。用 dart-define 指到夹具时不回退。
+/// 与公共资料共用用户选择；关闭加速时仅请求官方 Next 放送表。
+/// 自定义夹具地址原样使用，不作静默跨站回退。
 final scheduleClientProvider = Provider<BangumiScheduleClient>((ref) {
-  final isDefaultBase = _scheduleBase == BangumiScheduleClient.mirrorUrl;
-  return BangumiScheduleClient(
+  final client = BangumiScheduleClient(
     http: ref.watch(sourceHttpClientProvider),
-    baseUrl: _scheduleBase,
-    fallbackBaseUrl: isDefaultBase ? BangumiScheduleClient.calendarUrl : null,
+    routes: ref.watch(bangumiRoutePolicyProvider),
+    baseUrl: _scheduleBase.isEmpty ? null : _scheduleBase,
   );
+  ref.onDispose(client.dispose);
+  return client;
 });
 
 /// 一周放送表。
@@ -39,7 +41,8 @@ final weeklyScheduleProvider = FutureProvider.autoDispose<List<ScheduleDay>>((
 String? resolveScheduleCover(String? url) {
   if (url == null || url.isEmpty) return null;
   if (Uri.tryParse(url)?.hasScheme ?? false) return url;
-  if (_scheduleBase == BangumiScheduleClient.mirrorUrl ||
+  if (_scheduleBase.isEmpty ||
+      _scheduleBase == BangumiScheduleClient.mirrorUrl ||
       _scheduleBase == BangumiScheduleClient.calendarUrl) {
     return url;
   }

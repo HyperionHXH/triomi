@@ -33,6 +33,9 @@ class PlayerMenu extends StatefulWidget {
     this.lineName,
     this.danmakuEnabled = false,
     this.danmakuOn = true,
+    this.volumeEnabled = true,
+    this.volumeStatus,
+    this.onVolumeChanged,
   });
 
   final PlayerSettings settings;
@@ -45,6 +48,9 @@ class PlayerMenu extends StatefulWidget {
   final String? lineName;
   final bool danmakuEnabled;
   final bool danmakuOn;
+  final bool volumeEnabled;
+  final String? volumeStatus;
+  final Future<double> Function(double)? onVolumeChanged;
 
   @override
   State<PlayerMenu> createState() => _PlayerMenuState();
@@ -71,6 +77,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
   bool _open = false;
   bool _disposing = false;
   bool _busy = false;
+  bool _volumeDragging = false;
   String? _error;
   Size? _overlaySize;
 
@@ -84,7 +91,12 @@ class _PlayerMenuState extends State<PlayerMenu> {
   @override
   void didUpdateWidget(PlayerMenu oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_busy) _settings = widget.settings;
+    if (!_busy && !_volumeDragging) {
+      _settings = widget.settings;
+    } else if (!_busy) {
+      // Device polling may update the other preferences, not the drag draft.
+      _settings = widget.settings.copyWith(volume: _settings.volume);
+    }
   }
 
   void _opened() {
@@ -117,6 +129,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
     history?.remove();
     if (!_open) return;
     _open = false;
+    _volumeDragging = false;
     if (!_disposing) widget.onVisibilityChanged(false);
   }
 
@@ -128,7 +141,10 @@ class _PlayerMenuState extends State<PlayerMenu> {
     if (_scrollController.hasClients) _scrollController.jumpTo(0);
   }
 
-  Future<void> _change(PlayerSettings settings) async {
+  Future<void> _change(
+    PlayerSettings settings, {
+    bool volumeOnly = false,
+  }) async {
     if (_busy) return;
     final previous = widget.settings;
     setState(() {
@@ -137,7 +153,16 @@ class _PlayerMenuState extends State<PlayerMenu> {
       _error = null;
     });
     try {
-      await widget.onSettingsChanged(settings);
+      final changeVolume = widget.onVolumeChanged;
+      if (volumeOnly && changeVolume != null) {
+        final actual = await changeVolume(settings.volume);
+        if (mounted) {
+          _settings = _settings.copyWith(volume: actual);
+          _error = widget.volumeStatus;
+        }
+      } else {
+        await widget.onSettingsChanged(settings);
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -334,7 +359,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
             'volume',
             Icons.volume_up_rounded,
             '音量',
-            '${(_settings.volume * 100).round()}%',
+            widget.volumeStatus ?? '${(_settings.volume * 100).round()}%',
             _MenuPage.volume,
           ),
           const Divider(height: 8),
@@ -434,7 +459,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
-              '${(_settings.volume * 100).round()}%',
+              widget.volumeStatus ?? '${(_settings.volume * 100).round()}%',
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
@@ -443,15 +468,25 @@ class _PlayerMenuState extends State<PlayerMenu> {
           Slider(
             key: const ValueKey('player-menu-volume-slider'),
             value: _settings.volume,
-            onChanged: _busy
+            onChangeStart: _busy || !widget.volumeEnabled
+                ? null
+                : (_) => setState(() => _volumeDragging = true),
+            onChanged: _busy || !widget.volumeEnabled
                 ? null
                 : (value) => setState(() {
                     _settings = _settings.copyWith(volume: value);
                   }),
-            onChangeEnd: _busy
+            onChangeEnd: _busy || !widget.volumeEnabled
                 ? null
-                : (value) =>
-                      unawaited(_change(_settings.copyWith(volume: value))),
+                : (value) {
+                    _volumeDragging = false;
+                    unawaited(
+                      _change(
+                        _settings.copyWith(volume: value),
+                        volumeOnly: true,
+                      ),
+                    );
+                  },
           ),
         );
       case _MenuPage.danmaku:

@@ -112,6 +112,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   bool _holdingSpeed = false;
   bool _brightnessReady = false;
   int _brightnessRevision = 0;
+  MediaVolumeState _mediaVolume = const MediaVolumeState();
+
+  PlayerSettings get _displaySettings => _useNativeVideo
+      ? _settings.copyWith(volume: _mediaVolume.volume ?? 0)
+      : _settings;
 
   late int _chapterIndex;
 
@@ -207,6 +212,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
     _nativeVideoController = _NativeAndroidVideoController(
       onState: _onNativeVideoState,
+      onMediaVolume: _onMediaVolume,
       onPrepared: (state) {
         _prepareTimer?.cancel();
         _awaitingPlaybackStart = false;
@@ -223,6 +229,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     );
     _iosVideoController = IosVideoController(
       onState: _onNativeVideoState,
+      onMediaVolume: _onMediaVolume,
       onPrepared: (state) {
         _prepareTimer?.cancel();
         _awaitingPlaybackStart = false;
@@ -300,7 +307,14 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     if (mounted) setState(() {});
   }
 
+  void _onMediaVolume(MediaVolumeState state) {
+    if (!mounted) return;
+    setState(() => _mediaVolume = state);
+  }
+
   void _onNativeVideoState(NativeVideoState state) {
+    final volume = state.mediaVolume;
+    if (volume != null) _onMediaVolume(volume);
     if (_awaitingPlaybackStart || _scrubbing) return;
     final playingChanged = _playing != state.playing;
     _position = state.position;
@@ -510,7 +524,6 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _updateDanmakuClock();
     if (_useNativeVideo) {
       await _activeNativeController.setRate(_speed);
-      await _activeNativeController.setVolume(_settings.volume);
       await _activeNativeController.setAspectRatio(_settings.aspectRatio.ratio);
       await _activeNativeController.setBackgroundAudio(
         _settings.backgroundAudio,
@@ -890,7 +903,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       session: _loadSeq,
       position: _position,
       duration: Duration(milliseconds: _sliderMax.toInt()),
-      volume: _settings.volume,
+      volume: _displaySettings.volume,
+      volumeEnabled: !_useNativeVideo || _mediaVolume.canSet,
+      volumeFollowsDevice: _useNativeVideo,
       brightness: _brightness,
       brightnessEnabled: _useNativeVideo && _brightnessReady,
       holdSpeed: _settings.holdSpeed,
@@ -901,7 +916,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       onScrubUpdate: _previewScrub,
       onScrubEnd: (target) => unawaited(_endScrub(target)),
       onVolumeChanged: (value) => unawaited(_setAppVolume(value)),
-      onVolumeEnd: () => unawaited(_settings.save(_preferences)),
+      onVolumeEnd: () {
+        if (!_useNativeVideo) unawaited(_settings.save(_preferences));
+      },
       onBrightnessChanged: (value) => unawaited(_setBrightness(value)),
       seekHudTop: _chromeVisible ? 58 : 25,
       onHoldChanged: (enabled) => unawaited(_holdSpeed(enabled)),
@@ -1324,7 +1341,15 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                         ),
                         PlayerMenu(
                           controller: _menuController,
-                          settings: _settings,
+                          settings: _displaySettings,
+                          volumeEnabled:
+                              !_useNativeVideo || _mediaVolume.canSet,
+                          volumeStatus: _useNativeVideo
+                              ? _mediaVolume.status
+                              : null,
+                          onVolumeChanged: _useNativeVideo
+                              ? _changeMenuVolume
+                              : null,
                           nativeVideo: _useNativeVideo,
                           lineName: _lines.length > 1
                               ? _lines[_lineIndex].name
@@ -1779,11 +1804,22 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   }
 
   Future<void> _setAppVolume(double value) async {
+    if (!mounted) return;
     final volume = value.clamp(0.0, 1.0);
-    setState(() => _settings = _settings.copyWith(volume: volume));
     if (_useNativeVideo) {
-      await _activeNativeController.setVolume(volume);
+      if (!_mediaVolume.canSet) return;
+      try {
+        final state = await _activeNativeController.setMediaVolume(volume);
+        if (state == null || !mounted) return;
+        _onMediaVolume(state);
+        if (state.error != null) _toast(state.status!);
+      } on PlatformException {
+        if (mounted) _toast('设备音量暂不可用');
+      } on MissingPluginException {
+        if (mounted) _toast('设备音量暂不可用');
+      }
     } else {
+      setState(() => _settings = _settings.copyWith(volume: volume));
       await _player.setVolume(volume * 100);
     }
   }
@@ -1836,17 +1872,33 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     if (!open) _scheduleChromeHide();
   }
 
+  Future<double> _changeMenuVolume(double volume) async {
+    if (!_mediaVolume.canSet) {
+      throw StateError(_mediaVolume.status ?? '设备音量暂不可用');
+    }
+    final state = await _activeNativeController.setMediaVolume(volume);
+    if (!mounted || state == null) throw StateError('设备音量暂不可用');
+    _onMediaVolume(state);
+    if (state.volume == null) throw StateError(state.status ?? '设备音量暂不可用');
+    return state.volume!;
+  }
+
   Future<void> _changeMenuSettings(PlayerSettings settings) async {
     if (!mounted) return;
     final previous = _settings;
+    // Native device volume is transient. Preserve the desktop gain preference
+    // when saving speed/aspect/background settings from the same menu.
+    final persisted = _useNativeVideo
+        ? settings.copyWith(volume: previous.volume)
+        : settings;
     setState(() {
-      _settings = settings;
+      _settings = persisted;
       _speed = settings.speed;
     });
     try {
       await _applyControls();
       if (!mounted) return;
-      await settings.save(_preferences);
+      await persisted.save(_preferences);
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -2212,10 +2264,10 @@ class _VideoArea extends StatelessWidget {
   );
 }
 
-
 class _NativeAndroidVideoController implements VideoPlatformController {
   _NativeAndroidVideoController({
     required this.onState,
+    required this.onMediaVolume,
     required this.onPrepared,
     required this.onError,
     required this.onCompleted,
@@ -2223,6 +2275,7 @@ class _NativeAndroidVideoController implements VideoPlatformController {
   });
 
   final void Function(NativeVideoState state) onState;
+  final void Function(MediaVolumeState state) onMediaVolume;
   final void Function(NativeVideoState state) onPrepared;
   final void Function(String message) onError;
   final VoidCallback onCompleted;
@@ -2243,6 +2296,7 @@ class _NativeAndroidVideoController implements VideoPlatformController {
     final channel = MethodChannel('triomi/native-video/$id');
     _channel = channel;
     channel.setMethodCallHandler((call) async {
+      if (_disposed || _channel != channel) return;
       final args = call.arguments is Map
           ? Map<Object?, Object?>.from(call.arguments as Map)
           : const <Object?, Object?>{};
@@ -2268,6 +2322,7 @@ class _NativeAndroidVideoController implements VideoPlatformController {
           );
       }
     });
+    unawaited(_readMediaVolume(channel));
     final url = _pendingUrl;
     if (url != null) {
       unawaited(
@@ -2282,6 +2337,24 @@ class _NativeAndroidVideoController implements VideoPlatformController {
     }
   }
 
+  Future<void> _readMediaVolume(MethodChannel channel) async {
+    try {
+      final raw = await channel.invokeMapMethod<Object?, Object?>(
+        'getMediaVolume',
+      );
+      if (_disposed || _channel != channel) return;
+      onMediaVolume(MediaVolumeState.fromMap(raw ?? const {}));
+    } on PlatformException {
+      if (!_disposed && _channel == channel) {
+        onMediaVolume(const MediaVolumeState());
+      }
+    } on MissingPluginException {
+      if (!_disposed && _channel == channel) {
+        onMediaVolume(const MediaVolumeState());
+      }
+    }
+  }
+
   NativeVideoState _stateFrom(Map<Object?, Object?> args) {
     int number(String key) => (args[key] as num?)?.toInt() ?? 0;
     return NativeVideoState(
@@ -2289,6 +2362,9 @@ class _NativeAndroidVideoController implements VideoPlatformController {
       duration: Duration(milliseconds: number('duration')),
       bufferedPosition: Duration(milliseconds: number('bufferedPosition')),
       playing: args['playing'] == true,
+      mediaVolume: args.containsKey('mediaVolume')
+          ? MediaVolumeState.fromMap(args)
+          : null,
     );
   }
 
@@ -2338,8 +2414,17 @@ class _NativeAndroidVideoController implements VideoPlatformController {
       _invoke('setRate', <String, Object?>{'rate': rate});
 
   @override
-  Future<void> setVolume(double volume) =>
-      _invoke('setVolume', {'volume': volume});
+  Future<MediaVolumeState?> setMediaVolume(double volume) async {
+    final channel = _channel;
+    if (_disposed || channel == null) return null;
+    final raw = await channel.invokeMapMethod<Object?, Object?>(
+      'setMediaVolume',
+      {'volume': volume},
+    );
+    if (_disposed || _channel != channel) return null;
+    return MediaVolumeState.fromMap(raw ?? const {});
+  }
+
   @override
   Future<void> setAspectRatio(double? ratio) =>
       _invoke('setAspectRatio', {'ratio': ratio});

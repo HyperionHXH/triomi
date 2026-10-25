@@ -138,6 +138,27 @@ def validate_application(app: Path) -> dict:
     require((app / 'Frameworks' / 'Flutter.framework').is_dir(), 'Missing embedded Flutter engine')
     require((app / 'Frameworks' / 'App.framework').is_dir(), 'Missing compiled Flutter application')
     require((app / 'Frameworks' / 'App.framework' / 'flutter_assets').is_dir(), 'Missing Flutter assets')
+    ech_framework = app / 'Frameworks' / 'ech_http.framework'
+    ech_info, ech_binary = bundle_info(ech_framework, 'FMWK')
+    minimum = tuple((list(map(int, info['MinimumOSVersion'].split('.'))) + [0, 0])[:3])
+    ech_minimum = str(ech_info.get('MinimumOSVersion', '')).split('.')
+    require(all(part.isdigit() for part in ech_minimum) and
+            tuple((list(map(int, ech_minimum)) + [0, 0])[:3]) <= minimum,
+            'ECH framework requires a newer iOS version than Runner')
+    ech_commands = command('xcrun', 'otool', '-l', str(ech_binary))
+    native_minimums = re.findall(r'^\s*minos\s+(\d+(?:\.\d+)*)', ech_commands, re.MULTILINE)
+    require(bool(native_minimums) and
+            all(tuple((list(map(int, value.split('.'))) + [0, 0])[:3]) <= minimum
+                for value in native_minimums),
+            'ECH native library is missing a compatible iOS deployment target')
+    install_names = command('xcrun', 'otool', '-D', str(ech_binary)).splitlines()[1:]
+    require([name.strip() for name in install_names if name.strip()] ==
+            ['@rpath/ech_http.framework/ech_http'],
+            'ECH native asset has an invalid framework install name')
+    runner_commands = command('xcrun', 'otool', '-l', str(executable))
+    require(bool(re.search(r'^\s*path\s+@executable_path/Frameworks\s+\(offset',
+                           runner_commands, re.MULTILINE)),
+            'Runner cannot resolve embedded native assets via its Frameworks rpath')
     require(binaries > 0 and frameworks >= 2, 'Missing native release binaries/frameworks')
     return {
         'bundleIdentifier': info['CFBundleIdentifier'],

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
 import '../models/source_exception.dart';
+import 'bangumi_public_client.dart';
 import 'bangumi_source.dart';
 import 'declarative_source.dart';
 import 'http_client.dart';
@@ -34,8 +35,8 @@ class SourceEntry {
     required this.enabled,
     this.ruleText,
     this.repoUrl,
-  // Keep the public descriptor: argument while exposing live JS capabilities.
-  // ignore: prefer_initializing_formals
+    // Keep the public descriptor: argument while exposing live JS capabilities.
+    // ignore: prefer_initializing_formals
   }) : _descriptor = descriptor;
 
   final SourceDescriptor _descriptor;
@@ -116,6 +117,7 @@ class SourceRegistry {
   SourceRegistry({
     required this.repository,
     required this.http,
+    this.bangumiPublicClient,
     this.builtinAdapters = const <String, ContentSource>{},
     this.defaultDisabledBuiltins = const <String>{},
     this.mihonAdapters = const <MihonSource>[],
@@ -127,6 +129,7 @@ class SourceRegistry {
 
   final SourceRepository repository;
   final SourceHttpClient http;
+  final BangumiPublicClient? bangumiPublicClient;
 
   /// 内置适配器（如轻之国度）：随包编译，不走规则文件。
   /// 键为来源 id；对应数据库行的 ruleText 为空。
@@ -297,7 +300,11 @@ class SourceRegistry {
             source:
                 rule.descriptor.id == 'bangumi-anime' &&
                     rule.baseUrl == 'https://api.bgm.tv'
-                ? BangumiSource(rule: rule, http: http)
+                ? BangumiSource(
+                    rule: rule,
+                    http: http,
+                    publicClient: bangumiPublicClient,
+                  )
                 : DeclarativeSource(rule: rule, http: http),
             enabled: row.enabled,
             ruleText: text,

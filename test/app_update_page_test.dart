@@ -94,6 +94,8 @@ class _UpdateService extends AppUpdateService {
   @override
   void attachProgress() {}
   @override
+  Future<AppUpdateCandidate?> pendingCandidate() async => null;
+  @override
   Future<AppUpdateInfo> current() async {
     currentReads++;
     if (unsupportedCurrent) {
@@ -543,7 +545,7 @@ void main() {
         findsNothing,
       );
       await tester.pumpWidget(const SizedBox.shrink());
-      expect(service.discarded, isEmpty);
+      expect(service.discarded, hasLength(1));
     },
   );
 
@@ -563,12 +565,12 @@ void main() {
       expect(service.handedOff, hasLength(2));
       expect(service.downloaded, [163]);
       await tester.pumpWidget(const SizedBox.shrink());
-      expect(service.discarded, isEmpty);
+      expect(service.discarded, hasLength(1));
     },
   );
 
   testWidgets(
-    'dispose during system handoff does not remove the file being read',
+    'dispose during handoff waits until native lease exists before releasing page ownership',
     (tester) async {
       final launch = Completer<void>();
       final service = _UpdateService()..launchResult = launch.future;
@@ -583,7 +585,7 @@ void main() {
       expect(service.discarded, isEmpty);
       launch.complete();
       await tester.pumpAndSettle();
-      expect(service.discarded, isEmpty);
+      expect(service.discarded, hasLength(1));
       expect(tester.takeException(), isNull);
     },
   );
@@ -859,7 +861,31 @@ void main() {
       );
       expect(service.handedOff, hasLength(1));
       await tester.pumpWidget(const SizedBox.shrink());
+      expect(service.discarded, hasLength(1));
+    },
+  );
+
+  testWidgets(
+    'installer cancellation restores explicit retry and removal of retained candidate',
+    (tester) async {
+      final service = _UpdateService();
+      await _open(tester, service);
+      await _tap(tester, 'app-update-check');
+      await _download(tester);
+      await _tap(tester, 'app-update-ready-confirm');
+      expect(service.handedOff, hasLength(1));
+      service.onInstallerFinished?.call(installed: false, released: true);
+      await tester.pumpAndSettle();
+      expect(find.byType(AppUpdateHandoffView), findsNothing);
+      expect(find.byType(AppUpdateReadyView), findsOneWidget);
       expect(service.discarded, isEmpty);
+      await _tap(tester, 'app-update-ready-install');
+      await _tap(tester, 'app-update-ready-confirm');
+      expect(service.handedOff, hasLength(2));
+      service.onInstallerFinished?.call(installed: false, released: true);
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(service.discarded, hasLength(1));
     },
   );
 
@@ -942,7 +968,7 @@ void main() {
       expect(service.downloaded, [offeredRelease.versionCode]);
       expect(service.handedOff, [retained]);
       await tester.pumpWidget(const SizedBox.shrink());
-      expect(service.discarded, isEmpty);
+      expect(service.discarded, [retained]);
     },
   );
 }

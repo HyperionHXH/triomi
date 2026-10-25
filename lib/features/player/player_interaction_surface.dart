@@ -31,6 +31,8 @@ class PlayerInteractionSurface extends StatefulWidget {
     required this.child,
     this.controls,
     this.seekHudTop = 25,
+    this.volumeEnabled = true,
+    this.volumeFollowsDevice = false,
   });
 
   final bool enabled;
@@ -38,6 +40,8 @@ class PlayerInteractionSurface extends StatefulWidget {
   final Duration position;
   final Duration duration;
   final double volume;
+  final bool volumeEnabled;
+  final bool volumeFollowsDevice;
   final double brightness;
   final bool brightnessEnabled;
   final double holdSpeed;
@@ -211,12 +215,13 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
     if (key == LogicalKeyboardKey.arrowUp ||
         key == LogicalKeyboardKey.arrowDown) {
       if (event is KeyDownEvent) {
+        if (!widget.volumeEnabled) return KeyEventResult.handled;
         final value =
             (widget.volume + (key == LogicalKeyboardKey.arrowUp ? .1 : -.1))
                 .clamp(0.0, 1.0);
         widget.onVolumeChanged(value);
         widget.onVolumeEnd();
-        _showLevel(false, value);
+        _showLevel(false, widget.volumeFollowsDevice ? widget.volume : value);
         _hideHudLater();
       }
       return KeyEventResult.handled;
@@ -335,6 +340,7 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
     if (!_active) return;
     final brightness = details.localPosition.dx < width / 2;
     if (brightness && !widget.brightnessEnabled) return;
+    if (!brightness && !widget.volumeEnabled) return;
     ++_interactionGeneration;
     _clearKey();
     _adjustBrightness = brightness;
@@ -356,7 +362,10 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
     } else {
       widget.onVolumeChanged(value);
     }
-    _showLevel(brightness, value);
+    _showLevel(
+      brightness,
+      !brightness && widget.volumeFollowsDevice ? widget.volume : value,
+    );
   }
 
   void _finishAdjustment() {
@@ -439,6 +448,10 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
           ),
         ),
       );
+  double get _displayLevel =>
+      _levelHudBrightness == false && widget.volumeFollowsDevice
+      ? widget.volume
+      : _levelHudValue;
 
   Widget _levelHud() => Positioned(
     top: 25,
@@ -467,7 +480,7 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
                 child: Icon(
                   _levelHudBrightness!
                       ? Icons.brightness_6_rounded
-                      : (_levelHudValue == 0
+                      : (_displayLevel == 0
                             ? Icons.volume_off_rounded
                             : Icons.volume_up_rounded),
                   color: Colors.white,
@@ -481,7 +494,7 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${_levelHudBrightness! ? '亮度' : '音量'} ${(_levelHudValue * 100).round()}%',
+                      '${_levelHudBrightness! ? '亮度' : '音量'} ${(_displayLevel * 100).round()}%',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 12,
@@ -490,7 +503,7 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
                     ),
                     const SizedBox(height: 4),
                     LinearProgressIndicator(
-                      value: _levelHudValue.clamp(0.0, 1.0),
+                      value: _displayLevel.clamp(0.0, 1.0),
                       minHeight: 3,
                       borderRadius: BorderRadius.circular(2),
                       color: Colors.white,

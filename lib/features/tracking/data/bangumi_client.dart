@@ -58,7 +58,6 @@ class BangumiClient {
   BangumiClient({
     required this.http,
     this.baseUrl = defaultBaseUrl,
-    this.fallbackBaseUrl,
     this.userAgent = defaultUserAgent,
   });
 
@@ -67,35 +66,13 @@ class BangumiClient {
   /// 官方接口地址。
   static const String defaultBaseUrl = 'https://api.bgm.tv';
 
-  /// 官方接口不可达时用的镜像（Kazumi 同款做法，见其 `api_endpoints.dart`）。
-  ///
-  /// 它把 v0 的**鉴权端点也一并代理**（2026-09-28 实测：带伪造 Bearer token 请求
-  /// `/v0/me`、`/v0/users/-/collections/{id}`、
-  /// `/v0/users/-/collections/{id}/episodes`、`/v0/search/subjects` 全部返回 401
-  /// 而不是 404），所以带 token 的请求也能回退。
-  ///
-  /// **代价是用户的 access token 会发给第三方**：只在官方连不上/5xx 时被动触发，
-  /// 并且界面用 [usedFallback] 明示（不能偷偷换源）。用户已明确同意这个取舍。
-  static const String mirrorBaseUrl = 'https://api.bgmapi.com';
-
   /// Bangumi 要求的 UA 格式（developer_id/app/version (平台) (项目地址)）。
   static const String defaultUserAgent =
       'hyperionhxh/triomi/0.1.0 (Android) (https://github.com/hyperionhxh/triomi)';
 
   final SourceHttpClient http;
   final String baseUrl;
-
-  /// 备用地址：官方取不到时再试一次；为空表示不回退。
-  final String? fallbackBaseUrl;
   final String userAgent;
-
-  /// 最近一次请求实际发往的地址（界面据此提示「已切到镜像」）。
-  String? _usedBaseUrl;
-
-  String? get usedBaseUrl => _usedBaseUrl;
-
-  /// 是否走了镜像（主地址之外的备用地址）。
-  bool get usedFallback => _usedBaseUrl != null && _usedBaseUrl != baseUrl;
 
   /// 自己的数字 uid（`/v0/me` 里带回来的）。读单个收藏要用它，见 [collection]。
   String? _userId;
@@ -149,18 +126,8 @@ class BangumiClient {
     );
   }
 
-  /// 条目搜索（`POST /v0/search/subjects`，实验性接口）。
-  ///
-  /// 官方对搜索是「可选鉴权」，但**有 token 就带上**：认证请求的限流更宽，
-  /// 也避免部署方收紧匿名访问时直接 401。
-  ///
-  /// 例外（2026-09-29 设备实测）：**镜像 `api.bgmapi.com` 上的搜索不可靠**。同一关键词
-  /// 出现两种表现：① 带 `Authorization` 时回一个空列表（去掉 token 的同一请求有数据，
-  /// `Naruto`/`Chobits` 都复现过）；② 直接连接超时（`POST /v0/search/subjects` 20 秒无响应，
-  /// 而同一 host 的 `/v0/me`、写收藏都正常）。Kazumi 恰好**只给这个端点加镜像签名**
-  /// （`_shouldSignProtectedMirrorRequest`），说明镜像确实对这个接口有额外限制。
-  /// 所以：配了备用地址、又带了 token 却搜不到结果时，**去掉 token 再试一次**（搜索本来就
-  /// 不需要鉴权）。超时这种网络层问题重试也救不了，先把 `[[connection timeout]]` 如实透出。
+  /// Account-associated search always uses the official endpoint. Public
+  /// discovery has a separate anonymous client and routing policy.
   Future<List<TrackCandidate>> search(
     String keyword, {
     required MediaType type,
@@ -168,44 +135,9 @@ class BangumiClient {
     String? token,
   }) async {
     if (keyword.trim().isEmpty) return const <TrackCandidate>[];
-    final hasToken = token != null && token.isNotEmpty;
-    Object? data;
-    try {
-      data = await _searchRequest(
-        keyword,
-        type: type,
-        limit: limit,
-        token: token,
-      );
-    } on SourceException catch (error) {
-      // 镜像对带 Authorization 的搜索可能直接超时；搜索本身不需要鉴权，
-      // 在确认请求已经切到备用地址后，按空结果路径再用匿名请求重试一次。
-      if (!hasToken ||
-          fallbackBaseUrl == null ||
-          !usedFallback ||
-          !_unreachable(error)) {
-        rethrow;
-      }
-      data = await _searchRequest(
-        keyword,
-        type: type,
-        limit: limit,
-        token: null,
-        requestBaseUrl: fallbackBaseUrl,
-      );
-    }
-    var candidates = _toCandidates(data);
-    if (candidates.isEmpty && hasToken && fallbackBaseUrl != null) {
-      data = await _searchRequest(
-        keyword,
-        type: type,
-        limit: limit,
-        token: null,
-        requestBaseUrl: usedFallback ? fallbackBaseUrl : null,
-      );
-      candidates = _toCandidates(data);
-    }
-    return candidates;
+    return _toCandidates(
+      await _searchRequest(keyword, type: type, limit: limit, token: token),
+    );
   }
 
   Future<Object?> _searchRequest(
@@ -213,12 +145,10 @@ class BangumiClient {
     required MediaType type,
     required int limit,
     required String? token,
-    String? requestBaseUrl,
   }) => _json(
     '/v0/search/subjects?limit=$limit&offset=0',
     method: 'POST',
     token: token,
-    baseUrlOverride: requestBaseUrl,
     body: <String, Object?>{
       'keyword': keyword.trim(),
       'sort': 'match',
@@ -455,38 +385,13 @@ class BangumiClient {
     Object? body,
     bool allowMissing = false,
     bool expectNoContent = false,
-    String? baseUrlOverride,
   }) async {
-    // 官方不可达时用备用地址重试一次；403/401 之类的凭据错误不重试。
-    SourceResponse response;
+    final SourceResponse response;
     try {
-      final primaryBaseUrl = baseUrlOverride ?? baseUrl;
-      _usedBaseUrl = primaryBaseUrl;
-      response = await _send(primaryBaseUrl, path, method, token, body);
+      response = await _send(baseUrl, path, method, token, body);
     } on SourceException catch (error) {
-      // 「未收藏 404 → null」在异常路径同样要成立：真实网络层（dio）把非 2xx
-      // 抛成 SourceException，测试替身才走下面的响应路径。404 换到镜像也是
-      // 404（同一套数据），所以不回退、直接按契约返回。
       if (error.type == SourceErrorType.notFound && allowMissing) return null;
-      final fallback = fallbackBaseUrl;
-      final primaryBaseUrl = baseUrlOverride ?? baseUrl;
-      if (fallback == null ||
-          fallback == primaryBaseUrl ||
-          !_unreachable(error)) {
-        rethrow;
-      }
-      // 先记地址再发请求：`http.send` 对非 2xx 也会抛，等它返回才记就记不上
-      // （镜像回 401 时正好是这种情况，而这时最需要告诉用户「token 发出去了」）。
-      _usedBaseUrl = fallback;
-      try {
-        response = await _send(fallback, path, method, token, body);
-      } on SourceException catch (mirrorError) {
-        // 官方不可达、镜像回 404：同样是「未收藏」。
-        if (mirrorError.type == SourceErrorType.notFound && allowMissing) {
-          return null;
-        }
-        rethrow;
-      }
+      rethrow;
     }
 
     if (response.statusCode == 404 && allowMissing) return null;
@@ -522,6 +427,7 @@ class BangumiClient {
   ) => http.send(
     SourceRequest(
       url: '$base$path',
+      followRedirects: false,
       method: method,
       headers: <String, String>{
         'User-Agent': userAgent,
@@ -535,10 +441,7 @@ class BangumiClient {
     sourceId: sourceId,
   );
 
-  /// 值不值得换地址：网络层直接失败（连不上 / 超时）与 5xx 算「不可达」。
-  ///
-  /// 注意网络层把 5xx 也归到 [SourceErrorType.network]，所以 5xx 也会回退——
-  /// 镜像就是同一套 API 的另一个实例，换个入口再试是合理的。
+  /// A failed identity lookup permits the official current-user `-` segment.
   static bool _unreachable(SourceException error) =>
       error.type == SourceErrorType.network ||
       error.type == SourceErrorType.timeout;

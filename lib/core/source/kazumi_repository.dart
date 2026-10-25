@@ -28,8 +28,9 @@ class KazumiCatalogEntry {
 }
 
 class KazumiRepository {
-  KazumiRepository(this.registry);
+  KazumiRepository(this.registry, {this.useMirror = false});
   final SourceRegistry registry;
+  final bool useMirror;
   static const defaultRepository =
       'https://raw.githubusercontent.com/Predidit/KazumiRules/main/index.json';
   static String normalize(String value) {
@@ -50,11 +51,45 @@ class KazumiRepository {
     return uri.toString();
   }
 
+  /// Only the public upstream catalog is mirrored. Custom repositories and
+  /// installed rules retain their declared origin and trust/version checks.
+  Uri _deliveryUri(Uri original) {
+    final parts = original.pathSegments;
+    if (!useMirror ||
+        original.scheme != 'https' ||
+        original.host != 'raw.githubusercontent.com' ||
+        original.port != 443 ||
+        original.userInfo.isNotEmpty ||
+        original.hasQuery ||
+        original.hasFragment ||
+        parts.length != 4 ||
+        parts[0].toLowerCase() != 'predidit' ||
+        parts[1].toLowerCase() != 'kazumirules' ||
+        parts[2] != 'main' ||
+        !parts[3].endsWith('.json') ||
+        parts[3].contains('/') ||
+        parts[3].contains(r'\')) {
+      return original;
+    }
+    return Uri(
+      scheme: 'https',
+      host: 'raw.gitcode.com',
+      pathSegments: [
+        'gh_mirrors',
+        'ka',
+        'KazumiRules',
+        'raw',
+        'main',
+        parts[3],
+      ],
+    );
+  }
+
   Future<String> _download(String url) async {
     final http = registry.http;
     if (http is! SecureRuleDownloadClient) throw StateError('当前网络层不支持安全规则下载');
     final response = await (http as SecureRuleDownloadClient).downloadRuleBytes(
-      url,
+      _deliveryUri(Uri.parse(url)).toString(),
       sourceId: 'kazumi-repository',
     );
     const max = 2 * 1024 * 1024;

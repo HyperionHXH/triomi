@@ -4,14 +4,19 @@ import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
 import '../models/source_exception.dart';
 import 'bangumi_public_client.dart';
+import 'bangumi_route_policy.dart';
 import 'http_client.dart';
 import 'rule_schema.dart';
 import 'source_api.dart';
 
 /// Public metadata only: episode descriptions never become playback URLs.
 class BangumiSource implements SearchProvider, DetailProvider {
-  BangumiSource({required this.rule, required SourceHttpClient http})
-    : client = BangumiPublicClient(http);
+  BangumiSource({
+    required this.rule,
+    required SourceHttpClient http,
+    BangumiPublicClient? publicClient,
+    BangumiRoutePolicy routes = const BangumiRoutePolicy(),
+  }) : client = publicClient ?? BangumiPublicClient(http, routes: routes);
   final SourceRule rule;
   final BangumiPublicClient client;
   @override

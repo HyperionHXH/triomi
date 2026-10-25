@@ -272,6 +272,26 @@ final class RunnerTests: XCTestCase {
     }
   }
 
+  func testOSPacRetainsOrderedProxyAndDirectFailover() throws {
+    let complete = expectation(description: "CFNetwork preserves its PAC failover list")
+    IosSystemProxyRequest.resolve(url: try XCTUnwrap(URL(string: "https://source.invalid/comments")), proxies: [[
+      kCFProxyTypeKey as String: kCFProxyTypeAutoConfigurationJavaScript as String,
+      kCFProxyAutoConfigurationJavaScriptKey as String: "function FindProxyForURL(url, host) { return 'PROXY first.invalid:8080; PROXY second.invalid:8888; DIRECT'; }",
+    ]]) { value in
+      let route = value as? [String: Any]
+      let routes = route?["routes"] as? [[String: Any]]
+      XCTAssertEqual(route?["direct"] as? Bool, false)
+      XCTAssertEqual(routes?.count, 3)
+      if let routes = routes, routes.count == 3 {
+        XCTAssertEqual(routes[0]["proxy"] as? String, "first.invalid:8080")
+        XCTAssertEqual(routes[1]["proxy"] as? String, "second.invalid:8888")
+        XCTAssertEqual(routes[2]["direct"] as? Bool, true)
+      }
+      complete.fulfill()
+    }
+    wait(for: [complete], timeout: 20)
+  }
+
   func testPersistentWebKitSourceCookiesSurviveBridgeRecreation() throws {
     let host = "persist-\(UUID().uuidString.lowercased()).invalid"
     let url = try XCTUnwrap(URL(string: "https://\(host)/"))

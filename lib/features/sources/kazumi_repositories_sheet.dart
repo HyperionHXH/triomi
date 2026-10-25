@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/source/bangumi_route_policy.dart';
 import '../../core/source/kazumi_repository.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/storage/preferences.dart';
@@ -26,8 +27,10 @@ class _KazumiRepositoriesSheetState
   bool _loading = false;
   bool _saving = false;
   int _generation = 0;
-  KazumiRepository get _client =>
-      KazumiRepository(ref.read(sourceRegistryProvider));
+  KazumiRepository get _client => KazumiRepository(
+    ref.read(sourceRegistryProvider),
+    useMirror: ref.read(bangumiMirrorEnabledProvider),
+  );
   @override
   void initState() {
     super.initState();
@@ -247,6 +250,9 @@ class _KazumiRepositoriesSheetState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<bool>(bangumiMirrorEnabledProvider, (previous, next) {
+      if (previous != next) unawaited(_load());
+    });
     final installed = ref.watch(sourcesProvider).value?.entries ?? [];
     final enabled = _repositories.entries
         .where((e) => e.value)
@@ -286,7 +292,7 @@ class _KazumiRepositoriesSheetState
                   ),
                 ],
               ),
-              const Text('兼容 Kazumi api1–8 XPath/API；验证码仅通过可见站点人工处理，不执行验证脚本。'),
+              const Text('兼容 Kazumi api1–9 XPath/API；验证码仅通过可见站点人工处理，不执行验证脚本。'),
               ExpansionTile(
                 title: Text('管理仓库 · ${_repositories.length}'),
                 children: [

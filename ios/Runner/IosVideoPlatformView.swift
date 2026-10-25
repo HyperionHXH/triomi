@@ -1,6 +1,7 @@
 import AVFoundation
 import AVKit
 import Flutter
+import MediaPlayer
 import UIKit
 
 /// A process-wide lease prevents a retiring video view from deactivating audio
@@ -39,9 +40,11 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
   private let channel: FlutterMethodChannel
   private let playerLayer = AVPlayerLayer()
   private let player = AVPlayer()
+  private let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: 0, width: 200, height: 40))
   private var item: AVPlayerItem?
   private var statusObservation: NSKeyValueObservation?
   private var timeControlObservation: NSKeyValueObservation?
+  private var volumeObservation: NSKeyValueObservation?
   private var timeObserver: Any?
   private var itemEndToken: NSObjectProtocol?
   private var notificationTokens = [NSObjectProtocol]()
@@ -55,6 +58,7 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
   private var disposed = false
   private var prepared = false
   private var generation = 0
+  private var volumeRequestGeneration = 0
   private var pendingStartMs: Int64 = 0
   private var playbackRate: Float = 1
 
@@ -68,6 +72,14 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     playerLayer.videoGravity = .resizeAspect
     playerLayer.player = player
     container.layer.addSublayer(playerLayer)
+    // Keep the system control attached: an unattached/hidden MPVolumeView does
+    // not reliably bind to the current output route. Flutter supplies the UI.
+    // Only public UIView/UISlider APIs are used, never private class names or
+    // the read-only AVAudioSession.outputVolume setter.
+    volumeView.showsRouteButton = false
+    volumeView.isUserInteractionEnabled = false
+    volumeView.accessibilityElementsHidden = true
+    container.addSubview(volumeView)
     if AVPictureInPictureController.isPictureInPictureSupported() {
       pipController = AVPictureInPictureController(playerLayer: playerLayer)
       pipController?.delegate = self
@@ -79,6 +91,9 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     }
     timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { [weak self] _ in self?.emitState() }
     timeControlObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] _, _ in
+      DispatchQueue.main.async { self?.emitState() }
+    }
+    volumeObservation = AVAudioSession.sharedInstance().observe(\.outputVolume, options: [.new]) { [weak self] _, _ in
       DispatchQueue.main.async { self?.emitState() }
     }
     installNotifications()
@@ -130,11 +145,31 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
       playbackRate = Float(rate)
       if player.rate > 0 { player.rate = playbackRate }
       result(nil)
-    case "setVolume":
+    case "getMediaVolume": result(mediaVolumeState())
+    case "setMediaVolume":
       guard let value = (args["volume"] as? NSNumber)?.doubleValue, value.isFinite, (0...1).contains(value) else {
         result(FlutterError(code: "invalid_volume", message: "Volume must be in [0, 1]", details: nil)); return
       }
-      player.volume = Float(value); result(nil)
+      guard let slider = volumeSlider, slider.isEnabled, slider.window != nil else {
+        result(mediaVolumeState(error: "media_volume_unavailable")); return
+      }
+      volumeRequestGeneration += 1
+      let request = volumeRequestGeneration
+      slider.setValue(Float(value), animated: false)
+      slider.sendActions(for: [.valueChanged, .touchUpInside])
+      // The route applies volume asynchronously. Return its actual readback,
+      // not the requested slider position or an AVPlayer-only gain.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        guard let self = self, !self.disposed else {
+          result(FlutterError(code: "disposed", message: "Video view is disposed", details: nil)); return
+        }
+        let actual = AVAudioSession.sharedInstance().outputVolume
+        // An earlier drag sample may already have been superseded by a newer
+        // requested level; only the latest sample can report a rejected write.
+        let notApplied = request == self.volumeRequestGeneration && abs(Double(actual) - value) > 0.04
+        result(self.mediaVolumeState(error: notApplied ? "media_volume_not_applied" : nil))
+        self.emitState()
+      }
     case "setAspectRatio":
       if let ratio = (args["ratio"] as? NSNumber)?.doubleValue, ratio.isFinite, ratio > 0 {
         playerLayer.videoGravity = .resize
@@ -285,6 +320,20 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
       self.desiredPlaying = false; self.applyPlaybackIntent()
     })
   }
+  private var volumeSlider: UISlider? {
+    volumeView.subviews.first(where: { $0 is UISlider }) as? UISlider
+  }
+
+  private func mediaVolumeState(error: String? = nil) -> [String: Any] {
+    let slider = volumeSlider
+    var state: [String: Any] = [
+      "mediaVolume": Double(AVAudioSession.sharedInstance().outputVolume),
+      "mediaVolumeCanSet": slider?.isEnabled == true && slider?.window != nil
+    ]
+    if let error = error { state["mediaVolumeError"] = error }
+    return state
+  }
+
 
   private func state() -> [String: Any] {
     let position = player.currentTime()
@@ -300,10 +349,12 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
         }
       }
     }
-    return ["positionMs": position.triomiMilliseconds,
-            "durationMs": item?.duration.triomiMilliseconds ?? 0,
-            "bufferedPositionMs": buffered.triomiMilliseconds,
-            "playing": player.rate > 0]
+    var result = mediaVolumeState()
+    result["positionMs"] = position.triomiMilliseconds
+    result["durationMs"] = item?.duration.triomiMilliseconds ?? 0
+    result["bufferedPositionMs"] = buffered.triomiMilliseconds
+    result["playing"] = player.rate > 0
+    return result
   }
   private func emitState() { if !disposed { channel.invokeMethod("state", arguments: state()) } }
 
@@ -326,7 +377,7 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     disposed = true; generation += 1
     pipDeadline?.cancel(); pipResult?(false); pipResult = nil
     pipController?.delegate = nil; pipController?.stopPictureInPicture(); pipController = nil
-    statusObservation?.invalidate(); timeControlObservation?.invalidate()
+    statusObservation?.invalidate(); timeControlObservation?.invalidate(); volumeObservation?.invalidate()
     if let token = timeObserver { player.removeTimeObserver(token); timeObserver = nil }
     if let token = itemEndToken { NotificationCenter.default.removeObserver(token) }
     for token in notificationTokens { NotificationCenter.default.removeObserver(token) }

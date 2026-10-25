@@ -21,6 +21,9 @@ class _PlayerHarnessState extends State<_PlayerHarness> {
   double volume = .5;
   double brightness = .5;
   bool enabled = true;
+  bool deviceVolume = false;
+  bool volumeEnabled = true;
+  double? requestedVolume;
   int session = 0;
   final seeks = <Duration>[];
   final holds = <bool>[];
@@ -53,6 +56,8 @@ class _PlayerHarnessState extends State<_PlayerHarness> {
             position: position,
             duration: duration,
             volume: volume,
+            volumeFollowsDevice: deviceVolume,
+            volumeEnabled: volumeEnabled,
             brightness: brightness,
             brightnessEnabled: true,
             holdSpeed: 2.5,
@@ -74,7 +79,10 @@ class _PlayerHarnessState extends State<_PlayerHarness> {
               }
               previewOrigin = null;
             }),
-            onVolumeChanged: (value) => setState(() => volume = value),
+            onVolumeChanged: (value) => setState(() {
+              requestedVolume = value;
+              if (!deviceVolume) volume = value;
+            }),
             onVolumeEnd: () => saves++,
             onBrightnessChanged: (value) => setState(() => brightness = value),
             onHoldChanged: holds.add,
@@ -131,6 +139,45 @@ class _PlayerHarnessState extends State<_PlayerHarness> {
 }
 
 void main() {
+  testWidgets(
+    'device HUD follows snapped readback and external keys; unavailable volume has no writes',
+    (tester) async {
+      final key = GlobalKey<_PlayerHarnessState>();
+      await tester.pumpWidget(_PlayerHarness(key: key));
+      final state = key.currentState!;
+      state.update(() => state.deviceVolume = true);
+      state.sliderFocus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(state.requestedVolume, closeTo(.6, .001));
+      expect(
+        find.text('音量 50%'),
+        findsOneWidget,
+        reason: 'A pending device request must not invent a level',
+      );
+      state.update(() => state.volume = 8 / 15);
+      await tester.pump();
+      expect(find.text('音量 53%'), findsOneWidget);
+      state.update(() => state.volume = .4);
+      await tester.pump();
+      expect(
+        find.text('音量 40%'),
+        findsOneWidget,
+        reason: 'Physical keys may update the same visible HUD',
+      );
+      state.update(() {
+        state.volumeEnabled = false;
+        state.requestedVolume = null;
+      });
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(state.requestedVolume, isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
   testWidgets(
     'blank drag previews full-width 180s and commits once on release',
     (tester) async {

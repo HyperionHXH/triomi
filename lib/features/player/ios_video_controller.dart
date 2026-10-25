@@ -4,6 +4,34 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+/// Actual media output volume, separate from the desktop app-gain preference.
+class MediaVolumeState {
+  const MediaVolumeState({this.volume, this.canSet = false, this.error});
+
+  factory MediaVolumeState.fromMap(Map<Object?, Object?> args) {
+    final raw = args['mediaVolume'];
+    final value = raw is num && raw.isFinite
+        ? raw.toDouble().clamp(0.0, 1.0)
+        : null;
+    return MediaVolumeState(
+      volume: value,
+      canSet: value != null && args['mediaVolumeCanSet'] == true,
+      error: args['mediaVolumeError'] as String?,
+    );
+  }
+
+  final double? volume;
+  final bool canSet;
+  final String? error;
+
+  String? get status => switch (error) {
+    'media_volume_fixed' => '此设备使用固定音量',
+    'media_volume_permission_denied' => '系统不允许调节媒体音量',
+    'media_volume_not_applied' => '系统未应用请求音量，已显示实际音量',
+    _ => error != null || volume == null || !canSet ? '设备音量暂不可用' : null,
+  };
+}
+
 /// State emitted by a native video platform view.
 class NativeVideoState {
   const NativeVideoState({
@@ -11,12 +39,14 @@ class NativeVideoState {
     required this.duration,
     required this.bufferedPosition,
     required this.playing,
+    this.mediaVolume,
   });
 
   final Duration position;
   final Duration duration;
   final Duration bufferedPosition;
   final bool playing;
+  final MediaVolumeState? mediaVolume;
 }
 
 /// Common Dart seam for native video implementations.
@@ -37,7 +67,7 @@ abstract class VideoPlatformController {
   Future<void> pause();
   Future<void> seek(Duration position);
   Future<void> setRate(double rate);
-  Future<void> setVolume(double volume);
+  Future<MediaVolumeState?> setMediaVolume(double volume);
   Future<void> setAspectRatio(double? ratio);
   Future<void> setBackgroundAudio(bool enabled);
   Future<List<Map<Object?, Object?>>> subtitleTracks();
@@ -49,6 +79,7 @@ abstract class VideoPlatformController {
 class IosVideoController implements VideoPlatformController {
   IosVideoController({
     required this.onState,
+    required this.onMediaVolume,
     required this.onPrepared,
     required this.onError,
     required this.onCompleted,
@@ -56,6 +87,7 @@ class IosVideoController implements VideoPlatformController {
   });
 
   final void Function(NativeVideoState state) onState;
+  final void Function(MediaVolumeState state) onMediaVolume;
   final void Function(NativeVideoState state) onPrepared;
   final void Function(String message) onError;
   final VoidCallback onCompleted;
@@ -78,6 +110,7 @@ class IosVideoController implements VideoPlatformController {
     final channel = MethodChannel('triomi/ios-video/$id');
     _channel = channel;
     channel.setMethodCallHandler((call) async {
+      if (_disposed || _channel != channel) return;
       final args = call.arguments is Map
           ? Map<Object?, Object?>.from(call.arguments as Map)
           : const <Object?, Object?>{};
@@ -100,6 +133,7 @@ class IosVideoController implements VideoPlatformController {
           onError(message == null || message.isEmpty ? '原生播放器发生错误' : message);
       }
     });
+    unawaited(_readMediaVolume(channel));
     final url = _pendingUrl;
     if (url != null) {
       unawaited(
@@ -115,6 +149,24 @@ class IosVideoController implements VideoPlatformController {
     }
   }
 
+  Future<void> _readMediaVolume(MethodChannel channel) async {
+    try {
+      final raw = await channel.invokeMapMethod<Object?, Object?>(
+        'getMediaVolume',
+      );
+      if (_disposed || _channel != channel) return;
+      onMediaVolume(MediaVolumeState.fromMap(raw ?? const {}));
+    } on PlatformException {
+      if (!_disposed && _channel == channel) {
+        onMediaVolume(const MediaVolumeState());
+      }
+    } on MissingPluginException {
+      if (!_disposed && _channel == channel) {
+        onMediaVolume(const MediaVolumeState());
+      }
+    }
+  }
+
   NativeVideoState _stateFrom(Map<Object?, Object?> args) {
     int number(String key) => (args[key] as num?)?.toInt() ?? 0;
     return NativeVideoState(
@@ -122,6 +174,9 @@ class IosVideoController implements VideoPlatformController {
       duration: Duration(milliseconds: number('durationMs')),
       bufferedPosition: Duration(milliseconds: number('bufferedPositionMs')),
       playing: args['playing'] == true,
+      mediaVolume: args.containsKey('mediaVolume')
+          ? MediaVolumeState.fromMap(args)
+          : null,
     );
   }
 
@@ -168,8 +223,16 @@ class IosVideoController implements VideoPlatformController {
       _invoke('setRate', <String, Object?>{'rate': rate});
 
   @override
-  Future<void> setVolume(double volume) =>
-      _invoke('setVolume', <String, Object?>{'volume': volume});
+  Future<MediaVolumeState?> setMediaVolume(double volume) async {
+    final channel = _channel;
+    if (_disposed || channel == null) return null;
+    final raw = await channel.invokeMapMethod<Object?, Object?>(
+      'setMediaVolume',
+      {'volume': volume},
+    );
+    if (_disposed || _channel != channel) return null;
+    return MediaVolumeState.fromMap(raw ?? const {});
+  }
 
   @override
   Future<void> setAspectRatio(double? ratio) =>

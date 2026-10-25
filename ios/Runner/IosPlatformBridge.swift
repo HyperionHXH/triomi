@@ -397,6 +397,7 @@ final class IosSystemProxyRequest {
   private let url: URL
   private var pending: FlutterResult?
   private var source: CFRunLoopSource?
+  private var remainingProxies: [[String: Any]] = []
 
   private init(url: URL, result: @escaping FlutterResult) { self.url = url; pending = result }
 
@@ -415,15 +416,24 @@ final class IosSystemProxyRequest {
     guard let proxy = proxies.first, let type = proxy[kCFProxyTypeKey as String] as? String else {
       finish(FlutterError(code: "system_proxy_failed", message: "The OS returned no proxy route", details: nil)); return
     }
-    if type == kCFProxyTypeNone as String { finish(["direct": true]); return }
-    if type == kCFProxyTypeHTTP as String || type == kCFProxyTypeHTTPS as String {
-      do { finish(try Self.httpRoute(proxy)) }
-      catch { finish(FlutterError(code: "system_proxy_failed", message: "The OS proxy address is invalid or unsupported", details: nil)) }
+    if type == kCFProxyTypeNone as String || type == kCFProxyTypeHTTP as String || type == kCFProxyTypeHTTPS as String {
+      do {
+        let routes: [[String: Any]] = try proxies.map { entry in
+          guard let kind = entry[kCFProxyTypeKey as String] as? String else { throw IosPlatformBridge.error("Invalid OS proxy route") }
+          if kind == kCFProxyTypeNone as String { return ["direct": true] }
+          guard kind == kCFProxyTypeHTTP as String || kind == kCFProxyTypeHTTPS as String else {
+            throw IosPlatformBridge.error("Unsupported OS proxy route")
+          }
+          return try Self.httpRoute(entry)
+        }
+        finish(routes.count == 1 ? routes[0] : ["direct": false, "routes": routes])
+      } catch { finish(FlutterError(code: "system_proxy_failed", message: "The OS proxy address is invalid or unsupported", details: nil)) }
       return
     }
     guard allowPAC else {
       finish(FlutterError(code: "system_proxy_failed", message: "The OS selected an unsupported proxy route", details: nil)); return
     }
+    remainingProxies = Array(proxies.dropFirst())
     var context = CFStreamClientContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(), retain: nil, release: nil, copyDescription: nil)
     let callback: CFProxyAutoConfigurationResultCallback = { info, proxies, error in
       let request = Unmanaged<IosSystemProxyRequest>.fromOpaque(info).takeUnretainedValue()
@@ -431,7 +441,7 @@ final class IosSystemProxyRequest {
       guard error == nil, let routes = proxies as? [[String: Any]] else {
         request.finish(FlutterError(code: "system_proxy_failed", message: "The OS could not resolve its proxy configuration", details: nil)); return
       }
-      request.select(routes, allowPAC: false)
+      request.select(routes + request.remainingProxies, allowPAC: false)
     }
     if type == kCFProxyTypeAutoConfigurationURL as String,
        let value = proxy[kCFProxyAutoConfigurationURLKey as String] as? URL,

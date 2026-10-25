@@ -80,6 +80,67 @@ void main() {
     }
   });
 
+  test('CFNetwork PAC routes retain proxy ordering and explicit DIRECT fallback', () {
+    final uri = Uri.parse('https://next.bgm.tv/p1/episodes/1227087/comments');
+    expect(
+      systemProxyDirective(uri, {
+        'direct': false,
+        'routes': [
+          {'direct': false, 'proxy': 'first.invalid:8080'},
+          {'direct': false, 'proxy': '[::1]:7890'},
+          {'direct': true},
+        ],
+      }),
+      'PROXY first.invalid:8080; PROXY [::1]:7890; DIRECT',
+    );
+    for (final routes in <List<Object>>[
+      <Object>[],
+      ['DIRECT'],
+      [{'proxy': 'http://user:private@proxy.invalid:8080'}],
+      [{'proxy': 'proxy.invalid:8080; DIRECT'}],
+      [{'proxy': 'socks5://proxy.invalid:1080'}],
+      [{'direct': false}],
+    ]) {
+      expect(
+        () => systemProxyDirective(uri, {'routes': routes}),
+        throwsFormatException,
+      );
+    }
+  });
+
+  test('PAC-provided proxy failover reaches its ordered DIRECT destination', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final unavailable = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final unavailablePort = unavailable.port;
+    await unavailable.close();
+    final subscription = server.listen((request) async {
+      await request.drain<void>();
+      request.response.persistentConnection = false;
+      request.response.write('PAC direct fallback');
+      await request.response.close();
+    });
+    final dio = Dio()
+      ..httpClientAdapter = SystemProxyHttpClientAdapter(
+        createClient: HttpClient.new,
+        resolve: (uri) async => systemProxyDirective(uri, {
+          'routes': [
+            {'proxy': '127.0.0.1:$unavailablePort'},
+            {'direct': true},
+          ],
+        }),
+      );
+    addTearDown(() async {
+      dio.close(force: true);
+      await subscription.cancel();
+      await server.close(force: true);
+    });
+    expect(
+      (await dio.get<String>('http://127.0.0.1:${server.port}/comments')
+          .timeout(const Duration(seconds: 5))).data,
+      'PAC direct fallback',
+    );
+  });
+
   test(
     'platform bridge receives only target URL without URL credentials',
     () async {

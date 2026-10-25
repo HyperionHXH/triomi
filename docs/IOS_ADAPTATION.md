@@ -40,6 +40,8 @@ JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源�
 
 弹幕沿用主线B站、Animeko、Gamer三个独立只读池，支持匹配纠正、各源偏移、即时显示与安全屏蔽设置；旧弹弹play凭据入口/发送客户端和来源danmakuUrl消费已移除，既有安全存储不主动删除。详见 [DANMAKU.md](DANMAKU.md)。模拟器巡检使用loopback夹具客户端及真实生产会话/渲染，不等于线上服务或所有作品可达。
 
+主线174新增公共网络加速与`ech_http`原生资产：公开资料/规则镜像及官方评论ECH沿用主线策略，不改道账号、私有请求或原始视频；显式代理优先。iOS和Android播放器音量使用设备媒体音量读回，iOS通过公开`MPVolumeView`/`AVAudioSession.outputVolume`实现，不恢复桌面应用增益；Windows仍保留独立应用增益。模拟器无实际输出路由时如实报告不可调节，不能据此宣称硬件音量键已验收。
+
 ## GitHub Actions 获取 IPA
 
 工作流：[build-ios.yml](../.github/workflows/build-ios.yml)。无需 Apple 证书、Team ID、描述文件或签名 Secret。
@@ -47,7 +49,7 @@ JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源�
 1. 本次改动推送到 `feat/ios` 会自动触发；也可在 GitHub「Actions → build-ios → Run workflow」选择该分支手动运行。`on.push.branches` 明确包含 `feat/ios`、`master`、`main`，另保留 PR 和 `v*` Tag 触发。
 2. Runner 使用 `macos-latest`，从现有 build/release 工作流解析 Flutter 精确版本，运行 `flutter pub get`、缓存 CocoaPods、`pod install`。
 3. 执行 `flutter build ios --release --no-codesign`。`tools/package_ios.py` 检查 device arm64 Mach-O、版本、嵌入框架和未签名边界，将 `Runner.app` 复制进临时 `Payload/`，通过 `zip -r -y` 保留执行权限和框架链接。
-4. 运行 iPhone 模拟器 XCTest，以及 JS、持久化与真实视频 integration_test。`tools/run_ios_video_smoke.py` 启动仅监听 loopback 的夹具服务，让生产 PlayerPage 实际解码 30 秒视频并验证播放/暂停/跳转及三源弹幕会话开关；测试视频不进入 IPA。模拟器通过不替代真机 PiP、锁屏音频、照片权限及第三方账号验收。
+4. 运行 iPhone 模拟器 XCTest，以及 JS、持久化、原生网络与真实视频 integration_test。`tools/run_ios_video_smoke.py` 启动仅监听 loopback 的夹具服务，让生产 PlayerPage 实际解码 30 秒视频并验证播放/暂停/跳转及三源弹幕会话开关；测试视频不进入 IPA。Dart测试经官方`FLTIntegrationTestRunner`的XCTest通道返回结果，不依赖VM Service自动发现；模拟器ad-hoc签名仅为真实Keychain访问，真机IPA仍未签名。模拟器通过不替代真机PiP、锁屏音频、音量键、照片权限及第三方账号验收。
 5. 全部成功后，在该次运行底部 **Artifacts → triomi-ios-unsigned** 下载外层 ZIP，解压取得 `Triomi-iOS-Unsigned.ipa`。不要把 GitHub 下载的外层 artifact ZIP 当成 IPA。
 6. 新 `v*` Tag 的成功构建会把同名 IPA 附加到该 Tag 的 Release；不会替换既有同名但不同摘要的资产。手动运行和普通分支不会发布 Release。打包日志包含 IPA SHA-256，可在 Windows 用 `Get-FileHash .\Triomi-iOS-Unsigned.ipa -Algorithm SHA256` 对照。
 

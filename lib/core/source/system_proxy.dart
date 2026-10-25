@@ -45,11 +45,27 @@ Future<String> _systemProxyWithMessenger(
   return systemProxyDirective(uri, raw);
 }
 
-/// WinHTTP resolves PAC itself; static settings retain their protocol mapping
-/// and bypass list. Unsupported/malformed proxy settings are reported, never
-/// silently changed to a different route.
+/// WinHTTP/CFNetwork resolve PAC themselves. CFNetwork's ordered route list
+/// includes DIRECT only when the OS explicitly provides it. Static settings
+/// retain protocol mappings and bypass rules; unsupported routes remain errors.
 String systemProxyDirective(Uri uri, Map<String, Object?> settings) {
   if (settings['direct'] == true) return 'DIRECT';
+  final routes = settings['routes'];
+  if (routes != null) {
+    if (routes is! List || routes.isEmpty) {
+      throw const FormatException('系统代理路由无效');
+    }
+    return routes.map((route) {
+      if (route is! Map) throw const FormatException('系统代理路由无效');
+      if (route['direct'] == true) return 'DIRECT';
+      final endpoint = route['proxy'];
+      if (endpoint is! String || endpoint.trim().isEmpty ||
+          endpoint.contains(RegExp(r'[;\s=]'))) {
+        throw const FormatException('系统代理路由无效');
+      }
+      return systemProxyDirective(uri, {'proxy': endpoint});
+    }).join('; ');
+  }
   final bypass = '${settings['bypass'] ?? ''}';
   final host = uri.host.toLowerCase();
   for (final entry in bypass.split(RegExp(r'[;\s]+'))) {

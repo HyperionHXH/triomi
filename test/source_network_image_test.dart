@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:triomi/core/source/bangumi_route_policy.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/widgets/source_network_image.dart';
 
@@ -70,6 +71,20 @@ void main() {
     );
     PaintingBinding.instance.imageCache.clear();
   });
+
+  test(
+    'turning acceleration off loads the actual official cover URL',
+    () async {
+      final http = _ImageHttpClient(
+        routes: const BangumiRoutePolicy(mirrorEnabled: false),
+      )..bytesHandler = (_) => png;
+      const url = 'https://lain.bgm.tv/pic/cover/l/official.jpg';
+      final loaded = await resolve(SourceNetworkImage(url, http: http));
+      loaded.dispose();
+      expect(http.requests.single.url, url);
+      PaintingBinding.instance.imageCache.clear();
+    },
+  );
 
   test(
     'unavailable or invalid public image mirror falls back to origin',
@@ -215,9 +230,14 @@ void main() {
   );
 }
 
-class _ImageHttpClient extends FakeHttpClient {
-  _ImageHttpClient()
-    : super((_) async => throw StateError('Unexpected metadata request'));
+class _ImageHttpClient extends FakeHttpClient
+    implements BangumiImageRoutingClient {
+  _ImageHttpClient({BangumiRoutePolicy routes = const BangumiRoutePolicy()})
+    : bangumiRoutes = routes,
+      super((_) async => throw StateError('Unexpected metadata request'));
+
+  @override
+  final BangumiRoutePolicy bangumiRoutes;
 
   final imageSourceIds = <String>[];
 

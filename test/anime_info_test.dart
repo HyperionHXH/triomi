@@ -201,18 +201,20 @@ void main() {
     var online = true;
     final http = FakeHttpClient((request) async {
       if (!online) throw StateError('offline');
-      if (request.url.contains('/characters')) {
+      final path = Uri.parse(request.url).path;
+      if (path.endsWith('/characters')) {
         return const SourceResponse(
           statusCode: 200,
           body: '[{"id":11,"name":"角色","actors":[{"id":21,"name":"声优"}]}]',
         );
       }
-      if (request.url.contains('/subjects')) {
+      if (path.endsWith('/subjects')) {
         return const SourceResponse(
           statusCode: 200,
           body: '[{"id":2,"name_cn":"第二季","type":2,"relation":"续集"}]',
         );
       }
+      expect(path, '/p1/subjects/season1/comments');
       return const SourceResponse(
         statusCode: 200,
         body: '{"total":40,"data":[{"id":31,"comment":"public"}]}',
@@ -223,7 +225,10 @@ void main() {
       repo.section('season1', 'characters'),
       repo.section('season1', 'subjects'),
     ]);
-    await repo.section('season1', 'comments');
+    final comments = await repo.section('season1', 'comments');
+    expect(comments.rows.single['comment'], 'public');
+    expect(comments.nextOffset, 1);
+    expect(comments.hasMore, isTrue);
     await library.cacheItem(
       const MediaItem(
         sourceId: 'bangumi-anime',

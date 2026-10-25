@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_exception.dart';
@@ -56,149 +54,45 @@ void main() {
       expect(collection, isNull);
     });
 
-    test('官方不可达、镜像也未收藏（404）：同样返回 null', () async {
-      final http = realLikeClient(
-        bodies: {'/v0/me': '{"id":99}'},
-        throws: <String, SourceException Function(SourceRequest)>{
-          'official.test': (_) => const SourceException(
-            sourceId: BangumiClient.sourceId,
-            type: SourceErrorType.network,
-            message: '连接被拒绝',
-          ),
-          '/collections/12': (_) => const SourceException(
-            sourceId: BangumiClient.sourceId,
-            type: SourceErrorType.notFound,
-            message: 'HTTP 404',
-          ),
-        },
-      );
-      final bangumi = BangumiClient(
-        http: http,
-        baseUrl: 'https://official.test',
-        fallbackBaseUrl: 'https://mirror.test',
-      );
-
-      expect(await bangumi.collection(12, token: 't'), isNull);
-      expect(bangumi.usedFallback, isTrue);
-      // Both account lookup and collection read fall back to the mirror.
-      expect(http.requests, hasLength(4));
-      expect(http.requests.last.url, contains('/v0/users/99/collections/12'));
-    });
-
-    test('镜像再次失败（也连不上）：抛出错误，只有两次请求', () async {
-      final http = realLikeClient(
-        throws: <String, SourceException Function(SourceRequest)>{
-          'official.test': (_) => const SourceException(
-            sourceId: BangumiClient.sourceId,
-            type: SourceErrorType.network,
-            message: '官方连接被拒绝',
-          ),
-          'mirror.test': (_) => const SourceException(
-            sourceId: BangumiClient.sourceId,
-            type: SourceErrorType.network,
-            message: '镜像连接被拒绝',
-          ),
-        },
-      );
-      final bangumi = BangumiClient(
-        http: http,
-        baseUrl: 'https://official.test',
-        fallbackBaseUrl: 'https://mirror.test',
-      );
-
-      await expectLater(
-        bangumi.me('t'),
-        throwsA(
-          isA<SourceException>()
-              .having((error) => error.type, 'type', SourceErrorType.network)
-              .having((error) => error.message, 'message', contains('镜像')),
-        ),
-      );
-      expect(http.requests, hasLength(2));
-      expect(http.requests.last.url, startsWith('https://mirror.test'));
-    });
-
-    test('镜像带 token 搜索超时、匿名重试仍超时：如实抛出超时', () async {
-      var mirrorTokenAttempt = true;
-      final http = realLikeClient(
-        throws: <String, SourceException Function(SourceRequest)>{
-          'official.test': (_) => const SourceException(
-            sourceId: BangumiClient.sourceId,
-            type: SourceErrorType.network,
-            message: '官方不可达',
-          ),
-          'mirror.test': (request) {
-            final hasToken =
-                (request.headers['Authorization'] ?? '').isNotEmpty;
-            if (hasToken && mirrorTokenAttempt) {
-              mirrorTokenAttempt = false;
-              return const SourceException(
+    for (final type in [SourceErrorType.network, SourceErrorType.timeout]) {
+      test(
+        'official $type is preserved without third-party account fallback',
+        () async {
+          final http = realLikeClient(
+            throws: {
+              'official.test': (_) => SourceException(
                 sourceId: BangumiClient.sourceId,
-                type: SourceErrorType.timeout,
-                message: '镜像搜索超时（带 token）',
-              );
-            }
-            return const SourceException(
-              sourceId: BangumiClient.sourceId,
-              type: SourceErrorType.timeout,
-              message: '镜像搜索超时（匿名重试也没救回来）',
-            );
-          },
+                type: type,
+                message: 'official failed',
+              ),
+            },
+          );
+          final bangumi = BangumiClient(
+            http: http,
+            baseUrl: 'https://official.test',
+          );
+          await expectLater(
+            bangumi.me('t'),
+            throwsA(
+              isA<SourceException>().having(
+                (error) => error.type,
+                'type',
+                type,
+              ),
+            ),
+          );
+          expect(http.requests, hasLength(1));
+          expect(http.requests.single.url, 'https://official.test/v0/me');
+          expect(http.requests.single.followRedirects, isFalse);
         },
       );
-      final bangumi = BangumiClient(
-        http: http,
-        baseUrl: 'https://official.test',
-        fallbackBaseUrl: 'https://mirror.test',
-      );
-
-      await expectLater(
-        bangumi.search('Naruto', type: MediaType.anime, token: 't'),
-        throwsA(
-          isA<SourceException>()
-              .having((error) => error.type, 'type', SourceErrorType.timeout)
-              .having((error) => error.message, 'message', contains('匿名')),
-        ),
-      );
-      // 官方 → 镜像带 token → 镜像匿名，三次为止（匿名重试只有一次）。
-      expect(http.requests, hasLength(3));
-      expect(http.requests.last.headers.containsKey('Authorization'), isFalse);
-    });
-
-    test('官方超时也回退镜像（不只连不上才回退）', () async {
-      final http = realLikeClient(
-        throws: <String, SourceException Function(SourceRequest)>{
-          'official.test': (_) => const SourceException(
-            sourceId: BangumiClient.sourceId,
-            type: SourceErrorType.timeout,
-            message: '连接超时',
-          ),
-        },
-        bodies: <String, String>{
-          '/v0/me': jsonEncode(<String, Object?>{
-            'id': 1,
-            'username': 'hypex',
-            'nickname': 'Hypex',
-          }),
-        },
-      );
-      final bangumi = BangumiClient(
-        http: http,
-        baseUrl: 'https://official.test',
-        fallbackBaseUrl: 'https://mirror.test',
-      );
-
-      final me = await bangumi.me('t');
-      expect(me.nickname, 'Hypex');
-      expect(bangumi.usedFallback, isTrue);
-    });
+    }
 
     test('429 归类为限流，且不因限流换到镜像', () async {
       final http = realLikeClient(statuses: <String, int>{'/v0/me': 429});
       final bangumi = BangumiClient(
         http: http,
         baseUrl: 'https://official.test',
-        fallbackBaseUrl: 'https://mirror.test',
       );
 
       await expectLater(
@@ -312,7 +206,6 @@ void main() {
       final bangumi = BangumiClient(
         http: http,
         baseUrl: 'https://official.test',
-        fallbackBaseUrl: 'https://mirror.test',
       );
 
       SourceException? caught;
@@ -328,7 +221,8 @@ void main() {
       expect('${caught?.message}', isNot(contains(token)));
       expect(caught?.userMessage, isNot(contains(token)));
       expect(caught.toString(), isNot(contains(token)));
-      expect(bangumi.usedFallback, isTrue);
+      expect(http.requests, hasLength(1));
+      expect(http.requests.single.url, 'https://official.test/v0/me');
     });
   });
 

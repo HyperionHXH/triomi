@@ -56,6 +56,20 @@ jobs:
       - name: Install CocoaPods explicitly
         working-directory: ios
         run: pod install
+      - name: Prepare the ECH native-asset build tools
+        run: |
+          set -euo pipefail
+          for tool in cmake ninja; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              brew install "$tool"
+            fi
+            "$tool" --version
+          done
+      - name: Cache checksum-verified ECH dependency archives
+        uses: actions/cache@v4
+        with:
+          path: .dart_tool/hooks_runner/shared/ech_http/build/prebuilt/
+          key: ios-ech-deps-${{ runner.os }}-${{ runner.arch }}-${{ steps.sdk.outputs.flutter-version }}-${{ hashFiles('packages/ech_http/lib/src/build_support/dependencies.json', 'packages/ech_http/hook/build.dart', 'packages/ech_http/src/**') }}
       - name: Build unsigned iOS device release
         run: flutter build ios --release --no-codesign
       - name: Validate and package the unsigned IPA
