@@ -6,6 +6,8 @@
 
 174本地Dart回归：`flutter analyze --no-pub`零问题，Flutter全量1473通过/4跳过，包含Android/iOS设备媒体音量读回、PAC有序代理/DIRECT真实loopback回退、夜间阅读状态栏切换；Python工具109通过。新增iOS离线FFI用例验证原生HTTP状态/头/UTF-8正文、流式超限后释放单槽队列，不把HTTP夹具称为TLS/ECH握手。候选`499d013`已推送，[运行40201264057](https://github.com/HyperionHXH/triomi/actions/runs/40201264057)正在执行全部门槛。Android普通debug APK（arm/arm64/x64原生库）与Windows debug EXE均编译成功；本机GitHub下载超时通过按清单SHA-256核验的原始依赖ZIP缓存解决，未修改依赖或关闭校验。未安装或操作用户设备。
 
+运行40201264057全部门槛通过并下载53图逐张检查后，发现夜间顶部返回/菜单图标仍黑色，故未发布；提交`f7c60f3`补齐图标前景色与实际字形对比度断言。运行40203374882的真机Release、20项原生检查和6个真实集成场景通过，夜间原图已确认图标浅色；视觉巡检在第30张后保存弹幕偏移时遇到`RenderPadding value.isNonNegative`，未上传/发布IPA。生产面板的键盘空间直接使用`20 + viewInsets.bottom`；本地注入正/负键盘边界转换复现同一断言，现仅把视图外的键盘空间按零处理，正值保持原语义。底层iOS键盘指标为什么在该帧越界未确认；模拟器测试开启widget creation tracking保留后续组件定位，不吞异常、不跳过弹幕交互或放松53图门槛。
+
 173候选`9f62e8b`的[运行40194653535](https://github.com/HyperionHXH/triomi/actions/runs/40194653535)全部通过：原生19项（18通过/1硬件亮度跳过）、真实JS/存储/视频集成与53状态巡检；本地Flutter1438通过/3跳过、Python109通过。下载53张PNG逐张读取后发现夜间小说状态栏对比不足、追番设置仍残留旧弹弹play凭据/发送说明，已修正并加状态栏切换回归。该候选未发布，不用它替代174的最终验收。
 
 模拟器集成现使用官方`FLTIntegrationTestRunner`原生XCTest结果通道，不再依赖宿主VM Service发现；原生压力测试、Dart集成、视觉巡检各用隔离的一次性模拟器。仅模拟器XCTest启用ad-hoc签名以实际访问Keychain；真机Release保持`--no-codesign`。语义开关在测试基线前开启并最终还原，不跳过语义泄漏断言或凭据真实读写。

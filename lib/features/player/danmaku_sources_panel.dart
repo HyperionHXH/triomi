@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'danmaku_episode_picker.dart';
@@ -149,7 +151,8 @@ class _DanmakuSourcesPanelState extends State<DanmakuSourcesPanel> {
               20,
               0,
               20,
-              20 + MediaQuery.viewInsetsOf(context).bottom,
+              // A keyboard frame outside the view is not negative safe space.
+              20 + math.max(0.0, MediaQuery.viewInsetsOf(context).bottom),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -23,7 +23,7 @@ import 'fixtures/fake_http_client.dart';
 ///
 /// 覆盖：SAF 目录选择取消（回退私有目录）、EPUB/TXT 的 MIME 契约、
 /// 授权目录写入失败回退。全部通过 `triomi/platform` 的 mock 通道驱动，
-/// 不触真实 SAF / 真实文件系统（私有目录指到 tempdir）。
+/// 不触真实 SAF；私有目录指向隔离 tempdir，保留真实文件 IO。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -138,13 +138,13 @@ void main() {
     // 事件循环里等导出完成，再 pump 回 UI 渲染 snackbar。
     // 微任务链（mock 通道回执）与真实文件 IO（回退写盘）交替推进：
     // pump 冲刷微任务并发起 IO，runAsync 让 OS 侧完成 IO，再 pump 送达回调。
-    for (var round = 0; round < 8; round++) {
+    final deadline = Stopwatch()..start();
+    while (find.byType(SnackBar).evaluate().isEmpty &&
+        deadline.elapsed < const Duration(seconds: 5)) {
       await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await Future<void>.delayed(const Duration(milliseconds: 25));
       });
-      for (var index = 0; index < 5; index++) {
-        await tester.pump(const Duration(milliseconds: 20));
-      }
+      await tester.pump(const Duration(milliseconds: 20));
     }
   }
 

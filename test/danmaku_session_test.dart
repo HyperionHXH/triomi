@@ -536,6 +536,35 @@ void main() {
     },
   );
 
+  testWidgets('pool controls survive positive and negative keyboard inset transitions', (tester) async {
+    final session = DanmakuSession(client: _Client(), preferences: memoryPreferences());
+    addTearDown(session.dispose);
+    session.configure(item: item, chapter: chapter1, canonicalSubjectId: '400602');
+    session.setEnabled(true);
+    for (final inset in [0.0, 300.0, -300.0, 0.0]) {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Builder(builder: (context) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(viewInsets: EdgeInsets.only(bottom: inset)),
+          child: DanmakuSourcesPanel(
+            session: session,
+            onEnabledChanged: (value) async => session.setEnabled(value),
+            onAssociate: () {},
+          ),
+        ))),
+      ));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final toggle = find.byKey(const ValueKey('danmaku-source-animeko'));
+      await tester.ensureVisible(toggle);
+      await tester.pumpAndSettle();
+      final wasIncluded = session.includes(DanmakuProviderKind.animeko);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(session.includes(DanmakuProviderKind.animeko), !wasIncluded);
+      expect(session.includes(DanmakuProviderKind.gamer), isTrue);
+    }
+  });
+
   testWidgets(
     'source failure is visible and retries independently inside the real panel',
     (tester) async {
