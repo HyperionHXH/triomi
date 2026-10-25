@@ -4,7 +4,6 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:integration_test/integration_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/db/database_provider.dart';
@@ -23,6 +22,7 @@ import 'package:triomi/features/player/data/hybrid_danmaku_client.dart';
 import 'package:triomi/features/player/player_page.dart';
 
 import '../test/fixtures/fake_preferences.dart';
+import 'fixtures/ios_test_binding.dart';
 import 'fixtures/ios_tour_fixtures.dart';
 
 class _FixtureSource extends ContentSource implements ContentProvider {
@@ -53,7 +53,7 @@ class _FixtureRegistry extends SourceRegistryController {
 /// Uses production PlayerPage and real decoder/network/overlay. No native
 /// channel handlers or player state are mocked. Source metadata is a fixture.
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  initializeIosIntegrationBinding();
   testWidgets('real PlayerPage decodes video and toggles independent danmaku', (tester) async {
     const url = String.fromEnvironment('TRIOMI_VIDEO_URL');
     expect(url, isNotEmpty, reason: 'Use tools/run_ios_video_smoke.py');

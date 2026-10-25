@@ -16,7 +16,7 @@ def run_integration(flutter, root, device, entrypoint, defines, log, timeout):
          '-destination', f'platform=iOS Simulator,id={device}',
          '-parallel-testing-enabled', 'NO',
          '-only-testing:RunnerTests/IosIntegrationTests',
-         'CODE_SIGNING_ALLOWED=NO'],
+         'CODE_SIGN_IDENTITY=-', 'CODE_SIGNING_ALLOWED=YES'],
     ]
     for command in commands:
         result = subprocess.run(command, cwd=Path(root), stdout=log,

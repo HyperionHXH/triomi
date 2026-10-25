@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:integration_test/integration_test.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
@@ -14,8 +13,10 @@ import 'package:triomi/core/source/js/runtime/ios_js_runtime.dart';
 import 'package:triomi/core/source/js/runtime/js_runtime_factory_io.dart';
 import 'package:triomi/core/source/rule_schema.dart';
 
+import 'fixtures/ios_test_binding.dart';
+
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  initializeIosIntegrationBinding();
 
   testWidgets('iOS WebKit uses real host HTTP/selectors and revokes cancelled sessions', (
     tester,

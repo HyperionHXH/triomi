@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:integration_test/integration_test.dart';
 import 'package:triomi/app.dart';
 import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/media_type.dart';
@@ -27,10 +26,11 @@ import 'package:triomi/features/player/player_page.dart';
 import 'package:triomi/features/reader/manga_page_image.dart';
 import 'package:triomi/features/reader/manga_reader_page.dart';
 
+import 'fixtures/ios_test_binding.dart';
 import 'fixtures/ios_tour_fixtures.dart';
 
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  initializeIosIntegrationBinding();
 
   testWidgets('iOS production visual tour', (tester) async {
     final rawBase = const String.fromEnvironment('TRIOMI_TOUR_BASE_URL');

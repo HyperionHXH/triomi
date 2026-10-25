@@ -6,7 +6,6 @@ import 'package:drift/native.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
-import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:triomi/core/backup/backup_artifact_recovery.dart';
@@ -18,8 +17,10 @@ import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/local/local_comic_importer.dart';
 
+import 'fixtures/ios_test_binding.dart';
+
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  initializeIosIntegrationBinding();
 
   testWidgets('native Documents media, rules, preferences and secure storage survive reopen', (tester) async {
     final documents = await getApplicationDocumentsDirectory();
