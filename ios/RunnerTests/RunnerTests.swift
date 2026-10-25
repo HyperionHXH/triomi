@@ -431,7 +431,9 @@ private final class IosMediaScriptProbe: NSObject, WKScriptMessageHandler, WKNav
   }
 
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-    webView.evaluateJavaScript(action) { _, error in
+    // Results arrive through fixtureDone; Promise/postMessage values cannot be
+    // bridged by evaluateJavaScript. Keep script execution errors observable.
+    webView.evaluateJavaScript("(function(){\n\(action)\n})(); null;") { _, error in
       XCTAssertNil(error)
     }
   }

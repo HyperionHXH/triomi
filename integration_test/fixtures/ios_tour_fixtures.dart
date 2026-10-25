@@ -176,6 +176,9 @@ class IosTourFixtures {
     }
     // Skip public packaged rules, but retain genuine logged-out LK/LNS adapters.
     await preferences.set('sources.seededBuiltins', SourceRegistry.builtinRuleAssets);
+    // Exercise a user's explicitly empty list; never contact the public default
+    // repository from this isolated UI tour. Default loading has its own test.
+    await preferences.set('kazumi.repositories', <String, bool>{});
     await preferences.set('anime.workspace.tab', 2);
     await preferences.set('manga.workspace.tab', 0);
     await preferences.set('novel.workspace.tab', 1);
