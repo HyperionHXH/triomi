@@ -429,9 +429,10 @@ final class IosSystemProxyRequest {
       guard let info = info else { return }
       let request = Unmanaged<IosSystemProxyRequest>.fromOpaque(info).takeUnretainedValue()
       guard request.pending != nil else { return }
-      if error != nil || proxies == nil {
-        request.finish(FlutterError(code: "system_proxy_failed", message: "The OS could not resolve its proxy configuration", details: nil))
-      } else { request.select(proxies! as! [[String: Any]], allowPAC: false) }
+      guard error == nil, let routes = proxies as? [[String: Any]] else {
+        request.finish(FlutterError(code: "system_proxy_failed", message: "The OS could not resolve its proxy configuration", details: nil)); return
+      }
+      request.select(routes, allowPAC: false)
     }
     if type == kCFProxyTypeAutoConfigurationURL as String,
        let value = proxy[kCFProxyAutoConfigurationURLKey as String] as? URL,

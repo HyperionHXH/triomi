@@ -10,6 +10,8 @@ iOS补齐系统代理/PAC的Dart网络桥、HLS格式与省略Cookie语义、原
 
 本轮本地回归：`flutter analyze --no-pub`零问题；完整Flutter1437通过/3跳过，新增播放器平台菜单/迟到弹幕与iOS缓存确认测试均通过；Python工具109通过。Android普通debug APK与Windows debug EXE编译成功，未安装或操作用户设备。保留插件KGP、webview_windows CMake及Nuget提示；文档扫描零错误/35历史模板warning，编码零错误。iOS原生编译、53截图验收与公开Release仍需本轮云端证据，不借用历史结果。
 
+候选合并提交`d4e20b0`已推送，运行40165612383在Release Xcode编译发现当前SDK的PAC回调CFArray非Optional，不能强制解包；改用受检桥接并保留错误返回，未跳过PAC原生行为测试。编译失败前没有启动模拟器，工作流现仅在已有明确UDID时运行视觉诊断。Windows生产PlayerPage实际解码30秒loopback视频、进度/暂停/跳转/三源弹幕开关/恢复烟测通过；这不是iOS或线上来源证据。
+
 ## 当前请求：同步主干 R168 与小说书架去除登录状态
 
 在干净的 `feat/ios` 工作树拉取并合并 `origin/master` 的 `129eba7`（远程无 `origin/main`）。保留主干分集评论、评分编辑与新播放器输入，同时保留 iOS AVPlayer/PiP、WebKit JS、持久存储、下载生命周期及云端巡检。播放器冲突采用主干统一拖动预览/提交路径，真正 seek、音量和倍速仍派发至当前平台控制器；补齐 iOS 系统亮度读取，避免新手势仅在 Android 可用。
