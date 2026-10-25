@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +19,7 @@ import '../novel/novel_workspace_page.dart';
 import 'app_update_page.dart';
 import 'cache_management_page.dart';
 import 'cover_appearance_settings_page.dart';
+import 'settings_controller.dart';
 
 /// 通用设置；界面外观与阅读器排版分别在独立页面配置。
 class SettingsPage extends ConsumerWidget {
@@ -58,7 +60,7 @@ class SettingsPage extends ConsumerWidget {
                 title: const Text('来源 HTTP 代理'),
                 subtitle: Text(
                   ref.watch(sourceProxyProvider).isEmpty
-                      ? '未设置 · 使用默认网络'
+                      ? '未填写 · 跟随系统网络与代理'
                       : ref.watch(sourceProxyProvider),
                 ),
                 onTap: () => _editProxy(context, ref),
@@ -87,10 +89,23 @@ class SettingsPage extends ConsumerWidget {
           SettingsGroup(
             title: '关于',
             children: <Widget>[
+              if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS)
+                SwitchListTile(
+                  key: const ValueKey('automatic-app-update-check'),
+                  secondary: const Icon(Icons.update_outlined),
+                  title: const Text('启动时检查应用更新'),
+                  subtitle: const Text('仅检查新版本，不自动下载或安装；关闭后仍可手动检查'),
+                  value: ref.watch(automaticAppUpdateCheckProvider),
+                  onChanged: (enabled) => ref
+                      .read(automaticAppUpdateCheckProvider.notifier)
+                      .setEnabled(enabled),
+                ),
               ListTile(
                 leading: const Icon(Icons.system_update_outlined),
                 title: const Text('版本管理与应用更新'),
-                subtitle: const Text('GitHub 发布版本、更新说明、下载与安装'),
+                subtitle: Text(defaultTargetPlatform == TargetPlatform.iOS && !kIsWeb
+                    ? 'iOS 请从 Release 下载 IPA，并通过原侧载工具签名更新'
+                    : 'GitHub 发布版本、更新说明、下载与安装'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(
                   context,
@@ -135,7 +150,7 @@ class SettingsPage extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  '用于规则与轻之国度的 HTTP 请求。轻书架专用连接、APK 来源和原生视频不使用此设置。清空可恢复默认网络。',
+                  '用于公开番剧资料、评论、来源规则与轻之国度等 HTTP 请求。填写时优先使用此代理；清空后，Windows/Android 跟随系统已配置的代理，系统未配置则直连。轻书架专用连接与原生视频不使用此设置。',
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextField(

@@ -30,6 +30,7 @@ class PlayerInteractionSurface extends StatefulWidget {
     required this.onHoldChanged,
     required this.child,
     this.controls,
+    this.seekHudTop = 25,
   });
 
   final bool enabled;
@@ -54,6 +55,9 @@ class PlayerInteractionSurface extends StatefulWidget {
   final ValueChanged<bool> onHoldChanged;
   final Widget child;
   final Widget? controls;
+
+  /// Keeps seek feedback below visible player chrome.
+  final double seekHudTop;
 
   @override
   State<PlayerInteractionSurface> createState() =>
@@ -377,41 +381,171 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
   }
 
   Widget _hud(IconData icon, String label, double progress, Key key) =>
-      IgnorePointer(
-        child: Center(
-          child: Container(
-            key: key,
-            width: 230,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: .82),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: Colors.white, size: 30),
-                const SizedBox(height: 8),
-                Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontFeatures: [FontFeature.tabularFigures()],
+      Positioned(
+        top: key == const ValueKey('player-seek-hud') ? widget.seekHudTop : 25,
+        left: 0,
+        right: 0,
+        child: IgnorePointer(
+          child: Center(
+            child: Container(
+              key: key,
+              width: 200,
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: .82),
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: Colors.white12,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: Colors.white, size: 20),
                   ),
-                ),
-                const SizedBox(height: 10),
-                LinearProgressIndicator(
-                  value: progress.clamp(0.0, 1.0),
-                  color: Colors.white,
-                  backgroundColor: Colors.white30,
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          maxLines: 2,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        LinearProgressIndicator(
+                          value: progress.clamp(0.0, 1.0),
+                          minHeight: 3,
+                          borderRadius: BorderRadius.circular(2),
+                          color: Colors.white,
+                          backgroundColor: Colors.white30,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       );
+
+  Widget _levelHud() => Positioned(
+    top: 25,
+    left: 0,
+    right: 0,
+    child: IgnorePointer(
+      child: Center(
+        child: Container(
+          key: const ValueKey('player-level-hud'),
+          width: 200,
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: .82),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.white24),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: const BoxDecoration(
+                  color: Colors.white12,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _levelHudBrightness!
+                      ? Icons.brightness_6_rounded
+                      : (_levelHudValue == 0
+                            ? Icons.volume_off_rounded
+                            : Icons.volume_up_rounded),
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_levelHudBrightness! ? '亮度' : '音量'} ${(_levelHudValue * 100).round()}%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    LinearProgressIndicator(
+                      value: _levelHudValue.clamp(0.0, 1.0),
+                      minHeight: 3,
+                      borderRadius: BorderRadius.circular(2),
+                      color: Colors.white,
+                      backgroundColor: Colors.white30,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _speedHud() => Positioned(
+    top: 25,
+    left: 0,
+    right: 0,
+    child: IgnorePointer(
+      child: Center(
+        child: Container(
+          key: const ValueKey('player-speed-hud'),
+          width: 94,
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: .78),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white24),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.speed_rounded, color: Colors.white, size: 15),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '${widget.holdSpeed}x',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 
   static String _time(Duration value) {
     final seconds = value.inSeconds;
@@ -449,17 +583,8 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
                   behavior: HitTestBehavior.opaque,
                   dragStartBehavior: DragStartBehavior.down,
                   onTap: widget.onTap,
-                  onDoubleTapDown: (details) =>
-                      _doubleTapX = details.localPosition.dx,
                   onDoubleTap: () {
-                    if (!_active) return;
-                    if (_doubleTapX < constraints.maxWidth / 4) {
-                      _seekRelative(-15);
-                    } else if (_doubleTapX > constraints.maxWidth * .75) {
-                      _seekRelative(15);
-                    } else {
-                      widget.onTogglePlay();
-                    }
+                    if (_active) widget.onTogglePlay();
                   },
                   onHorizontalDragStart: _startScrub,
                   onHorizontalDragUpdate: (details) =>
@@ -479,13 +604,7 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
               ),
             ),
           ),
-        if (_active && _holding)
-          _hud(
-            Icons.speed_rounded,
-            '长按 ${widget.holdSpeed}x',
-            1,
-            const ValueKey('player-speed-hud'),
-          ),
+        if (_active && _holding) _speedHud(),
         if (_active && _seekTarget != null)
           _hud(
             _seekDelta.isNegative
@@ -498,23 +617,11 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
                 : 0,
             const ValueKey('player-seek-hud'),
           ),
-        if (_active && _levelHudBrightness != null)
-          _hud(
-            _levelHudBrightness!
-                ? Icons.brightness_6_rounded
-                : (_levelHudValue == 0
-                      ? Icons.volume_off_rounded
-                      : Icons.volume_up_rounded),
-            '${_levelHudBrightness! ? '亮度' : '音量'} ${(_levelHudValue * 100).round()}%',
-            _levelHudValue,
-            const ValueKey('player-level-hud'),
-          ),
+        if (_active && _levelHudBrightness != null) _levelHud(),
         if (widget.controls != null) widget.controls!,
       ],
     ),
   );
-
-  double _doubleTapX = 0;
 
   @override
   void dispose() {

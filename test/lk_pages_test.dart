@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,6 +33,7 @@ class FakeAccountSource implements AccountProfileProvider {
   bool loggedIn;
   LkProfile? profileResult;
   LkSignDetail? signResult;
+  Future<LkSignDetail>? signFuture;
   LkUnreadSummary? unreadResult;
   List<LkComment> commentsResult;
   Object? failWith;
@@ -90,6 +93,7 @@ class FakeAccountSource implements AccountProfileProvider {
 
   @override
   Future<LkSignDetail> signDetail() async {
+    if (signFuture != null) return signFuture!;
     if (failWith != null) throw failWith!;
     return signResult ?? const LkSignDetail(title: '每日签到');
   }
@@ -309,7 +313,32 @@ void main() {
       expect(source.claimCalls, 1);
       // 签完重新拉一次资料（余额与连续天数以站点为准）。
       expect(source.profileCalls, 2);
-      expect(find.text('签到成功，轻币已到账'), findsOneWidget);
+      expect(find.text('签到成功，资料与签到状态已同步'), findsOneWidget);
+    });
+
+    testWidgets('慢签到状态不会阻塞等级经验资料，失败后保留已显示资料', (tester) async {
+      final pending = Completer<LkSignDetail>();
+      final source = FakeAccountSource(
+        profileResult: const LkProfile(
+          uid: 42,
+          nickname: '独立加载书友',
+          coin: 128,
+          level: 3,
+          experience: 42,
+        ),
+      )..signFuture = pending.future;
+      await tester.pumpWidget(
+        harness(source: source, child: const LkAccountPage()),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('独立加载书友'), findsOneWidget);
+      expect(find.text('累计经验 42'), findsOneWidget);
+      expect(find.text('等级进度 3 / 9（非经验进度）'), findsOneWidget);
+      pending.completeError(StateError('签到状态暂不可用'));
+      await tester.pumpAndSettle();
+      expect(find.text('独立加载书友'), findsOneWidget);
+      expect(find.textContaining('签到状态暂不可用'), findsOneWidget);
     });
 
     testWidgets('未登录：提示去登录，不请求资料', (tester) async {

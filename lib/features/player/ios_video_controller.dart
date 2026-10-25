@@ -9,11 +9,13 @@ class NativeVideoState {
   const NativeVideoState({
     required this.position,
     required this.duration,
+    required this.bufferedPosition,
     required this.playing,
   });
 
   final Duration position;
   final Duration duration;
+  final Duration bufferedPosition;
   final bool playing;
 }
 
@@ -26,6 +28,8 @@ abstract class VideoPlatformController {
   Future<void> setUrl(
     String url, {
     Map<String, String> headers,
+    String? mimeType,
+    bool omitCookies,
     Duration startPosition,
     String title,
   });
@@ -60,6 +64,8 @@ class IosVideoController implements VideoPlatformController {
   MethodChannel? _channel;
   int? _viewId;
   String? _pendingUrl;
+  String? _pendingMimeType;
+  bool _pendingOmitCookies = false;
   Map<String, String> _pendingHeaders = const <String, String>{};
   Duration _pendingStartPosition = Duration.zero;
   String _pendingTitle = 'Triomi';
@@ -77,9 +83,13 @@ class IosVideoController implements VideoPlatformController {
           : const <Object?, Object?>{};
       switch (call.method) {
         case 'state':
-          onState(_stateFrom(args));
+          final state = _stateFrom(args);
+          _pendingStartPosition = state.position;
+          onState(state);
         case 'prepared':
-          onPrepared(_stateFrom(args));
+          final preparedState = _stateFrom(args);
+          _pendingStartPosition = preparedState.position;
+          onPrepared(preparedState);
         case 'completed':
           onState(_stateFrom(args));
           onCompleted();
@@ -96,6 +106,8 @@ class IosVideoController implements VideoPlatformController {
         setUrl(
           url,
           headers: _pendingHeaders,
+          mimeType: _pendingMimeType,
+          omitCookies: _pendingOmitCookies,
           startPosition: _pendingStartPosition,
           title: _pendingTitle,
         ).catchError((Object error) => onError('打开视频失败：$error')),
@@ -108,6 +120,7 @@ class IosVideoController implements VideoPlatformController {
     return NativeVideoState(
       position: Duration(milliseconds: number('positionMs')),
       duration: Duration(milliseconds: number('durationMs')),
+      bufferedPosition: Duration(milliseconds: number('bufferedPositionMs')),
       playing: args['playing'] == true,
     );
   }
@@ -116,12 +129,16 @@ class IosVideoController implements VideoPlatformController {
   Future<void> setUrl(
     String url, {
     Map<String, String> headers = const <String, String>{},
+    String? mimeType,
+    bool omitCookies = false,
     Duration startPosition = Duration.zero,
     String title = 'Triomi',
   }) async {
     if (_disposed) return;
     _pendingUrl = url;
     _pendingHeaders = headers;
+    _pendingMimeType = mimeType;
+    _pendingOmitCookies = omitCookies;
     _pendingStartPosition = startPosition;
     _pendingTitle = title;
     final channel = _channel;
@@ -129,6 +146,8 @@ class IosVideoController implements VideoPlatformController {
     await channel.invokeMethod<void>('open', <String, Object?>{
       'url': url,
       'headers': headers,
+      'mimeType': ?mimeType,
+      'omitCookies': omitCookies,
       'startMs': startPosition.inMilliseconds,
       'title': title,
     });

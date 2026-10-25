@@ -62,6 +62,8 @@ final downloadVideoResolverProvider = Provider<DownloadVideoResolver?>((ref) {
       name: source.name,
       url: result.url,
       headers: result.headers,
+      mimeType: result.mimeType,
+      omitCookies: result.omitCookies,
     );
   };
 });
@@ -107,7 +109,9 @@ Future<PlaySource> _resolveNativeVideo(
         'url': source.url,
         'headers': source.headers,
         'unavailableVideoUrls': source.unavailableVideoUrls,
+        'useLegacyParser': source.useLegacyParser,
         if (ios) 'requestId': requestId,
+        if (ios && source.omitCookies) 'omitCookies': true,
       },
     );
     if (cancellation.isCancelled) {
@@ -119,6 +123,10 @@ Future<PlaySource> _resolveNativeVideo(
     return PlaySource(
       name: source.name,
       url: url,
+      mimeType: raw?['mimeType'] == 'application/vnd.apple.mpegurl'
+          ? 'application/vnd.apple.mpegurl'
+          : null,
+      omitCookies: raw?['omitCookies'] == true,
       headers: {
         if (headers is Map)
           for (final entry in headers.entries) '${entry.key}': '${entry.value}',

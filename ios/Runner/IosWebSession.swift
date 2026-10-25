@@ -23,6 +23,23 @@ final class IosWebSession {
     return url
   }
 
+  /// Clear only disposable HTTP responses. Source logins and DOM storage stay.
+  func clearHttpCache(completion: @escaping () -> Void) {
+    let types: Set<String> = [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache]
+    let group = DispatchGroup()
+    for store in [ruleStore, videoStore] {
+      group.enter()
+      store.removeData(ofTypes: types, modifiedSince: .distantPast) { group.leave() }
+    }
+    if let browser = browser {
+      group.enter(); browser.clearHttpCache { group.leave() }
+    }
+    for resolver in [playback, download].compactMap({ $0 }) {
+      group.enter(); resolver.clearHttpCache { group.leave() }
+    }
+    group.notify(queue: .main, execute: completion)
+  }
+
   func handle(_ call: FlutterMethodCall, presenter: UIViewController?, result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any] ?? [:]
     if call.method == "cancelVideoResolve" {
@@ -59,7 +76,7 @@ final class IosWebSession {
       guard UIApplication.shared.applicationState == .active else {
         result(FlutterError(code: "activity_inactive", message: "Return to the app to resolve the playback page", details: nil)); return
       }
-      let resolver = IosVideoResolver(store: videoStore)
+      let resolver = IosVideoResolver(store: args["omitCookies"] as? Bool == true ? .nonPersistent() : videoStore)
       if call.method == "resolveVideo" { playback?.cancel(); playback = resolver }
       else { download?.cancel(); download = resolver }
       resolver.resolve(url: url, args: args, result: result)
@@ -163,6 +180,11 @@ private final class IosRuleBrowser: UIViewController, WKNavigationDelegate, WKUI
     decisionHandler(.deny)
   }
 
+  func clearHttpCache(completion: @escaping () -> Void) {
+    sessionStore.removeData(ofTypes: [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache],
+                            modifiedSince: .distantPast, completionHandler: completion)
+  }
+
   @objc private func cancel() { finish(false) }
 
   @objc private func save() {
@@ -196,7 +218,7 @@ private final class IosRuleBrowser: UIViewController, WKNavigationDelegate, WKUI
 
 /// Runs the site's ordinary WebKit player. No custom certificate handling,
 /// authentication bypass, DRM extraction, or non-HTTP resource access.
-private final class IosVideoResolver: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKUIDelegate {
+final class IosVideoResolver: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKUIDelegate {
   private let store: WKWebsiteDataStore
   private var web: WKWebView?
   private var pending: FlutterResult?
@@ -208,19 +230,26 @@ private final class IosVideoResolver: NSObject, WKNavigationDelegate, WKScriptMe
   private var unavailable = Set<String>()
   private var userAgent = ""
   private var completing = false
+  private var omitInputCookies = false
 
   init(store: WKWebsiteDataStore) { self.store = store }
+
+  func clearHttpCache(completion: @escaping () -> Void) {
+    store.removeData(ofTypes: [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache],
+                     modifiedSince: .distantPast, completionHandler: completion)
+  }
 
   func resolve(url: URL, args: [String: Any], result: @escaping FlutterResult) {
     pending = result; requestId = args["requestId"] as? String
     initialURL = url
+    omitInputCookies = args["omitCookies"] as? Bool == true
     unavailable = Set(args["unavailableVideoUrls"] as? [String] ?? [])
     let configuration = WKWebViewConfiguration()
     configuration.websiteDataStore = store
     configuration.allowsInlineMediaPlayback = true
     configuration.mediaTypesRequiringUserActionForPlayback = []
     configuration.userContentController.add(self, name: "triomiMedia")
-    configuration.userContentController.addUserScript(WKUserScript(source: Self.script, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+    configuration.userContentController.addUserScript(WKUserScript(source: Self.detectionScript(useLegacyParser: args["useLegacyParser"] as? Bool == true), injectionTime: .atDocumentStart, forMainFrameOnly: false))
     let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 1, height: 1), configuration: configuration)
     view.navigationDelegate = self
     view.uiDelegate = self
@@ -244,7 +273,7 @@ private final class IosVideoResolver: NSObject, WKNavigationDelegate, WKScriptMe
       }
       // A caller-provided Cookie is scoped only to its exact input host. It is
       // never reapplied to redirected pages or guessed media/CDN hosts.
-      if let header = headers.first(where: { $0.key.lowercased() == "cookie" })?.value {
+      if !self.omitInputCookies, let header = headers.first(where: { $0.key.lowercased() == "cookie" })?.value {
         let group = DispatchGroup()
         for pair in header.split(separator: ";") {
           let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
@@ -259,9 +288,17 @@ private final class IosVideoResolver: NSObject, WKNavigationDelegate, WKScriptMe
   }
 
   func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-    guard let payload = message.body as? [String: String], let value = payload["url"],
+    receiveMedia(message.body as? [String: Any] ?? [:])
+  }
+
+  func receiveMedia(_ payload: [String: Any]) {
+    guard let value = payload["url"] as? String,
           let url = IosWebSession.webURL(value) else { return }
-    found(url, page: payload["page"].flatMap { IosWebSession.webURL($0) }, policy: payload["policy"] ?? "strict-origin-when-cross-origin")
+    let mimeType = payload["mimeType"] as? String == "application/vnd.apple.mpegurl" ? "application/vnd.apple.mpegurl" : nil
+    guard Self.mediaURL(url) || mimeType != nil || payload["evidence"] as? String == "video" else { return }
+    found(url, page: (payload["page"] as? String).flatMap { IosWebSession.webURL($0) },
+          policy: payload["policy"] as? String ?? "strict-origin-when-cross-origin",
+          mimeType: mimeType, omitCookies: payload["omitCookies"] as? Bool == true)
   }
 
   func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
@@ -270,7 +307,9 @@ private final class IosVideoResolver: NSObject, WKNavigationDelegate, WKScriptMe
       decisionHandler(.cancel); return
     }
     if Self.mediaURL(url) {
-      found(url, page: navigationAction.sourceFrame.request.url, policy: "strict-origin-when-cross-origin")
+      // A suffixed HLS navigation carries the same format hint as a sniffed one.
+      found(url, page: navigationAction.sourceFrame.request.url, policy: "strict-origin-when-cross-origin",
+            mimeType: url.pathExtension.lowercased() == "m3u8" ? "application/vnd.apple.mpegurl" : nil)
       decisionHandler(.cancel); return
     }
     // WebKit owns navigation cookie scoping and default TLS validation. Strip
@@ -284,18 +323,30 @@ private final class IosVideoResolver: NSObject, WKNavigationDelegate, WKScriptMe
     decisionHandler(.allow)
   }
 
+  func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+               decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+    let type = navigationResponse.response.mimeType?.lowercased() ?? ""
+    if ["application/vnd.apple.mpegurl", "application/x-mpegurl", "application/mpegurl", "audio/mpegurl", "audio/x-mpegurl"].contains(type),
+       let url = navigationResponse.response.url, IosWebSession.webURL(url.absoluteString) != nil {
+      found(url, page: webView.url ?? initialURL, policy: "strict-origin-when-cross-origin", mimeType: "application/vnd.apple.mpegurl")
+      decisionHandler(.cancel); return
+    }
+    decisionHandler(.allow)
+  }
+
   func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
     if (error as NSError).code != NSURLErrorCancelled { fail("resolve_failed", "The playback page could not be loaded") }
   }
 
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { fail("resolve_failed", "The playback page process terminated") }
 
-  private func found(_ url: URL, page: URL?, policy: String) {
+  private func found(_ url: URL, page: URL?, policy: String, mimeType: String? = nil, omitCookies: Bool = false) {
     guard pending != nil, !completing else { return }
     if unavailable.contains(url.absoluteString) { fail("source_unavailable", "This route returned the source's unavailable-video placeholder"); return }
     guard !["googleads", "googlesyndication", "adposter"].contains(where: { url.absoluteString.contains($0) }) else { return }
     completing = true
-    IosWebSession.cookieHeader(url: url, store: store) { [weak self] cookies in
+    let omit = omitInputCookies || omitCookies
+    let complete: (String?) -> Void = { [weak self] cookies in
       guard let self = self, let callback = self.pending else { return }
       var headers = [String: String]()
       if let initial = self.initialURL, Self.sameOrigin(initial, url) {
@@ -310,8 +361,13 @@ private final class IosVideoResolver: NSObject, WKNavigationDelegate, WKScriptMe
       if let cookies = cookies { headers["Cookie"] = cookies }
       if let page = page, let referer = Self.referrer(page: page, target: url, policy: policy) { headers["Referer"] = referer }
       self.pending = nil; self.cleanup()
-      callback(["url": url.absoluteString, "headers": headers])
+      var response: [String: Any] = ["url": url.absoluteString, "headers": headers]
+      if let mimeType = mimeType { response["mimeType"] = mimeType }
+      if omit { response["omitCookies"] = true }
+      callback(response)
     }
+    if omit { complete(nil) }
+    else { IosWebSession.cookieHeader(url: url, store: store, completion: complete) }
   }
 
   static func sameOrigin(_ a: URL, _ b: URL) -> Bool {
@@ -366,48 +422,120 @@ private final class IosVideoResolver: NSObject, WKNavigationDelegate, WKScriptMe
     web = nil; requestId = nil
   }
 
+  static func detectionScript(useLegacyParser: Bool) -> String {
+    script.replacingOccurrences(of: "__TRIOMI_LEGACY__", with: useLegacyParser ? "true" : "false")
+  }
+
   private static let script = #"""
     (() => {
       if (window.__triomiMedia) return; window.__triomiMedia = true;
-      const report = value => {
+      const legacy = __TRIOMI_LEGACY__;
+      const hls = 'application/vnd.apple.mpegurl';
+      const isHls = type => /^(application|audio)\/(vnd\.apple\.mpegurl|x-mpegurl|mpegurl)(?:;|$)/i.test(type || '');
+      const reported = new Map();
+      const report = (input, evidence = '', mimeType = '', omitCookies = false) => {
         try {
-          const url = new URL(value, location.href);
-          if (!/^https?:$/.test(url.protocol)) return;
-          window.webkit.messageHandlers.triomiMedia.postMessage({url: url.href, page: location.href,
-            policy: document.referrerPolicy || 'strict-origin-when-cross-origin'});
+          if (typeof input !== 'string' || !input.trim()) return;
+          const url = new URL(input, location.href);
+          if (!/^https?:$/.test(url.protocol) || url.username || url.password ||
+              (reported.has(url.href) && (!mimeType || reported.get(url.href))) ||
+              (mimeType !== hls && evidence !== 'video' && !/\.(m3u8|mp4|m4v)$/i.test(url.pathname))) return;
+          reported.set(url.href, mimeType);
+          window.webkit.messageHandlers.triomiMedia.postMessage({url:url.href, page:location.href,
+            policy:document.referrerPolicy || 'strict-origin-when-cross-origin', evidence, mimeType, omitCookies});
         } catch (_) {}
       };
-      const media = value => /\.(?:m3u8|mp4|m4v)(?:[?#]|$)/i.test(value || '');
-      const scan = () => {
-        document.querySelectorAll('video,video source').forEach(v => {
-          const value = v.currentSrc || v.src;
-          if (value && !value.startsWith('blob:')) report(value);
-          if (v.tagName === 'VIDEO') { v.muted = true; const p = v.play(); if (p) p.catch(() => {}); }
-        });
-        performance.getEntriesByType('resource').forEach(r => { if (media(r.name)) report(r.name); });
+      const responseRequests = new WeakMap();
+      const clone = Response.prototype.clone;
+      Response.prototype.clone = function() {
+        const response = clone.call(this), metadata = responseRequests.get(this);
+        if (metadata) responseRequests.set(response, metadata);
+        return response;
       };
-      const originalText = Response.prototype.text;
+      const text = Response.prototype.text;
       Response.prototype.text = function() {
-        const url = this.url;
-        return originalText.call(this).then(value => { if (value.trim().startsWith('#EXTM3U')) report(url); return value; });
+        const url = this.url, metadata = responseRequests.get(this) || {};
+        return text.call(this).then(body => {
+          if (body.trim().startsWith('#EXTM3U')) report(url, 'manifest', hls, metadata.omit);
+          return body;
+        });
       };
-      const originalFetch = window.fetch;
-      window.fetch = function() {
-        return originalFetch.apply(this, arguments).then(response => {
-          if (media(response.url)) report(response.url);
+      const nativeFetch = window.fetch;
+      window.fetch = function(input, init) {
+        const request = input instanceof Request ? input.url : String(input);
+        const credentials = init && init.credentials || (input instanceof Request ? input.credentials : 'same-origin');
+        let omit = credentials === 'omit';
+        try { omit = omit || credentials === 'same-origin' && new URL(request, location.href).origin !== location.origin; } catch (_) {}
+        return nativeFetch.apply(this, arguments).then(response => {
+          const url = response.url || request;
+          try { omit = omit || credentials === 'same-origin' && new URL(url, location.href).origin !== location.origin; } catch (_) {}
+          responseRequests.set(response, {omit});
+          if (isHls(response.headers.get('content-type'))) report(url, 'mime', hls, omit);
+          else {
+            report(url, '', '', omit);
+            if (response.body && response.type !== 'opaque') {
+              try {
+                const reader = response.clone().body.getReader();
+                const timer = setTimeout(() => { reader.cancel().catch(() => {}); }, 5000);
+                const decoder = new TextDecoder();
+                let prefix = '', bytes = 0;
+                const read = () => reader.read().then(part => {
+                  if (part.value) {
+                    bytes += part.value.byteLength;
+                    prefix += decoder.decode(part.value.subarray(0, Math.max(0, 512 - prefix.length)), {stream:true});
+                  }
+                  const trimmed = prefix.trimStart();
+                  if (trimmed.startsWith('#EXTM3U')) {
+                    clearTimeout(timer); reader.cancel().catch(() => {});
+                    report(url, 'manifest', hls, omit);
+                  } else if (part.done || bytes >= 512 || trimmed.length >= 7) {
+                    clearTimeout(timer); reader.cancel().catch(() => {});
+                  } else return read();
+                }).catch(() => { clearTimeout(timer); });
+                read();
+              } catch (_) {}
+            }
+          }
           return response;
         });
       };
       const open = XMLHttpRequest.prototype.open;
-      XMLHttpRequest.prototype.open = function() {
+      XMLHttpRequest.prototype.open = function(method, input) {
+        const request = new URL(input, location.href);
         this.addEventListener('load', () => {
-          try { if (media(this.responseURL) || (typeof this.responseText === 'string' && this.responseText.trim().startsWith('#EXTM3U'))) report(this.responseURL); } catch (_) {}
-        });
+          try {
+            const url = this.responseURL || request.href;
+            const omit = !this.withCredentials && (request.origin !== location.origin || new URL(url).origin !== location.origin);
+            if (isHls(this.getResponseHeader('content-type')) ||
+                ((!this.responseType || this.responseType === 'text') && this.responseText.trim().startsWith('#EXTM3U')) ||
+                (this.responseType === 'arraybuffer' && this.response instanceof ArrayBuffer &&
+                  new TextDecoder().decode(new Uint8Array(this.response, 0, Math.min(512, this.response.byteLength))).trim().startsWith('#EXTM3U'))) {
+              report(url, 'manifest', hls, omit);
+            } else if (this.responseType === 'blob' && this.response instanceof Blob) {
+              this.response.slice(0,512).text().then(body => {
+                if (body.trim().startsWith('#EXTM3U')) report(url, 'manifest', hls, omit);
+              }).catch(() => {});
+            } else report(url, '', '', omit);
+          } catch (_) {}
+        }, {once:true});
         return open.apply(this, arguments);
       };
-      new MutationObserver(scan).observe(document, {childList:true, subtree:true, attributes:true, attributeFilter:['src']});
+      const scan = () => {
+        document.querySelectorAll('video,video source').forEach(v => {
+          report(v.currentSrc || v.src, 'video', isHls(v.type) ? hls : '');
+          if (v.tagName === 'VIDEO') { v.muted = true; const p = v.play(); if (p) p.catch(() => {}); }
+        });
+        if (legacy) document.querySelectorAll('iframe[src]').forEach(frame => {
+          try {
+            const url = new URL(frame.src, location.href);
+            for (const value of url.searchParams.values()) report(value);
+          } catch (_) {}
+        });
+      };
+      new MutationObserver(scan).observe(document, {childList:true, subtree:true, attributes:true, attributeFilter:['src','type']});
       setInterval(scan, 500);
-      document.addEventListener('DOMContentLoaded', scan);
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scan, {once:true});
+      else scan();
     })();
     """#
 }

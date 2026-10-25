@@ -58,9 +58,9 @@ class KazumiRule {
     final api = int.tryParse('${decoded['api'] ?? '1'}');
     if (api == null ||
         api < 1 ||
-        api > 8 ||
+        api > 9 ||
         (decoded['type'] ?? 'anime') != 'anime') {
-      throw const RuleFormatException('当前支持 Kazumi api 1–8 的番剧规则');
+      throw const RuleFormatException('当前支持 Kazumi api 1–9 的番剧规则');
     }
     final searchMode = decoded['searchMode'] ?? 'xpath';
     final chapterMode = decoded['chapterMode'] ?? 'xpath';
@@ -115,11 +115,14 @@ class KazumiRule {
       if (chapterApi == null) ...['chapterRoads', 'chapterResult'],
     ]) {
       final value = requiredText(key);
-      if (!value.startsWith('//') && !value.startsWith('.//')) {
+      if (!value.startsWith('/') && !value.startsWith('./')) {
         throw RuleFormatException('$key 必须是 XPath 选择器');
       }
       try {
-        HtmlSelector.selectAll('<html><body></body></html>', value);
+        HtmlSelector.selectAll(
+          '<html><body></body></html>',
+          value.startsWith('/') ? '.$value' : value,
+        );
       } catch (_) {
         throw RuleFormatException('$key 的 XPath 无效');
       }
@@ -232,7 +235,11 @@ class KazumiSource implements SearchProvider, DetailProvider, ContentProvider {
         if (header != null) {
           final cookies = header.split(RegExp(r',(?=\s*[^=;,\s]+=[^;,]*)'));
           if (_windows) {
-            await WindowsSourceSession.storeCookies(descriptor.id, uri.toString(), cookies);
+            await WindowsSourceSession.storeCookies(
+              descriptor.id,
+              uri.toString(),
+              cookies,
+            );
           } else {
             await platformChannel.storeRuleCookies(uri.toString(), cookies);
           }
@@ -306,15 +313,19 @@ class KazumiSource implements SearchProvider, DetailProvider, ContentProvider {
     final target = _url(url ?? descriptor.baseUrl!);
     if (_windows) {
       return WindowsSourceSession.open(
-        sourceId: descriptor.id, url: target,
+        sourceId: descriptor.id,
+        url: target,
         userAgent: _headers['User-Agent']!,
       );
     }
     return platformChannel.openRuleSession(target, _headers['User-Agent']!);
   }
 
-  // Kazumi queries // against the current subtree, unlike Triomi field rules.
-  String _relative(String value) => value.startsWith('//') ? '.$value' : value;
+  // Kazumi evaluates leading / and // against the current subtree.
+  String _relative(String value) {
+    final selector = value.trim();
+    return selector.startsWith('/') ? '.$selector' : selector;
+  }
 
   @override
   Future<List<MediaItem>> search(String keyword, {int page = 1}) async {
@@ -333,6 +344,7 @@ class KazumiSource implements SearchProvider, DetailProvider, ContentProvider {
                 remoteId: row.remoteId,
                 type: MediaType.anime,
                 title: row.title,
+                url: rule.chapterApi == null ? _url(row.remoteId) : null,
               ),
         ];
       } on RuleFormatException catch (error) {
@@ -352,7 +364,7 @@ class KazumiSource implements SearchProvider, DetailProvider, ContentProvider {
     final seen = <String>{};
     for (final row in HtmlSelector.selectAll(
       html,
-      '${rule.raw['searchList']}',
+      _relative('${rule.raw['searchList']}'),
     )) {
       final title = HtmlSelector.extractWithin(
         row,
@@ -405,7 +417,10 @@ class KazumiSource implements SearchProvider, DetailProvider, ContentProvider {
     }
     final html = await _fetch(item.url ?? item.remoteId);
     final result = <Chapter>[];
-    final roads = HtmlSelector.selectAll(html, '${rule.raw['chapterRoads']}');
+    final roads = HtmlSelector.selectAll(
+      html,
+      _relative('${rule.raw['chapterRoads']}'),
+    );
     for (var road = 0; road < roads.length; road++) {
       final seen = <String>{};
       final episodes = HtmlSelector.selectWithin(
@@ -453,6 +468,7 @@ class KazumiSource implements SearchProvider, DetailProvider, ContentProvider {
           url: url,
           webPage: !direct,
           headers: _headers,
+          useLegacyParser: rule.raw['useLegacyParser'] == true,
         ),
       ],
     );

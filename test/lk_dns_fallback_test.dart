@@ -5,6 +5,53 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/source/http_adapter_io.dart';
 
 void main() {
+  test('new connections prefer a working current DNS address without retaining removed routes', () async {
+    final first = InternetAddress('127.0.0.1');
+    final second = InternetAddress('127.0.0.2');
+    final working = await ServerSocket.bind(second, 0);
+    final peers = <Socket>[];
+    final workingSub = working.listen(peers.add);
+    ServerSocket? recovered;
+    StreamSubscription<Socket>? recoveredSub;
+    var current = [first, second];
+    final resolver = SourceDnsFallback(
+      systemLookup: (_) async => current,
+      query: (_) async => throw StateError('working system DNS needs no DoH'),
+    );
+    final uri = Uri.parse('http://www.lightnovel.fun:${working.port}/');
+    final clients = <Socket>[];
+    try {
+      final initial = await connectWithDnsFallback(uri, resolver).socket;
+      clients.add(initial);
+      expect(initial.remoteAddress.address, second.address);
+      // A previously slow/refused route recovering must not be retried first
+      // on every connection while the last working route is still in DNS.
+      recovered = await ServerSocket.bind(first, working.port);
+      recoveredSub = recovered.listen(peers.add);
+      final next = await connectWithDnsFallback(uri, resolver).socket;
+      clients.add(next);
+      expect(next.remoteAddress.address, second.address);
+      current = [first];
+      final changed = await connectWithDnsFallback(uri, resolver).socket;
+      clients.add(changed);
+      expect(
+        changed.remoteAddress.address,
+        first.address,
+        reason: 'a remembered route must never outlive the DNS answer',
+      );
+    } finally {
+      for (final client in clients) {
+        client.destroy();
+      }
+      for (final peer in peers) {
+        peer.destroy();
+      }
+      await recoveredSub?.cancel();
+      await recovered?.close();
+      await workingSub.cancel();
+      await working.close();
+    }
+  });
   test(
     'plain TCP connection carries bytes without raw socket promotion',
     () async {
@@ -165,7 +212,10 @@ void main() {
   });
 
   test('failed system-resolved LK route tries DoH alternatives', () async {
-    final reservation = await ServerSocket.bind(InternetAddress('127.0.0.2'), 0);
+    final reservation = await ServerSocket.bind(
+      InternetAddress('127.0.0.2'),
+      0,
+    );
     final unavailablePort = reservation.port;
     await reservation.close();
     var queries = 0;

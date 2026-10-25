@@ -626,7 +626,8 @@ void main() {
           'Book': <String, Object?>{
             'Id': 7,
             'Title': '夹具小说',
-            'UserName': '作者甲',
+            'Author': '作者甲',
+            'UserName': '上传者（不是作者）',
             'Cover': 'https://example.com/c.jpg',
             'Introduction': '<p>简介<br/>第二行</p>',
             'Extra': <String, Object?>{
@@ -726,7 +727,7 @@ void main() {
       final channel = LnsFontChannel(http: http);
 
       await expectLater(
-        channel.ensure('/font/x.woff2'),
+        channel.load('/font/x.woff2'),
         throwsA(
           isA<SourceException>().having(
             (error) => error.userMessage,

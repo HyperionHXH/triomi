@@ -27,6 +27,7 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
   bool _claiming = false;
   bool _notLoggedIn = false;
   String? _error;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -35,31 +36,53 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
   }
 
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
     setState(() {
-      _loading = true;
+      _loading = _profile == null;
       _error = null;
       _notLoggedIn = false;
     });
     try {
       final source = await loadLkAccount(ref);
       if (!source.isLoggedIn) {
-        if (!mounted) return;
+        if (!mounted || generation != _loadGeneration) return;
         setState(() {
           _notLoggedIn = true;
           _loading = false;
         });
         return;
       }
-      final profile = await source.profile();
-      final sign = await source.signDetail();
-      if (!mounted) return;
-      setState(() {
-        _profile = profile;
-        _sign = sign;
-        _loading = false;
-      });
+      Future<void> loadProfile() async {
+        try {
+          final profile = await source.profile();
+          if (!mounted || generation != _loadGeneration) return;
+          setState(() {
+            _profile = profile;
+            _loading = false;
+          });
+        } catch (error) {
+          if (!mounted || generation != _loadGeneration) return;
+          setState(() {
+            _error = describeSourceError(error);
+            _loading = false;
+          });
+        }
+      }
+
+      Future<void> loadSign() async {
+        try {
+          final sign = await source.signDetail();
+          if (!mounted || generation != _loadGeneration) return;
+          setState(() => _sign = sign);
+        } catch (error) {
+          if (!mounted || generation != _loadGeneration) return;
+          setState(() => _error = describeSourceError(error));
+        }
+      }
+
+      await Future.wait([loadProfile(), loadSign()]);
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = describeSourceError(error);
         _loading = false;
@@ -68,13 +91,18 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
   }
 
   Future<void> _claim() async {
+    if (_claiming) return;
+    final generation = ++_loadGeneration;
     setState(() => _claiming = true);
     try {
       final source = await loadLkAccount(ref);
       await source.claimSign();
+      if (!mounted || generation != _loadGeneration) return;
       // 余额与连续天数以站点返回为准，签完重新拉一次。
       await _load();
-      if (mounted) _toast('签到成功，轻币已到账');
+      if (mounted) {
+        _toast(_error == null ? '签到成功，资料与签到状态已同步' : '签到成功，资料刷新失败，请重试确认余额与经验');
+      }
     } catch (error) {
       if (mounted) _toast('签到失败：${describeSourceError(error)}');
     } finally {
@@ -89,8 +117,14 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
   }
 
   Future<void> _manageAccount() async {
+    _loadGeneration++;
     await context.push('${AppRoutes.sources}?type=novel');
-    if (mounted) await _load();
+    if (!mounted) return;
+    setState(() {
+      _profile = null;
+      _sign = null;
+    });
+    await _load();
   }
 
   @override
@@ -127,7 +161,7 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
         ),
       );
     }
-    if (_error != null) {
+    if (_error != null && _profile == null) {
       return EmptyStateView(
         icon: Icons.cloud_off_outlined,
         title: '资料加载失败',
@@ -146,6 +180,11 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
       child: ListView(
         padding: const EdgeInsets.only(bottom: AppSpacing.xl),
         children: <Widget>[
+          if (_error != null)
+            ListTile(
+              title: Text('资料刷新失败：$_error'),
+              trailing: TextButton(onPressed: _load, child: const Text('重试')),
+            ),
           if (profile != null) _profileCard(profile),
           if (sign != null) _signCard(sign),
         ],
@@ -161,7 +200,8 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
     final avatarUrl = profile.avatarUrl;
     final subtitle = <String>[
       'UID ${profile.uid}',
-      if (profile.levelName.isNotEmpty) profile.levelName,
+      if (profile.level != null) 'Lv.${profile.level}',
+      if (profile.displayLevelName.isNotEmpty) profile.displayLevelName,
     ].join(' · ');
 
     return Padding(
@@ -228,6 +268,25 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
                 _stat('发布', _countLabel(profile.postCount)),
               ],
             ),
+            const SizedBox(height: AppSpacing.sm),
+            if (profile.levelFraction case final fraction?) ...[
+              LinearProgressIndicator(value: fraction),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                '等级进度 ${profile.level} / 9（非经验进度）',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              profile.experience == null
+                  ? '来源未提供经验数据'
+                  : '累计经验 ${profile.experience}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: palette.mutedForeground,
+              ),
+            ),
+            Text('LK 未公布经验升级门槛；签到后以来源资料为准。', style: theme.textTheme.bodySmall),
           ],
         ),
       ),

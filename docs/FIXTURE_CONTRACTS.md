@@ -19,11 +19,8 @@
 | `/calendar` | GET | JSON，Bangumi 放送表（calendar）形状 | `schedule_providers.dart`（`TRIOMI_SCHEDULE_BASE` 注入时**不回退镜像**） |
 | `/anime/list?page=N`、`/anime/search?q=K` | GET | HTML 列表（搜索参数名同样是 `q`） | `local-fixture-anime.json` |
 | `/play/{ep}` | GET | HTML 线路列表：线路A=HLS `/video/sample.m3u8`、线路B=mp4 `/video/sample.mp4` | `local-fixture-anime.json`（content）→ 播放器 |
-| `/danmaku/{ep}.json` | GET | 弹弹play 信封 `{code:0, comments:[{p:"时间,模式,颜色,uid", m}]}`，40 条滚动 + 顶部(5) + 底部(4)；地址由**规则 `content.danmaku` 声明**，播放页不写 | `player_page._loadDanmaku`（规则自带弹幕源无需凭据） |
+| `/danmaku/{ep}.json` | GET | 旧信封 `{code:0, comments:[{p,m}]}`；仅保留来源规则字段的序列化兼容夹具，生产播放器不再读取此URL | 规则兼容测试 |
 | `/video/sample.mp4` | GET | 全量 200（`Content-Length`=文件大小、`Accept-Ranges: bytes`）；Range → 206 + `Content-Range`；跨末尾区间钳到末尾；后缀区间 `bytes=-N` 支持；**非法数字/多区间/倒序/越界统一 416 + `bytes */size`（D51，不再抛 ValueError）** | `video_downloader`（渐进式/HLS 下载、离线播放） |
-| `/api/v2/login`（弹弹play） | POST | body 带 `hash` → `{success:true, token:"fixture-dandanplay-token"}`；否则 `{success:false, errorMessage}` | `dandanplay_client` 登录 |
-| `/api/v2/search/episodes?anime=K` | GET | `{success, animes:[{animeTitle(回显关键词), episodes[]}]}` | 播放器手动匹配弹幕 |
-| `/api/v2/comment/{id}` | GET/POST | GET 弹幕数组；POST `{success:true, commentId}`（服务端日志打印发送内容，E2E 靠它断言） | 弹幕拉取/发送 |
 | `/tracking/bangumi/v0/me` | GET | 无 Authorization → 401；有 → `{id, username:"triomi-fixture", nickname}` | `TrackingService.verify` |
 | `/tracking/bangumi/v0/users/-/collections/{id}` | POST | **204**（官方 Bangumi 是 202——差异见下） | 收藏 upsert |
 | `/tracking/bangumi/v0/users/-/collections/{id}/episodes` | GET/PATCH | 逐集收藏；PATCH 回 **204** | 番剧进度上报 |

@@ -46,6 +46,12 @@ abstract class DetailProvider implements ContentSource {
   Future<List<Chapter>> chapters(MediaItem item);
 }
 
+/// Sources opt in when list responses omit metadata available in details.
+/// This fills only absent author/description; identity and shelf state stay put.
+abstract class ListMetadataProvider implements DetailProvider {
+  Future<MediaItem> listMetadata(MediaItem item);
+}
+
 /// 正文能力：漫画取图片、小说取文本、番剧取播放线路。
 abstract class ContentProvider implements ContentSource {
   Future<ChapterContent> content(Chapter chapter);

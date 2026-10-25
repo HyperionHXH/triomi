@@ -7,7 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/features/player/player_interaction_surface.dart';
 
 class _PlayerHarness extends StatefulWidget {
-  const _PlayerHarness({super.key});
+  const _PlayerHarness({super.key, this.topToolbar = false});
+  final bool topToolbar;
 
   @override
   State<_PlayerHarness> createState() => _PlayerHarnessState();
@@ -55,6 +56,7 @@ class _PlayerHarnessState extends State<_PlayerHarness> {
             brightness: brightness,
             brightnessEnabled: true,
             holdSpeed: 2.5,
+            seekHudTop: widget.topToolbar ? 58 : 25,
             onTap: () {},
             onTogglePlay: () => toggles++,
             onSeek: (target) => setState(() {
@@ -76,35 +78,49 @@ class _PlayerHarnessState extends State<_PlayerHarness> {
             onVolumeEnd: () => saves++,
             onBrightnessChanged: (value) => setState(() => brightness = value),
             onHoldChanged: holds.add,
-            controls: Align(
-              alignment: Alignment.bottomCenter,
-              child: SizedBox(
-                height: 90,
-                child: Column(
-                  children: [
-                    Slider(
-                      focusNode: sliderFocus,
-                      value: position.inSeconds.toDouble(),
-                      max: duration.inSeconds.toDouble(),
-                      onChanged: (_) =>
-                          throw StateError('Slider consumed arrow'),
+            controls: Stack(
+              children: [
+                if (widget.topToolbar)
+                  const Align(
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      key: ValueKey('player-test-toolbar'),
+                      height: 48,
+                      width: double.infinity,
+                      child: ColoredBox(color: Colors.red),
                     ),
-                    SizedBox(
-                      height: 40,
-                      child: Row(
-                        children: [
-                          TextButton(
-                            focusNode: buttonFocus,
-                            onPressed: () {},
-                            child: const Text('Control'),
+                  ),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: SizedBox(
+                    height: 90,
+                    child: Column(
+                      children: [
+                        Slider(
+                          focusNode: sliderFocus,
+                          value: position.inSeconds.toDouble(),
+                          max: duration.inSeconds.toDouble(),
+                          onChanged: (_) =>
+                              throw StateError('Slider consumed arrow'),
+                        ),
+                        SizedBox(
+                          height: 40,
+                          child: Row(
+                            children: [
+                              TextButton(
+                                focusNode: buttonFocus,
+                                onPressed: () {},
+                                child: const Text('Control'),
+                              ),
+                              Expanded(child: TextField(focusNode: textFocus)),
+                            ],
                           ),
-                          Expanded(child: TextField(focusNode: textFocus)),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
             child: const ColoredBox(color: Colors.black),
           ),
@@ -174,46 +190,121 @@ void main() {
     },
   );
 
-  testWidgets(
-    'both halves show actual level and progress then persist app volume',
-    (tester) async {
+  for (final size in [const Size(360, 640), const Size(1280, 720)]) {
+    testWidgets('scrubbing keeps progress in a compact top capsule at $size', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       final key = GlobalKey<_PlayerHarnessState>();
       await tester.pumpWidget(_PlayerHarness(key: key));
       await tester.pump();
       final area = tester.getRect(
         find.byKey(const ValueKey('player-blank-input')),
       );
-      var drag = await tester.startGesture(area.center - const Offset(60, 0));
-      await drag.moveBy(const Offset(0, -80));
+      final drag = await tester.startGesture(area.center - const Offset(80, 0));
+      await drag.moveBy(const Offset(60, 0));
       await tester.pump();
-      expect(key.currentState!.brightness, closeTo(.7, .001));
-      expect(find.text('亮度 70%'), findsOneWidget);
-      expect(
-        tester
-            .widget<LinearProgressIndicator>(
-              find.byType(LinearProgressIndicator),
-            )
-            .value,
-        closeTo(.7, .001),
-      );
-      await drag.up();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.text('亮度 70%'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 1));
-      expect(find.byKey(const ValueKey('player-level-hud')), findsNothing);
-      drag = await tester.startGesture(area.center + const Offset(60, 0));
-      await drag.moveBy(const Offset(0, 80));
-      await tester.pump();
-      expect(key.currentState!.volume, closeTo(.3, .001));
-      expect(find.text('音量 30%'), findsOneWidget);
-      await drag.up();
-      await tester.pump();
-      expect(key.currentState!.saves, 1);
+      final hud = tester.getRect(find.byKey(const ValueKey('player-seek-hud')));
+      expect(hud.width, lessThanOrEqualTo(200));
+      expect(hud.height, lessThanOrEqualTo(48));
+      expect(hud.center.dx, closeTo(area.center.dx, 1));
+      expect(hud.top, inInclusiveRange(area.top + 16, area.top + 32));
+      expect(hud.bottom, lessThan(area.center.dy));
       expect(key.currentState!.seeks, isEmpty);
-      await tester.pumpWidget(const SizedBox());
-      await tester.pump(const Duration(milliseconds: 50));
-    },
-  );
+      expect(find.textContaining('2:'), findsWidgets);
+      await drag.up();
+      await tester.pump();
+      expect(key.currentState!.seeks.single, key.currentState!.position);
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(seconds: 2));
+    });
+    testWidgets('seek feedback stays below visible top controls at $size', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final key = GlobalKey<_PlayerHarnessState>();
+      await tester.pumpWidget(_PlayerHarness(key: key, topToolbar: true));
+      await tester.pump();
+      final area = tester.getRect(
+        find.byKey(const ValueKey('player-blank-input')),
+      );
+      final gesture = await tester.startGesture(
+        area.center - const Offset(80, 0),
+      );
+      await gesture.moveBy(const Offset(60, 0));
+      await tester.pump();
+      final hud = tester.getRect(find.byKey(const ValueKey('player-seek-hud')));
+      expect(hud.width, lessThanOrEqualTo(200));
+      final toolbar = tester.getRect(
+        find.byKey(const ValueKey('player-test-toolbar')),
+      );
+      expect(hud.top, greaterThanOrEqualTo(toolbar.bottom + 8));
+      expect(hud.height, lessThanOrEqualTo(48));
+      expect(hud.center.dx, closeTo(area.center.dx, 1));
+      expect(hud.bottom, lessThan(area.center.dy));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+    testWidgets(
+      'both halves keep a compact top HUD and persist actual levels at $size',
+      (tester) async {
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final key = GlobalKey<_PlayerHarnessState>();
+        await tester.pumpWidget(_PlayerHarness(key: key));
+        await tester.pump();
+        final area = tester.getRect(
+          find.byKey(const ValueKey('player-blank-input')),
+        );
+        void expectCompactLevelHud() {
+          final hud = tester.getRect(
+            find.byKey(const ValueKey('player-level-hud')),
+          );
+          expect(hud.width, lessThanOrEqualTo(200));
+          expect(hud.height, lessThanOrEqualTo(48));
+          expect(hud.center.dx, closeTo(area.center.dx, 1));
+          expect(hud.top, inInclusiveRange(area.top + 16, area.top + 32));
+          expect(hud.bottom, lessThan(area.center.dy));
+          expect(tester.takeException(), isNull);
+        }
+
+        var drag = await tester.startGesture(area.center - const Offset(60, 0));
+        await drag.moveBy(const Offset(0, -80));
+        await tester.pump();
+        expect(key.currentState!.brightness, closeTo(.7, .001));
+        expect(find.text('亮度 70%'), findsOneWidget);
+        expectCompactLevelHud();
+        expect(
+          tester
+              .widget<LinearProgressIndicator>(
+                find.byType(LinearProgressIndicator),
+              )
+              .value,
+          closeTo(.7, .001),
+        );
+        await drag.up();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.text('亮度 70%'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.byKey(const ValueKey('player-level-hud')), findsNothing);
+        drag = await tester.startGesture(area.center + const Offset(60, 0));
+        await drag.moveBy(const Offset(0, 80));
+        await tester.pump();
+        expect(key.currentState!.volume, closeTo(.3, .001));
+        expect(find.text('音量 30%'), findsOneWidget);
+        expectCompactLevelHud();
+        await drag.up();
+        await tester.pump();
+        expect(key.currentState!.saves, 1);
+        expect(key.currentState!.seeks, isEmpty);
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(milliseconds: 50));
+      },
+    );
+  }
 
   for (final direction in [
     LogicalKeyboardKey.arrowLeft,
@@ -321,7 +412,14 @@ void main() {
       );
       await tester.pump(kLongPressTimeout + const Duration(milliseconds: 10));
       expect(key.currentState!.holds, [true]);
-      expect(find.text('长按 2.5x'), findsOneWidget);
+      final speedHud = tester.getRect(
+        find.byKey(const ValueKey('player-speed-hud')),
+      );
+      expect(speedHud.width, lessThan(150));
+      expect(speedHud.height, lessThan(40));
+      expect(speedHud.center.dx, closeTo(area.center.dx, 1));
+      expect(speedHud.top, lessThan(area.top + 48));
+      expect(find.text('2.5x'), findsOneWidget);
       await mouse.up();
       await tester.pump();
       expect(key.currentState!.holds, [true, false]);
@@ -411,7 +509,7 @@ void main() {
     },
   );
   testWidgets(
-    'double taps keep outer-quarter fifteen-second seek and middle pause',
+    'double taps toggle playback across the full surface without seeking',
     (tester) async {
       final key = GlobalKey<_PlayerHarnessState>();
       await tester.pumpWidget(_PlayerHarness(key: key));
@@ -426,11 +524,9 @@ void main() {
         await tester.tapAt(point);
         await tester.pump(const Duration(milliseconds: 350));
       }
-      expect(key.currentState!.seeks, [
-        const Duration(seconds: 105),
-        const Duration(seconds: 120),
-      ]);
-      expect(key.currentState!.toggles, 1);
+      expect(key.currentState!.seeks, isEmpty);
+      expect(key.currentState!.position, const Duration(seconds: 120));
+      expect(key.currentState!.toggles, 3);
       await tester.pumpWidget(const SizedBox());
     },
   );

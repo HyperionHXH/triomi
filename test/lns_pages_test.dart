@@ -259,7 +259,9 @@ void main() {
 
     testWidgets('首次加载后刷新可用，失败显示错误而不是空书架', (tester) async {
       final source = FakeShelfSource(
-        id: 'lk', name: '轻之国度', books: [book('lk', '刷新前收藏')],
+        id: 'lk',
+        name: '轻之国度',
+        books: [book('lk', '刷新前收藏')],
       );
       await tester.pumpWidget(
         harness(snapshotOf([source]), const RemoteShelfPage()),
@@ -286,7 +288,9 @@ void main() {
       addTearDown(tester.view.reset);
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       final source = FakeShelfSource(
-        id: 'lk', name: '轻之国度', books: [book('lk', '长标题站点收藏与作者信息')],
+        id: 'lk',
+        name: '轻之国度',
+        books: [book('lk', '长标题站点收藏与作者信息')],
       );
       await tester.pumpWidget(
         harness(snapshotOf([source]), const RemoteShelfPage()),
@@ -346,9 +350,14 @@ void main() {
               'Id': 9527,
               'UserName': '夹具书架友',
               'Growth': <Object?, Object?>{
-                'Coin': 128,
-                'SignStreak': 3,
+                'Coin': signed ? 148 : 128,
+                'SignStreak': signed ? 4 : 3,
                 'TodaySigned': signed,
+                'Level': 2,
+                'GrowthLevel': 4,
+                'Exp': signed ? 160 : 150,
+                'CurrentLevelExp': 100,
+                'NextLevelExp': 300,
               },
             });
           case 'SignIn':
@@ -376,6 +385,20 @@ void main() {
 
       expect(find.text('今日已签到'), findsOneWidget);
       expect(find.textContaining('签到成功'), findsOneWidget);
+      expect(find.text('148'), findsOneWidget);
+      expect(find.text('4 天'), findsOneWidget);
+      expect(find.textContaining('成长等级 Lv.4'), findsOneWidget);
+      expect(find.textContaining('访问等级 Lv.2'), findsOneWidget);
+      expect(find.textContaining('20 轻币'), findsOneWidget);
+      expect(find.textContaining('10 经验'), findsOneWidget);
+      expect(
+        tester
+            .widget<LinearProgressIndicator>(
+              find.byType(LinearProgressIndicator),
+            )
+            .value,
+        .3,
+      );
     });
 
     testWidgets('未登录：给出「去登录」引导', (tester) async {

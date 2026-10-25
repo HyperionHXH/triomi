@@ -1,8 +1,8 @@
 # 来源能力矩阵与生产/夹具边界（D75）
 
-> R166来源边界：全新配置不预置Kazumi/Mihon仓库，用户手动添加；升级保留已有仓库、启用状态及已安装插件，不自动删除用户设置。Windows漫画扩展提供常驻搜索与手动仓库/插件管理；保留原仓库URL身份，按实际索引位置解析相对元数据及下载地址。手动添加不等于信任，APK发布者核验与独立JAR来源/SHA-256确认仍需明确完成。Android沿用原生Mihon宿主，Windows沿用随包Suwayomi兼容运行时，不宣称全仓库兼容。当前产物、有限播放/旋转烟测及发布状态只以[CURRENT_STATUS](CURRENT_STATUS.md)为准；下方带轮次记录保留历史事实。
+> 当前来源边界（R171）：没有保存仓库设置时默认启用官方 KazumiRules；已有自定义列表及用户显式清空状态保留。番剧支持兼容 api1–9 XPath/API 子集，包括 API9 `sourceTemplate`，官方17条规则导入检查通过不代表各站验证、视频解析或播放均成功。两端补齐无后缀 HLS 嗅探及格式传递；只有规则声明旧解析时读取 iframe 查询中的媒体地址，不绕过验证码/TLS。Mihon仓库策略及原生/桌面宿主不变，不自动删除用户设置。当前产物、有限实际播放及发布状态以[CURRENT_STATUS](CURRENT_STATUS.md)为准；下方带轮次记录保留历史事实。
 
-> iOS 适配：iOS 15+ 的 JS/API/Kazumi 路径使用系统 WebKit、Dart 宿主网络及系统 AVPlayer；Mihon APK/DEX 与 Windows JVM 不能在 iOS 执行，管理入口明确降级。来源弹幕已接入加载/开关，官方匹配/发送仍需本人凭据。当前 Apple 编译/模拟器、账号、PiP 与锁屏设备证据以[当前状态](CURRENT_STATUS.md)记录为准，下方历史 Android/Windows 结果不外推至 iOS。详见 [iOS 适配说明](IOS_ADAPTATION.md)。
+> iOS 适配：iOS 15+ 的 JS/API/Kazumi 路径使用系统 WebKit、Dart 宿主网络及系统 AVPlayer；Mihon APK/DEX 与 Windows JVM 不能在 iOS 执行，管理入口明确降级。弹幕跟随R173的B站/Animeko/Gamer独立只读池、分集纠正、偏移与屏蔽设置，不再消费旧来源弹幕URL或提供弹弹play匹配/发送凭据入口。补齐无后缀HLS、MIME提示与省略Cookie语义；iOS17+支持AVPlayer公开MIME覆盖，15/16仍受系统识别能力限制。当前 Apple 编译/模拟器、账号、PiP 与锁屏设备证据以[当前状态](CURRENT_STATUS.md)记录为准，下方历史 Android/Windows 结果不外推至 iOS。详见 [iOS 适配说明](IOS_ADAPTATION.md)。
 
 ## 来源矩阵
 

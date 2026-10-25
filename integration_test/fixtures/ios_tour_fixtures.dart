@@ -5,12 +5,16 @@ import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
+import 'package:triomi/core/source/bangumi_public_client.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/source_repository.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
+import 'package:triomi/features/player/data/hybrid_danmaku_client.dart';
+import 'package:triomi/features/player/data/hybrid_danmaku_codec.dart';
+import 'package:triomi/features/player/data/hybrid_danmaku_models.dart';
 
 import '../../test/fixtures/fake_preferences.dart';
 
@@ -80,6 +84,68 @@ class TourHttpClient extends DioSourceHttpClient {
     Map<String, String> headers = const {},
     String method = 'PUT',
   }) => throw StateError('Visual tour never uploads account or backup data');
+}
+
+/// Only upstream discovery/identity is replaced. Each independent pool downloads
+/// host JSON over real loopback HTTP; production DanmakuSession owns matching,
+/// cancellation, selection, offsets and merging, and the real overlay renders it.
+/// This does not claim to verify live upstream APIs or public title matching.
+class LoopbackDanmakuClient extends HybridDanmakuClient {
+  LoopbackDanmakuClient(TourHttpClient transport)
+      : base = transport.origin,
+        super(http: transport, bangumi: BangumiPublicClient(transport));
+
+  final Uri base;
+  static const subject = MediaItem(
+    sourceId: 'bangumi-anime', remoteId: '900001',
+    title: '视觉巡检夹具 · 独立弹幕池', type: MediaType.anime,
+  );
+
+  List<DanmakuEpisodeChoice> _episodes(DanmakuProviderKind kind) => [
+    for (var index = 1; index <= 3; index++)
+      DanmakuEpisodeChoice(
+        provider: kind, id: '${kind.name}-$index', number: index.toDouble(),
+        title: '夹具 ${kind.name} · 第 $index 集',
+      ),
+  ];
+
+  @override
+  Future<List<DanmakuEpisodeChoice>> animekoEpisodes(String subjectId) async =>
+      _episodes(DanmakuProviderKind.animeko);
+  @override
+  Future<List<DanmakuEpisodeChoice>> bilibiliEpisodesForSubject(String subjectId) async =>
+      _episodes(DanmakuProviderKind.bilibili);
+  @override
+  Future<List<DanmakuEpisodeChoice>> gamerEpisodesForSubject(String subjectId) async =>
+      _episodes(DanmakuProviderKind.gamer);
+  @override
+  Future<List<DanmakuEpisodeChoice>> bilibiliEpisodes(String reference) async =>
+      _episodes(DanmakuProviderKind.bilibili);
+  @override
+  Future<List<DanmakuEpisodeChoice>> gamerEpisodes(String reference) async =>
+      _episodes(DanmakuProviderKind.gamer);
+
+  @override
+  Future<List<DanmakuComment>> comments(DanmakuEpisodeChoice episode) async {
+    final response = await http.send(SourceRequest(
+      url: base.resolve('/danmaku/${episode.id}.json').toString(),
+      cancellation: SourceRequestCancellation.current,
+    ), sourceId: 'tour-danmaku-${episode.provider.name}');
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    return [
+      for (final row in payload['comments'] as List)
+        ?_comment(row as Map<String, dynamic>, episode.provider),
+    ];
+  }
+
+  DanmakuComment? _comment(Map<String, dynamic> row, DanmakuProviderKind kind) {
+    final fields = (row['p'] as String).split(',');
+    return HybridDanmakuCodec.saneComment(
+      timeMs: (double.parse(fields[0]) * 1000).round(),
+      mode: int.parse(fields[1]), color: int.parse(fields[2]),
+      text: '夹具 ${kind.name} · ${row['m']}', user: '${kind.name}:${fields[3]}',
+    );
+  }
 }
 
 /// All state lives in this test's database/preferences, never the user's stores.
@@ -157,7 +223,8 @@ class IosTourFixtures {
       final fixtureContent = switch (type) {
         MediaType.anime => {
           'play': [{'name': '本地 H.264 · 30 秒', 'url': videoUrl}],
-          'danmaku': base.resolve('/danmaku/visual-tour.json').toString(),
+          // The player deliberately ignores legacy content.danmakuUrl.
+          // Independent pools are provided by LoopbackDanmakuClient above.
         },
         MediaType.manga => {
           'images': [

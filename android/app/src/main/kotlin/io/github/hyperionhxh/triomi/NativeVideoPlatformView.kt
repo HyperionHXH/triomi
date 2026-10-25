@@ -16,6 +16,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
@@ -25,6 +26,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.SubtitleView
@@ -46,6 +48,31 @@ class NativeVideoViewFactory(private val messenger: BinaryMessenger) :
     PlatformViewFactory(io.flutter.plugin.common.StandardMessageCodec.INSTANCE) {
     override fun create(context: Context, viewId: Int, args: Any?): PlatformView =
         NativeVideoPlatformView(context, viewId, messenger)
+}
+
+/** Transient compressed packets, not a disk cache or a download queue. */
+@UnstableApi
+internal object PlaybackBufferPolicy {
+    // Leave most of the app heap for Flutter, source runtimes and the decoder.
+    fun memoryBudgetBytes(maxHeapBytes: Long): Int =
+        (maxHeapBytes / 8).coerceIn(C.DEFAULT_BUFFER_SEGMENT_SIZE.toLong(), 128L * 1024 * 1024).toInt()
+
+    fun createLoadControl(maxHeapBytes: Long = Runtime.getRuntime().maxMemory()): DefaultLoadControl =
+        DefaultLoadControl.Builder()
+            // Both bounds must be long: a short minimum would stop refilling
+            // a byte-full buffer until only that short lookahead remained.
+            .setBufferDurationsMsForStreaming(
+                Int.MAX_VALUE, Int.MAX_VALUE,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS)
+            .setBufferDurationsMsForLocalPlayback(
+                Int.MAX_VALUE, Int.MAX_VALUE,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_FOR_LOCAL_PLAYBACK_MS,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_FOR_LOCAL_PLAYBACK_MS)
+            .setTargetBufferBytes(memoryBudgetBytes(maxHeapBytes))
+            .setPrioritizeTimeOverSizeThresholds(false)
+            .setBackBuffer(0, false)
+            .build()
 }
 
 /** Media3 with the already verified hybrid-composition TextureView surface. */
@@ -88,6 +115,7 @@ private class NativeVideoPlatformView(
         spec.withRequestHeaders(headers)
     }
     private val player = ExoPlayer.Builder(context)
+        .setLoadControl(PlaybackBufferPolicy.createLoadControl())
         .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource))
         .setAudioAttributes(AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
@@ -152,12 +180,15 @@ private class NativeVideoPlatformView(
                     val uri = Uri.parse(url)
                     require(uri.scheme in listOf("http", "https", "file", "content"))
                     require(uri.userInfo == null)
+                    val mimeType = call.argument<String>("mimeType")
+                    require(mimeType == null || mimeType == "application/vnd.apple.mpegurl")
                     currentUrl = url
                     currentHeaders = call.argument<Map<String, String>>("headers") ?: emptyMap()
                     announcedReady = false
                     resumeOnForeground = false
                     val position = (call.argument<Number>("startMilliseconds")?.toLong() ?: 0L).coerceAtLeast(0)
                     player.setMediaItem(MediaItem.Builder().setUri(uri)
+                        .setMimeType(if (mimeType == null) null else MimeTypes.APPLICATION_M3U8)
                         .setMediaMetadata(MediaMetadata.Builder()
                             .setTitle(call.argument<String>("title") ?: "Triomi").build())
                         .build(), position)
@@ -232,6 +263,7 @@ private class NativeVideoPlatformView(
     private fun stateMap(): Map<String, Any> = mapOf(
         "position" to player.currentPosition.coerceAtLeast(0),
         "duration" to player.duration.coerceAtLeast(0),
+        "bufferedPosition" to player.bufferedPosition.coerceAtLeast(0),
         "playing" to player.isPlaying,
     )
     private fun emitState() = emit("state", stateMap())

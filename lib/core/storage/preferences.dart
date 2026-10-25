@@ -8,6 +8,7 @@ class Preferences {
   Preferences(this._box);
 
   static const String boxName = 'settings';
+  static const automaticAppUpdateCheckKey = 'app-update.automaticCheck';
 
   final Box<dynamic> _box;
 
@@ -17,6 +18,10 @@ class Preferences {
   }
 
   T? get<T>(String key) => _box.get(key) as T?;
+
+  /// Existing installations keep startup version checks enabled by default.
+  bool get automaticAppUpdateCheckEnabled =>
+      get<bool>(automaticAppUpdateCheckKey) ?? true;
 
   /// Local metadata changes, without loading or executing a source runtime.
   Stream<Object?> watch(String key) => Stream<Object?>.multi((controller) {

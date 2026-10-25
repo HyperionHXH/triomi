@@ -1,5 +1,15 @@
 # Triomi 当前状态
 
+## 当前请求：同步主线173并视觉验收后发布iOS
+
+主线同步基准为 `origin/master` 的 `945a0a8`（0.12.0+173），包含R169–R173默认仓库、Kazumi API9/无后缀HLS解析、MixN近期同步/阅读跟手、缓存治理、紧凑菜单/评论和三源只读弹幕。保留iOS AVPlayer/PiP、WebKit JS、持久数据与下载常亮/回前台恢复，以及小说书架不展示登录状态的既有修正。
+
+iOS补齐系统代理/PAC的Dart网络桥、HLS格式与省略Cookie语义、原生真实缓冲进度、三源弹幕和菜单。WebKit公共API不提供缓存准确字节数，页面明确未知并允许只清HTTP响应的手动确认；不删除Cookie/DOM/下载或伪称容量自动治理。AVPlayer预载由系统调度，没有严格128MiB预算保证。
+
+巡检覆盖扩展为53个独立页面/交互状态，包含新菜单/倍速/比例、三源分集/偏移/显示屏蔽、阅读目录与夜间滚动、缓存分类/确认面板。弹幕目录与内容是隔离loopback客户端，生产会话/渲染和AVPlayer真实运行；不冒称线上匹配或实体设备通过。当前本地/云端验证与最终公开IPA结果完成后追加，旧run不得作为本轮通过证据。
+
+本轮本地回归：`flutter analyze --no-pub`零问题；完整Flutter1437通过/3跳过，新增播放器平台菜单/迟到弹幕与iOS缓存确认测试均通过；Python工具109通过。Android普通debug APK与Windows debug EXE编译成功，未安装或操作用户设备。保留插件KGP、webview_windows CMake及Nuget提示；文档扫描零错误/35历史模板warning，编码零错误。iOS原生编译、53截图验收与公开Release仍需本轮云端证据，不借用历史结果。
+
 ## 当前请求：同步主干 R168 与小说书架去除登录状态
 
 在干净的 `feat/ios` 工作树拉取并合并 `origin/master` 的 `129eba7`（远程无 `origin/main`）。保留主干分集评论、评分编辑与新播放器输入，同时保留 iOS AVPlayer/PiP、WebKit JS、持久存储、下载生命周期及云端巡检。播放器冲突采用主干统一拖动预览/提交路径，真正 seek、音量和倍速仍派发至当前平台控制器；补齐 iOS 系统亮度读取，避免新手势仅在 Android 可用。
@@ -48,6 +58,119 @@ Documents/Application Support 根目录排除 iCloud 备份，持久业务数据
 第四次 [macOS 运行39449835099](https://github.com/HyperionHXH/triomi/actions/runs/39449835099)原生 XCTest 10/10 通过，真实 Dart JS 超时重载通过。HTTP/选择器用例在取标题时误传 baseUrl，触发现有共享宿主的 URL 解析而断言失败；本地主机对相同宿主复现一致。已移除夹具取文本时多传的 baseUrl，保留原始标题断言，不修改 Android/Windows 选择器契约。CI 合并三组真实集成场景到一次模拟器启动，未删除用例或放松断言。
 
 第五次 [macOS 运行39453571279](https://github.com/HyperionHXH/triomi/actions/runs/39453571279)（提交 d25f796）全部通过：原生 XCTest、合并后的 JS/存储/视频真实集成用例、未签名 IPA 校验打包与上传（triomi-ios-unsigned 11.4 MB）。feat/ios 的 iOS 适配、后台播放与无签名构建闭环完成，可从该 Run 的 Artifacts 下载 IPA 侧载。
+## 当前请求：R173 菜单、评论与三源弹幕（已发布0.12.0+173）
+
+用户要求菜单/评论修复后研究弹幕，选择B站＋Animeko并追加非B站覆盖与Kazumi功能；后续明确本轮只做观看与设置、不做发送。现新增Gamer动画疯，三源独立组合，双端实网可见；修复提交`531cd92`与标签`v0.12.0-test.173`已推送，[173预发布](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-test.173)五项资产已完整核验。
+
+- 菜单参考Kazumi `1e3e111553b74c07f4412fa8a0e7959821caa789` 的锚定分组选项，改为最多296逻辑像素的圆角浮层，同一面板内切换倍速/比例/偏好；实际安全留白、短屏滚动、系统大字号、外点/Escape/返回与旋转均有行为回归。菜单与异步动作保持控制条，设置立即应用并保存，不重建媒体。
+- 评论共同失败的本机根因是连接路由：直连 `next.bgm.tv` TCP超时，系统已启用代理但Dart来源层未继承；显式走该系统路由后两个匿名接口均HTTP200且符合现有Next数据结构。Kazumi镜像匿名401，不复制其签名凭据。现显式应用代理优先，否则Windows WinHTTP及Android ProxySelector解析用户系统路由；保留协议/排除、每URL PAC、取消、TLS与错误，不启用代理、不扫描端口、不改系统设置。两评论面板在客户端替换时取消旧请求并独立重载，旧内容保留。
+- 评论/菜单阶段完整Flutter1365项通过/3项跳过，Android原生系统代理行为3项通过；纯IO无Binding时只在可用messenger上解析系统代理，不创建UI Binding，无宿主DIRECT，真实平台错误仍保留。257MiB WebDAV真实流式loopback、清单CAS及无Binding回归通过。新增弹幕后最终回归结果另记，旧数量不扩算。
+- 真实Windows Profile Flutter引擎打开生产PlayerPage并播放自建六分钟测试媒体，鼠标实际展开新菜单、选择1.5倍并见选中态；Android新建API35 `emulator-5590` 同样打开/触摸选择。两端均通过生产客户端显示subject400602真实公开短评和episode1227087真实讨论/嵌套回复；Android长短评在与生产详情相同的外层滚动约束下可完整滚动。仅Android临时设备配置系统代理作为网络前提，未触碰用户手机、账号或资料，未进行远端发表/编辑验收，不能声称任意网络可达。
+- 初轮菜单安全区与测试调度/POST303问题均已修并回归。临时UI宿主曾误把embedded评论直接放入有界容器，产生长文溢出；修正宿主为生产滚动契约后实跑无此溢出，未向生产加入嵌套滚动。两次模拟器宿主图形进程崩溃，换host GPU后完成剩余验收；不冒称物理手机或全部设备矩阵。临时Dart入口、专用模拟器已清理，用户原工作区及设备不变。
+- 生产双源采集、精确映射、分段与预算、独立状态/重试、手动分集/链接纠正与秒数偏移已接线；删除旧弹弹play凭据/登录/发送客户端，不主动清除旧安全存储。协议中的旧弹幕URL只保留序列化兼容，不再被播放器消费。
+- 实网生产客户端：芙莉莲subject400602→md21087073→ss46089→ep779775，整集protobuf7361条，末条1559.658秒；Animeko ep1227087为83条。实际Windows播放器显示7359＋83条、Android7357＋83条且可见远端弹幕；公共计数随时间变化。Android触摸切单源/关闭/恢复双源，切第2集立即清屏并重新显示5688＋30条，B站本集+2.5秒偏移真实键盘输入保存，Animeko仍0秒。
+- Hybrid与Gamer各自内存TTL5分钟、最多16项/2MiB，合计4MiB；手工绑定按作品＋章节最多128项，不自动下载或持久缓存视频/弹幕。B站分段不完整整源报错，CN/global同池不叠加，关闭单源不清另一源。严格区分空结果、未匹配与网络错误，保留地区/TLS/账号限制；播放倍速、暂停、seek和迟到加载有时间轴回归。
+
+操作入口、固定上游源码、五集研究及当前B方案边界见[弹幕说明](DANMAKU.md)。Android/Windows真实引擎验收均使用独立临时资料与自建六分钟媒体、真实远端弹幕，不冒充真实站点视频全链路或全部物理设备；用户资料与账号未动。临时Dart入口、自有窗口、专用AVD和端口转发已清理；正常main双端最终集成构建与发布资产验签结果另记。
+
+新增非B站实证：bangumi-data固定94ea82be的subject381666《百合是我的工作！》无任何B站地区映射；Gamer ACG128544→anime113239→video33254，全12集身份验证。真实生产客户端首集985条、0–1420秒、三种模式；Windows和Android实际面板均显示B站无匹配、Animeko4条、Gamer985条，自动续播第2集后为3＋726条。官方JS的geo=TW,HK是“弹幕来源显示”池筛选而非客户端所在地；缺参数400的初判已纠正，不更网络地区或绕过权限。
+
+Kazumi观看设置已补：即时显示区域、字号/字重/行高/透明度、彩色/描边、停留与倍速跟随、碰撞或海量预算、5秒去重、OpenCC简繁、关键词与安全正则的启停/编辑/删除/导入/导出、保留屏蔽规则的恢复默认。桌面/横屏右侧面板、手机滚动底部面板；弹幕目录筛选/集号定位/长目录分段，附加OP/ED正确可选。Windows半屏区域立即保存；Android半屏、去重、输入spoiler规则最终Prefs读回0.5/true/规则。绘制复用排版缓存，不逐帧排版。发送与聊天室按用户选择不做，不承诺所有番剧或网络都有弹幕。
+
+最终Flutter **1421通过/3跳过**，Python工具 **87通过**，`flutter analyze --no-pub`零问题，编码零错误，交付引用零error（历史35条模板warning保留）；旧弹弹play开发登录/发送端点及无生产消费者测试已删除。独立审查修复PAC第九路由误关活跃流、零超时语义、重定向体长度及跨源Cookie2头，12项真实IO回归通过；B站附加section的主题曲ep780514可纠正。第三源/设置定向78项通过，最终正常main的Windows Profile、Android x64 Debug均构建成功，临时宿主已清理。本地未存生产签名文件，正式构建使用既有Actions密钥、不生成替代证书；独立扫描1257源码文件已知私密账号值命中0（不冒称覆盖不可读取的签名密码），公开资产验签另记。
+
+发布：[正式流水线40105980056](https://github.com/HyperionHXH/triomi/actions/runs/40105980056)的正式签名Android、Windows ZIP/MSI及publish均成功；[同提交CI40105934796](https://github.com/HyperionHXH/triomi/actions/runs/40105934796)四任务全绿，远端analyze零问题及Flutter测试通过。五项公开下载完整读取，大小/SHA-256与GitHub摘要和SHA256SUMS一致；Windows450文件与更新清单逐成员一致，EXE0.12.0+173、MSI0.12.173只读确认。APK包名io.github.hyperionhxh.triomi、versionName0.12.0、versionCode173，apksigner验证通过，生产证书SHA256仍为`731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309`，166及之后同签名正式版可覆盖，不需卸载/清数据。
+
+173公开APK SHA256=`cf1bbf6b68a472a3d085f3af3791333cf252e403f2a43c81012be288e2aa8915`；ZIP=`d26101e6d50261c04cbff601198b56a09ab6640121d891ad619888b31213c644`；MSI=`6f46964ea7094f8a4d7c52adaf55b4364df3d682e74dfe0f32bab5205ad36414`。APK601成员与Windows450成员扫描已知账号值命中0、未含私钥/签名properties/调试日志文件。首轮下载超时后按原公开URL断点续传，最终字节重算正常；未替换发布资产或标签。没有向用户手机安装、卸载或清数据，也未用最终公开APK宣称物理设备全来源验收；修复阶段双端生产组件和真实远端数据的准确范围见上。
+
+## 当前请求：R172 MixN近期同步、紧凑提示与缓存控制（已发布0.12.0+172）
+
+用户追加要求推送编译后，修复提交`99aab0e`与标签`v0.12.0-test.172`已推送；[正式发布流水线39795109827](https://github.com/HyperionHXH/triomi/actions/runs/39795109827)成功，Android正式签名、Windows ZIP/MSI与publish任务完成。[172公开预发布](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-test.172)提供五项资产，公开字节验证结果另记。本轮对照的MixN近期改动不在主分支，而在`feature/multi-source-foundation`：`89cbfe40d1d240fbd266bbb3ae120b407e788d65`（2026-10-22 12:35:51 +08:00，分页及作者搜索）及`d8a23c0e5c40026f44d796344618e4cf8c63429d`（16:08:08 +08:00，作者补全与有界缓存）；10月21日没有该窗口内的上游提交。另对齐10月15日账号成长/签到`253079fba2d492e29909a54ed300120ca75d16e9`与成功路由优先思路`f178c1a44a5c7f76d06b4177e147d006db8f78e3`。
+
+- LNS标题/作者组合搜索使用官方引号模式，去掉把上传者`UserName`误作作者的回退；发现/书架/搜索按需补全真实作者与简介，原卡片身份和已显示内容不丢。详情/目录/列表共享有界缓存（64项、512 Ki字符、5分钟、四并发、8秒期限）及在途合并；官方文件下载权限仍独立实时读取。正文专用字体改成原子返回`{family,data}`，编码副本32 MiB/128项LRU；Flutter原生字体无法安全卸载，不把编码缓存上限冒称引擎字体总内存上限。
+- LK/LNS显示站点真实等级/经验，区分成长等级和访问等级；签到后读回权威资料，轻书架奖励只使用前后差值，无法读回就显示未知，不伪造零奖励。小说左右分页与卡片均跟随手指，取消回弹而不保存目标页，原点击/键盘/章节边界不变。内置小说站连接只在当前DNS答案内优先上次成功地址，不替换URL/Host/SNI，不添加旧IP或绕过TLS/代理。
+- 视频退进反馈200逻辑像素宽、约42像素高，顶部显示；控制栏显示时避开48像素标题栏。原音量/亮度/长按倍速提示保留。
+- 两端持续向本集结尾预载，不再由短时间窗停止；Windows明确关闭mpv磁盘缓存、压缩包前向内存128 MiB，Android为应用堆上限1/8且最多128 MiB，回看缓存0。达到字节预算后随播放释放继续补充；高码率整集可能超过预算，不能承诺全部整集常驻。没有新增自动离线下载。
+- 网页HTTP响应缓存按全局128 MiB/最早写入7天策略在冷启动后维护；设置提供实际用量、确认清理及清理后重测。只调用Android `WebView.clearCache(true)`与WebView2 `ClearBrowsingData(DISK_CACHE)`，不删Cookies/DOM、下载/续传、正文/字体、账号、来源、备份及待安装更新。存储扫描可取消，不完整统计不显示为完整用量。Windows原生清理使用独立固定WebView2 SDK 1.0.3537.50，不修改Pub插件缓存。
+- 通用设置增加“启动时检查应用更新”，既有安装默认开启；关闭时不创建启动网络客户端，进行中关闭会取消并阻止晚到弹窗，手动检查保持独立。不会自动下载或安装。
+
+空间调查与实际证据：普通在线小说阅读不调用`saveChapterContent`，持久正文来自显式下载或备份恢复，不能据空间增长自动删除。171桌面450文件固定安装负载341,099,361B，其中扩展运行时250,278,794B，不属于逐集视频缓存；私有JAR首次重建后校验复用。media_kit默认`cache-on-disk=yes`是mpv文档描述的潜在追加磁盘缓存风险，但本机六分钟HLS对照只观察到报告写入221B/220B、可见临时文件0B，没有复现视频负载写盘，不能认定它就是用户历史增长的唯一根因。
+
+实际烟测使用独立临时资料与新建API35模拟器，未写入/清除用户资料：18,266,832B六分钟动态HLS，Android暂停在2879ms后继续缓冲到360000ms（约19.7秒），Windows暂停2500ms时缓冲359916ms/总360000ms；均为生产内核加自建媒体，不冒充真实站点测速。Android持久目录中85,348 KiB为调试`flutter_assets`固定负载，播放后HTTP缓存仅188 KiB，没有新增18 MiB视频文件。真实2 MiB网页响应烟测：Windows HTTP类别2,953,608→819,592B、Android2,098,497→168B，双端合成HttpOnly Cookie前后保持；Windows烟测先显式关闭第三方Webview后宿主正常退出0，直接带活跃插件销毁的临时入口曾异常退出，未把该入口失败冒充生产缓存页面故障。
+
+
+参考：[Kazumi固定版本缓存策略](https://github.com/Predidit/Kazumi/blob/b935bd448a9c80f91062871781d74a93b51586a0/lib/services/player/playback_cache_policy.dart)默认1500 MiB、低内存模式2 MiB，并随计费网络/低内存设置调整；[图片缓存统计与清理](https://github.com/Predidit/Kazumi/blob/b935bd448a9c80f91062871781d74a93b51586a0/lib/services/storage/image_cache_service.dart)。本项目Android为Java堆内Media3，不直接照搬1500 MiB以免OOM；持续预载与容量保护是两层独立约束。[mpv缓存语义](https://mpv.io/manual/master/)、[WebView clearCache](https://developer.android.com/reference/android/webkit/WebView#clearCache(boolean))与[WebView2选择性清理](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2profile2?view=webview2-1.0.3537.50)用于核对磁盘/内存及会话保护边界。
+普通应用实际巡检覆盖Windows公开推荐/时间表/番剧详情/轻之国度发现、Android推荐/时间表/小说公开列表及滚动；桌面真实鼠标拖动阅读器从1/10到2/10，短拖回弹与原位置保持。Android真实视频拖动和Windows键盘跳转的小提示均在顶部。不使用调试模拟器帧耗时证明发布版零卡顿；未用真实账号执行签到/付费/整书下载，也没有所有来源或全手机矩阵的可达/流畅承诺。
+
+修复阶段验证：Flutter **1340通过/3跳过**（跳过仍为OS文件链接权限等平台限制），`flutter analyze --no-pub` **零问题**，Python工具 **89通过**，编码检查零错误、文档扫描无error。独立API35设备通过 **21项** Media3缓冲预算/释放后继续加载、原生表面生命周期及网页解析回归；没有使用`connectedAndroidTest`操作用户设备。Windows普通主入口Profile与Android普通主入口Debug均构建成功；Android正常`main`在自有模拟器实际载入公开推荐/封面、启动维护无未处理异常。三个临时Dart入口、六分钟媒体夹具及自有服务/模拟器已清理。随后按用户追加指令把版本升至172并通过正式发布流水线；本地修复阶段实操不扩算成最终公开APK在所有设备的完整验收。
+
+172发布字节核验完成：五项公开资产全部完整下载，本地大小/SHA-256与GitHub资产摘要及`SHA256SUMS.txt`逐项一致；Windows ZIP的450成员全部重算与更新清单一致，解压总字节341,188,369B。APK包名`io.github.hyperionhxh.triomi`、versionName=`0.12.0`、versionCode=`172`，`apksigner verify`通过，签名证书SHA-256仍为`731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309`，可覆盖166及之后同签名正式版，不需卸载/清数据。APK SHA-256=`d272d00874c3e0cdc60c7d954b81442b9cf2d5ffcdd78c97e74fe3c6b2a17f3d`；Windows ZIP=`21ae3fc6c36bfae3850d2f23267f1ac57ed666b7a4153d26310195eb6abb89c1`、MSI=`150cf5ba4e51ed19fb385461b7918130eba587d84ee65212ecf62aa370f9b6c1`。本次未对用户手机安装、清数据或卸载，最终实机体验由用户随后试用。
+
+
+## 当前请求：R171 双击交互及 Kazumi 获取/播放兼容（0.12.0+171）
+
+取消左右各四分之一双击退进15秒；空白画面任何位置双击均暂停/继续，键盘跳转、横拖和可调跳过按钮不变。回归覆盖左右及中间位置，不再发出 seek。
+
+本轮对照 Kazumi `184f8db535f9b4098ada763fcefea8e602126dc7` 与官方规则 `ba8e10b35b0c3a56bbb6032a12356b0473844c64`，发现的是规则协议与网页媒体提取差异，未发现需要整体替换解码器的证据，因此针对获取/解析链路修复：
+
+- 当前官方17条中 dalvdm、giriGiriLove、LMM、mgnacg、moonci、mutefun 六条已采用 API9；旧上限8会在导入前拒绝。现支持兼容1–9子集并回放17条规则，不宣称全站可播放。
+- API9 `searchApiConfig.sourceTemplate` 将搜索ID变为真实详情页；补齐带前缀及重复 `@source`、编码和HTTPS校验、API搜索/XPath目录混合模式。公开单次请求中 dalvdm/LMM/moonci 旧数值路径为404，规则模板路径为200；这不是首帧延迟或全部网络性能基准。
+- ezdmw 的相邻节点 XPath 联合播放列表及 `useLegacyParser` 规则字段沿获取链路保留。旧式 iframe 地址提取按规则开关执行，保留完整签名查询，不全局扫描任意字符串。
+- Windows 保留真实父页链接导航以遵守 Referer，但在 DOM 就绪时前进，不等图片完成；受控慢图夹具 DOM约17ms、完整load约4013ms，说明旧逻辑有额外等待，不冒充真实网站普遍提速。
+- 两端根据响应MIME和有界清单前缀识别无后缀HLS，兼容fetch/XHR二进制消费，不消耗播放器原响应。观测到的流类型传到Media3及下载器，避免清单被当成MP4；Media3使用其自身HLS MIME常量。Android旧WebView在开始/进度阶段安装回退脚本，过期回调与重入取消均有归属检查。
+
+最终验证：完整Flutter **1305项通过/3项跳过**，`flutter analyze --no-pub`零问题，Python工具 **89项通过**，编码零错误、文档扫描无错误。独立新建API35模拟器的最终网页解析/Media3生命周期回归 **19项通过**，未使用或清理用户设备。Windows真实WebView2从含3秒慢图的父页进入播放页，578ms取得无后缀HLS，media_kit实际显示320×180动态测试图，位置3000ms、缓冲11958ms；Android实际解析同一HLS并显示动态真帧，缓冲推进到12000ms，左右双击依次暂停/恢复（2723ms→3163ms），两次切换、零seek。均是生产组件加自建媒体夹具，不冒充真实站点首帧或完整手机矩阵。临时烟测入口及自有HTTP服务已清理。
+
+独立复核补齐四处消费边界：空video不再把当前HTML页面误认为视频；DOM source的HLS类型保留；真实父页重定向以原生顶层URL验证；fetch省略凭据的策略一直传到下载，禁止重新附加Cookie。提前离开父页产生的原生ConnectionAborted仅在仍指向已确认父文档时忽略，目的页证书/网络失败仍报错；回归同时覆盖父页取消与TLS失败。
+
+边界：不把GiriGiriLove挑战HTML、HTTP200入口或兼容导入等同于可播放，不添加验证绕过，也没有“所有来源与Kazumi同速”的证据。额外生产Dart公开API9探针在下载固定官方规则快照阶段遇到网络异常，独立读取raw.githubusercontent.com也超时，未进入搜索/目录链路，未记为在线成功；前述三站详情路径比较是另一次公开HTTP观测，不能合并冒称整条应用实网成功。
+
+修复提交 `e443f04` 已推送master，标签 `v0.12.0-test.171`；[正式流水线39715302611](https://github.com/HyperionHXH/triomi/actions/runs/39715302611)的Android、Windows、publish三任务均成功，[公开预发布171](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-test.171)含APK、完整ZIP、MSI、更新清单及SHA256SUMS。五项公开资产全部完整下载，大小、GitHub SHA-256及SHA256SUMS逐项一致，Windows更新清单450个成员重算后完全一致。公开EXE ProductVersion=`0.12.0+171`，MSI只读ProductVersion=`0.12.171`；未安装MSI或启动公开Windows主程序访问用户资料。
+
+公开APK包名 `io.github.hyperionhxh.triomi`、versionName=`0.12.0`、versionCode=`171`，apksigner验签通过，生产证书SHA-256仍为 `731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309`，可覆盖166之后同签名正式版。APK SHA-256=`d99008acc70f7dc6dc62e97fca339c2b02af2a70d1cca8ffc5b9bcd2e0f2053f`，ZIP=`d0dfd46b2b1699f8f1cc9d931642f3aff59324094e4161b8bf34e1a85da70bfa`，MSI=`dbb220b137d94509b9fe277fb1f5386a0251b33e34b801742017abcabf54a6b3`。独立临时API35移除自有debug验收包后安装最终公开APK，普通主入口实际载入推荐、三列真实封面，系统包信息读取171；不是物理手机或全部来源播放验收，原用户设备与资料不变。
+
+
+
+## 当前请求：紧凑音量/亮度手势提示（源码0.12.0+170）
+
+滑动调亮度/音量 HUD 参照 Kazumi `player_adjustment_hud.dart`：顶部居中200px宽胶囊，32px图标圆底、实时百分比和细进度条；保留原调节步进、音量持久化及亮度可用平台边界。跳转HUD、长按倍速HUD和双端播放器交互未改。参考图已按要求读取后删除。
+
+回归状态：尺寸回归在360×640手机与1280×720桌面均通过，检查胶囊宽度≤200、总高≤48、距顶部约25、位于垂直中心以上；同时操作实际触摸手势并断言音量/亮度数值更新、进度一致、松手后音量保存。Flutter播放器交互及续播专项14项通过，完整Flutter静态分析零问题。Windows隔离Flutter引擎分别在360px与720px容器渲染亮度与音量手势反馈截图，均更新到目标百分比并正常退出；未打开应用个人存储，也未触碰运行中的应用实例。
+
+版本提升至 `0.12.0+170`；本轮只提交并推送源码，不构建、不改发 `v0.11.0-test.169` 公开包。两张项目根目录参考图片已删除。
+
+
+## R169：默认番剧仓库、缓冲进度与可选启动更新（0.11.0+169）
+
+番剧规则仓库首次打开会在没有保存设置时启用官方 KazumiRules `index.json`；已有自定义列表及显式清空状态不被默认值覆盖，漫画 Mihon 仓库不变。Android 原生 Media3 通过 `bufferedPosition`、Windows media_kit 通过播放器 `stream.buffer` 更新进度条次级轨道，显示当前网络已缓冲位置。
+
+Kazumi 参考实现桌面 mpv 缓冲上限为 1.5 GiB，media_kit 当前默认是 32 MiB；Triomi 桌面播放器使用有界 128 MiB 预算，不照搬可能占用过多内存的 Kazumi 上限。Android Media3 原有 LoadControl 未改。来源网页解析、站点响应和视频传输是不同延迟阶段；没有跨来源同网络基准时，不宣称所有来源卡顿已被根治。
+
+播放失败界面改为限宽响应式卡片，保留错误详情、重新加载及选择其他集/线路。Android/Windows 发布版启动后检查官方版本，筛选支持当前平台且资产/校验清单完整的较新版本；“稍后”按平台记住当前 tag，出现更新版本时再提示。“查看更新”进入现有下载、核验与二次安装确认流程，不自动下载或安装。更新检查网络失败不阻塞首页。
+
+回归状态：全量 Flutter 1297 项通过、3 项跳过；播放器续播/缓冲条、默认 Kazumi 仓库及用户移除行为、更新版本筛选与启动弹窗双尺寸测试通过。首轮暴露的调试模式启动检查计时器问题已修复后重跑全量通过。
+
+`flutter analyze --no-pub` 零问题；Python 工具89项通过。Windows release 和 Android 验收 release 均编译成功，APK 包名及版本码169已核对。Android 验收构建显式设置 SDK 环境及 `--android-project-arg=triomiAcceptanceSigning=true`，不作为正式签名包发布。正式包通过 GitHub 既有生产签名 Secrets 构建，不读取或输出密值。本机未连接 Android 设备，未做真机播放验收；Windows 本机 MSI 打包受缺少 .NET SDK 限制，正式打包由带 .NET 10 SDK 的既有发布工作流完成。
+
+真实 Windows Flutter 引擎隔离烟测已完成：1100px 桌面与360px手机宽度分别渲染更新弹窗，中文字体/内容/双按钮截图无溢出，关闭后的返回意图符合预期；不打开 Hive/SQLite、不影响现有实例。正常实例启动因已有用户实例而按单写者保护返回32，未强杀用户进程；改用临时无资料 UI 入口的独立引擎渲染，完成后删除入口，不将其称为 Android 真机或整个应用旅程验收。参考源码：[Kazumi缓冲进度条](https://github.com/Predidit/Kazumi/blob/main/lib/pages/player/player_progress_bar.dart)、[缓存策略](https://github.com/Predidit/Kazumi/blob/main/lib/services/player/playback_cache_policy.dart)、[启动检查](https://github.com/Predidit/Kazumi/blob/main/lib/services/update/startup_update_check.dart)。
+
+已推送修复提交 `c4bb696`（包含此前顶部紧凑倍速提示提交），标签 `v0.11.0-test.169`；[正式发布流水线39609802212](https://github.com/HyperionHXH/triomi/actions/runs/39609802212) 的 Android、Windows、publish 三任务成功，[公开预发布169](https://github.com/HyperionHXH/triomi/releases/tag/v0.11.0-test.169) 已发布，五项资产完整下载后大小、GitHub SHA-256及SHA256SUMS全部匹配，Windows更新清单450成员逐项核验一致。APK包名正确、versionCode169，apksigner验签通过且生产证书指纹仍为 `731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309`。公开Windows EXE ProductVersion=`0.11.0+169`、MSI只读检查ProductVersion=`0.11.169`，未安装MSI、不影响现有实例。APK SHA-256=`6d4604541981fd1d1ecd74ea7e5e9aa3366dbc31fd15d450f61faf089286ebbd`，ZIP=`67b7c190deb569bc2971b5da4f16836245f12db8a34ed42f8a2bd0f0938fb91b`，MSI=`3b12bbab6777dfb66c630409b839db90314404e90941ce0fc22b22ecd2d607e2`。
+
+发布后对当前源码额外复核：四项相关回归文件共68项通过。使用生产 `KazumiSource + DioSourceHttpClient`、与当前官方索引相同版本的规则，对三站公开搜索“葬送的芙莉莲”进行单轮实际网络探测（独立主机无账户/浏览器Cookie桥，不绕过验证）；三站均得到搜索、目录和HTTP200播放入口：
+
+| 来源/规则版本 | 搜索含网络(ms) | 目录含网络(ms) | 本地内容分类(ms) | 首个播放页HTTP(ms) | 目录集数 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 7sefun 1.3 | 897 | 804 | 0 | 616 | 20 |
+| MXdm 2.4 | 816 | 264 | 0 | 253 | 40 |
+| sorani 1.0 | 977 | 314 | 0 | 1941 | 28 |
+
+这轮可见的耗时主要在站点网络/播放页而不是本地播放链接分类；三站都仍需网页JS解析，因此不能把HTTP200当视频首帧/稳定播放成功。首次独立探针还观察到raw.githubusercontent.com两次12秒规则下载超时，随后一次1.35秒成功；该现象发生在仓库分发阶段，不是已装来源的播放卡顿原因。未拿不同网络的快照比较冒充同条件Kazumi基准，也未宣称缓存扩容能修复远端慢站。失败交互另参考[VLC Android固定版本的`encounteredError`](https://code.videolan.org/videolan/vlc-android/-/blob/fe2833f50e526e9f5367b5e2b7ec23074a80b437/application/vlc-android/src/org/videolan/vlc/gui/video/VideoPlayerActivity.kt)：其单确认按钮直接离开播放器；本应用保留观看上下文并提供重试/选集线路，错误说明置于深色视频卡片，不照搬退出式对话框。
+
+
+
+## 当前请求：长按倍速提示缩小（未构建）
+
+按用户反馈修复长按倍速提示过大：不再复用居中230px通用进度HUD，改为视频顶部居中94px宽的单行小标签（小速度图标与当前倍速），位置参照Kazumi `PlayerSpeedHud` 的顶部25px；亮度、音量和进度反馈不变，长按及释放恢复倍速逻辑不变。现有鼠标长按回归新增尺寸和顶部位置断言，修改前实测宽230px失败，修复后交互专项12项通过、局部静态分析零问题；360/720px双尺寸触摸/鼠标临时渲染烟测通过并已移除，截图确认位置及占用范围，测试字体为占位字形，不冒称真机字体视觉验收。按要求只提交源码，不编译Android/Windows包、不触发发布，当前公开168包不包含此后续修复。
 ## 当前请求：R168 评论入口、手机手势与桌面输入（0.11.0+168）
 
 用户澄清后的核心是**观看页内与视频并行的分集讨论**，不是仅在详情外面增加作品短评。对照 Kazumi `video_page.dart` 的选集/评论页签以及 `queryBangumiEpisodeCommentsByID`，观看页在竖屏视频下方提供选集/评论，横屏与桌面通过顶部评论入口按需打开同一选集/评论侧面板，不恢复常驻右栏。分集目录来自 Bangumi v0，讨论与楼中楼来自官方 Next `/p1/episodes/{id}/comments`，与作品评分/短评接口分开。只自动匹配唯一的同编号正片；SP 等特别篇、编号不明或歧义时明确选择 Bangumi 分集，不拿播放站 ID 猜测。

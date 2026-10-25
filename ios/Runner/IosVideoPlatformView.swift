@@ -102,9 +102,15 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
             (scheme == "file" ? url.isFileURL : url.host?.isEmpty == false) else {
         result(FlutterError(code: "invalid_url", message: "Expected a local file or HTTP(S) media URL", details: nil)); return
       }
+      let mimeType = args["mimeType"] as? String
+      guard mimeType == nil || mimeType == "application/vnd.apple.mpegurl" else {
+        result(FlutterError(code: "invalid_mime_type", message: "Unsupported media MIME type", details: nil)); return
+      }
       do {
         try IosVideoAudioSession.acquire(viewId)
-        open(url, headers: args["headers"] as? [String: String] ?? [:], start: max(0, (args["startMs"] as? NSNumber)?.int64Value ?? 0))
+        open(url, headers: args["headers"] as? [String: String] ?? [:],
+             mimeType: mimeType, omitCookies: args["omitCookies"] as? Bool == true,
+             start: max(0, (args["startMs"] as? NSNumber)?.int64Value ?? 0))
         result(nil)
       } catch { result(FlutterError(code: "audio_session", message: error.localizedDescription, details: nil)) }
     case "play":
@@ -150,7 +156,7 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     }
   }
 
-  private func open(_ url: URL, headers: [String: String], start: Int64) {
+  private func open(_ url: URL, headers: [String: String], mimeType: String?, omitCookies: Bool, start: Int64) {
     generation += 1
     let currentGeneration = generation
     statusObservation?.invalidate()
@@ -160,8 +166,22 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     // This string option matches Flutter's AVFoundation video plugin convention;
     // Apple does not expose a public Swift HTTP-header constant. Headers remain
     // scoped by the resolved source URL, never passed to external applications.
-    let options: [String: Any] = headers.isEmpty ? [:] : ["AVURLAssetHTTPHeaderFieldsKey": headers]
+    var requestHeaders = headers
+    var options = [String: Any]()
+    if omitCookies {
+      requestHeaders = requestHeaders.filter { $0.key.caseInsensitiveCompare("Cookie") != .orderedSame }
+      // Explicitly override cookie injection without touching shared storage.
+      requestHeaders["Cookie"] = ""
+      options[AVURLAssetHTTPCookiesKey] = [HTTPCookie]()
+    }
+    if !requestHeaders.isEmpty { options["AVURLAssetHTTPHeaderFieldsKey"] = requestHeaders }
+    if #available(iOS 17.0, *), let mimeType = mimeType {
+      options[AVURLAssetOverrideMIMETypeKey] = mimeType
+    }
     let next = AVPlayerItem(asset: AVURLAsset(url: url, options: options))
+    // AVFoundation owns the memory budget; request the same long lookahead as
+    // desktop without pretending its public API offers a strict byte cap.
+    next.preferredForwardBufferDuration = 2_147_483
     item = next
     player.replaceCurrentItem(with: next)
     updateLayer()
@@ -267,9 +287,23 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
   }
 
   private func state() -> [String: Any] {
-    ["positionMs": player.currentTime().triomiMilliseconds,
-     "durationMs": item?.duration.triomiMilliseconds ?? 0,
-     "playing": player.rate > 0]
+    let position = player.currentTime()
+    let seconds = position.seconds
+    var buffered = position
+    if seconds.isFinite, let item = item {
+      for value in item.loadedTimeRanges {
+        let range = value.timeRangeValue
+        let end = CMTimeRangeGetEnd(range)
+        if range.start.seconds <= seconds + 0.25, end.seconds >= seconds,
+           end.seconds.isFinite, end > buffered {
+          buffered = end
+        }
+      }
+    }
+    return ["positionMs": position.triomiMilliseconds,
+            "durationMs": item?.duration.triomiMilliseconds ?? 0,
+            "bufferedPositionMs": buffered.triomiMilliseconds,
+            "playing": player.rate > 0]
   }
   private func emitState() { if !disposed { channel.invokeMethod("state", arguments: state()) } }
 

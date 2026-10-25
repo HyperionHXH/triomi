@@ -6,6 +6,9 @@ class PlaySource {
     this.headers = const {},
     this.webPage = false,
     this.unavailableVideoUrls = const [],
+    this.useLegacyParser = false,
+    this.mimeType,
+    this.omitCookies = false,
   });
 
   final String name;
@@ -17,6 +20,15 @@ class PlaySource {
 
   /// 来源声明的错误占位视频；命中时提示换线路，不冒充正片。
   final List<String> unavailableVideoUrls;
+
+  /// Legacy Kazumi rules expose the media URL through an iframe query value.
+  final bool useLegacyParser;
+
+  /// Observed stream format for URLs without an informative filename suffix.
+  final String? mimeType;
+
+  /// The observed request deliberately excluded browser credentials.
+  final bool omitCookies;
 }
 
 /// 章节正文内容：按内容形态取其中一种。
@@ -75,6 +87,9 @@ class ChapterContent {
           'headers': source.headers,
           'webPage': source.webPage,
           'unavailableVideoUrls': source.unavailableVideoUrls,
+          'useLegacyParser': source.useLegacyParser,
+          if (source.mimeType != null) 'mimeType': source.mimeType,
+          if (source.omitCookies) 'omitCookies': true,
         },
     ],
     'danmaku': danmakuUrl,
@@ -104,6 +119,11 @@ class ChapterContent {
                     e.key.toString(): e.value.toString(),
               },
               webPage: source['webPage'] == true,
+              useLegacyParser: source['useLegacyParser'] == true,
+              mimeType: source['mimeType'] == 'application/vnd.apple.mpegurl'
+                  ? 'application/vnd.apple.mpegurl'
+                  : null,
+              omitCookies: source['omitCookies'] == true,
               unavailableVideoUrls: [
                 for (final url
                     in (source['unavailableVideoUrls'] as List?) ?? const [])

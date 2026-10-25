@@ -238,6 +238,56 @@ Future<void> _download(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('startup update choice fits phone and desktop dialogs', (
+    tester,
+  ) async {
+    final release = _releases([169]).first;
+    for (final (size, windows) in [
+      (const Size(360, 640), false),
+      (const Size(1200, 800), true),
+    ]) {
+      await tester.binding.setSurfaceSize(size);
+      Future<bool?>? choice;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: FilledButton(
+                  onPressed: () => choice = showStartupUpdateDialog(
+                    context,
+                    release: release,
+                    windows: windows,
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.text('有新版本可用'), findsOneWidget);
+      expect(
+        find.textContaining(windows ? 'Windows' : 'Android'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('app-startup-update-later')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('app-startup-update-open')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('app-startup-update-open')));
+      await tester.pumpAndSettle();
+      expect(await choice, true);
+      expect(tester.takeException(), isNull);
+    }
+    await tester.binding.setSurfaceSize(null);
+  });
   testWidgets(
     'entry only reads installed identity and selecting an older release cannot download',
     (tester) async {

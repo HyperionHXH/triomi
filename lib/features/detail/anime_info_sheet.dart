@@ -22,13 +22,21 @@ import 'anime_review_dialog.dart';
 
 final _ownAnimeReviewProvider = FutureProvider.autoDispose
     .family<BangumiCollection?, String>((ref, id) async {
-  final service = ref.watch(animeCollectionServiceProvider);
-  if (!ref.read(trackingServiceProvider).hasToken(TrackingServiceKind.bangumi)) {
-    return null;
-  }
-  return service.status(MediaItem(sourceId: 'bangumi-anime', remoteId: id,
-    title: 'Bangumi 动画条目', type: MediaType.anime));
-});
+      final service = ref.watch(animeCollectionServiceProvider);
+      if (!ref
+          .read(trackingServiceProvider)
+          .hasToken(TrackingServiceKind.bangumi)) {
+        return null;
+      }
+      return service.status(
+        MediaItem(
+          sourceId: 'bangumi-anime',
+          remoteId: id,
+          title: 'Bangumi 动画条目',
+          type: MediaType.anime,
+        ),
+      );
+    });
 
 /// Public information partitions never own the playable source or episode list.
 class AnimeInfoSheet extends ConsumerStatefulWidget {
@@ -71,6 +79,7 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
     'episodes': '分集资料',
   };
   final _partitions = <String, _InfoPartition>{};
+  ProviderSubscription<AnimeInfoRepository>? _repository;
   String _section = 'info';
   bool _fullSummary = false, _fullTags = false;
   BangumiCollection? _ownReview;
@@ -82,6 +91,19 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
   void initState() {
     super.initState();
     _section = widget.initialSection;
+    _repository = ref.listenManual(animeInfoRepositoryProvider, (
+      previous,
+      next,
+    ) {
+      if (!mounted || identical(previous, next)) return;
+      for (final partition in _partitions.values) {
+        partition.owner?.cancel();
+        partition.busy = false;
+      }
+      // Keep displayed rows while retrying against a replacement connection;
+      // bypass cached pages so an old refresh error cannot survive the change.
+      unawaited(_load(reset: true, refresh: true));
+    });
     if (_section != 'info' || widget.item == null) {
       unawaited(_load(reset: true));
     }
@@ -116,6 +138,7 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
     for (final partition in _partitions.values) {
       partition.owner?.cancel();
     }
+    _repository?.close();
     super.dispose();
   }
 
@@ -189,29 +212,54 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
   }
 
   Future<void> _editReview() async {
-    if (!ref.read(trackingServiceProvider).hasToken(TrackingServiceKind.bangumi)) {
-      final connect = await showDialog<bool>(context: context,
+    if (!ref
+        .read(trackingServiceProvider)
+        .hasToken(TrackingServiceKind.bangumi)) {
+      final connect = await showDialog<bool>(
+        context: context,
         builder: (context) => AlertDialog(
           title: const Text('连接自己的 Bangumi 账号'),
-          content: const Text('公开评论无需登录。发表或编辑评分与吐槽，请先在追踪账号中填写你自己的 Bangumi 个人令牌。'),
+          content: const Text(
+            '公开评论无需登录。发表或编辑评分与吐槽，请先在追踪账号中填写你自己的 Bangumi 个人令牌。',
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('连接 Bangumi')),
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('连接 Bangumi'),
+            ),
           ],
-        ));
+        ),
+      );
       if (connect == true && mounted) {
-        await Navigator.push(context, MaterialPageRoute<void>(
-          builder: (_) => const TrackingPage(type: MediaType.anime)));
+        await Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => const TrackingPage(type: MediaType.anime),
+          ),
+        );
       }
       return;
     }
-    final item = widget.item ?? MediaItem(sourceId: 'bangumi-anime',
-      remoteId: widget.id, title: 'Bangumi 动画条目', type: MediaType.anime);
+    final item =
+        widget.item ??
+        MediaItem(
+          sourceId: 'bangumi-anime',
+          remoteId: widget.id,
+          title: 'Bangumi 动画条目',
+          type: MediaType.anime,
+        );
     final service = ref.read(animeCollectionServiceProvider);
-    final value = await showDialog<BangumiCollection>(context: context,
+    final value = await showDialog<BangumiCollection>(
+      context: context,
       barrierDismissible: false,
-      builder: (_) => AnimeReviewDialog(item: item));
-    if (!mounted || value == null ||
+      builder: (_) => AnimeReviewDialog(item: item),
+    );
+    if (!mounted ||
+        value == null ||
         !identical(service, ref.read(animeCollectionServiceProvider))) {
       return;
     }
@@ -471,7 +519,10 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       if (date.isNotEmpty)
-                        Text(date, style: Theme.of(context).textTheme.bodySmall),
+                        Text(
+                          date,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
                     ],
                   ),
                 ),
@@ -556,40 +607,46 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
   Widget build(BuildContext context) {
     final partition = _current;
     final savedReview = _section == 'comments'
-        ? ref.watch(_ownAnimeReviewProvider(widget.id)) : null;
-    final ownReview = _ownReview != null &&
-        identical(_ownReviewService, ref.watch(animeCollectionServiceProvider))
-        ? _ownReview : savedReview?.asData?.value;
+        ? ref.watch(_ownAnimeReviewProvider(widget.id))
+        : null;
+    final ownReview =
+        _ownReview != null &&
+            identical(
+              _ownReviewService,
+              ref.watch(animeCollectionServiceProvider),
+            )
+        ? _ownReview
+        : savedReview?.asData?.value;
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (widget.showSectionSelector)
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (final entry in sections.entries.where(
-                (entry) => !widget.embedded || entry.key != 'episodes',
-              ))
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(entry.value),
-                    selected: _section == entry.key,
-                    onSelected: (_) {
-                      if (_section == entry.key) return;
-                      setState(() => _section = entry.key);
-                      if (!_current.loaded &&
-                          !_current.busy &&
-                          (_section != 'info' || widget.item == null)) {
-                        unawaited(_load(reset: true));
-                      }
-                    },
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final entry in sections.entries.where(
+                  (entry) => !widget.embedded || entry.key != 'episodes',
+                ))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(entry.value),
+                      selected: _section == entry.key,
+                      onSelected: (_) {
+                        if (_section == entry.key) return;
+                        setState(() => _section = entry.key);
+                        if (!_current.loaded &&
+                            !_current.busy &&
+                            (_section != 'info' || widget.item == null)) {
+                          unawaited(_load(reset: true));
+                        }
+                      },
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
         const SizedBox(height: 12),
         if (_section == 'comments') ...[
           Text('评论 / 吐槽', style: Theme.of(context).textTheme.titleLarge),
@@ -604,19 +661,31 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
           ),
           if (savedReview?.hasError == true && ownReview == null)
             TextButton.icon(
-              onPressed: () => ref.invalidate(_ownAnimeReviewProvider(widget.id)),
+              onPressed: () =>
+                  ref.invalidate(_ownAnimeReviewProvider(widget.id)),
               icon: const Icon(Icons.refresh),
               label: const Text('我的吐槽读取失败，重试（不影响公开评论）'),
             ),
           if (ownReview case final review?)
-            Card.filled(child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('我的吐槽 · ${review.rate == 0 ? '未评分' : '${review.rate} / 10 分'}${review.private ? ' · 仅自己可见' : ''}'),
-                if (review.comment.isNotEmpty) SelectableText(review.comment),
-                TextButton(onPressed: _editReview, child: const Text('编辑我的评分与吐槽')),
-              ]),
-            )),
+            Card.filled(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '我的吐槽 · ${review.rate == 0 ? '未评分' : '${review.rate} / 10 分'}${review.private ? ' · 仅自己可见' : ''}',
+                    ),
+                    if (review.comment.isNotEmpty)
+                      SelectableText(review.comment),
+                    TextButton(
+                      onPressed: _editReview,
+                      child: const Text('编辑我的评分与吐槽'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           const SizedBox(height: 12),
         ],
         if (_section == 'info')

@@ -125,14 +125,14 @@ class CaptureProtocolTests(unittest.TestCase):
             self.assertIn('Duplicate screenshot frame', json.loads(body)['error'])
         self.assertEqual(len(self.session.manifest['captures']), 1)
 
-    def test_required_capture_validation_rejects_missing_and_changed_files(self):
+    def test_complete_capture_validation_rejects_missing_and_changed_files(self):
         self.frame = 0
         with patch.object(tour.subprocess, 'run', side_effect=self.screenshot):
-            for name in tour.REQUIRED_CAPTURES[:-1]:
+            for name in tour.EXPECTED_CAPTURES[:-1]:
                 self.assertEqual(self.capture(name)[0], 200)
-            with self.assertRaisesRegex(ValueError, '07_downloads_settings.png'):
+            with self.assertRaisesRegex(ValueError, tour.EXPECTED_CAPTURES[-1]):
                 self.session.validate_captures()
-            self.assertEqual(self.capture(tour.REQUIRED_CAPTURES[-1])[0], 200)
+            self.assertEqual(self.capture(tour.EXPECTED_CAPTURES[-1])[0], 200)
         self.session.validate_captures()
         target = self.session.screenshots / tour.REQUIRED_CAPTURES[0]
         original = target.read_bytes()
@@ -143,6 +143,26 @@ class CaptureProtocolTests(unittest.TestCase):
         target.unlink()
         with self.assertRaisesRegex(ValueError, 'files do not match'):
             self.session.validate_captures()
+
+    def test_original_seven_alone_do_not_pass_the_expanded_tour(self):
+        self.frame = 0
+        with patch.object(tour.subprocess, 'run', side_effect=self.screenshot):
+            for name in tour.REQUIRED_CAPTURES:
+                self.assertEqual(self.capture(name)[0], 200)
+        with self.assertRaisesRegex(ValueError, '06_danmaku_gamer_pool.png'):
+            self.session.validate_captures()
+
+    def test_independent_pool_capture_names_preserve_order_and_metadata(self):
+        self.frame = 0
+        names = ('06_danmaku_sources.png', '06_danmaku_bilibili_pool.png',
+                 '06_danmaku_animeko_pool.png', '06_danmaku_gamer_pool.png')
+        with patch.object(tour.subprocess, 'run', side_effect=self.screenshot):
+            for name in names:
+                status, body = self.capture(name, route='/player', description='Loopback pool')
+                self.assertEqual(status, 200, body)
+        self.assertEqual([item['name'] for item in self.session.manifest['captures']], list(names))
+        self.assertTrue(all(item['route'] == '/player'
+                            for item in self.session.manifest['captures']))
 
     def test_fixture_account_and_storage_mutations_are_disabled(self):
         for method, path in (

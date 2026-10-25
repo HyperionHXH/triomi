@@ -38,19 +38,31 @@ REQUIRED_CAPTURES = (
 )
 EXTRA_CAPTURES = (
     '01_manga_shelf.png', '01_novel_shelf.png',
+    '01_novel_downloaded_filter.png',
     '02_anime_sources.png', '02_manga_sources.png', '02_novel_sources.png',
     '02_source_import.png', '02_kazumi_repositories.png', '02_mihon_fallback.png',
     '03_discover.png', '03_detail.png',
     '04_novel_reader_menu.png', '04_novel_reader_settings.png',
+    '04_novel_catalog.png', '04_novel_reading_options.png', '04_novel_scroll.png',
     '05_manga_reader_controls.png', '06_anime_player_controls.png',
     '06_anime_player_settings.png',
+    '06_anime_player_speed.png', '06_anime_player_ratio.png', '06_anime_player_buffer.png',
+    '06_danmaku_sources.png', '06_danmaku_bilibili_pool.png',
+    '06_danmaku_animeko_pool.png', '06_danmaku_gamer_pool.png',
+    '06_danmaku_offsets.png', '06_danmaku_display_settings.png',
     '07_profile.png', '07_settings.png', '07_anime_settings.png',
     '07_manga_settings.png', '07_novel_settings.png', '07_webdav.png',
     '07_tracking.png', '07_lk_account.png', '07_lns_account.png',
     '07_backup.png', '07_history.png', '07_danmaku_settings.png',
+    '07_cache_management.png', '07_cache_memory_confirmation.png',
+    '07_cache_http_confirmation.png',
+    '07_cache_retained_content.png', '07_danmaku_shield_rules.png',
     '07_settings_large_text.png',
 )
-ALLOWED_CAPTURES = frozenset(REQUIRED_CAPTURES + EXTRA_CAPTURES)
+# Keep the original seven public evidence filenames stable, while requiring
+# every agreed production surface for a complete latest-mainline tour.
+EXPECTED_CAPTURES = REQUIRED_CAPTURES + EXTRA_CAPTURES
+ALLOWED_CAPTURES = frozenset(EXPECTED_CAPTURES)
 CAPTURE_NAME = re.compile(r'[0-9]{2}_[a-z0-9]+(?:_[a-z0-9]+)*\.png\Z')
 UDID = re.compile(r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\Z')
 TOUR_TIMEOUT_SECONDS = 18 * 60
@@ -126,13 +138,14 @@ class TourSession:
             'source_boundaries': {
                 'bind_address': '127.0.0.1',
                 'port': 'ephemeral',
-                'content': 'Repository-only deterministic image, novel, video and danmaku fixtures',
+                'content': 'Repository-only deterministic image, novel, video and independent danmaku pool fixtures; production session/rendering, not live upstream matching',
                 'accounts': 'Unauthenticated isolated test database/preferences/MemorySecureStore',
                 'mutations': 'Only POST /__tour/capture; fixture account and WebDAV writes are disabled',
                 'release_assets': 'Tour fixtures are host-only; the production IPA is built before the tour',
             },
             'required_captures': list(REQUIRED_CAPTURES),
             'extra_capture_names': list(EXTRA_CAPTURES),
+            'expected_captures': list(EXPECTED_CAPTURES),
             'captures': [],
             'errors': [],
         }
@@ -199,7 +212,7 @@ class TourSession:
         with self.lock:
             captures = self.manifest['captures']
             names = [item['name'] for item in captures]
-            missing = sorted(set(REQUIRED_CAPTURES) - set(names))
+            missing = sorted(set(EXPECTED_CAPTURES) - set(names))
             if missing:
                 raise ValueError(f'Missing required tour captures: {", ".join(missing)}')
             if len(names) != len(set(names)):

@@ -455,6 +455,7 @@ class DioSourceHttpClient
           sendTimeout: timeout,
           receiveTimeout: timeout,
         ),
+        cancelToken: SourceRequestCancellation.current?.token,
       );
       final status = response.statusCode ?? 0;
       if (status < 200 || status >= 400) {

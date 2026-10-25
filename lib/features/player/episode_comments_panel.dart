@@ -30,6 +30,7 @@ class EpisodeCommentsPanel extends ConsumerStatefulWidget {
 
 class _EpisodeCommentsPanelState extends ConsumerState<EpisodeCommentsPanel> {
   ProviderSubscription<AsyncValue<MediaItem>>? _association;
+  ProviderSubscription<BangumiPublicClient>? _client;
   SourceRequestCancellation? _owner;
   int _generation = 0;
   String? _subjectId, _associationError, _error;
@@ -43,6 +44,17 @@ class _EpisodeCommentsPanelState extends ConsumerState<EpisodeCommentsPanel> {
   @override
   void initState() {
     super.initState();
+    _client = ref.listenManual(bangumiPublicClientProvider, (previous, next) {
+      if (!mounted || identical(previous, next)) return;
+      // A network/proxy change replaces the client. Its old request must not
+      // keep this panel busy or deliver results into the new connection.
+      _owner?.cancel();
+      _generation++;
+      _busy = false;
+      if (_subjectId != null) {
+        unawaited(_selected == null ? _resolve() : _loadComments());
+      }
+    });
     _listen();
   }
 
@@ -130,6 +142,7 @@ class _EpisodeCommentsPanelState extends ConsumerState<EpisodeCommentsPanel> {
     _generation++;
     _owner?.cancel();
     _association?.close();
+    _client?.close();
     super.dispose();
   }
 

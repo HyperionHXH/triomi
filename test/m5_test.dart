@@ -17,9 +17,9 @@ import 'package:triomi/core/storage/cover_store.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
-import 'package:triomi/features/player/data/dandanplay_client.dart';
 import 'package:triomi/features/player/data/danmaku_overlay.dart';
 import 'package:triomi/features/player/data/danmaku_settings.dart';
+import 'package:triomi/features/player/data/hybrid_danmaku_models.dart';
 
 import 'fixtures/fake_http_client.dart';
 import 'fixtures/fake_preferences.dart';
@@ -413,18 +413,6 @@ void main() {
       expect(restored.opacity, 0.5);
       expect(restored.fontScale, 1.3);
       expect(restored.blockedWords, <String>['广告', '刷屏']);
-    });
-
-    test('弹弹play 凭据状态：缺 token 时不能发送', () {
-      const partial = DandanplayCredentials(appId: 'a', appSecret: 'b');
-      expect(partial.isConfigured, isTrue);
-      expect(partial.canSend, isFalse);
-      const full = DandanplayCredentials(
-        appId: 'a',
-        appSecret: 'b',
-        token: 't',
-      );
-      expect(full.canSend, isTrue);
     });
   });
 }

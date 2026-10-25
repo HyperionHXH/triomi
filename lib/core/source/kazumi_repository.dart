@@ -30,6 +30,8 @@ class KazumiCatalogEntry {
 class KazumiRepository {
   KazumiRepository(this.registry);
   final SourceRegistry registry;
+  static const defaultRepository =
+      'https://raw.githubusercontent.com/Predidit/KazumiRules/main/index.json';
   static String normalize(String value) {
     var uri = Uri.tryParse(value.trim());
     if (uri == null ||

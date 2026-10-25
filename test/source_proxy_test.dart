@@ -1,11 +1,32 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/network_proxy.dart';
 
+class _NetworkOverrides extends HttpOverrides {}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const channel = MethodChannel('triomi/platform');
+  HttpOverrides? previousOverrides;
+  setUp(() {
+    previousOverrides = HttpOverrides.current;
+    HttpOverrides.global = _NetworkOverrides();
+  });
+  tearDown(() {
+    HttpOverrides.global = previousOverrides;
+  });
+  setUp(
+    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (_) async => {'direct': true}),
+  );
+  tearDown(
+    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null),
+  );
   test('代理只接受无凭据HTTP主机端口，空值恢复默认', () {
     expect(
       normalizeSourceProxy('  http://127.0.0.1:7890/ '),

@@ -113,41 +113,67 @@ void main() {
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
 
-  test('redirect re-queries exact path cookie and never forwards source Cookie', () async {
-    final lookedUp = <String>[];
-    final http = FakeHttpClient((request) async => request.url.endsWith('/a/video.mp4')
-      ? const SourceResponse(statusCode: 302, body: '', headers: {
-          'location': 'https://other.test/b/video.mp4',
-        })
-      : const SourceResponse(statusCode: 200, body: 'real bytes'));
-    final path = await VideoDownloader(
-      http: http, sourceId: 'video',
-      headers: const {'Cookie': 'source=secret', 'Authorization': 'source-token',
-        'User-Agent': 'browser', 'Referer': 'https://site.test/'},
-      cookieForUrl: (url) async {
-        lookedUp.add(url);
-        return url.contains('other.test') ? 'other=exact' : 'path=exact';
-      },
-    ).download(url: 'https://cdn.test/a/video.mp4', directory: tempDir.path);
-    expect(lookedUp, ['https://cdn.test/a/video.mp4', 'https://other.test/b/video.mp4']);
-    expect(http.requests.map((r) => r.followRedirects), [false, false]);
-    expect(http.requests.first.headers['Cookie'], 'path=exact');
-    expect(http.requests.last.headers['Cookie'], 'other=exact');
-    expect(http.requests.last.headers.containsKey('Authorization'), isFalse);
-    expect(http.requests.last.headers['User-Agent'], 'browser');
-    expect(File(path).readAsStringSync(), 'real bytes');
-  });
+  test(
+    'redirect re-queries exact path cookie and never forwards source Cookie',
+    () async {
+      final lookedUp = <String>[];
+      final http = FakeHttpClient(
+        (request) async => request.url.endsWith('/a/video.mp4')
+            ? const SourceResponse(
+                statusCode: 302,
+                body: '',
+                headers: {'location': 'https://other.test/b/video.mp4'},
+              )
+            : const SourceResponse(statusCode: 200, body: 'real bytes'),
+      );
+      final path = await VideoDownloader(
+        http: http,
+        sourceId: 'video',
+        headers: const {
+          'Cookie': 'source=secret',
+          'Authorization': 'source-token',
+          'User-Agent': 'browser',
+          'Referer': 'https://site.test/',
+        },
+        cookieForUrl: (url) async {
+          lookedUp.add(url);
+          return url.contains('other.test') ? 'other=exact' : 'path=exact';
+        },
+      ).download(url: 'https://cdn.test/a/video.mp4', directory: tempDir.path);
+      expect(lookedUp, [
+        'https://cdn.test/a/video.mp4',
+        'https://other.test/b/video.mp4',
+      ]);
+      expect(http.requests.map((r) => r.followRedirects), [false, false]);
+      expect(http.requests.first.headers['Cookie'], 'path=exact');
+      expect(http.requests.last.headers['Cookie'], 'other=exact');
+      expect(http.requests.last.headers.containsKey('Authorization'), isFalse);
+      expect(http.requests.last.headers['User-Agent'], 'browser');
+      expect(File(path).readAsStringSync(), 'real bytes');
+    },
+  );
 
-  test('HTTPS redirect downgrade is rejected before issuing next request', () async {
-    final http = FakeHttpClient((request) async => const SourceResponse(
-      statusCode: 302, body: '', headers: {'location': 'http://cdn.test/video.mp4'},
-    ));
-    await expectLater(VideoDownloader(http: http, sourceId: 'video').download(
-      url: 'https://cdn.test/video.mp4', directory: tempDir.path),
-      throwsA(isA<SourceException>()));
-    expect(http.requests, hasLength(1));
-    expect(File('${tempDir.path}/video.mp4').existsSync(), isFalse);
-  });
+  test(
+    'HTTPS redirect downgrade is rejected before issuing next request',
+    () async {
+      final http = FakeHttpClient(
+        (request) async => const SourceResponse(
+          statusCode: 302,
+          body: '',
+          headers: {'location': 'http://cdn.test/video.mp4'},
+        ),
+      );
+      await expectLater(
+        VideoDownloader(
+          http: http,
+          sourceId: 'video',
+        ).download(url: 'https://cdn.test/video.mp4', directory: tempDir.path),
+        throwsA(isA<SourceException>()),
+      );
+      expect(http.requests, hasLength(1));
+      expect(File('${tempDir.path}/video.mp4').existsSync(), isFalse);
+    },
+  );
 
   group('渐进式视频下载', () {
     test('整文件落盘 + 进度到 1，扩展名按地址推断', () async {
@@ -244,21 +270,36 @@ seg-1.ts
       const first = 'https://cdn.example.com/a/first.ts';
       const second = 'https://other.test/b/second.ts';
       final http = byteHttp({
-        playlistUrl: utf8.encode('#EXTM3U\n#EXT-X-TARGETDURATION:2\n'
-          '#EXTINF:2,\n$first\n#EXTINF:2,\n$second\n#EXT-X-ENDLIST\n'),
-        first: [1, 2], second: [3, 4],
+        playlistUrl: utf8.encode(
+          '#EXTM3U\n#EXT-X-TARGETDURATION:2\n'
+          '#EXTINF:2,\n$first\n#EXTINF:2,\n$second\n#EXT-X-ENDLIST\n',
+        ),
+        first: [1, 2],
+        second: [3, 4],
       });
       final seen = <String>[];
       final output = await VideoDownloader(
-        http: http, sourceId: 'video', headers: const {'Cookie': 'never=forward'},
+        http: http,
+        sourceId: 'video',
+        headers: const {'Cookie': 'never=forward'},
         cookieForUrl: (url) async {
           seen.add(url);
-          return url == playlistUrl ? 'list=1' : url == first ? 'path=2' : 'other=3';
+          return url == playlistUrl
+              ? 'list=1'
+              : url == first
+              ? 'path=2'
+              : 'other=3';
         },
       ).download(url: playlistUrl, directory: tempDir.path);
       expect(seen.toSet(), {playlistUrl, first, second});
-      expect(http.requests.firstWhere((r) => r.url == first).headers['Cookie'], 'path=2');
-      expect(http.requests.firstWhere((r) => r.url == second).headers['Cookie'], 'other=3');
+      expect(
+        http.requests.firstWhere((r) => r.url == first).headers['Cookie'],
+        'path=2',
+      );
+      expect(
+        http.requests.firstWhere((r) => r.url == second).headers['Cookie'],
+        'other=3',
+      );
       expect(http.requests.every((r) => !r.followRedirects), isTrue);
       expect(File(output).existsSync(), isTrue);
     });
@@ -311,6 +352,71 @@ seg-1.ts
       expect(File(after.path!).lengthSync(), 4096);
     });
 
+    test('无后缀 HLS 解析结果下载分片并发布纯本地清单', () async {
+      mockDocumentsDirectory(tempDir);
+      final db = openTestDatabase();
+      addTearDown(db.close);
+      const stream = 'https://cdn.example.com/hls/stream?id=1';
+      final http = byteHttp({
+        stream: utf8.encode(
+          '#EXTM3U\n#EXT-X-TARGETDURATION:2\n'
+          '#EXTINF:2,\nfirst.ts\n#EXTINF:2,\nsecond.ts\n#EXT-X-ENDLIST\n',
+        ),
+        'https://cdn.example.com/hls/first.ts': [1, 2, 3],
+        'https://cdn.example.com/hls/second.ts': [4, 5, 6],
+      });
+      final service = DownloadService(
+        repository: DownloadRepository(db),
+        http: http,
+        preferences: memoryPreferences(),
+        videoCookieForUrl: (_) async =>
+            throw StateError('must not restore cookies'),
+        resolveVideo: (_, _) async => const PlaySource(
+          name: 'resolved',
+          url: stream,
+          mimeType: 'application/vnd.apple.mpegurl',
+          omitCookies: true,
+        ),
+      );
+      await service.run(
+        row: await enqueue(db),
+        provider: FakeAnimeSource(
+          sources: const [
+            PlaySource(
+              name: 'page',
+              url: 'https://site.test/play',
+              webPage: true,
+            ),
+          ],
+        ),
+      );
+      final row = await DownloadRepository(
+        db,
+      ).findRow(sourceId: 'fake-anime', remoteId: '1', chapterRemoteId: 'ep1');
+      expect(row!.status, 'done');
+      expect(row.path, endsWith('.m3u8'));
+      final manifest = File(row.path!).readAsStringSync();
+      expect(manifest, contains('#EXTM3U'));
+      expect(manifest, isNot(contains('https://')));
+      expect(
+        http.requests.every(
+          (r) => !r.headers.keys.any((key) => key.toLowerCase() == 'cookie'),
+        ),
+        isTrue,
+      );
+      final localSegments = manifest
+          .split('\n')
+          .where((line) => line.isNotEmpty && !line.startsWith('#'))
+          .map(
+            (line) =>
+                File('${File(row.path!).parent.path}/$line').readAsBytesSync(),
+          )
+          .toList();
+      expect(localSegments, [
+        [1, 2, 3],
+        [4, 5, 6],
+      ]);
+    });
     test('没有播放线路也没有图片：正文为空 → 任务失败', () async {
       mockDocumentsDirectory(tempDir);
       final db = openTestDatabase();
@@ -339,7 +445,9 @@ seg-1.ts
       mockDocumentsDirectory(tempDir);
       final db = openTestDatabase();
       addTearDown(db.close);
-      final http = byteHttp({'https://cdn.test/video.mp4': [1, 2, 3]});
+      final http = byteHttp({
+        'https://cdn.test/video.mp4': [1, 2, 3],
+      });
       var resolves = 0;
       final service = DownloadService(
         repository: DownloadRepository(db),
@@ -349,9 +457,15 @@ seg-1.ts
           resolves++;
           expect(source.webPage, isTrue);
           expect(owner.isCancelled, isFalse);
-          return const PlaySource(name: 'raw', url: 'https://cdn.test/video.mp4',
-            headers: {'User-Agent': 'browser-agent', 'Referer': 'https://site.test/',
-              'Cookie': 'old=not-forwarded'});
+          return const PlaySource(
+            name: 'raw',
+            url: 'https://cdn.test/video.mp4',
+            headers: {
+              'User-Agent': 'browser-agent',
+              'Referer': 'https://site.test/',
+              'Cookie': 'old=not-forwarded',
+            },
+          );
         },
         videoCookieForUrl: (url) async {
           expect(url, 'https://cdn.test/video.mp4');
@@ -359,15 +473,27 @@ seg-1.ts
         },
       );
       final row = await enqueue(db);
-      await service.run(row: row, provider: FakeAnimeSource(sources: const [
-        PlaySource(name: 'page', url: 'https://site.test/play', webPage: true),
-      ]));
+      await service.run(
+        row: row,
+        provider: FakeAnimeSource(
+          sources: const [
+            PlaySource(
+              name: 'page',
+              url: 'https://site.test/play',
+              webPage: true,
+            ),
+          ],
+        ),
+      );
       expect(resolves, 1);
       expect(http.requests.single.headers, {
-        'User-Agent': 'browser-agent', 'Referer': 'https://site.test/', 'Cookie': 'exact=target',
+        'User-Agent': 'browser-agent',
+        'Referer': 'https://site.test/',
+        'Cookie': 'exact=target',
       });
-      final after = await DownloadRepository(db).findRow(
-        sourceId: 'fake-anime', remoteId: '1', chapterRemoteId: 'ep1');
+      final after = await DownloadRepository(
+        db,
+      ).findRow(sourceId: 'fake-anime', remoteId: '1', chapterRemoteId: 'ep1');
       expect(after!.status, 'done');
       expect(File(after.path!).readAsBytesSync(), [1, 2, 3]);
     });

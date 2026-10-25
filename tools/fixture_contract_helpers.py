@@ -129,13 +129,8 @@ def build_contract_table() -> ContractTable:
     table.add(ContractRow("/calendar", "GET", "JSON Bangumi 放送表形状", "schedule_providers.dart（TRIOMI_SCHEDULE_BASE 注入时不回退镜像）", "test_anime_and_schedule"))
     table.add(ContractRow("/anime/list?page=N · /anime/search?keyword=K", "GET", "HTML 列表", "local-fixture-anime.json discover/search", "test_anime_and_schedule"))
     table.add(ContractRow("/play/{ep}", "GET", "HTML 线路（mp4/HLS m3u8）+ danmaku 地址", "local-fixture-anime.json content；player_page 播放", "test_anime_and_schedule"))
-    table.add(ContractRow("/danmaku/{ep}.json", "GET", "JSON 弹幕数组（滚动/顶部/底部）", "player_page._loadDanmaku（规则自带弹幕源）", "test_danmaku"))
+    table.add(ContractRow("/danmaku/{ep}.json", "GET", "JSON 兼容协议弹幕字段（不再由播放器消费）", "规则序列化兼容夹具", "test_danmaku"))
     table.add(ContractRow("/video/sample.mp4", "GET", "200 全量 / 206 分段（Content-Range/Length/Accept-Ranges）", "video_downloader（渐进式与 HLS 下载、离线播放）", "test_video_range_full / test_video_range_partial"))
-    # ---- 弹弹play（TRIOMI_DANDANPLAY_BASE 指向时）
-    table.add(ContractRow("/api/v2/login", "POST", "hash 非空 → success+token；否则 success:false+errorMessage", "dandanplay_client 登录", "test_dandanplay_login_and_comment"))
-    table.add(ContractRow("/api/v2/search/episodes?anime=K", "GET", "success + animes[].episodes（关键词回显）", "player 手动匹配弹幕", "test_dandanplay_search"))
-    table.add(ContractRow("/api/v2/comment/{id}", "GET", "弹幕数组", "player 拉取弹幕", "test_dandanplay_search"))
-    table.add(ContractRow("/api/v2/comment/{id}", "POST", "success + commentId", "弹幕发送（设备 E2E 断言）", "test_dandanplay_login_and_comment"))
     # ---- 追踪（TRIOMI_TRACKING_BASE 指向时）
     table.add(ContractRow("/tracking/bangumi/v0/me", "GET", "401（无 Authorization）/ 200 id+username+nickname", "TrackingService.verify", "test_tracking_auth_and_state"))
     table.add(ContractRow("/tracking/bangumi/v0/users/-/collections/{id}(+/episodes)", "GET/PATCH/POST", "逐集收藏与收藏 upsert；状态可从 /tracking/state 回读", "TrackingService 上报链路", "test_tracking_auth_and_state"))

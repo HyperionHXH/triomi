@@ -1,4 +1,5 @@
 import Darwin
+import CFNetwork
 import AVFoundation
 import Flutter
 import UIKit
@@ -100,6 +101,175 @@ final class RunnerTests: XCTestCase {
       XCTAssertNil($0); insecure.fulfill()
     }
     wait(for: [insecure], timeout: 15)
+  }
+
+  func testHttpCacheClearPreservesSourceAndVideoCookiesAndDOMStorage() throws {
+    let store = WKWebsiteDataStore.nonPersistent()
+    let video = WKWebsiteDataStore.nonPersistent()
+    let sessions = IosWebSession(ruleStore: store, videoStore: video)
+    let url = try XCTUnwrap(URL(string: "https://cache-\(UUID().uuidString.lowercased()).invalid/"))
+    let cookies = expectation(description: "Source and playback fixture cookies stored")
+    cookies.expectedFulfillmentCount = 2
+    IosWebSession.storeCookies(["rule=session; Path=/; Secure; HttpOnly"], url: url, store: store) { cookies.fulfill() }
+    IosWebSession.storeCookies(["video=session; Path=/; Secure; HttpOnly"], url: url, store: video) { cookies.fulfill() }
+    wait(for: [cookies], timeout: 15)
+    let configuration = WKWebViewConfiguration()
+    configuration.websiteDataStore = store
+    let probe = IosMediaScriptProbe(configuration: configuration)
+    let loaded = expectation(description: "WebKit source DOM storage populated")
+    probe.finished = { value in
+      XCTAssertEqual(value as? String, "saved"); loaded.fulfill()
+    }
+    probe.action = "localStorage.setItem('triomi-cache-fixture','kept'); window.webkit.messageHandlers.fixtureDone.postMessage('saved');"
+    probe.web.loadHTMLString("<html><body>cache fixture</body></html>", baseURL: url)
+    wait(for: [loaded], timeout: 15)
+    let cleared = expectation(description: "Public WebKit HTTP cache deletion completed")
+    sessions.clearHttpCache { cleared.fulfill() }
+    wait(for: [cleared], timeout: 15)
+    let retained = expectation(description: "Cookie and DOM state retained")
+    retained.expectedFulfillmentCount = 3
+    IosWebSession.cookieHeader(url: url, store: store) { XCTAssertEqual($0, "rule=session"); retained.fulfill() }
+    IosWebSession.cookieHeader(url: url, store: video) { XCTAssertEqual($0, "video=session"); retained.fulfill() }
+    probe.web.evaluateJavaScript("localStorage.getItem('triomi-cache-fixture')") { value, error in
+      XCTAssertNil(error); XCTAssertEqual(value as? String, "kept"); retained.fulfill()
+    }
+    wait(for: [retained], timeout: 15)
+  }
+
+  func testResolverDetectsSuffixlessHlsWithoutConsumingPlayerBodyOrAddingCookies() throws {
+    let probe = IosMediaScriptProbe()
+    let complete = expectation(description: "Actual WebKit fetch detection")
+    probe.finished = { value in
+      let result = value as? [String: Any]
+      XCTAssertEqual(result?["body"] as? String, "#EXTM3U\n#EXT-X-VERSION:3")
+      let reports = result?["reports"] as? [[String: Any]] ?? []
+      XCTAssertEqual(reports.count, 1)
+      XCTAssertEqual(reports.first?["url"] as? String, "https://triomi-resolver.invalid/manifest?id=1")
+      XCTAssertEqual(reports.first?["mimeType"] as? String, "application/vnd.apple.mpegurl")
+      XCTAssertEqual(reports.first?["omitCookies"] as? Bool, true)
+      complete.fulfill()
+    }
+    probe.bootstrap = """
+      window.reports = [];
+      window.fetch = () => {
+        const response = new Response('#EXTM3U\\n#EXT-X-VERSION:3', {headers:{'Content-Type':'application/octet-stream'}});
+        Object.defineProperty(response, 'url', {value:'https://triomi-resolver.invalid/manifest?id=1'});
+        return Promise.resolve(response);
+      };
+      """
+    probe.action = """
+      fetch('/manifest?id=1', {credentials:'omit'}).then(response => response.text()).then(body => {
+        setTimeout(() => window.webkit.messageHandlers.fixtureDone.postMessage({body,reports:window.reports}), 100);
+      });
+      """
+    probe.installDetection(legacy: false)
+    probe.web.loadHTMLString("<html><body>fixture</body></html>", baseURL: URL(string: "https://triomi-resolver.invalid/"))
+    wait(for: [complete], timeout: 15)
+  }
+
+  func testLegacyIframeQueryExtractionIsRuleOptIn() throws {
+    for legacy in [false, true] {
+      let probe = IosMediaScriptProbe()
+      let complete = expectation(description: "Legacy iframe rule \(legacy)")
+      probe.finished = { value in
+        let reports = value as? [[String: Any]] ?? []
+        XCTAssertEqual(reports.count, legacy ? 1 : 0)
+        if legacy { XCTAssertEqual(reports.first?["url"] as? String, "https://media.invalid/episode.m3u8") }
+        complete.fulfill()
+      }
+      probe.bootstrap = "window.reports = [];"
+      probe.action = """
+        const frame = document.createElement('iframe');
+        frame.src = 'https://parser.invalid/embed?url=https%3A%2F%2Fmedia.invalid%2Fepisode.m3u8';
+        document.body.appendChild(frame);
+        setTimeout(() => window.webkit.messageHandlers.fixtureDone.postMessage(window.reports), 100);
+        """
+      probe.installDetection(legacy: legacy)
+      probe.web.loadHTMLString("<html><body>fixture</body></html>", baseURL: URL(string: "https://triomi-resolver.invalid/"))
+      wait(for: [complete], timeout: 15)
+    }
+  }
+
+  func testResolverCancellationIsScopedToItsRequestOwner() throws {
+    let resolver = IosVideoResolver(store: .nonPersistent())
+    let cancelled = expectation(description: "Only matching owner cancels native resolver")
+    var returned = false
+    resolver.resolve(url: try XCTUnwrap(URL(string: "https://triomi-resolver.invalid/")), args: ["requestId": "new-download"]) { value in
+      returned = true
+      XCTAssertEqual((value as? FlutterError)?.code, "resolve_cancelled")
+      cancelled.fulfill()
+    }
+    resolver.cancel(requestId: "stale-download")
+    XCTAssertFalse(returned)
+    resolver.cancel(requestId: "new-download")
+    wait(for: [cancelled], timeout: 1)
+  }
+
+  func testResolverBridgeReturnsHlsMetadataAndHonorsObservedCookieOmission() throws {
+    let store = WKWebsiteDataStore.nonPersistent()
+    let url = try XCTUnwrap(URL(string: "https://triomi-resolver.invalid/extensionless"))
+    let stored = expectation(description: "Native media cookie fixture")
+    IosWebSession.storeCookies(["media=private; Path=/; Secure; HttpOnly"], url: url, store: store) { stored.fulfill() }
+    wait(for: [stored], timeout: 15)
+    for omit in [false, true] {
+      let resolver = IosVideoResolver(store: store)
+      let complete = expectation(description: "Resolver metadata reaches Flutter callback \(omit)")
+      var returned = false
+      resolver.resolve(url: url, args: ["requestId": "metadata-\(omit)"]) { value in
+        returned = true
+        let result = value as? [String: Any]
+        XCTAssertEqual(result?["url"] as? String, url.absoluteString)
+        XCTAssertEqual(result?["mimeType"] as? String, "application/vnd.apple.mpegurl")
+        XCTAssertEqual(result?["omitCookies"] as? Bool == true, omit)
+        let headers = result?["headers"] as? [String: String]
+        XCTAssertEqual(headers?["Cookie"], omit ? nil : "media=private")
+        XCTAssertNil(headers?["Referer"])
+        complete.fulfill()
+      }
+      resolver.receiveMedia(["url": url.absoluteString])
+      XCTAssertFalse(returned, "A plain suffixless link is not playable-media evidence")
+      resolver.receiveMedia(["url": url.absoluteString, "mimeType": "application/vnd.apple.mpegurl", "omitCookies": omit,
+                             "page": "https://triomi-resolver.invalid/player", "policy": "no-referrer"])
+      wait(for: [complete], timeout: 15)
+    }
+  }
+
+  func testProxyEndpointFormattingRejectsCredentialsAndKeepsIPv6() throws {
+    let route = try IosSystemProxyRequest.httpRoute([
+      kCFProxyHostNameKey as String: "::1", kCFProxyPortNumberKey as String: 7890,
+    ])
+    XCTAssertEqual(route["proxy"] as? String, "[::1]:7890")
+    for invalid in [
+      [kCFProxyHostNameKey as String: "proxy.invalid", kCFProxyPortNumberKey as String: 8080, kCFProxyUsernameKey as String: "private"],
+      [kCFProxyHostNameKey as String: "user:secret@proxy.invalid", kCFProxyPortNumberKey as String: 8080],
+      [kCFProxyHostNameKey as String: "proxy.invalid", kCFProxyPortNumberKey as String: 70000],
+    ] as [[String: Any]] { XCTAssertThrowsError(try IosSystemProxyRequest.httpRoute(invalid)) }
+    let bridge = try makeBridge()
+    for url in ["https://user:secret@source.invalid/", "file:///private/source"] {
+      XCTAssertEqual((invoke(bridge, "resolveSystemProxy", ["url": url]) as? FlutterError)?.code, "invalid_url")
+    }
+  }
+
+  func testOSPacEvaluationSelectsEachDestinationWithoutProbingIt() throws {
+    let script = """
+      function FindProxyForURL(url, host) {
+        if (host === 'bypass.invalid') return 'DIRECT';
+        return 'PROXY proxy.invalid:8080';
+      }
+      """
+    for (host, expected) in [("bypass.invalid", true), ("source.invalid", false)] {
+      let complete = expectation(description: "CFNetwork PAC evaluation for \(host)")
+      IosSystemProxyRequest.resolve(url: try XCTUnwrap(URL(string: "https://\(host)/comments")), proxies: [[
+        kCFProxyTypeKey as String: kCFProxyTypeAutoConfigurationJavaScript as String,
+        kCFProxyAutoConfigurationJavaScriptKey as String: script,
+      ]]) { value in
+        let route = value as? [String: Any]
+        XCTAssertEqual(route?["direct"] as? Bool, expected)
+        if !expected { XCTAssertEqual(route?["proxy"] as? String, "proxy.invalid:8080") }
+        complete.fulfill()
+      }
+      wait(for: [complete], timeout: 20)
+    }
   }
 
   func testPersistentWebKitSourceCookiesSurviveBridgeRecreation() throws {
@@ -237,5 +407,43 @@ final class RunnerTests: XCTestCase {
     XCTAssertFalse(session.categoryOptions.contains(.allowBluetooth))
     IosVideoAudioSession.release(-100)
     XCTAssertEqual(session.category, .playback)
+  }
+}
+
+private final class IosMediaScriptProbe: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+  let web: WKWebView
+  var bootstrap = ""
+  var action = ""
+  var finished: ((Any) -> Void)?
+
+  init(configuration: WKWebViewConfiguration = WKWebViewConfiguration()) {
+    web = WKWebView(frame: .zero, configuration: configuration)
+    super.init()
+    web.navigationDelegate = self
+    web.configuration.userContentController.add(self, name: "fixtureDone")
+    web.configuration.userContentController.add(self, name: "triomiMedia")
+  }
+
+  func installDetection(legacy: Bool) {
+    let controller = web.configuration.userContentController
+    controller.addUserScript(WKUserScript(source: bootstrap, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    controller.addUserScript(WKUserScript(source: IosVideoResolver.detectionScript(useLegacyParser: legacy), injectionTime: .atDocumentStart, forMainFrameOnly: true))
+  }
+
+  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    webView.evaluateJavaScript(action) { _, error in
+      XCTAssertNil(error)
+    }
+  }
+
+  func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+    if message.name == "triomiMedia", let value = message.body as? [String: Any],
+       let data = try? JSONSerialization.data(withJSONObject: value), let json = String(data: data, encoding: .utf8) {
+      web.evaluateJavaScript("window.reports.push(\(json))", completionHandler: nil)
+    } else if message.name == "fixtureDone" {
+      web.stopLoading(); web.navigationDelegate = nil
+      web.configuration.userContentController.removeAllScriptMessageHandlers()
+      let callback = finished; finished = nil; callback?(message.body)
+    }
   }
 }

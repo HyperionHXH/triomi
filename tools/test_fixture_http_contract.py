@@ -203,52 +203,6 @@ class FixtureHttpContractTest(unittest.TestCase):
         self.assertEqual(status, 206)
         self.assertEqual(len(body), 10)
 
-    # ------------------------------------------------------ 弹弹play
-
-    def test_dandanplay_login_and_comment(self) -> None:
-        status, _, body = request(
-            self.base,
-            "/api/v2/login",
-            method="POST",
-            payload={"hash": "fixture-hash", "appId": "app", "ts": 0},
-        )
-        self.assertEqual(status, 200)
-        payload = json.loads(body)
-        self.assertTrue(payload["success"], msg=payload)
-        self.assertEqual(payload["token"], "fixture-dandanplay-token")
-
-        status, _, body = request(
-            self.base,
-            "/api/v2/login",
-            method="POST",
-            payload={"appId": "app"},
-        )
-        self.assertEqual(status, 200)
-        payload = json.loads(body)
-        self.assertFalse(payload["success"], msg="缺 hash 按失败回执")
-        self.assertIn("errorMessage", payload)
-
-        status, _, body = request(
-            self.base,
-            "/api/v2/comment/9001",
-            method="POST",
-            payload={"text": "contract", "time": 1.5},
-        )
-        self.assertEqual(status, 200)
-        self.assertTrue(json.loads(body)["success"])
-
-    def test_dandanplay_search(self) -> None:
-        status, _, body = request(
-            self.base, "/api/v2/search/episodes?anime=" + quote("契约"),
-        )
-        self.assertEqual(status, 200)
-        payload = json.loads(body)
-        self.assertIn("契约", payload["animes"][0]["animeTitle"], msg="关键词回显")
-
-        status, _, body = request(self.base, "/api/v2/comment/9001")
-        self.assertEqual(status, 200)
-        self.assertIn("comments", json.loads(body))
-
     # ------------------------------------------------------ 追踪
 
     def test_tracking_auth_and_state(self) -> None:

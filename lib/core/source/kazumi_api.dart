@@ -36,6 +36,13 @@ class KazumiApiRule {
       _path('listPath', r'$.data[*]');
       _path('namePath', r'$.name');
       _path('sourcePath', r'$.url');
+      final template = '${raw['sourceTemplate'] ?? ''}'.trim();
+      if (template.isNotEmpty) {
+        if (!template.contains('@source')) {
+          throw const RuleFormatException('API 详情页模板必须引用 @source');
+        }
+        _https(template.replaceAll('@source', 'source'));
+      }
     } else {
       final format = '${raw['format'] ?? 'nested'}';
       if (!const ['nested', 'delimited'].contains(format)) {
@@ -126,15 +133,23 @@ class KazumiApiRule {
 
   List<({String title, String remoteId})> searchRows(String text) {
     final document = jsonDecode(text);
-    return [
-      for (final node in _paths['listPath']!.read(document))
-        if (_text(_first('namePath', node)).isNotEmpty &&
-            _text(_first('sourcePath', node)).isNotEmpty)
-          (
-            title: _text(_first('namePath', node)),
-            remoteId: _text(_first('sourcePath', node)),
-          ),
-    ];
+    final template = '${raw['sourceTemplate'] ?? ''}'.trim();
+    final result = <({String title, String remoteId})>[];
+    for (final node in _paths['listPath']!.read(document)) {
+      final title = _text(_first('namePath', node));
+      final source = _text(_first('sourcePath', node));
+      if (title.isEmpty || source.isEmpty) continue;
+      result.add((
+        title: title,
+        // API 9 permits a prefix immediately before @source, such as /GV@source.
+        remoteId: template.isEmpty
+            ? source
+            : _https(
+                template.replaceAll('@source', Uri.encodeComponent(source)),
+              ),
+      ));
+    }
+    return result;
   }
 
   List<Chapter> chapters(String text, MediaItem item, String baseUrl) {

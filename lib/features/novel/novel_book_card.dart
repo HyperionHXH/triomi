@@ -6,8 +6,8 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../discover/widgets/media_item_card.dart';
-
 import '../search/search_page.dart';
+import 'novel_list_metadata.dart';
 
 /// A novel card uses real source metadata; absent fields are omitted.
 class NovelBookCard extends StatelessWidget {
@@ -29,7 +29,12 @@ class NovelBookCard extends StatelessWidget {
   final Future<void> Function()? onReturn;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => NovelListMetadata(
+    item: item,
+    builder: (enriched) => _buildCard(context, enriched),
+  );
+
+  Widget _buildCard(BuildContext context, MediaItem item) {
     final theme = Theme.of(context);
     final palette = context.palette;
     void searchTag(String tag) => SearchPage.open(

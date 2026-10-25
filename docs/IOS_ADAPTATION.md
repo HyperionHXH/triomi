@@ -32,12 +32,13 @@ JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源�
 - `NSAllowsArbitraryLoads=true` 支持 HTTP 来源和 WebDAV；HTTP 内容及凭据没有 TLS 保护，敏感账号节点应选 HTTPS。
 - `UIBackgroundModes` 包含 `audio`、`fetch`；AVPlayer 持有独立音频会话租约，使用 `.playback/.moviePlayback`。播放设置开启后台音频后，切后台时脱离视频层而保留同一个播放器的音频；回前台重新挂接。未开启时挂起并保留用户播放/暂停意图，退出播放器释放会话。锁屏、系统中断及实际蓝牙设备仍需真机验证。
   Apple 的 [allowBluetooth](https://developer.apple.com/documentation/avfaudio/avaudiosession/categoryoptions-swift.struct/allowbluetooth) 与 [allowAirPlay](https://developer.apple.com/documentation/avfaudio/avaudiosession/categoryoptions-swift.struct/allowairplay) 显式选项针对录音类别，不能照搬到 `.playback`；系统为播放类别提供相应输出路由。
-- 播放设置中的「画中画」通过 `AVPictureInPictureController` 启动系统 PiP，共用 AVPlayerLayer，不另开一条媒体流；设备/媒体不可用或启动失败返回明确结果。PiP 不包含 Flutter 自绘弹幕，支持的视频/音频格式受系统 AVPlayer 限制，不等同 libmpv 的全部容器/解码范围。
-- 活跃下载拥有独立常亮租约；完成、暂停、后台或销毁释放，不能关闭阅读器/播放器持有的常亮。系统挂起仍会停止 Dart 下载执行；回前台自动恢复仅因生命周期中断的任务及排队任务，不恢复用户手动暂停、已删除、已完成或停用来源的任务。冷启动恢复中断记录，沿用已有漫画检查点及视频断点文件。`fetch` 不承诺无限后台下载或准时定时任务。
+- 播放菜单中的「画中画」通过 `AVPictureInPictureController` 共用原有 AVPlayerLayer，不另开媒体流；PiP 不含 Flutter 自绘弹幕。AVPlayer 回报真实已缓冲进度并请求向片尾预载，内存由系统管理，不承诺 Android/Windows 的严格128MiB字节预算。iOS17+可使用公开MIME覆盖选项，15/16仍依赖系统格式识别。
+- 活跃下载拥有独立常亮租约；完成、暂停、后台或销毁释放，不能关闭阅读器/播放器持有的常亮。系统挂起仍会停止Dart下载；回前台/冷启动恢复生命周期中断与排队任务，不恢复手动暂停、删除、完成或停用来源任务，`fetch`不承诺无限后台执行。
+- 缓存页支持系统WebKit HTTP响应缓存手动清理，保留Cookie/DOM和离线内容；公共API无法测量准确字节和最早写入时间，因此显示未知，不套用Android/Windows容量/年龄自动策略。显式应用代理优先，否则Dart来源网络通过CFNetwork读取目标URL的系统代理/PAC。
 - 开启 `CADisableMinimumFrameDurationOnPhone`；是否达到 120Hz 仍由设备、系统节能策略及帧耗时决定。
 - 严格文件校验只接受 iOS 的精确 `/var/...` → `/private/var/...` 系统别名，不允许任意符号链接重定向。
 
-弹幕入口、来源弹幕加载与开关已恢复，并保护切集和异步请求归属。来源提供兼容数据无需官方应用凭据；官方搜索/发送仍需本人身份，不内置别人的 AppSecret。详见 [DANMAKU.md](DANMAKU.md)。
+弹幕沿用主线B站、Animeko、Gamer三个独立只读池，支持匹配纠正、各源偏移、即时显示与安全屏蔽设置；旧弹弹play凭据入口/发送客户端和来源danmakuUrl消费已移除，既有安全存储不主动删除。详见 [DANMAKU.md](DANMAKU.md)。模拟器巡检使用loopback夹具客户端及真实生产会话/渲染，不等于线上服务或所有作品可达。
 
 ## GitHub Actions 获取 IPA
 
@@ -46,7 +47,7 @@ JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源�
 1. 本次改动推送到 `feat/ios` 会自动触发；也可在 GitHub「Actions → build-ios → Run workflow」选择该分支手动运行。`on.push.branches` 明确包含 `feat/ios`、`master`、`main`，另保留 PR 和 `v*` Tag 触发。
 2. Runner 使用 `macos-latest`，从现有 build/release 工作流解析 Flutter 精确版本，运行 `flutter pub get`、缓存 CocoaPods、`pod install`。
 3. 执行 `flutter build ios --release --no-codesign`。`tools/package_ios.py` 检查 device arm64 Mach-O、版本、嵌入框架和未签名边界，将 `Runner.app` 复制进临时 `Payload/`，通过 `zip -r -y` 保留执行权限和框架链接。
-4. 运行 iPhone 模拟器 XCTest，以及 JS、持久化与真实视频 integration_test。`tools/run_ios_video_smoke.py` 启动仅监听 loopback 的夹具服务，让生产 PlayerPage 实际解码 30 秒视频并验证播放/暂停/跳转及来源弹幕开关；测试视频不进入 IPA。模拟器通过不替代真机 PiP、锁屏音频、照片权限及第三方账号验收。
+4. 运行 iPhone 模拟器 XCTest，以及 JS、持久化与真实视频 integration_test。`tools/run_ios_video_smoke.py` 启动仅监听 loopback 的夹具服务，让生产 PlayerPage 实际解码 30 秒视频并验证播放/暂停/跳转及三源弹幕会话开关；测试视频不进入 IPA。模拟器通过不替代真机 PiP、锁屏音频、照片权限及第三方账号验收。
 5. 全部成功后，在该次运行底部 **Artifacts → triomi-ios-unsigned** 下载外层 ZIP，解压取得 `Triomi-iOS-Unsigned.ipa`。不要把 GitHub 下载的外层 artifact ZIP 当成 IPA。
 6. 新 `v*` Tag 的成功构建会把同名 IPA 附加到该 Tag 的 Release；不会替换既有同名但不同摘要的资产。手动运行和普通分支不会发布 Release。打包日志包含 IPA SHA-256，可在 Windows 用 `Get-FileHash .\Triomi-iOS-Unsigned.ipa -Algorithm SHA256` 对照。
 
@@ -54,9 +55,9 @@ JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源�
 
 `tools/run_ios_visual_tour.py --device <明确的模拟器UDID>` 运行生产 TriomiApp 的路由巡检。宿主只监听127.0.0.1，收到已完成渲染的页面握手后调用同一UDID的 `simctl screenshot`；原生AVPlayer画面不会被Flutter截图漏掉。每张截图记录页面、顺序、尺寸与SHA-256，拒绝缺失、重名及相同帧。录屏由 `simctl recordVideo --codec=h264` 创建，结束发送SIGINT并等待封装，再用ffprobe解码核验。失败时保留截图、日志、manifest与录屏以定位，不把中间材料称为通过。
 
-视觉产物为 `triomi-ios-visual-tour`，包含 `screenshots/*.png`、`ios_ui_tour.mp4`、`manifest.json` 和日志；测试夹具不写进release IPA。七个基础文件名保持用户约定，并补充各媒体书架、阅读菜单、来源仓库及账号/同步等独立场景。账号保持未登录，不在截图、视频或日志输入真实秘密。
+视觉产物为 `triomi-ios-visual-tour`，包含 `screenshots/*.png`、`ios_ui_tour.mp4`、`manifest.json` 和日志；测试夹具不写进release IPA。当前清单53个独立状态：保留七个基础文件名及原35状态，增加阅读目录/下载筛选/夜间滚动，播放器紧凑菜单/倍速/比例/缓冲信息，三个弹幕池的分集选择/偏移与显示屏蔽，以及缓存分类/手动确认/保留内容。账号保持未登录，不在截图、视频或日志输入真实秘密。
 
-已通过的运行：[39547378733](https://github.com/HyperionHXH/triomi/actions/runs/39547378733)，源码 `9d4a5ff`。运行成功后用 `gh run download <RUN_ID> -n triomi-ios-unsigned -D release_ios/ipa` 与 `gh run download <RUN_ID> -n triomi-ios-visual-tour -D release_ios/visual-tour` 拉回本地。本轮35张PNG已逐张打开检查，未发现白屏、错误弹窗、黄黑溢出条或明显布局错位；录屏191.021667秒，本地完整解码1041帧。全部截图及录屏哈希与manifest一致，具体逐张结果在本地 `release_ios/VISUAL_ACCEPTANCE.md`；机器断言不替代视觉判断，截图仅覆盖对应可见区域。
+历史基线运行：[39547378733](https://github.com/HyperionHXH/triomi/actions/runs/39547378733)，源码 `9d4a5ff`，35张PNG逐张检查、191.021667秒录屏完整解码1041帧；它不是本轮173同步的验收证据。本轮按精确提交和run下载到独立的 `release_ios/<RUN_ID>/`，不得用旧图片代替53状态巡检。最终运行、产物摘要与逐张验收结果见 [CURRENT_STATUS.md](CURRENT_STATUS.md) 当前请求段。
 
 ## AltStore / SideStore / TrollStore 安装
 
@@ -70,7 +71,7 @@ JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源�
 
 覆盖升级请沿用同一安装工具、Apple 团队和稳定 Bundle ID；改换签名身份可能无法覆盖或失去原 Keychain 访问。先在「我的 → 备份与恢复」导出备份到沙盒外；恢复不会迁移账号秘密，需要重新登录。不要通过卸载来解决更新问题后才考虑备份。
 
-## 本轮验证
+## 历史基线验证（不替代本轮173同步）
 
 - `flutter analyze --no-pub`：零问题。
 - `flutter test --no-pub`：1279 项通过，3 项跳过；包括 iOS 冷队列重建/回前台与手动暂停竞态、Android/iOS 弹幕切集迟到响应及开关、iOS APK 入口降级，以及本轮规则导入面板退出动画控制器生命周期回归。

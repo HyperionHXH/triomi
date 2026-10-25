@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 
 import 'lk_tls_socket.dart';
+import 'system_proxy_adapter.dart';
 
 // Only built-in novel-site hosts use this fallback. TLS still authenticates the
 // original URL hostname; DNS results never replace the URL, Host or SNI.
@@ -19,29 +20,34 @@ const sourceDnsHosts = {
 
 void configureSourceHttpAdapter(Dio dio, {String proxy = ''}) {
   final resolver = SourceDnsFallback();
-  dio.httpClientAdapter = IOHttpClientAdapter(
-    createHttpClient: () {
-      final client = HttpClient();
-      if (proxy.isNotEmpty) {
-        final uri = Uri.parse(proxy);
-        final host = uri.host.contains(':') ? '[${uri.host}]' : uri.host;
-        client.findProxy = (_) => 'PROXY $host:${uri.port}';
-      }
-      client.connectionFactory = (uri, proxyHost, proxyPort) async {
-        if (proxyHost != null || !sourceDnsHosts.contains(uri.host)) {
-          if (proxyHost == null && uri.scheme == 'https') {
-            return SecureSocket.startConnect(uri.host, uri.port);
-          }
-          return Socket.startConnect(
-            proxyHost ?? uri.host,
-            proxyPort ?? uri.port,
-          );
+  HttpClient createClient() {
+    final client = HttpClient();
+    if (proxy.isNotEmpty) {
+      final uri = Uri.parse(proxy);
+      final host = uri.host.contains(':') ? '[${uri.host}]' : uri.host;
+      client.findProxy = (_) => 'PROXY $host:${uri.port}';
+    }
+    client.connectionFactory = (uri, proxyHost, proxyPort) async {
+      if (proxyHost != null || !sourceDnsHosts.contains(uri.host)) {
+        if (proxyHost == null && uri.scheme == 'https') {
+          return SecureSocket.startConnect(uri.host, uri.port);
         }
-        return connectWithDnsFallback(uri, resolver);
-      };
-      return client;
-    },
-  );
+        return Socket.startConnect(
+          proxyHost ?? uri.host,
+          proxyPort ?? uri.port,
+        );
+      }
+      return connectWithDnsFallback(uri, resolver);
+    };
+    return client;
+  }
+
+  // Explicit application settings take precedence over the user's OS route.
+  // VPN routing stays in the OS; Wi-Fi/PAC settings use the platform bridge.
+  dio.httpClientAdapter =
+      proxy.isEmpty && (Platform.isWindows || Platform.isAndroid || Platform.isIOS)
+      ? SystemProxyHttpClientAdapter(createClient: createClient)
+      : IOHttpClientAdapter(createHttpClient: createClient);
 }
 
 /// Each attempt owns its TCP/TLS socket until it is handed to HttpClient.
@@ -133,9 +139,14 @@ ConnectionTask<Socket> connectWithDnsFallback(
     final resolved = await resolver.lookup(transportUri.host);
     if (cancelled) throw const SocketException('Connection cancelled');
 
-    active = connectLkAddresses(transportUri, resolved);
+    active = connectLkAddresses(
+      transportUri,
+      resolver._preferSuccessful(uri.host, resolved),
+    );
     try {
-      return await active!.socket;
+      final socket = await active!.socket;
+      resolver._rememberSuccessful(uri.host, socket.remoteAddress);
+      return socket;
     } catch (error) {
       active?.cancel();
       if (cancelled) rethrow;
@@ -147,9 +158,14 @@ ConnectionTask<Socket> connectWithDnsFallback(
           .toList(growable: false);
       if (alternatives.isEmpty) rethrow;
 
-      active = connectLkAddresses(transportUri, alternatives);
+      active = connectLkAddresses(
+        transportUri,
+        resolver._preferSuccessful(uri.host, alternatives),
+      );
       try {
-        return await active!.socket;
+        final socket = await active!.socket;
+        resolver._rememberSuccessful(uri.host, socket.remoteAddress);
+        return socket;
       } catch (_) {
         active?.cancel();
         rethrow;
@@ -174,6 +190,29 @@ class SourceDnsFallback {
   final Future<Map<String, dynamic>> Function(Uri)? query;
   final _cache =
       <String, ({DateTime expires, List<InternetAddress> addresses})>{};
+  // A process-local preference, not an alternate DNS cache. Only addresses in
+  // the current answer may be reordered; changed DNS always wins. The built-in
+  // host allowlist bounds this map and keeps unrelated sites/proxies untouched.
+  final _successful = <String, InternetAddress>{};
+
+  List<InternetAddress> _preferSuccessful(
+    String host,
+    List<InternetAddress> current,
+  ) {
+    final preferred = _successful[host];
+    if (preferred == null) return current;
+    final index = current.indexWhere((a) => a.address == preferred.address);
+    if (index < 0) {
+      _successful.remove(host);
+      return current;
+    }
+    if (index == 0) return current;
+    return [current[index], ...current.take(index), ...current.skip(index + 1)];
+  }
+
+  void _rememberSuccessful(String host, InternetAddress address) {
+    if (allowedHosts.contains(host)) _successful[host] = address;
+  }
 
   Future<List<InternetAddress>> lookup(String host) async {
     try {

@@ -25,7 +25,6 @@ import 'package:triomi/features/novel/data/lk/lk_client.dart';
 import 'package:triomi/features/novel/reader/font_catalog.dart';
 import 'package:triomi/features/novel/reader/novel_reader_settings.dart';
 import 'package:triomi/features/novel/reader/user_font_store.dart';
-import 'package:triomi/features/player/data/danmaku_settings.dart';
 import 'package:triomi/features/schedule/data/background_update_check.dart';
 import 'package:triomi/features/schedule/data/bangumi_schedule_client.dart';
 import 'package:triomi/features/schedule/data/schedule_providers.dart';
@@ -222,11 +221,21 @@ void main() {
     test('停用来源不发送远端收藏新增或删除请求', () async {
       final source = FakeRemoteShelf();
       final disabled = SourceRegistrySnapshot(
-        entries: [SourceEntry(descriptor: source.descriptor, source: source, enabled: false)],
+        entries: [
+          SourceEntry(
+            descriptor: source.descriptor,
+            source: source,
+            enabled: false,
+          ),
+        ],
         failures: const [],
       );
       for (final add in [true, false]) {
-        final failure = await syncShelfToSource(disabled, item: itemFor(source), add: add);
+        final failure = await syncShelfToSource(
+          disabled,
+          item: itemFor(source),
+          add: add,
+        );
         expect(failure, isNotNull);
       }
       expect(source.writes, isEmpty);
@@ -717,30 +726,6 @@ void main() {
 
       expect(client.usedFallback, isFalse);
       expect(client.usedBaseUrl, BangumiScheduleClient.calendarUrl);
-    });
-  });
-
-  group('弹幕凭据：内置槽位', () {
-    test('用户没填时用内置（本仓库未注入则为空，维持旧行为）', () {
-      final credentials = DandanplayCredentials.load(
-        memoryPreferences(),
-        MemorySecureStore(),
-      );
-
-      expect(credentials.appId, DandanplayCredentials.builtInAppId);
-      expect(credentials.isConfigured, DandanplayCredentials.hasBuiltIn);
-    });
-
-    test('用户填了自己的凭据时优先用用户的', () async {
-      final preferences = memoryPreferences();
-      await preferences.set(DandanplayCredentials.appIdKey, 'user-app');
-      final secureStore = MemorySecureStore();
-      await secureStore.set(DandanplayCredentials.appSecretKey, 'user-secret');
-
-      final credentials = DandanplayCredentials.load(preferences, secureStore);
-
-      expect(credentials.appId, 'user-app');
-      expect(credentials.appSecret, 'user-secret');
     });
   });
 

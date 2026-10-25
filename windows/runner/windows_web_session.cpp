@@ -344,6 +344,42 @@ void Handle(const flutter::MethodCall<Value>& call, std::unique_ptr<Result> raw_
   const auto* args = call.arguments() ? std::get_if<Map>(call.arguments()) : nullptr;
   if (!args) { result->Error("invalid_args", "session arguments required"); return; }
   const auto& method = call.method_name();
+  if (method == "clearHttpCache") {
+    const auto path = Wide(Text(*args, "profile"));
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    if (path.empty() || attributes == INVALID_FILE_ATTRIBUTES ||
+        !(attributes & FILE_ATTRIBUTE_DIRECTORY) || (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+      result->Error("invalid_profile", "cache cleanup requires an existing owned profile"); return;
+    }
+    auto profile = std::make_shared<Profile>();
+    profile->path = path;
+    // A temporary hidden controller performs no navigation and never mutates
+    // Cookies, DOM storage, sessions, downloads or browser history.
+    profile->Ensure([profile, result](bool success) {
+      ComPtr<ICoreWebView2_13> web13;
+      ComPtr<ICoreWebView2Profile> base;
+      ComPtr<ICoreWebView2Profile2> storage;
+      if (!success || !profile->web || FAILED(profile->web.As(&web13)) ||
+          FAILED(web13->get_Profile(&base)) || FAILED(base.As(&storage))) {
+        if (profile->controller) profile->controller->Close();
+        Failed(result); return;
+      }
+      const HRESULT started = storage->ClearBrowsingData(COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE,
+        Callback<ICoreWebView2ClearBrowsingDataCompletedHandler>(
+          [profile, result](HRESULT status) -> HRESULT {
+            // Keep the controller alive until completion; closing early cancels
+            // the API without necessarily delivering its completion callback.
+            if (profile->controller) profile->controller->Close();
+            if (!shutting_down) result->Success(Value(SUCCEEDED(status)));
+            return S_OK;
+          }).Get());
+      if (FAILED(started)) {
+        if (profile->controller) profile->controller->Close();
+        Failed(result);
+      }
+    });
+    return;
+  }
   if (method != "open" && method != "cookies" && method != "videoCookies" && method != "store") {
     result->NotImplemented(); return;
   }

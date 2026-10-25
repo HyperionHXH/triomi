@@ -1,4 +1,5 @@
 import AVFoundation
+import CFNetwork
 import Flutter
 import Photos
 import UIKit
@@ -10,6 +11,7 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
   private static let backupNameLock = NSLock()
   private static var lastBackupStamp: UInt64 = 0
   private let channel: FlutterMethodChannel
+  private let cacheChannel: FlutterMethodChannel
   private let files = FileManager.default
   private let worker = DispatchQueue(label: "triomi.ios.files", qos: .userInitiated)
   private let web = IosWebSession()
@@ -27,20 +29,32 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
 
   init(messenger: FlutterBinaryMessenger, channelName: String = "triomi/platform") {
     channel = FlutterMethodChannel(name: channelName, binaryMessenger: messenger)
+    cacheChannel = FlutterMethodChannel(name: channelName == "triomi/platform" ? "triomi/cache-management" : channelName + "/cache-management", binaryMessenger: messenger)
     super.init()
     channel.setMethodCallHandler { [weak self] call, result in
       self?.handle(call, result: result)
+    }
+    cacheChannel.setMethodCallHandler { [weak self] call, result in
+      guard let self = self else { return }
+      if call.method == "clearBrowserHttpCache" { self.web.clearHttpCache { result(true) } }
+      else { result(FlutterMethodNotImplemented) }
     }
   }
 
   deinit {
     channel.setMethodCallHandler(nil)
+    cacheChannel.setMethodCallHandler(nil)
     IosBackupArtifactRegistry.releaseOwner(artifactOwner)
   }
 
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any] ?? [:]
     switch call.method {
+    case "resolveSystemProxy":
+      guard let value = args["url"] as? String, let url = IosWebSession.webURL(value) else {
+        result(FlutterError(code: "invalid_url", message: "A public HTTP(S) URL without credentials is required", details: nil)); return
+      }
+      IosSystemProxyRequest.resolve(url: url, result: result)
     case "pickBackupFile", "pickFontFile", "pickImage", "pickDirectory", "pickLocalComic":
       presentPicker(call.method, directory: args["directory"] as? Bool == true, result: result)
     case "cancelLocalComicPick":
@@ -374,6 +388,89 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
 
   static func failure(_ code: String, _ error: Error) -> FlutterError {
     FlutterError(code: code, message: error.localizedDescription, details: nil)
+  }
+}
+
+/// Ask CFNetwork for the per-destination OS route, including exceptions and PAC.
+/// PAC executes through the OS API; target headers and credentials never enter it.
+final class IosSystemProxyRequest {
+  private let url: URL
+  private var pending: FlutterResult?
+  private var source: CFRunLoopSource?
+
+  private init(url: URL, result: @escaping FlutterResult) { self.url = url; pending = result }
+
+  static func resolve(url: URL, result: @escaping FlutterResult) {
+    guard let settings = CFNetworkCopySystemProxySettings()?.takeRetainedValue() else { result(["direct": true]); return }
+    let proxies = CFNetworkCopyProxiesForURL(url as CFURL, settings).takeRetainedValue()
+    resolve(url: url, proxies: proxies as! [[String: Any]], result: result)
+  }
+
+  static func resolve(url: URL, proxies: [[String: Any]], result: @escaping FlutterResult) {
+    let request = IosSystemProxyRequest(url: url, result: result)
+    request.select(proxies, allowPAC: true)
+  }
+
+  private func select(_ proxies: [[String: Any]], allowPAC: Bool) {
+    guard let proxy = proxies.first, let type = proxy[kCFProxyTypeKey as String] as? String else {
+      finish(FlutterError(code: "system_proxy_failed", message: "The OS returned no proxy route", details: nil)); return
+    }
+    if type == kCFProxyTypeNone as String { finish(["direct": true]); return }
+    if type == kCFProxyTypeHTTP as String || type == kCFProxyTypeHTTPS as String {
+      do { finish(try Self.httpRoute(proxy)) }
+      catch { finish(FlutterError(code: "system_proxy_failed", message: "The OS proxy address is invalid or unsupported", details: nil)) }
+      return
+    }
+    guard allowPAC else {
+      finish(FlutterError(code: "system_proxy_failed", message: "The OS selected an unsupported proxy route", details: nil)); return
+    }
+    var context = CFStreamClientContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(), retain: nil, release: nil, copyDescription: nil)
+    let callback: CFProxyAutoConfigurationResultCallback = { info, proxies, error in
+      guard let info = info else { return }
+      let request = Unmanaged<IosSystemProxyRequest>.fromOpaque(info).takeUnretainedValue()
+      guard request.pending != nil else { return }
+      if error != nil || proxies == nil {
+        request.finish(FlutterError(code: "system_proxy_failed", message: "The OS could not resolve its proxy configuration", details: nil))
+      } else { request.select(proxies! as! [[String: Any]], allowPAC: false) }
+    }
+    if type == kCFProxyTypeAutoConfigurationURL as String,
+       let value = proxy[kCFProxyAutoConfigurationURLKey as String] as? URL,
+       IosWebSession.webURL(value.absoluteString) != nil {
+      source = CFNetworkExecuteProxyAutoConfigurationURL(value as CFURL, url as CFURL, callback, &context)
+    } else if type == kCFProxyTypeAutoConfigurationJavaScript as String,
+              let script = proxy[kCFProxyAutoConfigurationJavaScriptKey as String] as? String {
+      source = CFNetworkExecuteProxyAutoConfigurationScript(script as CFString, url as CFURL, callback, &context)
+    }
+    guard let source = source else {
+      finish(FlutterError(code: "system_proxy_failed", message: "The OS proxy configuration is unsupported", details: nil)); return
+    }
+    CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+    // Retain the request until the callback or native deadline revokes its source.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+      if self.pending != nil { self.finish(FlutterError(code: "system_proxy_failed", message: "OS proxy resolution timed out", details: nil)) }
+    }
+  }
+
+  static func httpRoute(_ proxy: [String: Any]) throws -> [String: Any] {
+    guard let host = proxy[kCFProxyHostNameKey as String] as? String, !host.isEmpty,
+          let port = proxy[kCFProxyPortNumberKey as String] as? NSNumber, (1...65535).contains(port.intValue),
+          proxy[kCFProxyUsernameKey as String] == nil, proxy[kCFProxyPasswordKey as String] == nil,
+          !host.contains(where: { $0.isWhitespace || "/@?#;".contains($0) }) else {
+      throw IosPlatformBridge.error("Invalid OS proxy route")
+    }
+    let endpoint = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]:\(port.intValue)" : "\(host):\(port.intValue)"
+    guard let parsed = URLComponents(string: "http://" + endpoint), parsed.host != nil, parsed.port == port.intValue else {
+      throw IosPlatformBridge.error("Invalid OS proxy route")
+    }
+    return ["direct": false, "proxy": endpoint, "bypass": ""]
+  }
+
+  private func finish(_ value: Any) {
+    guard let callback = pending else { return }
+    pending = nil
+    if let source = source { CFRunLoopSourceInvalidate(source) }
+    source = nil
+    callback(value)
   }
 }
 
