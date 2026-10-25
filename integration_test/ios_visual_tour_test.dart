@@ -274,9 +274,15 @@ void main() {
     await tester.tap(find.byTooltip('阅读菜单'));
     await pumpFor();
     await tapText('阅读设置');
-    await tapText('上下滚动');
-    expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '上下滚动')).selected, isTrue);
-    await tapText('夜间');
+    for (final label in ['上下滚动', '夜间']) {
+      final chip = find.widgetWithText(ChoiceChip, label);
+      await tester.ensureVisible(chip);
+      await pumpFor();
+      expect(chip.hitTestable(), findsOneWidget);
+      await tester.tap(chip);
+      await pumpFor();
+      expect(tester.widget<ChoiceChip>(chip).selected, isTrue);
+    }
     await screenshot('04_novel_reading_options.png', AppRoutes.novelReader, '生产阅读设置实际选择上下滚动与夜间背景');
     await tapText('完成');
     expect(fixtures.preferences.get<String>('novelReader.mode'), 'scroll');

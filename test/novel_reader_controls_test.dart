@@ -190,6 +190,30 @@ void main() {
     await settle(tester);
   }
 
+  testWidgets('phone reading options retain scroll mode and night background', (tester) async {
+    tester.view.physicalSize = const Size(1206, 2622);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await open(tester);
+    await controls(tester);
+    await tester.tap(find.text('阅读设置'));
+    await tester.pumpAndSettle();
+    for (final label in ['上下滚动', '夜间']) {
+      final chip = find.widgetWithText(ChoiceChip, label);
+      await tester.ensureVisible(chip);
+      await tester.pumpAndSettle();
+      expect(chip.hitTestable(), findsOneWidget);
+      await tester.tap(chip);
+      await tester.pumpAndSettle();
+      expect(tester.widget<ChoiceChip>(chip).selected, isTrue);
+    }
+    await tester.tap(find.widgetWithText(FilledButton, '完成'));
+    await settle(tester);
+    expect(NovelReaderSettings.load(preferences).mode, NovelReadingMode.scroll);
+    expect(NovelReaderSettings.load(preferences).theme, NovelTheme.dark);
+  });
+
   testWidgets(
     'body controls overlay without reflow and catalog changes the actual chapter',
     (tester) async {
