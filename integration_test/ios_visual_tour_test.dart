@@ -532,9 +532,11 @@ void main() {
       await screenshot(name, route, '生产配置页面，未登录且无账号凭据');
       if (route == AppRoutes.settings) {
         await tapText('缓存与存储');
+        final rescan = find.byWidgetPredicate(
+            (widget) => widget is IconButton && widget.tooltip == '重新扫描');
         await until(() => find.text('缓存管理').evaluate().isNotEmpty &&
-            find.byTooltip('重新扫描').evaluate().isNotEmpty &&
-            tester.widget<IconButton>(find.byTooltip('重新扫描')).onPressed != null,
+            rescan.evaluate().isNotEmpty &&
+            tester.widget<IconButton>(rescan).onPressed != null,
             'production cache scan must complete before its preview');
         expect(find.textContaining('扫描未完成').evaluate(), isEmpty);
         await screenshot('07_cache_management.png', route, '生产缓存分类预览，只读统计，不清理设备或账号数据');
