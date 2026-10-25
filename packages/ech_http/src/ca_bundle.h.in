@@ -1,0 +1,8 @@
+#pragma once
+#include <string_view>
+inline std::string_view eh_ca_bundle() {
+  static constexpr unsigned char roots[] = {
+@EH_CA_BYTES@
+  };
+  return {reinterpret_cast<const char *>(roots), sizeof(roots)};
+}

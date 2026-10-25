@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
+import '../source/bangumi_route_policy.dart';
 import '../source/http_client.dart';
 
 /// Uses the same proxy, deadlines and TLS policy as source metadata requests.
@@ -36,7 +37,10 @@ class SourceNetworkImage extends ImageProvider<SourceNetworkImage> {
 
   Future<ui.Codec> _load(ImageDecoderCallback decode) async {
     try {
-      final requestUrl = _publicCoverRequestUrl(url);
+      final routes = http is BangumiImageRoutingClient
+          ? (http as BangumiImageRoutingClient).bangumiRoutes
+          : const BangumiRoutePolicy();
+      final requestUrl = routes.coverRequestUrl(url);
       try {
         return await _fetchAndDecode(requestUrl, decode);
       } catch (_) {
@@ -68,46 +72,4 @@ class SourceNetworkImage extends ImageProvider<SourceNetworkImage> {
 
   @override
   int get hashCode => Object.hash(url, identityHashCode(http), sourceId, scale);
-}
-
-final _publicBangumiPicturePath = RegExp(
-  r'^/(?:r/\d+(?:x\d+)?/)?pic/(?:cover|crt)/',
-);
-
-String _publicCoverRequestUrl(String url) {
-  final uri = Uri.tryParse(url);
-  if (uri == null ||
-      (uri.scheme != 'https' && uri.scheme != 'http') ||
-      uri.userInfo.isNotEmpty ||
-      uri.hasFragment ||
-      uri.hasPort) {
-    return url;
-  }
-  final publicPicture =
-      uri.host == 'lain.bgm.tv' &&
-      !uri.hasQuery &&
-      _publicBangumiPicturePath.hasMatch(uri.path);
-  final parts = uri.pathSegments;
-  final publicApiPicture =
-      uri.host == 'api.bgm.tv' &&
-      parts.length == 4 &&
-      parts[0] == 'v0' &&
-      const {'subjects', 'characters', 'persons'}.contains(parts[1]) &&
-      (int.tryParse(parts[2]) ?? 0) > 0 &&
-      parts[3] == 'image' &&
-      (!uri.hasQuery ||
-          (uri.queryParametersAll.length == 1 &&
-              uri.queryParametersAll['type']?.length == 1 &&
-              const {
-                'large',
-                'common',
-                'medium',
-                'small',
-                'grid',
-              }.contains(uri.queryParameters['type'])));
-  if (!publicPicture && !publicApiPicture) return url;
-  return Uri.https('wsrv.nl', '/', {
-    'url': '${uri.host}${uri.path}${uri.hasQuery ? '?${uri.query}' : ''}',
-    if (uri.path.toLowerCase().endsWith('.gif')) 'n': '-1',
-  }).toString();
 }

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/media_type.dart';
 import '../models/source_exception.dart';
+import 'bangumi_route_policy.dart';
 import 'github_public_delivery.dart';
 import 'http_adapter_stub.dart' if (dart.library.io) 'http_adapter_io.dart';
 import 'windows_mihon_host.dart';
@@ -157,13 +158,20 @@ abstract interface class SecureRuleDownloadClient {
 }
 
 class DioSourceHttpClient
-    implements SourceHttpClient, SecureRuleDownloadClient {
+    implements
+        SourceHttpClient,
+        SecureRuleDownloadClient,
+        BangumiImageRoutingClient {
   DioSourceHttpClient({
     Dio? dio,
     String proxy = '',
+    BangumiRoutePolicy bangumiRoutes = const BangumiRoutePolicy(),
+    BangumiRoutePolicy Function()? bangumiRoutesResolver,
     this.defaultUserAgent = 'Triomi/0.1.0',
     this.timeout = const Duration(seconds: 20),
-  }) : _allowPublicGithubDelivery = proxy.isEmpty,
+  }) : _bangumiRoutes = bangumiRoutes,
+       _bangumiRoutesResolver = bangumiRoutesResolver,
+       _allowPublicGithubDelivery = proxy.isEmpty,
        _dio =
            dio ??
            Dio(
@@ -174,10 +182,22 @@ class DioSourceHttpClient
                receiveDataWhenStatusError: true,
              ),
            ) {
-    if (dio == null) configureSourceHttpAdapter(_dio, proxy: proxy);
+    if (dio == null) {
+      configureSourceHttpAdapter(
+        _dio,
+        proxy: proxy,
+        bangumiRoutes: bangumiRoutes,
+        bangumiRoutesResolver: bangumiRoutesResolver,
+      );
+    }
   }
 
   final Dio _dio;
+  final BangumiRoutePolicy _bangumiRoutes;
+  final BangumiRoutePolicy Function()? _bangumiRoutesResolver;
+  @override
+  BangumiRoutePolicy get bangumiRoutes =>
+      _bangumiRoutesResolver?.call() ?? _bangumiRoutes;
   final String defaultUserAgent;
   final Duration timeout;
   final bool _allowPublicGithubDelivery;

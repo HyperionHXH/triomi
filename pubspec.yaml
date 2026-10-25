@@ -33,6 +33,10 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   xpath_selector: ^3.0.2
   dio: ^5.11.1
+  # Upstream 0.2.3 with a byte-identical CA embedding fix for MSVC C2026.
+  ech_http:
+    path: packages/ech_http
+  http: ^1.6.0
   html: ^0.15.7
   scrollable_positioned_list: ^0.3.8
   crypto: ^3.0.7

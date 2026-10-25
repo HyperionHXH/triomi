@@ -14,6 +14,9 @@ class _MenuHarness extends StatefulWidget {
     this.textScale = 1,
     this.padding = EdgeInsets.zero,
     this.features = true,
+    this.onVolume,
+    this.volumeEnabled = true,
+    this.volumeStatus,
   });
 
   final Future<void> Function(PlayerSettings)? onSave;
@@ -21,6 +24,9 @@ class _MenuHarness extends StatefulWidget {
   final double textScale;
   final EdgeInsets padding;
   final bool features;
+  final Future<double> Function(double)? onVolume;
+  final bool volumeEnabled;
+  final String? volumeStatus;
 
   @override
   State<_MenuHarness> createState() => _MenuHarnessState();
@@ -31,6 +37,10 @@ class _MenuHarnessState extends State<_MenuHarness> {
   final visibility = <bool>[];
   final actions = <PlayerMenuAction>[];
   int outsideTaps = 0;
+
+  void reportDeviceVolume(double value) {
+    setState(() => settings = settings.copyWith(volume: value));
+  }
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -56,6 +66,9 @@ class _MenuHarnessState extends State<_MenuHarness> {
                   child: PlayerMenu(
                     settings: settings,
                     nativeAndroid: widget.features,
+                    onVolumeChanged: widget.onVolume,
+                    volumeEnabled: widget.volumeEnabled,
+                    volumeStatus: widget.volumeStatus,
                     lineName: widget.features
                         ? List.filled(30, 'source').join()
                         : null,
@@ -98,6 +111,103 @@ Future<void> _tap(WidgetTester tester, String id) async {
 }
 
 void main() {
+  testWidgets(
+    'desktop volume keeps continuous app gain through normal settings callback',
+    (tester) async {
+      final key = GlobalKey<_MenuHarnessState>();
+      final saved = <PlayerSettings>[];
+      await tester.pumpWidget(
+        _MenuHarness(
+          key: key,
+          features: false,
+          onSave: (settings) async {
+            saved.add(settings);
+          },
+        ),
+      );
+      await _open(tester);
+      await _tap(tester, 'volume');
+      final slider = tester.widget<Slider>(
+        find.byKey(const ValueKey('player-menu-volume-slider')),
+      );
+      slider.onChanged!(.46);
+      slider.onChangeEnd!(.46);
+      await tester.pumpAndSettle();
+      expect(saved.single.volume, .46);
+      expect(key.currentState!.settings.volume, .46);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await _open(tester);
+      await _tap(tester, 'volume');
+      expect(
+        tester
+            .widget<Slider>(
+              find.byKey(const ValueKey('player-menu-volume-slider')),
+            )
+            .value,
+        .46,
+      );
+    },
+  );
+
+  testWidgets(
+    'device menu replaces optimistic slider with snapped readback without saving desktop gain',
+    (tester) async {
+      final pending = Completer<double>();
+      var saves = 0;
+      var requested = 0.0;
+      await tester.pumpWidget(
+        _MenuHarness(
+          onSave: (_) async {
+            saves++;
+          },
+          onVolume: (value) {
+            requested = value;
+            return pending.future;
+          },
+        ),
+      );
+      await _open(tester);
+      await _tap(tester, 'volume');
+      final slider = tester.widget<Slider>(
+        find.byKey(const ValueKey('player-menu-volume-slider')),
+      );
+      slider.onChanged!(.46);
+      slider.onChangeEnd!(.46);
+      await tester.pump();
+      expect(requested, .46);
+      pending.complete(.5);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<Slider>(
+              find.byKey(const ValueKey('player-menu-volume-slider')),
+            )
+            .value,
+        .5,
+      );
+      expect(find.text('50%'), findsOneWidget);
+      expect(saves, 0);
+    },
+  );
+
+  testWidgets(
+    'fixed device reports the limitation and disables its volume slider',
+    (tester) async {
+      await tester.pumpWidget(
+        const _MenuHarness(volumeEnabled: false, volumeStatus: '此设备使用固定音量'),
+      );
+      await _open(tester);
+      await _tap(tester, 'volume');
+      final slider = tester.widget<Slider>(
+        find.byKey(const ValueKey('player-menu-volume-slider')),
+      );
+      expect(slider.onChanged, isNull);
+      expect(slider.onChangeEnd, isNull);
+      expect(find.text('此设备使用固定音量'), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'settings apply immediately and retain selections after reopening',
     (tester) async {
@@ -178,6 +288,44 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('device updates do not rewind an active volume drag', (tester) async {
+    final key = GlobalKey<_MenuHarnessState>();
+    final writes = <double>[];
+    await tester.pumpWidget(_MenuHarness(
+      key: key,
+      onVolume: (value) async {
+        writes.add(value);
+        final actual = (value * 10).round() / 10;
+        key.currentState!.reportDeviceVolume(actual);
+        return actual;
+      },
+    ));
+    key.currentState!.reportDeviceVolume(.3);
+    await tester.pump();
+    await _open(tester);
+    await _tap(tester, 'volume');
+    final slider = find.byKey(const ValueKey('player-menu-volume-slider'));
+    final bounds = tester.getRect(slider);
+    final gesture = await tester.startGesture(
+      Offset(bounds.left + bounds.width * .3, bounds.center.dy),
+    );
+    await gesture.moveBy(const Offset(50, 0));
+    await tester.pump();
+    final draft = tester.widget<Slider>(slider).value;
+    expect(draft, greaterThan(.3));
+    key.currentState!.reportDeviceVolume(.3);
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(tester.widget<Slider>(slider).value, draft);
+    expect(writes, isEmpty);
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(writes.single, closeTo(draft, .001));
+    expect(tester.widget<Slider>(slider).value, (draft * 10).round() / 10);
+    key.currentState!.reportDeviceVolume(.8);
+    await tester.pump();
+    expect(tester.widget<Slider>(slider).value, .8);
+  });
 
   for (final size in [
     const Size(320, 640),

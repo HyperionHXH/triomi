@@ -311,6 +311,8 @@ void main() {
       );
       final toggle = find.byKey(const ValueKey('automatic-app-update-check'));
       await tester.scrollUntilVisible(toggle, 200);
+      await tester.ensureVisible(toggle);
+      await tester.pumpAndSettle();
       expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
       await tester.tap(toggle);
       await tester.pumpAndSettle();

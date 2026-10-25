@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/media_type.dart';
 import '../models/source_exception.dart';
+import 'bangumi_route_policy.dart';
 import 'http_client.dart';
 import 'source_providers.dart';
 
@@ -13,26 +14,43 @@ import 'source_providers.dart';
 /// the classic object/list payloads while `p1` wraps subject data in a Next
 /// payload. This client never forwards user credentials or cookies.
 class BangumiPublicClient {
-  BangumiPublicClient(this.http);
+  BangumiPublicClient(this.http, {this.routes = const BangumiRoutePolicy()});
 
   final SourceHttpClient http;
+  final BangumiRoutePolicy routes;
+  final _owners = <SourceRequestCancellation>{};
+  bool _disposed = false;
+
+  void dispose() {
+    _disposed = true;
+    for (final owner in _owners) {
+      owner.cancel('公开网络设置已改变');
+    }
+    _owners.clear();
+    _subjects.clear();
+  }
+
   final _subjectReads =
-      <(String, SourceRequestCancellation?, bool), Future<Map<String, Object?>>>{};
+      <
+        (String, SourceRequestCancellation?, bool),
+        Future<Map<String, Object?>>
+      >{};
   final _subjects = <String, (DateTime, Map<String, Object?>)>{};
 
   static const sourceId = 'bangumi-anime';
   static const userAgent =
       'Triomi/0.1.0 (https://github.com/HyperionHXH/triomi)';
-  static const v0Base = 'https://api.bgmapi.com/v0';
-  static const p1Base = 'https://api.kazumi.fyi/p1';
-  static const nextBase = 'https://next.bgm.tv/p1';
-  static const popularUrl = 'https://api.kazumi.fyi/kazumi/v1/popular/subjects';
+  String get v0Base => routes.v0;
+  String get p1Base => routes.p1;
+  String get nextBase => routes.comments;
+  String get popularUrl => routes.popular;
   static const Duration requestTimeout = Duration(seconds: 12);
   static const int pageSize = 24;
 
   Future<Map<String, Object?>> subject(String id, {bool refresh = false}) {
     final cached = _subjects[id];
-    if (!refresh && cached != null &&
+    if (!refresh &&
+        cached != null &&
         DateTime.now().difference(cached.$1) < const Duration(minutes: 5)) {
       return Future.value(cached.$2);
     }
@@ -63,19 +81,24 @@ class BangumiPublicClient {
         await _getJson('$v0Base/characters/${Uri.encodeComponent(id)}'),
       );
 
-  /// Comments use the official public Next API. The mirror requires its own
-  /// app authentication for comments; no upstream app credentials are copied.
+  /// Both modes retain actual Next short-review identities. In acceleration
+  /// mode its anonymous official request uses the shared ECH transport.
   Future<Object?> section(
     String id,
     String name, {
     int offset = 0,
     int limit = 20,
-  }) {
+  }) async {
     final base = name == 'comments' ? nextBase : v0Base;
-    return _getJson(
+    final value = await _getJson(
       '$base/subjects/${Uri.encodeComponent(id)}/${Uri.encodeComponent(name)}'
       '?limit=${limit.clamp(1, 100)}&offset=${offset.clamp(0, 100000)}',
     );
+    if (name == 'comments' &&
+        (value is! Map || value['data'] is! List || value['total'] is! num)) {
+      throw const FormatException('Bangumi 短评返回结构无效');
+    }
+    return value;
   }
 
   Future<List<Map<String, Object?>>> episodes(
@@ -157,7 +180,8 @@ class BangumiPublicClient {
     final response = await _send(
       SourceRequest(
         url:
-            '$popularUrl?limit=$boundedLimit&offset=${offset.clamp(0, 100000)}',
+            '$popularUrl?${routes.mirrorEnabled ? '' : 'type=2&'}'
+            'limit=$boundedLimit&offset=${offset.clamp(0, 100000)}',
       ),
     );
     final decoded = _decode(response);
@@ -172,11 +196,15 @@ class BangumiPublicClient {
   Future<SourceResponse> _send(SourceRequest request) async {
     final parent = request.cancellation ?? SourceRequestCancellation.current;
     final leaf = SourceRequestCancellation();
+    if (_disposed) throw StateError('公开资料客户端已关闭');
+    _owners.add(leaf);
     var finished = false;
     if (parent?.cancelled == true) leaf.cancel();
-    unawaited(parent?.token.whenCancel.then((_) {
-      if (!finished) leaf.cancel();
-    }));
+    unawaited(
+      parent?.token.whenCancel.then((_) {
+        if (!finished) leaf.cancel();
+      }),
+    );
     try {
       if (leaf.cancelled) throw StateError('公开资料请求已取消');
       final response = await http
@@ -187,7 +215,7 @@ class BangumiPublicClient {
               headers: {...request.headers, 'User-Agent': userAgent},
               body: request.body,
               bodyType: request.bodyType,
-              followRedirects: request.followRedirects,
+              followRedirects: false,
               checkStatus: false,
               cancellation: leaf,
             ),
@@ -226,6 +254,7 @@ class BangumiPublicClient {
       throw SourceException.wrap(error, sourceId: sourceId, url: request.url);
     } finally {
       finished = true;
+      _owners.remove(leaf);
     }
   }
 
@@ -315,7 +344,9 @@ class BangumiPublicPage {
 
 abstract final class BangumiV0Adapter {
   static Map<String, Object?> subject(Object? raw) {
-    if (raw is! Map) throw const FormatException('v0 subject 格式无效');
+    if (raw is! Map || raw['id'] == null) {
+      throw const FormatException('v0 subject 格式无效');
+    }
     return Map<String, Object?>.from(raw);
   }
 
@@ -325,7 +356,9 @@ abstract final class BangumiV0Adapter {
         : raw is Map
         ? raw['data']
         : null;
-    if (values is! List) throw const FormatException('v0 list 格式无效');
+    if (values is! List || values.any((value) => value is! Map)) {
+      throw const FormatException('v0 list 格式无效');
+    }
     return [
       for (final value in values)
         if (value is Map) Map<String, Object?>.from(value),
@@ -352,7 +385,9 @@ abstract final class BangumiV0Adapter {
 abstract final class BangumiP1Adapter {
   static Map<String, Object?> subject(Object? raw) {
     final value = raw is Map && raw['data'] is Map ? raw['data'] : raw;
-    if (value is! Map) throw const FormatException('p1 subject 格式无效');
+    if (value is! Map || value['id'] == null) {
+      throw const FormatException('p1 subject 格式无效');
+    }
     return Map<String, Object?>.from(value);
   }
 
@@ -381,6 +416,11 @@ abstract final class BangumiP1Adapter {
   }
 }
 
-final bangumiPublicClientProvider = Provider<BangumiPublicClient>(
-  (ref) => BangumiPublicClient(ref.watch(sourceHttpClientProvider)),
-);
+final bangumiPublicClientProvider = Provider<BangumiPublicClient>((ref) {
+  final client = BangumiPublicClient(
+    ref.watch(sourceHttpClientProvider),
+    routes: ref.watch(bangumiRoutePolicyProvider),
+  );
+  ref.onDispose(client.dispose);
+  return client;
+});

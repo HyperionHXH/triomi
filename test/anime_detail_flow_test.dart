@@ -192,7 +192,7 @@ void main() {
         }
         return const SourceResponse(
           statusCode: 200,
-          body: '{"total":1,"list":[{"user":{"nickname":"真实用户"},"comment":"公开吐槽内容","rate":8,"updatedAt":1700000000}]}',
+          body: '{"total":1,"data":[{"user":{"nickname":"真实用户"},"comment":"公开吐槽内容","rate":8,"updatedAt":1700000000}]}',
         );
       }
       if (path.endsWith('/characters')) {
@@ -243,6 +243,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        preferencesProvider.overrideWithValue(memoryPreferences()),
         sourceHttpClientProvider.overrideWithValue(http),
       ],
     );
@@ -373,6 +374,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          preferencesProvider.overrideWithValue(memoryPreferences()),
           sourceHttpClientProvider.overrideWithValue(http),
         ],
       );
@@ -426,6 +428,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          preferencesProvider.overrideWithValue(memoryPreferences()),
           sourceHttpClientProvider.overrideWithValue(http),
         ],
       );
@@ -483,6 +486,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          preferencesProvider.overrideWithValue(memoryPreferences()),
           sourceHttpClientProvider.overrideWithValue(oldHttp),
         ],
       );
@@ -525,6 +529,9 @@ void main() {
       });
       container.updateOverrides([
         databaseProvider.overrideWithValue(db),
+        preferencesProvider.overrideWithValue(
+          container.read(preferencesProvider),
+        ),
         sourceHttpClientProvider.overrideWithValue(replacement),
       ]);
       for (
@@ -589,6 +596,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        preferencesProvider.overrideWithValue(memoryPreferences()),
         sourceHttpClientProvider.overrideWithValue(http),
       ],
     );
@@ -709,6 +717,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          preferencesProvider.overrideWithValue(memoryPreferences()),
           sourceHttpClientProvider.overrideWithValue(http),
         ],
       );

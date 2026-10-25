@@ -270,98 +270,38 @@ void main() {
       expect(watched, 2);
     });
 
-    test('带 token 走镜像搜索为空时，去掉 token 再试一次（镜像实测会这样）', () async {
-      final http = FakeHttpClient((request) async {
-        final hasToken = (request.headers['Authorization'] ?? '').isNotEmpty;
-        return SourceResponse(
-          statusCode: 200,
-          url: request.url,
-          body: jsonEncode(<String, Object?>{
-            // 带 token → 空；不带 → 有数据。复刻镜像的真实表现。
-            'data': hasToken
-                ? <Object?>[]
-                : <Object?>[
-                    <String, Object?>{
-                      'id': 2782,
-                      'name': 'NARUTO -ナルト-',
-                      'name_cn': '火影忍者',
-                      'eps': 220,
-                    },
-                  ],
-          }),
-        );
-      });
-      final bangumi = BangumiClient(
-        http: http,
-        fallbackBaseUrl: BangumiClient.mirrorBaseUrl,
-      );
+    test(
+      'official account search retains an empty result without anonymous retry',
+      () async {
+        final http = client(routes: {'/v0/search/subjects': '{"data":[]}'});
+        final result = await BangumiClient(http: http)
+            .search('Naruto', type: MediaType.anime, token: 't');
+        expect(result, isEmpty);
+        expect(http.requests, hasLength(1));
+        expect(Uri.parse(http.lastRequest.url).host, 'api.bgm.tv');
+        expect(http.lastRequest.headers['Authorization'], 'Bearer t');
+      },
+    );
 
-      final candidates = await bangumi.search(
-        'Naruto',
-        type: MediaType.anime,
-        token: 't',
-      );
-
-      expect(candidates.single.remoteTrackId, '2782');
-      expect(candidates.single.title, '火影忍者');
-      expect(http.requests.length, 2);
-      expect(http.requests.first.headers['Authorization'], 'Bearer t');
-      expect(http.requests.last.headers.containsKey('Authorization'), isFalse);
-    });
-
-    test('镜像搜索带 token 超时时，去掉 token 再试一次', () async {
-      var mirrorTokenAttempt = true;
-      final http = FakeHttpClient((request) async {
-        final hasToken = (request.headers['Authorization'] ?? '').isNotEmpty;
-        if (request.url.startsWith('https://official.test')) {
+    test(
+      'account search transport failures never retry a third-party host',
+      () async {
+        final http = FakeHttpClient((request) async {
           throw const SourceException(
-            sourceId: BangumiClient.sourceId,
-            type: SourceErrorType.network,
-            message: 'official unavailable',
-          );
-        }
-        if (hasToken && mirrorTokenAttempt) {
-          mirrorTokenAttempt = false;
-          throw const SourceException(
-            sourceId: BangumiClient.sourceId,
+            sourceId: 'bangumi',
             type: SourceErrorType.timeout,
-            message: 'mirror search timed out',
+            message: 'timeout',
           );
-        }
-        return SourceResponse(
-          statusCode: 200,
-          url: request.url,
-          body: jsonEncode(<String, Object?>{
-            'data': <Object?>[
-              <String, Object?>{
-                'id': 42,
-                'name': 'Fixture Anime',
-                'name_cn': '夹具番剧',
-                'eps': 12,
-              },
-            ],
-          }),
+        });
+        await expectLater(
+          BangumiClient(http: http)
+              .search('Naruto', type: MediaType.anime, token: 't'),
+          throwsA(isA<SourceException>()),
         );
-      });
-      final bangumi = BangumiClient(
-        http: http,
-        baseUrl: 'https://official.test',
-        fallbackBaseUrl: BangumiClient.mirrorBaseUrl,
-      );
-
-      final candidates = await bangumi.search(
-        'Fixture',
-        type: MediaType.anime,
-        token: 't',
-      );
-
-      expect(candidates.single.remoteTrackId, '42');
-      expect(http.requests, hasLength(3));
-      expect(http.requests.first.headers['Authorization'], 'Bearer t');
-      expect(http.requests[1].headers['Authorization'], 'Bearer t');
-      expect(http.requests.last.headers.containsKey('Authorization'), isFalse);
-      expect(bangumi.usedFallback, isTrue);
-    });
+        expect(http.requests, hasLength(1));
+        expect(Uri.parse(http.lastRequest.url).host, 'api.bgm.tv');
+      },
+    );
 
     test('没有备用地址时不做「去掉 token 重试」（真实站点带 token 是正常的）', () async {
       final http = client(routes: {'/v0/search/subjects': '{"data":[]}'});
@@ -444,77 +384,33 @@ void main() {
       );
     });
 
-    test('官方连不上：带 token 的请求回退镜像，且 token 原样带上', () async {
-      final http = FakeHttpClient((request) async {
-        if (request.url.startsWith('https://api.bgm.tv')) {
+    test(
+      'an unavailable official account never sends credentials to a mirror',
+      () async {
+        final http = FakeHttpClient((request) async {
           throw const SourceException(
             sourceId: 'bangumi',
             type: SourceErrorType.network,
             message: '连接被拒绝',
           );
-        }
-        return SourceResponse(
-          statusCode: 200,
-          url: request.url,
-          body: jsonEncode(<String, Object?>{'id': 1, 'username': 'hypex'}),
+        });
+        await expectLater(
+          BangumiClient(http: http).me('secret-token'),
+          throwsA(isA<SourceException>()),
         );
-      });
-      final bangumi = BangumiClient(
-        http: http,
-        fallbackBaseUrl: BangumiClient.mirrorBaseUrl,
-      );
-
-      final me = await bangumi.me('secret-token');
-
-      expect(me.username, 'hypex');
-      expect(bangumi.usedFallback, isTrue);
-      expect(bangumi.usedBaseUrl, BangumiClient.mirrorBaseUrl);
-      expect(http.requests.length, 2);
-      expect(http.requests.last.url, '${BangumiClient.mirrorBaseUrl}/v0/me');
-      // 回退不改变请求内容：token 仍然通过 Authorization 发送。
-      expect(
-        http.requests.last.headers['Authorization'],
-        'Bearer secret-token',
-      );
-      expect(
-        http.requests.last.headers['User-Agent'],
-        BangumiClient.defaultUserAgent,
-      );
-    });
-
-    test('镜像回 401（token 无效）：仍要记为「走了镜像」，界面才能提示 token 已发出', () async {
-      // 网络层对非 2xx 是「抛异常」而不是返回响应，所以镜像 401 这条路最容易被记漏。
-      final http = FakeHttpClient((request) async {
-        if (request.url.startsWith('https://api.bgm.tv')) {
-          throw const SourceException(
-            sourceId: 'bangumi',
-            type: SourceErrorType.network,
-            message: '连接被拒绝',
-          );
-        }
-        throw const SourceException(
-          sourceId: 'bangumi',
-          type: SourceErrorType.auth,
-          message: 'HTTP 401',
+        expect(http.requests, hasLength(1));
+        expect(http.lastRequest.url, 'https://api.bgm.tv/v0/me');
+        expect(http.lastRequest.followRedirects, isFalse);
+        expect(
+          http.lastRequest.headers['Authorization'],
+          'Bearer secret-token',
         );
-      });
-      final bangumi = BangumiClient(
-        http: http,
-        fallbackBaseUrl: BangumiClient.mirrorBaseUrl,
-      );
-
-      await expectLater(bangumi.me('bad'), throwsA(isA<SourceException>()));
-      expect(bangumi.usedFallback, isTrue);
-      expect(http.requests.length, 2);
-      expect(http.requests.last.url, '${BangumiClient.mirrorBaseUrl}/v0/me');
-    });
+      },
+    );
 
     test('凭据错误（401）不触发回退：换地址也一样，没必要转手 token', () async {
       final http = client(statuses: <String, int>{'/v0/me': 401});
-      final bangumi = BangumiClient(
-        http: http,
-        fallbackBaseUrl: BangumiClient.mirrorBaseUrl,
-      );
+      final bangumi = BangumiClient(http: http);
 
       await expectLater(
         bangumi.me('bad'),
@@ -527,40 +423,38 @@ void main() {
         ),
       );
       expect(http.requests.length, 1);
-      expect(bangumi.usedFallback, isFalse);
     });
 
-    test('没有备用地址 / 备用地址与主地址相同：都不回退', () async {
-      final noFallback = FakeHttpClient((request) async {
-        throw const SourceException(
-          sourceId: 'bangumi',
-          type: SourceErrorType.network,
-          message: '连接被拒绝',
+    test(
+      'official transport failures remain failures with exactly one request',
+      () async {
+        final noFallback = FakeHttpClient((request) async {
+          throw const SourceException(
+            sourceId: 'bangumi',
+            type: SourceErrorType.network,
+            message: '连接被拒绝',
+          );
+        });
+        await expectLater(
+          BangumiClient(http: noFallback).me('t'),
+          throwsA(isA<SourceException>()),
         );
-      });
-      await expectLater(
-        BangumiClient(http: noFallback).me('t'),
-        throwsA(isA<SourceException>()),
-      );
-      expect(noFallback.requests.length, 1);
+        expect(noFallback.requests.length, 1);
 
-      final sameBase = FakeHttpClient((request) async {
-        throw const SourceException(
-          sourceId: 'bangumi',
-          type: SourceErrorType.network,
-          message: '连接被拒绝',
+        final sameBase = FakeHttpClient((request) async {
+          throw const SourceException(
+            sourceId: 'bangumi',
+            type: SourceErrorType.network,
+            message: '连接被拒绝',
+          );
+        });
+        await expectLater(
+          BangumiClient(http: sameBase, baseUrl: 'https://api.bgm.tv').me('t'),
+          throwsA(isA<SourceException>()),
         );
-      });
-      await expectLater(
-        BangumiClient(
-          http: sameBase,
-          baseUrl: 'https://api.bgm.tv',
-          fallbackBaseUrl: 'https://api.bgm.tv',
-        ).me('t'),
-        throwsA(isA<SourceException>()),
-      );
-      expect(sameBase.requests.length, 1);
-    });
+        expect(sameBase.requests.length, 1);
+      },
+    );
   });
 
   group('AniListClient', () {

@@ -1,16 +1,20 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/db/database_provider.dart';
 import '../../core/storage/cover_store.dart';
+import 'app_update_service.dart';
 import 'cache_management_service.dart';
 
 /// Explicit preview/confirmation only; opening this page never clears anything.
 class CacheManagementPage extends ConsumerStatefulWidget {
-  const CacheManagementPage({super.key, this.service});
+  const CacheManagementPage({super.key, this.service, this.updater});
 
   /// Allows the same production workflow against explicit owned test roots.
   final CacheManagementService? service;
+  final AppUpdateService? updater;
 
   @override
   ConsumerState<CacheManagementPage> createState() =>
@@ -23,6 +27,9 @@ class _CacheManagementPageState extends ConsumerState<CacheManagementPage> {
   RetainedContentSummary? _content;
   StorageSummary? _storage;
   String? _storageError;
+  AppUpdateService? _updater;
+  AppUpdateStorageInfo? _updateStorage;
+  String? _updateStorageError;
   CacheCancellation? _cancellation;
   CacheProgress? _progress;
   String? _message;
@@ -32,12 +39,15 @@ class _CacheManagementPageState extends ConsumerState<CacheManagementPage> {
   @override
   void initState() {
     super.initState();
+    _updater =
+        widget.updater ?? (Platform.isAndroid ? AppUpdateService() : null);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scan());
   }
 
   @override
   void dispose() {
     _cancellation?.cancel();
+    if (widget.updater == null) _updater?.close();
     super.dispose();
   }
 
@@ -53,6 +63,8 @@ class _CacheManagementPageState extends ConsumerState<CacheManagementPage> {
       _preview = null;
       _storage = null;
       _storageError = null;
+      _updateStorage = null;
+      _updateStorageError = null;
       _message = null;
     });
     try {
@@ -104,6 +116,18 @@ class _CacheManagementPageState extends ConsumerState<CacheManagementPage> {
         } catch (_) {
           if (mounted) {
             setState(() => _storageError = '浏览器或应用支持目录暂时无法完整统计；未把未知用量当作零。');
+          }
+        }
+        if (_updater != null && !token.cancelled) {
+          try {
+            final updateStorage = await _updater!.storageInfo();
+            if (mounted && !token.cancelled) {
+              setState(() => _updateStorage = updateStorage);
+            }
+          } catch (_) {
+            if (mounted) {
+              setState(() => _updateStorageError = '更新文件暂时无法完整统计；未执行清理。');
+            }
           }
         }
       }
@@ -254,6 +278,62 @@ class _CacheManagementPageState extends ConsumerState<CacheManagementPage> {
       if (mounted) {
         setState(() => _operation = null);
       }
+    }
+  }
+
+  Future<void> _clearUpdateStaging() async {
+    final storage = _updateStorage;
+    if (_busy || storage == null || storage.reclaimableBytes == 0) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('清理更新临时文件？'),
+        content: Text(
+          '当前可安全回收 ${_bytes(storage.reclaimableBytes)}。\n\n'
+          '仅清理更新器专用目录内确认可回收的文件；正在下载、核验或交给系统安装器的更新包会保留。'
+          '不删除已安装应用、漫画扩展、账号、离线下载或备份。实际回收量以清理后复核为准。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('保留'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('清理更新临时文件'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _operation = '正在清理更新临时文件';
+      _progress = null;
+    });
+    try {
+      final result = await _updater!.maintainStorage(clear: true);
+      final remaining = await _updater!.storageInfo();
+      final support = await _service!.storageSummary();
+      if (mounted) {
+        setState(() {
+          _updateStorage = remaining;
+          _updateStorageError = null;
+          _storage = support;
+          _message =
+              '更新临时文件实测回收 ${_bytes(result.removedBytes)}，'
+              '剩余 ${_bytes(remaining.totalBytes)}；正在使用 ${_bytes(remaining.protectedBytes)}，'
+              '跳过 ${result.skippedFiles} 项。账号、下载与备份保留。';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _updateStorage = null;
+          _updateStorageError = '更新清理或复核未完成，请重新扫描；未声称已清空。';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _operation = null);
     }
   }
 
@@ -416,6 +496,36 @@ class _CacheManagementPageState extends ConsumerState<CacheManagementPage> {
               ],
             ),
           ),
+          if (_updater != null)
+            Card(
+              child: Column(
+                children: [
+                  ListTile(
+                    title: const Text('应用更新临时文件'),
+                    subtitle: Text(
+                      _updateStorageError ??
+                          (_updateStorage == null
+                              ? '尚未完成统计'
+                              : '共 ${_bytes(_updateStorage!.totalBytes)} · 可安全回收 ${_bytes(_updateStorage!.reclaimableBytes)} · 正在使用 ${_bytes(_updateStorage!.protectedBytes)}\n'
+                                    '缓存目录：下载中间文件 ${_bytes(_updateStorage!.incomingBytes)}、安装副本 ${_bytes(_updateStorage!.installBytes)}；'
+                                    '旧版支持目录 ${_bytes(_updateStorage!.legacyBytes)}（已包含在支持目录总量内）。\n'
+                                    '冷启动自动回收已完成或中断的更新；正在下载、核验或交给系统安装器的包会保留。'),
+                    ),
+                  ),
+                  TextButton(
+                    key: const ValueKey('clear-update-staging'),
+                    onPressed:
+                        _busy ||
+                            _updateStorage == null ||
+                            _updateStorageError != null ||
+                            _updateStorage!.reclaimableBytes == 0
+                        ? null
+                        : _clearUpdateStaging,
+                    child: const Text('预览并清理更新临时文件'),
+                  ),
+                ],
+              ),
+            ),
           Card(
             child: ListTile(
               title: const Text('应用支持目录（只统计）'),
@@ -424,8 +534,9 @@ class _CacheManagementPageState extends ConsumerState<CacheManagementPage> {
                     (_storage == null
                         ? '尚未完成统计'
                         : '${_bytes(_storage!.supportBytes)}（文件字节，含上方浏览器缓存）\n'
-                              '其中更新暂存 ${_bytes(_storage!.updateBytes)}、已重建漫画运行时 ${_bytes(_storage!.managedRuntimeBytes)}（均保留）。\n'
-                              '还可能包含已安装扩展、受管 Java/漫画运行时、账号、数据库或更新暂存；不能整目录清理。'
+                              '更新暂存 ${_bytes(_storage!.updateBytes)}：下载中间文件 ${_bytes(_storage!.updateIncomingBytes)}、安装副本 ${_bytes(_storage!.updateInstallBytes)}（均已包含在更新暂存内）。\n'
+                              '漫画扩展 ${_bytes(_storage!.extensionBytes)}、已重建漫画运行时 ${_bytes(_storage!.managedRuntimeBytes)}、其余支持文件 ${_bytes(_storage!.otherSupportBytes)}。\n'
+                              '账号、数据库、已安装扩展与离线内容需要保留，不能整目录清理。'
                               '随安装包提供的解码器和 Java 资产属于固定安装体积，不等同持续缓存增长。'),
               ),
             ),

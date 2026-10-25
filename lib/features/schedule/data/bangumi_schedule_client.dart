@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import '../../../core/models/media_type.dart';
 import '../../../core/models/source_exception.dart';
+import '../../../core/source/bangumi_route_policy.dart';
 import '../../../core/source/http_client.dart';
 
 /// 放送表里的一部番剧。
@@ -53,23 +54,30 @@ class ScheduleDay {
 class BangumiScheduleClient {
   BangumiScheduleClient({
     required this.http,
-    this.baseUrl = mirrorUrl,
+    String? baseUrl,
+    this.routes = const BangumiRoutePolicy(),
     this.fallbackBaseUrl,
     this.userAgent = 'Triomi/0.1.0 (https://github.com/HyperionHXH/triomi)',
-  });
+  }) : baseUrl = baseUrl ?? routes.calendar;
 
   static const String calendarUrl = 'https://api.bgm.tv/calendar';
-
-  /// 与公开推荐共用镜像连接；Next 放送表通过独立适配器解析。
-  /// 不携带任何用户或第三方应用凭据。
-  static const String mirrorUrl = 'https://api.kazumi.fyi/p1/calendar';
+  static const String mirrorUrl = '${BangumiRoutePolicy.mirrorNext}/calendar';
 
   final SourceHttpClient http;
+  final BangumiRoutePolicy routes;
+  final _owners = <SourceRequestCancellation>{};
+  bool _disposed = false;
+
+  void dispose() {
+    _disposed = true;
+    for (final owner in _owners) {
+      owner.cancel('公开网络设置已改变');
+    }
+    _owners.clear();
+  }
 
   /// 调试时可指向本地夹具服务（见 schedule_providers.dart）。
   final String baseUrl;
-
-  /// 备用地址：`baseUrl` 取不到时再试一次；为空表示不回退。
   final String? fallbackBaseUrl;
   final String userAgent;
 
@@ -87,7 +95,9 @@ class BangumiScheduleClient {
       _usedBaseUrl = baseUrl;
       return days;
     } on SourceException {
-      if (SourceRequestCancellation.current?.cancelled == true) rethrow;
+      if (_disposed || SourceRequestCancellation.current?.cancelled == true) {
+        rethrow;
+      }
       final fallback = fallbackBaseUrl;
       // 备用地址与主地址相同时没有意义（也可能造成重复请求）。
       if (fallback == null || fallback == baseUrl) rethrow;
@@ -100,6 +110,8 @@ class BangumiScheduleClient {
   Future<List<ScheduleDay>> _fetch(String base) async {
     final parent = SourceRequestCancellation.current;
     final owner = SourceRequestCancellation();
+    if (_disposed) throw StateError('每日放送客户端已关闭');
+    _owners.add(owner);
     var finished = false;
     if (parent?.cancelled == true) owner.cancel();
     unawaited(
@@ -115,6 +127,7 @@ class BangumiScheduleClient {
             SourceRequest(
               url: base,
               headers: <String, String>{'User-Agent': userAgent},
+              followRedirects: false,
               cancellation: owner,
             ),
             sourceId: 'bangumi-schedule',
@@ -139,6 +152,7 @@ class BangumiScheduleClient {
       );
     } finally {
       finished = true;
+      _owners.remove(owner);
     }
     if (!response.isSuccess) {
       throw SourceException(

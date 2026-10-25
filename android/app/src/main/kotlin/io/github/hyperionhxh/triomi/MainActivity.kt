@@ -3,6 +3,7 @@ package io.github.hyperionhxh.triomi
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
@@ -32,6 +33,7 @@ class MainActivity : FlutterActivity() {
     private var videoPipEnabled = false
     private var videoBackgroundAudio = false
     private var videoPolicyOwner: String? = null
+    private var previousVolumeControlStream: Int? = null
     private var nativeForeground = false
     private var consentGeneration = 0L
 
@@ -197,6 +199,15 @@ class MainActivity : FlutterActivity() {
                         if (!active && owner != videoPolicyOwner) {
                             result.success(true)
                             return@setMethodCallHandler
+                        }
+                        if (active) {
+                            if (previousVolumeControlStream == null) {
+                                previousVolumeControlStream = volumeControlStream
+                            }
+                            volumeControlStream = AudioManager.STREAM_MUSIC
+                        } else {
+                            previousVolumeControlStream?.let { volumeControlStream = it }
+                            previousVolumeControlStream = null
                         }
                         videoPolicyOwner = if (active) owner else null
                         videoPipEnabled = call.argument<Boolean>("pip") == true
@@ -519,7 +530,7 @@ class MainActivity : FlutterActivity() {
         nativeForeground = false
         invalidateNativeConsent()
         val pip = Build.VERSION.SDK_INT >= 26 && isInPictureInPictureMode
-        NativeVideoLifecycle.active?.onBackground(videoBackgroundAudio || pip)
+        NativeVideoLifecycle.active?.onBackground(videoBackgroundAudio || pip, visiblePip = pip)
         mihonWebSession?.close()
         videoResolver?.cancel()
         downloadVideoResolver?.cancel()

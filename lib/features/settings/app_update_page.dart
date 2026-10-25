@@ -82,6 +82,16 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         setState(() => _progress = progress);
       }
     };
+    _service.onInstallerFinished =
+        ({required bool installed, required bool released}) {
+          if (!mounted) return;
+          setState(() {
+            if (released) _handedOff = false;
+            _message = installed
+                ? '系统安装器已返回，请刷新当前版本确认结果。'
+                : '系统安装已取消或未完成；已核验的更新包保留，可明确重试或移除。';
+          });
+        };
     _service.attachProgress();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _loadCurrent();
@@ -91,18 +101,19 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
   @override
   void dispose() {
     _service.onProgress = null;
+    _service.onInstallerFinished = null;
     final token = _token;
     if (token != null && _cancellable) {
       token.cancel();
       _service.cancel(token).catchError((Object _) {});
     }
     final candidate = _candidate;
-    // Once a launcher is reading the verified file, route disposal must not
-    // remove it. A failed launcher still cleans it below, even after disposal.
+    // Release page ownership even after handoff. Native installer leases keep
+    // pending reads alive and reap the file when the installer returns.
     if (candidate != null &&
-        !_handedOff &&
+        (!_handedOff || _android) &&
         !identical(candidate, _handoffInFlight)) {
-      _service.discard(candidate).catchError((Object _) {});
+      _service.abandon(candidate).catchError((Object _) {});
     }
     _zipPath.dispose();
     _manifestPath.dispose();
@@ -197,6 +208,17 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         final current = await _readCurrent(token);
         if (current != null) {
           _publishCurrent(current);
+          if (_candidate == null && current.platform == 'android') {
+            final pending = await _service.pendingCandidate();
+            token.check();
+            if (mounted && pending != null) {
+              setState(() {
+                _candidate = pending;
+                _handedOff = true;
+                _handoffWindows = false;
+              });
+            }
+          }
         }
       },
       targetLabel: '当前安装版本',
@@ -357,7 +379,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         return;
       }
       final old = _candidate;
-      if (old != null && !_handedOff) await _service.discard(old);
+      if (old != null && (!_handedOff || _android)) await _service.discard(old);
       token.check();
       if (!mounted) {
         await _service.discard(candidate);
@@ -527,6 +549,9 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
           } else {
             await _service.launchInstaller(candidate);
           }
+          if (!mounted && !windows) {
+            await _service.abandon(candidate).catchError((Object _) {});
+          }
           if (mounted) {
             setState(() {
               _handedOff = true;
@@ -534,7 +559,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
             });
           }
         } catch (_) {
-          if (!mounted && !alreadyHandedOff) await _service.discard(candidate);
+          if (!mounted && !alreadyHandedOff) await _service.abandon(candidate);
           rethrow;
         } finally {
           _handoffInFlight = null;

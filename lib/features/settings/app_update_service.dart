@@ -28,11 +28,15 @@ class AppUpdateCancellation {
   bool _cancelled = false;
   File? _marker;
   final _requests = <CancelToken>{};
+  final _streamCancellations = <void Function()>{};
   bool get cancelled => _cancelled;
   void cancel() {
     _cancelled = true;
     for (final request in _requests.toList()) {
       request.cancel();
+    }
+    for (final cancelStream in _streamCancellations.toList()) {
+      cancelStream();
     }
     try {
       _marker?.writeAsStringSync('cancel');
@@ -129,6 +133,32 @@ class AppUpdateCandidate {
   final int bytes;
   final bool signatureVerified;
   bool get canInstall => decision == 'upgrade';
+}
+
+/// Bytes in explicit updater-owned roots; protected bytes are never clearable.
+class AppUpdateStorageInfo {
+  const AppUpdateStorageInfo({
+    this.incomingBytes = 0,
+    this.installBytes = 0,
+    this.legacyBytes = 0,
+    this.reclaimableBytes = 0,
+    this.protectedBytes = 0,
+    this.removedBytes = 0,
+    this.skippedFiles = 0,
+  });
+  factory AppUpdateStorageInfo.fromMap(Map<Object?, Object?> map) =>
+      AppUpdateStorageInfo(
+        incomingBytes: map['incomingBytes'] as int,
+        installBytes: map['installBytes'] as int,
+        legacyBytes: map['legacyBytes'] as int,
+        reclaimableBytes: map['reclaimableBytes'] as int,
+        protectedBytes: map['protectedBytes'] as int,
+        removedBytes: map['removedBytes'] as int,
+        skippedFiles: map['skippedFiles'] as int,
+      );
+  final int incomingBytes, installBytes, legacyBytes;
+  final int reclaimableBytes, protectedBytes, removedBytes, skippedFiles;
+  int get totalBytes => incomingBytes + installBytes + legacyBytes;
 }
 
 Uri _updateHttps(String value) {
@@ -397,6 +427,20 @@ Future<String> stageAppUpdateBytes(
   if (expectedHash != null && !_hashPattern.hasMatch(expectedHash)) {
     throw const FormatException('无效的完整 SHA-256');
   }
+  cancellation.check();
+  final parent = destination.parent;
+  final type = await FileSystemEntity.type(
+    destination.path,
+    followLinks: false,
+  );
+  if (await FileSystemEntity.type(parent.path, followLinks: false) !=
+          FileSystemEntityType.directory ||
+      p.normalize(await parent.resolveSymbolicLinks()) !=
+          p.normalize(parent.absolute.path) ||
+      (type != FileSystemEntityType.notFound &&
+          type != FileSystemEntityType.file)) {
+    throw const FileSystemException('更新暂存只允许无路径别名的普通文件');
+  }
   final output = destination.openWrite();
   final digest = _DigestSink();
   final hash = sha256.startChunkedConversion(digest);
@@ -428,8 +472,14 @@ Future<String> stageAppUpdateBytes(
     }
     return digest.value.toString();
   } catch (_) {
-    if (!closed) await output.close();
-    if (await destination.exists()) await destination.delete();
+    try {
+      if (!closed) await output.close();
+    } finally {
+      if (await FileSystemEntity.type(destination.path, followLinks: false) ==
+          FileSystemEntityType.file) {
+        await destination.delete();
+      }
+    }
     cancellation.check();
     rethrow;
   }
@@ -469,6 +519,8 @@ class AppUpdateService {
   /// Explicit owned root for desktop staging (production defaults to support).
   final Directory? windowsUpdateRoot;
   void Function(AppUpdateProgress)? onProgress;
+  void Function({required bool installed, required bool released})?
+  onInstallerFinished;
   bool _progressAttached = false;
 
   void attachProgress() {
@@ -483,6 +535,13 @@ class AppUpdateService {
             raw['bytes'] as int,
             raw['total'] as int?,
           ),
+        );
+      }
+      if (call.method == 'installerFinished' && call.arguments is Map) {
+        final raw = call.arguments as Map;
+        onInstallerFinished?.call(
+          installed: raw['installed'] == true,
+          released: raw['released'] == true,
         );
       }
     });
@@ -517,6 +576,33 @@ class AppUpdateService {
     });
   }
 
+  /// Pure inspection: this method never removes staging files.
+  Future<AppUpdateStorageInfo> storageInfo() async {
+    if (!Platform.isAndroid) return const AppUpdateStorageInfo();
+    return AppUpdateStorageInfo.fromMap(
+      (await _native.invokeMethod<Map<Object?, Object?>>('storageInfo'))!,
+    );
+  }
+
+  /// Run after startup's first frame. Reaps installed/abandoned owned stages.
+  /// Explicit clear additionally requests all safely reclaimable stages only.
+  Future<AppUpdateStorageInfo> maintainStorage({bool clear = false}) async {
+    if (!Platform.isAndroid) return const AppUpdateStorageInfo();
+    return AppUpdateStorageInfo.fromMap(
+      (await _native.invokeMethod<Map<Object?, Object?>>('maintainStorage', {
+        'clear': clear,
+      }))!,
+    );
+  }
+
+  Future<AppUpdateCandidate?> pendingCandidate() async {
+    if (!Platform.isAndroid) return null;
+    final raw = await _native.invokeMethod<Map<Object?, Object?>>(
+      'pendingCandidate',
+    );
+    return raw == null || raw.isEmpty ? null : _candidate(raw);
+  }
+
   Future<AppUpdateCandidate?> pickApk(AppUpdateCancellation token) async {
     token.check();
     final raw = await _native.invokeMethod<Map<Object?, Object?>>('pickApk');
@@ -524,7 +610,15 @@ class AppUpdateService {
       token.check();
       return null;
     }
-    final candidate = _candidate(raw);
+    late final AppUpdateCandidate candidate;
+    try {
+      candidate = _candidate(raw);
+    } catch (_) {
+      await _native.invokeMethod<Object?>('discard', {
+        'path': raw['path'] as String,
+      });
+      rethrow;
+    }
     if (token.cancelled) {
       await discard(candidate);
       token.check();
@@ -824,26 +918,74 @@ class AppUpdateService {
     AppUpdateCancellation token,
   ) async {
     if (!Platform.isAndroid) throw UnsupportedError('网络 APK 仅支持 Android');
-    final directory = await _native.invokeMethod<String>('stagingDirectory');
-    final root = await Directory(directory!).resolveSymbolicLinks();
-    final incoming = File(
-      p.join(root, 'download-${DateTime.now().microsecondsSinceEpoch}.apk'),
+    onProgress?.call(AppUpdateProgress('download', 0, asset.bytes));
+    final body = await _request(asset.url, token, officialAsset: true);
+    final length = int.tryParse(
+      body.headers['content-length']?.firstOrNull ?? '',
     );
-    try {
-      onProgress?.call(AppUpdateProgress('download', 0, asset.bytes));
-      final body = await _request(asset.url, token, officialAsset: true);
-      final length = int.tryParse(
-        body.headers['content-length']?.firstOrNull ?? '',
-      );
-      if (length != null && length != asset.bytes) {
-        throw const FormatException('更新文件长度与发布资产不符');
+    if (length != null && length != asset.bytes) {
+      await body.stream.listen(null, onError: (Object _) {}).cancel();
+      throw const FormatException('更新文件长度与发布资产不符');
+    }
+    final candidate = await stageAndroidApk(
+      body.stream,
+      token,
+      expectedHash: hash,
+      expectedBytes: asset.bytes,
+      source: '官方 GitHub $appUpdateRepository · ${release.tag}',
+    );
+    if (candidate.offered.versionCode != release.versionCode ||
+        candidate.offered.version != release.version) {
+      await discard(candidate);
+      throw const FormatException('APK 实际版本与发布版本不符');
+    }
+    return candidate;
+  }
+
+  /// Native-owned lease covers the whole download, copy and verification chain.
+  Future<AppUpdateCandidate> stageAndroidApk(
+    Stream<List<int>> bytes,
+    AppUpdateCancellation token, {
+    required String expectedHash,
+    required int expectedBytes,
+    required String source,
+  }) async {
+    final input = StreamIterator<List<int>>(bytes);
+    Future<void>? streamCancellation;
+    Future<void> closeStream() => streamCancellation ??= input.cancel();
+    void cancelStream() {
+      // The awaited cleanup below still reports cancellation failures.
+      closeStream().ignore();
+    }
+
+    File? incoming;
+    late Future<bool> nextChunk;
+    Stream<List<int>> chunks() async* {
+      while (await nextChunk) {
+        yield input.current;
+        nextChunk = input.moveNext();
       }
+    }
+
+    AppUpdateCandidate? candidate;
+    try {
+      // StreamIterator subscribes only on moveNext. Take ownership before any
+      // cancellation, allocation or copy setup can fail, without awaiting data.
+      nextChunk = input.moveNext();
+      // An early source error remains on nextChunk for chunks() to rethrow.
+      nextChunk.ignore();
+      token._streamCancellations.add(cancelStream);
+      token.check();
+      final lease = (await _native.invokeMethod<Map<Object?, Object?>>(
+        'beginIncoming',
+      ))!;
+      incoming = File(lease['path'] as String);
       await stageAppUpdateBytes(
-        body.stream,
+        chunks(),
         incoming,
         cancellation: token,
-        expectedHash: hash,
-        expectedBytes: asset.bytes,
+        expectedHash: expectedHash,
+        expectedBytes: expectedBytes,
         onProgress: onProgress,
         phase: 'download',
       );
@@ -851,26 +993,42 @@ class AppUpdateService {
       onProgress?.call(const AppUpdateProgress('verify', 0));
       final raw = (await _native.invokeMethod<Map<Object?, Object?>>(
         'inspect',
-        {
-          'path': incoming.path,
-          'sha256': hash,
-          'source': '官方 GitHub $appUpdateRepository · ${release.tag}',
-        },
+        {'path': incoming.path, 'sha256': expectedHash, 'source': source},
       ))!;
-      final candidate = _candidate(raw);
-      if (candidate.offered.versionCode != release.versionCode ||
-          candidate.offered.version != release.version) {
-        await discard(candidate);
-        throw const FormatException('APK 实际版本与发布版本不符');
+      try {
+        candidate = _candidate(raw);
+      } catch (_) {
+        await _native.invokeMethod<Object?>('discard', {
+          'path': raw['path'] as String,
+        });
+        rethrow;
       }
-      if (token.cancelled) await discard(candidate);
       token.check();
       onProgress?.call(
         AppUpdateProgress('verified', candidate.bytes, candidate.bytes),
       );
       return candidate;
+    } catch (_) {
+      final rejected = candidate;
+      candidate = null;
+      if (rejected != null) await discard(rejected);
+      rethrow;
     } finally {
-      if (await incoming.exists()) await incoming.delete();
+      token._streamCancellations.remove(cancelStream);
+      try {
+        await closeStream();
+      } finally {
+        if (incoming != null) {
+          final result = await _native.invokeMethod<Map<Object?, Object?>>(
+            'finishIncoming',
+            {'path': incoming.path},
+          );
+          if (result?['removed'] != true) {
+            if (candidate != null) await discard(candidate);
+            throw const FileSystemException('无法清理本次下载暂存');
+          }
+        }
+      }
     }
   }
 
@@ -893,11 +1051,23 @@ class AppUpdateService {
     });
   }
 
+  /// Release page ownership without deleting bytes still leased to the installer.
+  Future<void> abandon(AppUpdateCandidate candidate) async {
+    if (Platform.isAndroid && candidate.offered.platform == 'android') {
+      await _native.invokeMethod<Object?>('discard', {
+        'path': candidate.path,
+        'relinquish': true,
+      });
+    } else {
+      await discard(candidate);
+    }
+  }
+
   Future<void> discard(AppUpdateCandidate candidate) async {
     if (candidate.offered.platform == 'android') {
-      if (await _native.invokeMethod<bool>('discard', {
+      if ((await _native.invokeMethod<Map<Object?, Object?>>('discard', {
             'path': candidate.path,
-          }) !=
+          }))?['removed'] !=
           true) {
         throw const FileSystemException('无法清理本次更新暂存');
       }

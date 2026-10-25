@@ -23,15 +23,12 @@ class AnimeRecommendationPage {
 class AnimeRecommendationRepository {
   AnimeRecommendationRepository(this.client);
   final BangumiPublicClient client;
-  bool _mirror = false;
-  int _epoch = 0;
-  bool get usesMirror => _mirror;
+  bool get usesMirror => client.routes.mirrorEnabled;
 
   Future<AnimeRecommendationPage> load(
     int offset, {
     AnimeFilter filter = const AnimeFilter(),
   }) async {
-    final epoch = offset == 0 ? ++_epoch : _epoch;
     final BangumiPublicPage page;
     if (filter.tags.isNotEmpty ||
         filter.year != null ||
@@ -49,16 +46,8 @@ class AnimeRecommendationRepository {
         ),
         offset: offset,
       );
-      if (epoch == _epoch) _mirror = false;
     } else {
-      try {
-        page = await client.popular(offset: offset);
-        if (epoch == _epoch) _mirror = true;
-      } catch (_) {
-        // The dedicated public popular endpoint is the only supported
-        // fallback; do not mix its cursor with a different ranking.
-        rethrow;
-      }
+      page = await client.popular(offset: offset);
     }
     final items = <MediaItem>[];
     for (final row in page.rows) {
@@ -90,11 +79,13 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
   String? _error;
   AnimeFilter _filter = const AnimeFilter();
   SourceRequestCancellation? _owner;
+  ProviderSubscription<AnimeRecommendationRepository>? _repository;
 
   @override
   void dispose() {
     _generation++;
     _owner?.cancel();
+    _repository?.close();
     super.dispose();
   }
 
@@ -106,6 +97,13 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
           .read(preferencesProvider)
           .get<Object?>('anime.recommendations.filter'),
     );
+    _repository = ref.listenManual(animeRecommendationRepositoryProvider, (
+      previous,
+      next,
+    ) {
+      if (!mounted || identical(previous, next)) return;
+      unawaited(_load(refresh: true));
+    });
     unawaited(_load());
   }
 

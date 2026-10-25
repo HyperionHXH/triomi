@@ -10,10 +10,12 @@ import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_providers.dart';
+import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/features/library/data/anime_identity_repository.dart';
 import 'package:triomi/features/player/episode_comments_panel.dart';
 
 import 'fixtures/fake_http_client.dart';
+import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
 
 const subject = MediaItem(
@@ -67,6 +69,7 @@ Future<ProviderContainer> mount(
   final container = ProviderContainer(
     overrides: [
       databaseProvider.overrideWithValue(db),
+      preferencesProvider.overrideWithValue(memoryPreferences()),
       sourceHttpClientProvider.overrideWithValue(http),
     ],
   );
@@ -369,6 +372,9 @@ void main() {
       });
       container.updateOverrides([
         databaseProvider.overrideWithValue(container.read(databaseProvider)),
+        preferencesProvider.overrideWithValue(
+          container.read(preferencesProvider),
+        ),
         sourceHttpClientProvider.overrideWithValue(replacement),
       ]);
       for (
@@ -411,6 +417,9 @@ void main() {
       );
       container.updateOverrides([
         databaseProvider.overrideWithValue(container.read(databaseProvider)),
+        preferencesProvider.overrideWithValue(
+          container.read(preferencesProvider),
+        ),
         sourceHttpClientProvider.overrideWithValue(replacement),
       ]);
       for (

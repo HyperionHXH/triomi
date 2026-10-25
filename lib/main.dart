@@ -19,6 +19,7 @@ import 'core/storage/preferences.dart';
 import 'core/storage/secure_store.dart';
 import 'features/library/data/manga_update_background.dart';
 import 'features/schedule/data/background_update_check.dart';
+import 'features/settings/app_update_service.dart';
 import 'features/settings/cache_management_service.dart';
 import 'features/sources/catalog_sheet.dart';
 
@@ -124,4 +125,20 @@ Future<void> main([List<String> args = const []]) async {
   // Disposable HTTP data is maintained without delaying the first frame.
   // Explicit downloads, restored content and browser sessions are retained.
   unawaited(CacheManagementService.runAutomaticMaintenance(database));
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_maintainUpdateStorage());
+  });
+}
+
+Future<void> _maintainUpdateStorage() async {
+  if (!Platform.isAndroid) return;
+  final updater = AppUpdateService();
+  try {
+    await updater.maintainStorage();
+  } catch (_) {
+    // An active installer, unsupported storage or a failed inspection must
+    // retain files, never block startup or broaden cleanup to user content.
+  } finally {
+    updater.close();
+  }
 }

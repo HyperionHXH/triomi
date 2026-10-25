@@ -36,6 +36,7 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
   SourceRequestCancellation? _owner;
   Set<String>? _tagMatches;
   bool _calendarReady = false;
+  ProviderSubscription<BangumiPublicClient>? _publicClient;
 
   bool get _currentSeason {
     final now = DateTime.now();
@@ -54,6 +55,14 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
         .read(preferencesProvider)
         .get<int>('anime.calendar.weekday');
     if (weekday != null && weekday >= 1 && weekday <= 7) _weekday = weekday;
+    _publicClient = ref.listenManual(bangumiPublicClientProvider, (
+      previous,
+      next,
+    ) {
+      if (!mounted || identical(previous, next)) return;
+      _calendarReady = false;
+      unawaited(_load(reset: true, refresh: true));
+    });
     unawaited(_load(reset: true));
   }
 
@@ -61,6 +70,7 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
   void dispose() {
     _generation++;
     _owner?.cancel();
+    _publicClient?.close();
     _scrollController.dispose();
     super.dispose();
   }

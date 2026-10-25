@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 
+import 'bangumi_ech_adapter.dart';
+import 'bangumi_route_policy.dart';
 import 'lk_tls_socket.dart';
 import 'system_proxy_adapter.dart';
 
@@ -18,7 +20,12 @@ const sourceDnsHosts = {
   'cf-api.lightnovel.life',
 };
 
-void configureSourceHttpAdapter(Dio dio, {String proxy = ''}) {
+void configureSourceHttpAdapter(
+  Dio dio, {
+  String proxy = '',
+  BangumiRoutePolicy bangumiRoutes = const BangumiRoutePolicy(),
+  BangumiRoutePolicy Function()? bangumiRoutesResolver,
+}) {
   final resolver = SourceDnsFallback();
   HttpClient createClient() {
     final client = HttpClient();
@@ -48,6 +55,14 @@ void configureSourceHttpAdapter(Dio dio, {String proxy = ''}) {
       proxy.isEmpty && (Platform.isWindows || Platform.isAndroid)
       ? SystemProxyHttpClientAdapter(createClient: createClient)
       : IOHttpClientAdapter(createHttpClient: createClient);
+  if (bangumiRoutes.mirrorEnabled || bangumiRoutesResolver != null) {
+    dio.httpClientAdapter = BangumiEchAdapter(
+      fallback: dio.httpClientAdapter,
+      policy: bangumiRoutes,
+      policyResolver: bangumiRoutesResolver,
+      explicitProxy: proxy,
+    );
+  }
 }
 
 /// Each attempt owns its TCP/TLS socket until it is handed to HttpClient.

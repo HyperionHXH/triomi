@@ -37,17 +37,20 @@ import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 
 interface NativeVideoLifecycleOwner {
-    fun onBackground(allowAudio: Boolean)
+    fun onBackground(allowAudio: Boolean, visiblePip: Boolean = false)
     fun onForeground()
     fun onPipChanged(inPip: Boolean)
 }
 object NativeVideoLifecycle {
     var active: NativeVideoLifecycleOwner? = null
 }
-class NativeVideoViewFactory(private val messenger: BinaryMessenger) :
-    PlatformViewFactory(io.flutter.plugin.common.StandardMessageCodec.INSTANCE) {
+class NativeVideoViewFactory internal constructor(
+    private val messenger: BinaryMessenger,
+    private val volumeFactory: (Context, Handler, (MediaVolumeState) -> Unit) -> MediaVolumeController =
+        { context, handler, changed -> MediaVolumeController(AndroidMediaVolumeDevice(context, handler), handler, changed) },
+) : PlatformViewFactory(io.flutter.plugin.common.StandardMessageCodec.INSTANCE) {
     override fun create(context: Context, viewId: Int, args: Any?): PlatformView =
-        NativeVideoPlatformView(context, viewId, messenger)
+        NativeVideoPlatformView(context, viewId, messenger, volumeFactory)
 }
 
 /** Transient compressed packets, not a disk cache or a download queue. */
@@ -81,6 +84,7 @@ private class NativeVideoPlatformView(
     private val context: Context,
     viewId: Int,
     messenger: BinaryMessenger,
+    volumeFactory: (Context, Handler, (MediaVolumeState) -> Unit) -> MediaVolumeController,
 ) : PlatformView, MethodChannel.MethodCallHandler, TextureView.SurfaceTextureListener, NativeVideoLifecycleOwner {
     private val root = FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
     private val texture = TextureView(context).apply {
@@ -98,6 +102,7 @@ private class NativeVideoPlatformView(
     @Volatile private var currentHeaders: Map<String, String> = emptyMap()
     private var surface: Surface? = null
     private var disposed = false
+    private var foreground = true
     private var announcedReady = false
     private var backgroundAudio = false
     private var aspectRatio: Float? = null
@@ -121,6 +126,7 @@ private class NativeVideoPlatformView(
             .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
         .setHandleAudioBecomingNoisy(true)
         .build()
+    private val mediaVolume = volumeFactory(context, handler) { emitState() }
     private val ticker = object : Runnable {
         override fun run() {
             if (disposed) return
@@ -134,6 +140,8 @@ private class NativeVideoPlatformView(
         root.addView(texture)
         root.addView(subtitles)
         channel.setMethodCallHandler(this)
+        // Media3 gain remains unity; AudioManager owns the user's media volume.
+        mediaVolume.start()
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (disposed) return
@@ -173,6 +181,10 @@ private class NativeVideoPlatformView(
     override fun onFlutterViewDetached() = Unit
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        if (disposed) {
+            result.error("native_video_disposed", "Player is closed", null)
+            return
+        }
         try {
             when (call.method) {
                 "setUrl" -> {
@@ -208,9 +220,10 @@ private class NativeVideoPlatformView(
                     player.setPlaybackSpeed((call.argument<Number>("rate")?.toFloat() ?: 1f).coerceIn(.5f, 3f))
                     result.success(null)
                 }
-                "setVolume" -> {
-                    player.volume = (call.argument<Number>("volume")?.toFloat() ?: 1f).coerceIn(0f, 1f)
-                    result.success(null)
+                "getMediaVolume" -> result.success(mediaVolume.refresh().asMap())
+                "setMediaVolume" -> {
+                    val value = requireNotNull(call.argument<Number>("volume")).toDouble()
+                    result.success(mediaVolume.setVolume(value).asMap())
                 }
                 "setAspectRatio" -> {
                     val value = call.argument<Number>("ratio")?.toFloat()
@@ -238,7 +251,10 @@ private class NativeVideoPlatformView(
                     player.trackSelectionParameters = builder.build()
                     result.success(null)
                 }
-                "getState" -> result.success(stateMap())
+                "getState" -> {
+                    mediaVolume.refresh()
+                    result.success(stateMap())
+                }
                 else -> result.notImplemented()
             }
         } catch (_: Exception) {
@@ -260,12 +276,12 @@ private class NativeVideoPlatformView(
         }
     }
 
-    private fun stateMap(): Map<String, Any> = mapOf(
+    private fun stateMap(): Map<String, Any?> = mapOf(
         "position" to player.currentPosition.coerceAtLeast(0),
         "duration" to player.duration.coerceAtLeast(0),
         "bufferedPosition" to player.bufferedPosition.coerceAtLeast(0),
         "playing" to player.isPlaying,
-    )
+    ) + mediaVolume.state.asMap()
     private fun emitState() = emit("state", stateMap())
     private fun emit(method: String, args: Any?) {
         if (!disposed) channel.invokeMethod(method, args)
@@ -283,18 +299,26 @@ private class NativeVideoPlatformView(
     }
 
     private var resumeOnForeground = false
-    override fun onBackground(allowAudio: Boolean) {
+    override fun onBackground(allowAudio: Boolean, visiblePip: Boolean) {
+        if (disposed) return
+        foreground = false
+        if (visiblePip) mediaVolume.start() else mediaVolume.stop()
         if (allowAudio) return
         resumeOnForeground = resumeOnForeground || player.playWhenReady
         player.pause()
     }
     override fun onForeground() {
+        if (disposed) return
+        foreground = true
+        mediaVolume.start()
         if (resumeOnForeground) {
             resumeOnForeground = false
             player.play()
         }
     }
     override fun onPipChanged(inPip: Boolean) {
+        if (disposed) return
+        if (foreground || inPip) mediaVolume.start() else mediaVolume.stop()
         emit("pip", mapOf("enabled" to inPip))
         if (inPip && resumeOnForeground) {
             resumeOnForeground = false
@@ -332,6 +356,7 @@ private class NativeVideoPlatformView(
     override fun dispose() {
         if (disposed) return
         disposed = true
+        mediaVolume.dispose()
         if (NativeVideoLifecycle.active === this) NativeVideoLifecycle.active = null
         handler.removeCallbacks(ticker)
         channel.setMethodCallHandler(null)

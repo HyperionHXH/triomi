@@ -71,10 +71,56 @@ class _EmptySources extends SourceRegistryController {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('public mirror changes delivery but retains installed rule identity and custom origins', () async {
+    final db = openTestDatabase();
+    final http = SecureFake(
+      (request) async => SourceResponse(
+        statusCode: 200,
+        url: request.url,
+        body: jsonEncode(
+          request.url.endsWith('/index.json')
+              ? [
+                  {'name': '测试番剧源', 'version': '1.1'},
+                ]
+              : rule(),
+        ),
+      ),
+    );
+    final registry = SourceRegistry(
+      repository: SourceRepository(db),
+      http: http,
+    );
+    addTearDown(() async {
+      registry.dispose();
+      await db.close();
+    });
+    final mirrored = KazumiRepository(registry, useMirror: true);
+    final entries = await mirrored.load(KazumiRepository.defaultRepository);
+    final descriptor = await mirrored.install(
+      KazumiRepository.defaultRepository,
+      entries.single,
+    );
+    expect(
+      http.requests.take(2).map((request) => Uri.parse(request.url).host),
+      ['raw.gitcode.com', 'raw.gitcode.com'],
+    );
+    expect(Uri.parse(http.requests[1].url).pathSegments.last, '测试番剧源.json');
+    final stored = await registry.repository.byId(descriptor.id);
+    expect(stored!.repoUrl, KazumiRepository.defaultRepository);
+    expect(stored.ruleText, jsonEncode(rule()));
+    await KazumiRepository(registry).load(KazumiRepository.defaultRepository);
+    expect(http.requests.last.url, KazumiRepository.defaultRepository);
+    const custom =
+        'https://raw.githubusercontent.com/user/rules/main/index.json';
+    await mirrored.load(custom);
+    expect(http.requests.last.url, custom);
+  });
+
   testWidgets('default anime repository loads and removed URLs stay removed', (
     tester,
   ) async {
     final preferences = memoryPreferences();
+    await preferences.set('network.bangumiMirrorEnabled', false);
     final db = openTestDatabase();
     final http = SecureFake(
       (request) async => SourceResponse(
