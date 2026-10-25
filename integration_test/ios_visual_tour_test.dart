@@ -114,9 +114,15 @@ void main() {
       cleanExceptions(route);
     }
     Future<void> tapText(String text) async {
-      final finder = find.text(text, findRichText: true).hitTestable().first;
-      expect(finder, findsOneWidget, reason: 'Expected visible production control "$text"');
-      await tester.tap(finder);
+      final candidates = find.text(text, findRichText: true);
+      expect(candidates.evaluate(), isNotEmpty, reason: 'Expected production control "$text"');
+      if (candidates.hitTestable().evaluate().isEmpty) {
+        await tester.ensureVisible(candidates.first);
+        await pumpFor(const Duration(milliseconds: 200));
+      }
+      final visible = candidates.hitTestable();
+      expect(visible.evaluate(), isNotEmpty, reason: 'Production control "$text" must be reachable');
+      await tester.tap(visible.first);
       await pumpFor(const Duration(milliseconds: 350));
     }
     Future<void> tapKey(String key) async {
@@ -148,6 +154,9 @@ void main() {
     await until(() => find.text(fixtures.item(MediaType.novel).title).evaluate().isNotEmpty,
         'independent novel shelf must be populated');
     final novelShelf = find.byType(NovelShelfView);
+    await until(() => tester.widgetList<RawImage>(find.descendant(
+        of: novelShelf, matching: find.byType(RawImage)))
+        .any((image) => image.image != null), 'novel shelf cover must finish actual decoding before capture');
     expect(find.descendant(of: novelShelf,
         matching: find.textContaining(RegExp('已登录|未登录|登录后'))), findsNothing,
         reason: '小说书架不展示账号状态；账号只从设置管理');
