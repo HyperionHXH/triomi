@@ -196,6 +196,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await open(tester);
+    expect(SystemChrome.latestStyle?.statusBarIconBrightness, Brightness.dark);
     await controls(tester);
     await tester.tap(find.text('阅读设置'));
     await tester.pumpAndSettle();
@@ -212,6 +213,8 @@ void main() {
     await settle(tester);
     expect(NovelReaderSettings.load(preferences).mode, NovelReadingMode.scroll);
     expect(NovelReaderSettings.load(preferences).theme, NovelTheme.dark);
+    expect(SystemChrome.latestStyle?.statusBarIconBrightness, Brightness.light);
+    expect(SystemChrome.latestStyle?.statusBarBrightness, Brightness.dark);
   });
 
   testWidgets(
