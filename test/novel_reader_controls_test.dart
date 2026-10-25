@@ -215,6 +215,15 @@ void main() {
     expect(NovelReaderSettings.load(preferences).theme, NovelTheme.dark);
     expect(SystemChrome.latestStyle?.statusBarIconBrightness, Brightness.light);
     expect(SystemChrome.latestStyle?.statusBarBrightness, Brightness.dark);
+    for (final control in [find.byType(BackButton), find.byTooltip('阅读菜单')]) {
+      final glyph = tester.widget<RichText>(
+        find.descendant(of: control, matching: find.byType(RichText)),
+      );
+      final foreground = glyph.text.style!.color!.computeLuminance();
+      final background = NovelTheme.dark.background.computeLuminance();
+      expect((foreground + 0.05) / (background + 0.05), greaterThanOrEqualTo(4.5),
+          reason: 'Night reader navigation icons must remain visible');
+    }
   });
 
   testWidgets(

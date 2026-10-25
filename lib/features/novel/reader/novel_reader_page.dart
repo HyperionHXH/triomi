@@ -974,7 +974,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               elevation: 2,
               child: Row(
                 children: [
-                  BackButton(onPressed: () => Navigator.of(context).maybePop()),
+                  BackButton(
+                    color: _settings.theme.foreground,
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
                   Expanded(
                     child: Text(
                       '${_item.title} · ${_chapter.title}',
@@ -984,6 +987,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                   ),
                   IconButton(
                     tooltip: '阅读菜单',
+                    color: _settings.theme.foreground,
                     onPressed: _showMenu,
                     icon: const Icon(Icons.more_vert),
                   ),

@@ -4,6 +4,8 @@
 
 发布前主线又推进至`6cf55e4`（0.12.0+174），因此追加合并公共网络加速/ECH、更新空间分类与系统音量，不把173候选当作最新包发布。保留iOS AVPlayer/PiP、WebKit JS、下载生命周期、持久沙盒与小说书架账号入口边界。最终云端运行、公开Release与本地逐图验收证据在完成后记录于本节。
 
+174本地Dart回归：`flutter analyze --no-pub`零问题，Flutter全量1473通过/4跳过，包含Android/iOS设备媒体音量读回、PAC有序代理/DIRECT真实loopback回退、夜间阅读状态栏切换；Python工具109通过。新增iOS离线FFI用例验证原生HTTP状态/头/UTF-8正文、流式超限后释放单槽队列，不把HTTP夹具称为TLS/ECH握手。候选`499d013`已推送，[运行40201264057](https://github.com/HyperionHXH/triomi/actions/runs/40201264057)正在执行全部门槛。Android普通debug APK（arm/arm64/x64原生库）与Windows debug EXE均编译成功；本机GitHub下载超时通过按清单SHA-256核验的原始依赖ZIP缓存解决，未修改依赖或关闭校验。未安装或操作用户设备。
+
 173候选`9f62e8b`的[运行40194653535](https://github.com/HyperionHXH/triomi/actions/runs/40194653535)全部通过：原生19项（18通过/1硬件亮度跳过）、真实JS/存储/视频集成与53状态巡检；本地Flutter1438通过/3跳过、Python109通过。下载53张PNG逐张读取后发现夜间小说状态栏对比不足、追番设置仍残留旧弹弹play凭据/发送说明，已修正并加状态栏切换回归。该候选未发布，不用它替代174的最终验收。
 
 模拟器集成现使用官方`FLTIntegrationTestRunner`原生XCTest结果通道，不再依赖宿主VM Service发现；原生压力测试、Dart集成、视觉巡检各用隔离的一次性模拟器。仅模拟器XCTest启用ad-hoc签名以实际访问Keychain；真机Release保持`--no-codesign`。语义开关在测试基线前开启并最终还原，不跳过语义泄漏断言或凭据真实读写。
