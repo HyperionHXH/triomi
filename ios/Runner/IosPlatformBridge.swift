@@ -426,7 +426,6 @@ final class IosSystemProxyRequest {
     }
     var context = CFStreamClientContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(), retain: nil, release: nil, copyDescription: nil)
     let callback: CFProxyAutoConfigurationResultCallback = { info, proxies, error in
-      guard let info = info else { return }
       let request = Unmanaged<IosSystemProxyRequest>.fromOpaque(info).takeUnretainedValue()
       guard request.pending != nil else { return }
       guard error == nil, let routes = proxies as? [[String: Any]] else {
