@@ -20,6 +20,36 @@ import run_ios_visual_tour as tour
 DEVICE = '12345678-1234-1234-1234-123456789ABC'
 
 
+class SimulatorValidationTests(unittest.TestCase):
+    def test_validates_only_the_explicit_running_simulator(self):
+        device = '12345678-1234-1234-1234-123456789ABC'
+        response = subprocess.CompletedProcess(
+            ['xcrun', 'simctl', 'getenv', device, 'SIMULATOR_UDID'],
+            0,
+            f'{device}\n',
+            '',
+        )
+        with patch.object(tour.subprocess, 'run', return_value=response) as simctl:
+            self.assertEqual(tour.validate_device(device)['udid'], device)
+        simctl.assert_called_once_with(
+            ['xcrun', 'simctl', 'getenv', device, 'SIMULATOR_UDID'],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=15,
+        )
+
+    def test_rejects_non_uuid_or_mismatched_simulator_without_global_enumeration(self):
+        with patch.object(tour.subprocess, 'run') as simctl:
+            with self.assertRaisesRegex(ValueError, 'explicit iOS Simulator UDID'):
+                tour.validate_device('booted')
+            response = subprocess.CompletedProcess([], 0, '87654321-1234-1234-1234-123456789ABC\n', '')
+            simctl.return_value = response
+            with self.assertRaisesRegex(ValueError, 'not running with the requested UDID'):
+                tour.validate_device('12345678-1234-1234-1234-123456789ABC')
+        self.assertEqual(simctl.call_count, 1)
+
+
 class CaptureProtocolTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()

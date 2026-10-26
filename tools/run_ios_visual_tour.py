@@ -98,20 +98,20 @@ def png_metadata(path: Path) -> dict:
 def validate_device(device: str) -> dict:
     if not UDID.fullmatch(device):
         raise ValueError('--device must be an explicit iOS Simulator UDID, never booted/name')
-    result = subprocess.run(
-        ['xcrun', 'simctl', 'list', 'devices', 'available', '--json'],
-        capture_output=True, text=True, check=True, timeout=30,
-    )
-    devices = [
-        item for runtime, group in json.loads(result.stdout)['devices'].items()
-        if '.iOS-' in runtime for item in group
-        if item['udid'].lower() == device.lower() and item.get('isAvailable', False)
-    ]
-    if len(devices) != 1:
-        raise ValueError(f'Expected one available iOS Simulator with UDID {device}')
-    if devices[0].get('state') != 'Booted':
-        raise ValueError(f'Selected iOS Simulator is not Booted: {device}')
-    return devices[0]
+    try:
+        result = subprocess.run(
+            ['xcrun', 'simctl', 'getenv', device, 'SIMULATOR_UDID'],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=15,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise ValueError(f'Selected simulator did not answer its boot-state probe: {device}') from error
+    actual = result.stdout.strip()
+    if actual.lower() != device.lower():
+        raise ValueError(f'Selected simulator is not running with the requested UDID: {device}')
+    return {'udid': actual}
 
 
 class CaptureError(ValueError):
