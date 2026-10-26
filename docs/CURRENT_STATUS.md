@@ -4,7 +4,13 @@
 
 发布前主线又推进至`6cf55e4`（0.12.0+174），因此追加合并公共网络加速/ECH、更新空间分类与系统音量，不把173候选当作最新包发布。保留iOS AVPlayer/PiP、WebKit JS、下载生命周期、持久沙盒与小说书架账号入口边界。最终云端运行、公开Release与本地逐图验收证据在完成后记录于本节。
 
-174本地Dart回归：`flutter analyze --no-pub`零问题，Flutter全量1473通过/4跳过，包含Android/iOS设备媒体音量读回、PAC有序代理/DIRECT真实loopback回退、夜间阅读状态栏切换；Python工具109通过。新增iOS离线FFI用例验证原生HTTP状态/头/UTF-8正文、流式超限后释放单槽队列，不把HTTP夹具称为TLS/ECH握手。候选`499d013`已推送，[运行40201264057](https://github.com/HyperionHXH/triomi/actions/runs/40201264057)正在执行全部门槛。Android普通debug APK（arm/arm64/x64原生库）与Windows debug EXE均编译成功；本机GitHub下载超时通过按清单SHA-256核验的原始依赖ZIP缓存解决，未修改依赖或关闭校验。未安装或操作用户设备。
+最终接受提交`5e86f62`（合入主线`6cf55e4`）本地`flutter analyze --no-pub`零问题、Flutter1474通过/4跳过、Python111通过；Android普通debug APK和Windows debug EXE编译成功，Windows生产PlayerPage实际解码loopback视频、播放/暂停/seek/恢复及独立弹幕烟测通过。`tools/run_ios_visual_tour.py`先前对工作流已明确选定的UDID重复执行全局`simctl list devices`，在云端CoreSimulator负载期间两次均超时；现改用有界`simctl getenv <UDID> SIMULATOR_UDID`精准探测，增加UUID匹配及非全局枚举回归。该修复后云端通过，非放宽巡检或取消截图验证。
+
+最终macOS [运行40256534946](https://github.com/HyperionHXH/triomi/actions/runs/40256534946)全绿：真机Release arm64原生库包装校验，20项原生XCTest（含1项仅因模拟器无硬件亮度能力而跳过），Dart集成包含iOS原生HTTP FFI边界、WKWebView源解析、真实AVPlayer解码/弹幕与持久化，以及53状态生产UI巡检。IPA、53张截图、manifest、Flutter日志和录屏下载到`release_ios/40256534946/`。manifest `passed`、53图各自尺寸/SHA-256校验匹配；H.264录屏198.02秒，本机OpenCV完整解码1925帧，与云端ffprobe计数相同。逐张读取全部53 PNG及录屏样帧：夜间小说阅读器返回/菜单图标为高亮浅色，黑色正文/工具栏对比正常；来源管理显示Kazumi api1–9和iOS APK/DEX降级；追番设置无旧弹弹play凭据/发送文案；公共网络加速开关及缓存/下载/账号入口均正常。未见白屏、异常弹窗、黄黑溢出条或明显布局错位。场景数据/视频/三池弹幕是隔离loopback夹具、账号未登录；UI目视仅来自模拟器，不能据此声称真实站点内容与全设备体验验证。
+
+未签名IPA发布为[GitHub Release `v0.12.0-ios.174`](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-ios.174)，基于同一接受提交；该Tag运行40259477167完整重建、模拟器全验收、发布上传全部成功。公开下载资产`Triomi-iOS-Unsigned.ipa`为13,429,552字节，SHA-256 `a0758a5b8e385b9bb623f3267a7e1b5f00b123623e50d89f50ddf522ec702706`，与云端打包日志及GitHub Release API资产摘要一致；已从公开Release下载到`release_ios/40256534946/public-release/`独立校验ZIP CRC、设备Payload、Bundle ID `io.github.hyperionhxh.triomi`、版本`0.12.0+174`、iOS最低15、arm64真机SDK声明。IPA未签名，不能直接安装；AltStore Classic / SideStore需由用户自己的合法签名身份签名，TrollStore仅在官方支持系统版本使用。该Release只有iOS IPA，不更改Android/Windows版发布Tag。
+
+最终巡检逐图记录见[`release_ios/40256534946/VISUAL_ACCEPTANCE.md`](../release_ios/40256534946/VISUAL_ACCEPTANCE.md)，公开IPA摘要也记于该目录。真机锁屏/后台音频、PiP、音量实体键/真实输出路由、相册授权、120Hz、第三方账号与WebDAV远端实写仍未实体iPhone验收；模拟器和本地夹具不能替代这些检查。
 
 运行40201264057全部门槛通过并下载53图逐张检查后，发现夜间顶部返回/菜单图标仍黑色，故未发布；提交`f7c60f3`补齐图标前景色与实际字形对比度断言。运行40203374882的真机Release、20项原生检查和6个真实集成场景通过，夜间原图已确认图标浅色；视觉巡检在第30张后保存弹幕偏移时遇到`RenderPadding value.isNonNegative`，未上传/发布IPA。生产面板的键盘空间直接使用`20 + viewInsets.bottom`；本地注入正/负键盘边界转换复现同一断言，现仅把视图外的键盘空间按零处理，正值保持原语义。底层iOS键盘指标为什么在该帧越界未确认；不吞异常、不跳过弹幕交互或放松53图门槛。
 
