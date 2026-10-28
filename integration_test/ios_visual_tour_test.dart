@@ -370,17 +370,16 @@ void main() {
         () => mangaSource.evaluate().isNotEmpty,
         'the installed JS/API source must be available in source management',
       );
-      final sourceSemantics = tester.ensureSemantics();
-      try {
-        final sourceToggle = find.bySemanticsLabel('启用来源 MangaDex 漫画（开放 API）');
-        expect(sourceToggle, findsOneWidget);
-        final enabledSwitch = tester.widget<Switch>(
-          find.descendant(of: sourceToggle, matching: find.byType(Switch)),
-        );
-        expect(enabledSwitch.value, isTrue);
-      } finally {
-        sourceSemantics.dispose();
-      }
+      final sourceToggle = find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.label == '启用来源 MangaDex 漫画（开放 API）',
+      );
+      expect(sourceToggle, findsOneWidget);
+      final enabledSwitch = tester.widget<Switch>(
+        find.descendant(of: sourceToggle, matching: find.byType(Switch)),
+      );
+      expect(enabledSwitch.value, isTrue);
       await go(AppRoutes.novel);
       await go('${AppRoutes.sources}?type=novel');
       await until(
