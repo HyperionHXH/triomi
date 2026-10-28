@@ -36,7 +36,7 @@ class SimulatorValidationTests(unittest.TestCase):
             capture_output=True,
             text=True,
             check=True,
-            timeout=15,
+            timeout=60,
         )
 
     def test_rejects_non_uuid_or_mismatched_simulator_without_global_enumeration(self):

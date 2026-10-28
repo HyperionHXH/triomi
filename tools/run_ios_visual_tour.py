@@ -104,7 +104,7 @@ def validate_device(device: str) -> dict:
             capture_output=True,
             text=True,
             check=True,
-            timeout=15,
+            timeout=60,
         )
     except subprocess.TimeoutExpired as error:
         raise ValueError(f'Selected simulator did not answer its boot-state probe: {device}') from error

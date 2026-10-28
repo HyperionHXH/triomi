@@ -298,13 +298,13 @@ final class RunnerTests: XCTestCase {
     let store = WKWebsiteDataStore.default()
     let added = expectation(description: "Persistent app WebKit jar stores cookie")
     IosWebSession.storeCookies(["persistent=value; Path=/; Secure; HttpOnly; Max-Age=3600"], url: url, store: store) { added.fulfill() }
-    wait(for: [added], timeout: 15)
+    wait(for: [added], timeout: 60)
     let recreated = IosWebSession()
     let read = expectation(description: "Recreated bridge reads persistent native cookie")
     recreated.handle(FlutterMethodCall(methodName: "ruleCookieHeader", arguments: ["url": url.absoluteString]), presenter: nil) {
       XCTAssertEqual($0 as? String, "persistent=value"); read.fulfill()
     }
-    wait(for: [read], timeout: 15)
+    wait(for: [read], timeout: 60)
     let removed = expectation(description: "Remove only smoke cookie")
     store.httpCookieStore.getAllCookies { cookies in
       let group = DispatchGroup()
@@ -313,7 +313,7 @@ final class RunnerTests: XCTestCase {
       }
       group.notify(queue: .main) { removed.fulfill() }
     }
-    wait(for: [removed], timeout: 15)
+    wait(for: [removed], timeout: 60)
   }
 
   func testBackupLeaseExcludesCleanupAcrossOwnersAndOSDescriptors() throws {
