@@ -87,7 +87,7 @@ jobs:
           xcrun simctl bootstatus "$device" -b
       - name: Prepare the debug simulator application
         run: flutter build ios --simulator --debug
-      - name: Smoke-test the native bridge and JavaScriptCore on iOS
+      - name: Smoke-test the native bridge on iOS
         run: |
           set -euo pipefail
           xcodebuild test \
@@ -98,7 +98,23 @@ jobs:
             -parallel-testing-enabled NO \
             -only-testing:RunnerTests \
             -skip-testing:RunnerTests/IosIntegrationTests \
+            -skip-testing:RunnerTests/IosJsRuntimeTests \
             -resultBundlePath build/ios/NativeSmoke.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+      # Infinite-loop tests revoke a WKWebView without a public process-kill API.
+      # Run them after cookie/storage tests; shut the disposable simulator down
+      # before production Flutter acceptance so stress cannot contaminate it.
+      - name: Exercise actual JavaScriptCore cancellation and replacement
+        run: |
+          set -euo pipefail
+          xcodebuild test \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}' \
+            -parallel-testing-enabled NO \
+            -only-testing:RunnerTests/IosJsRuntimeTests \
+            -resultBundlePath build/ios/JsStress.xcresult \
             CODE_SIGNING_ALLOWED=NO
       - name: Isolate Flutter acceptance from native WebContent stress tests
         id: flutter-simulator
@@ -162,6 +178,7 @@ jobs:
           name: triomi-ios-native-smoke
           path: |
             build/ios/NativeSmoke.xcresult
+            build/ios/JsStress.xcresult
             build/ios/acceptance/
           if-no-files-found: ignore
 
