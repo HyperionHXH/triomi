@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
 
 import '../../../core/db/app_database.dart';
@@ -8,6 +9,13 @@ import '../../../core/models/manga_metadata_override.dart';
 import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
 import 'library_category.dart';
+
+String _libraryJournalNamespace(MediaType type) =>
+    sha256.convert(utf8.encode('library-journal.v1.${type.name}')).toString();
+
+String _historyClearNamespace(MediaType? type) => sha256
+    .convert(utf8.encode('library-history-clear.v1.${type?.name ?? 'all'}'))
+    .toString();
 
 /// 书架条目 + 作品信息（列表渲染需要的信息都在这里）。
 class LibraryItemView {
@@ -64,8 +72,15 @@ class LibraryRepository {
   // ------------------------------------------------------------ 作品与书架
 
   /// 写入 / 更新作品快照。
-  Future<void> cacheItem(MediaItem item) {
-    return _db
+  Future<void> cacheItem(MediaItem item) async {
+    final previous =
+        await (_db.select(_db.mediaItems)..where(
+              (row) =>
+                  row.sourceId.equals(item.sourceId) &
+                  row.remoteId.equals(item.remoteId),
+            ))
+            .getSingleOrNull();
+    await _db
         .into(_db.mediaItems)
         .insertOnConflictUpdate(
           MediaItemsCompanion.insert(
@@ -80,6 +95,7 @@ class LibraryRepository {
             tagsJson: Value(item.tags.isEmpty ? null : jsonEncode(item.tags)),
             rating: Value(item.rating),
             status: Value(item.status),
+            detailJson: Value(previous?.detailJson),
             cachedAt: Value(DateTime.now()),
           ),
         );
@@ -174,11 +190,37 @@ class LibraryRepository {
     return row != null;
   }
 
-  /// 加入书架（同时缓存作品快照）。
   Future<void> addToLibrary(MediaItem item) async {
     await _db.transaction(() async {
+      final existing =
+          await (_db.select(_db.libraryEntries)..where(
+                (row) =>
+                    row.sourceId.equals(item.sourceId) &
+                    row.remoteId.equals(item.remoteId),
+              ))
+              .getSingleOrNull();
+      if (existing != null && existing.type != item.type) {
+        throw StateError(
+          'Favorite identity is already used by another media type',
+        );
+      }
       await cacheItem(item);
-      final now = DateTime.now();
+      var membershipAt = DateTime.now();
+      if (existing == null && item.type != MediaType.novel) {
+        final previous =
+            await (_db.select(_db.animeFollowSyncStates)
+                  ..where(
+                    (row) =>
+                        row.sourceId.equals(item.sourceId) &
+                        row.remoteId.equals(item.remoteId),
+                  )
+                  ..orderBy([(row) => OrderingTerm.desc(row.changedAt)])
+                  ..limit(1))
+                .getSingleOrNull();
+        if (previous != null && !membershipAt.isAfter(previous.changedAt)) {
+          membershipAt = previous.changedAt.add(const Duration(seconds: 1));
+        }
+      }
       await _db
           .into(_db.libraryEntries)
           .insert(
@@ -186,18 +228,26 @@ class LibraryRepository {
               sourceId: item.sourceId,
               remoteId: item.remoteId,
               type: item.type,
-              addedAt: now,
-              updatedAt: now,
+              addedAt: membershipAt,
+              updatedAt: membershipAt,
             ),
             mode: InsertMode.insertOrIgnore,
           );
+      if (existing == null && item.type != MediaType.novel) {
+        await _writeMembershipChange(
+          item.type,
+          item.sourceId,
+          item.remoteId,
+          membershipAt,
+          deleted: false,
+        );
+      }
     });
   }
 
-  /// 本地追番复用收藏存储，但不进入默认阅读书架。不依赖远端账号。
   Future<void> addAnimeFollow(MediaItem item) {
     if (item.type != MediaType.anime) {
-      throw ArgumentError.value(item.type, 'item.type', '追番只接受动画');
+      throw ArgumentError.value(item.type, 'item.type');
     }
     return addToLibrary(item);
   }
@@ -214,18 +264,32 @@ class LibraryRepository {
     String sourceId,
     String remoteId, {
     MediaType? type,
-  }) {
-    final statement = _db.delete(_db.libraryEntries)
-      ..where(
-        (table) =>
-            table.sourceId.equals(sourceId) &
-            table.remoteId.equals(remoteId) &
-            (type == null
-                ? const Constant(true)
-                : table.type.equalsValue(type)),
-      );
-    return statement.go();
-  }
+  }) async => _db.transaction(() async {
+    final matching =
+        await (_db.select(_db.libraryEntries)..where(
+              (row) =>
+                  row.sourceId.equals(sourceId) &
+                  row.remoteId.equals(remoteId) &
+                  (type == null
+                      ? const Constant(true)
+                      : row.type.equalsValue(type)),
+            ))
+            .get();
+    for (final entry in matching) {
+      if (entry.type != MediaType.novel) {
+        await _recordMembershipRemoval(entry.type, sourceId, remoteId);
+      }
+    }
+    await (_db.delete(_db.libraryEntries)..where(
+          (row) =>
+              row.sourceId.equals(sourceId) &
+              row.remoteId.equals(remoteId) &
+              (type == null
+                  ? const Constant(true)
+                  : row.type.equalsValue(type)),
+        ))
+        .go();
+  });
 
   Future<void> setPinnedFor(
     Set<(String, String)> keys,
@@ -256,17 +320,261 @@ class LibraryRepository {
     MediaType? type,
   }) => _db.transaction(() async {
     for (final key in keys) {
+      final matching =
+          await (_db.select(_db.libraryEntries)..where(
+                (row) =>
+                    row.sourceId.equals(key.$1) &
+                    row.remoteId.equals(key.$2) &
+                    (type == null
+                        ? const Constant(true)
+                        : row.type.equalsValue(type)),
+              ))
+              .get();
+      for (final entry in matching) {
+        if (entry.type != MediaType.novel) {
+          await _recordMembershipRemoval(entry.type, key.$1, key.$2);
+        }
+      }
       await (_db.delete(_db.libraryEntries)..where(
-            (t) =>
-                t.sourceId.equals(key.$1) &
-                t.remoteId.equals(key.$2) &
+            (row) =>
+                row.sourceId.equals(key.$1) &
+                row.remoteId.equals(key.$2) &
                 (type == null
                     ? const Constant(true)
-                    : t.type.equalsValue(type)),
+                    : row.type.equalsValue(type)),
           ))
           .go();
     }
   });
+
+  Future<AnimeFollowSyncStateRow?> _membershipChange(
+    MediaType type,
+    String sourceId,
+    String remoteId,
+  ) =>
+      (_db.select(_db.animeFollowSyncStates)..where(
+            (row) =>
+                row.accountKey.equals(_libraryJournalNamespace(type)) &
+                row.sourceId.equals(sourceId) &
+                row.remoteId.equals(remoteId),
+          ))
+          .getSingleOrNull();
+
+  Future<void> _writeMembershipChange(
+    MediaType type,
+    String sourceId,
+    String remoteId,
+    DateTime changedAt, {
+    required bool deleted,
+  }) async {
+    if (type == MediaType.novel) return;
+    final previous =
+        await (_db.select(_db.animeFollowSyncStates)
+              ..where(
+                (row) =>
+                    row.sourceId.equals(sourceId) &
+                    row.remoteId.equals(remoteId),
+              )
+              ..orderBy([(row) => OrderingTerm.desc(row.changedAt)])
+              ..limit(1))
+            .getSingleOrNull();
+    changedAt = DateTime.fromMillisecondsSinceEpoch(
+      changedAt.millisecondsSinceEpoch ~/ 1000 * 1000,
+    );
+    if (previous != null && !changedAt.isAfter(previous.changedAt)) {
+      changedAt = previous.changedAt.add(const Duration(seconds: 1));
+    }
+    await _db
+        .into(_db.animeFollowSyncStates)
+        .insertOnConflictUpdate(
+          AnimeFollowSyncStatesCompanion.insert(
+            accountKey: _libraryJournalNamespace(type),
+            sourceId: sourceId,
+            remoteId: remoteId,
+            changedAt: changedAt,
+            deleted: Value(deleted),
+          ),
+        );
+  }
+
+  Future<DateTime?> membershipChangedAt(
+    MediaType type,
+    String sourceId,
+    String remoteId,
+  ) async => (await _membershipChange(type, sourceId, remoteId))?.changedAt;
+
+  Future<void> markFavoriteChanged(
+    MediaType type,
+    String sourceId,
+    String remoteId,
+  ) async {
+    final entry =
+        await (_db.select(_db.libraryEntries)..where(
+              (row) =>
+                  row.sourceId.equals(sourceId) &
+                  row.remoteId.equals(remoteId) &
+                  row.type.equalsValue(type),
+            ))
+            .getSingleOrNull();
+    if (entry != null) {
+      await _writeMembershipChange(
+        type,
+        sourceId,
+        remoteId,
+        DateTime.now(),
+        deleted: false,
+      );
+    }
+  }
+
+  Future<void> _recordMembershipRemoval(
+    MediaType type,
+    String sourceId,
+    String remoteId,
+  ) => _writeMembershipChange(
+    type,
+    sourceId,
+    remoteId,
+    DateTime.now(),
+    deleted: true,
+  );
+
+  Future<void> journalRemoteMembershipChange({
+    required MediaType type,
+    required String sourceId,
+    required String remoteId,
+    required DateTime changedAt,
+    required bool deleted,
+    String? accountKey,
+  }) async {
+    if (type == MediaType.novel) return;
+    final namespace = accountKey == null
+        ? _libraryJournalNamespace(type)
+        : sha256
+              .convert(
+                utf8.encode('library-journal.v1.${type.name}.$accountKey'),
+              )
+              .toString();
+    await _db
+        .into(_db.animeFollowSyncStates)
+        .insertOnConflictUpdate(
+          AnimeFollowSyncStatesCompanion.insert(
+            accountKey: namespace,
+            sourceId: sourceId,
+            remoteId: remoteId,
+            changedAt: changedAt,
+            deleted: Value(deleted),
+          ),
+        );
+  }
+
+  Future<List<AnimeFollowSyncStateRow>> membershipJournal(
+    MediaType type, {
+    String? accountKey,
+  }) {
+    final namespace = accountKey == null
+        ? _libraryJournalNamespace(type)
+        : sha256
+              .convert(
+                utf8.encode('library-journal.v1.${type.name}.$accountKey'),
+              )
+              .toString();
+    return (_db.select(
+      _db.animeFollowSyncStates,
+    )..where((row) => row.accountKey.equals(namespace))).get();
+  }
+
+  Future<DateTime?> historyClearedAt(MediaType? type) async =>
+      (await (_db.select(_db.animeFollowSyncStates)..where(
+                (row) =>
+                    row.accountKey.equals(_historyClearNamespace(type)) &
+                    row.sourceId.equals('clear') &
+                    row.remoteId.equals('clear'),
+              ))
+              .getSingleOrNull())
+          ?.changedAt;
+
+  Future<void> setHistoryClearedAt(MediaType? type, DateTime changedAt) async {
+    final existing = await historyClearedAt(type);
+    if (existing != null && !changedAt.isAfter(existing)) return;
+    await _db
+        .into(_db.animeFollowSyncStates)
+        .insertOnConflictUpdate(
+          AnimeFollowSyncStatesCompanion.insert(
+            accountKey: _historyClearNamespace(type),
+            sourceId: 'clear',
+            remoteId: 'clear',
+            changedAt: changedAt,
+            deleted: const Value(true),
+          ),
+        );
+  }
+
+  Future<void> clearHistoryFor(String sourceId, String remoteId) =>
+      _db.transaction(() async {
+        final item = await itemByKey(sourceId, remoteId);
+        if (item == null) {
+          throw StateError('Cannot clear history without its media identity');
+        }
+        final rows =
+            await (_db.select(_db.histories)..where(
+                  (row) =>
+                      row.sourceId.equals(sourceId) &
+                      row.remoteId.equals(remoteId),
+                ))
+                .get();
+        var at = DateTime.now();
+        for (final row in rows) {
+          if (!at.isAfter(row.visitedAt)) {
+            at = row.visitedAt.add(const Duration(seconds: 1));
+          }
+        }
+        await storeHistoryClear(
+          type: item.type,
+          sourceId: sourceId,
+          remoteId: remoteId,
+          changedAt: at,
+        );
+        await (_db.delete(_db.histories)..where(
+              (row) =>
+                  row.sourceId.equals(sourceId) & row.remoteId.equals(remoteId),
+            ))
+            .go();
+      });
+
+  Future<List<AnimeFollowSyncStateRow>> historyClearJournal(MediaType? type) =>
+      (_db.select(_db.animeFollowSyncStates)..where(
+            (row) => row.accountKey.equals(_historyClearNamespace(type)),
+          ))
+          .get();
+
+  Future<void> storeHistoryClear({
+    required MediaType? type,
+    required String sourceId,
+    required String remoteId,
+    required DateTime changedAt,
+  }) async {
+    final existing =
+        await (_db.select(_db.animeFollowSyncStates)..where(
+              (row) =>
+                  row.accountKey.equals(_historyClearNamespace(type)) &
+                  row.sourceId.equals(sourceId) &
+                  row.remoteId.equals(remoteId),
+            ))
+            .getSingleOrNull();
+    if (existing != null && !changedAt.isAfter(existing.changedAt)) return;
+    await _db
+        .into(_db.animeFollowSyncStates)
+        .insertOnConflictUpdate(
+          AnimeFollowSyncStatesCompanion.insert(
+            accountKey: _historyClearNamespace(type),
+            sourceId: sourceId,
+            remoteId: remoteId,
+            changedAt: changedAt,
+            deleted: const Value(true),
+          ),
+        );
+  }
 
   /// Local snapshots are scoped at the SQL entry point. Maintenance callers
   /// may explicitly request all types; business pages always supply [type].
@@ -754,6 +1062,7 @@ class LibraryRepository {
                       unreadCount: Value(unread),
                     ),
                   );
+          await markFavoriteChanged(MediaType.manga, key.$1, key.$2);
         }
         return updated;
       });
@@ -766,7 +1075,66 @@ class LibraryRepository {
     double position = 0,
     String? device,
   }) async {
+    if (!position.isFinite || position < 0 || chapter.sourceId != sourceId) {
+      throw ArgumentError('History position or source identity is invalid');
+    }
     await _db.transaction(() async {
+      var visitedAt = DateTime.fromMillisecondsSinceEpoch(
+        DateTime.now().millisecondsSinceEpoch ~/ 1000 * 1000,
+      );
+      final old =
+          await (_db.select(_db.histories)
+                ..where(
+                  (row) =>
+                      row.sourceId.equals(sourceId) &
+                      row.remoteId.equals(remoteId),
+                )
+                ..orderBy([(row) => OrderingTerm.desc(row.visitedAt)])
+                ..limit(1))
+              .getSingleOrNull();
+      final item = await itemByKey(sourceId, remoteId);
+      final clearRows = <AnimeFollowSyncStateRow>[
+        ...await historyClearJournal(null),
+        if (item != null) ...await historyClearJournal(item.type),
+      ];
+      for (final at in [
+        if (old != null) old.visitedAt,
+        for (final row in clearRows)
+          if (row.sourceId == 'clear' ||
+              row.sourceId == sourceId && row.remoteId == remoteId)
+            row.changedAt,
+      ]) {
+        if (!visitedAt.isAfter(at)) {
+          visitedAt = at.add(const Duration(seconds: 1));
+        }
+      }
+      final cached =
+          await (_db.select(_db.chapters)..where(
+                (row) =>
+                    row.sourceId.equals(chapter.sourceId) &
+                    row.remoteId.equals(chapter.remoteId),
+              ))
+              .getSingleOrNull();
+      if (cached == null) {
+        await _db
+            .into(_db.chapters)
+            .insert(
+              ChaptersCompanion.insert(
+                sourceId: chapter.sourceId,
+                remoteId: chapter.remoteId,
+                itemSourceId: sourceId,
+                itemRemoteId: remoteId,
+                title: chapter.title,
+                url: Value(chapter.url),
+                number: Value(chapter.number),
+                sortIndex: Value(chapter.sortIndex),
+                locked: Value(chapter.locked),
+              ),
+            );
+      } else if (cached.itemSourceId != sourceId ||
+          cached.itemRemoteId != remoteId) {
+        throw StateError('History chapter belongs to another work');
+      }
       final deleteStatement = _db.delete(_db.histories)
         ..where(
           (table) =>
@@ -786,7 +1154,7 @@ class LibraryRepository {
               chapterRemoteId: chapter.remoteId,
               position: Value(position),
               device: Value(device),
-              visitedAt: DateTime.now(),
+              visitedAt: visitedAt,
             ),
           );
     });
@@ -873,18 +1241,30 @@ class LibraryRepository {
   }
 
   Future<void> clearHistory({MediaType? type}) async {
-    if (type == null) {
-      await _db.delete(_db.histories).go();
-      return;
-    }
-    await _db.customStatement(
-      'DELETE FROM histories WHERE EXISTS (SELECT 1 FROM media_items '
-      'WHERE media_items.source_id = histories.source_id '
-      'AND media_items.remote_id = histories.remote_id AND media_items.type = ?)',
-      [type.name],
-    );
-    _db.notifyUpdates({
-      TableUpdate.onTable(_db.histories, kind: UpdateKind.delete),
+    await _db.transaction(() async {
+      var clearedAt = DateTime.now();
+      final histories = await _db.select(_db.histories).get();
+      for (final history in histories) {
+        final item = await itemByKey(history.sourceId, history.remoteId);
+        if (type != null && item?.type != type) continue;
+        if (!clearedAt.isAfter(history.visitedAt)) {
+          clearedAt = history.visitedAt.add(const Duration(seconds: 1));
+        }
+      }
+      await setHistoryClearedAt(type, clearedAt);
+      if (type == null) {
+        await _db.delete(_db.histories).go();
+      } else {
+        await _db.customStatement(
+          'DELETE FROM histories WHERE EXISTS (SELECT 1 FROM media_items '
+          'WHERE media_items.source_id = histories.source_id '
+          'AND media_items.remote_id = histories.remote_id AND media_items.type = ?)',
+          [type.name],
+        );
+        _db.notifyUpdates({
+          TableUpdate.onTable(_db.histories, kind: UpdateKind.delete),
+        });
+      }
     });
   }
 

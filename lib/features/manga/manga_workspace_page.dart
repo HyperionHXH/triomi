@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -86,6 +87,12 @@ class _MangaWorkspacePageState extends ConsumerState<MangaWorkspacePage>
               icon: const Icon(Icons.search),
               onPressed: () =>
                   unawaited(SearchPage.open(context, type: MediaType.manga)),
+            ),
+          if (_library.selectionCount == 0)
+            IconButton(
+              tooltip: '同步收藏与历史',
+              icon: const Icon(Icons.cloud_sync_outlined),
+              onPressed: () => context.push(AppRoutes.webdav),
             ),
           if (_library.selectionCount == 0)
             IconButton(
@@ -185,15 +192,20 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            FilledButton.tonalIcon(
-              onPressed: _extensions,
-              icon: const Icon(Icons.extension_outlined),
-              label: const Text('插件 · 已安装 / 浏览 / 仓库'),
-            ),
+            if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS)
+              FilledButton.tonalIcon(
+                onPressed: _extensions,
+                icon: const Icon(Icons.extension_outlined),
+                label: const Text('插件 · 已安装 / 浏览 / 仓库'),
+              ),
             TextButton.icon(
               onPressed: _rules,
               icon: const Icon(Icons.settings_outlined),
-              label: const Text('规则与来源设置'),
+              label: Text(
+                !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+                    ? 'JS / API 漫画来源目录'
+                    : '规则与来源设置',
+              ),
             ),
           ],
         ),

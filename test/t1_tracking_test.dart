@@ -650,6 +650,48 @@ void main() {
       await service.setToken(TrackingServiceKind.anilist, 'al-token');
     }
 
+    test('redirected Bangumi writes never mark a binding synced', () async {
+      final http = FakeHttpClient(
+        (request) async => SourceResponse(
+          statusCode: request.method == 'GET' ? 200 : 302,
+          body: request.url.endsWith('/me')
+              ? '{"id":99}'
+              : request.method == 'GET'
+              ? '{"subject_id":12,"type":3,"ep_status":0}'
+              : '',
+          headers: const {'location': 'https://untrusted.test/collection'},
+        ),
+      );
+      final service = serviceOf(http);
+      await repository.bind(
+        sourceId: 'book-source',
+        remoteId: 'book',
+        kind: TrackingServiceKind.bangumi,
+        remoteTrackId: '12',
+      );
+      final before = (await repository.bindOf(
+        sourceId: 'book-source',
+        remoteId: 'book',
+        kind: TrackingServiceKind.bangumi,
+      ))!.syncedAt;
+      await service.setToken(TrackingServiceKind.bangumi, 'fixture-token');
+      final results = await service.reportStatus(
+        sourceId: 'book-source',
+        remoteId: 'book',
+        status: 'doing',
+        type: MediaType.manga,
+        chapterNumber: 3,
+      );
+      expect(results.single.ok, isFalse);
+      final binding = await repository.bindOf(
+        sourceId: 'book-source',
+        remoteId: 'book',
+        kind: TrackingServiceKind.bangumi,
+      );
+      expect(binding!.syncedAt, before);
+      expect(http.requests.last.followRedirects, isFalse);
+    });
+
     test('番剧进度：远端落后时推送，且用逐集接口', () async {
       final http = trackingHttpClient(remoteWatched: 1);
       final service = serviceOf(http);
@@ -872,8 +914,28 @@ void main() {
       );
       await service.setToken(TrackingServiceKind.bangumi, 'secret-token');
       expect(service.tokenOf(TrackingServiceKind.bangumi), 'secret-token');
+      expect(
+        service.secureStore.get(TrackingServiceKind.bangumi.tokenKey),
+        'secret-token',
+      );
+      expect(
+        service.preferences.get<String>(TrackingServiceKind.bangumi.tokenKey),
+        isNull,
+      );
+      expect(
+        service.preferences.get<int>('tracking.bangumi.credentialsRevision'),
+        1,
+      );
       await service.clearToken(TrackingServiceKind.bangumi);
       expect(service.tokenOf(TrackingServiceKind.bangumi), isNull);
+      expect(
+        service.preferences.get<int>('tracking.bangumi.credentialsRevision'),
+        2,
+      );
+      expect(
+        service.preferences.get<String>(TrackingServiceKind.bangumi.tokenKey),
+        isNull,
+      );
     });
   });
 }

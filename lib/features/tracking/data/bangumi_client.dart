@@ -449,7 +449,7 @@ class BangumiClient {
   /// 自行判状态码：真实网络层会抛错，测试替身只回响应，两条路必须一致。
   void _ensureSuccess(SourceResponse response, String path) {
     final status = response.statusCode;
-    if (response.isSuccess) return;
+    if (status >= 200 && status < 300) return;
     throw SourceException(
       sourceId: sourceId,
       type: switch (status) {

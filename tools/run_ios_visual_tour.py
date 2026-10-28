@@ -41,7 +41,7 @@ EXTRA_CAPTURES = (
     '01_manga_shelf.png', '01_novel_shelf.png',
     '01_novel_downloaded_filter.png',
     '02_anime_sources.png', '02_manga_sources.png', '02_novel_sources.png',
-    '02_source_import.png', '02_kazumi_repositories.png', '02_mihon_fallback.png',
+    '02_source_import.png', '02_kazumi_repositories.png', '02_manga_rule_catalog.png',
     '03_discover.png', '03_detail.png',
     '04_novel_reader_menu.png', '04_novel_reader_settings.png',
     '04_novel_catalog.png', '04_novel_reading_options.png', '04_novel_scroll.png',

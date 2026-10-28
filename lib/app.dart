@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/storage/preferences.dart';
 import 'core/theme/app_theme.dart';
+import 'features/library/data/library_auto_sync.dart';
 import 'features/settings/app_update_page.dart';
 import 'features/settings/app_update_service.dart';
 import 'features/settings/app_update_widgets.dart';
@@ -21,13 +22,35 @@ class TriomiApp extends ConsumerStatefulWidget {
   ConsumerState<TriomiApp> createState() => _TriomiAppState();
 }
 
-class _TriomiAppState extends ConsumerState<TriomiApp> {
+class _TriomiAppState extends ConsumerState<TriomiApp>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(libraryAutoSyncProvider.notifier).onResumed();
       unawaited(_checkForStartupUpdate());
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
+    final sync = ref.read(libraryAutoSyncProvider.notifier);
+    if (lifecycle == AppLifecycleState.resumed) {
+      sync.onResumed();
+    } else if (lifecycle == AppLifecycleState.paused ||
+        lifecycle == AppLifecycleState.detached ||
+        lifecycle == AppLifecycleState.hidden) {
+      sync.onPaused();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _checkForStartupUpdate() async {

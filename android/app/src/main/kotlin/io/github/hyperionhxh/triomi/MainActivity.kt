@@ -17,6 +17,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.util.concurrent.Executors
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 class MainActivity : FlutterActivity() {
     private var videoResolver: WebVideoResolver? = null
@@ -239,6 +240,8 @@ class MainActivity : FlutterActivity() {
                         val uri = runCatching { android.net.Uri.parse(url) }.getOrNull()
                         if (uri?.scheme != "https" || uri.host.isNullOrBlank() || uri.userInfo != null) {
                             result.error("invalid_url", "rule session requires HTTPS", null)
+                        } else if (call.argument<String>("sourceId").isNullOrBlank()) {
+                            result.error("invalid_source", "rule source identity is required", null)
                         } else if (!updateConsentCurrent(requestGeneration)) {
                             result.error("activity_inactive", "return to the app before opening source browser", null)
                         } else if (mihonSessionPending) {
@@ -249,6 +252,7 @@ class MainActivity : FlutterActivity() {
                                 val session = MihonWebSession(
                                     this, url!!,
                                     call.argument<String>("userAgent").orEmpty(),
+                                    ruleSourceId = call.argument<String>("sourceId"),
                                 ) { saved ->
                                     mihonWebSession = null
                                     if (mihonSessionPending) {
@@ -268,28 +272,18 @@ class MainActivity : FlutterActivity() {
                     }
                     "ruleCookieHeader", "ruleStoreCookies" -> {
                         val url = call.argument<String>("url")
-                        val uri = runCatching { android.net.Uri.parse(url) }.getOrNull()
-                        if (uri?.scheme != "https" || uri.host.isNullOrBlank() || uri.userInfo != null) {
+                        val target = url?.toHttpUrlOrNull()
+                        if (target == null || !target.isHttps || target.host.isBlank() || target.username.isNotEmpty() || target.password.isNotEmpty()) {
                             result.error("invalid_url", "rule cookies require HTTPS", null)
                         } else {
-                            val manager = android.webkit.CookieManager.getInstance()
+                            val cookies = eu.kanade.tachiyomi.network.AndroidCookieJar(this)
+                            val sourceId = call.argument<String>("sourceId").orEmpty()
                             if (call.method == "ruleCookieHeader") {
-                                result.success(manager.getCookie(url!!))
+                                result.success(cookies.ruleCookieHeader(sourceId, target))
                             } else {
-                                val cookies = call.argument<List<String>>("cookies").orEmpty()
-                                if (cookies.isEmpty()) {
+                                cookies.storeRuleCookies(sourceId, target,
+                                    call.argument<List<String>>("cookies").orEmpty()) {
                                     result.success(true)
-                                } else {
-                                    var remaining = cookies.size
-                                    cookies.forEach { cookie ->
-                                        manager.setCookie(url!!, cookie) {
-                                            remaining--
-                                            if (remaining == 0) {
-                                                manager.flush()
-                                                result.success(true)
-                                            }
-                                        }
-                                    }
                                 }
                             }
                         }

@@ -1,7 +1,7 @@
 name: triomi
 description: "追番 · 漫画 · 小说 三位一体的聚合客户端。"
 publish_to: 'none'
-version: 0.12.0+174
+version: 0.12.0+175
 
 environment:
   sdk: ^3.13.4
@@ -38,6 +38,7 @@ dependencies:
     path: packages/ech_http
   http: ^1.6.0
   html: ^0.15.7
+  xml: ^7.0.1
   scrollable_positioned_list: ^0.3.8
   crypto: ^3.0.7
   unorm_dart: ^0.3.3

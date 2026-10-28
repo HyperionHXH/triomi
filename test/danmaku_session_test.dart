@@ -536,33 +536,92 @@ void main() {
     },
   );
 
-  testWidgets('pool controls survive positive and negative keyboard inset transitions', (tester) async {
-    final session = DanmakuSession(client: _Client(), preferences: memoryPreferences());
-    addTearDown(session.dispose);
-    session.configure(item: item, chapter: chapter1, canonicalSubjectId: '400602');
-    session.setEnabled(true);
-    for (final inset in [0.0, 300.0, -300.0, 0.0]) {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(body: Builder(builder: (context) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(viewInsets: EdgeInsets.only(bottom: inset)),
-          child: DanmakuSourcesPanel(
-            session: session,
-            onEnabledChanged: (value) async => session.setEnabled(value),
-            onAssociate: () {},
+  testWidgets(
+    'pool controls survive positive and negative keyboard inset transitions',
+    (tester) async {
+      final session = DanmakuSession(
+        client: _Client(),
+        preferences: memoryPreferences(),
+      );
+      addTearDown(session.dispose);
+      session.configure(
+        item: item,
+        chapter: chapter1,
+        canonicalSubjectId: '400602',
+      );
+      session.setEnabled(true);
+      for (final inset in [0.0, 300.0, -300.0, 0.0]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => MediaQuery(
+                  data: MediaQuery.of(context)
+                      .copyWith(viewInsets: EdgeInsets.only(bottom: inset)),
+                  child: DanmakuSourcesPanel(
+                    session: session,
+                    onEnabledChanged: (value) async =>
+                        session.setEnabled(value),
+                    onAssociate: () {},
+                  ),
+                ),
+              ),
+            ),
           ),
-        ))),
-      ));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      final toggle = find.byKey(const ValueKey('danmaku-source-animeko'));
-      await tester.ensureVisible(toggle);
-      await tester.pumpAndSettle();
-      final wasIncluded = session.includes(DanmakuProviderKind.animeko);
-      await tester.tap(toggle);
-      await tester.pumpAndSettle();
-      expect(session.includes(DanmakuProviderKind.animeko), !wasIncluded);
-      expect(session.includes(DanmakuProviderKind.gamer), isTrue);
-    }
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final toggle = find.byKey(const ValueKey('danmaku-source-animeko'));
+        await tester.ensureVisible(toggle);
+        await tester.pumpAndSettle();
+        final wasIncluded = session.includes(DanmakuProviderKind.animeko);
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+        expect(session.includes(DanmakuProviderKind.animeko), !wasIncluded);
+        expect(session.includes(DanmakuProviderKind.gamer), isTrue);
+      }
+    },
+  );
+
+  testWidgets('offset dialog clamps negative root keyboard insets', (
+    tester,
+  ) async {
+    final session = DanmakuSession(
+      client: _Client(),
+      preferences: memoryPreferences(),
+    );
+    addTearDown(session.dispose);
+    session.configure(
+      item: item,
+      chapter: chapter1,
+      canonicalSubjectId: '400602',
+    );
+    session.setEnabled(true);
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(viewInsets: EdgeInsets.only(bottom: -300)),
+        child: MaterialApp(
+          home: Scaffold(
+            body: DanmakuSourcesPanel(
+              session: session,
+              onEnabledChanged: (value) async => session.setEnabled(value),
+              onAssociate: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final offsetButton = find.widgetWithText(TextButton, '调整偏移').first;
+    final onOpen = tester.widget<TextButton>(offsetButton).onPressed!;
+    onOpen();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.enterText(find.byType(TextFormField), '1.5');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(session.source(DanmakuProviderKind.bilibili).offsetSeconds, 1.5);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

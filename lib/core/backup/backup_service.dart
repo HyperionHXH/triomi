@@ -20,7 +20,9 @@ import '../storage/cover_store.dart';
 import '../storage/preferences.dart';
 import 'apk_backup_files.dart';
 import 'backup_artifact_recovery.dart';
+import 'backup_file_support.dart';
 import 'backup_import_recovery.dart';
+import 'backup_progress.dart';
 import 'download_backup_files.dart';
 import 'verified_backup_file.dart';
 
@@ -176,16 +178,20 @@ class BackupService {
     String? directoryUri,
     SafFileTreeWriter? writeToTree,
     void Function(int completed, int total)? onProgress,
+    BackupProgressCallback? onStageProgress,
   }) async {
     final artifactLease = await BackupArtifactGuard.acquireOperation();
     final archive = Archive();
     Directory? staging;
     Directory? publication;
+    File? publishedFile;
+    var complete = false;
     final integrity = <String, Object?>{};
+    final archivePaths = <String, String>{};
     try {
-      if (includeDownloadedMedia || includeApkPackages) {
-        staging = await Directory.systemTemp.createTemp('triomi-media-backup-');
-      }
+      checkBackupCancellation();
+      onStageProgress?.call(const BackupProgress(BackupStage.collecting));
+      staging = await Directory.systemTemp.createTemp('triomi-media-backup-');
       final payload = await _collect(
         includeCovers: includeCovers,
         includeOfflineContent: includeOfflineContent,
@@ -195,8 +201,11 @@ class BackupService {
         mediaStaging: includeDownloadedMedia ? staging : null,
         apkStaging: includeApkPackages ? staging : null,
         mediaIntegrity: integrity,
+        archivePaths: archivePaths,
+        coverStaging: staging,
+        onStageProgress: onStageProgress,
       );
-      _sealArchive(archive, payload, integrity: integrity);
+      checkBackupCancellation();
 
       final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
       String fileName;
@@ -214,16 +223,16 @@ class BackupService {
         file = File('${dir.path}${Platform.pathSeparator}$fileName');
       } while (await file.exists());
       final partial = File('${publication.path}/snapshot.part');
-      final output = OutputFileStream(partial.path);
-      try {
-        ZipEncoder().encodeStream(archive, output);
-        await output.close();
-        await partial.rename(file.path);
-      } catch (_) {
-        await output.close();
-        if (await partial.exists()) await partial.delete();
-        rethrow;
-      }
+      await packBackupFile(
+        payload: payload,
+        files: archivePaths,
+        stagingPath: staging.path,
+        outputPath: partial.path,
+        onProgress: onStageProgress,
+      );
+      checkBackupCancellation();
+      await partial.rename(file.path);
+      publishedFile = file;
 
       // Publish the local file atomically before handing it to SAF. Native code
       // copies from this path without transporting the ZIP through Dart/channel
@@ -255,6 +264,8 @@ class BackupService {
         }
       }
 
+      checkBackupCancellation();
+      complete = true;
       return (
         path: savedPath,
         summary: BackupSummary(
@@ -280,6 +291,11 @@ class BackupService {
         }
         await staging?.delete(recursive: true);
         await publication?.delete(recursive: true);
+        if (!complete &&
+            publishedFile != null &&
+            await publishedFile.exists()) {
+          await publishedFile.delete();
+        }
       } finally {
         await artifactLease.release();
       }
@@ -321,26 +337,58 @@ class BackupService {
     Directory? mediaStaging,
     Directory? apkStaging,
     Map<String, Object?>? mediaIntegrity,
+    Map<String, String>? archivePaths,
+    Directory? coverStaging,
+    BackupProgressCallback? onStageProgress,
   }) async {
+    var collectedTables = 0;
+    void collected() {
+      checkBackupCancellation();
+      onStageProgress?.call(
+        BackupProgress(
+          BackupStage.collecting,
+          completedItems: ++collectedTables,
+          totalItems: 13,
+        ),
+      );
+    }
+
+    checkBackupCancellation();
+    onStageProgress?.call(
+      const BackupProgress(BackupStage.collecting, totalItems: 13),
+    );
     final items = await database.select(database.mediaItems).get();
+    collected();
     final library = await database.select(database.libraryEntries).get();
+    collected();
     final histories = await database.select(database.histories).get();
+    collected();
     final chapters = await database.select(database.chapters).get();
+    collected();
     final animeLinks = await database.select(database.animeSourceLinks).get();
+    collected();
     final animeSyncStates = await database
         .select(database.animeFollowSyncStates)
         .get();
+    collected();
     final mangaFeeds = await database.select(database.mangaFeeds).get();
+    collected();
     final mergedReferences = await database
         .select(database.mergedMangaReferences)
         .get();
+    collected();
     final categories = await database.select(database.categories).get();
+    collected();
     final categoryLinks = await database
         .select(database.libraryCategoryLinks)
         .get();
+    collected();
     final tracking = await database.select(database.trackBinds).get();
+    collected();
     final sources = await database.select(database.sources).get();
+    collected();
     final downloads = await database.select(database.downloads).get();
+    collected();
     final media = <int, Map<String, Object?>>{};
     if (mediaStaging != null) {
       final store =
@@ -351,14 +399,31 @@ class BackupService {
             ),
           );
       for (final row in downloads) {
+        checkBackupCancellation();
+        onStageProgress?.call(
+          BackupProgress(
+            BackupStage.media,
+            completedItems: media.length,
+            totalItems: downloads.length,
+          ),
+        );
         final captured = await store.capture(
           row,
           archive,
           mediaStaging,
           mediaIntegrity!,
+          filePaths: archivePaths,
+          onProgress: onStageProgress,
         );
         if (captured != null) media[row.id] = captured;
       }
+      onStageProgress?.call(
+        BackupProgress(
+          BackupStage.media,
+          completedItems: downloads.length,
+          totalItems: downloads.length,
+        ),
+      );
     }
 
     var covers = 0;
@@ -366,40 +431,68 @@ class BackupService {
     CoverStore? localCovers = coverStore;
     if (includeCovers) {
       onProgress?.call(0, items.length);
-      for (var index = 0; index < items.length; index++) {
-        final item = items[index];
-        final url = item.coverUrl;
-        if (url != null && url.isNotEmpty) {
-          try {
-            File? cached;
+      onStageProgress?.call(
+        BackupProgress(BackupStage.covers, totalItems: items.length),
+      );
+      try {
+        localCovers ??= await CoverStore.open();
+      } catch (_) {}
+      var next = 0;
+      var completed = 0;
+      Future<void> collectCover() async {
+        while (next < items.length) {
+          final item = items[next++];
+          checkBackupCancellation();
+          final url = item.coverUrl;
+          if (url != null && url.isNotEmpty) {
             try {
-              localCovers ??= await CoverStore.open();
-              cached = await localCovers.find(url);
+              File? cached;
+              try {
+                cached = await localCovers?.find(url);
+              } catch (_) {
+                // Hosts without a documents-directory bridge can still export
+                // network covers; import requires a real writable cache.
+              }
+              final bytes = cached != null
+                  ? await cached.readAsBytes()
+                  : await SourceTransferProgress().run(
+                      () => http.fetchBytes(url, sourceId: item.sourceId),
+                    );
+              checkBackupCancellation();
+              if (bytes.isNotEmpty) {
+                final name =
+                    '${sha256.convert(utf8.encode(jsonEncode([item.sourceId, item.remoteId])))}.img';
+                coverNames[(item.sourceId, item.remoteId)] = name;
+                final archiveName = '$coversDirName/$name';
+                if (coverStaging != null) {
+                  final file = File('${coverStaging.path}/$name');
+                  await file.writeAsBytes(bytes);
+                  archivePaths?[archiveName] = file.path;
+                } else {
+                  archive.addFile(ArchiveFile.bytes(archiveName, bytes));
+                }
+                covers += 1;
+              }
             } catch (_) {
-              // Hosts without a documents-directory bridge can still export
-              // network covers; import requires a real writable cache.
+              checkBackupCancellation();
+              // 封面下载失败不影响备份主体。
             }
-            final bytes = cached != null
-                ? await cached.readAsBytes()
-                : await http.fetchBytes(url, sourceId: item.sourceId);
-            if (bytes.isNotEmpty) {
-              final name =
-                  '${sha256.convert(utf8.encode(jsonEncode([item.sourceId, item.remoteId])))}.img';
-              coverNames[(item.sourceId, item.remoteId)] = name;
-              archive.addFile(
-                ArchiveFile.bytes(
-                  '$coversDirName/$name',
-                  Uint8List.fromList(bytes),
-                ),
-              );
-              covers += 1;
-            }
-          } catch (_) {
-            // 封面下载失败不影响备份主体。
           }
+          onProgress?.call(++completed, items.length);
+          onStageProgress?.call(
+            BackupProgress(
+              BackupStage.covers,
+              completedItems: completed,
+              totalItems: items.length,
+            ),
+          );
         }
-        onProgress?.call(index + 1, items.length);
       }
+
+      // Drain every worker on failure before deleting their private snapshots.
+      await Future.wait(
+        List.generate(items.length.clamp(0, 4), (_) => collectCover()),
+      );
     }
 
     final settings = <String, Object?>{
@@ -583,9 +676,11 @@ class BackupService {
         archive,
         apkStaging,
         mediaIntegrity ?? {},
+        filePaths: archivePaths,
       );
     }
     _animeSyncStatesOf(payload);
+    checkBackupCancellation();
     return payload;
   }
 

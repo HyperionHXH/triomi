@@ -83,6 +83,7 @@ Future<void> performMangaSourceAction(
         saved = await platformChannel.openRuleSession(
           uri.toString(),
           'Mozilla/5.0',
+          sourceId: entry.descriptor.id,
         );
       }
       if (saved) message('应用内站点会话已保存；不与外部浏览器共享，不代表验证已通过');

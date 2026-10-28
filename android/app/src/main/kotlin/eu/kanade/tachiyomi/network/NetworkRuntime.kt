@@ -55,6 +55,46 @@ class AndroidCookieJar(context: Context) : CookieJar {
         prefs.edit().putStringSet("browserHosts", browserHosts + hosts).commit()
     }
 
+    /** Rule access requires this source's explicitly saved browser hosts. */
+    @Synchronized
+    fun useRuleBrowserSession(sourceId: String, hosts: Set<String>) {
+        require(sourceId.isNotBlank()) { "rule source identity is required" }
+        useBrowserSession(hosts)
+        val key = "ruleBrowserHosts.$sourceId"
+        prefs.edit().putStringSet(key, prefs.getStringSet(key, emptySet()).orEmpty() + hosts).commit()
+    }
+
+    @Synchronized
+    fun ruleCookieHeader(sourceId: String, url: HttpUrl): String? {
+        if (!ruleBrowserAuthorized(sourceId, url)) return null
+        // Keep WebView's domain, path, secure, expiry and logout semantics.
+        return CookieManager.getInstance().getCookie(url.toString())
+    }
+
+    @Synchronized
+    fun storeRuleCookies(sourceId: String, url: HttpUrl, cookies: List<String>, onComplete: () -> Unit) {
+        if (!ruleBrowserAuthorized(sourceId, url) || cookies.isEmpty()) {
+            onComplete()
+            return
+        }
+        val manager = CookieManager.getInstance()
+        var remaining = cookies.size
+        cookies.forEach { cookie ->
+            manager.setCookie(url.toString(), cookie) {
+                remaining--
+                if (remaining == 0) {
+                    manager.flush()
+                    onComplete()
+                }
+            }
+        }
+    }
+
+    private fun ruleBrowserAuthorized(sourceId: String, url: HttpUrl): Boolean =
+        sourceId.isNotBlank() && url.isHttps && url.username.isEmpty() && url.password.isEmpty() &&
+            url.host in browserHosts &&
+            url.host in prefs.getStringSet("ruleBrowserHosts.$sourceId", emptySet()).orEmpty()
+
     @Synchronized
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
         val stored = prefs.getString(url.host, null)?.lines()?.mapNotNull { Cookie.parse(url, it) }.orEmpty()

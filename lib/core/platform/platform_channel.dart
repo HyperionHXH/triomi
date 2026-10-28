@@ -165,6 +165,7 @@ class PlatformChannel {
       return false;
     }
   }
+
   Future<bool> uninstallMihon(String packageName) async {
     try {
       if (_desktop) {
@@ -282,10 +283,15 @@ class PlatformChannel {
     }
   }
 
-  Future<bool> openRuleSession(String url, String userAgent) async {
+  Future<bool> openRuleSession(
+    String url,
+    String userAgent, {
+    required String sourceId,
+  }) async {
     final raw = await _channel.invokeMethod<Object?>('ruleOpenSession', {
       'url': url,
       'userAgent': userAgent,
+      'sourceId': sourceId,
     });
     if (raw is! Map || raw['ok'] != true) {
       throw StateError('当前平台无法打开规则站点验证');
@@ -293,23 +299,32 @@ class PlatformChannel {
     return raw['saved'] == true;
   }
 
-  /// Cookies stay in WebView storage and transient request memory, never prefs.
-  Future<String?> ruleCookieHeader(String url) async {
+  /// Only this source's explicitly saved hosts can access WebView cookies.
+  Future<String?> ruleCookieHeader(
+    String url, {
+    required String sourceId,
+  }) async {
     try {
       return await _channel.invokeMethod<String>('ruleCookieHeader', {
         'url': url,
+        'sourceId': sourceId,
       });
     } on MissingPluginException {
       return null;
     }
   }
 
-  Future<void> storeRuleCookies(String url, List<String> cookies) async {
+  Future<void> storeRuleCookies(
+    String url,
+    List<String> cookies, {
+    required String sourceId,
+  }) async {
     if (cookies.isEmpty) return;
     try {
       await _channel.invokeMethod<bool>('ruleStoreCookies', {
         'url': url,
         'cookies': cookies,
+        'sourceId': sourceId,
       });
     } on MissingPluginException {
       // Desktop public rules remain usable without Android WebView sessions.

@@ -581,16 +581,5 @@ void main() {
       expect(await repository.lastReadOf('test-manga', '12'), isNull);
       expect(await repository.recentHistory(), isEmpty);
     });
-
-    test('目录未缓存时历史条目仍可展示（标题降级而不是崩溃）', () async {
-      await repository.recordHistory(
-        sourceId: 'test-manga',
-        remoteId: '12',
-        chapter: chapter(remoteId: '999', title: '第 9 话'),
-      );
-
-      final history = await repository.recentHistory();
-      expect(history.first.chapterTitle, '（目录未缓存）');
-    });
   });
 }

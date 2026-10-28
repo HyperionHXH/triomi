@@ -111,7 +111,7 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
       unawaited(ref.read(sourcesProvider.notifier).refresh());
       if (!mounted) return;
       setState(() => _installStates[entry.id] = _InstallState.installed);
-      _toast('已安装「${descriptor.name}」，可在来源列表中启用');
+      _toast('已安装「${descriptor.name}」；请在来源列表确认启用状态');
     } on SourceException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -173,6 +173,14 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
                 ),
               ],
             ),
+            if (widget.type == MediaType.manga)
+              const Padding(
+                padding: EdgeInsets.only(bottom: AppSpacing.sm),
+                child: Text(
+                  '此处安装的是 Triomi 支持的 JS / API 规则，可在来源列表确认启用状态。'
+                  'Mihon / Komikku APK/DEX 扩展不能在 iOS 转换或执行。',
+                ),
+              ),
             if (entries != null && entries.isNotEmpty)
               SourceFilterControls(
                 filters: _filters,

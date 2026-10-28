@@ -291,6 +291,86 @@ void main() {
   });
 
   group('WebDAV 客户端', () {
+    test('remote HTTP requires explicit endpoint consent before exposing Basic credentials', () async {
+      final http = FakeHttpClient(
+        (_) async => const SourceResponse(statusCode: 201, body: ''),
+      );
+      final client = WebDavClient(http: http);
+      const blocked = WebDavConfig(
+        baseUrl: 'http://192.168.1.5/dav/',
+        username: 'fixture',
+        password: 'secret',
+      );
+      await expectLater(client.stat(blocked), throwsFormatException);
+      await expectLater(client.upload(blocked, [1]), throwsFormatException);
+      expect(http.requests, isEmpty);
+      expect(http.uploads, isEmpty);
+      const approved = WebDavConfig(
+        baseUrl: 'http://192.168.1.5/dav/',
+        username: 'fixture',
+        password: 'secret',
+        allowInsecureHttp: true,
+      );
+      await client.upload(approved, [1]);
+      expect(
+        http.uploads.single.headers['Authorization'],
+        startsWith('Basic '),
+      );
+      expect(approved.toJson().containsKey('password'), isFalse);
+      expect(approved.toJson()['allowInsecureHttp'], isTrue);
+    });
+
+    test(
+      'metadata redirects are errors and are never followed with credentials',
+      () async {
+        final http = FakeHttpClient(
+          (_) async => const SourceResponse(
+            statusCode: 302,
+            body: '',
+            headers: {'location': 'https://other.test/credentials'},
+          ),
+        );
+        await expectLater(
+          WebDavClient(http: http).stat(
+            const WebDavConfig(
+              baseUrl: 'https://dav.test/',
+              username: 'fixture',
+              password: 'secret',
+            ),
+          ),
+          throwsA(isA<SourceException>()),
+        );
+        expect(http.requests.single.followRedirects, isFalse);
+      },
+    );
+    test('failed remote HTTP DAV redirects are not followed and local loopback remains allowed', () async {
+      const config = WebDavConfig(
+        baseUrl: 'http://192.168.1.8/dav/',
+        username: 'user',
+        password: 'secret',
+      );
+      final remote = WebDavClient(
+        http: FakeHttpClient(
+          (_) async => const SourceResponse(
+            statusCode: 302,
+            body: '',
+            headers: {'location': 'https://attacker.test/'},
+          ),
+        ),
+      );
+      await expectLater(remote.stat(config), throwsFormatException);
+      const loopback = WebDavConfig(
+        baseUrl: 'http://localhost:8123/dav/',
+        username: 'user',
+        password: 'secret',
+      );
+      final http = FakeHttpClient(
+        (_) async => const SourceResponse(statusCode: 404, body: ''),
+      );
+      expect((await WebDavClient(http: http).stat(loopback)).exists, isFalse);
+      expect(http.requests.single.followRedirects, isFalse);
+    });
+
     test('坚果云缺少父目录可首次同步，其他409不能误判为空', () async {
       var body =
           '<d:error xmlns:d="DAV:" xmlns:s="http://ns.jianguoyun.com">'

@@ -19,7 +19,7 @@ enum TrackingServiceKind {
     return null;
   }
 
-  /// 凭据存放键（Preferences）。token 属敏感信息，**不得写日志**。
+  /// 凭据存放键（SecureStore）。token 属敏感信息，**不得写日志**。
   String get tokenKey => 'tracking.$wire.token';
 }
 

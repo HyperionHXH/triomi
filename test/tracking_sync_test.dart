@@ -180,4 +180,28 @@ void main() {
     );
     expect(writes, 0);
   });
+  test('status-only report preserves remote progress instead of resetting it to zero', () async {
+    remoteProgress = 17;
+    final results = await service.reportStatus(
+      sourceId: item.sourceId,
+      remoteId: item.remoteId,
+      status: 'paused',
+      type: MediaType.manga,
+    );
+    expect(results.single.ok, isTrue);
+    expect(remoteType, 4);
+    expect(remoteProgress, 17);
+  });
+  test('invalid progress is a reported failure with no remote write', () async {
+    final results = await service.reportStatus(
+      sourceId: item.sourceId,
+      remoteId: item.remoteId,
+      status: 'done',
+      type: MediaType.manga,
+      chapterNumber: double.infinity,
+    );
+    expect(results.single.ok, isFalse);
+    expect(writes, 0);
+    expect(remoteProgress, 2);
+  });
 }

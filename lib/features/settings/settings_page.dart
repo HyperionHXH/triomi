@@ -110,6 +110,25 @@ class SettingsPage extends ConsumerWidget {
             ],
           ),
           SettingsGroup(
+            title: '数据维护',
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.cloud_sync_outlined),
+                title: const Text('WebDAV 收藏与历史同步'),
+                subtitle: const Text('自动合并漫画、动画收藏及阅读 / 观看位置'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.webdav),
+              ),
+              ListTile(
+                leading: const Icon(Icons.archive_outlined),
+                title: const Text('WebDAV 完整应用备份'),
+                subtitle: const Text('上传或合并完整数据备份；使用相同 WebDAV 连接'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.webdavBackup),
+              ),
+            ],
+          ),
+          SettingsGroup(
             title: '关于',
             children: <Widget>[
               if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS)
@@ -126,9 +145,11 @@ class SettingsPage extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.system_update_outlined),
                 title: const Text('版本管理与应用更新'),
-                subtitle: Text(defaultTargetPlatform == TargetPlatform.iOS && !kIsWeb
-                    ? 'iOS 请从 Release 下载 IPA，并通过原侧载工具签名更新'
-                    : 'GitHub 发布版本、更新说明、下载与安装'),
+                subtitle: Text(
+                  defaultTargetPlatform == TargetPlatform.iOS && !kIsWeb
+                      ? 'iOS 请从 Release 下载 IPA，并通过原侧载工具签名更新'
+                      : 'GitHub 发布版本、更新说明、下载与安装',
+                ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(
                   context,
@@ -274,9 +295,9 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                 ),
                 route(
                   Icons.cloud_sync_outlined,
-                  'WebDAV 追番收藏',
-                  '${AppRoutes.webdav}?type=anime',
-                  subtitle: '仅合并本地追番收藏；不上传全应用备份',
+                  'WebDAV 收藏与历史同步',
+                  AppRoutes.webdav,
+                  subtitle: '自动合并收藏与章节 / 页码 / 秒数；可查看连接与同步状态',
                 ),
               ],
             ),
@@ -299,25 +320,41 @@ class WorkspaceSettingsPage extends ConsumerWidget {
           ],
           if (type == MediaType.manga) ...[
             SettingsGroup(
-              title: '扩展与来源',
+              title: !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+                  ? '漫画来源管理'
+                  : '扩展与来源',
               children: [
-                page(
-                  Icons.extension_outlined,
-                  '漫画扩展',
-                  const MangaExtensionsPage(),
-                  refreshSources: true,
-                ),
+                if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS)
+                  page(
+                    Icons.extension_outlined,
+                    '漫画扩展',
+                    const MangaExtensionsPage(),
+                    refreshSources: true,
+                  ),
                 route(
-                  Icons.language_outlined,
-                  '漫画规则与来源',
+                  !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+                      ? Icons.storefront_outlined
+                      : Icons.language_outlined,
+                  !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+                      ? 'JS / API 漫画来源目录'
+                      : '漫画规则与来源',
                   '${AppRoutes.sources}?type=manga',
-                  subtitle: '来源登录与偏好在各漫画来源中管理',
+                  subtitle:
+                      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+                      ? '应用内安装兼容规则，不需另装 APK / DEX 扩展'
+                      : '来源登录与偏好在各漫画来源中管理',
                 ),
                 route(
                   Icons.sync_outlined,
                   '漫画追踪账号',
                   '${AppRoutes.tracking}?type=manga',
                   subtitle: 'Bangumi / AniList · 仅显示漫画绑定，服务凭据共用',
+                ),
+                route(
+                  Icons.cloud_sync_outlined,
+                  'WebDAV 收藏与历史同步',
+                  AppRoutes.webdav,
+                  subtitle: '自动合并收藏与章节 / 页码 / 秒数；可查看连接与同步状态',
                 ),
               ],
             ),

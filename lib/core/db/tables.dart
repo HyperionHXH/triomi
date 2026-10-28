@@ -346,8 +346,10 @@ class MergedMangaReferences extends Table {
   Set<Column<Object>> get primaryKey => {sourceId, remoteId};
 }
 
-/// Per-account follow changes, including deletions, for anime WebDAV sync.
-/// Account keys contain normalized endpoint/user identity, never credentials.
+/// Durable sync clocks, including legacy anime deletions, local membership
+/// decisions and namespaced library/history-clear records. Reuse preserves
+/// existing backups without changing the schema. Namespace/account identifiers
+/// are SHA-256 digests and never contain credentials or executable source data.
 @DataClassName('AnimeFollowSyncStateRow')
 class AnimeFollowSyncStates extends Table {
   TextColumn get accountKey => text()();

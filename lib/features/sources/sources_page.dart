@@ -32,9 +32,10 @@ import 'source_filter_controls.dart';
 /// 三条导入路径：粘贴规则文本、从剪贴板、从 URL 拉取。
 /// 导入失败必须显示具体原因（哪一项校验没过），不能只提示「导入失败」。
 class SourcesPage extends ConsumerStatefulWidget {
-  const SourcesPage({super.key, this.initialType});
+  const SourcesPage({super.key, this.initialType, this.initialQuery});
 
   final MediaType? initialType;
+  final String? initialQuery;
 
   @override
   ConsumerState<SourcesPage> createState() => _SourcesPageState();
@@ -60,7 +61,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
     _filters = SourceFilters.fromJson(
       preferences.get<Object?>('sources.filters.installed.${_type.name}') ??
           preferences.get<Object?>('sources.filters.installed'),
-    ).copyWith(clearType: true);
+    ).copyWith(clearType: true, query: widget.initialQuery);
   }
 
   void _setFilters(SourceFilters value) {
@@ -170,7 +171,10 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
               children: [
                 Text(switch (_type) {
                   MediaType.anime => '规则仓库 → 安装播放源 → 选择线路观看',
-                  MediaType.manga => '扩展仓库 → 安装扩展 → 启用来源阅读',
+                  MediaType.manga =>
+                    !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+                        ? '应用内安装 JS / API 漫画来源，无需另装扩展应用'
+                        : '扩展仓库 → 安装扩展 → 启用来源阅读',
                   MediaType.novel => '选择小说站点 → 管理账号 → 阅读与缓存',
                 }, style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(height: AppSpacing.xs),
@@ -352,7 +356,17 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.pop(context, 'kazumi'),
                 ),
-              if (_type == MediaType.manga)
+              if (_type == MediaType.manga &&
+                  !kIsWeb &&
+                  defaultTargetPlatform == TargetPlatform.iOS)
+                ListTile(
+                  leading: const Icon(Icons.storefront_outlined),
+                  title: const Text('JS / API 漫画来源目录'),
+                  subtitle: const Text('应用内浏览与安装兼容规则 · 无需另装 APK 或开启 JIT'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.pop(context, 'catalog'),
+                )
+              else if (_type == MediaType.manga)
                 ListTile(
                   leading: const Icon(Icons.extension_outlined),
                   title: const Text('漫画扩展与仓库'),
@@ -366,13 +380,16 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                   title: Text('内置小说站点'),
                   subtitle: Text('轻之国度与轻书架在本页管理账号；站点权限和可达性独立。无需安装漫画 APK。'),
                 ),
-              ListTile(
-                leading: const Icon(Icons.storefront_outlined),
-                title: Text('${_type.label}规则目录'),
-                subtitle: const Text('只查看当前分类的兼容规则与版本'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.pop(context, 'catalog'),
-              ),
+              if (_type != MediaType.manga ||
+                  kIsWeb ||
+                  defaultTargetPlatform != TargetPlatform.iOS)
+                ListTile(
+                  leading: const Icon(Icons.storefront_outlined),
+                  title: Text('${_type.label}规则目录'),
+                  subtitle: const Text('只查看当前分类的兼容规则与版本'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.pop(context, 'catalog'),
+                ),
               ListTile(
                 leading: const Icon(Icons.code),
                 title: const Text('手动导入规则'),
@@ -392,7 +409,8 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
           context: context,
           isScrollControlled: true,
           showDragHandle: true,
-          builder: (_) => const KazumiRepositoriesSheet(),
+          builder: (_) =>
+              KazumiRepositoriesSheet(initialQuery: widget.initialQuery),
         );
         if (mounted) await ref.read(sourcesProvider.notifier).refresh();
       case 'mihon':
@@ -484,7 +502,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => const MihonExtensionsSheet(),
+      builder: (_) => MihonExtensionsSheet(initialQuery: widget.initialQuery),
     );
     if (mounted) {
       // Mihon enabled state lives in Preferences, which is captured while
@@ -749,7 +767,8 @@ class _SourceImportSheetState extends State<_SourceImportSheet> {
             maxLines: 6,
             minLines: 4,
             decoration: InputDecoration(
-              hintText: '{"id": "my-source", "name": "我的来源", "type": "${widget.type.name}", ...}',
+              hintText:
+                  '{"id": "my-source", "name": "我的来源", "type": "${widget.type.name}", ...}',
             ),
           ),
           const SizedBox(height: AppSpacing.sm),

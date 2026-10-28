@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/db/app_database.dart';
@@ -123,7 +123,7 @@ void main() {
     expect(copied.score, 8);
     expect(copied.status, 'on_hold');
     expect(copied.pinned, true);
-    expect(copied.addedAt, origin.entry.addedAt);
+    expect(copied.addedAt, origin.entry!.addedAt);
     expect(copied.progress, 12);
     expect(copied.unreadCount, 0);
     expect(
@@ -418,5 +418,41 @@ void main() {
       await disk.close();
       await directory.delete(recursive: true);
     }
+  });
+  test('history-only migration preserves resume without adding either work to favorites', () async {
+    await library.removeFromLibrary(oldItem.sourceId, oldItem.remoteId);
+    final origin = await migrations.origin(oldItem);
+    expect(origin.entry, isNull);
+    expect(origin.hasReadingHistory, isTrue);
+    await migrations.copyToSource(
+      origin: origin,
+      target: newItem,
+      chapters: [newChapter],
+      resumeChapterId: newChapter.remoteId,
+    );
+    expect(
+      await library.isInLibrary(oldItem.sourceId, oldItem.remoteId),
+      isFalse,
+    );
+    expect(
+      await library.isInLibrary(newItem.sourceId, newItem.remoteId),
+      isFalse,
+    );
+    expect(
+      await library.chapterPositionOf(
+        newItem.sourceId,
+        newItem.remoteId,
+        newChapter.remoteId,
+      ),
+      0,
+    );
+    expect(
+      await library.chapterPositionOf(
+        oldItem.sourceId,
+        oldItem.remoteId,
+        'chapter',
+      ),
+      17,
+    );
   });
 }

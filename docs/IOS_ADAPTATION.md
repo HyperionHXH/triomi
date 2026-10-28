@@ -19,9 +19,18 @@
 | 账号凭据 | flutter_secure_storage 使用 iOS Keychain；LK/LNS、Bangumi/AniList 沿用现有 Dart 服务，不把登录态写入 IPA |
 | 网络 / WebDAV | Dio、HTML/XPath、crypto、archive 等复用 Dart 实现；ATS 允许 HTTP，局域网 WebDAV 有网络用途说明。证书验证保持开启 |
 | Windows 专属库 | webview_windows、Windows 解码库仅在所属平台生效；iOS 使用原生 WebKit 和 AVFoundation |
-| Mihon 扩展 | Android APK/DEX 与 Windows JVM/Suwayomi 不是 iOS 可执行格式。iOS 不提供这些执行宿主，应使用兼容 JS/API 来源；恢复的 APK 字节不会因此成为可执行插件 |
+| Mihon 扩展 | Android APK/DEX 与 Windows JVM/Suwayomi 不是 iOS 可执行格式。iOS 的“JS / API 漫画来源目录”在 Triomi 内校验、保存并运行兼容规则；不需要另外安装扩展 App、配置 JIT 或授予侧载权限。现有 APK 仓库不会自动转换为 JS 规则；旧 APK 只作为备份字节留存，绝不执行 |
 
 JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源权限和取消归属。调用 ID、会话 ID 和 Dart Zone 防止旧响应污染新调用；取消、超时、WebContent 终止、超限消息会撤销会话，下次请求重新加载。WebKit 公共 API 不提供立即杀死 PID 或固定内存预算，不能冒称具有 Android/Windows worker 的相同强杀保证。
+
+
+### iOS 添加漫画来源：应用内规则目录
+
+1. 打开「设置（齿轮）→ 漫画 → JS / API 漫画来源目录」；也可从「漫画 → 来源」页打开同名按钮。
+2. 目录卡片显示来源版本、能力与许可证。点「安装」后，Triomi 校验目录和规则的 id、类型、版本、能力以及可选 SHA-256，再把规则写入本机数据库；新规则默认启用，更新保留原来的启用状态。已内置的来源会显示“已安装”，可以直接在来源列表的“启用”开关检查/使用。
+3. 目前内置漫画目录提供 MangaDex 开放 API 规则；不要把这个列表误认为完整 Komikku/Mihon 扩展库。手动导入只接受 Triomi 的 JS/API 规则 JSON 文本或规则 JSON 的直接 URL，不接受 APK、DEX、JAR，也不接受一个扩展仓库索引地址。
+4. 应用沙盒只隔离并持久保存数据，不等同 Android 运行环境，也不会因为文件被复制到沙盒就获得安装或执行 APK 的能力。未知 APK 到规则 JSON 的自动转换并不存在；要增加其他站点，必须取得兼容的 Triomi JSON 规则。
+
 
 ## 系统集成
 

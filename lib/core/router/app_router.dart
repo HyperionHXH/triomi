@@ -89,6 +89,7 @@ abstract final class AppRoutes {
   static const String lnsAccount = '/lns-account';
   static const String downloads = '/downloads';
   static const String backup = '/backup';
+  static const String webdavBackup = '/webdav-backup';
   static const String webdav = '/webdav';
   static const String tracking = '/tracking';
   static const String danmakuSettings = '/danmaku-settings';
@@ -293,8 +294,14 @@ abstract final class AppRouter {
             path: AppRoutes.webdav,
             parentNavigatorKey: _rootNavigatorKey,
             builder: (context, state) => WebDavSyncPage(
+              fullBackup: state.uri.queryParameters['mode'] == 'backup',
               animeCollectionOnly: state.uri.queryParameters['type'] == 'anime',
             ),
+          ),
+          GoRoute(
+            path: AppRoutes.webdavBackup,
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => const WebDavSyncPage(fullBackup: true),
           ),
           GoRoute(
             path: AppRoutes.danmakuSettings,

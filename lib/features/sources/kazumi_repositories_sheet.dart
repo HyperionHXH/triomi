@@ -9,7 +9,8 @@ import '../../core/source/source_providers.dart';
 import '../../core/storage/preferences.dart';
 
 class KazumiRepositoriesSheet extends ConsumerStatefulWidget {
-  const KazumiRepositoriesSheet({super.key});
+  const KazumiRepositoriesSheet({super.key, this.initialQuery});
+  final String? initialQuery;
   @override
   ConsumerState<KazumiRepositoriesSheet> createState() =>
       _KazumiRepositoriesSheetState();
@@ -21,7 +22,7 @@ class _KazumiRepositoriesSheetState
   late Map<String, bool> _repositories;
   String? _selected;
   List<KazumiCatalogEntry> _entries = [];
-  String _query = '';
+  late String _query = (widget.initialQuery ?? '').trim().toLowerCase();
   String? _error, _installing;
   final _compatibility = <String, String>{};
   bool _loading = false;
@@ -337,7 +338,8 @@ class _KazumiRepositoriesSheetState
                     unawaited(_load());
                   },
                 ),
-              TextField(
+              TextFormField(
+                initialValue: widget.initialQuery,
                 decoration: const InputDecoration(
                   prefixIcon: Icon(Icons.search),
                   hintText: '筛选来源名称',

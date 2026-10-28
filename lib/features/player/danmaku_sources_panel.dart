@@ -66,34 +66,46 @@ class _DanmakuSourcesPanelState extends State<DanmakuSourcesPanel> {
             }
           }
 
-          return AlertDialog(
-            title: Text('${_name(kind)} · 本集时间偏移'),
-            content: TextFormField(
-              initialValue: input,
-              autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(
-                signed: true,
-                decimal: true,
+          final media = MediaQuery.of(context);
+          final insets = media.viewInsets;
+          return MediaQuery(
+            data: media.copyWith(
+              viewInsets: EdgeInsets.fromLTRB(
+                math.max(0.0, insets.left),
+                math.max(0.0, insets.top),
+                math.max(0.0, insets.right),
+                math.max(0.0, insets.bottom),
               ),
-              decoration: InputDecoration(
-                suffixText: '秒',
-                helperText: '正数延后，负数提前；只影响此作品此集此来源',
-                errorText: error,
-              ),
-              onChanged: (value) => input = value,
-              onFieldSubmitted: (_) => submit(),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('取消'),
+            child: AlertDialog(
+              title: Text('${_name(kind)} · 本集时间偏移'),
+              content: TextFormField(
+                initialValue: input,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(
+                  signed: true,
+                  decimal: true,
+                ),
+                decoration: InputDecoration(
+                  suffixText: '秒',
+                  helperText: '正数延后，负数提前；只影响此作品此集此来源',
+                  errorText: error,
+                ),
+                onChanged: (value) => input = value,
+                onFieldSubmitted: (_) => submit(),
               ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, 0.0),
-                child: const Text('重置为 0'),
-              ),
-              FilledButton(onPressed: submit, child: const Text('保存')),
-            ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, 0.0),
+                  child: const Text('重置为 0'),
+                ),
+                FilledButton(onPressed: submit, child: const Text('保存')),
+              ],
+            ),
           );
         },
       ),
@@ -315,12 +327,12 @@ class _DanmakuSourcesPanelState extends State<DanmakuSourcesPanel> {
         ? '读取失败'
         : state.selected != null
         ? state.comments.isEmpty
-            ? '已匹配，本集暂无弹幕'
-            : '已载入 ${state.comments.length} 条'
+              ? '已匹配，本集暂无弹幕'
+              : '已载入 ${state.comments.length} 条'
         : state.episodes.isEmpty
         ? session.subjectId == null
-            ? '等待作品关联或官方链接'
-            : '该来源未找到匹配季度 / 分集'
+              ? '等待作品关联或官方链接'
+              : '该来源未找到匹配季度 / 分集'
         : '需要手动选择分集';
     return Card(
       margin: EdgeInsets.zero,

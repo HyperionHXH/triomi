@@ -86,6 +86,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   ProgressReporter? _trackingReporter;
   AnimeIdentityRepository? _animeIdentity;
   bool _resetCrossSitePosition = false;
+  bool _progressSaveFailureShown = false;
 
   late final Preferences _preferences;
   late final DanmakuController _danmaku;
@@ -775,31 +776,36 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       return;
     }
     final repository = _libraryRepository;
-    if (repository == null) return;
+    final identity = _animeIdentity;
+    if (repository == null || identity == null) return;
     final chapter = _chapter;
     final position = _position;
     try {
-      await _animeIdentity?.recordSelection(_item, chapter);
-      final subject = await _animeIdentity?.subjectFor(_item);
-      if (subject != null && subject.sourceId != _item.sourceId) {
+      final subject = await identity.db.transaction(() async {
+        await identity.recordSelection(_item, chapter);
+        final subject = await identity.subjectFor(_item);
+        if (subject != null && subject.sourceId != _item.sourceId) {
+          await repository.updateProgress(
+            sourceId: subject.sourceId,
+            remoteId: subject.remoteId,
+            chapterNumber: chapter.number ?? (chapter.sortIndex + 1).toDouble(),
+          );
+        }
         await repository.updateProgress(
-          sourceId: subject.sourceId,
-          remoteId: subject.remoteId,
+          sourceId: _item.sourceId,
+          remoteId: _item.remoteId,
           chapterNumber: chapter.number ?? (chapter.sortIndex + 1).toDouble(),
         );
-      }
-      await repository.updateProgress(
-        sourceId: _item.sourceId,
-        remoteId: _item.remoteId,
-        chapterNumber: chapter.number ?? (chapter.sortIndex + 1).toDouble(),
-      );
-      await repository.recordHistory(
-        sourceId: _item.sourceId,
-        remoteId: _item.remoteId,
-        chapter: chapter,
-        position: position.inSeconds.toDouble(),
-      );
+        await repository.recordHistory(
+          sourceId: _item.sourceId,
+          remoteId: _item.remoteId,
+          chapter: chapter,
+          position: position.inSeconds.toDouble(),
+        );
+        return subject;
+      });
       _resetCrossSitePosition = false;
+      _progressSaveFailureShown = false;
       // 进度上报（追踪服务）：尽力而为，失败不影响播放。
       unawaited(
         _trackingReporter?.report(
@@ -819,7 +825,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         ref.invalidate(historyByTypeProvider);
       }
     } catch (_) {
-      // 进度写失败不应该打断播放。
+      if (mounted && !_progressSaveFailureShown) {
+        _progressSaveFailureShown = true;
+        _toast('观看进度暂未保存，将在播放中自动重试；请检查可用空间');
+      }
     }
   }
 

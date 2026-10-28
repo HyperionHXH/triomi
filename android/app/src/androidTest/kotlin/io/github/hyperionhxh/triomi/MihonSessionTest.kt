@@ -78,6 +78,45 @@ class MihonSessionTest {
         setCookie(url.toString(), "triomi_private=; Path=/private; Secure; Max-Age=0")
     }
 
+    @Test fun ruleCookiesRequireTheSavedSourceSessionAndKeepPathScope() {
+        val jar = AndroidCookieJar(context)
+        val url = "https://triomi-rule-cookie.invalid/".toHttpUrl()
+        val source = "kazumi:cookie-regression:${java.util.UUID.randomUUID()}"
+        setCookie(url.toString(), "rule_root=visible; Path=/; Secure; Max-Age=600")
+        setCookie(url.toString(), "rule_private=restricted; Path=/private; Secure; Max-Age=600")
+        instrumentation.runOnMainSync { jar.useBrowserSession(setOf(url.host)) }
+        assertNull("global browser authorization is insufficient", jar.ruleCookieHeader(source, url))
+        instrumentation.runOnMainSync { jar.useRuleBrowserSession(source, setOf(url.host)) }
+        assertTrue(jar.ruleCookieHeader(source, url).orEmpty().contains("rule_root=visible"))
+        assertFalse(jar.ruleCookieHeader(source, url).orEmpty().contains("rule_private"))
+        assertTrue(jar.ruleCookieHeader(source, url.resolve("/private/chapter")!!).orEmpty()
+            .contains("rule_private=restricted"))
+        assertNull("another rule must not read this login", jar.ruleCookieHeader("kazumi:other", url))
+        val stored = CountDownLatch(1)
+        instrumentation.runOnMainSync {
+            jar.storeRuleCookies(source, url,
+                listOf("rule_saved=accepted; Path=/private; Secure; Max-Age=600")) { stored.countDown() }
+        }
+        assertTrue(stored.await(10, TimeUnit.SECONDS))
+        assertFalse(jar.ruleCookieHeader(source, url).orEmpty().contains("rule_saved"))
+        assertTrue(jar.ruleCookieHeader(source, url.resolve("/private/chapter")!!).orEmpty()
+            .contains("rule_saved=accepted"))
+        val finished = CountDownLatch(1)
+        instrumentation.runOnMainSync {
+            jar.storeRuleCookies("kazumi:other", url,
+                listOf("rule_injected=blocked; Path=/; Secure")) { finished.countDown() }
+        }
+        assertTrue(finished.await(10, TimeUnit.SECONDS))
+        assertFalse(CookieManager.getInstance().getCookie(url.toString()).orEmpty().contains("rule_injected"))
+        assertNull(jar.ruleCookieHeader(source, "https://unregistered-rule.invalid/".toHttpUrl()))
+        setCookie(url.toString(), "rule_root=; Path=/; Secure; Max-Age=0")
+        assertFalse(jar.ruleCookieHeader(source, url).orEmpty().contains("rule_root"))
+        setCookie(url.toString(), "rule_private=; Path=/private; Secure; Max-Age=0")
+        setCookie(url.toString(), "rule_saved=; Path=/private; Secure; Max-Age=0")
+        context.getSharedPreferences("mihon.cookies", Context.MODE_PRIVATE)
+            .edit().remove("ruleBrowserHosts.$source").commit()
+    }
+
     @Test fun cloudflareDenialIsNotAlwaysAChallenge() {
         val detector = CloudflareInterceptor(context, AndroidCookieJar(context)) { "test" }
         fun response(body: String, challenge: Boolean = false): Response = Response.Builder()

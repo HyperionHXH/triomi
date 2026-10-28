@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
@@ -73,6 +74,38 @@ void main() {
       // 标记置位后 Hive 键不会被重复删除动作触碰（它属于业务回写）。
       expect(preferences.get<String>('lk.securityKey'), 'fresh-value');
       expect(preferences.get<bool>(kSecureMigratedKey), isTrue);
+    });
+
+    test('already migrated installs remove stale tracking copies and migrate WebDAV once', () async {
+      await preferences.set(kSecureMigratedKey, true);
+      await secureStore.set('tracking.bangumi.token', 'new-secure-token');
+      await preferences.set('tracking.bangumi.token', 'stale-plain-token');
+      await preferences.set(
+        kWebDavConfigKey,
+        jsonEncode({
+          'baseUrl': 'https://dav.test/dav/',
+          'username': 'fixture',
+          'password': 'legacy-dav-secret',
+          'remotePath': 'library',
+        }),
+      );
+      await migrateCredentialsToSecureStore(
+        preferences: preferences,
+        secureStore: secureStore,
+      );
+      expect(secureStore.get('tracking.bangumi.token'), 'new-secure-token');
+      expect(preferences.get<String>('tracking.bangumi.token'), isNull);
+      expect(secureStore.get(kWebDavPasswordKey), 'legacy-dav-secret');
+      final stored =
+          jsonDecode(preferences.get<String>(kWebDavConfigKey)!) as Map;
+      expect(stored.containsKey('password'), isFalse);
+      expect(stored['remotePath'], 'library');
+      await secureStore.set(kWebDavPasswordKey, 'new-dav-secret');
+      await migrateCredentialsToSecureStore(
+        preferences: preferences,
+        secureStore: secureStore,
+      );
+      expect(secureStore.get(kWebDavPasswordKey), 'new-dav-secret');
     });
 
     test('空键不迁移也不报错', () async {

@@ -54,6 +54,34 @@ void main() {
       expect(collection, isNull);
     });
 
+    for (final status in [301, 302, 303, 307, 308]) {
+      test(
+        'write HTTP $status cannot report a successful no-content update',
+        () async {
+          final http = FakeHttpClient(
+            (request) async => SourceResponse(
+              statusCode: request.method == 'GET' ? 200 : status,
+              body: request.method == 'GET' ? '{"id":99}' : '',
+              headers: const {'location': 'https://untrusted.test/account'},
+            ),
+          );
+          await expectLater(
+            BangumiClient(http: http)
+                .upsertCollection(12, token: 'fixture-token', status: 'doing'),
+            throwsA(isA<SourceException>()),
+          );
+          expect(http.requests.last.followRedirects, isFalse);
+          expect(http.requests.last.method, 'POST');
+          expect(
+            http.requests.every(
+              (request) => Uri.parse(request.url).host == 'api.bgm.tv',
+            ),
+            isTrue,
+          );
+        },
+      );
+    }
+
     for (final type in [SourceErrorType.network, SourceErrorType.timeout]) {
       test(
         'official $type is preserved without third-party account fallback',
