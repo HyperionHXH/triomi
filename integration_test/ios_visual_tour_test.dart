@@ -912,7 +912,7 @@ void main() {
           '/anime/settings' => '追番设置',
           '/manga/settings' => '漫画设置',
           '/novel/settings' => '小说设置',
-          AppRoutes.webdav => 'WebDAV 应用备份',
+          AppRoutes.webdav => 'WebDAV 收藏与历史',
           AppRoutes.tracking => '追踪账号',
           AppRoutes.lkAccount => '还没有登录轻之国度',
           AppRoutes.lnsAccount => '还没有登录轻书架',
