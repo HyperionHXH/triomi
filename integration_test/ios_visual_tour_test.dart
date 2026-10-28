@@ -187,7 +187,26 @@ void main() {
 
       Future<void> tapKey(String key) async {
         final target = find.byKey(ValueKey(key));
+        expect(
+          target,
+          findsOneWidget,
+          reason: 'Expected production control key "$key"',
+        );
         await tester.ensureVisible(target);
+        if (target.hitTestable().evaluate().isEmpty) {
+          await tester.scrollUntilVisible(
+            target,
+            300,
+            maxScrolls: 20,
+            scrollable: find.byType(Scrollable).last,
+          );
+          await pumpFor(const Duration(milliseconds: 200));
+        }
+        expect(
+          target.hitTestable(),
+          findsOneWidget,
+          reason: 'Production control "$key" must be reachable',
+        );
         await tester.tap(target.hitTestable());
         await pumpFor(const Duration(milliseconds: 350));
       }
