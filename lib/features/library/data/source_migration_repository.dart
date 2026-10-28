@@ -26,7 +26,7 @@ class MigrationOrigin {
   );
 
   final MediaItem item;
-  final LibraryEntryRow entry;
+  final LibraryEntryRow? entry;
   final HistoryRow? _history;
   final List<LibraryCategoryLinkRow> _categories;
   final Chapter? lastChapter;
@@ -91,9 +91,11 @@ class SourceMigrationRepository {
       throw StateError('跨来源复制目前支持漫画与小说');
     }
     final entry = await _entry(item);
-    if (entry == null) throw StateError('请先将原作品加入本地书架');
-    if (entry.type != item.type) throw StateError('作品类型与书架记录不一致');
+    if (entry != null && entry.type != item.type) {
+      throw StateError('作品类型与书架记录不一致');
+    }
     final history = await _lastHistory(item);
+    if (entry == null && history == null) throw StateError('原作品没有可迁移的收藏或观看记录');
     final chapters = await _library.loadChapters(item.sourceId, item.remoteId);
     return MigrationOrigin._(
       item,
@@ -253,7 +255,8 @@ class SourceMigrationRepository {
       ],
     );
     final now = DateTime.now();
-    if (existingEntry == null) {
+    final originalEntry = origin.entry;
+    if (existingEntry == null && originalEntry != null) {
       await _db
           .into(_db.libraryEntries)
           .insert(
@@ -266,22 +269,24 @@ class SourceMigrationRepository {
                     (selected == null ? 0 : selected.sortIndex + 1).toDouble(),
               ),
               score: metadata
-                  ? Value(origin.entry.score)
+                  ? Value(originalEntry.score)
                   : const Value.absent(),
               status: metadata
-                  ? Value(origin.entry.status)
+                  ? Value(originalEntry.status)
                   : const Value.absent(),
               pinned: metadata
-                  ? Value(origin.entry.pinned)
+                  ? Value(originalEntry.pinned)
                   : const Value.absent(),
               unreadCount: const Value(0),
-              addedAt: origin.entry.addedAt,
+              addedAt: originalEntry.addedAt,
               updatedAt: now,
             ),
           );
     }
     for (final category
-        in copyCategories ? categories : const <LibraryCategoryLinkRow>[]) {
+        in copyCategories && originalEntry != null
+            ? categories
+            : const <LibraryCategoryLinkRow>[]) {
       await _db
           .into(_db.libraryCategoryLinks)
           .insertOnConflictUpdate(

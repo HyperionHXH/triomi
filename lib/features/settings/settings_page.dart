@@ -110,6 +110,25 @@ class SettingsPage extends ConsumerWidget {
             ],
           ),
           SettingsGroup(
+            title: '数据维护',
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.cloud_sync_outlined),
+                title: const Text('WebDAV 收藏与历史同步'),
+                subtitle: const Text('自动合并漫画、动画收藏及阅读 / 观看位置'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.webdav),
+              ),
+              ListTile(
+                leading: const Icon(Icons.archive_outlined),
+                title: const Text('WebDAV 完整应用备份'),
+                subtitle: const Text('上传或合并完整数据备份；使用相同 WebDAV 连接'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push(AppRoutes.webdavBackup),
+              ),
+            ],
+          ),
+          SettingsGroup(
             title: '关于',
             children: <Widget>[
               SwitchListTile(
@@ -271,9 +290,9 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                 ),
                 route(
                   Icons.cloud_sync_outlined,
-                  'WebDAV 追番收藏',
-                  '${AppRoutes.webdav}?type=anime',
-                  subtitle: '仅合并本地追番收藏；不上传全应用备份',
+                  'WebDAV 收藏与历史同步',
+                  AppRoutes.webdav,
+                  subtitle: '自动合并收藏与章节 / 页码 / 秒数；可查看连接与同步状态',
                 ),
               ],
             ),
@@ -316,6 +335,12 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                   '漫画追踪账号',
                   '${AppRoutes.tracking}?type=manga',
                   subtitle: 'Bangumi / AniList · 仅显示漫画绑定，服务凭据共用',
+                ),
+                route(
+                  Icons.cloud_sync_outlined,
+                  'WebDAV 收藏与历史同步',
+                  AppRoutes.webdav,
+                  subtitle: '自动合并收藏与章节 / 页码 / 秒数；可查看连接与同步状态',
                 ),
               ],
             ),

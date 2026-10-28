@@ -264,7 +264,8 @@ class AppUpdateRetention(
         return StorageInfo(incomingBytes, installBytes, legacyBytes, reclaimable, protected, removed, skipped)
     }
 
-    @Synchronized fun close() {
+    @Synchronized fun close(incomingPath: String? = null) {
+        if (incomingPath != null) runCatching { finishIncoming(incomingPath) }
         for (path in candidates.toList()) runCatching { releaseCandidate(File(path)) }
         // Disposal relinquishes page ownership, unlike a rejected explicit discard.
         candidates.clear()

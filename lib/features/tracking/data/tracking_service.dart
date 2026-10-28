@@ -26,7 +26,7 @@ part 'tracking_sync.dart';
 /// 设计红线：
 /// - **上报绝不抛错**（`reportProgress` 返回逐项结果），阅读/播放不能被追踪打断；
 /// - **只增不减**：远端进度已经不小于本地时跳过推送，避免把新进度写回旧值；
-/// - token 只进设置存储，**不写日志**。
+/// - token 只进安全存储，**不写日志**。
 class TrackingService {
   TrackingService({
     required this.http,
@@ -59,10 +59,7 @@ class TrackingService {
   // ---------------------------------------------------------------- 凭据
 
   String? tokenOf(TrackingServiceKind kind) {
-    // 安全存储优先；Hive 里的旧值（迁移前备份）作回退。
-    final value =
-        secureStore.get(kind.tokenKey) ??
-        preferences.get<String>(kind.tokenKey);
+    final value = secureStore.get(kind.tokenKey);
     return value == null || value.isEmpty ? null : value;
   }
 
@@ -71,13 +68,20 @@ class TrackingService {
   Future<void> setToken(TrackingServiceKind kind, String token) async {
     final trimmed = token.trim();
     await secureStore.set(kind.tokenKey, trimmed);
-    await preferences.set(kind.tokenKey, trimmed);
+    await preferences.remove(kind.tokenKey);
+    await _notifyCredentialsChanged(kind);
   }
 
   Future<void> clearToken(TrackingServiceKind kind) async {
     // 两处都清：SecureStore 是正身，Hive 的旧值（迁移前）也一并删。
     await secureStore.remove(kind.tokenKey);
     await preferences.remove(kind.tokenKey);
+    await _notifyCredentialsChanged(kind);
+  }
+
+  Future<void> _notifyCredentialsChanged(TrackingServiceKind kind) async {
+    final key = 'tracking.${kind.wire}.credentialsRevision';
+    await preferences.set(key, (preferences.get<int>(key) ?? 0) + 1);
   }
 
   /// 校验 token 是否可用（追踪账号页「测试连接」）。
@@ -256,8 +260,9 @@ class TrackingService {
         message: '未配置 access token',
       );
     }
-    final watched = math.max(chapterNumber.floor(), 0);
     try {
+      if (!chapterNumber.isFinite) throw ArgumentError('章节进度无效');
+      final watched = math.max(chapterNumber.floor(), 0);
       switch (kind) {
         case TrackingServiceKind.bangumi:
           await _pushBangumi(
@@ -336,7 +341,7 @@ class TrackingService {
       subjectId,
       token: token,
       status: status,
-      watchedEpisodes: (force || behind) && watched > 0 ? watched : null,
+      watchedEpisodes: behind && watched > 0 ? watched : null,
     );
   }
 
@@ -362,7 +367,7 @@ class TrackingService {
       mediaId: mediaId,
       token: token,
       status: status,
-      progress: watched,
+      progress: math.max(watched, entry?.progress ?? 0),
     );
   }
 }

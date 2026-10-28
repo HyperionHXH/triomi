@@ -14,10 +14,16 @@ import 'source_providers.dart';
 /// the classic object/list payloads while `p1` wraps subject data in a Next
 /// payload. This client never forwards user credentials or cookies.
 class BangumiPublicClient {
-  BangumiPublicClient(this.http, {this.routes = const BangumiRoutePolicy()});
+  BangumiPublicClient(
+    this.http, {
+    this._routes = const BangumiRoutePolicy(),
+    this._routesResolver,
+  });
 
   final SourceHttpClient http;
-  final BangumiRoutePolicy routes;
+  final BangumiRoutePolicy _routes;
+  final BangumiRoutePolicy Function()? _routesResolver;
+  BangumiRoutePolicy get routes => _routesResolver?.call() ?? _routes;
   final _owners = <SourceRequestCancellation>{};
   bool _disposed = false;
 
@@ -117,6 +123,9 @@ class BangumiPublicClient {
   /// All episode types, including specials, for explicit discussion selection.
   Future<List<Map<String, Object?>>> allEpisodes(String subjectId) async {
     final rows = <Map<String, Object?>>[];
+    final ids = <int>{};
+    int? expectedTotal;
+    const maxEpisodes = 10000;
     var offset = 0;
     while (true) {
       final raw = await _getJson(
@@ -128,10 +137,37 @@ class BangumiPublicClient {
       }
       final page = BangumiV0Adapter.list(raw);
       final count = (raw['data'] as List).length;
+      final total = raw['total'];
+      if (count > 100 ||
+          page.length != count ||
+          (total != null &&
+              (total is! int || total < 0 || total > maxEpisodes))) {
+        throw const FormatException('Bangumi 分集列表数量无效');
+      }
+      if (total is int) {
+        if (expectedTotal != null && expectedTotal != total) {
+          throw const FormatException('Bangumi 分集列表已变化，请重试');
+        }
+        expectedTotal = total;
+      }
+      for (final episode in page) {
+        final id = episode['id'];
+        if (id is! int || id <= 0 || !ids.add(id)) {
+          throw const FormatException('Bangumi 分集身份无效或分页重复');
+        }
+      }
       rows.addAll(page);
       offset += count;
-      final total = raw['total'];
-      if (total is num ? offset >= total : count < 100) return rows;
+      if (offset > maxEpisodes ||
+          (expectedTotal != null && offset > expectedTotal)) {
+        throw const FormatException('Bangumi 分集列表超出声明范围');
+      }
+      if (expectedTotal != null ? offset == expectedTotal : count < 100) {
+        return rows;
+      }
+      if (offset == maxEpisodes) {
+        throw const FormatException('Bangumi 分集列表分页过多');
+      }
       if (count == 0) throw const FormatException('Bangumi 分集列表分页中断');
     }
   }

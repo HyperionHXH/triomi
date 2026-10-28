@@ -44,6 +44,67 @@ class SourceRequestCancellation {
   }
 }
 
+/// Scoped transfer activity, without changing every source client's interface.
+/// Long transfers time out on inactivity, not elapsed upload duration.
+class SourceTransferProgress {
+  SourceTransferProgress({
+    this.onSend,
+    this.onReceive,
+    this.allowConflict = false,
+    this.inactivityTimeout = const Duration(seconds: 30),
+  });
+  final void Function(int sent, int total)? onSend;
+  final void Function(int received, int total)? onReceive;
+  final Duration inactivityTimeout;
+  final bool allowConflict;
+  static final Object _key = Object();
+  static SourceTransferProgress? get current =>
+      Zone.current[_key] as SourceTransferProgress?;
+  Timer? _timer;
+  void Function()? _expire;
+
+  void sent(int count, int total) {
+    if (_expire == null) return;
+    _touch();
+    onSend?.call(count, total);
+  }
+
+  void received(int count, int total) {
+    if (_expire == null) return;
+    _touch();
+    onReceive?.call(count, total);
+  }
+
+  void _touch() {
+    _timer?.cancel();
+    _timer = Timer(inactivityTimeout, () => _expire?.call());
+  }
+
+  Future<T> run<T>(Future<T> Function() action) async {
+    final owner =
+        SourceRequestCancellation.current ?? SourceRequestCancellation();
+    final expired = Completer<T>();
+    _expire = () {
+      owner.cancel('传输长时间没有进展');
+      if (!expired.isCompleted) {
+        expired.completeError(TimeoutException('WebDAV传输长时间没有进展'));
+      }
+    };
+    _touch();
+    try {
+      return await owner.run(
+        () => runZoned(
+          () => Future.any([action(), expired.future]),
+          zoneValues: {_key: this},
+        ),
+      );
+    } finally {
+      _timer?.cancel();
+      _expire = null;
+    }
+  }
+}
+
 /// 来源请求。
 class SourceRequest {
   const SourceRequest({
@@ -440,6 +501,8 @@ class DioSourceHttpClient
           sendTimeout: timeout,
           receiveTimeout: timeout,
         ),
+        cancelToken: SourceRequestCancellation.current?.token,
+        onReceiveProgress: SourceTransferProgress.current?.received,
       );
       final status = response.statusCode ?? 0;
       if (status < 200 || status >= 400) {
@@ -479,6 +542,7 @@ class DioSourceHttpClient
       );
       final status = response.statusCode ?? 0;
       if (status < 200 || status >= 400) {
+        await response.data?.stream.listen(null).cancel();
         throw SourceException(
           sourceId: sourceId,
           type: _classifyStatus(status),
@@ -522,9 +586,13 @@ class DioSourceHttpClient
     try {
       final response = await _dio.request<String>(
         url,
-        data: Stream.fromIterable(<List<int>>[bytes]),
+        data: Stream.fromIterable(_uploadChunks(bytes)),
         options: Options(
           method: method,
+          // Authenticated uploads must never forward credentials across redirects.
+          followRedirects: !headers.keys.any(
+            (key) => key.toLowerCase() == 'authorization',
+          ),
           headers: <String, String>{
             'User-Agent': defaultUserAgent,
             'Content-Length': '${bytes.length}',
@@ -532,16 +600,23 @@ class DioSourceHttpClient
           },
           responseType: ResponseType.plain,
           connectTimeout: timeout,
-          sendTimeout: timeout,
+          sendTimeout: SourceTransferProgress.current == null
+              ? timeout
+              : Duration.zero,
           receiveTimeout: timeout,
         ),
+        cancelToken: SourceRequestCancellation.current?.token,
+        onSendProgress: SourceTransferProgress.current?.sent,
+        onReceiveProgress: SourceTransferProgress.current?.received,
       );
       final result = SourceResponse(
         statusCode: response.statusCode ?? 0,
         body: response.data ?? '',
         url: response.realUri.toString(),
       );
-      if (!result.isSuccess) {
+      if (!result.isSuccess &&
+          !(result.statusCode == 412 &&
+              SourceTransferProgress.current?.allowConflict == true)) {
         throw SourceException(
           sourceId: sourceId,
           type: _classifyStatus(result.statusCode),
@@ -553,6 +628,20 @@ class DioSourceHttpClient
       rethrow;
     } catch (error) {
       throw SourceException.wrap(error, sourceId: sourceId, url: url);
+    }
+  }
+
+  static Iterable<List<int>> _uploadChunks(List<int> bytes) sync* {
+    const size = 64 * 1024;
+    if (bytes.length <= size) {
+      yield bytes;
+      return;
+    }
+    for (var offset = 0; offset < bytes.length; offset += size) {
+      final end = (offset + size).clamp(0, bytes.length);
+      yield bytes is Uint8List
+          ? Uint8List.sublistView(bytes, offset, end)
+          : bytes.sublist(offset, end);
     }
   }
 

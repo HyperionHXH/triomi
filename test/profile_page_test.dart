@@ -87,6 +87,19 @@ void main() {
                 .type,
             type,
           );
+          if (type != MediaType.novel) {
+            final syncEntry = find.widgetWithText(ListTile, 'WebDAV 收藏与历史同步');
+            await tester.ensureVisible(syncEntry);
+            await tester.tap(syncEntry);
+            await _advance(tester);
+            final page = tester.widget<WebDavSyncPage>(
+              find.byType(WebDavSyncPage),
+            );
+            expect(page.fullBackup, isFalse);
+            expect(page.animeCollectionOnly, isFalse);
+            router.pop();
+            await _advance(tester);
+          }
           final trackingEntry = find.widgetWithText(
             ListTile,
             type == MediaType.anime ? '追番追踪账号' : '${type.label}追踪账号',
@@ -148,7 +161,10 @@ void main() {
     (tester) async {
       final router = AppRouter.create(initialLocation: AppRoutes.profile);
       final container = ProviderContainer(
-        overrides: [preferencesProvider.overrideWithValue(memoryPreferences())],
+        overrides: [
+          preferencesProvider.overrideWithValue(memoryPreferences()),
+          secureStoreProvider.overrideWithValue(MemorySecureStore()),
+        ],
       );
       try {
         await tester.pumpWidget(

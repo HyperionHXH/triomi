@@ -24,6 +24,12 @@ class HistoryPage extends ConsumerWidget {
     return PageScaffold(
       title: type == null ? '全部历史' : '${type!.label}历史',
       actions: <Widget>[
+        if (type != MediaType.novel)
+          IconButton(
+            tooltip: '同步漫画与动画收藏、历史',
+            onPressed: () => context.push(AppRoutes.webdav),
+            icon: const Icon(Icons.cloud_sync_outlined),
+          ),
         IconButton(
           tooltip: '清空历史',
           onPressed: () => _confirmClear(context, ref),

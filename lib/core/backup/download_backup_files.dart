@@ -6,6 +6,8 @@ import 'package:crypto/crypto.dart';
 
 import '../../features/downloads/data/image_download_checkpoint.dart';
 import '../db/app_database.dart';
+import 'backup_file_support.dart';
+import 'backup_progress.dart';
 
 /// Portable downloaded files, without device paths or transport/resume secrets.
 class DownloadBackupFiles {
@@ -93,14 +95,14 @@ class DownloadBackupFiles {
       throw const FormatException('离线HLS包含非本机资源');
     }
     for (final resource in resources) {
+      checkBackupCancellation();
       final file = File('${File(path).parent.path}/$resource');
       final metadata = jsonDecode(
         await File('${file.path}.json').readAsString(),
       );
       if (metadata is! Map ||
           metadata['bytes'] != await file.length() ||
-          metadata['sha256'] !=
-              (await sha256.bind(file.openRead()).first).toString()) {
+          metadata['sha256'] != await hashBackupFile(file)) {
         throw const FormatException('离线HLS分片校验失败');
       }
     }
@@ -111,24 +113,34 @@ class DownloadBackupFiles {
   }
 
   Future<List<String>> _partialNames(Directory directory) async {
-    if (await FileSystemEntity.type('${directory.path}/${ImageDownloadCheckpoint.fileName}', followLinks: false) == FileSystemEntityType.file) {
+    if (await FileSystemEntity.type(
+          '${directory.path}/${ImageDownloadCheckpoint.fileName}',
+          followLinks: false,
+        ) ==
+        FileSystemEntityType.file) {
       final checkpoint = await ImageDownloadCheckpoint.load(directory);
       if (checkpoint.pages.isEmpty) throw const FormatException('部分漫画缺少已校验页');
       final names = checkpoint.pages.keys.toList()..sort();
       for (final name in names) {
-        if (!await checkpoint.valid(name)) throw const FormatException('部分漫画页校验失败');
+        checkBackupCancellation();
+        if (!await checkpoint.valid(name)) {
+          throw const FormatException('部分漫画页校验失败');
+        }
       }
       return [ImageDownloadCheckpoint.fileName, ...names];
     }
     final names = <String>[];
     await for (final entry in directory.list(followLinks: false)) {
+      checkBackupCancellation();
       if (entry is! File) continue;
       final name = entry.uri.pathSegments.last;
       if (!RegExp(r'^video\.(mp4|mkv|webm|flv|mov|m4v|ts|m4s|aac)\.part$')
           .hasMatch(name)) {
         continue;
       }
-      final journal = File('${entry.path.substring(0, entry.path.length - 5)}.resume.json');
+      final journal = File(
+        '${entry.path.substring(0, entry.path.length - 5)}.resume.json',
+      );
       final state = jsonDecode(await journal.readAsString());
       final size = await entry.length();
       if (state is! Map ||
@@ -145,15 +157,20 @@ class DownloadBackupFiles {
     }
     if (names.isEmpty) {
       await for (final entry in directory.list(followLinks: false)) {
+        checkBackupCancellation();
         if (entry is! File) continue;
         final name = entry.uri.pathSegments.last;
-        if (!RegExp(r'^part-[0-9a-f]{64}\.(mp4|mkv|webm|flv|mov|m4v|ts|m4s|aac)$').hasMatch(name)) continue;
+        if (!RegExp(
+          r'^part-[0-9a-f]{64}\.(mp4|mkv|webm|flv|mov|m4v|ts|m4s|aac)$',
+        ).hasMatch(name)) {
+          continue;
+        }
         final checksum = File('${entry.path}.json');
         final state = jsonDecode(await checksum.readAsString());
         if (state is! Map ||
             await entry.length() == 0 ||
             state['bytes'] != await entry.length() ||
-            state['sha256'] != (await sha256.bind(entry.openRead()).first).toString()) {
+            state['sha256'] != await hashBackupFile(entry)) {
           throw const FormatException('部分HLS分片校验失败');
         }
         names.addAll([name, '$name.json']);
@@ -172,8 +189,10 @@ class DownloadBackupFiles {
     DownloadRow row,
     Archive archive,
     Directory staging,
-    Map<String, Object?> integrity,
-  ) async {
+    Map<String, Object?> integrity, {
+    Map<String, String>? filePaths,
+    BackupProgressCallback? onProgress,
+  }) async {
     if (row.path == null) return null;
     final partial = row.status != 'done';
     try {
@@ -205,7 +224,14 @@ class DownloadBackupFiles {
       final checkDir = await Directory('${staging.path}/$id').create();
       final copied = <String, File>{};
       final metadata = <String, Object?>{};
+      var completedBytes = 0;
+      var completedItems = 0;
+      var totalBytes = 0;
       for (final name in names) {
+        totalBytes += await File('${dir.path}/$name').length();
+      }
+      for (final name in names) {
+        checkBackupCancellation();
         final source = File('${dir.path}/$name');
         if (await FileSystemEntity.type(source.path, followLinks: false) !=
                 FileSystemEntityType.file ||
@@ -216,11 +242,31 @@ class DownloadBackupFiles {
             await source.length() == 0) {
           return null;
         }
-        final file = await source.copy('${checkDir.path}/$name');
+        final file = File('${checkDir.path}/$name');
+        await copyBackupFile(
+          source,
+          file,
+          onBytes: (bytes) {
+            completedBytes += bytes;
+            onProgress?.call(
+              BackupProgress(
+                BackupStage.media,
+                completedBytes: completedBytes,
+                totalBytes: totalBytes,
+                completedItems: completedItems,
+                totalItems: names.length,
+              ),
+            );
+          },
+        );
         if (name.endsWith('.json')) {
           final data = jsonDecode(await file.readAsString()) as Map;
           final sanitized = name.endsWith('.resume.json')
-              ? {'identity': data['identity'], 'etag': data['etag'], 'total': data['total']}
+              ? {
+                  'identity': data['identity'],
+                  'etag': data['etag'],
+                  'total': data['total'],
+                }
               : name == ImageDownloadCheckpoint.fileName
               ? {'pages': ImageDownloadCheckpoint.parse(data).values.toList()}
               : name == 'manifest.json'
@@ -231,30 +277,50 @@ class DownloadBackupFiles {
         copied[name] = file;
         metadata['media/$id/$name'] = {
           'size': await file.length(),
-          'sha256': (await sha256.bind(file.openRead()).first).toString(),
+          'sha256': await hashBackupFile(file),
         };
+        onProgress?.call(
+          BackupProgress(
+            BackupStage.media,
+            completedBytes: completedBytes,
+            totalBytes: totalBytes,
+            completedItems: ++completedItems,
+            totalItems: names.length,
+          ),
+        );
       }
       // Check the snapshot, not only files that could change during copying.
       if (partial) {
         await _partialNames(checkDir);
       } else {
-        await _names(isDirectory ? checkDir.path : '${checkDir.path}/${names.first}');
+        await _names(
+          isDirectory ? checkDir.path : '${checkDir.path}/${names.first}',
+        );
       }
       for (final entry in copied.entries) {
-        final file = ArchiveFile.stream(
-          'media/$id/${entry.key}',
-          InputFileStream(entry.value.path),
-        )..compression = CompressionType.none;
-        archive.addFile(file);
+        final name = 'media/$id/${entry.key}';
+        if (filePaths != null) {
+          filePaths[name] = entry.value.path;
+        } else {
+          archive.addFile(
+            ArchiveFile.stream(name, InputFileStream(entry.value.path))
+              ..compression = CompressionType.none,
+          );
+        }
       }
       integrity.addAll(metadata);
       return {
         'id': id,
         'files': names,
         'kind': partial
-            ? names.first == ImageDownloadCheckpoint.fileName ? 'image-partial'
-            : names.first.startsWith('video.') ? 'video-partial' : 'hls-partial'
-            : isDirectory ? 'images' : 'video',
+            ? names.first == ImageDownloadCheckpoint.fileName
+                  ? 'image-partial'
+                  : names.first.startsWith('video.')
+                  ? 'video-partial'
+                  : 'hls-partial'
+            : isDirectory
+            ? 'images'
+            : 'video',
         if (!isDirectory) 'entry': names.first,
       };
     } on FileSystemException {
@@ -275,7 +341,13 @@ class DownloadBackupFiles {
     final id = identity(row);
     if (media['id'] != id ||
         media['files'] is! List ||
-        !['images', 'video', 'video-partial', 'hls-partial', 'image-partial'].contains(media['kind'])) {
+        ![
+          'images',
+          'video',
+          'video-partial',
+          'hls-partial',
+          'image-partial',
+        ].contains(media['kind'])) {
       throw const FormatException('备份媒体身份损坏');
     }
     final names = (media['files'] as List).cast<String>();
@@ -299,10 +371,18 @@ class DownloadBackupFiles {
           (videoEntry is! String || !names.contains(videoEntry))) {
         throw const FormatException('备份视频入口缺失');
       }
-      final partial = ['video-partial', 'hls-partial', 'image-partial'].contains(media['kind']);
+      final partial = [
+        'video-partial',
+        'hls-partial',
+        'image-partial',
+      ].contains(media['kind']);
       final actual = partial
           ? await _partialNames(stage)
-          : await _names(media['kind'] == 'images' ? stage.path : '${stage.path}/$videoEntry');
+          : await _names(
+              media['kind'] == 'images'
+                  ? stage.path
+                  : '${stage.path}/$videoEntry',
+            );
       if (actual.toSet().difference(names.toSet()).isNotEmpty ||
           names.toSet().difference(actual.toSet()).isNotEmpty) {
         throw const FormatException('备份媒体清单不完整');

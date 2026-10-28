@@ -16,11 +16,7 @@ import '../discover/widgets/media_item_card.dart';
 import '../library/data/library_providers.dart';
 import '../library/data/library_repository.dart';
 import '../profile/data/sync_providers.dart';
-import '../tracking/data/tracking_models.dart';
-import '../tracking/data/tracking_providers.dart';
 import 'data/anime_collection_service.dart';
-import 'data/anime_follow_sync.dart';
-import 'data/anime_webdav_sync.dart';
 
 const animeFollowStatuses = <String, String>{
   '': '全部',
@@ -65,19 +61,24 @@ Future<void> setAnimeFollowStatus(
               updatedAt: Value(changedAt),
             ),
           );
+      if (existing != null) {
+        await ref
+            .read(libraryRepositoryProvider)
+            .markFavoriteChanged(MediaType.anime, key.$1, key.$2);
+      }
     }
   });
 }
 
 /// Cancelling local membership records a durable deletion for the configured
 /// WebDAV account; histories, downloads and Bangumi collection stay untouched.
-Future<void> removeAnimeFollow(WidgetRef ref, MediaItem item) =>
-    ref.read(animeWebDavSyncProvider).removeLocal(item);
+Future<void> removeAnimeFollow(WidgetRef ref, MediaItem item) => ref
+    .read(libraryRepositoryProvider)
+    .removeFromLibrary(item.sourceId, item.remoteId, type: MediaType.anime);
 
-/// Explicit re-addition advances past a known delete even within one SQLite
-/// timestamp tick, so immediate remove/re-add never loses to the tombstone.
+/// Re-adding favorites records an explicit newer membership decision.
 Future<void> addAnimeFollow(WidgetRef ref, MediaItem item) =>
-    ref.read(animeWebDavSyncProvider).addLocal(item);
+    ref.read(libraryRepositoryProvider).addAnimeFollow(item);
 
 class AnimeFollowsPage extends ConsumerStatefulWidget {
   const AnimeFollowsPage({super.key});
@@ -158,7 +159,13 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
         if (_message != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(_message!),
+            child: Row(
+              children: [
+                Expanded(child: Text(_message!)),
+                if (!_busy && _message!.startsWith('同步未完成'))
+                  TextButton(onPressed: _syncCloud, child: const Text('重试')),
+              ],
+            ),
           ),
         if (error != null)
           Padding(
@@ -253,7 +260,7 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
                         : error != null
                         ? '未能读取收藏，请重试或检查账号。'
                         : rows.isEmpty
-                        ? '在动画详情加入收藏夹，点云同步与已连接的账号同步。'
+                        ? '在动画详情加入收藏夹；连接 WebDAV 后可自动跨设备同步。'
                         : '没有符合条件的追番',
                   ),
                 )
@@ -383,111 +390,7 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
   }
 
   Future<void> _syncCloud() async {
-    final dav = ref.read(webDavConfigProvider).isConfigured;
-    final bgm = ref
-        .read(trackingServiceProvider)
-        .hasToken(TrackingServiceKind.bangumi);
-    var useDav = dav, useBangumi = bgm;
-    var priority = AnimeSyncPriority.bangumi;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (_, update) => AlertDialog(
-          title: const Text('云同步'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('WebDAV 合并设备间的收藏夹；Bangumi 同步收藏状态。两者不替代本地收藏。'),
-                CheckboxListTile(
-                  title: const Text('WebDAV 收藏夹'),
-                  value: useDav,
-                  onChanged: dav ? (v) => update(() => useDav = v!) : null,
-                ),
-                if (!dav)
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(dialogContext);
-                      context.push('${AppRoutes.webdav}?type=anime');
-                    },
-                    child: const Text('连接 WebDAV'),
-                  ),
-                CheckboxListTile(
-                  title: const Text('Bangumi 收藏状态'),
-                  value: useBangumi,
-                  onChanged: bgm ? (v) => update(() => useBangumi = v!) : null,
-                ),
-                if (!bgm)
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(dialogContext);
-                      context.push('${AppRoutes.tracking}?type=anime');
-                    },
-                    child: const Text('连接 Bangumi'),
-                  ),
-                if (useBangumi)
-                  DropdownButton<AnimeSyncPriority>(
-                    value: priority,
-                    isExpanded: true,
-                    items: const [
-                      DropdownMenuItem(
-                        value: AnimeSyncPriority.bangumi,
-                        child: Text('状态冲突：Bangumi 优先'),
-                      ),
-                      DropdownMenuItem(
-                        value: AnimeSyncPriority.local,
-                        child: Text('状态冲突：本地优先'),
-                      ),
-                      DropdownMenuItem(
-                        value: AnimeSyncPriority.newest,
-                        child: Text('状态冲突：最新修改优先'),
-                      ),
-                    ],
-                    onChanged: (v) => update(() => priority = v!),
-                  ),
-                if (useBangumi)
-                  const Text('本地独有收藏上传状态，云端独有收藏补入本地；删除本地收藏不删除 Bangumi 记录。'),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: useDav || useBangumi
-                  ? () => Navigator.pop(dialogContext, true)
-                  : null,
-              child: const Text('同步'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    setState(() {
-      _busy = true;
-      _message = null;
-    });
-    try {
-      await syncAnimeFollows(
-        ref,
-        webDav: useDav,
-        bangumi: useBangumi,
-        priority: priority,
-        onProgress: (message) {
-          if (mounted) setState(() => _message = message);
-        },
-      );
-      if (mounted) {
-        setState(() => _message = '收藏已同步 · ${_time(DateTime.now())}');
-      }
-    } catch (error) {
-      if (mounted) setState(() => _message = '同步未完成：$error');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    await context.push(AppRoutes.webdav);
   }
 
   Future<void> _setStatus(String status) async {
@@ -549,12 +452,9 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
           ..clear()
           ..addAll(failed);
         _message = errors.isEmpty
-            ? '已更新 $succeeded 项；点云同步与账号同步'
+            ? '已更新 $succeeded 项；已开启的自动同步会合并到云端'
             : '$succeeded 项已更新，${failed.length} 项失败并保留选择：${errors.toSet().join('；')}';
       });
     }
   }
-
-  String _time(DateTime time) =>
-      '${time.month}/${time.day} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
 }

@@ -162,14 +162,21 @@ void main() {
     (tester) async {
       final target = TargetSource('B');
       await launch(tester, [target]);
-      expect(find.text('目标来源'), findsOneWidget);
-      await tester.tap(find.text('搜索目标作品'));
+      await tester.tap(find.byKey(const ValueKey('searchMigration')));
       await settle(tester);
       await tester.tap(find.text(target.item.title));
       await settle(tester);
       expect(find.textContaining('原来源续读章节：第12话'), findsOneWidget);
       expect(await library.isInLibrary('B', 'target'), false);
-      await tester.ensureVisible(find.byKey(const ValueKey('commitMigration')));
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('commitMigration')),
+        250,
+        scrollable: find
+            .byWidgetPredicate(
+              (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+            )
+            .first,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('commitMigration')));
       await settle(tester);
@@ -195,12 +202,12 @@ void main() {
       final target = TargetSource('B')
         ..failure = StateError('temporary network failure');
       await launch(tester, [target]);
-      await tester.tap(find.text('搜索目标作品'));
+      await tester.tap(find.byKey(const ValueKey('searchMigration')));
       await settle(tester);
       expect(find.textContaining('temporary network failure'), findsOneWidget);
       expect(await library.isInLibrary('B', 'target'), false);
       target.failure = null;
-      await tester.tap(find.text('搜索目标作品'));
+      await tester.tap(find.byKey(const ValueKey('searchMigration')));
       await settle(tester);
       expect(find.text(target.item.title), findsOneWidget);
       expect(find.textContaining('temporary network failure'), findsNothing);
@@ -214,7 +221,9 @@ void main() {
         ..searchPending = Completer<List<MediaItem>>();
       final second = TargetSource('C');
       await launch(tester, [first, second]);
-      await tester.tap(find.text('搜索目标作品'));
+      await tester.tap(find.byType(SwitchListTile));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('searchMigration')));
       await settle(tester);
       await tester.tap(find.text('来源B · zh'));
       await tester.pumpAndSettle();
@@ -223,16 +232,65 @@ void main() {
       first.searchPending!.complete([first.item]);
       await settle(tester);
       expect(find.text(first.item.title), findsNothing);
-      await tester.tap(find.text('搜索目标作品'));
+      await tester.tap(find.byKey(const ValueKey('searchMigration')));
       await settle(tester);
       await tester.tap(find.text(second.item.title));
       await settle(tester);
-      await tester.ensureVisible(find.byKey(const ValueKey('commitMigration')));
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('commitMigration')),
+        250,
+        scrollable: find
+            .byWidgetPredicate(
+              (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+            )
+            .first,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('commitMigration')));
       await settle(tester);
       expect(await library.isInLibrary('C', 'target'), true);
       expect(await library.isInLibrary('B', 'target'), false);
+    },
+  );
+
+  testWidgets(
+    'all-source search publishes fast results independently and selects their actual source',
+    (tester) async {
+      final slow = TargetSource('B')
+        ..searchPending = Completer<List<MediaItem>>();
+      final fast = TargetSource('C');
+      final failed = TargetSource('D')
+        ..failure = StateError('site unavailable');
+      await launch(tester, [slow, fast, failed]);
+      await tester.tap(find.byKey(const ValueKey('searchMigration')));
+      await settle(tester);
+      expect(find.text(fast.item.title), findsOneWidget);
+      expect(find.textContaining('site unavailable'), findsOneWidget);
+      expect(await library.isInLibrary('C', 'target'), isFalse);
+      await tester.ensureVisible(find.text(fast.item.title));
+      await tester.tap(find.text(fast.item.title));
+      await settle(tester);
+      slow.searchPending!.complete([slow.item]);
+      await settle(tester);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('commitMigration')),
+        250,
+        scrollable: find
+            .byWidgetPredicate(
+              (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('commitMigration')));
+      await settle(tester);
+      expect(await library.isInLibrary('C', 'target'), isTrue);
+      expect(await library.isInLibrary('B', 'target'), isFalse);
+      expect(
+        await library.isInLibrary(original.sourceId, original.remoteId),
+        isTrue,
+      );
+      expect(await library.chapterPositionOf('C', 'target', 'new-12'), 0);
     },
   );
 

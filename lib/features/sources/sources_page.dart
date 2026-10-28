@@ -32,9 +32,10 @@ import 'source_filter_controls.dart';
 /// 三条导入路径：粘贴规则文本、从剪贴板、从 URL 拉取。
 /// 导入失败必须显示具体原因（哪一项校验没过），不能只提示「导入失败」。
 class SourcesPage extends ConsumerStatefulWidget {
-  const SourcesPage({super.key, this.initialType});
+  const SourcesPage({super.key, this.initialType, this.initialQuery});
 
   final MediaType? initialType;
+  final String? initialQuery;
 
   @override
   ConsumerState<SourcesPage> createState() => _SourcesPageState();
@@ -60,7 +61,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
     _filters = SourceFilters.fromJson(
       preferences.get<Object?>('sources.filters.installed.${_type.name}') ??
           preferences.get<Object?>('sources.filters.installed'),
-    ).copyWith(clearType: true);
+    ).copyWith(clearType: true, query: widget.initialQuery);
   }
 
   void _setFilters(SourceFilters value) {
@@ -392,7 +393,8 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
           context: context,
           isScrollControlled: true,
           showDragHandle: true,
-          builder: (_) => const KazumiRepositoriesSheet(),
+          builder: (_) =>
+              KazumiRepositoriesSheet(initialQuery: widget.initialQuery),
         );
         if (mounted) await ref.read(sourcesProvider.notifier).refresh();
       case 'mihon':
@@ -484,7 +486,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => const MihonExtensionsSheet(),
+      builder: (_) => MihonExtensionsSheet(initialQuery: widget.initialQuery),
     );
     if (mounted) {
       // Mihon enabled state lives in Preferences, which is captured while

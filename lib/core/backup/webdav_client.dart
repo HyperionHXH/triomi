@@ -2,9 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
+import 'package:xml/xml.dart';
+
 import '../models/media_type.dart';
 import '../models/source_exception.dart';
 import '../source/http_client.dart';
+import 'backup_progress.dart';
 import 'backup_service.dart';
 
 /// WebDAV 连接配置。
@@ -15,12 +19,23 @@ class WebDavConfig {
     required this.password,
     this.remotePath = 'triomi',
     this.fileName = 'backup.zip',
+    this.allowInsecureHttp = false,
   });
 
   /// 服务器根地址（如 `https://dav.example.com/dav/`）。
   final String baseUrl;
   final String username;
   final String password;
+
+  /// Explicit consent for this exact configured HTTP endpoint; never inferred.
+  final bool allowInsecureHttp;
+
+  static bool isLoopbackHost(String host) {
+    final value = host.toLowerCase();
+    if (value == 'localhost' || value == '::1' || value == '[::1]') return true;
+    final address = InternetAddress.tryParse(value);
+    return address != null && address.isLoopback;
+  }
 
   /// 远端目录（多级用 `/` 分隔，会逐级 MKCOL）。
   final String remotePath;
@@ -58,6 +73,13 @@ class WebDavConfig {
         root.hasFragment) {
       throw const FormatException('WebDAV地址必须是HTTP(S)目录，不能内嵌凭据、查询或片段');
     }
+    if (root.scheme == 'http' &&
+        !isLoopbackHost(root.host) &&
+        !allowInsecureHttp) {
+      throw const FormatException(
+        '远程 HTTP WebDAV 会明文传输密码；请使用 HTTPS 或明确确认此地址的风险',
+      );
+    }
     if (includeFile &&
         (fileName.isEmpty ||
             fileName == '.' ||
@@ -78,7 +100,7 @@ class WebDavConfig {
   Map<String, Object?> toJson() => <String, Object?>{
     'baseUrl': baseUrl,
     'username': username,
-    'password': password,
+    'allowInsecureHttp': allowInsecureHttp,
     'remotePath': remotePath,
     'fileName': fileName,
   };
@@ -89,6 +111,7 @@ class WebDavConfig {
     password: '${json['password'] ?? ''}',
     remotePath: '${json['remotePath'] ?? 'triomi'}',
     fileName: '${json['fileName'] ?? 'backup.zip'}',
+    allowInsecureHttp: json['allowInsecureHttp'] == true,
   );
 }
 
@@ -111,24 +134,104 @@ class RemoteBackupInfo {
 ///
 /// 只依赖项目已有的 HTTP 栈，不引入额外依赖（Kazumi 的同步也是这个路子）。
 class WebDavClient {
-  WebDavClient({required this.http, this.sourceId = 'webdav'});
+  WebDavClient({
+    required this.http,
+    this.sourceId = 'webdav',
+    this.inactivityTimeout = const Duration(seconds: 30),
+  });
 
   final SourceHttpClient http;
   final String sourceId;
+  final Duration inactivityTimeout;
+
+  static SourceErrorType _statusError(int status) => switch (status) {
+    401 || 403 => SourceErrorType.auth,
+    404 => SourceErrorType.notFound,
+    429 => SourceErrorType.rateLimited,
+    _ => SourceErrorType.network,
+  };
 
   Map<String, String> _authHeaders(WebDavConfig config) => <String, String>{
     'Authorization':
         'Basic ${base64Encode(utf8.encode('${config.username}:${config.password}'))}',
   };
 
+  /// Authenticate against the configured base collection, without creating it
+  /// or treating a missing object as proof that the credentials were accepted.
+  Future<void> checkConnection(WebDavConfig config) async {
+    config.directoryUrl; // Validate scheme, embedded credentials and consent.
+    final root = Uri.parse(config.baseUrl.trim());
+    final uri = root.replace(
+      path: root.path.endsWith('/') ? root.path : '${root.path}/',
+    );
+    final response =
+        await SourceTransferProgress(inactivityTimeout: inactivityTimeout).run(
+          () => http.send(
+            SourceRequest(
+              url: uri.toString(),
+              method: 'PROPFIND',
+              headers: {..._authHeaders(config), 'Depth': '0'},
+              followRedirects: false,
+              checkStatus: false,
+            ),
+            sourceId: sourceId,
+          ),
+        );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw SourceException(
+        sourceId: sourceId,
+        type: _statusError(response.statusCode),
+        message: 'WebDAV连接检查失败：HTTP ${response.statusCode}',
+      );
+    }
+    bool valid = false;
+    try {
+      final root = XmlDocument.parse(response.body).rootElement;
+      bool dav(XmlElement element, String name) =>
+          element.name.local == name && element.namespaceUri == 'DAV:';
+      valid =
+          dav(root, 'multistatus') &&
+          root.childElements
+              .where((element) => dav(element, 'response'))
+              .any(
+                (response) => response.childElements
+                    .where((element) => dav(element, 'propstat'))
+                    .any(
+                      (propstat) =>
+                          propstat.childElements.any(
+                            (element) =>
+                                dav(element, 'status') &&
+                                RegExp(r'^HTTP/\S+\s+2\d\d(?:\s|$)')
+                                    .hasMatch(element.innerText.trim()),
+                          ) &&
+                          propstat.descendants.whereType<XmlElement>().any(
+                            (element) => dav(element, 'collection'),
+                          ),
+                    ),
+              );
+    } on XmlParserException {
+      valid = false;
+    }
+    if (!valid) throw const FormatException('服务器未返回有效的WebDAV目录响应');
+    checkBackupCancellation();
+  }
+
   /// 逐级创建远端目录（已存在时服务器返回 405，视为成功）。
-  Future<void> ensureDirectory(WebDavConfig config) async {
+  Future<void> ensureDirectory(
+    WebDavConfig config, {
+    Set<String>? ensured,
+  }) async {
     // Validate the entire target before making any network request.
     config.fileUrl;
     final root = Uri.parse(config.baseUrl.trim());
     final segments = root.pathSegments.where((s) => s.isNotEmpty).toList();
     for (final segment in config.directorySegments) {
       segments.add(segment);
+      checkBackupCancellation();
+      final directory = root
+          .replace(pathSegments: [...segments, ''])
+          .toString();
+      if (ensured?.contains(directory) == true) continue;
       final response = await http.send(
         SourceRequest(
           url: root.replace(pathSegments: segments).toString(),
@@ -137,18 +240,18 @@ class WebDavClient {
           body: null,
           bodyType: RequestBodyType.none,
           checkStatus: false,
+          followRedirects: false,
         ),
         sourceId: sourceId,
       );
       if (!{200, 201, 204, 405}.contains(response.statusCode)) {
         throw SourceException(
           sourceId: sourceId,
-          type: {401, 403}.contains(response.statusCode)
-              ? SourceErrorType.auth
-              : SourceErrorType.network,
+          type: _statusError(response.statusCode),
           message: 'WebDAV目录创建失败：HTTP ${response.statusCode}',
         );
       }
+      ensured?.add(directory);
     }
   }
 
@@ -157,32 +260,112 @@ class WebDavClient {
     WebDavConfig config,
     List<int> bytes, {
     RemoteBackupInfo? expected,
+    Set<String>? ensuredDirectories,
+    void Function(int completed, int total)? onProgress,
   }) async {
     final tag = expected?.etag;
     if (expected?.exists == true && (tag == null || !_validRevisionTag(tag))) {
       throw StateError('远端不提供强ETag，不能安全覆盖；请选择新的备份文件名');
     }
-    await ensureDirectory(config);
-    final response = await http.uploadBytes(
-      config.fileUrl,
-      sourceId: sourceId,
-      bytes: bytes,
-      headers: {
-        ..._authHeaders(config),
-        if (expected?.exists != true) 'If-None-Match': '*',
-        if (expected?.exists == true) 'If-Match': tag!,
-      },
-    );
-    if (!response.isSuccess) {
+    checkBackupCancellation();
+    await ensureDirectory(config, ensured: ensuredDirectories);
+    final response =
+        await SourceTransferProgress(
+          onSend: onProgress,
+          inactivityTimeout: inactivityTimeout,
+        ).run(
+          () => http.uploadBytes(
+            config.fileUrl,
+            sourceId: sourceId,
+            bytes: bytes,
+            headers: {
+              ..._authHeaders(config),
+              if (expected?.exists != true) 'If-None-Match': '*',
+              if (expected?.exists == true) 'If-Match': tag!,
+            },
+          ),
+        );
+    checkBackupCancellation();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
       throw SourceException(
         sourceId: sourceId,
-        type: {401, 403}.contains(response.statusCode)
-            ? SourceErrorType.auth
-            : SourceErrorType.network,
+        type: _statusError(response.statusCode),
         message: response.statusCode == 412
             ? '远端在预览后发生变化；未覆盖，请重新预览'
             : 'WebDAV上传失败：HTTP ${response.statusCode}',
       );
+    }
+  }
+
+  /// Conditional immutable publication. Large file objects probe first to avoid
+  /// retransmitting unchanged media; small revision manifests can PUT directly.
+  Future<void> putImmutable(
+    WebDavConfig config,
+    List<int> bytes, {
+    required String hash,
+    required Set<String> ensuredDirectories,
+    void Function(int completed, int total)? onProgress,
+    void Function()? onVerifying,
+    bool probeExisting = false,
+  }) async {
+    checkBackupCancellation();
+    await ensureDirectory(config, ensured: ensuredDirectories);
+    if (probeExisting && (await stat(config)).exists) {
+      onVerifying?.call();
+      await _verifyImmutable(config, bytes.length, hash);
+      return;
+    }
+    final response =
+        await SourceTransferProgress(
+          onSend: onProgress,
+          allowConflict: true,
+          inactivityTimeout: inactivityTimeout,
+        ).run(
+          () => http.uploadBytes(
+            config.fileUrl,
+            sourceId: sourceId,
+            bytes: bytes,
+            headers: {..._authHeaders(config), 'If-None-Match': '*'},
+          ),
+        );
+    checkBackupCancellation();
+    if (response.statusCode == 412) {
+      onVerifying?.call();
+      await _verifyImmutable(config, bytes.length, hash);
+    } else if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw SourceException(
+        sourceId: sourceId,
+        type: _statusError(response.statusCode),
+        message: 'WebDAV对象上传失败：HTTP ${response.statusCode}',
+      );
+    }
+  }
+
+  Future<void> _verifyImmutable(
+    WebDavConfig config,
+    int size,
+    String hash,
+  ) async {
+    final existing = await http.downloadBytes(
+      config.fileUrl,
+      sourceId: sourceId,
+      headers: _authHeaders(config),
+      followRedirects: false,
+    );
+    await _validateDownload(existing, maxBytes: size, expectedBytes: size);
+    var received = 0;
+    final body = existing.stream.timeout(inactivityTimeout).map((chunk) {
+      checkBackupCancellation();
+      received += chunk.length;
+      if (received > size) {
+        throw const FormatException('远端不可变备份对象超过声明大小');
+      }
+      return chunk;
+    });
+    final digest = await sha256.bind(body).first;
+    checkBackupCancellation();
+    if (received != size || digest.toString() != hash) {
+      throw const FormatException('远端不可变备份对象校验失败；未更新备份版本');
     }
   }
 
@@ -211,30 +394,41 @@ class WebDavClient {
   Future<List<int>?> downloadBounded(
     WebDavConfig config, {
     required int maxBytes,
+    String? expectedETag,
   }) async {
     if (maxBytes < 0) throw ArgumentError.value(maxBytes, 'maxBytes');
+    if (expectedETag != null && !_validRevisionTag(expectedETag)) {
+      throw StateError('远端版本标记不合法；未下载或覆盖同步数据');
+    }
+    checkBackupCancellation();
     try {
       final response = await http.downloadBytes(
         config.fileUrl,
         sourceId: sourceId,
-        headers: _authHeaders(config),
+        headers: {..._authHeaders(config), 'If-Match': ?expectedETag},
+        followRedirects: false,
       );
-      final declared = response.contentLength;
-      if (declared != null && declared > maxBytes) {
-        throw const FormatException('WebDAV响应超过允许大小');
-      }
+      await _validateDownload(
+        response,
+        maxBytes: maxBytes,
+        expectedETag: expectedETag,
+      );
       final body = BytesBuilder(copy: false);
       var total = 0;
-      await for (final chunk in response.stream) {
+      await for (final chunk in response.stream.timeout(inactivityTimeout)) {
+        checkBackupCancellation();
         total += chunk.length;
         if (total > maxBytes) {
           throw const FormatException('WebDAV响应超过允许大小');
         }
         body.add(chunk);
       }
+      checkBackupCancellation();
       return body.takeBytes();
     } on SourceException catch (error) {
-      if (error.type == SourceErrorType.notFound) return null;
+      if (error.type == SourceErrorType.notFound && expectedETag == null) {
+        return null;
+      }
       rethrow;
     }
   }
@@ -258,28 +452,31 @@ class WebDavClient {
     SourceByteStream? response;
     var completed = false;
     IOSink? sink;
+    checkBackupCancellation();
     try {
       response = await http.downloadBytes(
         config.fileUrl,
         sourceId: sourceId,
         headers: _authHeaders(config),
+        followRedirects: false,
       );
-      final declared = response.contentLength;
-      if (declared != null &&
-          (declared > maxBytes ||
-              (expectedBytes != null && declared != expectedBytes))) {
-        throw const FormatException('WebDAV文件大小声明不合法');
-      }
+      await _validateDownload(
+        response,
+        maxBytes: maxBytes,
+        expectedBytes: expectedBytes,
+      );
       await destination.parent.create(recursive: true);
       sink = destination.openWrite(mode: FileMode.writeOnly);
       var total = 0;
-      await for (final chunk in response.stream) {
+      await for (final chunk in response.stream.timeout(inactivityTimeout)) {
+        checkBackupCancellation();
         total += chunk.length;
         if (total > maxBytes ||
             (expectedBytes != null && total > expectedBytes)) {
           throw const FormatException('WebDAV文件超过允许大小');
         }
         sink.add(chunk);
+        await sink.flush();
       }
       await sink.flush();
       await sink.close();
@@ -287,6 +484,7 @@ class WebDavClient {
       if (expectedBytes != null && total != expectedBytes) {
         throw const FormatException('WebDAV文件长度与清单不一致');
       }
+      checkBackupCancellation();
       completed = true;
       return total;
     } on SourceException catch (error) {
@@ -308,6 +506,7 @@ class WebDavClient {
 
   /// 查询远端备份信息（存在性 / 大小 / 修改时间）。
   Future<RemoteBackupInfo> stat(WebDavConfig config) async {
+    checkBackupCancellation();
     try {
       final response = await http.send(
         SourceRequest(
@@ -317,9 +516,11 @@ class WebDavClient {
           body: null,
           bodyType: RequestBodyType.none,
           checkStatus: false,
+          followRedirects: false,
         ),
         sourceId: sourceId,
       );
+      checkBackupCancellation();
       final status = response.statusCode;
       if (status == 401 || status == 403) {
         throw SourceException(
@@ -337,10 +538,10 @@ class WebDavClient {
               ).hasMatch(response.body))) {
         return const RemoteBackupInfo(exists: false);
       }
-      if (!response.isSuccess && response.statusCode != 207) {
+      if (status < 200 || status >= 300) {
         throw SourceException(
           sourceId: sourceId,
-          type: SourceErrorType.network,
+          type: _statusError(status),
           message: 'HTTP ${response.statusCode}',
         );
       }
@@ -356,6 +557,49 @@ class WebDavClient {
     } on SourceException catch (error) {
       if (error.type == SourceErrorType.notFound) {
         return const RemoteBackupInfo(exists: false);
+      }
+      rethrow;
+    }
+  }
+
+  void _ensureDownloadSuccess(SourceByteStream response) {
+    if (response.statusCode >= 200 && response.statusCode < 300) return;
+    throw SourceException(
+      sourceId: sourceId,
+      type: _statusError(response.statusCode),
+      message: 'WebDAV下载失败：HTTP ${response.statusCode}',
+    );
+  }
+
+  Future<void> _validateDownload(
+    SourceByteStream response, {
+    required int maxBytes,
+    int? expectedBytes,
+    String? expectedETag,
+  }) async {
+    try {
+      _ensureDownloadSuccess(response);
+      if (expectedETag != null) {
+        final actual = response.headers.entries
+            .where((entry) => entry.key.toLowerCase() == 'etag')
+            .map((entry) => entry.value)
+            .firstOrNull;
+        if (actual != expectedETag) {
+          throw StateError('远端版本在读取前发生变化或未返回版本标记；请重新同步');
+        }
+      }
+      final declared = response.contentLength;
+      if (declared != null &&
+          (declared > maxBytes ||
+              (expectedBytes != null && declared != expectedBytes))) {
+        throw const FormatException('WebDAV响应超过允许大小或长度不符');
+      }
+    } catch (_) {
+      // Rejecting response headers must also release the live HTTP body.
+      try {
+        await response.stream.listen(null).cancel();
+      } catch (_) {
+        // Keep the original validation failure.
       }
       rethrow;
     }

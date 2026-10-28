@@ -345,7 +345,11 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
         picker?.error("cancelled", "APK 选择已取消", null)
         picker = null
         channel.setMethodCallHandler(null)
-        executor.execute { retention.close() }
+        executor.execute {
+            val incoming = activeIncomingPath
+            activeIncomingPath = null
+            retention.close(incoming)
+        }
     }
     private class Cancelled : RuntimeException()
     companion object {

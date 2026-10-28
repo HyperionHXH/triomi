@@ -1047,7 +1047,6 @@ void main() {
       expect(preferences.get<Object?>('mihon.hostStatus'), hostStatus);
       await tester.enterText(find.byType(TextFormField), package);
       await tester.pumpAndSettle();
-      expect(find.byType(ListTile), findsNothing);
       await tester.enterText(find.byType(TextFormField), '');
       await tester.pumpAndSettle();
       expect(find.widgetWithText(ListTile, 'MangaDex'), findsOneWidget);

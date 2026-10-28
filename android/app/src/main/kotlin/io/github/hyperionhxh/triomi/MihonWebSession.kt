@@ -39,6 +39,7 @@ class MihonWebSession(
     private val activity: Activity,
     url: String,
     userAgent: String,
+    private val ruleSourceId: String? = null,
     private val onComplete: (Boolean) -> Unit,
 ) {
     private val origin = sourceWebsiteUrl(url)
@@ -79,7 +80,8 @@ class MihonWebSession(
         button("返回") { if (webView.canGoBack()) webView.goBack() else dialog.dismiss() }
         button("刷新") { webView.reload() }
         button("保存会话") {
-            cookies.useBrowserSession(hosts)
+            if (ruleSourceId == null) cookies.useBrowserSession(hosts)
+            else cookies.useRuleBrowserSession(ruleSourceId, hosts)
             saved = true
             dialog.dismiss()
         }
@@ -109,7 +111,8 @@ class MihonWebSession(
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
                 request.url.toString().toHttpUrlOrNull()?.let {
-                    it.username.isNotEmpty() || it.password.isNotEmpty()
+                    it.username.isNotEmpty() || it.password.isNotEmpty() ||
+                        (ruleSourceId != null && !it.isHttps)
                 } ?: true
 
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {

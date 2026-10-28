@@ -669,6 +669,18 @@ void main() {
         'duration': 180000,
         'playing': true,
       });
+      await tester.runAsync(
+        () => db.customStatement(
+          "CREATE TRIGGER fail_player_history BEFORE INSERT ON histories BEGIN SELECT RAISE(ABORT, 'simulated disk write failure'); END",
+        ),
+      );
+      await tester.pump(const Duration(seconds: 6));
+      await settle();
+      expect(find.textContaining('观看进度暂未保存'), findsOneWidget);
+      expect(find.text('这一集暂时无法播放'), findsNothing);
+      await tester.runAsync(
+        () => db.customStatement('DROP TRIGGER fail_player_history'),
+      );
       await tester.pump(const Duration(seconds: 6));
       await tester.pumpWidget(const SizedBox());
       await settle();

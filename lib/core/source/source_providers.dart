@@ -149,10 +149,16 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
       );
     }
   }
+  // Public route preferences must not dispose unrelated source/JS instances.
+  final publicClient = BangumiPublicClient(
+    ref.watch(sourceHttpClientProvider),
+    routesResolver: () => ref.read(bangumiRoutePolicyProvider),
+  );
+  ref.onDispose(publicClient.dispose);
   final registry = SourceRegistry(
     repository: ref.watch(sourceRepositoryProvider),
     http: ref.watch(sourceHttpClientProvider),
-    bangumiPublicClient: ref.watch(bangumiPublicClientProvider),
+    bangumiPublicClient: publicClient,
     jsRuntimeFactory: ref.watch(sourceJsRuntimeFactoryProvider),
     jsContentOptions: (id) => id == 'mangadex'
         ? mangaDexContentOptions(preferences)

@@ -89,6 +89,12 @@ class _MangaWorkspacePageState extends ConsumerState<MangaWorkspacePage>
             ),
           if (_library.selectionCount == 0)
             IconButton(
+              tooltip: '同步收藏与历史',
+              icon: const Icon(Icons.cloud_sync_outlined),
+              onPressed: () => context.push(AppRoutes.webdav),
+            ),
+          if (_library.selectionCount == 0)
+            IconButton(
               tooltip: '漫画设置',
               icon: const Icon(Icons.settings_outlined),
               onPressed: () =>

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../library/data/library_auto_sync.dart';
+import 'webdav_status_cards.dart';
 
 /// Shared personal maintenance; media accounts belong to their workspaces.
 class ProfilePage extends StatelessWidget {
@@ -47,11 +50,25 @@ class ProfilePage extends StatelessWidget {
               onTap: () => context.push(AppRoutes.backup),
             ),
             ListTile(
-              leading: const Icon(Icons.cloud_outlined),
-              title: const Text('WebDAV 应用备份'),
-              subtitle: const Text('上传或合并完整备份；追番收藏同步在追番设置中'),
+              leading: const Icon(Icons.cloud_sync_outlined),
+              title: const Text('WebDAV 收藏与历史同步'),
+              subtitle: Consumer(
+                builder: (context, ref, _) {
+                  final state = ref.watch(libraryAutoSyncProvider);
+                  return Text(
+                    '${webDavConnectionLabel(state)} · ${webDavSyncLabel(state)}',
+                  );
+                },
+              ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push(AppRoutes.webdav),
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud_outlined),
+              title: const Text('WebDAV 应用备份'),
+              subtitle: const Text('上传或合并完整备份；与收藏和历史同步分开'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push(AppRoutes.webdavBackup),
             ),
           ],
         ),

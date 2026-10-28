@@ -212,7 +212,10 @@ class KazumiSource implements SearchProvider, DetailProvider, ContentProvider {
       if (_browserCookies) {
         final cookies = _windows
             ? await WindowsSourceSession.cookies(descriptor.id, uri.toString())
-            : await platformChannel.ruleCookieHeader(uri.toString());
+            : await platformChannel.ruleCookieHeader(
+                uri.toString(),
+                sourceId: descriptor.id,
+              );
         headers.removeWhere((key, _) => key.toLowerCase() == 'cookie');
         if (cookies != null && cookies.isNotEmpty) headers['Cookie'] = cookies;
       }
@@ -241,7 +244,11 @@ class KazumiSource implements SearchProvider, DetailProvider, ContentProvider {
               cookies,
             );
           } else {
-            await platformChannel.storeRuleCookies(uri.toString(), cookies);
+            await platformChannel.storeRuleCookies(
+              uri.toString(),
+              cookies,
+              sourceId: descriptor.id,
+            );
           }
         }
       }
@@ -317,7 +324,11 @@ class KazumiSource implements SearchProvider, DetailProvider, ContentProvider {
         userAgent: _headers['User-Agent']!,
       );
     }
-    return platformChannel.openRuleSession(target, _headers['User-Agent']!);
+    return platformChannel.openRuleSession(
+      target,
+      _headers['User-Agent']!,
+      sourceId: descriptor.id,
+    );
   }
 
   // Kazumi evaluates leading / and // against the current subtree.

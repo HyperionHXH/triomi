@@ -17,6 +17,7 @@ import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/core/theme/app_theme.dart';
 import 'package:triomi/features/detail/detail_page.dart';
 import 'package:triomi/features/history/history_page.dart';
@@ -96,6 +97,7 @@ void main() {
       overrides: [
         databaseProvider.overrideWithValue(db),
         preferencesProvider.overrideWithValue(memoryPreferences()),
+        secureStoreProvider.overrideWithValue(MemorySecureStore()),
         sourcesProvider.overrideWith(_EmptySourceRegistry.new),
         sourceHttpClientProvider.overrideWithValue(
           FakeHttpClient(
@@ -140,6 +142,7 @@ void main() {
       final appContainer = ProviderContainer(
         overrides: [
           preferencesProvider.overrideWithValue(preferences),
+          secureStoreProvider.overrideWithValue(MemorySecureStore()),
           routerProvider.overrideWithValue(router),
         ],
       );

@@ -200,6 +200,22 @@ class AppUpdateRetentionTest {
         }
     }
 
+    @Test fun closingTheIncomingOwnerReleasesItsLeaseWithoutReleasingInstallerHandoff() {
+        Fixture().use { fixture ->
+            val owner = fixture.retention()
+            val candidate = fixture.candidate(owner)
+            owner.beginHandoff(candidate)
+            val incoming = owner.beginIncoming().apply { writeText("partial download") }
+            owner.close(incoming.path)
+            val replacement = fixture.retention()
+            replacement.maintain(clear = true)
+            assertFalse(incoming.exists())
+            assertTrue(candidate.exists())
+            assertNotNull(replacement.pendingCandidate())
+            assertFalse(replacement.releaseCandidate(candidate))
+        }
+    }
+
     @Test fun preparedHandoffCanBeReopenedAfterProcessDeathWithoutDeletingBytes() {
         Fixture().use { fixture ->
             val original = fixture.retention()

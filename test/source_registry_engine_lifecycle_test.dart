@@ -1,21 +1,77 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_descriptor.dart';
 import 'package:triomi/core/models/source_exception.dart';
+import 'package:triomi/core/source/bangumi_route_policy.dart';
 import 'package:triomi/core/source/js/js_runtime.dart';
 import 'package:triomi/core/source/js/js_source.dart';
 import 'package:triomi/core/source/source_api.dart';
+import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/source_repository.dart';
+import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/core/storage/secure_store.dart';
 
 import 'fixtures/fake_http_client.dart';
+import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
 import 't2_js_source_test.dart' show FakeJsRuntime, jsRuleText;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'public mirror change preserves registry and active JS source',
+    () async {
+      final db = openTestDatabase();
+      addTearDown(db.close);
+      final repository = SourceRepository(db);
+      await repository.upsert(
+        id: 'js-source',
+        name: 'JS',
+        type: MediaType.manga,
+        kind: SourceKind.plugin,
+        ruleText: jsRuleText(),
+        enabled: true,
+      );
+      final engine = FakeJsRuntime(functions: {'search'});
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          preferencesProvider.overrideWithValue(memoryPreferences()),
+          secureStoreProvider.overrideWithValue(MemorySecureStore()),
+          sourceHttpClientProvider.overrideWithValue(
+            FakeHttpClient(
+              (_) async => throw StateError('No network expected'),
+            ),
+          ),
+          sourceJsRuntimeFactoryProvider.overrideWithValue(() => engine),
+        ],
+      );
+      addTearDown(container.dispose);
+      final registry = container.read(sourceRegistryProvider);
+      final source = (await registry.load()).entries.single.source as JsSource;
+      await source.initialize();
+      expect(registry.bangumiPublicClient!.routes.mirrorEnabled, isTrue);
+      await container
+          .read(bangumiMirrorEnabledProvider.notifier)
+          .setEnabled(false);
+      expect(
+        identical(container.read(sourceRegistryProvider), registry),
+        isTrue,
+      );
+      expect(
+        identical((await registry.load()).entries.single.source, source),
+        isTrue,
+      );
+      expect(engine.disposed, isFalse);
+      expect(registry.bangumiPublicClient!.routes.mirrorEnabled, isFalse);
+    },
+  );
+
   test('disabled JS stays visible without running top-level code', () async {
     final db = openTestDatabase();
     addTearDown(db.close);

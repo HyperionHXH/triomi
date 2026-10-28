@@ -93,10 +93,17 @@ Future<void> main([List<String> args = const []]) async {
   // 必须在任何客户端读会话 / token 之前完成。
   final secureStore = FlutterSecureStore();
   await secureStore.init();
-  await migrateCredentialsToSecureStore(
-    preferences: preferences,
-    secureStore: secureStore,
-  );
+  try {
+    await migrateCredentialsToSecureStore(
+      preferences: preferences,
+      secureStore: secureStore,
+    );
+  } catch (_) {
+    // Preserve unmigrated values for retry; runtime tracking/DAV read only secure storage.
+    debugPrint(
+      'Credential migration unavailable; restart after secure storage recovers.',
+    );
+  }
   await restoreBackgroundUpdateSchedule(preferences);
   await scheduleMangaUpdates(preferences);
   await scheduleLocalBackups(preferences);

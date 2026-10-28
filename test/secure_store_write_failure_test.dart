@@ -65,4 +65,24 @@ void main() {
     expect(store.get('session'), 'recovered');
   });
 
+  test(
+    'successful writes remain readable after an initialization failure',
+    () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            if (call.method == 'readAll') {
+              throw PlatformException(code: 'unavailable');
+            }
+            return null;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null),
+      );
+      final store = FlutterSecureStore();
+      await store.init();
+      await store.set('session', 'saved-after-recovery');
+      expect(store.get('session'), 'saved-after-recovery');
+    },
+  );
 }

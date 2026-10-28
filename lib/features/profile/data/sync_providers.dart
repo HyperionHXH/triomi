@@ -7,6 +7,7 @@ import '../../../core/backup/webdav_client.dart';
 import '../../../core/db/database_provider.dart';
 import '../../../core/source/source_providers.dart';
 import '../../../core/storage/preferences.dart';
+import '../../../core/storage/secure_store.dart';
 
 /// 备份服务（本地导出 / 导入，WebDAV 也复用它产生的包）。
 final backupServiceProvider = Provider<BackupService>(
@@ -21,19 +22,23 @@ final webDavClientProvider = Provider<WebDavClient>(
   (ref) => WebDavClient(http: ref.watch(sourceHttpClientProvider)),
 );
 
-/// WebDAV 配置（持久化在设置里；密码也只在本机设置，不随备份导出）。
+/// WebDAV 非敏感配置保存在设置；密码只由 SecureStore 提供。
 class WebDavConfigController extends Notifier<WebDavConfig> {
-  static const String _key = 'sync.webdav.config';
+  static const String _key = kWebDavConfigKey;
 
   @override
   WebDavConfig build() {
     final raw = ref.watch(preferencesProvider).get<String>(_key);
+    final password =
+        ref.watch(secureStoreProvider).get(kWebDavPasswordKey) ?? '';
     if (raw == null || raw.isEmpty) {
       return const WebDavConfig(baseUrl: '', username: '', password: '');
     }
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is Map) return WebDavConfig.fromJson(decoded);
+      if (decoded is Map) {
+        return WebDavConfig.fromJson({...decoded, 'password': password});
+      }
     } on FormatException {
       // 配置损坏时退回空配置，让用户重填。
     }
@@ -41,8 +46,9 @@ class WebDavConfigController extends Notifier<WebDavConfig> {
   }
 
   Future<void> update(WebDavConfig next) async {
-    state = next;
+    await ref.read(secureStoreProvider).set(kWebDavPasswordKey, next.password);
     await ref.read(preferencesProvider).set(_key, jsonEncode(next.toJson()));
+    state = next;
   }
 }
 
