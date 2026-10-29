@@ -9,6 +9,7 @@ import 'package:triomi/app.dart';
 import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/router/app_router.dart';
+import 'package:triomi/core/source/catalog_repository.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
@@ -399,6 +400,87 @@ void main() {
         find.descendant(of: sourceToggle, matching: find.byType(Switch)),
       );
       expect(enabledSwitch.value, isTrue);
+
+      // Add the Android repository URL through production UI; its explicit
+      // marker leads to a hashed compatible catalog, not APK execution.
+      await tapText('添加漫画来源');
+      await tapText('JS / API 漫画来源目录');
+      await tapKey('catalog-manage-repositories');
+      await tester.enterText(
+        find.byKey(const ValueKey('catalog-repository-url')),
+        TourHttpClient.catalogRepositoryUrl,
+      );
+      await tapKey('catalog-repository-add');
+      await until(
+        () => container
+            .read(catalogRepositoriesProvider)
+            .any(
+              (repository) =>
+                  repository.url == TourHttpClient.catalogRepositoryUrl,
+            ),
+        'a user-entered repository must persist before leaving management',
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      await pumpFor();
+      await screenshot(
+        '02_compatible_repositories.png',
+        '${AppRoutes.sources}?type=manga',
+        '生产兼容仓库管理：录入单个 HTTPS 地址并持久保存，不执行 APK',
+      );
+      await tester.tap(find.byTooltip('关闭仓库管理'));
+      await pumpFor();
+      final remoteOffer = find.byKey(
+        const ValueKey(
+          'catalog-offer:${TourHttpClient.catalogRepositoryUrl}|xkcd',
+        ),
+      );
+      await until(
+        () => remoteOffer.evaluate().isNotEmpty,
+        'the declared compatible catalog must load through loopback transport',
+      );
+      final remoteInstall = find.descendant(
+        of: remoteOffer,
+        matching: find.widgetWithText(FilledButton, '安装'),
+      );
+      await tester.ensureVisible(remoteInstall);
+      await pumpFor();
+      await screenshot(
+        '02_remote_rule_catalog.png',
+        '${AppRoutes.sources}?type=manga',
+        '远程规则目录：显示仓库身份与 xkcd 实际兼容规则，SHA-256 安装前校验',
+      );
+      await tester.tap(remoteInstall.hitTestable());
+      await until(
+        () => find
+            .descendant(of: remoteOffer, matching: find.text('已安装'))
+            .evaluate()
+            .isNotEmpty,
+        'the remotely downloaded rule must initialize in actual iOS WebKit',
+      );
+      expect(
+        fixtures.http.catalogRequests,
+        containsAll([
+          TourHttpClient.catalogRepositoryUrl,
+          'https://${TourHttpClient.catalogHost}/index.json',
+          'https://${TourHttpClient.catalogHost}/rules/xkcd.json',
+        ]),
+      );
+      Navigator.of(tester.element(find.text('漫画来源目录'))).pop();
+      await until(
+        () =>
+            container
+                .read(sourcesProvider)
+                .value
+                ?.enabledEntries
+                .any((entry) => entry.descriptor.id == 'xkcd') ==
+            true,
+        'remote installed source must appear enabled in the production registry',
+      );
+      await screenshot(
+        '02_remote_rule_installed.png',
+        '${AppRoutes.sources}?type=manga',
+        '应用内远程规则安装后默认启用，原漫画来源及书库保持',
+      );
       await go(AppRoutes.novel);
       await go('${AppRoutes.sources}?type=novel');
       await until(
@@ -1055,7 +1137,7 @@ void main() {
       debugPrint('IOS_VISUAL_TOUR_CAPTURES=$captureIndex');
       expect(
         captureIndex,
-        53,
+        56,
         reason: 'Every agreed production tour surface must be captured',
       );
     },

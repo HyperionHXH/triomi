@@ -42,6 +42,8 @@ EXTRA_CAPTURES = (
     '01_novel_downloaded_filter.png',
     '02_anime_sources.png', '02_manga_sources.png', '02_novel_sources.png',
     '02_source_import.png', '02_kazumi_repositories.png', '02_manga_rule_catalog.png',
+    '02_compatible_repositories.png', '02_remote_rule_catalog.png',
+    '02_remote_rule_installed.png',
     '03_discover.png', '03_detail.png',
     '04_novel_reader_menu.png', '04_novel_reader_settings.png',
     '04_novel_catalog.png', '04_novel_reading_options.png', '04_novel_scroll.png',
@@ -269,6 +271,30 @@ class TourHandler(Handler):
         path = urlparse(self.path).path
         if path == '/__tour/manga.png':
             self._send((ROOT / 'tools/fixture_media/ui-tour-manga.png').read_bytes(), 'image/png')
+            return
+        if path == '/__tour/catalog/repo.json':
+            self.reply(200, {'triomi': {
+                'indexUrl': 'https://tour-catalog.invalid/index.json',
+                'name': '视觉巡检夹具 · 兼容规则仓库',
+            }})
+            return
+        if path in ('/__tour/catalog/index.json', '/__tour/catalog/rules/xkcd.json'):
+            rule = (ROOT / 'assets/rules/xkcd-js.json').read_bytes()
+            if path.endswith('/rules/xkcd.json'):
+                self._send(rule, 'application/json; charset=utf-8')
+                return
+            metadata = json.loads(rule)
+            self.reply(200, {
+                'schemaVersion': 1,
+                'name': '视觉巡检夹具 · 兼容规则仓库',
+                'sources': [{
+                    **{key: metadata[key] for key in ('id', 'name', 'type', 'version', 'lang')},
+                    'url': 'https://tour-catalog.invalid/rules/xkcd.json',
+                    'hash': hashlib.sha256(rule).hexdigest(),
+                    'capabilities': ['discover', 'search', 'detail', 'content'],
+                    'license': 'GPL-3.0-or-later · 独立实现；xkcd 内容 CC BY-NC 2.5',
+                }],
+            })
             return
         if (path in ('/list', '/search', '/calendar', '/anime/list', '/anime/search', '/novel/list',
                      '/api/v2/search/episodes')

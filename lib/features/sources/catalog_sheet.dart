@@ -8,6 +8,7 @@ import '../../core/models/media_type.dart';
 import '../../core/models/source_descriptor.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/source/catalog_installer.dart';
+import '../../core/source/catalog_repository.dart';
 import '../../core/source/source_catalog.dart';
 import '../../core/source/source_filters.dart';
 import '../../core/source/source_providers.dart';
@@ -15,6 +16,7 @@ import '../../core/source/source_registry.dart';
 import '../../core/storage/preferences.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
+import 'catalog_repositories_sheet.dart';
 import 'source_filter_controls.dart';
 
 /// 来源目录加载器（D77 seam）：默认读随包 asset
@@ -44,11 +46,23 @@ class CatalogSheet extends ConsumerStatefulWidget {
 
 enum _InstallState { idle, installing, installed, failed }
 
+class _CatalogOffer {
+  const _CatalogOffer(this.entry, this.repositoryId, this.repositoryName);
+  final SourceCatalogEntry entry;
+  final String repositoryId;
+  final String repositoryName;
+  String get key => '$repositoryId|${entry.id}';
+}
+
 class _CatalogSheetState extends ConsumerState<CatalogSheet> {
   List<SourceCatalogEntry>? _entries;
   Object? _loadError;
   final Map<String, _InstallState> _installStates = <String, _InstallState>{};
   final Map<String, String> _installErrors = <String, String>{};
+  final Map<String, CatalogRepositoryResult> _repositories = {};
+  final Set<String> _loadingRepositories = {};
+  final Set<String> _installingIds = {};
+  int _loadGeneration = 0;
   late SourceFilters _filters;
 
   void _setFilters(SourceFilters value) {
@@ -83,26 +97,104 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
   }
 
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
+    final repositories = ref
+        .read(catalogRepositoriesProvider)
+        .where((repository) => repository.enabled)
+        .toList();
     setState(() {
       _loadError = null;
       _entries = null;
-      _installStates.clear();
+      _repositories.clear();
+      _installStates.removeWhere(
+        (_, state) => state != _InstallState.installing,
+      );
       _installErrors.clear();
+      _loadingRepositories
+        ..clear()
+        ..addAll(repositories.map((repository) => repository.id));
     });
+    // Each repository settles independently. One failure never masks another
+    // repository or the bundled offline catalog.
+    for (final repository in repositories) {
+      unawaited(() async {
+        final result = await ref
+            .read(catalogRepositoryLoaderProvider)
+            .load(repository);
+        if (!mounted || generation != _loadGeneration) return;
+        setState(() {
+          _repositories[repository.id] = result;
+          _loadingRepositories.remove(repository.id);
+        });
+      }());
+    }
     try {
       final entries = await ref.read(sourceCatalogLoaderProvider)();
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() => _entries = entries);
     } catch (error) {
-      if (!mounted) return;
-      setState(() => _loadError = error);
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _entries = [];
+        _loadError = error;
+      });
     }
   }
 
-  Future<void> _install(SourceCatalogEntry entry) async {
+  List<_CatalogOffer> get _offers => [
+    for (final entry in _entries ?? const <SourceCatalogEntry>[])
+      _CatalogOffer(entry, 'builtin', '内置离线目录'),
+    for (final repository in ref.read(catalogRepositoriesProvider))
+      for (final entry
+          in _repositories[repository.id]?.entries ??
+              const <SourceCatalogEntry>[])
+        _CatalogOffer(entry, repository.id, _repositories[repository.id]!.name),
+  ];
+
+  Future<void> _manageRepositories() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => const CatalogRepositoriesSheet(),
+    );
+  }
+
+  Future<void> _install(_CatalogOffer offer) async {
+    final entry = offer.entry;
+    if (_installingIds.contains(entry.id)) return;
+    if (_offers.where((candidate) => candidate.entry.id == entry.id).length >
+        1) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('确认同 ID 来源的仓库'),
+          content: SingleChildScrollView(
+            child: Text(
+              '多个仓库提供 ${entry.id}。本次仅从以下仓库安装或更新，不会自动选择其他仓库：'
+              '\n${offer.repositoryName}\n${offer.repositoryId}\n规则：${entry.url}',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('从此仓库安装'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true || _installingIds.contains(entry.id)) {
+        return;
+      }
+    }
     setState(() {
-      _installStates[entry.id] = _InstallState.installing;
-      _installErrors.remove(entry.id);
+      _installingIds.add(entry.id);
+      _installStates[offer.key] = _InstallState.installing;
+      _installErrors.remove(offer.key);
     });
     try {
       final descriptor = await CatalogInstaller(
@@ -110,20 +202,22 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
       ).install(entry);
       unawaited(ref.read(sourcesProvider.notifier).refresh());
       if (!mounted) return;
-      setState(() => _installStates[entry.id] = _InstallState.installed);
+      setState(() => _installStates[offer.key] = _InstallState.installed);
       _toast('已安装「${descriptor.name}」；请在来源列表确认启用状态');
     } on SourceException catch (error) {
       if (!mounted) return;
       setState(() {
-        _installStates[entry.id] = _InstallState.failed;
-        _installErrors[entry.id] = error.userMessage;
+        _installStates[offer.key] = _InstallState.failed;
+        _installErrors[offer.key] = error.userMessage;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _installStates[entry.id] = _InstallState.failed;
-        _installErrors[entry.id] = '$error';
+        _installStates[offer.key] = _InstallState.failed;
+        _installErrors[offer.key] = '$error';
       });
+    } finally {
+      if (mounted) setState(() => _installingIds.remove(entry.id));
     }
   }
 
@@ -134,38 +228,51 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  _InstallState _stateOf(String id) => _installStates[id] ?? _InstallState.idle;
+  _InstallState _stateOf(_CatalogOffer offer) =>
+      _installingIds.contains(offer.entry.id)
+      ? _InstallState.installing
+      : _installStates[offer.key] ?? _InstallState.idle;
 
   @override
   Widget build(BuildContext context) {
-    final entries = _entries;
-    final visible = entries
-        ?.where(
-          (entry) => _filters.matches(
-            languages: [entry.lang],
-            nsfw: entry.nsfw,
-            mediaType: entry.type,
-            searchText: [entry.id, entry.name],
-          ),
-        )
-        .toList();
+    ref.listen(catalogRepositoriesProvider, (_, _) => unawaited(_load()));
+    final repositories = ref.watch(catalogRepositoriesProvider);
+    final offers = _offers;
+    final entries = offers.map((offer) => offer.entry).toList();
+    final visible = offers.where((offer) {
+      final entry = offer.entry;
+      return _filters.matches(
+        languages: [entry.lang],
+        nsfw: entry.nsfw,
+        mediaType: entry.type,
+        searchText: [entry.id, entry.name, offer.repositoryName],
+      );
+    }).toList();
+    final idCounts = <String, int>{};
+    for (final offer in offers) {
+      idCounts.update(offer.entry.id, (count) => count + 1, ifAbsent: () => 1);
+    }
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: SizedBox(
         height: MediaQuery.sizeOf(context).height * 0.72,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
+          children: [
             Row(
-              children: <Widget>[
+              children: [
                 Expanded(
                   child: Text(
                     '${widget.type?.label ?? ''}来源目录',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                const Spacer(),
+                IconButton(
+                  key: const ValueKey('catalog-manage-repositories'),
+                  tooltip: '管理兼容仓库',
+                  onPressed: _manageRepositories,
+                  icon: const Icon(Icons.storage_outlined),
+                ),
                 IconButton(
                   tooltip: '刷新目录',
                   onPressed: _load,
@@ -173,64 +280,117 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
                 ),
               ],
             ),
-            if (widget.type == MediaType.manga)
-              const Padding(
-                padding: EdgeInsets.only(bottom: AppSpacing.sm),
-                child: Text(
-                  '此处安装的是 Triomi 支持的 JS / API 规则，可在来源列表确认启用状态。'
-                  'Mihon / Komikku APK/DEX 扩展不能在 iOS 转换或执行。',
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextButton.icon(
+                      onPressed: _manageRepositories,
+                      icon: const Icon(Icons.add_link),
+                      label: const Text('管理仓库 · 添加 JS / API 来源'),
+                    ),
+                    if (widget.type == MediaType.manga)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: Text('仅支持 JS / API 规则；APK 不能在 iOS 执行。'),
+                      ),
+                    if (entries.isNotEmpty)
+                      SourceFilterControls(
+                        filters: _filters,
+                        types: widget.type == null
+                            ? MediaType.values
+                            : const [],
+                        languages: entries
+                            .where(
+                              (entry) =>
+                                  widget.type == null ||
+                                  entry.type == widget.type,
+                            )
+                            .map((entry) => entry.lang),
+                        onChanged: _setFilters,
+                        visibleCount: visible.length,
+                        totalCount: entries
+                            .where(
+                              (entry) =>
+                                  widget.type == null ||
+                                  entry.type == widget.type,
+                            )
+                            .length,
+                      ),
+                    if (_loadError != null)
+                      _CatalogErrorView(error: '$_loadError', onRetry: _load),
+                    for (final repository in repositories)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: AppSpacing.sm,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _repositories[repository.id]?.name ??
+                                  repository.label,
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            Text(repository.url),
+                            if (!repository.enabled)
+                              const Text('仓库已停用 · 已安装来源不受影响')
+                            else if (_loadingRepositories.contains(
+                              repository.id,
+                            ))
+                              const Text('正在加载仓库…')
+                            else if (_repositories[repository.id]?.error
+                                case final error?)
+                              Text(
+                                '仓库加载失败：$error',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              )
+                            else
+                              Text(
+                                '${_repositories[repository.id]?.entries.length ?? 0} 个兼容来源',
+                              ),
+                            if (repository.enabled &&
+                                _repositories[repository.id]?.error != null)
+                              TextButton(
+                                onPressed: _load,
+                                child: const Text('重试仓库'),
+                              ),
+                          ],
+                        ),
+                      ),
+                    if (_entries == null)
+                      const Padding(
+                        padding: EdgeInsets.all(AppSpacing.xl),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (entries.isEmpty &&
+                        _loadError == null &&
+                        _loadingRepositories.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(AppSpacing.xl),
+                        child: Center(child: Text('目录是空的：仓库还没有登记任何来源')),
+                      ),
+                    if (entries.isNotEmpty && visible.isEmpty)
+                      TextButton(
+                        onPressed: () => _setFilters(const SourceFilters()),
+                        child: const Text('没有匹配的来源 · 清除筛选'),
+                      ),
+                    if (visible.isNotEmpty)
+                      _EntryList(
+                        offers: visible,
+                        idCounts: idCounts,
+                        installedIds: ref.watch(_installedIdsProvider),
+                        stateOf: _stateOf,
+                        errorOf: (key) => _installErrors[key],
+                        onInstall: (offer) => unawaited(_install(offer)),
+                      ),
+                  ],
                 ),
               ),
-            if (entries != null && entries.isNotEmpty)
-              SourceFilterControls(
-                filters: _filters,
-                types: widget.type == null ? MediaType.values : const [],
-                languages: entries
-                    .where(
-                      (entry) =>
-                          widget.type == null || entry.type == widget.type,
-                    )
-                    .map((entry) => entry.lang),
-                onChanged: _setFilters,
-                visibleCount: visible!.length,
-                totalCount: entries
-                    .where(
-                      (entry) =>
-                          widget.type == null || entry.type == widget.type,
-                    )
-                    .length,
-              ),
-            if (entries == null && _loadError == null)
-              const Padding(
-                padding: EdgeInsets.all(AppSpacing.xl),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_loadError != null)
-              _CatalogErrorView(error: '$_loadError', onRetry: _load)
-            else if (entries!.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(AppSpacing.xl),
-                child: Center(child: Text('目录是空的：仓库还没有登记任何来源')),
-              )
-            else if (visible!.isEmpty)
-              Expanded(
-                child: Center(
-                  child: TextButton(
-                    onPressed: () => _setFilters(const SourceFilters()),
-                    child: const Text('没有匹配的来源 · 清除筛选'),
-                  ),
-                ),
-              )
-            else
-              Expanded(
-                child: _EntryList(
-                  entries: visible,
-                  installedIds: ref.watch(_installedIdsProvider),
-                  stateOf: _stateOf,
-                  errorOf: (id) => _installErrors[id],
-                  onInstall: (entry) => unawaited(_install(entry)),
-                ),
-              ),
+            ),
           ],
         ),
       ),
@@ -249,28 +409,32 @@ final _installedIdsProvider = Provider<Map<String, String?>>((ref) {
 
 class _EntryList extends StatelessWidget {
   const _EntryList({
-    required this.entries,
+    required this.offers,
+    required this.idCounts,
     required this.installedIds,
     required this.stateOf,
     required this.errorOf,
     required this.onInstall,
   });
 
-  final List<SourceCatalogEntry> entries;
+  final List<_CatalogOffer> offers;
+  final Map<String, int> idCounts;
   final Map<String, String?> installedIds;
-  final _InstallState Function(String id) stateOf;
-  final String? Function(String id) errorOf;
-  final void Function(SourceCatalogEntry entry) onInstall;
+  final _InstallState Function(_CatalogOffer offer) stateOf;
+  final String? Function(String key) errorOf;
+  final void Function(_CatalogOffer offer) onInstall;
 
   @override
   Widget build(BuildContext context) {
-    final byType = <MediaType, List<SourceCatalogEntry>>{};
-    for (final entry in entries) {
-      byType.putIfAbsent(entry.type, () => <SourceCatalogEntry>[]).add(entry);
+    final byType = <MediaType, List<_CatalogOffer>>{};
+    for (final offer in offers) {
+      byType.putIfAbsent(offer.entry.type, () => <_CatalogOffer>[]).add(offer);
     }
     final types = MediaType.values.where(byType.containsKey).toList();
 
     return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       itemCount: types.length,
       itemBuilder: (context, typeIndex) {
         final type = types[typeIndex];
@@ -285,16 +449,20 @@ class _EntryList extends StatelessWidget {
                 MediaType.novel => '小说',
               }, style: Theme.of(context).textTheme.titleSmall),
             ),
-            for (final entry in byType[type]!)
+            for (final offer in byType[type]!)
               Padding(
+                key: ValueKey('catalog-offer:${offer.key}'),
                 padding: const EdgeInsets.only(bottom: AppSpacing.md),
                 child: _EntryCard(
-                  entry: entry,
-                  state: stateOf(entry.id),
-                  error: errorOf(entry.id),
-                  installed: installedIds.containsKey(entry.id),
-                  installedVersion: installedIds[entry.id],
-                  onInstall: () => onInstall(entry),
+                  entry: offer.entry,
+                  repositoryName: offer.repositoryName,
+                  repositoryUrl: offer.repositoryId,
+                  conflict: (idCounts[offer.entry.id] ?? 0) > 1,
+                  state: stateOf(offer),
+                  error: errorOf(offer.key),
+                  installed: installedIds.containsKey(offer.entry.id),
+                  installedVersion: installedIds[offer.entry.id],
+                  onInstall: () => onInstall(offer),
                 ),
               ),
           ],
@@ -307,6 +475,9 @@ class _EntryList extends StatelessWidget {
 class _EntryCard extends StatelessWidget {
   const _EntryCard({
     required this.entry,
+    required this.repositoryName,
+    required this.repositoryUrl,
+    required this.conflict,
     required this.state,
     required this.error,
     required this.installed,
@@ -315,6 +486,9 @@ class _EntryCard extends StatelessWidget {
   });
 
   final SourceCatalogEntry entry;
+  final String repositoryName;
+  final String repositoryUrl;
+  final bool conflict;
   final _InstallState state;
   final String? error;
   final bool installed;
@@ -333,20 +507,20 @@ class _EntryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    entry.name,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                ),
+            Wrap(
+              spacing: AppSpacing.sm,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(entry.name, style: Theme.of(context).textTheme.titleSmall),
                 Text(
                   'v${entry.version}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
+            Text('仓库：$repositoryName'),
+            if (repositoryUrl != 'builtin') Text(repositoryUrl),
+            if (conflict) const Text('同 ID 存在于多个仓库；安装前请确认所选仓库，不会自动合并'),
             const SizedBox(height: AppSpacing.xs),
             Text(
               '${sourceLanguageLabel(sourceLanguage(entry.lang))} · ${sourceContentLabel(entry.nsfw)}',

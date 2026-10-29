@@ -69,48 +69,70 @@ class _SourceFilterControlsState extends State<SourceFilterControls> {
           ),
           onChanged: (value) => onChanged(filters.copyWith(query: value)),
         ),
-        Wrap(
-          spacing: 12,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            if (widget.showLanguage)
-              DropdownButton<String>(
-                key: const ValueKey('source-language-filter'),
-                value: filters.language ?? '*',
-                items: [
-                  const DropdownMenuItem(value: '*', child: Text('全部语言')),
-                  for (final lang in choices)
-                    DropdownMenuItem(
-                      value: lang,
-                      child: Text(sourceLanguageLabel(lang)),
+        LayoutBuilder(
+          builder: (context, constraints) => Wrap(
+            spacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (widget.showLanguage)
+                SizedBox(
+                  width: MediaQuery.textScalerOf(context)
+                      .scale(150)
+                      .clamp(0, constraints.maxWidth),
+                  child: DropdownButton<String>(
+                    isExpanded: true,
+                    itemHeight: null,
+                    key: const ValueKey('source-language-filter'),
+                    value: filters.language ?? '*',
+                    items: [
+                      const DropdownMenuItem(value: '*', child: Text('全部语言')),
+                      for (final lang in choices)
+                        DropdownMenuItem(
+                          value: lang,
+                          child: Text(sourceLanguageLabel(lang)),
+                        ),
+                    ],
+                    onChanged: (value) => onChanged(
+                      filters.copyWith(
+                        language: value,
+                        clearLanguage: value == '*',
+                      ),
                     ),
-                ],
-                onChanged: (value) => onChanged(
-                  filters.copyWith(
-                    language: value,
-                    clearLanguage: value == '*',
                   ),
                 ),
+              SizedBox(
+                width: MediaQuery.textScalerOf(context)
+                    .scale(180)
+                    .clamp(0, constraints.maxWidth),
+                child: DropdownButton<SourceContentRestriction>(
+                  isExpanded: true,
+                  itemHeight: null,
+                  key: const ValueKey('source-content-filter'),
+                  value: filters.content,
+                  items: [
+                    for (final content in SourceContentRestriction.values)
+                      DropdownMenuItem(
+                        value: content,
+                        child: Text(content.label),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      onChanged(filters.copyWith(content: value));
+                    }
+                  },
+                ),
               ),
-            DropdownButton<SourceContentRestriction>(
-              key: const ValueKey('source-content-filter'),
-              value: filters.content,
-              items: [
-                for (final content in SourceContentRestriction.values)
-                  DropdownMenuItem(value: content, child: Text(content.label)),
-              ],
-              onChanged: (value) {
-                if (value != null) onChanged(filters.copyWith(content: value));
-              },
-            ),
-            for (final type in widget.types)
-              FilterChip(
-                label: Text(type.label),
-                selected: filters.type == type,
-                onSelected: (value) =>
-                    onChanged(filters.copyWith(type: type, clearType: !value)),
-              ),
-          ],
+              for (final type in widget.types)
+                FilterChip(
+                  label: Text(type.label),
+                  selected: filters.type == type,
+                  onSelected: (value) => onChanged(
+                    filters.copyWith(type: type, clearType: !value),
+                  ),
+                ),
+            ],
+          ),
         ),
         Row(
           children: [

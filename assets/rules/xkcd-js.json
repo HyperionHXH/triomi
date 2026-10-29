@@ -1,0 +1,18 @@
+{
+  "id": "xkcd",
+  "name": "xkcd（官方公开 API · 编号搜索）",
+  "type": "manga",
+  "engine": "js",
+  "lang": "en",
+  "version": "1.0.0",
+  "baseUrl": "https://xkcd.com",
+  "requireLogin": false,
+  "feeds": [
+    {
+      "id": "recent",
+      "name": "最近更新",
+      "url": "/info.0.json"
+    }
+  ],
+  "script": "function comicId(url, fallback) {\n  var value = fallback || (url.match(/\\/([0-9]+)(?:\\/|$)/) || [])[1];\n  var id = Number(value);\n  if (!Number.isInteger(id) || id < 1 || id === 404) throw new Error('xkcd 编号无效；404 是作者故意保留的空章');\n  return id;\n}\nasync function comic(id) {\n  var response = await triomi.fetch('https://xkcd.com/' + (id ? id + '/' : '') + 'info.0.json');\n  if (response.status !== 200) throw new Error('xkcd HTTP ' + response.status);\n  var result = JSON.parse(response.body);\n  if (!result || !Number.isInteger(result.num) || !result.title || !/^https:\\/\\/imgs\\.xkcd\\.com\\//.test(result.img || ''))\n    throw new Error('xkcd 返回了无法识别的漫画元数据');\n  return result;\n}\nfunction itemFor(value) {\n  return {remoteId: String(value.num), title: value.title, url: 'https://xkcd.com/' + value.num + '/',\n    coverUrl: value.img, author: 'Randall Munroe', description: value.alt || '', tags: ['英文', '科学', '条漫']};\n}\nasync function discover(url, page) {\n  if (!Number.isInteger(page) || page < 1) throw new Error('xkcd 分页无效');\n  var latest = await comic(null);\n  var start = latest.num - (page - 1) * 20;\n  var ids = [];\n  for (var id = start; id > Math.max(0, start - 20); id--) {\n    if (id !== 404) ids.push(id);\n  }\n  var items = [];\n  for (var offset = 0; offset < ids.length; offset += 4) {\n    var batch = await Promise.all(ids.slice(offset, offset + 4).map(async function(id) {\n      return itemFor(id === latest.num ? latest : await comic(id));\n    }));\n    items = items.concat(batch);\n  }\n  return items;\n}\nasync function search(keyword, page) {\n  if (page > 1) return [];\n  var query = String(keyword || '').trim();\n  if (!query) return discover('https://xkcd.com/info.0.json', 1);\n  if (/^https:\\/\\/xkcd\\.com\\/[0-9]+\\/?$/.test(query)) query = query.match(/\\/([0-9]+)/)[1];\n  if (!/^#?[0-9]+$/.test(query)) throw new Error('xkcd 官方接口不提供标题搜索，请输入漫画编号（例如 1）或 https://xkcd.com/1/');\n  return [itemFor(await comic(comicId('', query.replace(/^#/, ''))))];\n}\nasync function detail(url, item) {\n  var result = await comic(comicId(url, item && item.remoteId));\n  return {item:itemFor(result), chapters:[{remoteId:String(result.num), title:result.title,\n    url:'https://xkcd.com/' + result.num + '/', number:result.num,\n    releaseDate:result.year + '-' + String(result.month).padStart(2,'0') + '-' + String(result.day).padStart(2,'0')}]};\n}\nasync function content(url, chapter) {\n  var result = await comic(comicId(url, chapter && chapter.remoteId));\n  return {images:[result.img], headers:{Referer:'https://xkcd.com/'}};\n}\n"
+}

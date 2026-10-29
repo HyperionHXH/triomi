@@ -138,6 +138,8 @@ void main() {
       );
       await settle(tester, rounds: 10);
       expect(find.text('更新'), findsOneWidget);
+      await tester.ensureVisible(find.text('更新'));
+      await tester.pump();
       await tester.tap(find.text('更新'));
       await settle(tester, rounds: 10);
       final container = ProviderScope.containerOf(
@@ -165,6 +167,8 @@ void main() {
     );
     await settle(tester);
 
+    await tester.ensureVisible(find.text('安装'));
+    await tester.pump();
     await tester.tap(find.text('安装'));
     await settle(tester, rounds: 8);
 
@@ -193,6 +197,8 @@ void main() {
     );
     await settle(tester);
 
+    await tester.ensureVisible(find.text('安装'));
+    await tester.pump();
     await tester.tap(find.text('安装'));
     await settle(tester, rounds: 8);
 

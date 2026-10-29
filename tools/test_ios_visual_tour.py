@@ -4,6 +4,7 @@ Only simctl is replaced: requests traverse the real HTTP server, PNG validation,
 ordered manifest persistence and required-frame validation.
 """
 from http.client import HTTPConnection
+import hashlib
 import json
 from pathlib import Path
 import signal
@@ -206,6 +207,21 @@ class CaptureProtocolTests(unittest.TestCase):
         status, body = self.request('GET', '/novelread/tour-1')
         self.assertEqual(status, 200)
         self.assertIn('夹具小说', body.decode('utf-8'))
+
+    def test_compatible_catalog_pins_the_packaged_rule_without_serving_apks(self):
+        status, body = self.request('GET', '/__tour/catalog/repo.json')
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)['triomi']['indexUrl'],
+                         'https://tour-catalog.invalid/index.json')
+        status, body = self.request('GET', '/__tour/catalog/index.json')
+        self.assertEqual(status, 200)
+        entry = json.loads(body)['sources'][0]
+        status, rule = self.request('GET', '/__tour/catalog/rules/xkcd.json')
+        self.assertEqual(status, 200)
+        self.assertEqual(entry['id'], json.loads(rule)['id'])
+        self.assertEqual(entry['version'], json.loads(rule)['version'])
+        self.assertEqual(entry['hash'], hashlib.sha256(rule).hexdigest())
+        self.assertEqual(self.request('GET', '/__tour/catalog/rules/unknown.apk')[0], 404)
 
 
 class RecorderFinalizationTests(unittest.TestCase):

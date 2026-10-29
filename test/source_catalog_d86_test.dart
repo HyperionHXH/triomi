@@ -205,6 +205,8 @@ void main() {
       await settle(tester);
       expect(find.text('安装'), findsOneWidget);
 
+      await tester.ensureVisible(find.text('安装'));
+      await tester.pump();
       await tester.runAsync(() async {
         final db = container.read(databaseProvider);
         final installed =
@@ -238,6 +240,8 @@ void main() {
       await pumpSheet(tester, container);
       await settle(tester);
 
+      await tester.ensureVisible(find.text('安装'));
+      await tester.pump();
       await tester.tap(find.text('安装'));
       await settle(tester, rounds: 8);
 
@@ -263,6 +267,8 @@ void main() {
       await pumpSheet(tester, container);
       await settle(tester);
 
+      await tester.ensureVisible(find.text('安装'));
+      await tester.pump();
       await tester.tap(find.text('安装'));
       await settle(tester, rounds: 10);
 
@@ -288,6 +294,8 @@ void main() {
       await pumpSheet(tester, container);
       await settle(tester);
 
+      await tester.ensureVisible(find.text('安装'));
+      await tester.pump();
       await tester.tap(find.text('安装'));
       await settle(tester, rounds: 8);
 
@@ -316,6 +324,8 @@ void main() {
       await pumpSheet(tester, container);
       await settle(tester);
 
+      await tester.ensureVisible(find.text('安装'));
+      await tester.pump();
       await tester.tap(find.text('安装'));
       await settle(tester, rounds: 8);
 
@@ -371,10 +381,14 @@ void main() {
       await pumpSheet(tester, container);
       await settle(tester);
 
+      await tester.ensureVisible(find.text('安装'));
+      await tester.pump();
       await tester.tap(find.text('安装'));
       await settle(tester, rounds: 8);
       expect(find.textContaining('HTTP 503'), findsOneWidget);
 
+      await tester.ensureVisible(find.text('安装'));
+      await tester.pump();
       await tester.tap(find.text('安装'));
       await settle(tester, rounds: 10);
       expect(find.text('已安装'), findsOneWidget);
