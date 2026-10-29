@@ -11,6 +11,11 @@
 提交 `85ea522` 的 [macOS 运行 40803252652](https://github.com/HyperionHXH/triomi/actions/runs/40803252652) 全绿：真机 Release 无签名 IPA 校验、隔离原生 XCTest、独立 JavaScriptCore 取消/替换压力测试、真实 iOS JS/持久化/视频/弹幕集成和 53 状态生产视觉巡检均通过；分支推送按设计不执行 Release 发布。IPA、全套截图、manifest、诊断与 H.264 录屏已上传 Actions artifact；IPA 已下载到 `release_ios/40803252652/ipa/Triomi-iOS-Unsigned.ipa`，SHA-256 为 `7ecef1f10d08178dd0ed63396a9134c89656e48919dac02485a2efd12ea32c49`。该包是未签名安装包，不能绕过 Apple 签名与设备限制。
 
 模拟器视觉证据使用生产 `TriomiApp`、隔离数据和 loopback 视频/弹幕夹具；不能替代实体 iPhone 的真实账号、第三方网络、相册授权、锁屏后台音频、PiP、硬件高刷和 WebDAV 远端写入验收。iOS 使用方法及 APK/DEX 不可执行的边界见 [`docs/IOS_ADAPTATION.md`](IOS_ADAPTATION.md)。
+
+复跑 `40809357299` 的 Release 与生产视觉巡检通过，但原生 Cookie 用例在没有 WKWebView 的临时规则 store 上等待 Set-Cookie 超时，故未上传候选 IPA。生产规则 jar 实际为持久 `.default()`，此用例现改为相同 store、随机测试 host 和定向清理，仍验证 HttpOnly、路径/域、Secure 前缀和播放 jar 隔离；不改生产 Cookie 行为、不跳过用例。WebKit 未回调的底层原因未证明，本轮新提交以云端复验结果为准。
+
+## 历史请求：主线174同步、逐图验收与独立iOS Release
+
 发布前主线又推进至`6cf55e4`（0.12.0+174），因此追加合并公共网络加速/ECH、更新空间分类与系统音量，不把173候选当作最新包发布。保留iOS AVPlayer/PiP、WebKit JS、下载生命周期、持久沙盒与小说书架账号入口边界。最终云端运行、公开Release与本地逐图验收证据在完成后记录于本节。
 
 最终接受提交`5e86f62`（合入主线`6cf55e4`）本地`flutter analyze --no-pub`零问题、Flutter1474通过/4跳过、Python111通过；Android普通debug APK和Windows debug EXE编译成功，Windows生产PlayerPage实际解码loopback视频、播放/暂停/seek/恢复及独立弹幕烟测通过。`tools/run_ios_visual_tour.py`先前对工作流已明确选定的UDID重复执行全局`simctl list devices`，在云端CoreSimulator负载期间两次均超时；现改用有界`simctl getenv <UDID> SIMULATOR_UDID`精准探测，增加UUID匹配及非全局枚举回归。该修复后云端通过，非放宽巡检或取消截图验证。

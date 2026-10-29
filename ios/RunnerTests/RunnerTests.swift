@@ -66,8 +66,22 @@ final class RunnerTests: XCTestCase {
   func testWebKitCookiesRemainURLScopedAndPlaybackIsolated() throws {
     let host = "native-\(UUID().uuidString.lowercased()).invalid"
     let source = try XCTUnwrap(URL(string: "https://\(host)/private/page"))
-    let store = WKWebsiteDataStore.nonPersistent()
-    let sessions = IosWebSession(ruleStore: store)
+    // Match the production persistent rule jar, with a unique host and scoped
+    // cleanup. Playback below still exercises its separate ephemeral store.
+    let sessions = IosWebSession()
+    let store = sessions.ruleStore
+    addTeardownBlock {
+      let removed = self.expectation(description: "Only this test host's cookies removed")
+      store.httpCookieStore.getAllCookies { cookies in
+        let group = DispatchGroup()
+        for cookie in cookies where IosWebSession.cookieDomainMatches(cookie, url: source) {
+          group.enter()
+          store.httpCookieStore.delete(cookie) { group.leave() }
+        }
+        group.notify(queue: .main) { removed.fulfill() }
+      }
+      self.wait(for: [removed], timeout: 15)
+    }
     let stored = expectation(description: "Native WebKit Set-Cookie completion")
     sessions.handle(FlutterMethodCall(methodName: "ruleStoreCookies", arguments: ["url": source.absoluteString, "cookies": [
       "session=secret; Path=/; Secure; HttpOnly",
