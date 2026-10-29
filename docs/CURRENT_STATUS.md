@@ -1,15 +1,16 @@
 # Triomi 当前状态
 
-## 当前请求：同步主线 R175 与 iOS 规则来源一键安装体验
+## 当前请求：同步主线 R175 与 iOS 规则来源一键安装体验（已验收）
 
-将 `origin/master` `19554d6`（0.12.0+175）完整合入 `feat/ios`，包含跨设备收藏/进度自动同步、来源迁移恢复、Bangumi 独立选择及分块 WebDAV 完整备份。APK 安全路径在主线变更基础上保留 iOS `/var`→`/private/var` 合法系统别名。
+已将 `origin/master` `19554d6`（0.12.0+175）完整合入 `feat/ios`，包含跨设备收藏/进度自动同步、来源迁移恢复、Bangumi 独立选择及分块 WebDAV 完整备份。APK 安全路径在主线变更基础上保留 iOS `/var`→`/private/var` 合法系统别名。
 
-用户反馈的失效路径已证实：iOS“漫画扩展与仓库”把用户带到只有“返回”的 APK/DEX 说明页，真正的 JS/API 目录虽已存在，却藏在另一个菜单项。iOS 现在从漫画来源入口直接进入 Triomi 内规则目录；设置页和漫画工作区不再显示 APK 插件入口；历史缺源恢复也导向兼容规则目录。MangaDex 以随包规则离线安装并在目录操作后显示于来源列表；不下载外部 App、不请求 JIT，也不声称可自动转换 Komikku APK。
+用户反馈的失效路径已证实：iOS“漫画扩展与仓库”原先把用户带到只有“返回”的 APK/DEX 说明页，真正的 JS/API 目录虽已存在，却藏在另一个菜单项。iOS 现在从漫画来源入口直接进入 Triomi 内规则目录；设置页和漫画工作区不再显示 APK 插件入口；历史缺源恢复也导向兼容规则目录。MangaDex 以随包规则离线安装并在目录操作后显示于来源列表；不下载外部 App、不请求 JIT，也不声称可自动转换 Komikku APK。
 
-本地 `flutter analyze --no-pub` 零问题；完整 `flutter test --no-pub` 1545 通过 / 4 跳过；Python 工具 111 项通过。新增负 `viewInsets` 弹幕偏移对话框回归通过。Android debug APK、Windows debug EXE 编译通过；视觉 tour 源码在 Windows 上编译通过并按设计跳过 iOS 专属执行。macOS 原生编译、模拟器真实 WebKit JS 安装和全页截图巡检待本轮云端运行证明，不借用旧版云端证据。
+本地 `flutter analyze --no-pub` 零问题；完整 `flutter test --no-pub` 1545 通过 / 4 跳过；Python 工具 111 项通过。新增负 `viewInsets` 弹幕偏移对话框回归通过。Android debug APK、Windows debug EXE 编译通过。
 
-## 当前请求：主线174同步、逐图验收与独立iOS Release
+提交 `85ea522` 的 [macOS 运行 40803252652](https://github.com/HyperionHXH/triomi/actions/runs/40803252652) 全绿：真机 Release 无签名 IPA 校验、隔离原生 XCTest、独立 JavaScriptCore 取消/替换压力测试、真实 iOS JS/持久化/视频/弹幕集成和 53 状态生产视觉巡检均通过；分支推送按设计不执行 Release 发布。IPA、全套截图、manifest、诊断与 H.264 录屏已上传 Actions artifact；IPA 已下载到 `release_ios/40803252652/ipa/Triomi-iOS-Unsigned.ipa`，SHA-256 为 `7ecef1f10d08178dd0ed63396a9134c89656e48919dac02485a2efd12ea32c49`。该包是未签名安装包，不能绕过 Apple 签名与设备限制。
 
+模拟器视觉证据使用生产 `TriomiApp`、隔离数据和 loopback 视频/弹幕夹具；不能替代实体 iPhone 的真实账号、第三方网络、相册授权、锁屏后台音频、PiP、硬件高刷和 WebDAV 远端写入验收。iOS 使用方法及 APK/DEX 不可执行的边界见 [`docs/IOS_ADAPTATION.md`](IOS_ADAPTATION.md)。
 发布前主线又推进至`6cf55e4`（0.12.0+174），因此追加合并公共网络加速/ECH、更新空间分类与系统音量，不把173候选当作最新包发布。保留iOS AVPlayer/PiP、WebKit JS、下载生命周期、持久沙盒与小说书架账号入口边界。最终云端运行、公开Release与本地逐图验收证据在完成后记录于本节。
 
 最终接受提交`5e86f62`（合入主线`6cf55e4`）本地`flutter analyze --no-pub`零问题、Flutter1474通过/4跳过、Python111通过；Android普通debug APK和Windows debug EXE编译成功，Windows生产PlayerPage实际解码loopback视频、播放/暂停/seek/恢复及独立弹幕烟测通过。`tools/run_ios_visual_tour.py`先前对工作流已明确选定的UDID重复执行全局`simctl list devices`，在云端CoreSimulator负载期间两次均超时；现改用有界`simctl getenv <UDID> SIMULATOR_UDID`精准探测，增加UUID匹配及非全局枚举回归。该修复后云端通过，非放宽巡检或取消截图验证。

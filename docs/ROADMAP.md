@@ -4,12 +4,13 @@
 
 每个小步都要满足四件事：用户动作可观察、生产代码已接线、行为测试覆盖、证据等级写清楚。测试通过只能证明测试覆盖的层级，不能替代真实网络、模拟器或账号验收。
 
-## 当前请求：同步主线 R175、iOS 应用内来源安装与新视觉验收
+## 当前请求：同步主线 R175、iOS 应用内来源安装与新视觉验收（已完成）
 
 - [x] 合并 `origin/master` `19554d6`（0.12.0+175），保留 iOS 沙盒/APK路径边界并接入主线自动收藏/历史同步、来源迁移与分块 WebDAV 完整备份。
 - [x] iOS 漫画入口从只解释 APK/DEX 的死路改为直接打开兼容 JS/API 规则目录；设置、工作区和缺源恢复不再误导用户进入 APK 插件安装页。
 - [x] 新增 iOS 缺源恢复及负键盘 viewInsets 偏移对话框回归；本地 analyze 零问题、Flutter 1545 通过/4 跳过、Python111通过，Android/Windows debug 构建通过。
-- [ ] macOS Release、原生/生产 integration 与全页 iOS 视觉巡检通过；下载最新 IPA、截图和录屏逐项目视验收后发布对应 iOS Release。
+- [x] 提交 `85ea522` 的 [macOS 运行 40803252652](https://github.com/HyperionHXH/triomi/actions/runs/40803252652) 全绿：真机 Release IPA、隔离原生 XCTest、JavaScriptCore 压力、真实 iOS 集成及 53 状态生产视觉巡检通过。
+- [x] 下载并校验 `Triomi-iOS-Unsigned.ipa`、全套视觉截图/manifest/录屏与诊断；IPA 本地 SHA-256 为 `7ecef1f10d08178dd0ed63396a9134c89656e48919dac02485a2efd12ea32c49`。分支推送不自动创建 Release，侧载包从 Actions artifact 获取。
 
 ## 当前请求：主线174同步到iOS并发布侧载包
 
