@@ -8,11 +8,15 @@
 
 插件仓库最终已推送`5986b9e`，兼容目录CI运行`40881127408`通过；35项插件工具测试、目录`--check`与凭据扫描通过。原公开HTTPS索引实取17条，逐条取回JSON、身份、版本和SHA-256全部一致，包含五条1.0.1修正，证据留在`release_ios/chinese-ports/public-catalog-verification.json`。Android1571包/下载地址不变，17包明确映射，1554仍需人工移植；21个SAFE来源中9个受访问验证、连接/证书、账号或二进制图片变换阻塞而不发布。另查DM5/漫画人所需的章节专属图片Referer，目前宿主图片与离线缓存协议不能保持，不发布半成品。喵趣因搜索404只提供浏览/详情/章节，生成器不再强迫规则宣称不存在的搜索。
 
-本地最终analyze零问题、完整串行Flutter1731项通过/4跳过（含全部128项新增规则契约），应用Python工具112项、插件Python35项通过；Windows debug EXE与Android debug APK均已重新编译，未安装或操作现有设备。完整Flutter前两轮均1717项成功、4跳过、1项既有订阅排序失败；最小真实数据库复现100个不同订阅只产生89个唯一ID，证实原`microsecondsSinceEpoch`碰撞会覆盖前一行。新建订阅改为128位系统安全随机ID，已有ID、同条件复用、墓碑恢复和备份身份不改；新增失败前/修复后回归及原订阅9项通过，最终全量已证明不再复现。
+本地最终analyze零问题、177完整串行Flutter1732项通过/4跳过（含全部128项新增规则契约及仓库键盘回归），应用Python工具112项、插件Python35项通过；177 Windows debug EXE与Android debug APK均已重新编译，未安装或操作现有设备。完整Flutter前两轮均1717项成功、4跳过、1项既有订阅排序失败；最小真实数据库复现100个不同订阅只产生89个唯一ID，证实原`microsecondsSinceEpoch`碰撞会覆盖前一行。新建订阅改为128位系统安全随机ID，已有ID、同条件复用、墓碑恢复和备份身份不改；新增失败前/修复后回归及原订阅9项通过，最终全量已证明不再复现。
 
 生产`JsSource + QuickJS + Dart HTTPS`实网：11个新增来源已完成发现、所声明的搜索、章节、首图真实Flutter解码；Webmota只有独立Python公开章节与首末图成功，Windows Dart TLS握手终止，不能冒称应用实网通过。全部规则对应的字节哈希/页数/解码摘要保存在`release_ios/chinese-ports/production-live-summary.json`和`release_ios/source-ports/runtime-<id>.json`。实网补抓MH1234/咚漫的root-relative最终响应URL、普通网页内Cloudflare jsd脚本误判、杂志迷空搜索与带空格目录；五条规则增至1.0.1并保留原拒绝域名/付费/真实验证限制，未关闭TLS。杂志迷需按刊名如25ans搜索。
 
-源码`60c6882`的macOS运行`40881165945`真机Release构建、原生桥/JavaScriptCore压力门槛及实际iOS集成136项全部通过，包含全部128项新增规则契约。但视觉巡检在录入仓库后收起键盘时失败：iOS回报`viewInsets.bottom=-50748567689.9`，`CatalogRepositoriesSheet`将其直接加到padding触发`isNonNegative`断言，随后出现级联paint错误。已下载失败录屏/截图/完整日志到`release_ios/40881165945/`，不当作最终通过或发布。新增相同尺寸/异常值的真实输入→保存→收起键盘→关闭弹层回归先失败；生产沿用已有`math.max(0, keyboardInset)`边界，正向键盘边距保留，修复后仓库管理14项及analyze通过。此宿主修正使用独立0.12.0+177候选，最终云端视觉及Release待本轮完成后记录，不覆盖既有176资产。
+源码`60c6882`的macOS运行`40881165945`真机Release构建、原生桥/JavaScriptCore压力门槛及实际iOS集成136项全部通过，包含全部128项新增规则契约。但视觉巡检在录入仓库后收起键盘时失败：iOS回报`viewInsets.bottom=-50748567689.9`，`CatalogRepositoriesSheet`将其直接加到padding触发`isNonNegative`断言，随后出现级联paint错误。已下载失败录屏/截图/完整日志到`release_ios/40881165945/`，未当作最终通过或发布。新增相同尺寸/异常值的真实输入→保存→收起键盘→关闭弹层回归先失败；生产沿用已有`math.max(0, keyboardInset)`边界，正向键盘边距保留，修复后仓库管理14项及analyze通过。此宿主修正采用独立0.12.0+177，不覆盖既有176资产。
+
+最终接受源码`0227cf6a90f70237313905ac4eab28a4dfc3bbbe`的[macOS运行40890601599](https://github.com/HyperionHXH/triomi/actions/runs/40890601599)全部通过：真机Release IPA、原生桥与JavaScriptCore门槛、实际iOS集成136项（含全部128项新增规则契约）、56状态生产视觉巡检。最终IPA、56张PNG、完整录屏/manifest/原生诊断均已下载到`release_ios/40890601599/`，逐图读取14份联系表内全部56图，并原图复核仓库管理与小说书架；未见异常弹窗、黄黑溢出、页面白屏或明显错位，小说首页没有账号登录状态。PNG尺寸/字节/哈希全匹配manifest，录屏250.383333秒、本地全帧解码2054帧与云端一致；录屏包含模拟器启动的短暂白色过渡，随后进入已填充主页，不冒称真机冷启动性能。报告为`local-review/visual-review.json`。
+
+已发布独立[iOS v0.12.0-ios.177](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-ios.177)，保持原176及其他平台Release资产不变。Assets中的`Triomi-iOS-Unsigned.ipa`为本次接受的原始字节、iOS15+、Bundle ID不变；公开匿名HTTPS重新下载13696709字节，与本地接受产物及GitHub资产digest的SHA-256 `1e0b24d6dc03905411d9eb8bac62a8da0bce1826043b0f58917392bf0829a554`一致，tag精确指向接受源码。公开复取及比对见`release_ios/40890601599/local-review/release-verification.json`。176支持同一仓库协议，但建议更新177以获得键盘/订阅ID修复；原网址刷新后安装新增来源、更新五条1.0.1即可。真实账号、WebDAV远端写入及实体iPhone侧载/锁屏/PiP/相册/120Hz仍不由模拟器与桌面实网替代。
 
 ## 当前请求：iOS Release、单网址兼容规则仓库与常用来源移植（R176）
 
