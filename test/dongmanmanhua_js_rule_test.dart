@@ -137,6 +137,80 @@ void main() {
     expect(http.requests, hasLength(3));
   });
 
+  sourceRuleTest('Dongman observed search follows relative Dio redirect through oldest public episode', () async {
+    const canonicalPath = '/SUSPENSE/ruchuyizhedenver/list?title_no=1954';
+    const oldestPath =
+        '/SUSPENSE/ruchuyizhedenver/%E7%AC%AC1%E8%AF%9D/viewer?title_no=1954&episode_no=1';
+    const observedImage =
+        'https://cdn.dongmanmanhua.cn/1642470818446195411.jpg?x-oss-process=image/quality,q_90';
+    final http = FakeHttpClient((request) async {
+      checkOfficial(request);
+      final uri = Uri.parse(request.url);
+      if (uri.path == '/search') {
+        expect(uri.queryParameters['keyword'], '如出一辙的女儿');
+        return response(
+          '<div id="content"><div class="card_wrap search">'
+          '<ul class="card_lst"><li>'
+          '${card('/episodeList?titleNo=1954')}'
+          '</li></ul></div></div>',
+          url: request.url,
+        );
+      }
+      if (uri.path == '/episodeList') {
+        // Production Dio realUri exposes the last raw Location, not an
+        // absolute URI, for the official 301 response observed on 2026-10-29.
+        return response(
+          detailPage([104, 10, 9, 8, 7, 6, 5, 4, 3, 2], links: [2]).replaceAll(
+            'href="/SUSPENSE/',
+            'href="//www.dongmanmanhua.cn/SUSPENSE/',
+          ),
+          url: canonicalPath,
+        );
+      }
+      if (uri.path.endsWith('/list')) {
+        expect(request.url, '$list&page=2');
+        return response(
+          detailPage([1], links: [1]).replaceFirst(
+            '/SUSPENSE/ruchuyizhedenver/chapter/viewer?title_no=1954&amp;episode_no=1',
+            '//www.dongmanmanhua.cn${oldestPath.replaceAll('&', '&amp;')}',
+          ),
+          url: request.url,
+        );
+      }
+      expect(request.url, '$origin$oldestPath');
+      return response(
+        '<html><head><meta property="og:url" '
+        'content="http://www.dongmanmanhua.cn$oldestPath"></head>'
+        '<body><div id="_imageList">'
+        '<img data-url="$observedImage"></div></body></html>',
+        url: request.url,
+      );
+    });
+    final source = await prepare(http);
+    final selected = (await source.search('如出一辙的女儿')).single;
+    expect(selected.url, '$origin/episodeList?titleNo=1954');
+    expect(selected.remoteId, '1954');
+    final chapters = await source.chapters(selected);
+    expect((await source.detail(selected)).url, list);
+    expect(chapters.map((row) => row.number), [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      104,
+    ]);
+    expect(chapters.first.remoteId, '1954:1');
+    expect(chapters.first.url, '$origin$oldestPath');
+    expect((await source.content(chapters.first)).images, [observedImage]);
+    expect(http.requests, hasLength(4));
+  });
+
   sourceRuleTest('Dongman search canonical redirect and transitive chapter pagination are complete', () async {
     final http = FakeHttpClient((request) async {
       checkOfficial(request);
@@ -270,6 +344,54 @@ void main() {
         throwsA(failure('官方公开网页')),
       );
       expect(http.requests, isEmpty);
+    },
+  );
+
+  sourceRuleTest(
+    'Dongman relative redirect normalization retains exact official boundaries',
+    () async {
+      for (final redirectedUrl in [
+        '//other.example/story/list?title_no=1954',
+        '//www.dongmanmanhua.cn.other.example/story/list?title_no=1954',
+        '//www.dongmanmanhua.cn@other.example/story/list?title_no=1954',
+        'https://www.dongmanmanhua.cn:443/story/list?title_no=1954',
+        'http://www.dongmanmanhua.cn/story/list?title_no=1954',
+        r'/\other.example/story/list?title_no=1954',
+      ]) {
+        final http = FakeHttpClient(
+          (_) async => response(detailPage([2, 1]), url: redirectedUrl),
+        );
+        final source = await prepare(http);
+        await expectLater(source.detail(manga), throwsA(failure('官方公开网页')));
+        expect(http.requests, hasLength(1));
+      }
+    },
+  );
+
+  sourceRuleTest(
+    'Dongman relative redirects cannot change the selected title or episode',
+    () async {
+      final titleSource = await prepare(
+        FakeHttpClient(
+          (_) async => response(
+            detailPage([2, 1]),
+            url: '/SUSPENSE/other/list?title_no=99',
+          ),
+        ),
+      );
+      await expectLater(titleSource.detail(manga), throwsA(failure('其他作品')));
+      final chapterSource = await prepare(
+        FakeHttpClient(
+          (_) async => response(
+            '<div id="_imageList"><img data-url="$image1"></div>',
+            url: '/SUSPENSE/ruchuyizhedenver/chapter/viewer?title_no=1954&episode_no=99',
+          ),
+        ),
+      );
+      await expectLater(
+        chapterSource.content(chapter),
+        throwsA(failure('其他章节')),
+      );
     },
   );
 

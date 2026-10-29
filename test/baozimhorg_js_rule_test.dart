@@ -139,6 +139,85 @@ void main() {
     expect(http.requests, hasLength(1));
   });
 
+  sourceRuleTest('GoDa accepts public HTML and API data with inert site-wide gate markers', () async {
+    const siteScript = '''
+<!-- cached text: Just a moment / Attention Required / 人机验证 / cf-chl- -->
+<script src="/assets/captcha.js"></script>
+<script>var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js';</script>
+<style>.captcha-placeholder { display: none; }</style>
+''';
+    final http = FakeHttpClient((request) async {
+      if (request.url.startsWith(api)) {
+        return response({
+          'id': '5',
+          'title': '公开漫画',
+          'desc': 'A captcha reference is not a verification page.',
+          'content_rating': '0',
+          'chapters': [
+            {
+              'id': '11',
+              'attributes': {'title': '第1话', 'slug': 'chapter-1', 'order': 1},
+            },
+          ],
+        });
+      }
+      return SourceResponse(
+        statusCode: 200,
+        body:
+            siteScript +
+            (request.url == manga.url
+                ? '<main><h1>公开漫画</h1><div id="mangachapters" data-mid="5"></div></main>'
+                : '<div class="container"><div class="cardlist"><div class="pb-2"><a href="/manga/safe-book"><h3>公开漫画</h3></a></div></div></div>'),
+      );
+    });
+    final source = await prepare(http);
+    expect(await source.discover(source.feeds.first), hasLength(1));
+    expect((await source.detail(manga)).description, contains('captcha'));
+    expect((await source.chapters(manga)).single.url, chapter.url);
+  });
+
+  sourceRuleTest(
+    'GoDa rejects rendered verification walls and HTTP access failures',
+    () async {
+      for (final wall in [
+        '<title>Attention Required! | Cloudflare</title>',
+        '<main><h1>人机验证</h1></main>',
+        '<form id="challenge-form"><p>Verify you are human</p></form>',
+      ]) {
+        final source = await prepare(
+          FakeHttpClient(
+            (_) async => SourceResponse(statusCode: 200, body: wall),
+          ),
+        );
+        await expectLater(
+          source.discover(source.feeds.first),
+          throwsA(failure('站点要求验证')),
+        );
+      }
+      final apiWall = await prepare(
+        FakeHttpClient(
+          (_) async => const SourceResponse(
+            statusCode: 200,
+            body: '<title>Just a moment...</title>',
+          ),
+        ),
+      );
+      await expectLater(apiWall.content(chapter), throwsA(failure('站点要求验证')));
+      final denied = await prepare(
+        FakeHttpClient(
+          (_) async => const SourceResponse(
+            statusCode: 403,
+            body: '<title>Just a moment...</title>',
+          ),
+        ),
+      );
+      await expectLater(
+        denied.discover(denied.feeds.first),
+        throwsA(failure('HTTP 403')),
+      );
+    },
+  );
+
   sourceRuleTest(
     'GoDa refuses unknown image ciphers, challenge pages and empty catalogs',
     () async {

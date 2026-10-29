@@ -15,7 +15,9 @@ void main() {
   const base = 'https://m.wmh1234.com';
   const comicUrl = '$base/comic/13704.html';
   const chapterUrl = '$base/comic/13704/413578.html';
-  const readerUrl = 'https://reader.hqread.cc/r/public-reader-token';
+  const goPath = '/go/MTM3MDQtNDEzNTc4LTIxYTI1OGRiNTQ';
+  const readerPath = '/r/MTM3MDQtNDEzNTc4LTIxYTI1OGRiNTQ';
+  const readerUrl = 'https://reader.hqread.cc$readerPath';
   const chapter = Chapter(
     sourceId: 'mh1234',
     remoteId: '413578',
@@ -207,19 +209,20 @@ ${cards ? '''
   );
 
   sourceRuleTest(
-    'MH1234 follows public literal redirect and retains ordered image tokens',
+    'MH1234 resolves observed relative HTTP redirect before public reader',
     () async {
       final http = FakeHttpClient((request) async {
         if (request.url == chapterUrl) {
           return html(
             '<script>location.replace("$readerUrl");</script>',
-            url: '$base/go/public-reader-token',
+            // Dart IO/Dio exposes the relative Location as response.realUri.
+            url: goPath,
           );
         }
         expect(request.url, readerUrl);
         return html('''
 <img class="reader-image" src="/placeholder.svg"
- data-src="https://images.example/one.webp?st=first&amp;e=1793404800">
+ data-src="https://wmh1234.wszwhg.net/UploadFiles6/w/20181027183134159.webp?st=public-fixture&amp;e=1793404800">
 <img class="reader-image" data-src="/images/two.webp?st=second&amp;e=1793404800">
 ''', url: readerUrl);
       });
@@ -227,13 +230,103 @@ ${cards ? '''
       final result = await source.content(chapter);
       expect(http.requests.map((row) => row.url), [chapterUrl, readerUrl]);
       expect(result.images, [
-        'https://images.example/one.webp?st=first&e=1793404800',
+        'https://wmh1234.wszwhg.net/UploadFiles6/w/20181027183134159.webp?st=public-fixture&e=1793404800',
         'https://reader.hqread.cc/images/two.webp?st=second&e=1793404800',
       ]);
       expect(
         source.rule.headers.keys.map((key) => key.toLowerCase()),
         isNot(contains('referer')),
       );
+    },
+  );
+
+  sourceRuleTest(
+    'MH1234 resolves reader-relative response URL before relative HTML images',
+    () async {
+      final http = FakeHttpClient((request) async {
+        if (request.url == chapterUrl) {
+          return html(
+            '<script>window.location.replace("$readerUrl");</script>',
+            url: goPath,
+          );
+        }
+        expect(request.url, readerUrl);
+        return html('''
+<img class="reader-image" src="/placeholder.svg"
+ data-src="../images/one.webp?st=first&amp;e=1793404800">
+<img class="reader-image" data-src="/images/two.webp?st=second&amp;e=1793404800">
+''', url: readerPath);
+      });
+      final source = await prepare(http);
+      final result = await source.content(chapter);
+      expect(http.requests.map((row) => row.url), [chapterUrl, readerUrl]);
+      expect(result.images, [
+        'https://reader.hqread.cc/images/one.webp?st=first&e=1793404800',
+        'https://reader.hqread.cc/images/two.webp?st=second&e=1793404800',
+      ]);
+      expect(chapter.remoteId, '413578');
+      expect(chapter.url, chapterUrl);
+    },
+  );
+
+  sourceRuleTest(
+    'MH1234 rejects untrusted HTTP redirect response URLs before HTML parsing',
+    () async {
+      var responseUrl = '';
+      final http = FakeHttpClient(
+        (request) async => html(
+          '<script>location.replace("$readerUrl");</script>'
+          '<img class="reader-image" data-src="/images/one.webp">',
+          url: responseUrl,
+        ),
+      );
+      final source = await prepare(http);
+      for (final invalidUrl in [
+        'https://unrelated.example/go/token',
+        '//unrelated.example/go/token',
+        'http://m.wmh1234.com$goPath',
+        'https://reader.hqread.cc/not-a-reader/token',
+        'https://reader.hqread.cc.evil.example/r/token',
+        r'/\unrelated.example/go/token',
+        '/go/token\n',
+      ]) {
+        responseUrl = invalidUrl;
+        final before = http.requests.length;
+        await expectLater(source.content(chapter), throwsA(failure('跳转地址')));
+        expect(http.requests, hasLength(before + 1));
+      }
+    },
+  );
+
+  sourceRuleTest(
+    'MH1234 rejects untrusted reader final URL and blocked reader chapters',
+    () async {
+      var blocked = false;
+      final http = FakeHttpClient((request) async {
+        if (request.url == chapterUrl) {
+          return html(
+            '<script>location.replace("$readerUrl");</script>',
+            url: goPath,
+          );
+        }
+        expect(request.url, readerUrl);
+        return blocked
+            ? html('<main>登录后阅读</main>', url: readerPath)
+            : html(
+                '<img class="reader-image" data-src="/images/one.webp">',
+                url: 'https://unrelated.example/r/token',
+              );
+      });
+      final source = await prepare(http);
+      await expectLater(source.content(chapter), throwsA(failure('跳转地址')));
+      blocked = true;
+      await expectLater(source.content(chapter), throwsA(failure('没有公开')));
+      expect(http.requests.map((row) => row.url), [
+        chapterUrl,
+        readerUrl,
+        chapterUrl,
+        readerUrl,
+      ]);
     },
   );
 

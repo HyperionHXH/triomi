@@ -118,6 +118,39 @@ void main() {
   );
 
   sourceRuleTest(
+    'Zazhimi encodes spaced public issue folders and rejects traversal',
+    () async {
+      final spaced = await prepare(
+        FakeHttpClient(
+          (_) async => response({
+            'magazine': [
+              {
+                'magId': '24819',
+                'magName': '25ans wedding 2025年冬春号',
+                'magDate': '2601/25ans wedding 2025 WinterSpring/',
+              },
+            ],
+          }),
+        ),
+      );
+      expect(
+        (await spaced.search('25ans')).single.coverUrl,
+        'https://img2020.zazhimi.net/aazzmpic-l/2601/25ans%20wedding%202025%20WinterSpring/001.jpg',
+      );
+      final unsafe = await prepare(
+        FakeHttpClient(
+          (_) async => response({
+            'magazine': [
+              {'magId': '1', 'magName': 'invalid', 'magDate': '../secret/'},
+            ],
+          }),
+        ),
+      );
+      await expectLater(unsafe.search('test'), throwsA(failure('封面目录无效')));
+    },
+  );
+
+  sourceRuleTest(
     'Zazhimi exposes one complete issue and keeps every page in API order',
     () async {
       final http = FakeHttpClient((request) async {
@@ -149,6 +182,40 @@ void main() {
         images.last,
         'https://img2020.zazhimi.net/aazzmpic/2612/25ans-26-12/252.jpg',
       );
+    },
+  );
+
+  sourceRuleTest(
+    'Zazhimi distinguishes an actual empty search from rejected issue access',
+    () async {
+      final empty = await prepare(
+        FakeHttpClient(
+          (_) async => const SourceResponse(
+            statusCode: 200,
+            body: '{"status":"100","error":"没有内容","magazine":[]}',
+          ),
+        ),
+      );
+      expect(await empty.search('TRIOMI_不存在_00000000'), isEmpty);
+      await expectLater(empty.content(chapter), throwsA(failure('没有内容')));
+      final rejected = await prepare(
+        FakeHttpClient(
+          (_) async => const SourceResponse(
+            statusCode: 200,
+            body: '{"status":"401","error":"请登录","magazine":[]}',
+          ),
+        ),
+      );
+      await expectLater(rejected.search('25ans'), throwsA(failure('请登录')));
+      final malformed = await prepare(
+        FakeHttpClient(
+          (_) async => const SourceResponse(
+            statusCode: 200,
+            body: '{"status":"100","error":"没有内容","magazine":null}',
+          ),
+        ),
+      );
+      await expectLater(malformed.search('25ans'), throwsA(failure('没有内容')));
     },
   );
 

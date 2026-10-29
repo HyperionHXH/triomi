@@ -283,6 +283,63 @@ ${next == null ? '' : '<a id="next" href="$next">下一页</a>'}
   });
 
   sourceRuleTest(
+    'Miaoqu ignores inert site-wide challenge scripts across public pages',
+    () async {
+      const siteScript = '''
+<!-- cached text: Just a moment / Attention Required / 人机验证 / cf-chl- -->
+<script>var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=public';</script>
+<style>.cf-chl-placeholder { display: none; }</style>
+''';
+      final http = FakeHttpClient((request) async {
+        return SourceResponse(
+          statusCode: 200,
+          body:
+              siteScript +
+              (request.url == comicUrl
+                  ? detailHtml
+                  : request.url == chapterUrl
+                  ? readerData(52916, [
+                      {'url': 'https://s2.bzcdn.net/a/1.jpg'},
+                      {'url': 'https://s2.bzcdn.net/a/2.jpg'},
+                    ])
+                  : listing()),
+        );
+      });
+      final source = await prepare(http);
+      expect(await source.discover(source.feeds.first), hasLength(1));
+      expect((await source.detail(manga)).title, '咒术回战');
+      expect((await source.chapters(manga)), hasLength(4));
+      expect((await source.content(chapter)).images, [
+        'https://s2.bzcdn.net/a/1.jpg',
+        'https://s2.bzcdn.net/a/2.jpg',
+      ]);
+    },
+  );
+
+  sourceRuleTest(
+    'Miaoqu rejects rendered verification walls without executing scripts',
+    () async {
+      for (final wall in [
+        '<title>Just a moment...</title><script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>',
+        '<title>Attention Required! | Cloudflare</title>',
+        '<main><h1>人机验证</h1><form id="challenge-form"></form></main>',
+        '<form id="challenge-form"><p>Verify you are human</p></form>',
+      ]) {
+        final source = await prepare(
+          FakeHttpClient(
+            (_) async => SourceResponse(statusCode: 200, body: wall),
+          ),
+        );
+        await expectLater(
+          source.discover(source.feeds.first),
+          throwsA(failure('网站要求验证')),
+        );
+        await expectLater(source.content(chapter), throwsA(failure('网站要求验证')));
+      }
+    },
+  );
+
+  sourceRuleTest(
     'Miaoqu surfaces access gates and changed detail structure',
     () async {
       var count = 0;
