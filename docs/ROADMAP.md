@@ -11,7 +11,7 @@
 - [x] 自有插件仓库发布5个显式移植规则及逐包兼容报告；保留1571个原APK，不声称整库自动转换；公开目录/规则哈希实取核验。
 - [x] 真实生产JS实网MangaDex/xkcd阅读首图解码；Komiic/漫画柜/WEBTOON网络边界、拷贝漫画上游210访问前提如实记录。
 - [x] analyze零问题、Flutter1602通过/4跳过、Windows/Android debug编译；目录/规则87定向通过，Python工具112项、插件仓库33项通过。
-- [ ] 56状态iOS视觉巡检/原生及集成验收，下载逐图读取后发布176最终iOS Release并核验公开IPA。
+- [x] 接受源码8d621b2的macOS40831538368全部通过，56张PNG逐图读取/哈希一致，录屏完整解码1892帧；发布独立v0.12.0-ios.176并从公开Release下载IPA，SHA-256 b3fbac2b9be463acecb72aad2f1e7e71c5972c865e57a0e52c8e9660dd30b651与云端和GitHub digest一致。
 
 ## 当前请求：同步主线 R175、iOS 应用内来源安装与新视觉验收（已完成）
 

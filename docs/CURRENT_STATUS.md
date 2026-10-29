@@ -10,9 +10,13 @@ R176新增持久兼容仓库管理：用户粘贴一个HTTPS兼容索引，或�
 
 真实网络证据：生产JsSource/QuickJS + Dart HTTPS运行MangaDex发现20部、Berserk搜索1部、211章/88页及首张3072×1600 JPEG解码通过；xkcd最近20部、编号1搜索和577×311首图解码通过。Komiic公开GraphQL、额度和JPEG单图取回通过，但Windows Dart TLS握手失败，不能用Python成功冒称应用网络通过；漫画柜公开reader安全解码及WebP取回通过，但当前主机部分DNS/TLS/搜索请求失败；WEBTOON繁中规则协议测试通过，实网viewer返回停机页/TLS错误，未证明在线阅读。拷贝漫画API210要求官方App解除限制且网页无可读章节，本次没有发布半成品规则。实际网络与各站账号/额度限制明确保留。
 
-本地analyze零问题，完整Flutter1602通过/4跳过，Windows debug EXE及Android debug APK已编译（Android显式C:/Android/sdk）；新增目录/移植规则定向87项通过，Python工具112项通过、编码零错误。新增56状态视觉巡检包含录入仓库、从逻辑HTTPS严格映射loopback的目录/规则下载、真实iOS WebKit初始化与启用；新增Komiic/xkcd实际WebKit协议集成。当前iOS云端构建、截图及最终176 Release尚待本轮运行，不使用175旧证据代替。
+本地analyze零问题，完整Flutter1602通过/4跳过，Windows debug EXE及Android debug APK已编译（Android显式C:/Android/sdk）；新增目录/移植规则定向87项通过，Python工具112项通过、编码零错误。新增56状态视觉巡检包含录入仓库、从逻辑HTTPS严格映射loopback的目录/规则下载、真实iOS WebKit初始化与启用；新增Komiic/xkcd实际WebKit协议集成。最终接受源码`8d621b2863f2e8fbfa9e246a63460f48fe0411b9`的[macOS运行40831538368](https://github.com/HyperionHXH/triomi/actions/runs/40831538368)全部门槛通过：真机Release、17项原生检查（仅硬件亮度1跳过）、3项JavaScriptCore压力、实际iOS集成和56状态生产视觉巡检全绿。
 
 首次云端40826842065真机IPA构建和新增仓库录入/下载/启用截图通过，但新增Komiic协议夹具详情遗漏必填`imageUrl`；视觉巡检快进断言读取了timeline tap后尚未重建的旧暂停位置。下载完整日志和录屏观察到原生画面确已跳至12秒，独立视频集成同轮seek通过。现补齐真实详情字段，并在timeline tap后pump、弹幕切换后读取快进基准，不修改生产seek/规则解析、不放宽原断言；该失败候选不发布，等待完整复跑。
+
+最终IPA、56张PNG、manifest、546.326667秒H.264录屏与原生诊断已下载到`release_ios/40831538368/`。逐图联系表读取全部56图，未见白屏、异常弹窗、黄黑溢出或明显错位；小说书架无登录状态，新增兼容仓库/远程安装链路可见。PNG字节/像素/哈希逐项匹配manifest，录屏完整解码1892帧与云端相同。该模拟器/loopback验收不替代真实账号、上游网络、实体iPhone锁屏音频/PiP/相册/120Hz与WebDAV远端写入。
+
+已发布独立[Release v0.12.0-ios.176](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-ios.176)，上传同一接受IPA，不重建；公开下载回`release_ios/40831538368/public-release/`，13,652,314字节，SHA-256`b3fbac2b9be463acecb72aad2f1e7e71c5972c865e57a0e52c8e9660dd30b651`，与云端打包日志、GitHub资产digest完全一致，ZIP CRC/Bundle ID/0.12.0+176/iPhoneOS/iOS15元数据通过。使用说明见`IOS_ADAPTATION.md`；规则仓库只需一个HTTPS网址，5条移植不冒称1571包全兼容。最后仅证据文档提交`[skip ci]`不改变接受生产代码。
 
 ## 当前请求：同步主线 R175 与 iOS 规则来源一键安装体验（已验收）
 
