@@ -8,11 +8,13 @@
 
 本地 `flutter analyze --no-pub` 零问题；完整 `flutter test --no-pub` 1545 通过 / 4 跳过；Python 工具 111 项通过。新增负 `viewInsets` 弹幕偏移对话框回归通过。Android debug APK、Windows debug EXE 编译通过。
 
-提交 `85ea522` 的 [macOS 运行 40803252652](https://github.com/HyperionHXH/triomi/actions/runs/40803252652) 全绿：真机 Release 无签名 IPA 校验、隔离原生 XCTest、独立 JavaScriptCore 取消/替换压力测试、真实 iOS JS/持久化/视频/弹幕集成和 53 状态生产视觉巡检均通过；分支推送按设计不执行 Release 发布。IPA、全套截图、manifest、诊断与 H.264 录屏已上传 Actions artifact；IPA 已下载到 `release_ios/40803252652/ipa/Triomi-iOS-Unsigned.ipa`，SHA-256 为 `7ecef1f10d08178dd0ed63396a9134c89656e48919dac02485a2efd12ea32c49`。该包是未签名安装包，不能绕过 Apple 签名与设备限制。
+最终源码 `ac4ca8f` 的 [macOS 运行 40814487463](https://github.com/HyperionHXH/triomi/actions/runs/40814487463) 全绿：真机 Release 无签名 IPA 校验、17项原生 XCTest（16通过/1仅因模拟器不支持硬件亮度修改而跳过）、3项独立 JavaScriptCore 取消/替换压力测试、真实 iOS JS/持久化/视频/弹幕集成和 53 状态生产视觉巡检均通过。全部产物下载到 `release_ios/40814487463/`；IPA `ipa/Triomi-iOS-Unsigned.ipa` 为13,610,827字节，SHA-256 `f609e9d0f76ae7702138c704e0924d7c4a57b90ac4d6a38d2941af4d42c8474b`，与云端打包日志一致，本地 ZIP CRC 与 iPhoneOS / 0.12.0+175 / iOS15 元数据校验通过。分支推送按设计不执行 Release 发布；该包仍需合法签名或设备支持的安装处理。
 
 模拟器视觉证据使用生产 `TriomiApp`、隔离数据和 loopback 视频/弹幕夹具；不能替代实体 iPhone 的真实账号、第三方网络、相册授权、锁屏后台音频、PiP、硬件高刷和 WebDAV 远端写入验收。iOS 使用方法及 APK/DEX 不可执行的边界见 [`docs/IOS_ADAPTATION.md`](IOS_ADAPTATION.md)。
 
-复跑 `40809357299` 的 Release 与生产视觉巡检通过，但原生 Cookie 用例在没有 WKWebView 的临时规则 store 上等待 Set-Cookie 超时，故未上传候选 IPA。生产规则 jar 实际为持久 `.default()`，此用例现改为相同 store、随机测试 host 和定向清理，仍验证 HttpOnly、路径/域、Secure 前缀和播放 jar 隔离；不改生产 Cookie 行为、不跳过用例。WebKit 未回调的底层原因未证明，本轮新提交以云端复验结果为准。
+复跑 `40809357299` 的 Release 与生产视觉巡检通过，但原生 Cookie 用例在没有 WKWebView 的临时规则 store 上等待 Set-Cookie 超时，故未上传候选 IPA。生产规则 jar 实际为持久 `.default()`，此用例改为相同 store、随机测试 host 和定向清理，仍验证 HttpOnly、路径/域、Secure 前缀和播放 jar 隔离；不改生产 Cookie 行为、不跳过用例。最终运行 `40814487463` 该用例0.051秒通过，全链路全绿；原先临时 store 的 WebKit 未回调底层原因未证明。
+
+已把本轮53张PNG逐张置于带原文件名的六图联系表目视，文件尺寸/像素/SHA-256全部匹配manifest，未见白屏、黄黑溢出条、异常弹窗或明显错位；小说书架无登录状态，漫画目录有MangaDex安装卡，夜间正文/返回图标可见，R175 WebDAV新入口正常。H.264录屏816.49秒，本地完整解码1653帧，与云端相同；包含构建/启动等待与切换阶段，不将这些帧误称已渲染页面。逐图清单和边界见本地 `release_ios/40814487463/VISUAL_ACCEPTANCE.md`。最终仅文档证据提交使用 `[skip ci]`，不改变已验收生产代码或测试。
 
 ## 历史请求：主线174同步、逐图验收与独立iOS Release
 

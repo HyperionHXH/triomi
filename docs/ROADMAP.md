@@ -9,8 +9,8 @@
 - [x] 合并 `origin/master` `19554d6`（0.12.0+175），保留 iOS 沙盒/APK路径边界并接入主线自动收藏/历史同步、来源迁移与分块 WebDAV 完整备份。
 - [x] iOS 漫画入口从只解释 APK/DEX 的死路改为直接打开兼容 JS/API 规则目录；设置、工作区和缺源恢复不再误导用户进入 APK 插件安装页。
 - [x] 新增 iOS 缺源恢复及负键盘 viewInsets 偏移对话框回归；本地 analyze 零问题、Flutter 1545 通过/4 跳过、Python111通过，Android/Windows debug 构建通过。
-- [x] 提交 `85ea522` 的 [macOS 运行 40803252652](https://github.com/HyperionHXH/triomi/actions/runs/40803252652) 全绿：真机 Release IPA、隔离原生 XCTest、JavaScriptCore 压力、真实 iOS 集成及 53 状态生产视觉巡检通过。
-- [x] 下载并校验 `Triomi-iOS-Unsigned.ipa`、全套视觉截图/manifest/录屏与诊断；IPA 本地 SHA-256 为 `7ecef1f10d08178dd0ed63396a9134c89656e48919dac02485a2efd12ea32c49`。分支推送不自动创建 Release，侧载包从 Actions artifact 获取。
+- [x] 源码 `ac4ca8f` 的 [macOS 运行 40814487463](https://github.com/HyperionHXH/triomi/actions/runs/40814487463) 全绿：真机 Release IPA、17项原生 XCTest（1项硬件亮度跳过）、3项 JavaScriptCore 压力、真实 iOS 集成及53状态生产视觉巡检通过。
+- [x] 下载最终 IPA、53张PNG/manifest/录屏与原生诊断至 `release_ios/40814487463/`，逐图联系表目视无明显异常，录屏完整解码1653帧。IPA本地及云端 SHA-256 一致为 `f609e9d0f76ae7702138c704e0924d7c4a57b90ac4d6a38d2941af4d42c8474b`。分支推送不自动创建 Release，侧载包从 Actions artifact 获取。
 
 ## 当前请求：主线174同步到iOS并发布侧载包
 
