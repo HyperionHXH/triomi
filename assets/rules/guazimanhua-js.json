@@ -1,0 +1,33 @@
+{
+  "id": "guazimanhua",
+  "name": "瓜子漫画",
+  "type": "manga",
+  "engine": "js",
+  "lang": "zh",
+  "version": "1.0.0",
+  "baseUrl": "https://www.guazimanhua.com",
+  "requireLogin": false,
+  "headers": {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Referer": "https://www.guazimanhua.com/"
+  },
+  "feeds": [
+    {
+      "id": "popular",
+      "name": "人气排行",
+      "url": "/category.php?sort=hits&page={page}"
+    },
+    {
+      "id": "recent",
+      "name": "最近更新",
+      "url": "/category.php?sort=update&page={page}"
+    }
+  ],
+  "attribution": {
+    "reference": "keiyoushi/extensions-source",
+    "commit": "dbf6c05d6a9520c60533f1626616263522bbe71a",
+    "license": "Apache-2.0",
+    "implementation": "Independent data-only protocol port; no upstream implementation copied."
+  },
+  "script": "// Independent protocol implementation; reference: keiyoushi/extensions-source (Apache-2.0),\n// commit dbf6c05d6a9520c60533f1626616263522bbe71a, Guazimanhua.kt.\n// Only public HTML data is parsed. No downloaded JavaScript is executed.\nvar BASE = 'https://www.guazimanhua.com';\nvar endPages = {};\nfunction fail(message) { throw new Error('瓜子漫画：' + message); }\nfunction publicUrl(url, kind) {\n  var match = new RegExp('^https://www\\\\.guazimanhua\\\\.com/' + kind + '\\\\.php\\\\?id=([0-9]+)$').exec(url || '');\n  if (!match) fail('无效的' + kind + '地址');\n  return match[1];\n}\nasync function html(url) {\n  var response = await triomi.fetch(url);\n  if (response.status !== 200) fail('网站 HTTP ' + response.status);\n  var text = response.body || '';\n  if (/cf-chl-|challenge-platform|Just a moment|Attention Required|人机验证|验证码/.test(text)) fail('网站要求验证，无法直接读取');\n  return text;\n}\nasync function value(body, selector, attr) {\n  var rows = await triomi.select(body, selector, {v:{selector:'.',attr:attr || 'text'}});\n  return rows.length ? String(rows[0].v || '').trim() : '';\n}\nasync function listing(url, page, key) {\n  page = Number(page) || 1;\n  if (page < 1 || Math.floor(page) !== page) fail('页码无效');\n  if (endPages[key] && page > endPages[key]) return [];\n  var body = await html(url);\n  var current = await value(body, 'nav.pager a.on');\n  if (current && Number(current) < page) return [];\n  var links = await triomi.select(body, 'nav.pager a', {text:{selector:'.'}});\n  if (!links.some(function(link) {return link.text === '>';})) endPages[key] = page;\n  var rows = await triomi.select(body, 'article.card', {\n    title: 'h3 a',\n    url: {selector:'a.cover-wrap',attr:'href',absolute:true},\n    coverUrl: {selector:'img.cover',attr:'src',absolute:true},\n    author: 'div.meta'\n  }, url);\n  if (!rows.length && !/暂无|没有找到|未找到|没有相关|无搜索结果/.test(body)) fail('无法识别漫画列表');\n  var seen = {}, items = [];\n  for (var i = 0; i < rows.length; i++) {\n    var row = rows[i], id = publicUrl(row.url, 'comic');\n    if (!row.title) fail('漫画标题缺失');\n    if (seen[id]) continue;\n    seen[id] = true;\n    items.push({remoteId:id,title:row.title,url:row.url,coverUrl:row.coverUrl,author:(row.author || '').split(' · ')[0]});\n  }\n  return items;\n}\nasync function discover(url, page) {\n  if (!/^https:\\/\\/www\\.guazimanhua\\.com\\/category\\.php\\?sort=(hits|update)&page=[0-9]+$/.test(url)) fail('无效的浏览地址');\n  return listing(url, page, url.replace(/&page=[0-9]+$/, ''));\n}\nasync function search(keyword, page) {\n  page = Number(page) || 1;\n  var key = BASE + '/category.php?keyword=' + encodeURIComponent(keyword) + '&sort=hits';\n  return listing(key + '&page=' + page, page, key);\n}\nasync function detail(url, snapshot) {\n  var id = publicUrl(url, 'comic'), body = await html(url);\n  var title = await value(body, 'div.mobile-comic-title');\n  if (!title) fail('无法识别漫画详情');\n  var authors = await triomi.select(body, 'div.cinema-strip > div', {label:'span',text:'b'});\n  var author = '';\n  for (var a = 0; a < authors.length; a++) if (authors[a].label === '作者') author = authors[a].text || '';\n  var meta = await value(body, 'p.mobile-comic-meta');\n  var tags = (await value(body, 'p.mobile-comic-tags')).split(/\\s*[/·]\\s*/).filter(function(t) {return !!t;});\n  var raw = await triomi.select(body, 'section.mobile-comic-all-chapters div.mobile-chapter-grid a', {\n    title:{selector:'.'},url:{selector:'.',attr:'href',absolute:true}\n  }, url);\n  if (!raw.length) fail('章节目录缺失');\n  // The public detail page emits newest-first; reversing preserves announcements and extras.\n  var chapters = [], seen = {};\n  for (var i = raw.length - 1; i >= 0; i--) {\n    var row = raw[i], chapterId = publicUrl(row.url, 'chapter');\n    if (!row.title) fail('章节标题缺失');\n    if (seen[chapterId]) continue;\n    seen[chapterId] = true;\n    chapters.push({remoteId:chapterId,title:row.title,url:row.url,volumeTitle:'章节',locked:false});\n  }\n  return {item:{remoteId:id,title:title,url:url,coverUrl:await value(body,'img.mobile-comic-cover','src'),\n    author:author,description:await value(body,'p.mobile-comic-desc'),tags:tags,\n    status:/完结|完結/.test(meta)?'completed':(/连载|連載/.test(meta)?'ongoing':'unknown')},chapters:chapters};\n}\nasync function content(url, chapter) {\n  publicUrl(url, 'chapter');\n  var body = await html(url);\n  var rows = await triomi.select(body, 'section.reader-images img', {url:{selector:'.',attr:'src',absolute:true}}, url);\n  if (!rows.length) fail('章节未提供公开图片；可能已下架、要求登录或仅限官方应用');\n  var images = [];\n  for (var i = 0; i < rows.length; i++) {\n    if (!/^https?:\\/\\//.test(rows[i].url || '')) fail('章节图片地址无效');\n    images.push(rows[i].url);\n  }\n  return {images:images};\n}\n"
+}

@@ -10,6 +10,7 @@ import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:triomi/core/models/source_descriptor.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/js/js_source.dart';
 import 'package:triomi/core/source/js/runtime/flutter_js_runtime.dart';
@@ -28,6 +29,18 @@ void main() {
     'xkcd': 'xkcd-js.json',
     'manhuagui': 'manhuagui-js.json',
     'webtoons-zh': 'webtoons-zh-js.json',
+    'bh3': 'bh3-js.json',
+    'terrahistoricus': 'terrahistoricus-js.json',
+    'kuaikanmanhua': 'kuaikanmanhua-js.json',
+    'mh1234': 'mh1234-js.json',
+    'guazimanhua': 'guazimanhua-js.json',
+    'miaoqu': 'miaoqu-js.json',
+    'iqiyi': 'iqiyi-js.json',
+    'dongmanmanhua': 'dongmanmanhua-js.json',
+    'baozimanhuaplus': 'baozimanhuaplus-js.json',
+    'baozimhorg': 'baozimhorg-js.json',
+    'zaimanhua': 'zaimanhua-js.json',
+    'zazhimi': 'zazhimi-js.json',
   };
   test(
     'anonymous published rule discovery/search/chapter/image: $id',
@@ -75,14 +88,22 @@ void main() {
                 'xkcd' => '1',
                 _ => discovered.first.title,
               };
-        final searched = await source.search(keyword);
-        record['query'] = keyword;
-        record['searchCount'] = searched.length;
-        expect(
-          searched,
-          isNotEmpty,
-          reason: 'search must produce real source identities',
+        final supportsSearch = source.descriptor.capabilities.contains(
+          SourceCapability.search,
         );
+        final searched = supportsSearch
+            ? await source.search(keyword)
+            : discovered;
+        record['searchSupported'] = supportsSearch;
+        if (supportsSearch) {
+          record['query'] = keyword;
+          record['searchCount'] = searched.length;
+          expect(
+            searched,
+            isNotEmpty,
+            reason: 'supported search must produce real source identities',
+          );
+        }
         final item = id == 'mangadex'
             ? searched.firstWhere(
                 (item) =>

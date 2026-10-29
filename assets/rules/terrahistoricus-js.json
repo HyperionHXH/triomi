@@ -1,0 +1,51 @@
+{
+  "id": "terrahistoricus",
+  "name": "泰拉记事社（官方漫画）",
+  "type": "manga",
+  "engine": "js",
+  "lang": "zh",
+  "version": "1.0.0",
+  "baseUrl": "https://comic.hypergryph.com",
+  "requireLogin": false,
+  "headers": {
+    "Referer": "https://comic.hypergryph.com/",
+    "Accept": "application/json"
+  },
+  "feeds": [
+    {
+      "id": "terra",
+      "name": "泰拉记事社",
+      "url": "/api/comic?topicKey=terra-historicus"
+    },
+    {
+      "id": "talos",
+      "name": "塔卫二记事社",
+      "url": "/api/comic?topicKey=talos-ii-historicus"
+    },
+    {
+      "id": "terra-recent",
+      "name": "泰拉 · 最近更新",
+      "url": "/api/recentUpdate?topicKey=terra-historicus"
+    },
+    {
+      "id": "talos-recent",
+      "name": "塔卫二 · 最近更新",
+      "url": "/api/recentUpdate?topicKey=talos-ii-historicus"
+    }
+  ],
+  "description": "鹰角网络官方公开漫画，涵盖泰拉与塔卫二两个主题。每次打开章节重新请求全部分页的签名图片地址；图片链接过期后请重新打开章节，当前宿主不支持图片 HTTP 403 自动刷新。",
+  "attribution": {
+    "protocolReference": "https://github.com/keiyoushi/extensions-source/tree/dbf6c05d6a9520c60533f1626616263522bbe71a/src/zh/terrahistoricus",
+    "referenceFiles": [
+      "TerraHistoricus.kt",
+      "TerraHistoricusDto.kt",
+      "build.gradle.kts"
+    ],
+    "referenceLicense": "Apache-2.0",
+    "referenceLicenseUrl": "https://github.com/keiyoushi/extensions-source/blob/dbf6c05d6a9520c60533f1626616263522bbe71a/LICENSE",
+    "apkPackage": "eu.kanade.tachiyomi.extension.zh.terrahistoricus",
+    "implementation": "Independent JavaScript implementation of the official public JSON protocol; no upstream code copied. Separate topic feeds and topic-qualified identities, ascending chapter reading order, bounded four-worker image resolution and explicit access errors. Does not port Android image-403 refresh interceptor.",
+    "bounds": "No login/payment/access-control bypass; official HTTPS image hosts only. At most two catalog requests per search, 2000 chapters per detail and 1000 images per chapter. Signed URLs are refreshed on a new content call, not on individual image HTTP 403."
+  },
+  "script": "// Independently implemented public JSON protocol; no upstream code copied.\n// Protocol reference: keiyoushi/extensions-source TerraHistoricus at\n// dbf6c05d6a9520c60533f1626616263522bbe71a (Apache-2.0).\n// Signed image URLs are resolved afresh on every content call. The host has\n// no image-403 interceptor: reopen/reload the chapter after a URL expires.\nvar TH_BASE = 'https://comic.hypergryph.com';\nvar TH_TOPICS = ['terra-historicus', 'talos-ii-historicus'];\nvar thSequence = 0;\nfunction thFail(message) { throw new Error('泰拉记事社：' + message); }\nfunction thObject(value, label) {\n  if (!value || typeof value !== 'object' || Array.isArray(value)) thFail(label + '格式无效');\n  return value;\n}\nfunction thList(value, label, limit) {\n  if (!Array.isArray(value) || value.length > limit) thFail(label + '格式无效或超出安全上限');\n  return value;\n}\nfunction thText(value, label) {\n  if (typeof value !== 'string' || !value.trim() || value.length > 4096) thFail(label + '缺失或格式无效');\n  return value.trim();\n}\nfunction thId(value) {\n  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(value)) thFail('作品或章节编号无效');\n  return value;\n}\nfunction thImage(value) {\n  if (typeof value !== 'string' || value.length > 8192 || !/^https:\\/\\/(?:[a-z0-9-]+\\.)*(?:hycdn\\.cn|hypergryph\\.com)\\//i.test(value) || /[\\s\\\\#]/.test(value))\n    thFail('图片地址无效；仅接受官方 HTTPS 图片');\n  return value;\n}\nasync function thFetch(path, fresh) {\n  var response = await triomi.fetch(TH_BASE + path, fresh ? {headers: {'Cache-Control': 'no-cache'}} : {});\n  if (response.status === 401 || response.status === 402 || response.status === 403)\n    thFail('访问受限（HTTP ' + response.status + '）；请在官网检查登录、授权或访问验证，规则不会绕过限制');\n  if (response.status !== 200) thFail('官网请求失败（HTTP ' + response.status + '）');\n  if (typeof response.body !== 'string' || response.body.length > 4000000) thFail('官网响应过大或格式无效');\n  var result;\n  try { result = JSON.parse(response.body); } catch (_) { thFail('官网返回非 JSON 内容，可能需要访问验证，请在官网查看'); }\n  thObject(result, '官网响应');\n  if (result.code !== 0) {\n    var message = typeof result.msg === 'string' ? result.msg.replace(/<[^>]*>/g, '').slice(0, 160) : '';\n    thFail('官网拒绝请求（code ' + String(result.code).slice(0, 20) + '）' + (message ? '：' + message : '；请在官网查看访问权限'));\n  }\n  if (result.data == null) thFail('官网响应缺少 data');\n  return result.data;\n}\nfunction thItem(row, topic, recent) {\n  thObject(row, '作品');\n  var cid = thId(recent ? row.comicCid : row.cid);\n  var tags = [];\n  if (row.type === 2) tags.push('相簿');\n  if (row.type === 3) tags.push('四格');\n  if (row.keywords != null) thList(row.keywords, '关键词', 100).forEach(function (tag) { tags.push(thText(tag, '关键词')); });\n  var description = [];\n  if (typeof row.subtitle === 'string' && row.subtitle.trim()) description.push('「' + row.subtitle.trim() + '」');\n  if (typeof row.introduction === 'string' && row.introduction.trim()) description.push(row.introduction.trim());\n  var authors = row.authors == null ? [] : thList(row.authors, '作者', 100).map(function (name) { return thText(name, '作者'); });\n  return {remoteId: topic + '/' + cid, type: 'manga', title: thText(row.title, '作品标题'),\n    url: TH_BASE + '/' + topic + '/comic/' + cid, coverUrl: thImage(recent ? row.coverUrl : row.cover),\n    author: authors.join('、'), description: description.join('\\n'), tags: tags};\n}\nasync function thCatalog(topic, recent) {\n  var data = await thFetch('/api/' + (recent ? 'recentUpdate' : 'comic') + '?topicKey=' + topic);\n  var seen = {};\n  var items = [];\n  thList(data, '作品列表', 1000).forEach(function (row) {\n    var item = thItem(row, topic, recent);\n    if (!seen[item.remoteId]) { seen[item.remoteId] = true; items.push(item); }\n  });\n  return items;\n}\nfunction thPage(page) {\n  if (!Number.isInteger(page) || page < 1) thFail('页码无效');\n  return page;\n}\nasync function discover(url, page) {\n  if (thPage(page) !== 1) return [];\n  var match = /^https:\\/\\/comic\\.hypergryph\\.com\\/api\\/(comic|recentUpdate)\\?topicKey=(terra-historicus|talos-ii-historicus)$/.exec(url);\n  if (!match) thFail('发现页地址无效');\n  return thCatalog(match[2], match[1] === 'recentUpdate');\n}\nasync function search(keyword, page) {\n  if (thPage(page) !== 1) return [];\n  if (typeof keyword !== 'string' || keyword.length > 200) thFail('搜索词无效');\n  var query = keyword.trim().toLowerCase();\n  var result = [];\n  for (var i = 0; i < TH_TOPICS.length; i++) {\n    var rows = await thCatalog(TH_TOPICS[i], false);\n    rows.forEach(function (item) { if (item.title.toLowerCase().indexOf(query) !== -1) result.push(item); });\n  }\n  return result;\n}\nfunction thLocation(url, chapter) {\n  var match = /^https:\\/\\/comic\\.hypergryph\\.com\\/(terra-historicus|talos-ii-historicus)\\/comic\\/([A-Za-z0-9_-]{1,80})(?:\\/episode\\/([A-Za-z0-9_-]{1,80}))?\\/?$/.exec(url || '');\n  if (!match || (chapter ? !match[3] : !!match[3])) thFail('作品或章节地址无效；请从对应主题重新打开作品');\n  return {topic: match[1], comic: match[2], episode: match[3], api: '/api/comic/' + match[2] + (chapter ? '/episode/' + match[3] : '')};\n}\nfunction thDate(seconds) {\n  if (seconds == null) return null;\n  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0 || seconds > 253402300799) thFail('章节日期格式无效');\n  return new Date(seconds * 1000).toISOString();\n}\nasync function detail(url) {\n  var location = thLocation(url, false);\n  var comic = thObject(await thFetch(location.api), '作品详情');\n  if (comic.cid !== location.comic) thFail('作品详情编号不匹配');\n  var rows = thList(comic.episodes, '章节目录', 2000);\n  var seen = {};\n  // Official API returns latest first. Reverse once for oldest-to-newest\n  // reading, retaining all interleaved extras, notices and preview episodes.\n  var chapters = rows.map(function (episode, index) {\n    thObject(episode, '章节');\n    var cid = thId(episode.cid);\n    if (seen[cid]) thFail('章节目录含重复编号');\n    seen[cid] = true;\n    if (!Number.isInteger(episode.type) || episode.type < 1 || episode.type > 4) thFail('未知的章节类型');\n    var title = thText(episode.title, '章节标题');\n    var shortTitle = typeof episode.shortTitle === 'string' ? episode.shortTitle.trim() : '';\n    var prefix = episode.type === 1 ? shortTitle : ['', '', '番外', '贺图', '公告'][episode.type];\n    return {remoteId: location.topic + '/' + location.comic + '/' + cid,\n      title: (prefix ? prefix + ' ' : '') + title,\n      url: TH_BASE + '/' + location.topic + '/comic/' + location.comic + '/episode/' + cid,\n      volumeTitle: ['','正篇','番外','贺图','公告'][episode.type],\n      releaseDate: thDate(episode.displayTime != null ? episode.displayTime : index === 0 ? comic.updateTime : null)};\n  }).reverse();\n  return {item: thItem(comic, location.topic, false), chapters: chapters};\n}\nasync function content(url) {\n  var location = thLocation(url, true);\n  var stamp = String(Date.now()) + '-' + String(++thSequence);\n  var episode = thObject(await thFetch(location.api + '?_=' + stamp, true), '章节详情');\n  if (episode.cid != null && episode.cid !== location.episode) thFail('章节详情编号不匹配');\n  var pages = thList(episode.pageInfos, '漫画页信息', 1000);\n  if (!pages.length) thFail('章节没有公开漫画页；请在官网检查访问权限');\n  pages.forEach(function (page) { thObject(page, '漫画页信息'); });\n  var images = new Array(pages.length);\n  var cursor = 0;\n  var failure = null;\n  async function worker() {\n    while (!failure && cursor < pages.length) {\n      var index = cursor++;\n      try {\n        var page = thObject(await thFetch(location.api + '/page?pageNum=' + (index + 1) + '&_=' + stamp, true), '漫画页');\n        if (page.pageNum != null && page.pageNum !== index + 1) thFail('漫画页码不匹配');\n        images[index] = thImage(page.url);\n      } catch (error) { failure = error; }\n    }\n  }\n  var workers = [];\n  for (var i = 0; i < Math.min(4, pages.length); i++) workers.push(worker());\n  await Promise.all(workers);\n  if (failure) throw failure;\n  return {images: images};\n}\n"
+}

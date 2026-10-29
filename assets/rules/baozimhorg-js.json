@@ -1,0 +1,32 @@
+{
+  "id": "baozimhorg",
+  "name": "GoDa漫画（公开漫画）",
+  "type": "manga",
+  "engine": "js",
+  "lang": "zh",
+  "version": "1.0.0",
+  "baseUrl": "https://baozimh.org",
+  "requireLogin": false,
+  "feeds": [
+    {
+      "id": "popular",
+      "name": "人气漫画",
+      "url": "/popular"
+    },
+    {
+      "id": "recent",
+      "name": "最新更新",
+      "url": "/recent"
+    }
+  ],
+  "headers": {
+    "Referer": "https://baozimh.org/"
+  },
+  "attribution": {
+    "protocolReference": "https://github.com/keiyoushi/extensions-source/tree/dbf6c05d6a9520c60533f1626616263522bbe71a/src/zh/baozimhorg",
+    "referenceLicense": "Apache-2.0",
+    "implementation": "Independent JavaScript public-protocol implementation; no upstream code or third-party implementation copied. No arbitrary page JavaScript evaluated.",
+    "bounds": "Anonymous public HTML/catalog and public data-only image-list decoding. No webpage evaluation, authentication, or anti-bot bypass; no binary image transform."
+  },
+  "script": "// Independent implementation of the public GoDa HTML/API wire protocol.\nvar BASE='https://baozimh.org',API='https://api-get-v3.mgsearcher.com';\nfunction fail(s){throw new Error('GoDa：'+s);}\nasync function fetchText(url){var r=await triomi.fetch(url,{headers:{Referer:BASE+'/'}});if(r.status!==200)fail('HTTP '+r.status);if(/Just a moment|cf-chl-|captcha|challenge-platform/i.test(r.body))fail('站点要求验证');return r.body;}\nasync function value(html,selector,attr){var a=await triomi.select(html,selector,{v:{selector:'.',attr:attr||'text'}});return a.length?String(a[0].v||'').trim():'';}\nasync function cards(url){var html=await fetchText(url);var rows=await triomi.select(html,'.container > .cardlist .pb-2 a',{url:{selector:'.',attr:'href'},title:'h3',coverUrl:{selector:'img',attr:'src'}},BASE);return rows.map(function(x){var m=x.url.match(/^\\/manga\\/([^/?#]+)\\/?$/);if(!m||!x.title)fail('列表项目格式无效');var img=x.coverUrl||'';var wrapped=img.match(/[?&]url=([^&]+)/);if(wrapped)img=decodeURIComponent(wrapped[1]);return {remoteId:m[1],title:x.title,url:BASE+'/manga/'+m[1],coverUrl:img};});}\nasync function discover(url,page){return cards(BASE+(/\\/recent(?:\\?|$)/.test(url)?'/newss/page/':'/hots/page/')+page);}\nasync function search(q,page){return cards(BASE+'/s/'+encodeURIComponent(q)+'?page='+page);}\nasync function jsonApi(path){var j;try{j=JSON.parse(await fetchText(API+path));}catch(e){fail('接口返回无法解析的数据');}if(j.code!==200||!j.data)fail(j.message||'公开接口拒绝请求');return j.data;}\nasync function detail(url,snapshot){\n var slug=(url.match(/\\/manga\\/([^/?#]+)/)||[])[1]||snapshot.remoteId;if(!/^[A-Za-z0-9_-]+$/.test(slug||''))fail('漫画标识无效');\n var html=await fetchText(BASE+'/manga/'+slug),mid=await value(html,'#mangachapters','data-mid');if(!/^\\d+$/.test(mid))fail('作品已下架或公开目录不可用');\n var d=await jsonApi('/api/manga/get?mid='+mid+'&mode=all');if(String(d.id)!==mid||!d.title||!Array.isArray(d.chapters)||!d.chapters.length)fail('公开目录为空或格式无效');\n if(d.content_rating!=null && String(d.content_rating)!=='0')fail('不支持受限内容');\n var rows=d.chapters.map(function(c,i){return {c:c,i:i};});rows.sort(function(a,b){var ao=Number(a.c.attributes.order),bo=Number(b.c.attributes.order);return isFinite(ao)&&isFinite(bo)&&ao!==bo?ao-bo:a.i-b.i;});\n var seen={},chapters=rows.map(function(row){var c=row.c,a=c.attributes;if(!/^\\d+$/.test(String(c.id))||!a||!a.title||!a.slug)fail('章节数据无效');if(seen[c.id])fail('章节编号重复');seen[c.id]=true;return {remoteId:mid+'/'+c.id,title:a.title,url:BASE+'/manga/'+slug+'/'+a.slug+'#'+mid+'/'+c.id,number:Number(a.order)||undefined,volumeTitle:'章节',releaseDate:a.updatedAt,locked:false};});\n var title=await value(html,'main h1');return {item:{remoteId:slug,title:d.title||title,url:BASE+'/manga/'+slug,coverUrl:d.cover,description:d.desc},chapters:chapters};\n}\nfunction decodeImages(input){\n if(typeof input!=='string'||input.length>4000000||input.slice(0,3)!=='J7r'||input.slice(-2)!=='nQ')fail('未知的公开图片数据格式');\n var s=input.slice(3,-2),size=s.length-5;if(size<=0)fail('图片数据为空');\n var a=Math.floor(size/3),b=Math.floor((size-a)/2),c=size-a-b;\n if(s.slice(b,b+2)!=='kD'||s.slice(b+2+c,b+5+c)!=='W4s')fail('图片数据标记无效');\n var joined=s.slice(b+5+c)+s.slice(0,b)+s.slice(b+2,b+2+c);if(joined.length!==size)fail('图片数据长度无效');\n var custom='_-9876543210abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',standard='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_',plain='';\n for(var at=0;at<joined.length;at+=7){var part=joined.slice(at,at+7);if(Math.floor(at/7)%2)part=part.split('').reverse().join('');for(var k=0;k<part.length;k++){var pos=custom.indexOf(part[k]);if(pos<0)fail('图片数据字符无效');plain+=standard[pos];}}\n var bits=0,acc=0,bytes=[];for(var i=0;i<plain.length;i++){acc=(acc<<6)|standard.indexOf(plain[i]);bits+=6;if(bits>=8){bits-=8;bytes.push((acc>>>bits)&255);}}\n if(bits&&(acc&((1<<bits)-1)))fail('图片数据编码无效');\n var utf='';for(var j=0;j<bytes.length;j++)utf+='%'+('0'+bytes[j].toString(16)).slice(-2);\n var rows;try{rows=JSON.parse(decodeURIComponent(utf));}catch(e){fail('图片数据解码失败');}\n if(!Array.isArray(rows)||!rows.length||rows.length>5000)fail('图片列表为空或过大');return rows;\n}\nasync function content(url,chapter){\n var m=String(chapter.remoteId||'').match(/^(\\d+)\\/(\\d+)$/)||url.match(/#(\\d+)\\/(\\d+)$/);if(!m)fail('请刷新章节目录');\n var d=await jsonApi('/api/v2/chapter/getinfo?m='+m[1]+'&c='+m[2]);if(!d.info||!d.info.images)fail('公开图片数据缺失');\n var rows=decodeImages(d.info.images.images);rows.sort(function(a,b){return Number(a.order)-Number(b.order);});\n return {images:rows.map(function(x){if(!Number.isFinite(Number(x.order))||typeof x.url!=='string'||!/^\\/(?!\\/)/.test(x.url)||/[\\s\\\\]/.test(x.url))fail('图片路径无效');return 'https://c-nd2-1.6wm.top'+x.url;}),headers:{Referer:BASE+'/'}};\n}\n"
+}

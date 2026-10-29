@@ -266,6 +266,30 @@ void main() {
     expect((await repo.list()).length, 3);
   });
 
+  test('连续添加不同订阅不覆盖先前身份或筛选条件', () async {
+    final db = openTestDatabase();
+    addTearDown(db.close);
+    final repo = MangaFeedRepository(db);
+    final ids = <String>[];
+    for (var i = 0; i < 100; i++) {
+      ids.add(
+        await repo.save(
+          sourceId: 'one',
+          kind: 'search',
+          query: 'query-$i',
+          name: '订阅$i',
+        ),
+      );
+    }
+    expect(ids.toSet(), hasLength(100), reason: '不同订阅不得共用持久ID: $ids');
+    final rows = await repo.list();
+    expect(rows.map((row) => row.query), [
+      for (var i = 0; i < 100; i++) 'query-$i',
+    ]);
+    await repo.reorder(ids.reversed.toList());
+    expect((await repo.list()).map((row) => row.id), ids.reversed);
+  });
+
   test('筛选快照接受旧完整列表，拒绝未知版本和部分分组形状变化', () {
     final fresh = <Map<String, Object?>>[
       {

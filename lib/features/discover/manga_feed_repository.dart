@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,6 +34,11 @@ String mangaFeedTitle(MangaFeedRow row, SourceEntry? entry) {
           : row.feedId == 'popular'
           ? '热门'
           : row.feedId)}';
+}
+
+String _newSavedFeedId() {
+  final random = Random.secure();
+  return 'saved:${base64Url.encode(List<int>.generate(16, (_) => random.nextInt(256)))}';
 }
 
 class MangaFeedRepository {
@@ -87,8 +93,7 @@ class MangaFeedRepository {
       }
     }).firstOrNull;
     final old = duplicate ?? rows.where((row) => row.id == id).firstOrNull;
-    final selectedId =
-        old?.id ?? id ?? 'saved:${DateTime.now().microsecondsSinceEpoch}';
+    final selectedId = old?.id ?? id ?? _newSavedFeedId();
     final title = name.trim().isNotEmpty
         ? name.trim()
         : normalizedQuery.isNotEmpty

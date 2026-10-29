@@ -1,0 +1,32 @@
+{
+  "id": "zaimanhua",
+  "name": "再漫画（公开章节）",
+  "type": "manga",
+  "engine": "js",
+  "lang": "zh",
+  "version": "1.0.0",
+  "baseUrl": "https://manhua.zaimanhua.com",
+  "requireLogin": false,
+  "feeds": [
+    {
+      "id": "popular",
+      "name": "人气排行",
+      "url": "/popular"
+    },
+    {
+      "id": "recent",
+      "name": "最新更新",
+      "url": "/recent"
+    }
+  ],
+  "headers": {
+    "Referer": "https://manhua.zaimanhua.com/"
+  },
+  "attribution": {
+    "protocolReference": "https://github.com/keiyoushi/extensions-source/tree/dbf6c05d6a9520c60533f1626616263522bbe71a/src/zh/zaimanhua",
+    "referenceLicense": "Apache-2.0",
+    "implementation": "Independent JavaScript public-protocol implementation; no upstream code or third-party implementation copied. No arbitrary page JavaScript evaluated.",
+    "bounds": "Public guest-readable chapters only. Signed images refresh on every content call; expired cached image requests require reopening the chapter. No image interceptor or login bypass."
+  },
+  "script": "// Independent anonymous-public protocol port; Apache-2.0 upstream reference in attribution.\nvar API='https://v4api.zaimanhua.com/app/v1';\nvar BASE='https://manhua.zaimanhua.com';\nfunction fail(s){throw new Error('再漫画：'+s);}\nfunction positive(x){return /^\\d+$/.test(String(x)) && Number(x)>0;}\nasync function api(path,platform){\n var r=await triomi.fetch(API+path,{headers:{Platform:platform||'h5',Referer:BASE+'/'}});\n if(r.status!==200)fail('HTTP '+r.status);\n var j;try{j=JSON.parse(r.body);}catch(e){fail('接口未返回 JSON');}\n if(j.errmsg || (j.errno!=null && j.errno!==0))fail(j.errmsg||'接口拒绝请求');\n if(j.data==null)fail('接口缺少数据');return j.data;\n}\nfunction names(v){return Array.isArray(v)?v.map(function(x){return x.tag_name||x.tagName||'';}).filter(Boolean):String(v||'').split(/[,，/]/).filter(Boolean);}\nfunction item(x){var id=x.comic_id||x.id;if(!positive(id)||!x.title)fail('漫画元数据不完整');var st=names(x.status).join('');return {remoteId:String(id),title:x.title,url:BASE+'/comic/detail/'+id,coverUrl:x.cover,author:names(x.authors).join(', '),tags:names(x.types),status:/完结|完結/.test(st)?'completed':/连载|連載/.test(st)?'ongoing':'unknown',description:x.description};}\nasync function discover(url,page){\n var path=/\\/recent(?:\\?|$)/.test(url)?'/comic/update/list/0/'+page:'/comic/rank/list?tag_id=0&page='+page;\n var rows=await api(path);if(!Array.isArray(rows))fail('列表格式无效');return rows.map(item);\n}\nasync function search(q,page){var d=await api('/search/index?source=0&size=20&keyword='+encodeURIComponent(q)+'&page='+page);var rows=d.list;if(!Array.isArray(rows))fail('搜索结果格式无效');return rows.map(item);}\nfunction idFor(url,snapshot){var id=snapshot&&snapshot.remoteId;if(!positive(id)){var m=url.match(/\\/comic\\/detail\\/(\\d+)/)||url.match(/[?&]id=(\\d+)/);id=m&&m[1];}if(!positive(id))fail('漫画编号无效');return String(id);}\nfunction unwrap(d){return d.data||d.comicInfo||d;}\nasync function detail(url,snapshot){\n var id=idFor(url,snapshot),d=unwrap(await api('/comic/detail/'+id+'?_v=2.2.5','pc'));\n if(d.canRead===false || d.is_need_login===1)fail('此作品需要登录或更高权限；仅支持公开章节');\n if(d.isHideChapter===1 && d.canRead===true){\n  var r=await triomi.fetch(BASE+'/api/v1/comic2/comic/detail?id='+id,{headers:{Platform:'pc',Referer:BASE+'/'}});\n  if(r.status!==200)fail('公开目录 HTTP '+r.status);\n  var j=JSON.parse(r.body);if(j.errmsg || (j.errno!=null&&j.errno!==0))fail(j.errmsg||'公开目录不可用');\n  var alternate=unwrap(j.data||{});d.chapters=alternate.chapterList||alternate.chapters;\n }\n var groups=d.chapters||d.chapterList;if(!Array.isArray(groups)||!groups.length)fail('公开章节目录为空或权限不足');\n var chapters=[],seen={};groups.forEach(function(g){\n  if(!Array.isArray(g.data))fail('章节分组格式无效');\n  var rows=g.data.map(function(c,i){return {c:c,i:i};});\n  rows.sort(function(a,b){var av=Number(a.c.chapter_order),bv=Number(b.c.chapter_order);return isFinite(av)&&isFinite(bv)&&av!==bv?av-bv:a.i-b.i;});\n  rows.forEach(function(row){var c=row.c,cid=c.chapter_id;if(!positive(cid))fail('章节编号无效');var key=String(cid);if(seen[key])return;seen[key]=true;\n   var title=c.chapter_name||c.chapter_title;if(!title)fail('章节标题为空');\n   chapters.push({remoteId:id+'/'+cid,title:title,url:'https://m.zaimanhua.com/pages/comic/page?comic_id='+id+'&chapter_id='+cid,number:Number(c.chapter_order)||undefined,volumeTitle:g.title||'章节',locked:c.canRead===false||c.is_fee===true,releaseDate:c.updatetime?new Date(Number(c.updatetime)*1000).toISOString():undefined});\n  });\n });\n if(!chapters.length)fail('没有公开章节目录');return {item:item(d),chapters:chapters};\n}\nasync function content(url,chapter){\n var pair=String(chapter.remoteId||'').match(/^(\\d+)\\/(\\d+)$/);\n if(!pair){var m=url.match(/[?&]comic_id=(\\d+)/),c=url.match(/[?&]chapter_id=(\\d+)/);if(m&&c)pair=['',m[1],c[1]];}\n if(!pair)fail('章节编号无效');var d=unwrap(await api('/comic/chapter/'+pair[1]+'/'+pair[2]+'?_v=2.2.5','h5'));\n if(d.canRead!==true)fail('此章节需要登录或更高权限；不会尝试认证');\n var images=d.page_url_hd;if(!Array.isArray(images)||!images.length)fail('公开章节没有图片');\n if(d.picnum!=null && Number(d.picnum)!==images.length)fail('图片数量不完整');\n images.forEach(function(x){if(typeof x!=='string'||!/^https:\\/\\/images\\.zaimanhua\\.com\\//.test(x))fail('图片地址无效');});\n // Never cache signed image URLs: each content call refreshes the public chapter API.\n return {images:images,headers:{Referer:BASE+'/'}};\n}\n"
+}

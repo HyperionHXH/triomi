@@ -1,3 +1,4 @@
+import 'ios_chinese_rules_test.dart' as chinese_rules;
 import 'ios_ech_http_test.dart' as native_http;
 import 'ios_js_runtime_test.dart' as javascript;
 import 'ios_storage_live_test.dart' as storage;
@@ -8,6 +9,7 @@ import 'ios_video_live_test.dart' as video;
 void main() {
   native_http.main();
   javascript.main();
+  chinese_rules.main();
   storage.main();
   video.main();
 }
