@@ -781,11 +781,13 @@ void main() {
       await tester.tapAt(
         Offset(track.left + track.width * .25, track.center.dy),
       );
+      // Flush the slider preview and native seek before reading widget state:
+      // the pre-tap paused value can already satisfy the range below.
+      await pumpFor(const Duration(milliseconds: 350));
       await until(
         () => timeline().value >= 4500 && timeline().value <= 10500,
         'timeline tap must seek the paused native decoder away from the end',
       );
-      final beforeSkip = timeline().value;
       await tester.tap(find.byTooltip('关闭弹幕'));
       await pumpFor();
       expect(overlay().enabled, isFalse);
@@ -793,6 +795,7 @@ void main() {
       await tester.tap(find.byTooltip('开启弹幕'));
       await pumpFor();
       expect(overlay().enabled, isTrue);
+      final beforeSkip = timeline().value;
       await tester.tap(find.byKey(const ValueKey('player-skip')));
       await until(
         () => timeline().value >= beforeSkip + 4500,

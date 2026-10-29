@@ -12,6 +12,8 @@ R176新增持久兼容仓库管理：用户粘贴一个HTTPS兼容索引，或�
 
 本地analyze零问题，完整Flutter1602通过/4跳过，Windows debug EXE及Android debug APK已编译（Android显式C:/Android/sdk）；新增目录/移植规则定向87项通过，Python工具112项通过、编码零错误。新增56状态视觉巡检包含录入仓库、从逻辑HTTPS严格映射loopback的目录/规则下载、真实iOS WebKit初始化与启用；新增Komiic/xkcd实际WebKit协议集成。当前iOS云端构建、截图及最终176 Release尚待本轮运行，不使用175旧证据代替。
 
+首次云端40826842065真机IPA构建和新增仓库录入/下载/启用截图通过，但新增Komiic协议夹具详情遗漏必填`imageUrl`；视觉巡检快进断言读取了timeline tap后尚未重建的旧暂停位置。下载完整日志和录屏观察到原生画面确已跳至12秒，独立视频集成同轮seek通过。现补齐真实详情字段，并在timeline tap后pump、弹幕切换后读取快进基准，不修改生产seek/规则解析、不放宽原断言；该失败候选不发布，等待完整复跑。
+
 ## 当前请求：同步主线 R175 与 iOS 规则来源一键安装体验（已验收）
 
 已将 `origin/master` `19554d6`（0.12.0+175）完整合入 `feat/ios`，包含跨设备收藏/进度自动同步、来源迁移恢复、Bangumi 独立选择及分块 WebDAV 完整备份。APK 安全路径在主线变更基础上保留 iOS `/var`→`/private/var` 合法系统别名。

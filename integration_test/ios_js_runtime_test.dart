@@ -257,6 +257,7 @@ Object.defineProperty(globalThis, 'throwingExport', {
                 'id': '1696',
                 'title': '协议夹具',
                 'status': 'ONGOING',
+                'imageUrl': 'https://komiic.com/cover/1696.jpg',
                 'authors': <Object?>[],
                 'categories': <Object?>[],
                 'warnings': <Object?>[],
