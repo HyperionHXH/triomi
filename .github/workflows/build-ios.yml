@@ -85,8 +85,8 @@ jobs:
             xcrun simctl boot "$device"
           fi
           xcrun simctl bootstatus "$device" -b
-      - name: Prepare the debug simulator application
-        run: flutter build ios --simulator --debug
+      - name: Prepare the isolated native XCTest host
+        run: flutter build ios --simulator --debug --target=integration_test/fixtures/ios_native_host.dart
       - name: Smoke-test the native bridge on iOS
         run: |
           set -euo pipefail
