@@ -28,6 +28,8 @@ JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源�
 
 从 **0.12.0+176** 开始支持持久保存兼容仓库，不必逐个粘贴 JSON。先安装此版本或更新的 iOS 包，再按以下步骤操作；175及更早的版本没有“管理兼容仓库”功能。
 
+177候选另修复iOS收起键盘时异常负viewInsets使“管理兼容仓库”弹层崩溃的问题，并包含新增中文规则的实际iOS WebKit契约；最终发布状态见CURRENT_STATUS，不能把尚未完成视觉门槛的候选当作已发布。176支持相同仓库协议，新增规则本身无需安装外部扩展App。
+
 已发布：[v0.12.0-ios.176](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-ios.176)。在 Assets 下载 `Triomi-iOS-Unsigned.ipa`，不要下载 Source code ZIP。该包最低iOS15；未签名，仍需自己的合法签名安装或设备系统支持的安装器。完整云端[40831538368](https://github.com/HyperionHXH/triomi/actions/runs/40831538368)通过，56张截图已下载逐图读取，IPA公开下载摘要与接受产物一致。
 
 1. 打开「漫画 → 浏览 → JS / API 漫画来源目录」，或漫画右上角齿轮进入同名入口；在来源管理点「添加漫画来源 → JS / API 漫画来源目录」。

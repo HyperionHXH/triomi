@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -48,7 +50,8 @@ class _CatalogRepositoriesSheetState
           16,
           16,
           16,
-          16 + MediaQuery.viewInsetsOf(context).bottom,
+          // iOS can report a transient keyboard frame outside the view.
+          16 + math.max(0.0, MediaQuery.viewInsetsOf(context).bottom),
         ),
         child: SizedBox(
           height: MediaQuery.sizeOf(context).height * .8,

@@ -434,6 +434,64 @@ void main() {
   );
 
   testWidgets(
+    'repository entry survives keyboard frame transitions without losing saved URL',
+    (tester) async {
+      tester.view.physicalSize = const Size(1206, 2622);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final inset = ValueNotifier<double>(0);
+      addTearDown(inset.dispose);
+      final container = _container(routingHttpClient({_indexUrl: _index()}));
+      await tester.runAsync(() async {
+        await container.read(sourcesProvider.future);
+      });
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            builder: (context, child) => ValueListenableBuilder<double>(
+              valueListenable: inset,
+              builder: (context, bottom, _) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(viewInsets: EdgeInsets.only(bottom: bottom)),
+                child: child!,
+              ),
+            ),
+            home: const Scaffold(body: CatalogSheet(type: MediaType.manga)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('catalog-manage-repositories')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('catalog-repository-url')),
+        _indexUrl,
+      );
+      inset.value = 300;
+      await tester.pumpAndSettle();
+      final add = find.byKey(const ValueKey('catalog-repository-add'));
+      await _reveal(tester, add);
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+      expect(container.read(catalogRepositoriesProvider).single.url, _indexUrl);
+      FocusManager.instance.primaryFocus?.unfocus();
+      inset.value = -50748567689.9;
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      inset.value = 0;
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('关闭仓库管理'));
+      await tester.pumpAndSettle();
+      expect(find.text('Remote fixture'), findsOneWidget);
+      expect(container.read(catalogRepositoriesProvider).single.url, _indexUrl);
+    },
+  );
+
+  testWidgets(
     'hash and refresh failures retain installed version and offline entries',
     (tester) async {
       var offline = false;
