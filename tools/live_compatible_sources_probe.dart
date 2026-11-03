@@ -84,8 +84,8 @@ void main() {
         final keyword = query.isNotEmpty
             ? query
             : switch (id) {
-                'mangadex' => 'Berserk',
-                'komiic' => '腦洞學生會',
+                'mangadex' => 'Yotsuba',
+                'komiic' => '香格里拉',
                 'xkcd' => '1',
                 'copymanga' => '一拳超人',
                 _ => discovered.first.title,
@@ -108,7 +108,8 @@ void main() {
         }
         final item = switch (id) {
           'mangadex' => searched.firstWhere(
-            (item) => item.remoteId == '801513ba-a712-498c-8f57-cae55b38cc92',
+            (item) => RegExp(r'四[葉叶]|Yotsuba|よつばと', caseSensitive: false)
+                .hasMatch(item.title),
           ),
           'copymanga' => searched.firstWhere(
             (item) => item.remoteId == 'yiquanchaoren',
@@ -145,7 +146,7 @@ void main() {
         final bytes = await http.fetchBytes(
           imageUrl,
           sourceId: source.descriptor.id,
-          headers: source.rule.headers,
+          headers: content.imageHeaders,
         );
         final codec = await ui.instantiateImageCodec(Uint8List.fromList(bytes));
         final frame = await codec.getNextFrame();

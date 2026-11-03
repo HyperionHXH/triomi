@@ -4,7 +4,7 @@
 
 > iOS 适配：iOS 15+ 的 JS/API/Kazumi 路径使用系统 WebKit、Dart 宿主网络及系统 AVPlayer；Mihon APK/DEX 与 Windows JVM 不能在 iOS 执行，管理入口明确降级。弹幕跟随R173的B站/Animeko/Gamer独立只读池、分集纠正、偏移与屏蔽设置，不再消费旧来源弹幕URL或提供弹弹play匹配/发送凭据入口。补齐无后缀HLS、MIME提示与省略Cookie语义；iOS17+支持AVPlayer公开MIME覆盖，15/16仍受系统识别能力限制。当前 Apple 编译/模拟器、账号、PiP 与锁屏设备证据以[当前状态](CURRENT_STATUS.md)记录为准，下方历史 Android/Windows 结果不外推至 iOS。详见 [iOS 适配说明](IOS_ADAPTATION.md)。
 
-> R178进行中：Copy1.1.0已改用实际Android1.4.85的App API协议，生产Dart读取490章/正文/首图通过，但本轮iOS执行仍待验收。此前17条也加入真实iOS网络门槛；旧烟测手工传图片头不等同生产Reader，现修复公共imageHeaders在Reader/下载/保存路径的丢失。下表旧轮次结果不提升为本轮通过；公开仓库仍为先前1.0.0，最终规则和宿主发布以CURRENT_STATUS精确记录为准。
+> R178进行中：Copy1.1.0已改用实际Android1.4.85的App API协议，6426971的41564359308已通过真实iOS全分组490章、旧新正文、生产阅读器翻页/下一章/文字吐槽及设置账号入口；11张原生截图已读取，搜索图等待误匹配仍需新修复复验。17条旧源在同轮iOS实网12通过/5失败（WEBTOON详情超时、BH3接收超时、喵趣403、咚漫图片连接超时、Webmota样本搜索ID与规范ID不同）。共享公共imageHeaders已接Reader/下载/保存；跨错误Zone导致HTTP失败伪装JS超时的桥缺陷已先失败后通过修复，WEBTOON公开目录改官方episodes API。原56状态巡检因目录两个安装按钮定位错误失败已修；下一轮未通过前不发布候选IPA。公开仓库仍为先前1.0.0；下表旧轮次结果不提升为本轮通过，最终状态以CURRENT_STATUS为准。
 
 
 ## 来源矩阵

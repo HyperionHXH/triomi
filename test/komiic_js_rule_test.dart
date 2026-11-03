@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/models/chapter.dart';
@@ -8,10 +7,10 @@ import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/js/js_source.dart';
-import 'package:triomi/core/source/js/runtime/flutter_js_runtime.dart';
 import 'package:triomi/core/source/rule_schema.dart';
 
 import 'fixtures/fake_http_client.dart';
+import 'fixtures/portable_rule_test_support.dart';
 
 // The production rule runs in the real JS engine; only network I/O is fixed.
 void main() {
@@ -49,11 +48,11 @@ void main() {
       SourceResponse(statusCode: 200, body: jsonEncode({'data': value}));
 
   Map<String, dynamic> payload(SourceRequest request) {
-    expect(request.url, 'https://komiic.com/api/query');
+    expect(request.url, 'https://komiic.cc/api/query');
     expect(request.method, 'POST');
     expect(request.bodyType, RequestBodyType.json);
     expect(request.headers['Content-Type'], 'application/json');
-    expect(request.headers['Referer'], 'https://komiic.com/');
+    expect(request.headers['Referer'], 'https://komiic.cc/');
     expect(
       request.headers.keys.map((key) => key.toLowerCase()),
       isNot(contains('cookie')),
@@ -64,9 +63,9 @@ void main() {
   Future<JsSource> prepare(FakeHttpClient http) async {
     final source = JsSource(
       rule: SourceRule.parseJson(
-        File('assets/rules/komiic-js.json').readAsStringSync(),
+        await readSourceRuleAsset('assets/rules/komiic-js.json'),
       ),
-      runtime: FlutterJsRuntime(),
+      runtime: createSourceRuleRuntime(),
       http: http,
     );
     addTearDown(source.dispose);
@@ -80,7 +79,7 @@ void main() {
     contains(text),
   );
 
-  test(
+  sourceRuleTest(
     'Komiic popular/recent use 30-row GraphQL pagination and real DTO fields',
     () async {
       final http = FakeHttpClient((request) async {
@@ -118,7 +117,7 @@ void main() {
     },
   );
 
-  test(
+  sourceRuleTest(
     'Komiic search passes literal text as a variable and ends after page one',
     () async {
       const keyword = '腦洞 "學生會" + % & \\';
@@ -140,7 +139,7 @@ void main() {
     },
   );
 
-  test(
+  sourceRuleTest(
     'Komiic preserves separate book/chapter editions with stable reading order',
     () async {
       Map<String, Object?> row(String id, String serial, String type) => {
@@ -195,7 +194,7 @@ void main() {
     },
   );
 
-  test(
+  sourceRuleTest(
     'Komiic checks guest quota and maps kid to ordered absolute image URLs',
     () async {
       final http = FakeHttpClient((request) async {
@@ -215,25 +214,15 @@ void main() {
         });
       });
       final source = await prepare(http);
-      expect(
-        source.rule.headers['Referer'],
-        'https://komiic.com/',
-        reason: 'reader/download transport uses persistent rule image headers',
-      );
       final result = await source.content(chapter);
       expect(http.requests, hasLength(2));
       expect(result.images, [
-        'https://komiic.com/api/image/e429ffc5-e4df-46ae-9a72-d737ca5f4028',
-        'https://komiic.com/api/image/00541b35-2c4e-4301-a3eb-8fe848d702ba',
+        'https://komiic.cc/api/image/e429ffc5-e4df-46ae-9a72-d737ca5f4028',
+        'https://komiic.cc/api/image/00541b35-2c4e-4301-a3eb-8fe848d702ba',
       ]);
-      // ChapterContent currently retains images, not root content headers.
-      // Assert the exported contract directly through the same real JS runtime.
-      final raw = await source.runtime.call('content', [
-        chapterUrl,
-        {'remoteId': '43706'},
-        <String, Object?>{},
-      ]) as Map;
-      expect((raw['headers'] as Map)['Referer'], chapterUrl);
+      expect(result.imageHeaders, {
+        'Referer': 'https://komiic.cc/comic/1696/chapter/43706/images/all',
+      });
       expect(
         http.requests.every((request) => !request.url.contains('/api/image/')),
         isTrue,
@@ -242,7 +231,60 @@ void main() {
     },
   );
 
-  test(
+  sourceRuleTest('Komiic rewrites only official transport hosts and retains canonical identity', () async {
+    const covers = {
+      'https://public.komiic.com/comics/a/cover.jpg?size=240':
+          'https://public.komiic.cc/comics/a/cover.jpg?size=240',
+      'https://img.komiic.com/comics/a/cover.webp':
+          'https://img.komiic.cc/comics/a/cover.webp',
+      'https://download.komiic.com/comics/a/cover.jpg':
+          'https://download.komiic.cc/comics/a/cover.jpg',
+      'https://public.komiic.cc/comics/a/cover.jpg':
+          'https://public.komiic.cc/comics/a/cover.jpg',
+      'https://public.komiic.com.example/cover.jpg':
+          'https://public.komiic.com.example/cover.jpg',
+      'https://images.example/cover.jpg': 'https://images.example/cover.jpg',
+    };
+    final http = FakeHttpClient((request) async {
+      payload(request);
+      return data({
+        'comics': [
+          for (final cover in covers.keys) {...comic(), 'imageUrl': cover},
+        ],
+      });
+    });
+    final source = await prepare(http);
+    expect(source.rule.baseUrl, 'https://komiic.cc');
+    final items = await source.discover(source.feeds.first);
+    expect(items.map((item) => item.coverUrl), covers.values);
+    expect(items.every((item) => item.remoteId == '1696'), isTrue);
+    expect(items.every((item) => item.url == comicUrl), isTrue);
+    expect(http.requests, hasLength(1));
+  });
+
+  sourceRuleTest('Komiic uses the selected mirror for saved mirror chapters without fallback', () async {
+    const mirrorChapter = Chapter(
+      sourceId: 'komiic',
+      remoteId: '43706',
+      title: '第 00 話',
+      url: 'https://komiic.cc/comic/1696/chapter/43706/images/all',
+    );
+    final http = FakeHttpClient((request) async {
+      final body = payload(request);
+      if (body['operationName'] == 'imageLimit') {
+        return data({'getImageLimit': {'limit': 300, 'usage': 1}});
+      }
+      expect(body['variables'], {'chapterId': '43706'});
+      return data({'imagesByChapterId': [{'kid': 'fresh-guest-page'}]});
+    });
+    final source = await prepare(http);
+    final result = await source.content(mirrorChapter);
+    expect(result.images, ['https://komiic.cc/api/image/fresh-guest-page']);
+    expect(result.imageHeaders['Referer'], mirrorChapter.url);
+    expect(http.requests, hasLength(2));
+  });
+
+  sourceRuleTest(
     'Komiic exhausted daily quota fails before requesting chapter images',
     () async {
       final http = FakeHttpClient((request) async {
@@ -261,7 +303,7 @@ void main() {
     },
   );
 
-  test(
+  sourceRuleTest(
     'Komiic GraphQL unauthorized partial data is not empty search success',
     () async {
       final http = FakeHttpClient(
@@ -289,7 +331,7 @@ void main() {
   );
 
   for (final status in [401, 402, 403, 429]) {
-    test('Komiic HTTP $status is explicit, never an empty catalog', () async {
+    sourceRuleTest('Komiic HTTP $status is explicit, never an empty catalog', () async {
       final source = await prepare(
         FakeHttpClient(
           (request) async =>
@@ -303,7 +345,7 @@ void main() {
     });
   }
 
-  test('Komiic preserves classified host auth failures', () async {
+  sourceRuleTest('Komiic preserves classified host auth failures', () async {
     final source = await prepare(
       FakeHttpClient((request) async {
         throw const SourceException(
@@ -333,7 +375,7 @@ void main() {
     ],
     [<String, Object?>{}],
   ]) {
-    test('Komiic malformed/empty page list $images fails visibly', () async {
+    sourceRuleTest('Komiic malformed/empty page list $images fails visibly', () async {
       final source = await prepare(
         FakeHttpClient((request) async {
           if (payload(request)['operationName'] == 'imageLimit') {
@@ -351,7 +393,7 @@ void main() {
     });
   }
 
-  test(
+  sourceRuleTest(
     'Komiic malformed quota is not silently treated as unlimited access',
     () async {
       final http = FakeHttpClient(
@@ -365,7 +407,7 @@ void main() {
     },
   );
 
-  test(
+  sourceRuleTest(
     'Komiic missing listing, detail or chapter DTOs are not false success',
     () async {
       final source = await prepare(FakeHttpClient((request) async => data({})));
@@ -378,7 +420,7 @@ void main() {
     },
   );
 
-  test(
+  sourceRuleTest(
     'Komiic missing chapter array fails instead of saving partial detail',
     () async {
       final source = await prepare(

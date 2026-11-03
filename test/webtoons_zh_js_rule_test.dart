@@ -1,14 +1,14 @@
-import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/js/js_source.dart';
-import 'package:triomi/core/source/js/runtime/flutter_js_runtime.dart';
 import 'package:triomi/core/source/rule_schema.dart';
 
 import 'fixtures/fake_http_client.dart';
+import 'fixtures/portable_rule_test_support.dart';
 
 const _base = 'https://www.webtoons.com';
 const _list = '$_base/zh-hant/school/example/list?title_no=546';
@@ -18,9 +18,9 @@ const _viewer =
 Future<JsSource> _prepare(FakeHttpClient http) async {
   final source = JsSource(
     rule: SourceRule.parseJson(
-      File('assets/rules/webtoons-zh-js.json').readAsStringSync(),
+      await readSourceRuleAsset('assets/rules/webtoons-zh-js.json'),
     ),
-    runtime: FlutterJsRuntime(),
+    runtime: createSourceRuleRuntime(),
     http: http,
   );
   addTearDown(source.dispose);
@@ -42,33 +42,26 @@ const _cards = '''
 </ul>
 ''';
 
-String _chapterPage(int page, {int pages = 12, bool repeated = false}) {
-  final episode = repeated ? 12 : pages + 1 - page;
-  final links = page == 1
-      ? [for (var next = 2; next <= 11 && next <= pages; next++) next]
-      : page == 11 && pages > 11
-      ? [1, 12]
-      : [1];
-  final chapter =
-      '''
-<li class="_episodeItem detail_list_item" data-episode-no="$episode">
-<a href="/zh-hant/school/example/episode/viewer?title_no=546&amp;episode_no=$episode">
-<span class="subj"><span>第 $episode 話</span><em class="ico_bgm">BGM</em></span>
-</a></li>
-''';
-  return '''
+const _metadata = '''
 <html><head>
 <meta property="og:image" content="https://covers.example.test/detail.jpg">
 <meta property="com-linewebtoon:webtoon:author" content="測試作家">
-</head><body>
-<h1 class="subj">測試作品</h1>
+</head><body><h1 class="subj">測試作品</h1>
 <div id="_asideDetail"><p class="summary">公開作品簡介</p></div>
 <div class="detail_install_app">最新 7 話僅限APP上閱讀！</div>
-<ul id="_listUl">$chapter$chapter</ul>
-<div class="paginate">${links.map((next) => '<a href="/zh-hant/school/example/list?title_no=546&amp;page=$next">$next</a>').join()}</div>
 </body></html>
 ''';
-}
+
+Map<String, Object?> _episode(int number) => {
+  'episodeNo': number,
+  'episodeTitle': '第 $number 話',
+  'viewerLink': '/zh-hant/school/example/episode/viewer?title_no=546&episode_no=$number',
+};
+SourceResponse _episodes(List<Object?> rows, {Object? cursor = 0}) =>
+    SourceResponse(statusCode: 200, body: jsonEncode({
+      'success': true,
+      'result': {'episodeList': rows, 'nextCursor': cursor},
+    }));
 
 Chapter _chapter() => Chapter(
   sourceId: 'webtoons-zh',
@@ -79,9 +72,22 @@ Chapter _chapter() => Chapter(
 );
 
 void main() {
-  test('public feeds, keyword encoding, stable IDs and complete multi-block chapter pagination', () async {
+  sourceRuleTest('public feeds, keyword encoding, stable IDs and complete public API cursor pagination', () async {
     final http = FakeHttpClient((request) async {
       final uri = Uri.parse(request.url);
+      if (uri.host == 'm.webtoons.com') {
+        expect(uri.path, '/api/v1/webtoon/546/episodes');
+        expect(uri.queryParameters['pageSize'], '99999');
+        expect(request.headers['Referer'], 'https://m.webtoons.com/');
+        expect(request.headers.keys.map((key) => key.toLowerCase()),
+            isNot(anyOf(contains('origin'), contains('cookie'))));
+        final cursor = uri.queryParameters['cursor'];
+        expect(cursor, anyOf(isNull, '6'));
+        return _episodes([
+          for (var n = cursor == null ? 6 : 12;
+              n >= (cursor == null ? 1 : 7); n--) _episode(n),
+        ], cursor: cursor == null ? 6 : 0);
+      }
       expect(uri.host, 'www.webtoons.com');
       expect(request.headers['Referer'], isNotEmpty);
       if (uri.path == '/zh-hant/ranking/popular' ||
@@ -94,8 +100,7 @@ void main() {
         return SourceResponse(statusCode: 200, body: _cards);
       }
       if (uri.path.endsWith('/list')) {
-        final page = int.parse(uri.queryParameters['page'] ?? '1');
-        return SourceResponse(statusCode: 200, body: _chapterPage(page));
+        return const SourceResponse(statusCode: 200, body: _metadata);
       }
       fail('Unexpected public request: ${request.url}');
     });
@@ -119,16 +124,14 @@ void main() {
     ]);
     expect(chapters.first.title, '第 1 話');
     expect(chapters.last.number, 12);
-    final pages = http.requests
-        .where((request) => Uri.parse(request.url).path.endsWith('/list'))
-        .map(
-          (request) => Uri.parse(request.url).queryParameters['page'] ?? '1',
-        );
-    expect(pages.toSet(), {for (var page = 1; page <= 12; page++) '$page'});
-    expect(pages.length, 12);
+    expect(detail.title, '測試作品');
+    expect(detail.author, '測試作家');
+    expect(chapters.first.url, _viewer);
+    expect(http.requests.where((r) => r.url.contains('/api/v1/')), hasLength(2));
+    expect(http.requests.where((r) => r.url.contains('/list?')), hasLength(1));
   });
 
-  test(
+  sourceRuleTest(
     'public viewer keeps image order, quality query and chapter Referer',
     () async {
       final http = FakeHttpClient((request) async {
@@ -160,7 +163,7 @@ void main() {
     },
   );
 
-  test(
+  sourceRuleTest(
     'recognizes an actual empty-search count but rejects changed markup',
     () async {
       var empty = true;
@@ -180,7 +183,7 @@ void main() {
     },
   );
 
-  test('app-only, paid, age/login gate and MotionToon without images fail explicitly', () async {
+  sourceRuleTest('app-only, paid, age/login gate and MotionToon without images fail explicitly', () async {
     for (final body in [
       '<div>請登入後閱讀</div>',
       '<div>此話僅限 APP 或購買後閱讀</div>',
@@ -205,7 +208,7 @@ void main() {
     }
   });
 
-  test(
+  sourceRuleTest(
     'server-stopped HTTP 200 and HTTP failure are never empty success',
     () async {
       for (final response in [
@@ -230,40 +233,65 @@ void main() {
     },
   );
 
-  test('restricted detail and repeated pagination fail instead of incomplete success', () async {
-    var restricted = true;
-    final source = await _prepare(
-      FakeHttpClient((request) async {
-        if (Uri.parse(request.url).path.endsWith('/list')) {
-          final page = int.parse(
-            Uri.parse(request.url).queryParameters['page'] ?? '1',
-          );
-          return SourceResponse(
-            statusCode: 200,
-            body: restricted
-                ? '<h1>請至官方登入</h1>'
-                : _chapterPage(page, pages: 2, repeated: true),
-          );
-        }
-        return const SourceResponse(statusCode: 200, body: _cards);
-      }),
-    );
-    final item = (await source.discover(source.feeds.first)).single;
-    await expectLater(source.chapters(item), throwsA(isA<SourceException>()));
-    restricted = false;
-    await expectLater(
-      source.chapters(item),
-      throwsA(
-        isA<SourceException>().having(
-          (error) => error.message,
-          'incomplete pagination',
-          contains('無法取得完整公開目錄'),
-        ),
-      ),
-    );
+  sourceRuleTest('restricted metadata fails before requesting the API', () async {
+    final http = FakeHttpClient((request) async => const SourceResponse(
+      statusCode: 200, body: '<h1>請至官方登入</h1>'));
+    final source = await _prepare(http);
+    await expectLater(source.runtime.call('detail', [_list, <String, Object?>{}]),
+        throwsA(anything));
+    expect(http.requests, hasLength(1));
   });
 
-  test(
+  final invalidCatalogs = <String, SourceResponse>{
+    'HTTP restriction': const SourceResponse(statusCode: 403, body: 'Forbidden'),
+    'invalid JSON': const SourceResponse(statusCode: 200, body: '<html>login</html>'),
+    'unsuccessful payload': const SourceResponse(statusCode: 200,
+        body: '{"success":false,"result":{"episodeList":[],"nextCursor":0}}'),
+    'missing payload': const SourceResponse(statusCode: 200, body: '{"success":true}'),
+    'empty catalog': _episodes([]),
+    'duplicate IDs': _episodes([_episode(1), _episode(1)]),
+    'invalid ID': _episodes([{..._episode(1), 'episodeNo': 0}]),
+    'string ID': _episodes([{..._episode(1), 'episodeNo': '1'}]),
+    'wrong work': _episodes([{..._episode(1), 'viewerLink': _viewer.replaceFirst('546', '547')}]),
+    'wrong episode': _episodes([{..._episode(2), 'viewerLink': _viewer}]),
+    'foreign URL': _episodes([{..._episode(1), 'viewerLink': 'https://evil.test/zh-hant/a/viewer?title_no=546&episode_no=1'}]),
+    'wrong language': _episodes([{..._episode(1), 'viewerLink': _viewer.replaceFirst('zh-hant', 'en')}]),
+    'non-viewer URL': _episodes([{..._episode(1), 'viewerLink': _viewer.replaceFirst('/viewer?', '/list?')}]),
+    'duplicate query ID': _episodes([{..._episode(1), 'viewerLink': '$_viewer&title_no=547'}]),
+    'missing cursor': _episodes([_episode(1)], cursor: null),
+    'string cursor': _episodes([_episode(1)], cursor: '0'),
+    'negative cursor': _episodes([_episode(1)], cursor: -1),
+  };
+  for (final entry in invalidCatalogs.entries) {
+    sourceRuleTest('public catalog rejects ${entry.key}', () async {
+      final source = await _prepare(FakeHttpClient((request) async =>
+          request.url.startsWith('https://m.webtoons.com/')
+              ? entry.value
+              : const SourceResponse(statusCode: 200, body: _metadata)));
+      await expectLater(source.runtime.call('detail', [_list, <String, Object?>{}]),
+          throwsA(anything));
+    });
+  }
+
+  for (final scenario in ['repeated cursor', 'duplicate across pages', 'page bound']) {
+    sourceRuleTest('public catalog rejects $scenario without partial success', () async {
+      var calls = 0;
+      final http = FakeHttpClient((request) async {
+        if (!request.url.startsWith('https://m.webtoons.com/')) {
+          return const SourceResponse(statusCode: 200, body: _metadata);
+        }
+        calls++;
+        return _episodes([_episode(scenario == 'duplicate across pages' ? 1 : calls)],
+            cursor: scenario == 'repeated cursor' ? 1 : calls);
+      });
+      final source = await _prepare(http);
+      await expectLater(source.runtime.call('detail', [_list, <String, Object?>{}]),
+          throwsA(anything));
+      expect(calls, scenario == 'page bound' ? 100 : 2);
+    });
+  }
+
+  sourceRuleTest(
     'viewer redirect to another episode and placeholder image are rejected',
     () async {
       for (final body in [

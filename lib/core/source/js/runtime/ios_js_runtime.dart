@@ -199,9 +199,7 @@ class _IosJsBroker {
 
   static String _newIdentity() {
     final random = Random.secure();
-    return base64Url.encode(
-      List<int>.generate(16, (_) => random.nextInt(256)),
-    );
+    return base64Url.encode(List<int>.generate(16, (_) => random.nextInt(256)));
   }
 
   String nextId(String kind) => '$_identity-$kind-${++_sequence}';
@@ -226,14 +224,14 @@ class _IosJsBroker {
       owner: owner,
     );
     if (owner != null) {
-      unawaited(Future.any<void>([
-        owner.token.whenCancel.then((_) {}),
-        finished.future,
-      ]).then((_) async {
-        if (!finished.isCompleted && owner.cancelled) {
-          await release(session, message: 'JS 请求已取消');
-        }
-      }));
+      unawaited(
+        Future.any<void>([owner.token.whenCancel.then((_) {}), finished.future])
+            .then((_) async {
+              if (!finished.isCompleted && owner.cancelled) {
+                await release(session, message: 'JS 请求已取消');
+              }
+            }),
+      );
     }
     unawaited(() async {
       try {
@@ -250,10 +248,12 @@ class _IosJsBroker {
         }
         final message = error.message ?? 'iOS JS 运行时失败';
         if (!completion.isCompleted) {
-          completion.completeError(JsRuntimeError(
-            message,
-            hostError: decodeHostError(message, sourceId: ''),
-          ));
+          completion.completeError(
+            JsRuntimeError(
+              message,
+              hostError: decodeHostError(message, sourceId: ''),
+            ),
+          );
         }
       } catch (error) {
         await release(session, message: 'iOS JS 引擎不可用：$error');
@@ -267,10 +267,7 @@ class _IosJsBroker {
     }
   }
 
-  Future<void> release(
-    String session, {
-    String message = 'JS 运行时会话已释放',
-  }) async {
+  Future<void> release(String session, {String message = 'JS 运行时会话已释放'}) async {
     sessions.remove(session);
     for (final pending in _pending.values) {
       if (pending.session == session && !pending.completion.isCompleted) {
@@ -309,37 +306,43 @@ class _IosJsBroker {
         payload is! Map<Object?, Object?>) {
       return {'error': 'JS 请求已取消或已结束'};
     }
-    try {
-      final response = pending.zone.run(() => runtime._host(payload));
-      final owner = pending.owner;
-      final value = await (owner == null
-          ? response
-          : Future.any<Object?>([
-              response,
-              owner.token.whenCancel.then<Object?>(
-                (_) => throw const JsRuntimeError('JS 请求已取消'),
-              ),
-            ]));
-      if (sessions[session] != runtime ||
-          !identical(_pending[parentId]?.completion, pending.completion) ||
-          pending.completion.isCompleted ||
-          owner?.cancelled == true) {
-        return {'error': 'JS 请求已取消或已结束'};
+    // Catch asynchronous host failures in their originating error zone. A
+    // failed Future cannot deliver errors across Dart error-zone boundaries.
+    return pending.zone.run(() async {
+      try {
+        final response = runtime._host(payload);
+        final owner = pending.owner;
+        final value = await (owner == null
+            ? response
+            : Future.any<Object?>([
+                response,
+                owner.token.whenCancel.then<Object?>(
+                  (_) => throw const JsRuntimeError('JS 请求已取消'),
+                ),
+              ]));
+        if (sessions[session] != runtime ||
+            !identical(_pending[parentId]?.completion, pending.completion) ||
+            pending.completion.isCompleted ||
+            owner?.cancelled == true) {
+          return {'error': 'JS 请求已取消或已结束'};
+        }
+        // StandardMessageCodec can represent more than JSON; reject non-JSON
+        // host values here rather than leaving a WebKit promise unsettled.
+        jsonEncode(value);
+        return {'value': value};
+      } on SourceException catch (error) {
+        return {'error': encodeHostError(error)};
+      } catch (error) {
+        return {
+          'error': encodeHostError(
+            SourceException(
+              sourceId: '',
+              type: SourceErrorType.parse,
+              message: '$error',
+            ),
+          ),
+        };
       }
-      // StandardMessageCodec can represent more than JSON; reject non-JSON
-      // host values here rather than leaving a WebKit promise unsettled.
-      jsonEncode(value);
-      return {'value': value};
-    } on SourceException catch (error) {
-      return {'error': encodeHostError(error)};
-    } catch (error) {
-      return {
-        'error': encodeHostError(SourceException(
-          sourceId: '',
-          type: SourceErrorType.parse,
-          message: '$error',
-        )),
-      };
-    }
+    });
   }
 }

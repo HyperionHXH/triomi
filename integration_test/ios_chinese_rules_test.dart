@@ -6,10 +6,13 @@ import '../test/copymanga_js_rule_test.dart' as copymanga;
 import '../test/dongmanmanhua_js_rule_test.dart' as dongmanmanhua;
 import '../test/guazimanhua_js_rule_test.dart' as guazimanhua;
 import '../test/iqiyi_js_rule_test.dart' as iqiyi;
+import '../test/komiic_js_rule_test.dart' as komiic;
 import '../test/kuaikanmanhua_js_rule_test.dart' as kuaikanmanhua;
+import '../test/manhuagui_js_rule_test.dart' as manhuagui;
 import '../test/mh1234_js_rule_test.dart' as mh1234;
 import '../test/miaoqu_js_rule_test.dart' as miaoqu;
 import '../test/terrahistoricus_js_rule_test.dart' as terrahistoricus;
+import '../test/webtoons_zh_js_rule_test.dart' as webtoons;
 import '../test/zaimanhua_js_rule_test.dart' as zaimanhua;
 import '../test/zazhimi_js_rule_test.dart' as zazhimi;
 import 'fixtures/ios_test_binding.dart';
@@ -29,4 +32,7 @@ void main() {
   zaimanhua.main();
   zazhimi.main();
   copymanga.main();
+  komiic.main();
+  manhuagui.main();
+  webtoons.main();
 }

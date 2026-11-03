@@ -368,13 +368,22 @@ void main() {
       await tapText('JS / API 漫画来源目录');
       expect(find.text('漫画来源目录'), findsOneWidget);
       expect(find.text('MangaDex 漫画（开放 API）'), findsOneWidget);
-      expect(find.text('安装'), findsOneWidget);
+      final mangaDexOffer = find.byKey(
+        const ValueKey('catalog-offer:builtin|mangadex'),
+      );
+      final mangaDexInstall = find.descendant(
+        of: mangaDexOffer,
+        matching: find.widgetWithText(FilledButton, '安装'),
+      );
+      expect(mangaDexInstall, findsOneWidget);
       await screenshot(
         '02_manga_rule_catalog.png',
         '${AppRoutes.sources}?type=manga',
         'iOS 应用内 JS/API 来源目录：无需安装外部 APK/DEX',
       );
-      await tapText('安装');
+      await tester.ensureVisible(mangaDexInstall);
+      await tester.tap(mangaDexInstall);
+      await pumpFor(const Duration(milliseconds: 350));
       await until(
         () => find.text('已安装').evaluate().isNotEmpty,
         'the bundled MangaDex JS/API rule must install through the production catalog',

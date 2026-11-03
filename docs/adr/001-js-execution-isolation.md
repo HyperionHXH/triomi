@@ -30,6 +30,9 @@ IPC 为 loopback TCP、随机 256bit token、generation/session/call ID、4 字�
 
 iOS 工厂返回 `IosJsRuntime`，通过 `triomi/ios-js-runtime` 通道驱动原生 WebKit。每个会话使用独立内容世界和非持久数据存储，不加载第三方页面；CSP 阻止页面直接联网，来源 HTTP 与 HTML 选择器仍由 Dart 宿主执行。会话/调用 ID 和捕获的 Dart Zone 绑定宿主请求，旧响应及结束调用的孤儿请求不能进入后续调用。
 
+R178错误Zone边界：宿主Future的执行、await、取消竞争、JSON校验和错误编码必须全部位于调用捕获的Zone内。仅在该Zone创建Future却在MethodChannel回调Zone等待，会使异步错误无法跨Dart错误Zone返回，网络失败留下未完成JS Promise直到原生watchdog撤销会话。跨错误Zone回归先复现挂起，再证明原timeout分类与消息及时返回；不得以延长JS deadline掩盖真实HTTP错误。
+
+
 原生 deadline、取消、dispose、WebContent 终止及超限消息会撤销宿主能力并销毁会话，下一次调用重新加载规则。iOS 公共 WebKit API 不提供 PID 强杀或固定内存预算；销毁 WKWebView 不保证系统立刻终止 WebContent，不能沿用 Android/Windows 的等强终止主张。系统 WebKit 执行无需给应用授予 JIT entitlement，release Flutter 使用 AOT。
 
 新增真实 iOS XCTest 与 Dart integration_test，覆盖同步死循环期间原生响应、超时/取消/重载、HTTP/选择器、错误/JSON 边界及旧宿主响应。Windows 主机无法执行这些 Apple 运行时场景；它们已接入 `build-ios.yml` 模拟器门槛，尚未取得本轮云端或真机运行结果。实现与验收边界见 [iOS 适配指南](../IOS_ADAPTATION.md)。
