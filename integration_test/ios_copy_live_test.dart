@@ -341,17 +341,28 @@ void main() {
         ),
       );
       await until(
-        () => find
-            .byWidgetPredicate(
-              (widget) =>
-                  widget is MediaItemCard &&
-                  widget.item.sourceId == item.sourceId &&
-                  widget.item.remoteId == item.remoteId,
-            )
-            .evaluate()
-            .isNotEmpty,
-        'Production search must render the actual live main-comic result card',
+        () => find.byType(MediaItemCard).evaluate().isNotEmpty,
+        'Production search must finish with actual result cards',
       );
+      final mainResult = find.byWidgetPredicate(
+        (widget) =>
+            widget is MediaItemCard &&
+            widget.item.sourceId == item.sourceId &&
+            widget.item.remoteId == item.remoteId,
+      );
+      // Results are a lazy horizontal list; the main work is not necessarily
+      // among the first visible cards when similarly named spin-offs precede it.
+      await tester.scrollUntilVisible(
+        mainResult,
+        200,
+        scrollable: find.byWidgetPredicate(
+          (widget) =>
+              widget is Scrollable &&
+              axisDirectionToAxis(widget.axisDirection) == Axis.horizontal,
+        ),
+        maxScrolls: 20,
+      );
+      expect(mainResult.hitTestable(), findsOneWidget);
       await capture(
         '01_copy_search.png',
         '/manga/search',

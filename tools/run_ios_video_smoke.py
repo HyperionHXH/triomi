@@ -43,10 +43,10 @@ def main() -> int:
             try:
                 result = run_integration(
                     flutter, root, args.device, entrypoint,
-                    [f'TRIOMI_VIDEO_URL={url}'], stream, 900,
+                    [f'TRIOMI_VIDEO_URL={url}'], stream, 1200,
                 )
             except subprocess.TimeoutExpired:
-                print('iOS acceptance exceeded its 15-minute host deadline.',
+                print('iOS acceptance exceeded its 20-minute build-and-run host deadline.',
                       flush=True)
         if result:
             subprocess.run([

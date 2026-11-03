@@ -272,10 +272,16 @@ void main() {
     final http = FakeHttpClient((request) async {
       final body = payload(request);
       if (body['operationName'] == 'imageLimit') {
-        return data({'getImageLimit': {'limit': 300, 'usage': 1}});
+        return data({
+          'getImageLimit': {'limit': 300, 'usage': 1},
+        });
       }
       expect(body['variables'], {'chapterId': '43706'});
-      return data({'imagesByChapterId': [{'kid': 'fresh-guest-page'}]});
+      return data({
+        'imagesByChapterId': [
+          {'kid': 'fresh-guest-page'},
+        ],
+      });
     });
     final source = await prepare(http);
     final result = await source.content(mirrorChapter);
@@ -331,18 +337,21 @@ void main() {
   );
 
   for (final status in [401, 402, 403, 429]) {
-    sourceRuleTest('Komiic HTTP $status is explicit, never an empty catalog', () async {
-      final source = await prepare(
-        FakeHttpClient(
-          (request) async =>
-              SourceResponse(statusCode: status, body: 'blocked'),
-        ),
-      );
-      await expectLater(
-        source.search('test'),
-        throwsA(failure('HTTP $status')),
-      );
-    });
+    sourceRuleTest(
+      'Komiic HTTP $status is explicit, never an empty catalog',
+      () async {
+        final source = await prepare(
+          FakeHttpClient(
+            (request) async =>
+                SourceResponse(statusCode: status, body: 'blocked'),
+          ),
+        );
+        await expectLater(
+          source.search('test'),
+          throwsA(failure('HTTP $status')),
+        );
+      },
+    );
   }
 
   sourceRuleTest('Komiic preserves classified host auth failures', () async {
@@ -367,15 +376,15 @@ void main() {
     );
   });
 
-  for (final images in <Object?>[
-    null,
-    <Object?>[],
-    [
+  for (final entry in <String, Object?>{
+    'missing array': null,
+    'empty array': <Object?>[],
+    'blank image identifier': [
       {'kid': ''},
     ],
-    [<String, Object?>{}],
-  ]) {
-    sourceRuleTest('Komiic malformed/empty page list $images fails visibly', () async {
+    'missing image identifier': [<String, Object?>{}],
+  }.entries) {
+    sourceRuleTest('Komiic ${entry.key} fails visibly', () async {
       final source = await prepare(
         FakeHttpClient((request) async {
           if (payload(request)['operationName'] == 'imageLimit') {
@@ -383,7 +392,7 @@ void main() {
               'getImageLimit': {'limit': 300, 'usage': 1},
             });
           }
-          return data({'imagesByChapterId': images});
+          return data({'imagesByChapterId': entry.value});
         }),
       );
       await expectLater(

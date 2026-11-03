@@ -132,7 +132,7 @@ jobs:
           xcrun simctl bootstatus "$device" -b
       - name: Exercise real iOS JS, durable storage and video with danmaku
         id: acceptance
-        timeout-minutes: 17
+        timeout-minutes: 23
         run: python tools/run_ios_video_smoke.py --device '${{ steps.flutter-simulator.outputs.udid }}' --suite
       - name: Install the recording decoder when unavailable
         if: ${{ !cancelled() && steps.simulator.outputs.udid != '' }}
@@ -175,7 +175,7 @@ jobs:
         id: manga-live
         if: ${{ !cancelled() && steps.audit-simulator.outputs.udid != '' }}
         timeout-minutes: 95
-        run: python tools/run_ios_copy_acceptance.py --audit-sources --device '${{ steps.audit-simulator.outputs.udid }}'
+        run: python tools/run_ios_copy_acceptance.py --audit-sources --allow-miaoqu-verification-block --device '${{ steps.audit-simulator.outputs.udid }}'
       - name: Create disposable live Copy acceptance simulator
         id: copy-simulator
         if: ${{ !cancelled() && steps.audit-simulator.outputs.udid != '' }}

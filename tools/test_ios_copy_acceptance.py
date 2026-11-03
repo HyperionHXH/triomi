@@ -82,5 +82,49 @@ class CopyBoundaryTests(unittest.TestCase):
             copy.CopySession(DEVICE, self.session.output)
 
 
+class SourceReleasePolicyTests(unittest.TestCase):
+    def report(self):
+        ids = ('mangadex', 'komiic', 'xkcd', 'manhuagui', 'webtoons-zh', 'bh3',
+               'terrahistoricus', 'kuaikanmanhua', 'mh1234', 'guazimanhua', 'miaoqu',
+               'iqiyi', 'dongmanmanhua', 'baozimanhuaplus', 'baozimhorg', 'zaimanhua', 'zazhimi')
+        report = {'complete': True, 'passed': 16, 'failed': 1, 'sources': [
+            {'source': name, 'status': 'passed', 'stage': 'complete'} for name in ids]}
+        row = next(row for row in report['sources'] if row['source'] == 'miaoqu')
+        row.update(status='failed', stage='discover',
+                   error='SourceException(miaoqu, auth): HTTP 403：<title>Just a moment...</title>')
+        return report
+
+    def test_known_verification_block_is_accepted_without_mutating_failure(self):
+        report = self.report()
+        original = json.dumps(report, sort_keys=True)
+        self.assertTrue(copy.permits_miaoqu_external_block(report))
+        self.assertEqual(json.dumps(report, sort_keys=True), original)
+
+    def test_timeout_parse_or_different_forbidden_response_cannot_be_released(self):
+        for error in ('SourceException(miaoqu, timeout): request timed out',
+                      'SourceException(miaoqu, parse): invalid reader',
+                      'SourceException(miaoqu, auth): HTTP 403: forbidden'):
+            with self.subTest(error=error):
+                report = self.report()
+                next(row for row in report['sources'] if row['source'] == 'miaoqu')['error'] = error
+                self.assertFalse(copy.permits_miaoqu_external_block(report))
+
+    def test_missing_duplicate_or_another_failed_source_blocks_release(self):
+        for change in ('missing', 'duplicate', 'failed', 'incomplete', 'counts'):
+            with self.subTest(change=change):
+                report = self.report()
+                if change == 'missing':
+                    report['sources'].pop()
+                elif change == 'duplicate':
+                    report['sources'][-1] = report['sources'][0].copy()
+                elif change == 'failed':
+                    report['sources'][0]['status'] = 'failed'
+                elif change == 'incomplete':
+                    report['complete'] = False
+                else:
+                    report['passed'] = 15
+                self.assertFalse(copy.permits_miaoqu_external_block(report))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -127,7 +127,37 @@ def collect_failure(device, output):
     return errors
 
 
-def run_audit(device, output):
+def permits_miaoqu_external_block(report):
+    """User-authorized release boundary; the failed live audit stays failed."""
+    expected = {
+        'mangadex', 'komiic', 'xkcd', 'manhuagui', 'webtoons-zh', 'bh3',
+        'terrahistoricus', 'kuaikanmanhua', 'mh1234', 'guazimanhua', 'miaoqu',
+        'iqiyi', 'dongmanmanhua', 'baozimanhuaplus', 'baozimhorg',
+        'zaimanhua', 'zazhimi',
+    }
+    if not isinstance(report, dict) or report.get('complete') is not True:
+        return False
+    sources = report.get('sources')
+    if (not isinstance(sources, list) or len(sources) != len(expected)
+            or any(not isinstance(row, dict) for row in sources)
+            or {row.get('source') for row in sources} != expected
+            or report.get('passed') != 16 or report.get('failed') != 1):
+        return False
+    for row in sources:
+        if row['source'] != 'miaoqu':
+            if row.get('status') != 'passed' or row.get('stage') != 'complete':
+                return False
+        else:
+            error = row.get('error', '')
+            if (row.get('status') != 'failed' or row.get('stage') != 'discover'
+                    or not isinstance(error, str)
+                    or not error.startswith('SourceException(miaoqu, auth): HTTP 403')
+                    or 'Just a moment' not in error):
+                return False
+    return True
+
+
+def run_audit(device, output, *, allow_miaoqu_verification_block=False):
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
         raise ValueError('Audit output directory must be empty')
@@ -158,8 +188,17 @@ def run_audit(device, output):
             manifest['errors'].extend(collect_failure(device, output))
         manifest.update(status='failed' if manifest['errors'] else 'passed',
                         finished_at=timestamp(), flutter_exit_code=code)
+        manifest['release_policy'] = {'accepted': not manifest['errors'], 'external_blockers': []}
+        if (allow_miaoqu_verification_block and code == 65
+                and manifest['errors'] == ['Source audit exited 65']):
+            if permits_miaoqu_external_block(json.loads(report.read_text(encoding='utf-8'))):
+                manifest['release_policy'] = {
+                    'accepted': True,
+                    'external_blockers': ['miaoqu: cloud HTTP403 verification wall; live test remains failed'],
+                }
+                print('::warning::Release excludes the documented Miaoqu HTTP403 verification blocker; audit remains failed.')
         (output / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
-    return int(bool(manifest['errors']))
+    return int(not manifest['release_policy']['accepted'])
 
 
 
@@ -239,9 +278,12 @@ def main():
     parser.add_argument('--output', type=Path)
     parser.add_argument('--audit-sources', action='store_true',
                         help='Run the separate 17-source live production audit')
+    parser.add_argument('--allow-miaoqu-verification-block', action='store_true',
+                        help='Allow only the explicitly documented Miaoqu HTTP403 blocker for release; keep the failed audit')
     args = parser.parse_args()
     if args.audit_sources:
-        return run_audit(args.device, args.output or ROOT / 'build/ios/manga-sources-live')
+        return run_audit(args.device, args.output or ROOT / 'build/ios/manga-sources-live',
+                         allow_miaoqu_verification_block=args.allow_miaoqu_verification_block)
     args.output = args.output or ROOT / 'build/ios/copy-live'
     session = CopySession(args.device, args.output)
 

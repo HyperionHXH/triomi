@@ -233,7 +233,7 @@ Object.defineProperty(globalThis, 'throwingExport', {
               }),
             );
           }
-          expect(request.url, 'https://komiic.com/api/query');
+          expect(request.url, 'https://komiic.cc/api/query');
           expect(request.method, 'POST');
           final payload = jsonDecode(request.body!) as Map;
           final data = switch (payload['operationName']) {
@@ -312,7 +312,7 @@ Object.defineProperty(globalThis, 'throwingExport', {
             content.images.single,
             id == 'xkcd'
                 ? 'https://imgs.xkcd.com/comics/barrel_cropped_(1).jpg'
-                : 'https://komiic.com/api/image/e429ffc5-e4df-46ae-9a72-d737ca5f4028',
+                : 'https://komiic.cc/api/image/e429ffc5-e4df-46ae-9a72-d737ca5f4028',
           );
         } finally {
           source.dispose();
