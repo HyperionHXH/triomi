@@ -1,6 +1,15 @@
 # Triomi 当前状态
 
-## 当前请求：按当前 Android Copy 插件完整移植与实际 iOS 验收（R178，未完成）
+## 当前请求：当前 Android Copy 协议移植与实际 iOS 验收（R178，已交付）
+
+**最终交付：** 源码`0c27925277588952711ad6c5a16d36dd175c51db`的[macOS/iOS41600804216](https://github.com/HyperionHXH/triomi/actions/runs/41600804216)发布门槛通过：真机Release IPA、原生桥/JavaScriptCore压力、222项实际iOS综合集成、56状态原生产巡检、Copy真实搜索/完整490章/旧章205页与新章14页/翻页下一章/文字吐槽/设置账号入口11状态。67张PNG按manifest逐张哈希校验并全部联系表实际读取；两段H.264录屏本机完整解码2016帧/853.258333秒与470帧/736.11秒，1206×2622；不是完整观看视频。所有实际产物保留在`release_ios/41600804216/`。
+
+已发布独立[iOS178 Release](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-ios.178)，原始`Triomi-iOS-Unsigned.ipa`为13756231字节，SHA-256 **`bfc790667166b6716ecb0d24a0f021f91483cd64451b74a156d2284cd35f6fc3`**。公开匿名下载HTTP200与接受产物字节摘要一致；IPA元数据0.12.0+178、iPhoneOS、最低iOS15、`io.github.hyperionhxh.triomi`，包内Copy规则摘要与验收一致。未签名，不代表实体iPhone已安装或本人账号验收。
+
+原兼容仓库`f37db58`已发布Copy1.1.0、Komiic/漫画柜/WEBTOON繁中1.0.1，18条公开索引及逐条规则版本/身份/SHA-256全部实取一致；四条与接受源码逐字节一致，生产Dart HTTPS→CatalogInstaller→真实QuickJS→数据库安装/启用四条通过，插件35项测试/生成检查/凭据扫描及[目录CI41612960879](https://github.com/HyperionHXH/Mihon-Extensions/actions/runs/41612960879)通过。网址不变，旧规则更新；Copy设置/账号/吐槽及图片上下文修复需要新178宿主。旧iOS和Android资产保留。
+
+**明确外部边界：** 最终旧17源实网16通过，喵趣云端HTTP403/Cloudflare验证页仍失败；原报告status=failed保留，用户授权的release_policy仅对这一精确外部阻塞接受，其余16项必须complete。没有跳过测试、伪造成功、验证绕过或全网络承诺。并行哔咔源码未提交进本包，也不扩大为哔咔/JM/绅士漫画已交付。下面是修复过程历史，不作为未完成清单。
+
 
 此前Copy1.0.0是网页适配而非当前APK协议，已确认不能以仓库安装成功交付为可读。现已下载并反编译实际1.4.85 APK（SHA-256 `0a208f10b4f8fa3f3f0fae7704935e1a487c6ee342722c7e7818a02ad8c8dd6a`），对照ApiRepo、DTO、拦截器、登录与设置；旧1.4.55 smali不足以代表当前实现。实际默认API为`api.copy4000.com`，必需的公开协议头含Version2026.08.21、Origin/Region/Webp和platform参数。按当前协议生产`JsSource + QuickJS + Dart HTTPS`发现、搜索、490章完整分组分页、正文和首图解码已通过，消除此前网页空目录路径；这仍不是iOS验收。
 
@@ -8,7 +17,7 @@
 
 此前17条来源正在按真实iOS网络重新检查；历史13条Windows首图通过不能外推iOS。发现宿主确实丢失图片Referer/UA等上下文，旧烟测手工带头掩盖了生产阅读器差异；现修正ChapterContent安全公共imageHeaders、真实图片加载/缓存键、阅读器预载、下载及长按保存传递。不会持久化Authorization/Cookie。用户已确认dpsk停止工作，不再排除任何此前来源。
 
-新增真实iOS Copy全链路及17条旧源实网门槛，沿用固定SDK、Xcode真机/模拟器构建、原生桥/JavaScriptCore压力、生产56状态巡检；Copy新增真实搜索/详情/旧新章节/翻页/下一章/吐槽/设置/账号入口11状态原生截图和完整录屏。失败不能跳过、替换为夹具或发布候选IPA，云端日志/截图/录屏必须取回实际读取后才记录完成。当前云端运行与最终发布证据待实际执行补入；1.1.0规则尚未替换公开1.0.0。
+新增真实iOS Copy全链路及17条旧源实网门槛，沿用固定SDK、Xcode真机/模拟器构建、原生桥/JavaScriptCore压力、生产56状态巡检；Copy新增实际11状态原生截图与录屏。前三轮失败诊断均保留，最终发布只接受上方41600804216的相同字节；唯一喵趣403按用户明确授权单独列外部阻塞。
 
 候选源码`6426971fe18c0e6c0231a5930024086b6cf076d6`的[macOS/iOS运行41564359308](https://github.com/HyperionHXH/triomi/actions/runs/41564359308)已结束：真机Release编译/IPA结构、原生桥、JavaScriptCore压力、iOS集成及真实Copy生产阅读通过；原56状态巡检与17源门槛失败，IPA上传和发布按门槛阻止。诊断产物已下载至`release_ios/41564359308/`。该提交本地完整Flutter1780通过/4跳过、Python116项及Android/Windows debug编译通过，不代表后续追加修复的相同字节。
 
