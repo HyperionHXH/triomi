@@ -1,4 +1,5 @@
 // Synthetic source contracts. This entry is also part of iOS acceptance.
+import '../test/host_features_test.dart' as host_features;
 import '../test/jmcomic_client_test.dart' as jmcomic_client;
 import '../test/jmcomic_image_test.dart' as jmcomic_image;
 import '../test/jmcomic_js_rule_test.dart' as jmcomic;
@@ -11,6 +12,7 @@ import 'ios_picacomic_test.dart' as picacomic;
 
 void main() {
   initializeIosIntegrationBinding();
+  host_features.main();
   picacomic.main();
   registry.main();
   pipeline.main();

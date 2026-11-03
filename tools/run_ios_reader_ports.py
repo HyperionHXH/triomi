@@ -54,6 +54,24 @@ class ReaderPortSession(TourSession):
         self.save()
 
 
+def validate_metadata_reports(reports):
+    expected = {'picacomic', 'wnacg', 'jmcomic', 'ehentai'}
+    if (len(reports) != len(expected) or
+            any(not isinstance(report, dict) for report in reports) or
+            {report.get('source') for report in reports} != expected):
+        raise ValueError('Metadata report source set is incomplete or duplicated')
+    for report in reports:
+        expected_status = ('blocked_account' if report['source'] == 'picacomic'
+                           else 'metadata_passed')
+        if report.get('status') != expected_status:
+            raise ValueError('Metadata report status did not meet the anonymous gate')
+        if any(report.get(field) is not False
+               for field in ('readingValidated', 'iosValidated')):
+            raise ValueError('Metadata audit must not claim image or iOS reading acceptance')
+        if report['source'] == 'picacomic' and report.get('requests') != []:
+            raise ValueError('Anonymous account guard unexpectedly made a network request')
+
+
 def collect_metadata(device, output):
     app = ROOT / 'build/ios/iphonesimulator/Runner.app/Info.plist'
     with app.open('rb') as stream:
@@ -68,9 +86,7 @@ def collect_metadata(device, output):
     shutil.copytree(source, output / 'reports')
     reports = [json.loads(p.read_text(encoding='utf-8'))
                for p in (output / 'reports').rglob('*-metadata.json')]
-    expected = {'picacomic', 'wnacg', 'jmcomic', 'ehentai'}
-    if len(reports) != 4 or {r.get('source') for r in reports} != expected:
-        raise ValueError('Metadata report source set is incomplete or duplicated')
+    validate_metadata_reports(reports)
     return reports
 
 

@@ -7,6 +7,7 @@ import '../models/source_exception.dart';
 import 'bangumi_public_client.dart';
 import 'bangumi_source.dart';
 import 'declarative_source.dart';
+import 'host_features.dart';
 import 'http_client.dart';
 import 'js/js_runtime.dart';
 import 'js/js_source.dart';
@@ -177,6 +178,7 @@ class SourceRegistry {
   }
 
   JsSource _script(String id, String text, SourceRule rule) {
+    SourceHostFeatures.requireSupported(id, rule.requiresHost);
     if (_disposed) throw StateError('来源注册表已关闭');
     final previous = _scripts[id];
     if (previous?.text == text) return previous!.instance;
@@ -456,6 +458,7 @@ class SourceRegistry {
       return rule.descriptor;
     }
     final rule = SourceRule.parseJson(text);
+    SourceHostFeatures.requireSupported(rule.descriptor.id, rule.requiresHost);
     await repository.upsert(
       id: rule.descriptor.id,
       name: rule.descriptor.name,

@@ -13,6 +13,7 @@ import 'dart:convert';
 
 import '../models/media_type.dart';
 import '../models/source_descriptor.dart' show SourceCapability;
+import 'host_features.dart';
 import 'source_filters.dart';
 
 /// 语义化版本（`major.minor.patch`），用于目录条目的比较与升级判断。
@@ -111,6 +112,7 @@ class SourceCatalogEntry {
     this.updatedAt,
     this.lang = '',
     this.nsfw,
+    this.requiresHost = const [],
   });
 
   /// 规则 id；同仓库内唯一（重复项在解析期拒绝）。
@@ -119,6 +121,7 @@ class SourceCatalogEntry {
   final MediaType type;
   final String lang;
   final bool? nsfw;
+  final List<String> requiresHost;
   final CatalogVersion version;
 
   /// 规则 JSON 的下载地址（absolute http/https，或随包 asset:// 地址）。
@@ -202,6 +205,12 @@ abstract final class SourceCatalogIndex {
         continue;
       }
       final entryProblems = <String>[];
+      var requiresHost = <String>[];
+      try {
+        requiresHost = SourceHostFeatures.parse(node['requiresHost']);
+      } on FormatException catch (error) {
+        entryProblems.add(error.message);
+      }
       final where = '第 ${index + 1} 项';
 
       final id = '${node['id'] ?? ''}'.trim();
@@ -288,6 +297,7 @@ abstract final class SourceCatalogIndex {
             type: type!,
             lang: node['lang'] is String ? (node['lang'] as String).trim() : '',
             nsfw: sourceNsfwFlag(node['nsfw']),
+            requiresHost: requiresHost,
             version: version!,
             url: url,
             hash: optional(node['hash']),

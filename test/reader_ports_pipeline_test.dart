@@ -13,6 +13,20 @@ import 'package:triomi/features/library/data/library_repository.dart';
 import 'fixtures/portable_rule_test_support.dart';
 import 'fixtures/reader_port_harness.dart';
 
+Future<List<int>> _pixels(List<int> bytes) async {
+  final codec = await ui.instantiateImageCodec(Uint8List.fromList(bytes));
+  final frame = await codec.getNextFrame();
+  try {
+    final data = (await frame.image.toByteData(
+      format: ui.ImageByteFormat.rawRgba,
+    ))!;
+    return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+  } finally {
+    frame.image.dispose();
+    codec.dispose();
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   for (final id in readerPortIds) {
@@ -60,6 +74,11 @@ void main() {
           sourceId: id,
           headers: content.imageHeaders,
           http: harness.http,
+        );
+        expect(
+          await _pixels(saved!),
+          await _pixels(harness.adapter.png),
+          reason: '$id must restore the original geometry, not merely decode',
         );
         final library = LibraryRepository(harness.database);
         await library.cacheItem(item);

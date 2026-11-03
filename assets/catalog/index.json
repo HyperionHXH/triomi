@@ -8,7 +8,12 @@
       "nsfw": true,
       "version": "1.0.0",
       "url": "asset://assets/rules/ehentai-js.json",
-      "capabilities": ["discover", "search", "detail", "content"],
+      "capabilities": [
+        "discover",
+        "search",
+        "detail",
+        "content"
+      ],
       "license": "Triomi 公开网页协议适配 / 内容权利归各自权利人"
     },
     {
@@ -19,7 +24,12 @@
       "nsfw": true,
       "version": "1.0.0",
       "url": "asset://assets/rules/wnacg-js.json",
-      "capabilities": ["discover", "search", "detail", "content"],
+      "capabilities": [
+        "discover",
+        "search",
+        "detail",
+        "content"
+      ],
       "license": "Triomi 公开网页协议适配 / 内容权利归各自权利人"
     },
     {
@@ -28,10 +38,19 @@
       "type": "manga",
       "lang": "zh",
       "nsfw": true,
-      "version": "1.0.0",
+      "version": "1.0.1",
       "url": "asset://assets/rules/jmcomic-js.json",
-      "capabilities": ["discover", "search", "detail", "content"],
-      "license": "Triomi API 协议适配 / 内容权利归各自权利人"
+      "capabilities": [
+        "discover",
+        "search",
+        "detail",
+        "content"
+      ],
+      "license": "Triomi API 协议适配 / 内容权利归各自权利人",
+      "requiresHost": [
+        "jmcomic.api.v1",
+        "jmcomic.image.v1"
+      ]
     },
     {
       "id": "picacomic",
@@ -39,10 +58,18 @@
       "type": "manga",
       "lang": "zh",
       "nsfw": true,
-      "version": "1.0.0",
+      "version": "1.0.1",
       "url": "asset://assets/rules/picacomic-js.json",
-      "capabilities": ["discover", "search", "detail", "content"],
-      "license": "Triomi API 协议适配 / 内容权利归各自权利人"
+      "capabilities": [
+        "discover",
+        "search",
+        "detail",
+        "content"
+      ],
+      "license": "Triomi API 协议适配 / 内容权利归各自权利人",
+      "requiresHost": [
+        "picacomic.account.v1"
+      ]
     },
     {
       "id": "age-anime",

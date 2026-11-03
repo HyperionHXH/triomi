@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 
 import '../models/source_descriptor.dart';
+import 'host_features.dart';
 import 'http_client.dart';
 import 'js/js_source.dart';
 import 'js/runtime/js_runtime_factory.dart';
@@ -14,13 +15,22 @@ import 'source_registry.dart';
 /// All validation happens before the sole transactional write. A failed update
 /// leaves the installed version, its enablement, library and history intact.
 class CatalogInstaller {
-  CatalogInstaller(this.registry, {AssetBundle? bundle})
-    : bundle = bundle ?? rootBundle;
+  CatalogInstaller(
+    this.registry, {
+    AssetBundle? bundle,
+    this.hostFeatures = SourceHostFeatures.supported,
+  }) : bundle = bundle ?? rootBundle;
   final SourceRegistry registry;
   final AssetBundle bundle;
+  final Set<String> hostFeatures;
   static const maxBytes = 2 * 1024 * 1024;
 
   Future<SourceDescriptor> install(SourceCatalogEntry entry) async {
+    SourceHostFeatures.requireSupported(
+      entry.id,
+      entry.requiresHost,
+      available: hostFeatures,
+    );
     final old = await registry.repository.byId(entry.id);
     final oldVersion = CatalogVersion.tryParse(old?.version ?? '');
     if (old != null &&
@@ -67,6 +77,14 @@ class CatalogInstaller {
     }
     final text = utf8.decode(bytes);
     final rule = SourceRule.parseJson(text);
+    SourceHostFeatures.requireSupported(
+      rule.descriptor.id,
+      rule.requiresHost,
+      available: hostFeatures,
+    );
+    if (!entry.requiresHost.toSet().containsAll(rule.requiresHost)) {
+      throw StateError('目录未声明规则所需的全部原生网关能力');
+    }
     var descriptor = rule.descriptor;
     if (descriptor.id != entry.id ||
         descriptor.type != entry.type ||

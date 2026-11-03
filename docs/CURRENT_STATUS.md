@@ -1,5 +1,41 @@
 # Triomi 当前状态
 
+## 最新请求：R179内置受限原生网关，规则继续仓库安装（编译验收中）
+
+用户明确授权补齐应用中的JM/哔咔网关，提交推送并编译，取代上一轮“不推新IPA”的边界。已有`67ce2cd`实现不是空预留：JM匿名API解密和图片还原、哔咔只读API签名/安全账号存储及生产设置入口已接线。本轮升至0.12.0+179，增加版本化`requiresHost`能力契约：`jmcomic.api.v1`、`jmcomic.image.v1`、`picacomic.account.v1`，目录安装、手工导入、来源加载与JS初始化检查；未知能力拒绝，目录显示缺少网关并禁用安装，防止未来JSON误装。兼容原无声明的JM/哔咔身份，JSON声明不会授予跨站账号或任意原生执行能力。
+
+JM/哔咔随包规则1.0.1声明所需能力，仍由用户显式安装、不默认启用；原来源身份/章节/书库保留。后续HTML/目录/解析变更可更新JSON，原生加密/签名/像素契约改变仍需更新应用。哔咔凭据只在支持的客户端输入，Keychain保存且不进入JS。没有创建/读取/使用GitHub账号Secrets；私人relay/账号测试及禁用workflow草稿留在本地、不纳入提交。合成测试不冒充真实账号或站点图片验收。
+
+本轮本地定向45项已通过，包含缺失宿主/目录隐瞒依赖/手工未知能力拒绝及无落库副作用；全量复验与iOS流水线结果随后补记。本轮仅分支提交构建，不移动旧Tag或覆盖既有Release。下方插件发布和旧候选记录保留历史。
+
+## 最新请求：四源已发布原插件仓库，不推新IPA（2026-11-03）
+
+用户最新明确要求“JM和哔咔都要发，可以提交并推送”，取代此前排除两者/待授权方案。插件仓库 `HyperionHXH/Mihon-Extensions` 的 `main` 已提交并推送 `ba207926d89ae81a0f75ff6583e71695fe933d6c`：原18条加WNACG1.0.0、E-Hentai1.1.0、JMComic1.0.0、哔咔1.0.0，共22条。原38份规则与Android索引哈希不变；公开匿名HTTPS逐项实取22条，身份/版本/SHA-256和本地分发字节全部一致。目录CI41657109247及安全CI41657109014均成功。
+
+**兼容边界：** 正式iOS178源码`0c27925`只支持前两条；JM需原生API解密/图片还原，哔咔需原生安全账号/签名网关。已有源码`67ce2cd`候选包含这些实现，但与正式包同为0.12.0+178，不能只凭版本号判断。两条名称显式标注“需原生网关宿主”，目录和归属记录包含`hostRequirements`；旧客户端会忽略该说明字段，**并不会阻止安装**。上传JSON不补齐原生能力，不能称旧178已可读。
+
+生产Dart HTTPS→公开目录/规则→SHA-256安装→隔离数据库→当前生产来源factory→QuickJS与合成图片读取，四条全部通过；JM输出像素与标准几何图一致，哔咔未登录调用零API请求、仅模拟账号夹具登录。旧178完整原宿主通用安装/顺序/危险图片/额度/验证拒绝8项再次通过；插件Python39项、生成检查与包含未跟踪文件的125份前瞻凭据扫描通过，两个Dart探针analyze零问题。没有把合成图片/Windows执行外推真实站点或实际iOS阅读。
+
+应用内操作：漫画→浏览→JS / API漫画来源目录→管理兼容仓库，沿用原网址 `https://raw.githubusercontent.com/HyperionHXH/Mihon-Extensions/main/repo/triomi/index.json`，返回刷新后明确安装；四条保留NSFW，排除NSFW筛选时不可见。哔咔真实账号验收未做，不创建/读取/使用GitHub账号Secrets，不将账号或协议签名常量放入规则。本轮没有构建/发布新IPA，没有提交推送应用仓库；已有未提交工作全部保留。
+
+探针：`tools/catalog_reader_native_probe.dart`（`TRIOMI_PUBLIC_CATALOG=1`仅下载GitHub目录/规则，站点/账号/图片仍合成）、`tools/legacy_reader_catalog_probe.dart`。证据：`release_ios/reader-ports/catalog-only-20261103/public-four-reader-catalog.json`、`public-catalog-native-factory.log`、`published-four-reader-acceptance.json`。下方记录保留为阶段历史，不再作为待发布清单。
+
+## 最新接续：四源本地复验与哔咔账号安全边界（2026-11-03）
+
+用户允许不使用涉及 GitHub Secrets 的哔咔账号验收。本轮不创建、读取或消费账号 Secrets；保留已有未提交的 relay/账号集成测试草稿，但不执行。工作流草稿的 `picacomic-account` 任务已硬禁用，移除其手动入口与凭据绑定；匿名登录门槛、合成协议/设置/阅读器测试保留，不冒称本人账号通过。无自动提交、推送、新 Actions 触发或发布，已交付 Copy178 与旧产物不变。
+
+接续重新完整串行 Flutter 回归 **1926通过/4跳过**（504秒），`flutter analyze --no-pub` 零问题；按仓库 requirements 在项目忽略目录隔离安装 Python 测试依赖，最终宿主工具 **128通过**。新增元数据报告失败关闭校验：必须四个唯一来源、三源 metadata_passed、哔咔 blocked_account 且零网络请求、明确不宣称图片/iOS阅读验收；新增测试先失败后通过。通用私钥/GitHub token 模式扫描无未审查命中，不读取私人凭据文件，不等同于完整凭据审计。日志在 `release_ios/reader-ports/resume-20261103/`。
+
+本轮 Windows debug（25.3秒）和 Android debug（20.9秒）再次构建通过，未安装到任何设备；原有 CMake policy/Kotlin迁移警告保留。编码检查零错误，diff检查无空白错误。
+
+已存在的四源候选 `67ce2cd4b9b9c0a87dcf556d0eb3aa9951634da2` 的[iOS运行41627388664](https://github.com/HyperionHXH/triomi/actions/runs/41627388664)已成功结束，不含哔咔Secrets草稿；真机Release编译/打包、原生桥、JavaScriptCore压力、**333项实际iOS综合集成**、原56状态、Copy11状态与四源6状态合成巡检通过。生产WebKit/Dio匿名元数据WNACG20/24、JM80/80、EH62/25；哔咔blocked_account且零请求。旧17源仍16通过/喵趣403原始失败，沿用既有精确例外，无新增豁免。
+
+全部同run产物已下载至 `release_ios/41627388664/`，73张PNG逐张manifest哈希/尺寸/集合验证并通过联系表全部实际读取；三录像完整解码2085帧/623.05秒、681帧/631.398333秒、542帧/589.818333秒（不是完整观看）。IPA为13811237字节，SHA256 `309a7fec28a825c885a4f98d594e84c3cca18be7518071f627c9572a1dfcb6bc`，0.12.0+178/iOS15+/原bundle ID，四规则逐字节匹配候选Git blob。未发布新Release、未安装到真机；旧178不覆盖。
+
+实际看图发现JM合成截图被再次切片：测试adapter返回未打乱原图，随后生产还原器正常执行导致几何图错序。新增原始RGBA逐像素断言先失败，改为adapter预先逆置乱后四源下载/保存/离线、生产UI及JM还原共12项通过；没有改生产协议/规则。**该夹具修复仅本地，云端原JM图不作为正确还原视觉通过；修正后的iOS截图仍待新候选复验。**真实安全样本站点图片阅读/本人账号仍未完成，不称四源全面可在线阅读。下方为历史过程，最新边界见本节及 `docs/handoff/reader-ports-acceptance.md`。
+
+夹具修复后再次完整串行 **1926通过/4跳过（530秒）**，最终analyze零问题（9.4秒）；前一轮504秒全量与12项定向分别保留，不合并计数。此轮未提交修改仅测试/工具/工作流/文档，生产实现与现有云端候选不变。云端核验结论见 `release_ios/41627388664/acceptance-review.json`；不覆盖原178正式发布。
+
 ## 当前请求：哔咔 / 绅士漫画 / JMComic / E-Hentai 移植验收（进行中）
 
 用户确认 omp 已完成，允许继续验收；沿用本地 `ios-without-device` 技能，保留已接受 Copy178 与历史产物。四源原本地合成回归182通过，不代表实站/iOS可读。本轮新匿名生产 `SourceRegistry → QuickJS → Dio HTTPS` 元数据预检：JM远程加密服务器列表200、发现80条和搜索80条；哔咔空安全存储正确要求登录且未发网络请求，明确记录 blocked_account。绅士漫画默认wn07.cfd读取超时、公开E-Hentai连接超时，原失败证据保留，不假设解析成功或全站不可达。

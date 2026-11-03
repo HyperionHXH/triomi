@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
+import 'host_features.dart';
 import 'http_client.dart';
 import 'selector_engine.dart';
 import 'source_api.dart';
@@ -191,6 +192,7 @@ class SourceRule {
     this.detail,
     this.content,
     this.jsCode,
+    this.requiresHost = const [],
   });
 
   final SourceDescriptor descriptor;
@@ -204,6 +206,7 @@ class SourceRule {
 
   /// JS 规则的源码（声明式规则为 null）。
   final String? jsCode;
+  final List<String> requiresHost;
 
   bool get isScript => jsCode != null;
 
@@ -222,6 +225,12 @@ class SourceRule {
   }
 
   static SourceRule parseMap(Map<Object?, Object?> map) {
+    final List<String> requiresHost;
+    try {
+      requiresHost = SourceHostFeatures.parse(map['requiresHost']);
+    } on FormatException catch (error) {
+      throw RuleFormatException(error.message);
+    }
     final id = map['id']?.toString().trim() ?? '';
     final name = map['name']?.toString().trim() ?? '';
     if (id.isEmpty) throw const RuleFormatException('缺少 id');
@@ -298,6 +307,7 @@ class SourceRule {
       detail: isScript ? null : RuleDetail.parse(map['detail']),
       content: isScript ? null : RuleContent.parse(map['content']),
       jsCode: isScript ? script : null,
+      requiresHost: requiresHost,
     );
 
     // JS 规则的能力由运行时探测导出函数决定，不做声明式自检。

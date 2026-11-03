@@ -9,6 +9,7 @@ import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/source/http_client.dart';
+import 'package:triomi/core/source/jmcomic/jmcomic_image.dart';
 import 'package:triomi/core/source/js/js_source.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
@@ -122,8 +123,62 @@ class ReaderPortHarness {
 class ReaderPortFixtureAdapter implements HttpClientAdapter {
   ReaderPortFixtureAdapter(this.png);
   final Uint8List png;
+  final _jmPngs = <String, Future<Uint8List>>{};
   bool offline = false;
   final requests = <RequestOptions>[];
+
+  Future<Uint8List> _scrambledJmPng(String url) async {
+    final rows = jmImageRows(url);
+    final codec = await ui.instantiateImageCodec(png);
+    final image = (await codec.getNextFrame()).image;
+    try {
+      final raw = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+      final pixels = raw.buffer.asUint8List(
+        raw.offsetInBytes,
+        raw.lengthInBytes,
+      );
+      final scrambled = Uint8List(pixels.length);
+      final stride = image.width * 4;
+      final step = image.height ~/ rows;
+      final remainder = image.height % rows;
+      // Invert the site permutation at the raw-byte boundary, not by calling
+      // the production restore function. The reader must recover the geometry.
+      for (var i = 0; i < rows; i++) {
+        final length = step + (i == 0 ? remainder : 0);
+        final originalY = step * i + (i == 0 ? 0 : remainder);
+        final scrambledY = image.height - step * (i + 1) - remainder;
+        scrambled.setRange(
+          scrambledY * stride,
+          (scrambledY + length) * stride,
+          pixels,
+          originalY * stride,
+        );
+      }
+      final buffer = await ui.ImmutableBuffer.fromUint8List(scrambled);
+      final descriptor = ui.ImageDescriptor.raw(
+        buffer,
+        width: image.width,
+        height: image.height,
+        pixelFormat: ui.PixelFormat.rgba8888,
+      );
+      final encodedCodec = await descriptor.instantiateCodec();
+      final encodedImage = (await encodedCodec.getNextFrame()).image;
+      try {
+        final data = (await encodedImage.toByteData(
+          format: ui.ImageByteFormat.png,
+        ))!;
+        return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      } finally {
+        encodedImage.dispose();
+        encodedCodec.dispose();
+        descriptor.dispose();
+        buffer.dispose();
+      }
+    } finally {
+      image.dispose();
+      codec.dispose();
+    }
+  }
 
   @override
   Future<ResponseBody> fetch(
@@ -139,6 +194,12 @@ class ReaderPortFixtureAdapter implements HttpClientAdapter {
     ResponseBody json(Object data) =>
         text(jsonEncode({'code': 200, 'data': data}));
     if (uri.host == 'geometry.example.invalid') {
+      if (uri.path.startsWith('/media/photos/')) {
+        final bytes = await (_jmPngs[uri.path] ??= _scrambledJmPng(
+          uri.toString(),
+        ));
+        return ResponseBody.fromBytes(bytes, 200);
+      }
       return ResponseBody.fromBytes(png, 200);
     }
     if (uri.host == 'picaapi.picacomic.com') {

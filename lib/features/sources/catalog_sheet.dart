@@ -9,6 +9,7 @@ import '../../core/models/source_descriptor.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/source/catalog_installer.dart';
 import '../../core/source/catalog_repository.dart';
+import '../../core/source/host_features.dart';
 import '../../core/source/source_catalog.dart';
 import '../../core/source/source_filters.dart';
 import '../../core/source/source_providers.dart';
@@ -501,6 +502,11 @@ class _EntryCard extends StatelessWidget {
     final old = CatalogVersion.tryParse(installedVersion ?? '');
     final update = installed && old != null && entry.version.isNewerThan(old);
     final done = (installed && !update) || state == _InstallState.installed;
+    final requiredHost = SourceHostFeatures.requiredFor(
+      entry.id,
+      entry.requiresHost,
+    );
+    final missingHost = requiredHost.difference(SourceHostFeatures.supported);
     return AppCard(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),
@@ -521,6 +527,12 @@ class _EntryCard extends StatelessWidget {
             Text('仓库：$repositoryName'),
             if (repositoryUrl != 'builtin') Text(repositoryUrl),
             if (conflict) const Text('同 ID 存在于多个仓库；安装前请确认所选仓库，不会自动合并'),
+            if (requiredHost.isNotEmpty)
+              Text(
+                missingHost.isEmpty
+                    ? '原生网关：当前应用已支持'
+                    : '需要更新应用，缺少网关：${missingHost.join(', ')}',
+              ),
             const SizedBox(height: AppSpacing.xs),
             Text(
               '${sourceLanguageLabel(sourceLanguage(entry.lang))} · ${sourceContentLabel(entry.nsfw)}',
@@ -575,7 +587,9 @@ class _EntryCard extends StatelessWidget {
               child: done
                   ? const Text('已安装')
                   : FilledButton.icon(
-                      onPressed: installing ? null : onInstall,
+                      onPressed: installing || missingHost.isNotEmpty
+                          ? null
+                          : onInstall,
                       icon: installing
                           ? const SizedBox(
                               width: 14,

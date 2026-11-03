@@ -28,6 +28,7 @@ SourceCatalogEntry entryOf({
   String? hash,
   String name = '目录漫画源',
   CatalogVersion version = const CatalogVersion(1, 0, 0),
+  List<String> requiresHost = const [],
 }) => SourceCatalogEntry(
   id: id,
   name: name,
@@ -42,6 +43,7 @@ SourceCatalogEntry entryOf({
     SourceCapability.content,
   },
   license: 'GPL-3.0',
+  requiresHost: requiresHost,
 );
 
 const String ruleJson = '''
@@ -121,6 +123,24 @@ Future<void> settle(WidgetTester tester, {int rounds = 6}) async {
 }
 
 void main() {
+  testWidgets('未知原生网关明确提示升级且不允许安装', (tester) async {
+    final http = FakeHttpClient((_) async => throw StateError('No downloads'));
+    await tester.pumpWidget(
+      await harness(
+        loader: () async => [
+          entryOf(id: 'future-gateway', requiresHost: ['future.gateway.v2']),
+        ],
+        http: http,
+      ),
+    );
+    await settle(tester);
+    expect(find.textContaining('需要更新应用，缺少网关'), findsOneWidget);
+    final button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, '安装'),
+    );
+    expect(button.onPressed, isNull);
+    expect(http.requests, isEmpty);
+  });
   for (final succeed in [true, false]) {
     testWidgets('升级 UI ${succeed ? "成功" : "失败保留旧版"}', (tester) async {
       await tester.pumpWidget(

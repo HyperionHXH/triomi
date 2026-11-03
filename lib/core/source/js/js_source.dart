@@ -7,6 +7,7 @@ import '../../models/media_item.dart';
 import '../../models/media_type.dart';
 import '../../models/source_descriptor.dart';
 import '../../models/source_exception.dart';
+import '../host_features.dart';
 import '../http_client.dart';
 import '../rule_schema.dart';
 import '../selector_engine.dart';
@@ -88,6 +89,7 @@ class JsSource
   }
 
   Future<void> _initialize() async {
+    SourceHostFeatures.requireSupported(_id, rule.requiresHost);
     final script = rule.jsCode;
     if (script == null || script.trim().isEmpty) {
       throw SourceException(
@@ -145,7 +147,9 @@ class JsSource
     });
     final url = resolveUrl(rule.baseUrl, rendered) ?? rendered;
     final raw = await _invoke('discover', <Object?>[
-      url, page, if (requestOptions != null) requestOptions!(),
+      url,
+      page,
+      if (requestOptions != null) requestOptions!(),
     ]);
     return _toItems(raw);
   }
@@ -153,7 +157,9 @@ class JsSource
   @override
   Future<List<MediaItem>> search(String keyword, {int page = 1}) async {
     final raw = await _invoke('search', <Object?>[
-      keyword, page, if (requestOptions != null) requestOptions!(),
+      keyword,
+      page,
+      if (requestOptions != null) requestOptions!(),
     ]);
     return _toItems(raw);
   }
@@ -181,9 +187,14 @@ class JsSource
   }) async {
     await initialize();
     if (await runtime.hasFunction('searchTagged')) {
-      return _toItems(await _invoke('searchTagged', [
-        keyword, page, tags, if (requestOptions != null) requestOptions!(),
-      ]));
+      return _toItems(
+        await _invoke('searchTagged', [
+          keyword,
+          page,
+          tags,
+          if (requestOptions != null) requestOptions!(),
+        ]),
+      );
     }
     // Legacy rules, like MixN's aggregate search, accept tag labels as online
     // keywords. Do not filter their incomplete cached result list on-device.
@@ -270,9 +281,12 @@ class JsSource
     if (cached != null && cached.optionsKey == optionsKey) return cached;
 
     final raw = await _invoke('detail', <Object?>[
-      url, item.toJson(), ?options,
+      url,
+      item.toJson(),
+      ?options,
     ]);
-    if (revision != _detailRevision || optionsKey != jsonEncode(requestOptions?.call())) {
+    if (revision != _detailRevision ||
+        optionsKey != jsonEncode(requestOptions?.call())) {
       throw StateError('来源设置或登录状态已变化，请重新加载');
     }
     final map = raw is Map<Object?, Object?> ? raw : const <Object?, Object?>{};
@@ -422,7 +436,8 @@ class JsSource
       html: raw['html']?.toString(),
       playSources: playSources,
       comments: [
-        for (final value in raw['comments'] is List ? raw['comments'] as List : const [])
+        for (final value
+            in raw['comments'] is List ? raw['comments'] as List : const [])
           ?ChapterComment.fromJson(value),
       ],
       commentMode: const {'merge', 'separate'}.contains(raw['commentMode'])
@@ -464,7 +479,11 @@ class JsSource
 }
 
 class _JsDetail {
-  const _JsDetail({required this.item, required this.chapters, required this.optionsKey});
+  const _JsDetail({
+    required this.item,
+    required this.chapters,
+    required this.optionsKey,
+  });
 
   final MediaItem item;
   final List<Chapter> chapters;
