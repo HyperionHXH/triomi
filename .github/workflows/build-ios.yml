@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     runs-on: macos-latest
-    timeout-minutes: 90
+    timeout-minutes: 210
     permissions:
       contents: read
     defaults:
@@ -25,6 +25,8 @@ jobs:
           python-version: '3.12'
       - name: Validate the visual tour capture protocol
         run: python -m unittest discover -s tools -p 'test_ios_visual_tour.py'
+      - name: Validate live Copy capture boundaries
+        run: python -m unittest discover -s tools -p 'test_ios_copy_acceptance.py'
       - name: Resolve the repository's exact Flutter SDK
         id: sdk
         run: python tools/resolve_ios_toolchain.py --github-output "$GITHUB_OUTPUT"
@@ -157,6 +159,49 @@ jobs:
         if: ${{ !cancelled() && steps.tour-simulator.outputs.udid != '' }}
         timeout-minutes: 22
         run: python tools/run_ios_visual_tour.py --device '${{ steps.tour-simulator.outputs.udid }}'
+      - name: Create disposable live source audit simulator
+        id: audit-simulator
+        if: ${{ !cancelled() && steps.tour-simulator.outputs.udid != '' }}
+        run: |
+          set -euo pipefail
+          previous='${{ steps.tour-simulator.outputs.udid }}'
+          xcrun simctl shutdown "$previous"
+          read -r device_type runtime < <(xcrun simctl list devices --json | python -c 'import json,sys; groups=json.load(sys.stdin)["devices"]; print(next(d["deviceTypeIdentifier"]+" "+runtime for runtime,devices in groups.items() for d in devices if d["udid"]==sys.argv[1]))' "$previous")
+          device="$(xcrun simctl create Triomi-Live-Source-Audit "$device_type" "$runtime")"
+          echo "udid=$device" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device" -b
+      - name: Audit all seventeen previous ports on real iOS and upstream HTTP
+        id: manga-live
+        if: ${{ !cancelled() && steps.audit-simulator.outputs.udid != '' }}
+        timeout-minutes: 95
+        run: python tools/run_ios_copy_acceptance.py --audit-sources --device '${{ steps.audit-simulator.outputs.udid }}'
+      - name: Create disposable live Copy acceptance simulator
+        id: copy-simulator
+        if: ${{ !cancelled() && steps.audit-simulator.outputs.udid != '' }}
+        run: |
+          set -euo pipefail
+          previous='${{ steps.audit-simulator.outputs.udid }}'
+          xcrun simctl shutdown "$previous"
+          read -r device_type runtime < <(xcrun simctl list devices --json | python -c 'import json,sys; groups=json.load(sys.stdin)["devices"]; print(next(d["deviceTypeIdentifier"]+" "+runtime for runtime,devices in groups.items() for d in devices if d["udid"]==sys.argv[1]))' "$previous")
+          device="$(xcrun simctl create Triomi-Copy-Live-Acceptance "$device_type" "$runtime")"
+          echo "udid=$device" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device" -b
+      - name: Accept live Copy API and production reader with native evidence
+        id: copy-live
+        if: ${{ !cancelled() && steps.copy-simulator.outputs.udid != '' }}
+        timeout-minutes: 23
+        run: python tools/run_ios_copy_acceptance.py --device '${{ steps.copy-simulator.outputs.udid }}'
+      - name: Upload live source audit and Copy evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: triomi-ios-live-sources
+          path: |
+            build/ios/copy-live/
+            build/ios/manga-sources-live/
+          if-no-files-found: warn
       - name: Upload visual tour screenshots, recording and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -165,7 +210,7 @@ jobs:
           path: build/ios/visual-tour/
           if-no-files-found: warn
       - name: Upload the exact validated IPA
-        if: success() && steps.acceptance.outcome == 'success' && steps.visual-tour.outcome == 'success'
+        if: success() && steps.acceptance.outcome == 'success' && steps.visual-tour.outcome == 'success' && steps.manga-live.outcome == 'success' && steps.copy-live.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: triomi-ios-unsigned

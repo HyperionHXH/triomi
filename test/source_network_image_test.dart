@@ -164,6 +164,44 @@ void main() {
     PaintingBinding.instance.imageCache.clear();
   });
 
+  test('chapter-specific Referer reaches HTTP and separates decoded image cache entries', () async {
+    final widePng = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEUlEQVR4nGOUs4n6z8DAwAAACb0BtVhLOK8AAAAASUVORK5CYII=',
+    );
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      final referer = request.headers.value('referer');
+      if (request.headers.value('user-agent') != 'Source image client' ||
+          !const {'https://reader.example/chapter/a', 'https://reader.example/chapter/b'}.contains(referer)) {
+        request.response.statusCode = HttpStatus.forbidden;
+      } else {
+        request.response.headers.contentType = ContentType('image', 'png');
+        request.response.add(referer!.endsWith('/a') ? png : widePng);
+      }
+      await request.response.close();
+    });
+    final http = DioSourceHttpClient();
+    final url = 'http://127.0.0.1:${server.port}/same-image.png';
+    try {
+      final first = await resolve(SourceNetworkImage(url, http: http, headers: const {
+        'Referer': 'https://reader.example/chapter/a',
+        'User-Agent': 'Source image client',
+      }));
+      expect((first.image.width, first.image.height), (1, 1));
+      first.dispose();
+      final second = await resolve(SourceNetworkImage(url, http: http, headers: const {
+        'Referer': 'https://reader.example/chapter/b',
+        'User-Agent': 'Source image client',
+      }));
+      expect((second.image.width, second.image.height), (2, 1));
+      second.dispose();
+    } finally {
+      http.close();
+      PaintingBinding.instance.imageCache.clear();
+      await server.close(force: true);
+    }
+  });
+
   test(
     'images use the configured proxy and a changed client reloads the same URL',
     () async {

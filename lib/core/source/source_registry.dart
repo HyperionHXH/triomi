@@ -108,6 +108,13 @@ class _DisabledScriptSource implements ContentSource {
   bool get isReady => false;
 }
 
+typedef JsSourceFactory = JsSource Function({
+  required SourceRule rule,
+  required JsRuntime runtime,
+  required SourceHttpClient http,
+  Map<String, Object?> Function()? requestOptions,
+});
+
 /// 来源注册表：负责「从数据库 / 内置资产里把规则变成可用来源」。
 ///
 /// 双轨来源体系（见 PROJECT_SPEC 4.3）：
@@ -123,7 +130,8 @@ class SourceRegistry {
     this.mihonAdapters = const <MihonSource>[],
     this.metadataFailures = const <SourceFailure>[],
     this.jsRuntimeFactory,
-    this.jsContentOptions,
+    this.jsRequestOptions,
+    this.jsSourceFactory,
     AssetBundle? assetBundle,
   }) : _bundle = assetBundle ?? rootBundle;
 
@@ -151,7 +159,8 @@ class SourceRegistry {
   /// 测试注入替身走这里。
   final JsRuntime Function()? jsRuntimeFactory;
 
-  final Map<String, Object?> Function(String sourceId)? jsContentOptions;
+  final Map<String, Object?> Function(String sourceId)? jsRequestOptions;
+  final JsSourceFactory? jsSourceFactory;
 
   final AssetBundle _bundle;
   final Map<String, ({String text, JsSource instance})> _scripts = {};
@@ -172,13 +181,13 @@ class SourceRegistry {
     final previous = _scripts[id];
     if (previous?.text == text) return previous!.instance;
     previous?.instance.dispose();
-    final source = JsSource(
+    final source = (jsSourceFactory ?? JsSource.new)(
       rule: rule,
       runtime: (jsRuntimeFactory ?? createFlutterJsRuntime)(),
       http: http,
-      contentOptions: jsContentOptions == null
+      requestOptions: jsRequestOptions == null
           ? null
-          : () => jsContentOptions!(id),
+          : () => jsRequestOptions!(id),
     );
     _scripts[id] = (text: text, instance: source);
     return source;

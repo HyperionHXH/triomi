@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/source/copymanga/copymanga_cover.dart';
 import '../../../core/source/http_client.dart';
 import '../../../core/source/source_providers.dart';
 import '../../../core/storage/cover_store.dart';
@@ -468,8 +469,30 @@ class _MediaCoverState extends ConsumerState<MediaCover> {
     final value = widget.url;
     if (value == null || value.isEmpty) return placeholder;
 
+    if (widget.sourceId == 'copymanga') {
+      return Consumer(builder: (context, ref, child) {
+        final policy = ref.watch(copyMangaCoverHeadersProvider);
+        final headers = policy.asData?.value;
+        if (policy.isLoading || headers == null) return placeholder;
+        return _networkImage(value, placeholder, http, headers);
+      });
+    }
+    return _networkImage(value, placeholder, http, const {});
+  }
+
+  Widget _networkImage(
+    String value,
+    Widget placeholder,
+    SourceHttpClient http,
+    Map<String, String> headers,
+  ) {
     return Image(
-      image: SourceNetworkImage(value, http: http, sourceId: widget.sourceId),
+      image: SourceNetworkImage(
+        value,
+        http: http,
+        sourceId: widget.sourceId,
+        headers: headers,
+      ),
       fit: BoxFit.cover,
       frameBuilder: (_, child, frame, synchronous) =>
           frame != null || synchronous ? child : placeholder,

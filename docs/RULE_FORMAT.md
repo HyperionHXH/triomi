@@ -178,10 +178,10 @@ JS 规则。JS 规则与声明式规则**同一份 JSON**，用 `engine: "js"` �
 ### 7.1 导出函数（缺省即该能力不可用）
 
 ```js
-async function discover(url, page)   // → MediaItem[]；url 已由宿主渲染 {page} 并补全为绝对地址
-async function search(keyword, page) // → MediaItem[]
-async function detail(url, item)     // → { item: {...}, chapters: [...] }（两次调用按地址缓存，只发一次请求）
-async function content(url, chapter) // → { images? / text? / html? / playSources? / danmakuUrl? }
+async function discover(url, page, options) // → MediaItem[]；url 已由宿主渲染并补全
+async function search(keyword, page, options) // → MediaItem[]
+async function detail(url, item, options) // → {item: {...}, chapters: [...]}
+async function content(url, chapter, options) // → {images?, imageHeaders?, comments?, commentMode?, text?, html?, playSources?}
 ```
 
 - `MediaItem` 字段与声明式字段同名：`remoteId / title / url / coverUrl /
@@ -191,6 +191,10 @@ async function content(url, chapter) // → { images? / text? / html? / playSour
   releaseDate / locked`；标题缺省时按顺序兜底为「第 N 话」。
 - `content(url, chapter)` 的 `chapter` 是章节 JSON（`remoteId / title /
   url / number / volumeTitle`），拼弹幕地址之类会用到。
+- `options` 是宿主按请求读取的非秘密来源设置；旧脚本可以不声明该参数。详情缓存按地址和设置快照隔离，切号/退出会撤销迟到目录，不能复用旧账号结果。`searchTags(options)` 和 `searchTagged(keyword, page, tags, options)` 为可选标签入口。
+- 漫画 `imageHeaders` 保留公共 Referer/User-Agent/Origin/Accept/Accept-Language，随阅读、预载、下载和长按保存传递；账户 Authorization/Cookie 不进入正文缓存或规则设置。显式空User-Agent表示省略，不会自动替换为Dart默认UA。
+- `comments` 是 `{author, text, replyTo?}` 的只读文字数组，`commentMode` 为`merge`/`separate`。原生阅读器显示这些普通文本，不执行HTML或生成伪图片。只有显式评论章节可以在无图片时使用空评论状态；无图片且无评论类型仍是正文失败。
+- Copy原生账号授权绑定规则执行内容和输入指纹，而不只绑定自报id；规则替换后需明确重新登录，旧凭据不会自动授权给新脚本。密码不保存，token只在宿主向所选精确官方API注入。
 
 ### 7.2 宿主函数 `triomi.*`
 

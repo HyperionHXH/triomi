@@ -116,6 +116,7 @@ class SourceRequest {
     this.followRedirects = true,
     this.checkStatus = true,
     this.cancellation,
+    this.omitUserAgent = false,
   });
 
   final String url;
@@ -129,6 +130,7 @@ class SourceRequest {
   final bool followRedirects;
   final bool checkStatus;
   final SourceRequestCancellation? cancellation;
+  final bool omitUserAgent;
 }
 
 /// 来源响应。
@@ -261,6 +263,17 @@ class DioSourceHttpClient
       _bangumiRoutesResolver?.call() ?? _bangumiRoutes;
   final String defaultUserAgent;
   final Duration timeout;
+
+  Map<String, String> _requestHeaders(Map<String, String> headers, {bool omitUserAgent = false}) {
+    final omit = omitUserAgent || headers.entries.any(
+      (entry) => entry.key.toLowerCase() == 'user-agent' && entry.value.isEmpty,
+    );
+    return {
+      if (!omit) 'User-Agent': defaultUserAgent,
+      for (final entry in headers.entries)
+        if (!omit || entry.key.toLowerCase() != 'user-agent') entry.key: entry.value,
+    };
+  }
   final bool _allowPublicGithubDelivery;
   late final GithubPublicDelivery _githubDelivery = GithubPublicDelivery(
     _dio,
@@ -387,9 +400,8 @@ class DioSourceHttpClient
         options: Options(
           method: request.method.toUpperCase(),
           followRedirects: accept == null ? request.followRedirects : false,
-          headers: <String, String>{
-            'User-Agent': defaultUserAgent,
-            ...request.headers,
+          headers: {
+            ..._requestHeaders(request.headers, omitUserAgent: request.omitUserAgent),
             'Accept': ?accept,
           },
           contentType: switch (request.bodyType) {
@@ -495,7 +507,7 @@ class DioSourceHttpClient
         url,
         options: Options(
           method: method,
-          headers: <String, String>{'User-Agent': defaultUserAgent, ...headers},
+          headers: _requestHeaders(headers),
           responseType: ResponseType.bytes,
           connectTimeout: timeout,
           sendTimeout: timeout,
@@ -532,7 +544,7 @@ class DioSourceHttpClient
         url,
         options: Options(
           followRedirects: followRedirects,
-          headers: <String, String>{'User-Agent': defaultUserAgent, ...headers},
+          headers: _requestHeaders(headers),
           responseType: ResponseType.stream,
           connectTimeout: timeout,
           sendTimeout: timeout,

@@ -4,6 +4,9 @@
 
 > iOS 适配：iOS 15+ 的 JS/API/Kazumi 路径使用系统 WebKit、Dart 宿主网络及系统 AVPlayer；Mihon APK/DEX 与 Windows JVM 不能在 iOS 执行，管理入口明确降级。弹幕跟随R173的B站/Animeko/Gamer独立只读池、分集纠正、偏移与屏蔽设置，不再消费旧来源弹幕URL或提供弹弹play匹配/发送凭据入口。补齐无后缀HLS、MIME提示与省略Cookie语义；iOS17+支持AVPlayer公开MIME覆盖，15/16仍受系统识别能力限制。当前 Apple 编译/模拟器、账号、PiP 与锁屏设备证据以[当前状态](CURRENT_STATUS.md)记录为准，下方历史 Android/Windows 结果不外推至 iOS。详见 [iOS 适配说明](IOS_ADAPTATION.md)。
 
+> R178进行中：Copy1.1.0已改用实际Android1.4.85的App API协议，生产Dart读取490章/正文/首图通过，但本轮iOS执行仍待验收。此前17条也加入真实iOS网络门槛；旧烟测手工传图片头不等同生产Reader，现修复公共imageHeaders在Reader/下载/保存路径的丢失。下表旧轮次结果不提升为本轮通过；公开仓库仍为先前1.0.0，最终规则和宿主发布以CURRENT_STATUS精确记录为准。
+
+
 ## 来源矩阵
 
 | 来源 | 类型 | discover | search | detail | content | 播放线路 | 生产/调试 | 证据 |
@@ -14,6 +17,7 @@
 | `local-fixture-novel.json`（本地夹具·小说） | novel | ✅ | ✅ | ✅ | ✅（文本） | — | **仅调试** | 同上 |
 | `local-fixture-js.json`（夹具 JS 对照） | manga | ✅ | ✅ | ✅ | ✅ | 同夹具 | **仅调试** | 同上 |
 | `mangadex-api-js.json` v1.0.5 | manga | ✅ | ✅（名称/原始题材标签） | ✅ | ✅（图片；可选低流量） | — | 随包播种，可从来源目录安全升级，不覆盖用户规则 | R155公开题材字典77项、Action请求实际Berserk结果；最终Windows在线最近更新20部及封面。历史C149为v1.0.4；不是APK执行证据 |
+| `copymanga-js.json` v1.0.0 | manga | ✅（实网50条） | ✅（实网11条） | 访客浏览器490章；Dart仍空 | 游客205/14图及JPEG成功；Dart阅读未通过 | — | 原iOS目录已发布，现有176/177可刷新下载安装；无新IPA | 87项相关回归/analyze通过；21项生成器/目录CI及生产HTTPS安装启用通过；已排除必需登录/解码错误，传输响应差异仍未解；iOS本轮未验 |
 | 用户 Mihon APK 仓库 | manga | ✅ | ✅ | ✅ | ✅（插件图片） | — | Android 宿主真实验收；不代表全仓库兼容 | MangaDex 1.6、拷贝漫画 1.4、Jinman 1.6.59 阅读/重启；Jinman 原始来源设置与图片还原通过；十八漫画 1.6 加载成功但站点超时 |
 | `age-anime-js.json` v1.0.1 | anime | ✅（首页最新） | ✅ | ✅（分线路） | ✅（网页 PlaySource） | Android WebView 解析到实际 HLS/MP4 | 随包播种，可从目录更新；本轮 Android 实测 | C99 芙莉莲线路 2 第 08 集 24:49 正片；线路 1 错误卡明确拒绝 |
 | Kazumi 7sefun v1.3 / MXdm v2.4 / DM84 v1.4 | anime | ❌（推荐独立） | ✅ | ✅（站内播放列表） | ✅（网页/直接流） | 各站各列表独立，不冒充多个网站 | C124随包MIT原规则、支持XPath子集 | 三站真实网络搜索/目录见C124-kazumi-live-network；7sefun设备视频另记，不宣称三站全视频通过 |

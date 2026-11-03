@@ -29,6 +29,7 @@ void main() {
     'xkcd': 'xkcd-js.json',
     'manhuagui': 'manhuagui-js.json',
     'webtoons-zh': 'webtoons-zh-js.json',
+    'copymanga': 'copymanga-js.json',
     'bh3': 'bh3-js.json',
     'terrahistoricus': 'terrahistoricus-js.json',
     'kuaikanmanhua': 'kuaikanmanhua-js.json',
@@ -86,6 +87,7 @@ void main() {
                 'mangadex' => 'Berserk',
                 'komiic' => '腦洞學生會',
                 'xkcd' => '1',
+                'copymanga' => '一拳超人',
                 _ => discovered.first.title,
               };
         final supportsSearch = source.descriptor.capabilities.contains(
@@ -104,12 +106,15 @@ void main() {
             reason: 'supported search must produce real source identities',
           );
         }
-        final item = id == 'mangadex'
-            ? searched.firstWhere(
-                (item) =>
-                    item.remoteId == '801513ba-a712-498c-8f57-cae55b38cc92',
-              )
-            : searched.first;
+        final item = switch (id) {
+          'mangadex' => searched.firstWhere(
+            (item) => item.remoteId == '801513ba-a712-498c-8f57-cae55b38cc92',
+          ),
+          'copymanga' => searched.firstWhere(
+            (item) => item.remoteId == 'yiquanchaoren',
+          ),
+          _ => searched.first,
+        };
         record['item'] = {
           'id': item.remoteId,
           'title': item.title,

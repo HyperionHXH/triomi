@@ -45,6 +45,20 @@
       "updatedAt": "2026-10-05T00:00:00Z"
     },
     {
+      "id": "copymanga",
+      "name": "拷贝漫画",
+      "type": "manga",
+      "version": "1.1.0",
+      "url": "asset://assets/rules/copymanga-js.json",
+      "capabilities": [
+        "discover",
+        "search",
+        "detail",
+        "content"
+      ],
+      "license": "Triomi 独立 API 协议实现 / 内容权利归各自权利人"
+    },
+    {
       "id": "bangumi-anime",
       "name": "Bangumi 番剧资料（无播放）",
       "type": "anime",

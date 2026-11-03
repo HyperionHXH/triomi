@@ -214,7 +214,9 @@ class DownloadService {
           final name =
               '${(index + 1).toString().padLeft(4, '0')}${_extensionOf(url)}';
           if (!await checkpoint.valid(name, url: url)) {
-            final bytes = await http.fetchBytes(url, sourceId: row.sourceId);
+            final bytes = await http.fetchBytes(
+              url, sourceId: row.sourceId, headers: content.imageHeaders,
+            );
             check();
             final file = File('$directory${Platform.pathSeparator}$name');
             await file.writeAsBytes(bytes, flush: true);
@@ -232,6 +234,14 @@ class DownloadService {
           files: files,
           title: chapter.title,
         );
+        if (content.commentMode != null || content.comments.isNotEmpty) {
+          await repository.saveChapterContent(
+            chapter.copyWith(content: content),
+            itemSourceId: row.sourceId,
+            itemRemoteId: row.remoteId,
+          );
+          check();
+        }
         await repository.markDone(row.id, path: directory);
         return;
       }

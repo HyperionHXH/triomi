@@ -18,6 +18,7 @@ Future<void> showImageViewer(
   BuildContext context, {
   required String imageUrl,
   required String sourceId,
+  Map<String, String> imageHeaders = const {},
   String? heroTag,
 }) {
   return Navigator.of(context, rootNavigator: true).push(
@@ -25,7 +26,7 @@ Future<void> showImageViewer(
       opaque: false,
       barrierColor: Colors.black,
       pageBuilder: (context, animation, secondaryAnimation) =>
-          _ImageViewerPage(imageUrl: imageUrl, sourceId: sourceId),
+          _ImageViewerPage(imageUrl: imageUrl, sourceId: sourceId, imageHeaders: imageHeaders),
       transitionsBuilder: (context, animation, secondaryAnimation, child) =>
           FadeTransition(opacity: animation, child: child),
     ),
@@ -33,10 +34,11 @@ Future<void> showImageViewer(
 }
 
 class _ImageViewerPage extends ConsumerStatefulWidget {
-  const _ImageViewerPage({required this.imageUrl, required this.sourceId});
+  const _ImageViewerPage({required this.imageUrl, required this.sourceId, required this.imageHeaders});
 
   final String imageUrl;
   final String sourceId;
+  final Map<String, String> imageHeaders;
 
   @override
   ConsumerState<_ImageViewerPage> createState() => _ImageViewerPageState();
@@ -73,6 +75,7 @@ class _ImageViewerPageState extends ConsumerState<_ImageViewerPage> {
                             widget.imageUrl,
                             http: ref.watch(sourceHttpClientProvider),
                             sourceId: widget.sourceId,
+                            headers: widget.imageHeaders,
                           ),
                     fit: BoxFit.contain,
                     loadingBuilder: (context, child, progress) {
@@ -118,6 +121,7 @@ class _ImageViewerPageState extends ConsumerState<_ImageViewerPage> {
     context,
     imageUrl: widget.imageUrl,
     sourceId: widget.sourceId,
+    imageHeaders: widget.imageHeaders,
   );
 }
 
@@ -127,10 +131,12 @@ Future<void> saveImageWithFeedback(
   BuildContext context, {
   required String imageUrl,
   required String sourceId,
+  Map<String, String> imageHeaders = const {},
 }) async {
   final bytes = await loadImageBytes(
     imageUrl,
     sourceId: sourceId,
+    headers: imageHeaders,
     http: ProviderScope.containerOf(
       context,
       listen: false,
@@ -153,11 +159,12 @@ Future<Uint8List?> loadImageBytes(
   String url, {
   required String sourceId,
   SourceHttpClient? http,
+  Map<String, String> headers = const {},
 }) async {
   if (url.startsWith('http://') || url.startsWith('https://')) {
     if (http == null) return null;
     try {
-      final data = await http.fetchBytes(url, sourceId: sourceId);
+      final data = await http.fetchBytes(url, sourceId: sourceId, headers: headers);
       return Uint8List.fromList(data);
     } catch (_) {
       return null;

@@ -28,7 +28,9 @@ void configureSourceHttpAdapter(
 }) {
   final resolver = SourceDnsFallback();
   HttpClient createClient() {
-    final client = HttpClient();
+    // SourceHttpClient supplies the normal UA explicitly. Leaving Dart's own
+    // default active would make an intentional source-level omission ineffective.
+    final client = HttpClient()..userAgent = null;
     if (proxy.isNotEmpty) {
       final uri = Uri.parse(proxy);
       final host = uri.host.contains(':') ? '[${uri.host}]' : uri.host;

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:html/parser.dart' as html_parser;
 
 import '../../models/chapter.dart';
@@ -39,18 +41,19 @@ class JsSource
     required this.rule,
     required this.runtime,
     required this.http,
-    this.contentOptions,
+    this.requestOptions,
   });
 
   final SourceRule rule;
   final JsRuntime runtime;
   final SourceHttpClient http;
 
-  /// Read at each content request so preference changes do not restart workers.
-  final Map<String, Object?> Function()? contentOptions;
+  /// Read for each operation; settings changes do not restart unrelated rules.
+  final Map<String, Object?> Function()? requestOptions;
 
   final Set<SourceCapability> _capabilities = <SourceCapability>{};
   final Map<String, _JsDetail> _detailCache = <String, _JsDetail>{};
+  int _detailRevision = 0;
   bool _ready = false;
   bool _disposed = false;
   Future<void>? _initializing;
@@ -116,6 +119,12 @@ class JsSource
     _ready = true;
   }
 
+  /// Revoke account- or configuration-dependent metadata without losing the rule.
+  void invalidateDetailCache() {
+    _detailRevision++;
+    _detailCache.clear();
+  }
+
   void dispose() {
     _disposed = true;
     _ready = false;
@@ -135,13 +144,17 @@ class JsSource
       'offset': '${(page - 1) * 20}',
     });
     final url = resolveUrl(rule.baseUrl, rendered) ?? rendered;
-    final raw = await _invoke('discover', <Object?>[url, page]);
+    final raw = await _invoke('discover', <Object?>[
+      url, page, if (requestOptions != null) requestOptions!(),
+    ]);
     return _toItems(raw);
   }
 
   @override
   Future<List<MediaItem>> search(String keyword, {int page = 1}) async {
-    final raw = await _invoke('search', <Object?>[keyword, page]);
+    final raw = await _invoke('search', <Object?>[
+      keyword, page, if (requestOptions != null) requestOptions!(),
+    ]);
     return _toItems(raw);
   }
 
@@ -149,7 +162,9 @@ class JsSource
   Future<List<SearchTag>> searchTags() async {
     await initialize();
     if (!await runtime.hasFunction('searchTags')) return const [];
-    final raw = await _invoke('searchTags', const []);
+    final raw = await _invoke('searchTags', <Object?>[
+      if (requestOptions != null) requestOptions!(),
+    ]);
     if (raw is! List) throw const FormatException('来源标签列表格式无效');
     return [
       for (final row in raw)
@@ -166,7 +181,9 @@ class JsSource
   }) async {
     await initialize();
     if (await runtime.hasFunction('searchTagged')) {
-      return _toItems(await _invoke('searchTagged', [keyword, page, tags]));
+      return _toItems(await _invoke('searchTagged', [
+        keyword, page, tags, if (requestOptions != null) requestOptions!(),
+      ]));
     }
     // Legacy rules, like MixN's aggregate search, accept tag labels as online
     // keywords. Do not filter their incomplete cached result list on-device.
@@ -197,7 +214,7 @@ class JsSource
         'number': chapter.number,
         'volumeTitle': chapter.volumeTitle,
       },
-      if (contentOptions != null) contentOptions!(),
+      if (requestOptions != null) requestOptions!(),
     ]);
     return _toContent(raw, chapterUrl: url);
   }
@@ -246,13 +263,22 @@ class JsSource
   Future<_JsDetail> _loadDetail(MediaItem snapshot) async {
     final item = snapshot.sourceSnapshot;
     final url = item.url ?? '';
+    final options = requestOptions?.call();
+    final optionsKey = jsonEncode(options);
+    final revision = _detailRevision;
     final cached = _detailCache[url];
-    if (cached != null) return cached;
+    if (cached != null && cached.optionsKey == optionsKey) return cached;
 
-    final raw = await _invoke('detail', <Object?>[url, item.toJson()]);
+    final raw = await _invoke('detail', <Object?>[
+      url, item.toJson(), ?options,
+    ]);
+    if (revision != _detailRevision || optionsKey != jsonEncode(requestOptions?.call())) {
+      throw StateError('来源设置或登录状态已变化，请重新加载');
+    }
     final map = raw is Map<Object?, Object?> ? raw : const <Object?, Object?>{};
     final rawItem = map['item'];
     final result = _JsDetail(
+      optionsKey: optionsKey,
       item: rawItem is Map<Object?, Object?> ? _mergeItem(item, rawItem) : item,
       chapters: _toChapters(map['chapters'], url),
     );
@@ -387,9 +413,21 @@ class JsSource
     }
     return ChapterContent(
       images: _resolveList(raw['images'], chapterUrl),
+      imageHeaders: {
+        ...publicImageHeaders(rule.headers),
+        ...publicImageHeaders(raw['headers']),
+        ...publicImageHeaders(raw['imageHeaders']),
+      },
       text: raw['text']?.toString(),
       html: raw['html']?.toString(),
       playSources: playSources,
+      comments: [
+        for (final value in raw['comments'] is List ? raw['comments'] as List : const [])
+          ?ChapterComment.fromJson(value),
+      ],
+      commentMode: const {'merge', 'separate'}.contains(raw['commentMode'])
+          ? raw['commentMode'] as String
+          : null,
       danmakuUrl: resolveUrl(
         chapterUrl,
         (raw['danmakuUrl'] ?? raw['danmaku'])?.toString(),
@@ -426,10 +464,11 @@ class JsSource
 }
 
 class _JsDetail {
-  const _JsDetail({required this.item, required this.chapters});
+  const _JsDetail({required this.item, required this.chapters, required this.optionsKey});
 
   final MediaItem item;
   final List<Chapter> chapters;
+  final String optionsKey;
 }
 
 /// 宿主桥实现：请求走 [SourceHttpClient]，解析复用 [HtmlSelector]。

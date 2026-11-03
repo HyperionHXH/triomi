@@ -30,6 +30,8 @@ JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源�
 
 建议安装 **0.12.0+177**：已修复iOS收起键盘时异常负viewInsets使“管理兼容仓库”弹层崩溃，以及快速添加不同订阅时的ID碰撞；包含新增中文规则的实际iOS WebKit契约和全套云端视觉验收。176仍支持相同仓库协议，新增规则本身无需安装外部扩展App，但177提供本轮宿主修复。
 
+R178候选增加Copy1.1.0的实际Android1.4.85 API协议、原生来源设置/账号/吐槽和公共图片请求头传递；这些新宿主功能需要178或更新版。178正在按本轮实际iOS阅读/截图录屏验收，未通过前不以旧177的云端结果代替；公开规则及最终IPA状态以CURRENT_STATUS为准。
+
 已发布：[v0.12.0-ios.177](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-ios.177)。在 Assets 下载 `Triomi-iOS-Unsigned.ipa`，不要下载 Source code ZIP。该包最低iOS15；未签名，仍需自己的合法签名安装或设备系统支持的安装器。完整云端[40890601599](https://github.com/HyperionHXH/triomi/actions/runs/40890601599)通过，56张截图已逐图读取，2054帧录屏完整解码；公开匿名下载IPA的SHA-256 `1e0b24d6dc03905411d9eb8bac62a8da0bce1826043b0f58917392bf0829a554`与接受产物及GitHub digest一致。原176与其他平台资产不变。
 
 1. 打开「漫画 → 浏览 → JS / API 漫画来源目录」，或漫画右上角齿轮进入同名入口；在来源管理点「添加漫画来源 → JS / API 漫画来源目录」。
@@ -48,13 +50,13 @@ JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源�
 
 ### 兼容规则不等于 APK 整库转换
 
-`HyperionHXH/Mihon-Extensions` 中的 `triomi/rules/` 是逐站移植的 JS/API 实现，`repo/triomi/` 是带哈希的生成分发物。原5条 MangaDex、Komiic、xkcd、漫画柜、WEBTOON繁中保留，本轮新增12条一般中文规则，共17条；各站匿名网络/图片读取证据与限制分开记录，不把schema、离线夹具或接口可达当作全部实站功能通过。
+`HyperionHXH/Mihon-Extensions` 中的 `triomi/rules/` 是逐站移植的 JS/API 实现，`repo/triomi/` 是带哈希的生成分发物。原17条规则保持，新增Copy后共18条；各站匿名网络/图片读取证据与限制分开记录，不把schema、离线夹具或接口可达当作全部实站功能通过。
 
 - MangaDex 保留中文目录和低流量设置；xkcd是英文科学条漫和编号搜索。
 - Komiic按官方游客/已保存网站会话与图片额度读取，不包含Android插件的邮箱密码登录/自动续期，不绕过额度。
 - 漫画柜只读取公开章节，对受限/隐藏章节明确报错；不执行网页脚本。
 - WEBTOON只处理繁中公开网页章节，登录/付费/仅App/年龄门槛不绕过。站点停机、地区网络与TLS/DNS限制会显示实际错误；不能保证任何网络下都能读取。
-- 拷贝漫画本轮公开接口返回HTTP/API210，要求官方App解除访问限制；网页也未提供可读章节/图片。因此没有把只会列作品的半成品发布成可安装规则，Android原APK继续保留。
+- Copy旧1.0.0网页适配的目录安装已发布，但不能作为当前APK完整移植。R178候选1.1.0已改用实际1.4.85默认App API和协议头，生产Dart目录/正文/图片链路通过；保留原source/漫画/章节身份。178原生来源设置提供线路/平台/分辨率/筛选、只读源站收藏、可选账号与文字吐槽。账号在系统安全存储并按规则指纹+API主机隔离，规则执行内容变更后需明确重新登录。最终iOS阅读及原仓库更新须以本轮实际验收记录为准。
 - 新增：崩坏3官方漫画、泰拉/塔卫二记事社、快看、MH1234、瓜子、喵趣、爱奇艺叭嗒、咚漫简中、Webmota包子+、GoDa、再漫画及杂志迷。已安装176的用户在原目录刷新即可安装；不另装扩展App。杂志迷是整刊来源，不是纯漫画目录。
 - 喵趣明确为“仅浏览，站点搜索不可用”：站内搜索404，所以不导出搜索函数、不参加聚合搜索；从漫画浏览选该来源阅读。杂志迷按刊名（如25ans）搜索，带日期的完整期刊名可能无结果。其他来源的免费/登录/付费/App专属限制保留；签名图片过期需重新打开或加载章节。11个新增来源已完成Windows生产JS/Dart HTTPS首图解码，Webmota独立Python读取成功但Windows Dart TLS握手失败，不能保证所有网络可达。
 - 21个原仓库SAFE中文包逐项结果见插件仓库`triomi/chinese-port-audit.json`，12条可安装，9条有连接/证书/验证、账号或宿主图片变换限制而不发布。另查DM5和漫画人，图片必须携带章节专属Referer，当前客户端图片/离线缓存接口不能保存传递，故没有发布只有目录能用的规则。不制作成人内容检索/阅读插件。
@@ -99,6 +101,8 @@ JS 的 HTTP 和 HTML 选择器继续通过 Dart 宿主桥执行，保留来源�
 `tools/run_ios_visual_tour.py --device <明确的模拟器UDID>` 运行生产 TriomiApp 的路由巡检。宿主只监听127.0.0.1，收到已完成渲染的页面握手后调用同一UDID的 `simctl screenshot`；原生AVPlayer画面不会被Flutter截图漏掉。每张截图记录页面、顺序、尺寸与SHA-256，拒绝缺失、重名及相同帧。录屏由 `simctl recordVideo --codec=h264` 创建，结束发送SIGINT并等待封装，再用ffprobe解码核验。失败时保留截图、日志、manifest与录屏以定位，不把中间材料称为通过。
 
 视觉产物为 `triomi-ios-visual-tour`，包含 `screenshots/*.png`、`ios_ui_tour.mp4`、`manifest.json` 和日志；测试夹具不写进release IPA。当前清单56个独立状态：保留53状态，新增录入兼容仓库、远程规则目录、下载并在真实iOS WebKit初始化后的启用来源。目录URL为逻辑HTTPS并由测试传输严格映射到loopback，不放宽生产HTTPS校验；账号保持未登录，不输入真实秘密。
+
+R178另设两组真实网络门槛，使用独立一次性模拟器：`tools/run_ios_copy_acceptance.py --audit-sources --device <UDID>`逐项执行此前17条规则的真实iOS运行时、生产HTTP、完整阅读及首/中/末图解码；`--device <UDID>`执行Copy完整分组/旧新章节页序和生产UI11状态，原生截图/录屏保存在`build/ios/copy-live/`，逐源诊断在`build/ios/manga-sources-live/`。loopback只承载截图握手，不提供漫画内容；HTTP/图片来自实站，失败不得改成skip或夹具成功。两组与既有原生/56状态门槛全部通过才交付IPA，`triomi-ios-live-sources`保留失败现场。
 
 历史基线运行：[39547378733](https://github.com/HyperionHXH/triomi/actions/runs/39547378733)，源码 `9d4a5ff`，35张PNG逐张检查、191.021667秒录屏完整解码1041帧；它不是本轮173同步的验收证据。本轮按精确提交和run下载到独立的 `release_ios/<RUN_ID>/`，不得用旧图片代替53状态巡检。最终运行、产物摘要与逐张验收结果见 [CURRENT_STATUS.md](CURRENT_STATUS.md) 当前请求段。
 

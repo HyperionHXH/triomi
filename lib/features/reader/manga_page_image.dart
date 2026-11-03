@@ -64,12 +64,14 @@ class MangaPageImage extends StatefulWidget {
     required this.fit,
     required this.settings,
     required this.onRetry,
+    this.imageHeaders = const {},
   });
   final ImageProvider provider;
   final String url, sourceId;
   final BoxFit fit;
   final MangaViewSettings settings;
   final VoidCallback onRetry;
+  final Map<String, String> imageHeaders;
   @override
   State<MangaPageImage> createState() => _MangaPageImageState();
 }
@@ -277,6 +279,7 @@ class _MangaPageImageState extends State<MangaPageImage> {
           context,
           imageUrl: widget.url,
           sourceId: widget.sourceId,
+          imageHeaders: widget.imageHeaders,
         ),
         child: Center(child: fitted),
       ),

@@ -31,6 +31,45 @@ class PlaySource {
   final bool omitCookies;
 }
 
+/// Read-only source discussion, rendered as native text rather than fake images.
+class ChapterComment {
+  const ChapterComment({required this.author, required this.text, this.replyTo});
+
+  final String author;
+  final String text;
+  final String? replyTo;
+
+  Map<String, Object?> toJson() => {
+    'author': author,
+    'text': text,
+    if (replyTo != null) 'replyTo': replyTo,
+  };
+
+  static ChapterComment? fromJson(Object? raw) {
+    if (raw is! Map || raw['author'] is! String || raw['text'] is! String) {
+      return null;
+    }
+    return ChapterComment(
+      author: raw['author'] as String,
+      text: raw['text'] as String,
+      replyTo: raw['replyTo'] is String ? raw['replyTo'] as String : null,
+    );
+  }
+}
+
+/// Portable image context only. Account credentials stay in the secure HTTP host.
+Map<String, String> publicImageHeaders(Object? value) {
+  if (value is! Map) return const {};
+  const allowed = {'referer', 'user-agent', 'origin', 'accept', 'accept-language'};
+  return {
+    for (final entry in value.entries)
+      if (entry.key is String && entry.value is String &&
+          allowed.contains((entry.key as String).toLowerCase()) &&
+          !(entry.value as String).contains(RegExp(r'[\r\n]')))
+        entry.key as String: entry.value as String,
+  };
+}
+
 /// 章节正文内容：按内容形态取其中一种。
 class ChapterContent {
   const ChapterContent({
@@ -41,10 +80,15 @@ class ChapterContent {
     this.danmakuUrl,
     this.fontFamily,
     this.fontData,
+    this.comments = const <ChapterComment>[],
+    this.commentMode,
+    this.imageHeaders = const {},
   });
 
   /// 漫画：图片地址列表。
   final List<String> images;
+
+  final Map<String, String> imageHeaders;
 
   /// 小说：纯文本正文（与 [html] 二选一，html 优先）。
   final String? text;
@@ -67,16 +111,40 @@ class ChapterContent {
   /// Stored with chapter content so offline downloads and backups are portable.
   final String? fontData;
 
+  final List<ChapterComment> comments;
+
+  /// Null means no discussion supplied; merge/separate also represent an empty
+  /// discussion chapter, which is distinct from an unavailable image chapter.
+  final String? commentMode;
+
   bool get isEmpty =>
       images.isEmpty &&
       (text == null || text!.isEmpty) &&
       (html == null || html!.isEmpty) &&
       playSources.isEmpty &&
-      danmakuUrl == null;
+      danmakuUrl == null && comments.isEmpty && commentMode == null;
+
+  ChapterContent copyWith({
+    List<String>? images,
+    Map<String, String>? imageHeaders,
+    List<ChapterComment>? comments,
+  }) => ChapterContent(
+    images: images ?? this.images,
+    imageHeaders: imageHeaders ?? this.imageHeaders,
+    text: text,
+    html: html,
+    playSources: playSources,
+    danmakuUrl: danmakuUrl,
+    fontFamily: fontFamily,
+    fontData: fontData,
+    comments: comments ?? this.comments,
+    commentMode: commentMode,
+  );
 
   /// 序列化为 JSON（离线缓存与备份共用）。
   Map<String, Object?> toJson() => <String, Object?>{
     'images': images,
+    if (imageHeaders.isNotEmpty) 'imageHeaders': publicImageHeaders(imageHeaders),
     'text': text,
     'html': html,
     'play': <Object?>[
@@ -95,6 +163,9 @@ class ChapterContent {
     'danmaku': danmakuUrl,
     'font': fontFamily,
     'fontData': fontData,
+    if (comments.isNotEmpty || commentMode != null)
+      'comments': [for (final comment in comments) comment.toJson()],
+    if (commentMode != null) 'commentMode': commentMode,
   };
 
   /// 反序列化；内容为空或格式不对时返回 null。
@@ -134,6 +205,14 @@ class ChapterContent {
       danmakuUrl: raw['danmaku'] as String?,
       fontFamily: raw['font'] as String?,
       fontData: raw['fontData'] as String?,
+      imageHeaders: publicImageHeaders(raw['imageHeaders']),
+      comments: [
+        for (final value in raw['comments'] is List ? raw['comments'] as List : const [])
+          ?ChapterComment.fromJson(value),
+      ],
+      commentMode: const {'merge', 'separate'}.contains(raw['commentMode'])
+          ? raw['commentMode'] as String
+          : null,
     );
     return content.isEmpty ? null : content;
   }

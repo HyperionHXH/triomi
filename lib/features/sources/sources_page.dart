@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/db/database_provider.dart';
 import '../../core/models/media_type.dart';
+import '../../core/source/copymanga/copymanga_js_source.dart';
 import '../../core/source/http_client.dart';
 import '../../core/source/js/js_source.dart';
 import '../../core/source/kazumi_source.dart';
@@ -23,6 +24,7 @@ import '../downloads/data/download_repository.dart';
 import '../manga/manga_extension_details_page.dart';
 import '../manga/windows_mihon_settings_page.dart';
 import 'catalog_sheet.dart';
+import 'copymanga_settings_sheet.dart';
 import 'kazumi_repositories_sheet.dart';
 import 'mihon_extensions_sheet.dart';
 import 'source_filter_controls.dart';
@@ -312,6 +314,8 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                                   if (mounted) _toast('来源设置不可用：$error');
                                 }
                               }
+                            : entry.enabled && entry.source is CopyMangaJsSource
+                            ? () => showCopyMangaSettingsSheet(context, entry.source as CopyMangaJsSource)
                             : entry.enabled &&
                                   entry.source is JsSource &&
                                   supportsMangaDexDataSaver(
@@ -645,6 +649,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                         setState(() => message = '请填写账号与密码');
                         return;
                       }
+                      passwordController.clear();
                       setState(() {
                         busy = true;
                         message = null;
@@ -675,6 +680,9 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
         ),
       ),
     );
+    accountController.dispose();
+    passwordController.clear();
+    passwordController.dispose();
   }
 
   Future<void> _confirmDelete(SourceEntry entry) async {

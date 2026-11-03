@@ -40,7 +40,7 @@ void main() {
   };
   Future<JsSource> sourceOf(
     FakeHttpClient http, {
-    Map<String, Object?> Function()? contentOptions,
+    Map<String, Object?> Function()? requestOptions,
   }) async {
     final source = JsSource(
       rule: SourceRule.parseJson(
@@ -48,7 +48,7 @@ void main() {
       ),
       runtime: FlutterJsRuntime(),
       http: http,
-      contentOptions: contentOptions,
+      requestOptions: requestOptions,
     );
     addTearDown(source.dispose);
     await source.initialize();
@@ -241,7 +241,7 @@ void main() {
           },
         });
       }),
-      contentOptions: () => {'dataSaver': dataSaver},
+      requestOptions: () => {'dataSaver': dataSaver},
     );
     expect((await source.content(chapter)).images, [
       'https://img.test/data/h/original.png',
@@ -267,7 +267,7 @@ void main() {
             'dataSaver': ?missingSaver,
           },
         })),
-        contentOptions: () => {'dataSaver': true},
+        requestOptions: () => {'dataSaver': true},
       );
       expect((await source.content(chapter)).images, [
         'https://img.test/data/h/original.png',
@@ -285,7 +285,7 @@ void main() {
           'dataSaver': ['ok.jpg', ''],
         },
       })),
-      contentOptions: () => {'dataSaver': true},
+      requestOptions: () => {'dataSaver': true},
     );
     await expectLater(source.content(chapter), throwsA(isA<SourceException>()));
   });

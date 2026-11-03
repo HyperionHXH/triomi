@@ -17,8 +17,11 @@ import '../storage/preferences.dart';
 import '../storage/secure_store.dart';
 import 'bangumi_public_client.dart';
 import 'bangumi_route_policy.dart';
+import 'copymanga/copymanga_js_source.dart';
+import 'copymanga/copymanga_preferences.dart';
 import 'http_client.dart';
 import 'js/js_runtime.dart';
+import 'js/js_source.dart';
 import 'js/runtime/js_runtime_factory.dart';
 import 'mangadex_preferences.dart';
 import 'mihon_installer.dart';
@@ -81,6 +84,8 @@ final lnsSourceProvider = Provider<LnsSource>((ref) {
 
 final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
   final preferences = ref.watch(preferencesProvider);
+  final secureStore = ref.watch(secureStoreProvider);
+  final copySettings = CopyMangaPreferences(preferences);
   final mihonAdapters = <MihonSource>[];
   final metadataFailures = <SourceFailure>[];
   final enabledPackages = {
@@ -174,9 +179,14 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
     http: ref.watch(sourceHttpClientProvider),
     bangumiPublicClient: publicClient,
     jsRuntimeFactory: ref.watch(sourceJsRuntimeFactoryProvider),
-    jsContentOptions: (id) => id == 'mangadex'
+    jsRequestOptions: (id) => id == 'mangadex'
         ? mangaDexContentOptions(preferences)
         : const <String, Object?>{},
+    jsSourceFactory: ({required rule, required runtime, required http, requestOptions}) =>
+        supportsCopyMangaSettings(rule.descriptor.id, rule.descriptor.version)
+        ? CopyMangaJsSource(rule: rule, runtime: runtime, http: http,
+            preferences: copySettings, secureStore: secureStore)
+        : JsSource(rule: rule, runtime: runtime, http: http, requestOptions: requestOptions),
     builtinAdapters: <String, ContentSource>{
       LkSource.id: LkSource(
         client: LkClient(

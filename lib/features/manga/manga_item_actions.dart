@@ -7,6 +7,7 @@ import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/platform/platform_channel.dart';
 import '../../core/router/app_router.dart';
+import '../../core/source/copymanga/copymanga_js_source.dart';
 import '../../core/source/mihon_source.dart';
 import '../../core/source/source_providers.dart';
 import '../library/data/library_providers.dart';
@@ -147,6 +148,14 @@ Future<void> showMangaItemActions(
             throw StateError('此插件来源未启用、未受信任或宿主不可用，无法解析作品网站');
           }
           website = (await source.websiteUri(item: item)).toString();
+        } else if (item.sourceId == 'copymanga') {
+          final snapshot = await ref.read(sourcesProvider.future);
+          final source = snapshot.entries
+              .where((entry) => entry.descriptor.id == item.sourceId)
+              .firstOrNull?.source;
+          website = source is CopyMangaJsSource
+              ? source.websiteUrl(item.url!)
+              : item.url!;
         } else {
           website = item.url!;
         }

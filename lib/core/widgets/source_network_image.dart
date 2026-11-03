@@ -18,12 +18,14 @@ class SourceNetworkImage extends ImageProvider<SourceNetworkImage> {
     required this.http,
     this.sourceId = 'images',
     this.scale = 1,
+    this.headers = const {},
   });
 
   final String url;
   final SourceHttpClient http;
   final String sourceId;
   final double scale;
+  final Map<String, String> headers;
 
   @override
   Future<SourceNetworkImage> obtainKey(ImageConfiguration configuration) =>
@@ -57,7 +59,11 @@ class SourceNetworkImage extends ImageProvider<SourceNetworkImage> {
     String requestUrl,
     ImageDecoderCallback decode,
   ) async {
-    final data = await http.fetchBytes(requestUrl, sourceId: sourceId);
+    final data = await http.fetchBytes(
+      requestUrl,
+      sourceId: sourceId,
+      headers: requestUrl == url ? headers : const {},
+    );
     final bytes = data is Uint8List ? data : Uint8List.fromList(data);
     return decode(await ui.ImmutableBuffer.fromUint8List(bytes));
   }
@@ -68,8 +74,14 @@ class SourceNetworkImage extends ImageProvider<SourceNetworkImage> {
       other.url == url &&
       identical(other.http, http) &&
       other.sourceId == sourceId &&
-      other.scale == scale;
+      other.scale == scale && mapEquals(other.headers, headers);
 
   @override
-  int get hashCode => Object.hash(url, identityHashCode(http), sourceId, scale);
+  int get hashCode {
+    var headerHash = 0;
+    for (final entry in headers.entries) {
+      headerHash ^= Object.hash(entry.key, entry.value);
+    }
+    return Object.hash(url, identityHashCode(http), sourceId, scale, headerHash);
+  }
 }

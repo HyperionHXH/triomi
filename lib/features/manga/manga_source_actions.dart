@@ -5,11 +5,13 @@ import 'package:flutter/services.dart';
 import '../../core/models/media_type.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/platform/platform_channel.dart';
+import '../../core/source/copymanga/copymanga_js_source.dart';
 import '../../core/source/kazumi_source.dart';
 import '../../core/source/mihon_source.dart';
 import '../../core/source/source_registry.dart';
 import '../../core/source/source_website.dart';
 import '../../core/source/windows_source_session.dart';
+import '../sources/copymanga_settings_sheet.dart';
 import '../sources/sources_page.dart';
 import 'windows_mihon_settings_page.dart';
 
@@ -36,6 +38,10 @@ Future<void> performMangaSourceAction(
 
   try {
     final source = entry.source;
+    if (action == MangaSourceAction.settings && source is CopyMangaJsSource) {
+      await showCopyMangaSettingsSheet(context, source);
+      return;
+    }
     if (action == MangaSourceAction.settings && source is! MihonSource) {
       await Navigator.push(
         context,
@@ -65,13 +71,17 @@ Future<void> performMangaSourceAction(
     }
     final uri = source is MihonSource
         ? await source.websiteUri()
-        : publicSourceWebsiteUri(entry.descriptor.baseUrl ?? '');
+        : publicSourceWebsiteUri(source is CopyMangaJsSource
+            ? source.websiteUrl(entry.descriptor.baseUrl ?? '')
+            : entry.descriptor.baseUrl ?? '');
     if (action == MangaSourceAction.browser) {
       final opened = await platformChannel.launchExternalUrl(uri.toString());
       if (!opened) message('无法打开外部浏览器：当前平台不支持或没有可用浏览器');
     } else {
       final bool saved;
-      if (source is KazumiSource) {
+      if (source is CopyMangaJsSource) {
+        saved = await source.openWebsiteSession();
+      } else if (source is KazumiSource) {
         saved = await source.openWebSession(url: uri.toString());
       } else if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
         saved = await WindowsSourceSession.open(

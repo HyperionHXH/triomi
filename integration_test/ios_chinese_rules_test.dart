@@ -2,6 +2,7 @@
 import '../test/baozimanhuaplus_js_rule_test.dart' as baozimanhuaplus;
 import '../test/baozimhorg_js_rule_test.dart' as baozimhorg;
 import '../test/bh3_js_rule_test.dart' as bh3;
+import '../test/copymanga_js_rule_test.dart' as copymanga;
 import '../test/dongmanmanhua_js_rule_test.dart' as dongmanmanhua;
 import '../test/guazimanhua_js_rule_test.dart' as guazimanhua;
 import '../test/iqiyi_js_rule_test.dart' as iqiyi;
@@ -27,4 +28,5 @@ void main() {
   baozimhorg.main();
   zaimanhua.main();
   zazhimi.main();
+  copymanga.main();
 }

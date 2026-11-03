@@ -25,6 +25,7 @@ import '../library/data/library_repository.dart';
 import '../library/data/merged_manga_repository.dart';
 import '../novel/reader/novel_reader_settings.dart';
 import '../tracking/data/tracking_providers.dart';
+import 'manga_chapter_comments.dart';
 import 'manga_page_image.dart';
 import 'reader_settings.dart';
 import 'reader_work_settings.dart';
@@ -88,6 +89,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   final FocusNode _focusNode = FocusNode();
 
   List<String> _images = const <String>[];
+  List<ChapterComment> _comments = const [];
+  String? _commentMode;
+  bool _commentsVisited = false;
+  Map<String, String> _imageHeaders = const {};
   String? _error;
   bool _loading = true;
   bool _chromeVisible = true;
@@ -206,6 +211,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       _loading = true;
       _error = null;
       _images = const <String>[];
+      _comments = const [];
+      _commentMode = null;
+      _commentsVisited = false;
+      _imageHeaders = const {};
       _page = 0;
     });
 
@@ -222,15 +231,25 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       if (!mounted || seq != _requestSeq) return;
       // 离线优先：下载过的章节直接读本地图片目录。
       final localImages = await _localImagesOf(chapter);
+      final cachedContent = await ref.read(downloadRepositoryProvider)
+          .localChapterContent(chapter.sourceId, chapter.remoteId);
       if (!mounted || seq != _requestSeq) return;
-      if (localImages.isNotEmpty) {
+      if (localImages.isNotEmpty ||
+          (cachedContent?.commentMode != null && cachedContent!.images.isEmpty)) {
         setState(() {
           _images = localImages;
-          _page = (saved?.floor() ?? 0).clamp(0, _images.length - 1);
+          _comments = cachedContent?.comments ?? const [];
+          _commentMode = cachedContent?.commentMode;
+          _imageHeaders = cachedContent?.imageHeaders ?? const {};
+          _page = _images.isEmpty ? 0 : (saved?.floor() ?? 0).clamp(0, _images.length - 1);
           _loading = false;
         });
         unawaited(_cacheChapters());
-        _restorePage(seq);
+        if (_images.isNotEmpty) {
+          _restorePage(seq);
+        } else {
+          _restoring = false;
+        }
         return;
       }
       if (chapter.sourceId == 'local-comic') {
@@ -278,7 +297,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           : await provider.content(chapter);
       if (!mounted || seq != _requestSeq) return;
 
-      if (content.images.isEmpty) {
+      if (content.images.isEmpty && content.commentMode == null) {
         setState(() {
           _loading = false;
           _error = _unsupportedMessage(content);
@@ -288,12 +307,19 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
       setState(() {
         _images = content.images;
-        _page = (saved?.floor() ?? 0).clamp(0, _images.length - 1);
+        _comments = content.comments;
+        _commentMode = content.commentMode;
+        _imageHeaders = content.imageHeaders;
+        _page = _images.isEmpty ? 0 : (saved?.floor() ?? 0).clamp(0, _images.length - 1);
         _loading = false;
       });
 
       unawaited(_cacheChapters());
-      _restorePage(seq);
+      if (_images.isNotEmpty) {
+        _restorePage(seq);
+      } else {
+        _restoring = false;
+      }
       unawaited(_preloadNeighbour());
     } catch (error) {
       if (!mounted || seq != _requestSeq) return;
@@ -451,6 +477,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
               url,
               http: ref.read(sourceHttpClientProvider),
               sourceId: _chapters[next].sourceId,
+              headers: content.imageHeaders,
             ),
             width: width,
             height: 8192,
@@ -517,6 +544,8 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   void _nextPage() {
     if (_page + _spreadSize < _images.length) {
       _goToPage(_page + _spreadSize);
+    } else if (_images.isNotEmpty && _commentMode != null && !_commentsVisited) {
+      unawaited(_showComments());
     } else {
       _switchChapter(1);
     }
@@ -746,6 +775,17 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       );
     }
 
+    if (_images.isEmpty && _commentMode != null) {
+      return Padding(
+        padding: EdgeInsets.only(top: _chromeVisible ? 88 : 0, bottom: _chromeVisible ? 80 : 0),
+        child: MangaChapterComments(
+          key: ValueKey('comments:${_chapter.remoteId}'),
+          comments: _comments,
+          mode: _commentMode!,
+        ),
+      );
+    }
+
     if (settings.mode == ReadingMode.webtoon) {
       return ScrollablePositionedList.builder(
         key: ValueKey('$_chapterIndex:$_requestSeq'),
@@ -797,6 +837,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
             url,
             http: ref.watch(sourceHttpClientProvider),
             sourceId: _chapter.sourceId,
+            headers: _imageHeaders,
           );
     final width =
         (MediaQuery.sizeOf(context).width *
@@ -812,6 +853,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       ),
       url: url,
       sourceId: _chapter.sourceId,
+      imageHeaders: _imageHeaders,
       fit: fit,
       settings: _viewSettings,
       onRetry: () => _retryImage(url),
@@ -865,6 +907,12 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                         ],
                       ),
                     ),
+                    if (_commentMode != null)
+                      IconButton(
+                        tooltip: '吐槽',
+                        onPressed: _showComments,
+                        icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+                      ),
                     IconButton(
                       tooltip: '目录',
                       onPressed: _showChapterList,
@@ -920,7 +968,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                     ] else
                       Expanded(
                         child: Text(
-                          _loading ? '正在加载章节…' : '章节未加载',
+                          _loading ? '正在加载章节…' : _commentMode != null ? '吐槽 · ${_comments.length} 条' : '章节未加载',
                           textAlign: TextAlign.center,
                           style: const TextStyle(color: Colors.white70),
                         ),
@@ -936,6 +984,19 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _showComments() async {
+    _commentsVisited = true;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.85,
+        child: MangaChapterComments(comments: _comments, mode: _commentMode ?? 'merge'),
       ),
     );
   }

@@ -34,7 +34,7 @@ void main() {
         rule: rule,
         runtime: FlutterJsRuntime(),
         http: http,
-        contentOptions: () => {'dataSaver': dataSaver},
+        requestOptions: () => {'dataSaver': dataSaver},
       );
       try {
         await source.initialize();

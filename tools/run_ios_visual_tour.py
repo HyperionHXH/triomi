@@ -123,6 +123,9 @@ class CaptureError(ValueError):
 
 
 class TourSession:
+    expected_captures = EXPECTED_CAPTURES
+    allowed_captures = ALLOWED_CAPTURES
+
     def __init__(self, device: str, output: Path):
         self.device = device
         self.output = output.resolve()
@@ -174,7 +177,7 @@ class TourSession:
         name = payload.get('name')
         if not isinstance(name, str) or not CAPTURE_NAME.fullmatch(name):
             raise CaptureError('Capture name must be a PNG basename without paths')
-        if name not in ALLOWED_CAPTURES:
+        if name not in self.allowed_captures:
             raise CaptureError(f'Unknown capture name: {name}')
         for field in ('route', 'description'):
             if field in payload and (
@@ -215,7 +218,7 @@ class TourSession:
         with self.lock:
             captures = self.manifest['captures']
             names = [item['name'] for item in captures]
-            missing = sorted(set(EXPECTED_CAPTURES) - set(names))
+            missing = sorted(set(self.expected_captures) - set(names))
             if missing:
                 raise ValueError(f'Missing required tour captures: {", ".join(missing)}')
             if len(names) != len(set(names)):

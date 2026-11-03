@@ -1,5 +1,30 @@
 # Triomi 当前状态
 
+## 当前请求：按当前 Android Copy 插件完整移植与实际 iOS 验收（R178，未完成）
+
+此前Copy1.0.0是网页适配而非当前APK协议，已确认不能以仓库安装成功交付为可读。现已下载并反编译实际1.4.85 APK（SHA-256 `0a208f10b4f8fa3f3f0fae7704935e1a487c6ee342722c7e7818a02ad8c8dd6a`），对照ApiRepo、DTO、拦截器、登录与设置；旧1.4.55 smali不足以代表当前实现。实际默认API为`api.copy4000.com`，必需的公开协议头含Version2026.08.21、Origin/Region/Webp和platform参数。按当前协议生产`JsSource + QuickJS + Dart HTTPS`发现、搜索、490章完整分组分页、正文和首图解码已通过，消除此前网页空目录路径；这仍不是iOS验收。
+
+规则1.1.0移除旧网页AES实现，保留既有source/漫画/章节身份，改为原生App API、21条列表/100章分页、words页序、图片分辨率、真实筛选/榜单/主题、只读收藏、章节隐藏和总评/吐槽。Triomi目录按各分组index升序适配阅读器前进语义；原Android宿主使用降序，不机械照搬其列表方向。新宿主178增加Copy独立非秘密设置、系统安全存储账号、可选网站Cookie登录与原生文字吐槽，不生成伪图片URL。匿名阅读不需要登录；无真实账号凭据，不宣称已完成本人账号远端验收。
+
+此前17条来源正在按真实iOS网络重新检查；历史13条Windows首图通过不能外推iOS。发现宿主确实丢失图片Referer/UA等上下文，旧烟测手工带头掩盖了生产阅读器差异；现修正ChapterContent安全公共imageHeaders、真实图片加载/缓存键、阅读器预载、下载及长按保存传递。不会持久化Authorization/Cookie。dpsk当前负责范围尚未得到确认，因此此前规则本体暂不改写，仅共享宿主修复和只读逐源验收。
+
+新增真实iOS Copy全链路及17条旧源实网门槛，沿用固定SDK、Xcode真机/模拟器构建、原生桥/JavaScriptCore压力、生产56状态巡检；Copy新增真实搜索/详情/旧新章节/翻页/下一章/吐槽/设置/账号入口11状态原生截图和完整录屏。失败不能跳过、替换为夹具或发布候选IPA，云端日志/截图/录屏必须取回实际读取后才记录完成。当前云端运行与最终发布证据待实际执行补入；1.1.0规则尚未替换公开1.0.0。
+
+
+## 当前请求：Copy 漫画 iOS 规则移植
+
+新增 `assets/rules/copymanga-js.json`：复用现有 JS/API 安装、来源与阅读器，独立实现公开网页列表/搜索、分组章节目录及 AES-128-CBC/PKCS7 图片列表解码；不执行下载网页脚本，不增加原生插件或运行时。随包来源目录和既有 iOS WebKit 契约入口已接线，无新增说明弹窗。
+
+最终 Copy 与目录/安装/schema 回归 87 项通过，`flutter analyze --no-pub` 零问题。最终规则按网站实际 XHR 传递公开 `dnts` 字段，正文只请求 canonical URL。真实生产 `JsSource + QuickJS + Dart HTTPS` 发现 50 条、搜索 11 条；主作品 `yiquanchaoren` 目录实际返回空分组，另一搜索结果 `yiquanchaorenmaoer` 返回一章但正文为空，两条均明确记为失败。独立普通 HTTPS 曾取得 305+185 章、205 张图片地址，并取回首张 200681 字节、1100×1659 JPEG；这不能代替当前应用的实网阅读验收。真实 Chromium 使用网页自身 XHR 也得到空目录，现有系统代理路线的生产烟测同样失败，未用重试、换域或关闭 TLS 隐藏结果。
+
+追加诊断已取得明确反证：隔离未登录 Chromium 页面显示登录/注册，但章节 XHR 无 Cookie/Authorization，主动 `credentials:omit` 也返回完整目录；同一份当前规则解码为 305+185 章，排除“普通目录必须登录”和“规则解码丢章节”。canonical 首卷205张、最新第286话14张及首图均由游客实际取得。原插件公开smali阅读使用初始化空token的apiHeaders且禁用Cookie，账号token只在可选登录搜索链获取，不能把阅读空响应归因于未登录。同步原生 HTTP/Bun/Dart 请求返回可成功解密的空数组；完整普通请求头重放、单独使用HTTP/2也未消除差异。准确边界是上游对浏览器/原生连接返回不同数据；具体TLS分类、出口或服务器选择条件仍未证明，不强加登录。完整对照见 `release_ios/source-ports/copymanga-guest-diagnosis.json`。
+
+
+原iOS兼容仓库已发布提交 `b2c5c8c6293e7ed21870d7545ba66f80cb4bf1f2`，原网址不变，共18条；原17条规则版本/URL/SHA-256完全不变。Copy 1.0.0为19179字节、SHA-256 `6494a4929d5eb0a4653827fd3a1363776c38befa24afe1568843b45b7c8e56bf`；公开匿名HTTPS实取一致。本地生成器21项、`--check`与凭据扫描通过，[目录CI41467289746](https://github.com/HyperionHXH/Mihon-Extensions/actions/runs/41467289746)成功。真实 `CatalogRepositoryLoader → HTTPS CatalogInstaller → SHA-256/身份/能力校验 → 隔离SQLite启用 → QuickJS注册`从原公开网址安装通过；直连raw文件首次超时证据单独保留，使用本机已有系统代理路线后完成，不改系统代理。证据：`public-copy-catalog-verification.json`、`public-copy-catalog-install.json`及`public-copy-catalog-install-direct.json`，均位于`release_ios/source-ports/`。现有176/177客户端刷新原目录即可安装Copy，无需为纯规则更新重装IPA。
+
+本机恢复固定 Flutter 3.47.5/Dart 3.13.4 后可执行测试；Windows Developer Mode 未启用使 pub get 的平台插件链接步骤报错，但 Dart 依赖解析、原生测试桥编译及上述测试实际运行。应用仓库本轮未提交/推送，iOS编译/模拟器未运行，也未发布新IPA；规则仓库发布与站点正文读取验收分开，不将浏览器成功或目录安装成功冒称Dart/iOS实站阅读已通过。
+
+
 ## 当前请求：同一兼容仓库扩展一般中文漫画来源
 
 沿用已发布0.12.0+176的仓库管理协议；新增规则从原`repo/triomi/index.json`刷新安装，不要求另填网址或重装APK。Android元数据内中文语言包62个，原仓库标记SAFE21、MIXED22、NSFW19；本轮逐项评估21个SAFE来源的公开协议，不自动转换全库，也不制作成人内容检索/阅读插件。既有Komiic、MangaDex、漫画柜和WEBTOON繁中保留原能力及网络边界。
