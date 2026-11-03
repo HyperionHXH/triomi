@@ -41,10 +41,7 @@ const _detail = '''<div class="book-title"><h1>鬼灭之刃</h1></div>
 <li><a class="status1" href="/comic/19430/999999.html">锁定章节</a></li></ul></div>''';
 
 void main() {
-  Future<JsSource> prepare(
-    FakeHttpClient http, {
-    String? baseUrl,
-  }) async {
+  Future<JsSource> prepare(FakeHttpClient http, {String? baseUrl}) async {
     final data = jsonDecode(
       await readSourceRuleAsset('assets/rules/manhuagui-js.json'),
     ) as Map<String, dynamic>;
@@ -133,105 +130,130 @@ void main() {
     'https://www.mhgui.com',
     'https://tw.mhgui.com',
   ]) {
-    sourceRuleTest('configured official mirror $origin keeps canonical identity', () async {
-      final http = FakeHttpClient((request) async {
-        expect(request.url, startsWith('$origin/'));
-        expect(request.headers['Referer'], '$origin/');
+    sourceRuleTest(
+      'configured official mirror $origin keeps canonical identity',
+      () async {
+        final http = FakeHttpClient((request) async {
+          expect(request.url, startsWith('$origin/'));
+          expect(request.headers['Referer'], '$origin/');
+          expect(
+            request.headers.keys.map((key) => key.toLowerCase()),
+            isNot(contains('cookie')),
+          );
+          final path = Uri.parse(request.url).path;
+          return SourceResponse(
+            statusCode: 200,
+            url: request.url,
+            body: path.contains('/list/') || path.contains('/s/')
+                ? (path.contains('/s/') ? _search : _listing).replaceAll(
+                    'href="/comic/',
+                    'href="$origin/comic/',
+                  )
+                : path.endsWith('.html')
+                ? _reader
+                : _detail.replaceAll('href="/comic/', 'href="$origin/comic/'),
+          );
+        });
+        final source = await prepare(http, baseUrl: '$origin/');
+        final item = (await source.discover(
+          source.feeds.first,
+          page: 2,
+        )).single;
+        expect(item.remoteId, '19430');
+        expect(item.url, 'https://www.manhuagui.com/comic/19430/');
+        expect((await source.search('鬼灭之刃', page: 3)).single.remoteId, '19430');
+        final full = await source.detail(item);
+        expect(full.remoteId, '19430');
+        expect(full.url, item.url);
+        final chapters = await source.chapters(item);
+        expect(chapters.last.remoteId, '19430/248298');
+        expect(chapters.last.url, chapter().url);
+        final content = await source.content(chapter(origin: origin));
+        expect(content.images, hasLength(3));
+        expect(content.images.first, contains('i.hamreus.com/ps4/g/'));
         expect(
-          request.headers.keys.map((key) => key.toLowerCase()),
-          isNot(contains('cookie')),
+          content.imageHeaders['Referer'],
+          '$origin/comic/19430/248298.html',
         );
-        final path = Uri.parse(request.url).path;
-        return SourceResponse(
-          statusCode: 200,
-          url: request.url,
-          body: path.contains('/list/') || path.contains('/s/')
-              ? (path.contains('/s/') ? _search : _listing).replaceAll(
-                  'href="/comic/',
-                  'href="$origin/comic/',
-                )
-              : path.endsWith('.html')
-              ? _reader
-              : _detail.replaceAll('href="/comic/', 'href="$origin/comic/'),
-        );
-      });
-      final source = await prepare(http, baseUrl: '$origin/');
-      final item = (await source.discover(source.feeds.first, page: 2)).single;
-      expect(item.remoteId, '19430');
-      expect(item.url, 'https://www.manhuagui.com/comic/19430/');
-      expect((await source.search('鬼灭之刃', page: 3)).single.remoteId, '19430');
-      final full = await source.detail(item);
-      expect(full.remoteId, '19430');
-      expect(full.url, item.url);
-      final chapters = await source.chapters(item);
-      expect(chapters.last.remoteId, '19430/248298');
-      expect(chapters.last.url, chapter().url);
-      final content = await source.content(chapter(origin: origin));
-      expect(content.images, hasLength(3));
-      expect(content.images.first, contains('i.hamreus.com/ps4/g/'));
-      expect(content.imageHeaders['Referer'], '$origin/comic/19430/248298.html');
-      // Old saved canonical chapter URLs also use the configured request target.
-      await source.content(chapter());
-      expect(http.requests, hasLength(5));
-    });
+        // Old saved canonical chapter URLs also use the configured request target.
+        await source.content(chapter());
+        expect(http.requests, hasLength(5));
+      },
+    );
   }
 
-  for (final invalid in [
-    'https://www.manhuagui.com.evil.test',
-    'https://www.manhuagui.com@evil.test',
-    'https://www.manhuagui.com:444',
-    'https://www.manhuagui.com/other',
-    'http://www.manhuagui.com',
-  ]) {
-    sourceRuleTest('invalid configured origin $invalid never requests a page', () async {
+  for (final entry in {
+    'foreign suffix': 'https://www.manhuagui.com.evil.test',
+    'userinfo authority': 'https://www.manhuagui.com@evil.test',
+    'nondefault port': 'https://www.manhuagui.com:444',
+    'nonroot path': 'https://www.manhuagui.com/other',
+    'insecure scheme': 'http://www.manhuagui.com',
+  }.entries) {
+    sourceRuleTest(
+      'invalid configured origin ${entry.key} never requests a page',
+      () async {
+        final http = FakeHttpClient((request) async {
+          fail('invalid configured origin must not send HTTP');
+        });
+        final source = await prepare(http, baseUrl: entry.value);
+        await expectLater(source.content(chapter()), throwsA(anything));
+        expect(http.requests, isEmpty);
+      },
+    );
+  }
+
+  sourceRuleTest(
+    'foreign saved chapter input cannot borrow an official chapter identity',
+    () async {
       final http = FakeHttpClient((request) async {
-        fail('invalid configured origin must not send HTTP');
+        fail('foreign input must not send HTTP');
       });
-      final source = await prepare(http, baseUrl: invalid);
-      await expectLater(source.content(chapter()), throwsA(anything));
+      final source = await prepare(http);
+      await expectLater(
+        source.content(chapter(origin: 'https://evil.test')),
+        throwsA(predicate((e) => e.toString().contains('无效的来源地址'))),
+      );
       expect(http.requests, isEmpty);
-    });
-  }
+    },
+  );
 
-  sourceRuleTest('foreign saved chapter input cannot borrow an official chapter identity', () async {
-    final http = FakeHttpClient((request) async {
-      fail('foreign input must not send HTTP');
-    });
-    final source = await prepare(http);
-    await expectLater(
-      source.content(chapter(origin: 'https://evil.test')),
-      throwsA(predicate((e) => e.toString().contains('无效的来源地址'))),
-    );
-    expect(http.requests, isEmpty);
-  });
+  sourceRuleTest(
+    'selected mirror HTTP 403 remains one failure without mirror fallback',
+    () async {
+      final http = FakeHttpClient(
+        (request) async =>
+            const SourceResponse(statusCode: 403, body: 'Forbidden'),
+      );
+      final source = await prepare(http, baseUrl: 'https://www.mhgui.com');
+      await expectLater(
+        source.content(chapter()),
+        throwsA(predicate((e) => e.toString().contains('HTTP 403'))),
+      );
+      expect(http.requests, hasLength(1));
+      expect(
+        http.requests.single.url,
+        'https://www.mhgui.com/comic/19430/248298.html',
+      );
+    },
+  );
 
-  sourceRuleTest('selected mirror HTTP 403 remains one failure without mirror fallback', () async {
-    final http = FakeHttpClient(
-      (request) async => const SourceResponse(statusCode: 403, body: 'Forbidden'),
-    );
-    final source = await prepare(http, baseUrl: 'https://www.mhgui.com');
-    await expectLater(
-      source.content(chapter()),
-      throwsA(predicate((e) => e.toString().contains('HTTP 403'))),
-    );
-    expect(http.requests, hasLength(1));
-    expect(http.requests.single.url, 'https://www.mhgui.com/comic/19430/248298.html');
-  });
-
-  sourceRuleTest('foreign redirect HTML is rejected rather than parsed as public data', () async {
-    final http = FakeHttpClient(
-      (request) async => const SourceResponse(
-        statusCode: 200,
-        body: _reader,
-        url: 'https://evil.test/comic/19430/248298.html',
-      ),
-    );
-    final source = await prepare(http);
-    await expectLater(
-      source.content(chapter()),
-      throwsA(predicate((e) => e.toString().contains('无效的来源地址'))),
-    );
-  });
+  sourceRuleTest(
+    'foreign redirect HTML is rejected rather than parsed as public data',
+    () async {
+      final http = FakeHttpClient(
+        (request) async => const SourceResponse(
+          statusCode: 200,
+          body: _reader,
+          url: 'https://evil.test/comic/19430/248298.html',
+        ),
+      );
+      final source = await prepare(http);
+      await expectLater(
+        source.content(chapter()),
+        throwsA(predicate((e) => e.toString().contains('无效的来源地址'))),
+      );
+    },
+  );
 
   sourceRuleTest('real JS distinguishes pagination end and genuine empty search from blocked HTML', () async {
     final http = FakeHttpClient(
@@ -295,14 +317,18 @@ void main() {
     'missing signature': 'SMH.imgData({"bid":19430,"cid":248298,"files":["a.webp"],"path":"/a/"});',
     'incomplete page list': 'SMH.imgData({"bid":19430,"cid":248298,"len":2,"files":["a.webp"],"path":"/a/","sl":{"e":1,"m":"x"}});',
   }.entries) {
-    sourceRuleTest('real JS rejects ${entry.key} instead of empty content', () async {
-      final source = await prepare(
-        FakeHttpClient(
-          (request) async => SourceResponse(statusCode: 200, body: entry.value),
-        ),
-      );
-      await expectLater(source.content(chapter()), throwsA(anything));
-    });
+    sourceRuleTest(
+      'real JS rejects ${entry.key} instead of empty content',
+      () async {
+        final source = await prepare(
+          FakeHttpClient(
+            (request) async =>
+                SourceResponse(statusCode: 200, body: entry.value),
+          ),
+        );
+        await expectLater(source.content(chapter()), throwsA(anything));
+      },
+    );
   }
 
   sourceRuleTest('real JS rejects HTTP errors and restricted detail without unlocking cookies', () async {
@@ -337,5 +363,4 @@ void main() {
       isTrue,
     );
   });
-
 }

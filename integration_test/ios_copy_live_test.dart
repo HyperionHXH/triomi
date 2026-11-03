@@ -355,11 +355,17 @@ void main() {
       await tester.scrollUntilVisible(
         mainResult,
         200,
-        scrollable: find.byWidgetPredicate(
-          (widget) =>
-              widget is Scrollable &&
-              axisDirectionToAxis(widget.axisDirection) == Axis.horizontal,
-        ),
+        scrollable: find
+            .ancestor(
+              of: find.byType(MediaItemCard).first,
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is Scrollable &&
+                    axisDirectionToAxis(widget.axisDirection) ==
+                        Axis.horizontal,
+              ),
+            )
+            .first,
         maxScrolls: 20,
       );
       expect(mainResult.hitTestable(), findsOneWidget);

@@ -452,7 +452,21 @@ class _DanmakuSettingsPanelState extends ConsumerState<DanmakuSettingsPanel> {
   }) async {
     final result = await showDialog<DanmakuShieldRule>(
       context: context,
-      builder: (_) => _RuleDialog(rule: rule),
+      builder: (context) {
+        final media = MediaQuery.of(context);
+        final insets = media.viewInsets;
+        return MediaQuery(
+          data: media.copyWith(
+            viewInsets: EdgeInsets.fromLTRB(
+              insets.left.clamp(0.0, double.infinity),
+              insets.top.clamp(0.0, double.infinity),
+              insets.right.clamp(0.0, double.infinity),
+              insets.bottom.clamp(0.0, double.infinity),
+            ),
+          ),
+          child: _RuleDialog(rule: rule),
+        );
+      },
     );
     if (result == null || !mounted) return;
     final current = ref.read(danmakuSettingsProvider);

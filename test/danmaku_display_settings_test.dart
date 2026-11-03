@@ -448,6 +448,42 @@ void main() {
   );
 
   testWidgets(
+    'shield editor saves through transient negative keyboard insets',
+    (tester) async {
+      final preferences = memoryPreferences();
+      final container = ProviderContainer(
+        overrides: [preferencesProvider.overrideWithValue(preferences)],
+      );
+      addTearDown(container.dispose);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: DanmakuSettingsPage()),
+        ),
+      );
+      await tester.scrollUntilVisible(
+        find.text('添加规则'),
+        400,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('添加规则'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '视察屏蔽词');
+      tester.view.viewInsets = const FakeViewPadding(bottom: -1000);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(danmakuSettingsProvider).shieldRules.single.text,
+        '视察屏蔽词',
+      );
+    },
+  );
+
+  testWidgets(
     'shared panel publishes immediately and settings persist in edit order',
     (tester) async {
       final preferences = memoryPreferences();
