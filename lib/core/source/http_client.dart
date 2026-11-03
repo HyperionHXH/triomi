@@ -6,8 +6,10 @@ import 'package:flutter/foundation.dart';
 import '../models/media_type.dart';
 import '../models/source_exception.dart';
 import 'bangumi_route_policy.dart';
+import 'ehentai/ehentai_image.dart';
 import 'github_public_delivery.dart';
 import 'http_adapter_stub.dart' if (dart.library.io) 'http_adapter_io.dart';
+import 'jmcomic/jmcomic_image.dart';
 import 'windows_mihon_host.dart';
 
 /// 请求体类型。
@@ -399,7 +401,7 @@ class DioSourceHttpClient
         data: request.bodyType == RequestBodyType.none ? null : request.body,
         options: Options(
           method: request.method.toUpperCase(),
-          followRedirects: accept == null ? request.followRedirects : false,
+          followRedirects: accept == null && sourceId != 'ehentai' ? request.followRedirects : false,
           headers: {
             ..._requestHeaders(request.headers, omitUserAgent: request.omitUserAgent),
             'Accept': ?accept,
@@ -503,12 +505,21 @@ class DioSourceHttpClient
         }
         return await WindowsMihonHost.instance.coverBytes(url, sourceId);
       }
+      final ehPage = sourceId == 'ehentai' && isEhentaiImagePage(url);
+      if (ehPage && method != 'GET') {
+        throw const FormatException('E-Hentai 图片页只支持读取');
+      }
+      final requestUrl = ehPage ? await resolveEhentaiImage(this, url) : url;
       final response = await _dio.request<List<int>>(
-        url,
+        requestUrl,
         options: Options(
           method: method,
-          headers: _requestHeaders(headers),
+          headers: _requestHeaders(ehPage ? {
+            'Referer': url,
+            'User-Agent': 'Mozilla/5.0',
+          } : headers),
           responseType: ResponseType.bytes,
+          followRedirects: ehPage ? false : null,
           connectTimeout: timeout,
           sendTimeout: timeout,
           receiveTimeout: timeout,
@@ -517,14 +528,15 @@ class DioSourceHttpClient
         onReceiveProgress: SourceTransferProgress.current?.received,
       );
       final status = response.statusCode ?? 0;
-      if (status < 200 || status >= 400) {
+      if (status < 200 || status >= (ehPage ? 300 : 400)) {
         throw SourceException(
           sourceId: sourceId,
           type: _classifyStatus(status),
           message: 'HTTP $status',
         );
       }
-      return response.data ?? const <int>[];
+      final bytes = response.data ?? const <int>[];
+      return sourceId == 'jmcomic' ? await restoreJmImage(url, bytes) : bytes;
     } on SourceException {
       rethrow;
     } catch (error) {

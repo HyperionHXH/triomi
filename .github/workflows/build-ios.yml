@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     runs-on: macos-latest
-    timeout-minutes: 210
+    timeout-minutes: 260
     permissions:
       contents: read
     defaults:
@@ -27,6 +27,8 @@ jobs:
         run: python -m unittest discover -s tools -p 'test_ios_visual_tour.py'
       - name: Validate live Copy capture boundaries
         run: python -m unittest discover -s tools -p 'test_ios_copy_acceptance.py'
+      - name: Validate reader port evidence boundaries
+        run: python -m unittest discover -s tools -p 'test_ios_reader_ports.py'
       - name: Resolve the repository's exact Flutter SDK
         id: sdk
         run: python tools/resolve_ios_toolchain.py --github-output "$GITHUB_OUTPUT"
@@ -193,6 +195,35 @@ jobs:
         if: ${{ !cancelled() && steps.copy-simulator.outputs.udid != '' }}
         timeout-minutes: 23
         run: python tools/run_ios_copy_acceptance.py --device '${{ steps.copy-simulator.outputs.udid }}'
+      - name: Create disposable reader port acceptance simulator
+        id: reader-simulator
+        if: ${{ !cancelled() && steps.copy-simulator.outputs.udid != '' }}
+        run: |
+          set -euo pipefail
+          previous='${{ steps.copy-simulator.outputs.udid }}'
+          xcrun simctl shutdown "$previous"
+          read -r device_type runtime < <(xcrun simctl list devices --json | python -c 'import json,sys; groups=json.load(sys.stdin)["devices"]; print(next(d["deviceTypeIdentifier"]+" "+runtime for runtime,devices in groups.items() for d in devices if d["udid"]==sys.argv[1]))' "$previous")
+          device="$(xcrun simctl create Triomi-Reader-Ports "$device_type" "$runtime")"
+          echo "udid=$device" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device" -b
+      - name: Capture four reader ports using synthetic geometric pages
+        id: reader-visual
+        if: ${{ !cancelled() && steps.reader-simulator.outputs.udid != '' }}
+        timeout-minutes: 23
+        run: python tools/run_ios_reader_ports.py --device '${{ steps.reader-simulator.outputs.udid }}'
+      - name: Audit four reader ports public metadata without credentials or images
+        id: reader-metadata
+        if: ${{ !cancelled() && steps.reader-simulator.outputs.udid != '' }}
+        timeout-minutes: 23
+        run: python tools/run_ios_reader_ports.py --metadata --device '${{ steps.reader-simulator.outputs.udid }}'
+      - name: Upload reader port evidence including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: triomi-ios-reader-ports
+          path: build/ios/reader-ports/
+          if-no-files-found: warn
       - name: Upload live source audit and Copy evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4
@@ -210,7 +241,7 @@ jobs:
           path: build/ios/visual-tour/
           if-no-files-found: warn
       - name: Upload the exact validated IPA
-        if: success() && steps.acceptance.outcome == 'success' && steps.visual-tour.outcome == 'success' && steps.manga-live.outcome == 'success' && steps.copy-live.outcome == 'success'
+        if: success() && steps.acceptance.outcome == 'success' && steps.visual-tour.outcome == 'success' && steps.manga-live.outcome == 'success' && steps.copy-live.outcome == 'success' && steps.reader-visual.outcome == 'success' && steps.reader-metadata.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: triomi-ios-unsigned

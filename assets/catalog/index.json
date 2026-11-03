@@ -1,6 +1,50 @@
 {
   "sources": [
     {
+      "id": "ehentai",
+      "name": "E-Hentai（公开图库）",
+      "type": "manga",
+      "lang": "all",
+      "nsfw": true,
+      "version": "1.0.0",
+      "url": "asset://assets/rules/ehentai-js.json",
+      "capabilities": ["discover", "search", "detail", "content"],
+      "license": "Triomi 公开网页协议适配 / 内容权利归各自权利人"
+    },
+    {
+      "id": "wnacg",
+      "name": "绅士漫画（WNACG）",
+      "type": "manga",
+      "lang": "zh",
+      "nsfw": true,
+      "version": "1.0.0",
+      "url": "asset://assets/rules/wnacg-js.json",
+      "capabilities": ["discover", "search", "detail", "content"],
+      "license": "Triomi 公开网页协议适配 / 内容权利归各自权利人"
+    },
+    {
+      "id": "jmcomic",
+      "name": "JMComic（禁漫天堂）",
+      "type": "manga",
+      "lang": "zh",
+      "nsfw": true,
+      "version": "1.0.0",
+      "url": "asset://assets/rules/jmcomic-js.json",
+      "capabilities": ["discover", "search", "detail", "content"],
+      "license": "Triomi API 协议适配 / 内容权利归各自权利人"
+    },
+    {
+      "id": "picacomic",
+      "name": "哔咔漫画",
+      "type": "manga",
+      "lang": "zh",
+      "nsfw": true,
+      "version": "1.0.0",
+      "url": "asset://assets/rules/picacomic-js.json",
+      "capabilities": ["discover", "search", "detail", "content"],
+      "license": "Triomi API 协议适配 / 内容权利归各自权利人"
+    },
+    {
       "id": "age-anime",
       "name": "AGE 番剧",
       "type": "anime",

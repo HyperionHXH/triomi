@@ -1,0 +1,50 @@
+{
+    "id":  "picacomic",
+    "name":  "哔咔漫画",
+    "type":  "manga",
+    "engine":  "js",
+    "lang":  "zh",
+    "nsfw":  true,
+    "version":  "1.0.0",
+    "baseUrl":  "https://picaapi.picacomic.com",
+    "requireLogin":  true,
+    "capabilities":  [
+                         "discover",
+                         "search",
+                         "detail",
+                         "content"
+                     ],
+    "feeds":  [
+                  {
+                      "url":  "/comics",
+                      "name":  "最新收录",
+                      "id":  "newest"
+                  },
+                  {
+                      "url":  "/comics/random",
+                      "name":  "随机推荐",
+                      "id":  "random"
+                  },
+                  {
+                      "url":  "/users/favourite",
+                      "name":  "源站收藏（只读）",
+                      "id":  "favourite"
+                  },
+                  {
+                      "url":  "/comics/leaderboard?tt=H24\u0026ct=VC",
+                      "name":  "24 小时热门",
+                      "id":  "rank-day"
+                  },
+                  {
+                      "url":  "/comics/leaderboard?tt=D7\u0026ct=VC",
+                      "name":  "7 天热门",
+                      "id":  "rank-week"
+                  },
+                  {
+                      "url":  "/comics/leaderboard?tt=D30\u0026ct=VC",
+                      "name":  "30 天热门",
+                      "id":  "rank-month"
+                  }
+              ],
+    "script":  "\u0027use strict\u0027;\nconst API = \u0027https://picaapi.picacomic.com\u0027;\nfunction fail(message) { throw new Error(message); }\nfunction positive(value) { return Number.isInteger(value) \u0026\u0026 value \u003e 0; }\nfunction pageNumber(page) {\n  if (!positive(page)) fail(\u0027Invalid page number\u0027);\n  return page;\n}\nasync function api(path, body) {\n  const response = await triomi.fetch(API + path, body === undefined ? {} : {\n    method: \u0027POST\u0027, body: JSON.stringify(body), bodyType: \u0027json\u0027\n  });\n  if (response.status !== 200) fail(\u0027Pica API HTTP \u0027 + response.status);\n  let value;\n  try { value = JSON.parse(response.body); } catch (_) { fail(\u0027Invalid Pica JSON\u0027); }\n  if (!value || value.code !== 200 || !value.data) fail(\u0027Invalid Pica API data\u0027);\n  return value.data;\n}\nfunction image(media) {\n  if (!media || typeof media.fileServer !== \u0027string\u0027 ||\n      !/^https:\\/\\/[^\\s/?#@]+(?:\\/[^\\s?#]*)?$/.test(media.fileServer) ||\n      typeof media.path !== \u0027string\u0027 || !media.path ||\n      /(^|\\/)\\.\\.(\\/|$)/.test(media.path)) fail(\u0027Invalid Pica image\u0027);\n  return media.fileServer.replace(/\\/+$/, \u0027\u0027) + \u0027/static/\u0027 + media.path.replace(/^\\/+/, \u0027\u0027);\n}\nfunction idOf(url, snapshot) {\n  const candidate = snapshot \u0026\u0026 snapshot.remoteId;\n  if (typeof candidate === \u0027string\u0027 \u0026\u0026 /^[a-zA-Z0-9_-]+$/.test(candidate)) return candidate;\n  const match = /^https:\\/\\/picaapi\\.picacomic\\.com\\/comics\\/([a-zA-Z0-9_-]+)$/.exec(url);\n  if (!match) fail(\u0027Invalid Pica comic identity\u0027);\n  return match[1];\n}\nfunction item(comic) {\n  if (!comic || typeof comic._id !== \u0027string\u0027 || !/^[a-zA-Z0-9_-]+$/.test(comic._id) ||\n      typeof comic.title !== \u0027string\u0027 || !comic.title.trim()) fail(\u0027Invalid Pica comic\u0027);\n  const tags = Array.isArray(comic.tags) ? comic.tags : (comic.categories || []);\n  return {remoteId: comic._id, type: \u0027manga\u0027, title: comic.title,\n    url: API + \u0027/comics/\u0027 + comic._id, coverUrl: image(comic.thumb),\n    author: [comic.author, comic.artist].filter(Boolean).filter((x, i, a) =\u003e a.indexOf(x) === i).join(\u0027 / \u0027),\n    description: comic.description || \u0027\u0027, tags: Array.from(new Set(tags.map(x =\u003e String(x).trim()).filter(Boolean))),\n    status: comic.finished ? \u0027已完结\u0027 : \u0027连载中\u0027};\n}\nfunction list(comics, options) {\n  if (!Array.isArray(comics)) fail(\u0027Invalid Pica comic list\u0027);\n  const blocked = options \u0026\u0026 Array.isArray(options.blocked) ? options.blocked : [];\n  return comics.filter(c =\u003e {\n    const genres = Array.isArray(c.tags) ? c.tags : (c.categories || []);\n    return !genres.some(g =\u003e blocked.indexOf(String(g).trim()) \u003e= 0);\n  }).map(item);\n}\nfunction slice(value, expectedPage) {\n  if (!value || !Array.isArray(value.docs) || !Number.isInteger(value.pages) ||\n      value.pages \u003c 0 || value.pages \u003e 200 || value.page !== expectedPage ||\n      (value.pages \u003e 0 \u0026\u0026 expectedPage \u003e value.pages \u0026\u0026 value.docs.length \u003e 0)) {\n    fail(\u0027Invalid or excessive Pica pagination\u0027);\n  }\n  return value;\n}\nasync function allPages(path, field) {\n  const first = slice((await api(path + \u0027?page=1\u0027))[field], 1);\n  const result = first.docs.slice();\n  for (let p = 2; p \u003c= first.pages; p++) {\n    const next = slice((await api(path + \u0027?page=\u0027 + p))[field], p);\n    if (next.pages !== first.pages) fail(\u0027Pica pagination changed; reload chapter\u0027);\n    result.push(...next.docs);\n    if (result.length \u003e 20000) fail(\u0027Pica response exceeds safety limit\u0027);\n  }\n  return result;\n}\nfunction sort(options) { return options \u0026\u0026 [\u0027dd\u0027, \u0027da\u0027, \u0027ld\u0027, \u0027vd\u0027].indexOf(options.sort) \u003e= 0 ? options.sort : \u0027dd\u0027; }\nasync function discover(url, page, options) {\n  pageNumber(page);\n  if (url.indexOf(API + \u0027/comics/leaderboard?\u0027) === 0) {\n    if (page !== 1) return [];\n    return list((await api(url.substring(API.length))).comics, options);\n  }\n  if (url === API + \u0027/comics/random\u0027) return list((await api(\u0027/comics/random\u0027)).comics, options);\n  const path = url === API + \u0027/users/favourite\u0027 ? \u0027/users/favourite\u0027 : \u0027/comics\u0027;\n  const response = await api(path + \u0027?page=\u0027 + page + \u0027\u0026s=\u0027 + sort(options));\n  return list(slice(response.comics, page).docs, options);\n}\nasync function search(keyword, page, options) {\n  return searchTagged(keyword, page, [], options);\n}\nasync function searchTags() {\n  const categories = (await api(\u0027/categories\u0027)).categories;\n  if (!Array.isArray(categories)) fail(\u0027Invalid Pica categories\u0027);\n  return categories.filter(c =\u003e c \u0026\u0026 typeof c.title === \u0027string\u0027 \u0026\u0026 c.title.trim())\n    .map(c =\u003e ({id: c.title, label: c.title}));\n}\nasync function searchTagged(keyword, page, tags, options) {\n  pageNumber(page);\n  const categories = Array.isArray(tags) ? tags.filter(t =\u003e typeof t === \u0027string\u0027 \u0026\u0026 t.trim()) : [];\n  const text = String(keyword || \u0027\u0027).trim();\n  let data;\n  if (!text \u0026\u0026 categories.length \u003c= 1) {\n    data = await api(\u0027/comics?page=\u0027 + page + \u0027\u0026s=\u0027 + sort(options) +\n      (categories.length ? \u0027\u0026c=\u0027 + encodeURIComponent(categories[0]) : \u0027\u0027));\n  } else {\n    const payload = {keyword: text, sort: sort(options)};\n    if (categories.length) payload.categories = categories;\n    data = await api(\u0027/comics/advanced-search?page=\u0027 + page, payload);\n  }\n  return list(slice(data.comics, page).docs, options);\n}\nasync function detail(url, snapshot) {\n  const id = idOf(url, snapshot);\n  const comic = item((await api(\u0027/comics/\u0027 + id)).comic);\n  const eps = await allPages(\u0027/comics/\u0027 + id + \u0027/eps\u0027, \u0027eps\u0027);\n  const seen = new Set();\n  const chapters = eps.map(ep =\u003e {\n    if (!ep || !positive(ep.order) || typeof ep.title !== \u0027string\u0027 || seen.has(ep.order)) {\n      fail(\u0027Invalid or duplicate Pica episode\u0027);\n    }\n    seen.add(ep.order);\n    return {remoteId: id + \u0027/order/\u0027 + ep.order, title: ep.title,\n      url: API + \u0027/comics/\u0027 + id + \u0027/order/\u0027 + ep.order, number: ep.order,\n      sortIndex: ep.order, releaseDate: ep.updated_at || null};\n  }).sort((a, b) =\u003e a.number - b.number);\n  if (!chapters.length) fail(\u0027Pica returned no readable episodes\u0027);\n  return {item: comic, chapters: chapters};\n}\nasync function content(url) {\n  const match = /^https:\\/\\/picaapi\\.picacomic\\.com\\/comics\\/[a-zA-Z0-9_-]+\\/order\\/[1-9][0-9]*$/.exec(url);\n  if (!match) fail(\u0027Invalid Pica chapter identity\u0027);\n  const pages = await allPages(url.substring(API.length) + \u0027/pages\u0027, \u0027pages\u0027);\n  if (!pages.length) fail(\u0027Pica returned no readable pages\u0027);\n  return {images: pages.map(p =\u003e image(p.media)), imageHeaders: {\u0027User-Agent\u0027: \u0027okhttp/3.8.1\u0027}};\n}"
+}

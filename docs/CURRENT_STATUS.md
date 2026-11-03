@@ -1,5 +1,17 @@
 # Triomi 当前状态
 
+## 当前请求：哔咔 / 绅士漫画 / JMComic / E-Hentai 移植验收（进行中）
+
+用户确认 omp 已完成，允许继续验收；沿用本地 `ios-without-device` 技能，保留已接受 Copy178 与历史产物。四源原本地合成回归182通过，不代表实站/iOS可读。本轮新匿名生产 `SourceRegistry → QuickJS → Dio HTTPS` 元数据预检：JM远程加密服务器列表200、发现80条和搜索80条；哔咔空安全存储正确要求登录且未发网络请求，明确记录 blocked_account。绅士漫画默认wn07.cfd读取超时、公开E-Hentai连接超时，原失败证据保留，不假设解析成功或全站不可达。
+
+新增不记录凭据、远程标题、响应体或图片的 `tools/live_reader_ports_probe.dart`；原始报告在忽略目录 `release_ios/reader-ports/`。正在做独立普通HTTPS与上游域名列表对照，并把已有四源便携契约接入综合iOS入口；尚未提交推送、触发云端或发布新包。本轮已询问提交/推送/Actions授权，Release与公开目录发布另行授权。细节见 `docs/handoff/reader-ports-acceptance.md`；账号、真实图片/离线闭环与实际iOS均未完成。
+
+追加本机实网修复：官方域名列表实取为wnacg.buzz/site，默认更新至.buzz，生产Dart直连发现20条/搜索24条均200，数字身份不变。EH直连仍超时；本机已有系统代理的独立普通HTTPS200，显式选择同一路线后的生产Dart发现66条/搜索25条均200。过程中确证并修复强制inline_set触发302和搜索导航javascript跳转控件被误当URL两处缺陷，不允许自动重定向、不执行站点脚本。新增哔咔设置保存/取消真实UI测试先复现退场动画disposed TextEditingController，现等待DialogRoute.completed后释放，原断言通过。
+
+本轮完整Flutter回归1916通过/4跳过（追加修复前），最终四源定向106通过/0跳过、Python iOS宿主工具32通过、最终analyze零问题。两轮计数分别保留，不合并冒称最终全量。四源契约/注册表/账号网关/设置UI已接入综合iOS入口；实网元数据另有独立入口。原平台debug构建正在串行执行；实际iOS、真实账号/图片/离线阅读仍待验，不发布或外推通过。
+
+用户在提交/推送/Actions询问后要求继续，本轮候选提交与云端验收获授权，仍不发Release/公开规则仓库。Windows与Android普通debug均构建通过；Android使用已有SDK的进程环境变量，不安装到设备。追加四源生产下载/manifest/Save Image/断网本地解码合成闭环4项、生产UI四阅读器与哔咔设置1项全部通过。Python宿主工具35通过，最新analyze零问题。工作流保留旧门槛，新增六状态几何夹具截图/录屏及独立真实元数据审计；不以合成图片代替真实站点阅读，也不豁免新源失败。正在准备确切候选与最终全量复测。
+
 ## 当前请求：当前 Android Copy 协议移植与实际 iOS 验收（R178，已交付）
 
 **最终交付：** 源码`0c27925277588952711ad6c5a16d36dd175c51db`的[macOS/iOS41600804216](https://github.com/HyperionHXH/triomi/actions/runs/41600804216)发布门槛通过：真机Release IPA、原生桥/JavaScriptCore压力、222项实际iOS综合集成、56状态原生产巡检、Copy真实搜索/完整490章/旧章205页与新章14页/翻页下一章/文字吐槽/设置账号入口11状态。67张PNG按manifest逐张哈希校验并全部联系表实际读取；两段H.264录屏本机完整解码2016帧/853.258333秒与470帧/736.11秒，1206×2622；不是完整观看视频。所有实际产物保留在`release_ios/41600804216/`。

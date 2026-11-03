@@ -11,6 +11,7 @@ import '../../core/source/js/js_source.dart';
 import '../../core/source/kazumi_source.dart';
 import '../../core/source/mangadex_preferences.dart';
 import '../../core/source/mihon_source.dart';
+import '../../core/source/picacomic/picacomic_js_source.dart';
 import '../../core/source/rule_schema.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_filters.dart';
@@ -27,6 +28,7 @@ import 'catalog_sheet.dart';
 import 'copymanga_settings_sheet.dart';
 import 'kazumi_repositories_sheet.dart';
 import 'mihon_extensions_sheet.dart';
+import 'picacomic_settings_sheet.dart';
 import 'source_filter_controls.dart';
 
 /// 来源与规则管理。
@@ -314,6 +316,8 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                                   if (mounted) _toast('来源设置不可用：$error');
                                 }
                               }
+                            : entry.enabled && entry.source is PicacomicJsSource
+                            ? () => showPicacomicSettingsSheet(context, entry.source as PicacomicJsSource)
                             : entry.enabled && entry.source is CopyMangaJsSource
                             ? () => showCopyMangaSettingsSheet(context, entry.source as CopyMangaJsSource)
                             : entry.enabled &&

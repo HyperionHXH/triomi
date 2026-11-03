@@ -20,6 +20,7 @@ import 'bangumi_route_policy.dart';
 import 'copymanga/copymanga_js_source.dart';
 import 'copymanga/copymanga_preferences.dart';
 import 'http_client.dart';
+import 'jmcomic/jmcomic_js_source.dart';
 import 'js/js_runtime.dart';
 import 'js/js_source.dart';
 import 'js/runtime/js_runtime_factory.dart';
@@ -27,6 +28,8 @@ import 'mangadex_preferences.dart';
 import 'mihon_installer.dart';
 import 'mihon_source.dart';
 import 'network_proxy.dart';
+import 'picacomic/picacomic_js_source.dart';
+import 'picacomic/picacomic_preferences.dart';
 import 'source_api.dart';
 import 'source_filters.dart';
 import 'source_registry.dart';
@@ -186,6 +189,11 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
         supportsCopyMangaSettings(rule.descriptor.id, rule.descriptor.version)
         ? CopyMangaJsSource(rule: rule, runtime: runtime, http: http,
             preferences: copySettings, secureStore: secureStore)
+        : rule.descriptor.id == 'picacomic' && rule.baseUrl == 'https://picaapi.picacomic.com'
+        ? PicacomicJsSource(rule: rule, runtime: runtime, http: http,
+            preferences: PicacomicPreferences(preferences), secureStore: secureStore)
+        : rule.descriptor.id == 'jmcomic'
+        ? JmcomicJsSource(rule: rule, runtime: runtime, http: http)
         : JsSource(rule: rule, runtime: runtime, http: http, requestOptions: requestOptions),
     builtinAdapters: <String, ContentSource>{
       LkSource.id: LkSource(
