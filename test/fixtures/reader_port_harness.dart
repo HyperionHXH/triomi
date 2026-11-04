@@ -193,7 +193,8 @@ class ReaderPortFixtureAdapter implements HttpClientAdapter {
         ResponseBody.fromString(body, status);
     ResponseBody json(Object data) =>
         text(jsonEncode({'code': 200, 'data': data}));
-    if (uri.host == 'geometry.example.invalid') {
+    if (uri.host == 'geometry.example.invalid' ||
+        uri.host == 'geometry.hath.network') {
       if (uri.path.startsWith('/media/photos/')) {
         final bytes = await (_jmPngs[uri.path] ??= _scrambledJmPng(
           uri.toString(),
@@ -250,8 +251,7 @@ class ReaderPortFixtureAdapter implements HttpClientAdapter {
     if (uri.host == 'www.wnacg.buzz') {
       if (uri.path.startsWith('/photos-gallery')) {
         return text(
-          '<script>var imglist=["//geometry.example.invalid/wn-1.png",'
-          '"//geometry.example.invalid/wn-2.png"];</script>',
+          '<script>document.writeln(${jsonEncode('var imglist=[{url:fast_img_host+"//geometry.example.invalid/wn-1.png",caption:"[0001]"},{url:fast_img_host+"//geometry.example.invalid/wn-2.png",caption:"[0002]"}];')});</script>',
         );
       }
       if (uri.path.startsWith('/photos-index')) {
@@ -292,7 +292,7 @@ class ReaderPortFixtureAdapter implements HttpClientAdapter {
     if (uri.host == 'e-hentai.org') {
       if (uri.path.startsWith('/s/')) {
         return text(
-          '<img id="img" src="https://geometry.example.invalid/eh-${uri.pathSegments.last}.png">',
+          '<img id="img" src="https://geometry.hath.network:4443/h/eh-${uri.pathSegments.last}.png">',
         );
       }
       if (uri.path == '/g/500000/aaaaaaaaaa/') {

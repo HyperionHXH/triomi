@@ -5,7 +5,7 @@
   "engine": "js",
   "lang": "all",
   "nsfw": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "baseUrl": "https://e-hentai.org",
   "requireLogin": false,
   "capabilities": [

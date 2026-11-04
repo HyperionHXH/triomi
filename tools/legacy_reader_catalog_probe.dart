@@ -1,4 +1,5 @@
 // Also run against the published 0c27925 host, not only the new source gateways.
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -66,7 +67,7 @@ void main() {
             : pageBody;
       } else if (uri.host == 'www.wnacg.buzz') {
         body = uri.path.startsWith('/photos-gallery')
-            ? '<script>var imglist=["https://geometry.example.invalid/page-1.png"];</script>'
+            ? '<script>document.writeln(${jsonEncode('var imglist=[${[for (var n = 1; n <= total; n++) '{url:fast_img_host+"//geometry.example.invalid/page-$n.png",caption:"[$n]"}'].join(',')}];')});</script>'
             : '<h2>Synthetic geometry</h2><li class="gallary_item"><div class="title">'
                   '<a href="/photos-index-aid-101.html">Synthetic geometry</a></div>'
                   '<img src="https://geometry.example.invalid/cover.png"></li>';
@@ -96,11 +97,12 @@ void main() {
   sourceRuleTest(
     'Catalog installs WNACG with hashes and generic JS reading',
     () async {
-      final (source, _) = await install('wnacg');
+      final (source, _) = await install('wnacg', total: 23);
       final item = (await source.discover(source.feeds.first)).single;
       final chapters = await source.chapters(item);
       expect((await source.content(chapters.single)).images, [
-        'https://geometry.example.invalid/page-1.png',
+        for (var n = 1; n <= 23; n++)
+          'https://geometry.example.invalid/page-$n.png',
       ]);
     },
   );
@@ -130,6 +132,9 @@ void main() {
     '<img id="img" src="http://geometry.example.invalid/page.png">',
     '<img id="img" src="https://exhentai.org/private.png">',
     '<img id="img" src="https://127.0.0.1/private.png">',
+    '<img id="img" src="https://hath.network.evil.invalid:4443/private.png">',
+    '<img id="img" src="https://fixture.hath.network:0/private.png">',
+    '<img id="img" src="https://fixture.hath.network:65536/private.png">',
     '<img id="img" src="https://geometry.example.invalid/509.gif">',
     '<div>Image viewing limit reached</div>',
     '<title>Just a moment</title><form id="challenge-form"></form>',
@@ -147,4 +152,19 @@ void main() {
       },
     );
   }
+  sourceRuleTest(
+    'Catalog EH accepts HTTPS HAtH ports without dropping pages',
+    () async {
+      final (source, _) = await install(
+        'ehentai',
+        total: 1,
+        pageBody: '<img id="img" src="https://fixture.hath.network:4443/h/fixture/1.webp">',
+      );
+      final item = (await source.search(_gallery)).single;
+      final chapter = (await source.chapters(item)).single;
+      expect((await source.content(chapter)).images, [
+        'https://fixture.hath.network:4443/h/fixture/1.webp',
+      ]);
+    },
+  );
 }

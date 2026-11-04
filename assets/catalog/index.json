@@ -6,7 +6,7 @@
       "type": "manga",
       "lang": "all",
       "nsfw": true,
-      "version": "1.0.0",
+      "version": "1.0.1",
       "url": "asset://assets/rules/ehentai-js.json",
       "capabilities": [
         "discover",
@@ -22,7 +22,7 @@
       "type": "manga",
       "lang": "zh",
       "nsfw": true,
-      "version": "1.0.0",
+      "version": "1.0.1",
       "url": "asset://assets/rules/wnacg-js.json",
       "capabilities": [
         "discover",

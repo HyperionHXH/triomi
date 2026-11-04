@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
@@ -176,6 +178,38 @@ void main() {
       },
     );
   }
+
+  sourceRuleTest('WNACG document writeln array preserves every page despite bracketed captions', () async {
+    final list = [
+      for (var i = 1; i <= 23; i++)
+        '{url:fast_img_host+"//cdn.example.invalid/$i.webp?verify=public",caption:"[${i.toString().padLeft(4, '0')}]"}',
+    ].join(',');
+    final wrapped =
+        'document.writeln(${jsonEncode('\t\tvar imglist=[$list,{url:fast_img_host+"/themes/weitu/images/bg/shoucang.jpg",caption:"bookmark"}];').replaceAll(r'\t', '\t')});';
+    final source = await prepare(
+      FakeHttpClient((_) async => html('<script>$wrapped</script>')),
+    );
+    final result = await source.content(chapter);
+    expect(result.images, [
+      for (var i = 1; i <= 23; i++)
+        'https://cdn.example.invalid/$i.webp?verify=public',
+    ]);
+  });
+
+  sourceRuleTest('WNACG unwrapped array ignores caption brackets and does not execute page code', () async {
+    final source = await prepare(
+      FakeHttpClient(
+        (_) async => html('''<script>
+      var imglist=[{url:"//cdn.example.invalid/1.jpg",caption:"[0001]"},
+        {url:"//cdn.example.invalid/2.jpg",caption:"[0002]"}];
+      throw new Error("SITE CODE MUST NOT RUN");</script>'''),
+      ),
+    );
+    expect((await source.content(chapter)).images, [
+      'https://cdn.example.invalid/1.jpg',
+      'https://cdn.example.invalid/2.jpg',
+    ]);
+  });
 
   sourceRuleTest('WNACG missing collection pages fail rather than publish an incomplete directory', () async {
     final source = await prepare(

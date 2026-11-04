@@ -219,7 +219,7 @@ void main() {
       expect(Uri.parse(request.url).queryParameters['express'], '');
       return {
         'images': [
-          for (var i = 1; i <= 3; i++)
+          for (var i = 1; i <= 37; i++)
             {
               'image':
                   'https://cdn.example.invalid/media/photos/500000/0000$i.jpg',
@@ -230,7 +230,7 @@ void main() {
     final source = await prepare(http);
     final result = await source.content(chapter);
     expect(result.images, [
-      for (var i = 1; i <= 3; i++)
+      for (var i = 1; i <= 37; i++)
         'https://cdn.example.invalid/media/photos/500000/0000$i.jpg',
     ]);
     expect(result.imageHeaders, {

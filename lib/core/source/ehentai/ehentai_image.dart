@@ -80,7 +80,16 @@ Future<String> resolveEhentaiImage(
       uri.scheme != 'https' ||
       uri.host.isEmpty ||
       uri.userInfo.isNotEmpty ||
-      uri.port != 443 ||
+      uri.port < 1 ||
+      uri.port > 65535 ||
+      (uri.port != 443 && !uri.host.endsWith('.hath.network')) ||
+      !RegExp(
+        r'^[a-z0-9-]+(?:\.[a-z0-9-]+)+$',
+        caseSensitive: false,
+      ).hasMatch(uri.host) ||
+      RegExp(r'^[0-9.]+$').hasMatch(uri.host) ||
+      uri.host.endsWith('.localhost') ||
+      uri.host.endsWith('.local') ||
       uri.hasFragment ||
       uri.host == 'exhentai.org' ||
       uri.host.endsWith('.exhentai.org') ||

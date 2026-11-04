@@ -58,6 +58,21 @@ final _png = base64Decode(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  for (final port in [4443, 8443, 49152]) {
+    sourceRuleTest(
+      'EH native resolver accepts real HAtH HTTPS port $port',
+      () async {
+        final image = 'https://fixture.hath.network:$port/h/fixture/1.webp';
+        final http = FakeHttpClient(
+          (_) async => SourceResponse(
+            statusCode: 200,
+            body: '<img id="img" src="$image">',
+          ),
+        );
+        expect(await resolveEhentaiImage(http, _page), image);
+      },
+    );
+  }
   sourceRuleTest(
     'EH lazy image identity accepts only canonical public HTTPS image pages',
     () {
@@ -122,6 +137,10 @@ void main() {
 
   for (final body in [
     '<img id="img" src="http://cdn.example.invalid/1.jpg">',
+    '<img id="img" src="https://127.0.0.1/1.jpg">',
+    '<img id="img" src="https://fixture.local/1.jpg">',
+    '<img id="img" src="https://hath.network.evil.invalid:4443/1.jpg">',
+    '<img id="img" src="https://fixture.hath.network:0/1.jpg">',
     '<img id="img" src="https://exhentai.org/1.jpg">',
     '<img id="img" src="https://user:secret@cdn.example.invalid/1.jpg">',
     '<img id="img" src="https://cdn.example.invalid:444/1.jpg">',
