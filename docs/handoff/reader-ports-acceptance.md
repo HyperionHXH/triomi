@@ -4,6 +4,33 @@ Started: 2026-11-03. Supersedes the stop boundary in
 `reader-ports-local-stage.md`: the user confirmed omp finished and requested
 acceptance of Picacomic, WNACG, JMComic and public E-Hentai.
 
+## Accepted Host179 Candidate (2026-11-04)
+
+Source2a25ab045a7f36b1fa15138a9eb1eef94c84731b, actual iOS41761181957
+succeeded. Device Release/arm64, native bridge/JSC stress,354 comprehensive
+integration tests, original56/Copy11/four-reader6 state tours and anonymous
+metadata gates pass. Old17 sources16 pass/known Miaoqu403 raw failure retained
+with preexisting exact release policy only; Dongman passes unchanged.
+Metadata WN20/24, JM80/80, EH65/25, Pica blocked_account/zero requests.
+
+All artifacts under release_ios/41761181957/. All73 screenshot dimensions and
+SHA-256 checked, all actually read in contact sheets. JM canonical geometry
+restored correctly, Pica settings no error/overflow. Copy search covers remain
+placeholders at capture time, detail cover/reader images render; not full cover
+network acceptance. Recordings fully decoded1802/328/544 frames and
+650.695/584.41/559.725 seconds; not watched in full. Four IPA rules match exact
+source Git blobs. Limited package private-key/GitHub-token pattern scan0 hits;
+no real credentials read/used, not a complete credential audit.
+
+IPA: triomi-ios-unsigned/Triomi-iOS-Unsigned.ipa,13820120 bytes,
+SHA2560372ad5ccfeb057dd642e0931af44c026173b46dd1578917180fb341e23bd2e7.
+Version0.12.0+179/iOS15+/original bundle ID. No physical-device install, tag or
+Release publication. Requires legitimate signing before normal iPhone install.
+Final local1948 passed/4 skipped, analyze0, Python128, Windows/Android debug
+build pass; no installs. Private-account drafts remain untouched/uncommitted.
+Real four-source upstream images/accounts remain UNVALIDATED, not inferred
+from synthetic pipelines or metadata. Evidence: acceptance-review.json.
+
 ## Latest Reading Repairs (2026-11-04)
 
 App6488305 and plugin ef7e075 are pushed. WN1.0.1 no longer truncates
