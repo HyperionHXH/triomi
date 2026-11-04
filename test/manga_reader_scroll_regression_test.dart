@@ -116,14 +116,16 @@ Future<void> _capture(
     final client = HttpClient();
     try {
       final request = await client.postUrl(base.resolve('/__tour/capture'));
-      request.headers.contentType = ContentType.json;
-      request.write(
+      final body = utf8.encode(
         jsonEncode({
           'name': name,
           'route': '/reader/scroll-regression',
           'description': description,
         }),
       );
+      request.headers.contentType = ContentType.json;
+      request.contentLength = body.length;
+      request.add(body);
       final response = await request.close().timeout(
         const Duration(seconds: 50),
       );
