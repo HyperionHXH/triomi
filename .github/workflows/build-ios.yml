@@ -136,6 +136,13 @@ jobs:
         id: acceptance
         timeout-minutes: 23
         run: python tools/run_ios_video_smoke.py --device '${{ steps.flutter-simulator.outputs.udid }}' --suite
+      - name: Upload failed iOS acceptance diagnostics immediately
+        if: ${{ failure() && steps.acceptance.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: triomi-ios-acceptance-failure
+          path: build/ios/acceptance/
+          if-no-files-found: warn
       - name: Install the recording decoder when unavailable
         if: ${{ !cancelled() && steps.simulator.outputs.udid != '' }}
         run: |

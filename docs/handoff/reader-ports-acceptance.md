@@ -4,6 +4,37 @@ Started: 2026-11-03. Supersedes the stop boundary in
 `reader-ports-local-stage.md`: the user confirmed omp finished and requested
 acceptance of Picacomic, WNACG, JMComic and public E-Hentai.
 
+## Latest Reading Repairs (2026-11-04)
+
+App6488305 and plugin ef7e075 are pushed. WN1.0.1 no longer truncates
+document.writeln-wrapped arrays at bracketed captions: inert string decoding,
+balanced arrays, exact bookmark banner filtering. Captured HTML returns all38
+manga URL fields. Generic EH1.1.1 and native resolver accept valid nondefault
+HTTPS ports only for .hath.network; five real HTML captures replay correctly.
+No website script or actual site image was executed/downloaded for this replay.
+JM37 ordered pages, Pica3 API pages/6 images and synthetic offline pipeline pass.
+
+Local final:1946 Flutter passed/4 skipped;84 directed;12 tests on extracted
+official178 host; analyze0;128 Python; Windows/Android debug build pass with
+no installs. Plugin41 tests and both CI41754561659/41754561772 pass; public
+four-rule bytes/hashes checked. Evidence: reading-bugs-20261104 directory.
+
+Cloud41754509531 is NOT accepted:351 integration passes/1 Pica settings failure
+(negative keyboard viewInsets -> AnimatedPadding constructor assertion).
+Deterministic positive/negative keyboard save/cancel regressions reproduced
+both failures; local dialog-scoped nonnegative inset clamp fixes all4. Final
+full1948 Flutter passed/4 skipped in605s; analyze0 and Python128 pass.
+Four-reader visual and metadata gates pass; all6 screenshots
+actually read, JM geometry no longer scrambled. Metadata WN20/24, JM80/80,
+EH58/25; Pica blocked_account/zero requests. Old-source audit15 passed/2 failed:
+known Miaoqu403 plus Dongman CDN20s connection timeout. Local same-URL normal
+TLS HEAD200 is separate evidence, not cloud success. Rerun original gates, no
+new exception. Downloaded diagnostics: release_ios/41754509531/.
+Previous41662518366 was blocked by JM upstream search500.
+Do not substitute local results or older candidate artifacts, waive failures,
+or deliver a gated IPA. Workflow now stages an early failure diagnostics upload
+only; preserve/exclude unrelated disabled private-account draft job and files.
+
 ## Current Follow-Up: Build Native Gateway Host179
 
 User now authorizes app gateway completion, commit/push and iOS compilation.
