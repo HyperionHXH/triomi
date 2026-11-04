@@ -1,5 +1,9 @@
 # Triomi iOS 端适配改动说明与自签安装指南
 
+## 当前正式下载：179
+
+已公开发布并设为Latest：[v0.12.0-ios.179](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-ios.179)。下载Assets中的`Triomi-iOS-Unsigned.ipa`，不要下载Source code ZIP；最低iOS15，未签名，需要合法签名安装。该资产与已验收41761181957原产物逐字节一致，SHA-256 `0372ad5ccfeb057dd642e0931af44c026173b46dd1578917180fb341e23bd2e7`，另附校验文件。178原版本保留；下文“不发布新Release”描述的是此前尚未获得发布授权的历史阶段，当前以本节为准。
+
 ## 2026-11-04 阅读修复与当前候选
 
 **179已完成编译验收：** 源码`2a25ab0`的[iOS41761181957](https://github.com/HyperionHXH/triomi/actions/runs/41761181957)成功，Actions下载`triomi-ios-unsigned`内的`Triomi-iOS-Unsigned.ipa`，版本0.12.0+179/iOS15+，SHA-256 `0372ad5ccfeb057dd642e0931af44c026173b46dd1578917180fb341e23bd2e7`。未签名，仍需合法签名安装；没有替换旧Release。354项实际iOS集成、原56/Copy11/四源6状态巡检通过，73张图全部核验并实际读取。哔咔键盘弹窗已修，咚漫本轮读取通过；仅喵趣原403限制保留，未新增豁免。真实四源图片/本人账号未验，合成几何图不替代它们。下段6488305失败是修复前历史。
