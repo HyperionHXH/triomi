@@ -393,6 +393,11 @@ class DioSourceHttpClient
     required String sourceId,
   }) async {
     try {
+      // Some signed APIs require an exact media type, including its charset.
+      // Dio rejects a different contentType option alongside an explicit header.
+      final hasContentType = request.headers.keys.any(
+        (key) => key.toLowerCase() == Headers.contentTypeHeader,
+      );
       Future<Response<String>> sendTo(
         String url, {
         String? accept,
@@ -406,11 +411,13 @@ class DioSourceHttpClient
             ..._requestHeaders(request.headers, omitUserAgent: request.omitUserAgent),
             'Accept': ?accept,
           },
-          contentType: switch (request.bodyType) {
-            RequestBodyType.json => Headers.jsonContentType,
-            RequestBodyType.form => Headers.formUrlEncodedContentType,
-            RequestBodyType.none => null,
-          },
+          contentType: hasContentType
+              ? null
+              : switch (request.bodyType) {
+                  RequestBodyType.json => Headers.jsonContentType,
+                  RequestBodyType.form => Headers.formUrlEncodedContentType,
+                  RequestBodyType.none => null,
+                },
           connectTimeout: timeout,
           sendTimeout: timeout,
           receiveTimeout: timeout,

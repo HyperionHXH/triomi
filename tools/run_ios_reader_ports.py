@@ -26,6 +26,8 @@ CAPTURES = (
     '01_reader_ports_sources.png', '02_pica_settings.png',
     '03_picacomic_reader.png', '04_wnacg_reader.png',
     '05_jmcomic_reader.png', '06_ehentai_reader.png',
+    '07_webtoon_delayed.png', '08_webtoon_decode_error.png',
+    '09_webtoon_after_fling.png',
 )
 
 

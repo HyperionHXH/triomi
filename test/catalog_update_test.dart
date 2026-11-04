@@ -63,6 +63,37 @@ void main() {
     capabilities: capabilities,
     hash: hash,
   );
+  test(
+    'catalog installer rejects development IDs before downloading or writing',
+    () async {
+      final db = openTestDatabase();
+      addTearDown(db.close);
+      final repo = SourceRepository(db);
+      final http = FakeHttpClient(
+        (_) async => throw StateError('must not download'),
+      );
+      final installer = CatalogInstaller(
+        SourceRegistry(repository: repo, http: http),
+      );
+      for (final id in developmentSourceIds) {
+        await expectLater(
+          installer.install(
+            SourceCatalogEntry(
+              id: id,
+              name: id,
+              type: MediaType.manga,
+              version: const CatalogVersion(1, 0, 0),
+              url: 'https://fixture.example.test/$id.json',
+              capabilities: capabilities,
+            ),
+          ),
+          throwsA(predicate((error) => '$error'.contains('调试来源'))),
+        );
+      }
+      expect(http.requests, isEmpty);
+      expect(await repo.all(), isEmpty);
+    },
+  );
   test('SemVer prerelease ordering, build metadata and invalid versions', () {
     final versions = [
       '1.0.0-alpha',

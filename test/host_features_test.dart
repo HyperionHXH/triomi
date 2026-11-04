@@ -31,6 +31,18 @@ void main() {
     );
     SourceHostFeatures.requireSupported('jmcomic', []);
   });
+  test('Pica 1.0.2 requires the corrected HTTP account host', () {
+    const required = ['picacomic.account.v2'];
+    expect(
+      () => SourceHostFeatures.requireSupported(
+        'picacomic',
+        required,
+        available: {'picacomic.account.v1'},
+      ),
+      throwsStateError,
+    );
+    SourceHostFeatures.requireSupported('picacomic', required);
+  });
   for (final invalid in [
     'jmcomic.api.v1',
     [1],

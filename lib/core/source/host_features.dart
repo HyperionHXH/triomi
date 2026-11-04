@@ -6,6 +6,7 @@ abstract final class SourceHostFeatures {
     'jmcomic.api.v1',
     'jmcomic.image.v1',
     'picacomic.account.v1',
+    'picacomic.account.v2',
   };
 
   static Set<String> requiredFor(String id, Iterable<String> declared) => {

@@ -15,6 +15,7 @@ import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/features/sources/catalog_repositories_sheet.dart';
 import 'package:triomi/features/sources/catalog_sheet.dart';
+import 'package:triomi/features/sources/source_filter_controls.dart';
 
 import 'fixtures/fake_http_client.dart';
 import 'fixtures/fake_preferences.dart';
@@ -561,6 +562,12 @@ void main() {
       expect(find.textContaining('fixture repository offline'), findsOneWidget);
       expect(find.text('Offline fixture'), findsOneWidget);
       expect(find.textContaining('同 ID 存在于多个仓库'), findsNWidgets(2));
+      final counts = tester.widget<SourceFilterControls>(
+        find.byType(SourceFilterControls),
+      );
+      expect(counts.visibleCount, 2);
+      expect(counts.totalCount, 2);
+      expect(find.text('2 个来源 · 3 条仓库条目（同 ID 只安装一次）'), findsOneWidget);
       final install = find.descendant(
         of: find.byKey(const ValueKey('catalog-offer:$_indexUrl|fixture')),
         matching: find.text('安装'),
@@ -578,6 +585,47 @@ void main() {
       );
     },
   );
+
+  testWidgets('development IDs from bundled and remote catalogs stay hidden', (
+    tester,
+  ) async {
+    final index = jsonDecode(_index()) as Map<String, dynamic>;
+    final prototype = (index['sources'] as List).single as Map<String, dynamic>;
+    index['sources'] = [
+      prototype,
+      for (final id in developmentSourceIds)
+        {...prototype, 'id': id, 'name': id},
+    ];
+    final http = routingHttpClient({_indexUrl: jsonEncode(index)});
+    final container = _container(
+      http,
+      builtin: [
+        _builtin,
+        for (final id in developmentSourceIds)
+          SourceCatalogEntry(
+            id: id,
+            name: id,
+            type: MediaType.manga,
+            version: const CatalogVersion(1, 0, 0),
+            url: 'https://fixture.example.test/$id.json',
+            capabilities: const {SourceCapability.search},
+          ),
+      ],
+    );
+    await container.read(catalogRepositoriesProvider.notifier).add(_indexUrl);
+    await _pump(tester, container);
+    for (final id in developmentSourceIds) {
+      expect(find.text(id), findsNothing);
+      expect(
+        find.byKey(ValueKey('catalog-offer:$_indexUrl|$id')),
+        findsNothing,
+      );
+      expect(find.byKey(ValueKey('catalog-offer:builtin|$id')), findsNothing);
+    }
+    expect(find.text('2 个来源 · 2 条仓库条目（同 ID 只安装一次）'), findsOneWidget);
+    expect(find.text('1 个兼容来源'), findsOneWidget);
+    expect(http.requests.map((request) => request.url), [_indexUrl]);
+  });
 
   testWidgets('same-version remote MangaDex is not an update', (tester) async {
     final http = routingHttpClient({

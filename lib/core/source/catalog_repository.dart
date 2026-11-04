@@ -7,6 +7,7 @@ import '../storage/preferences.dart';
 import 'http_client.dart';
 import 'source_catalog.dart';
 import 'source_providers.dart';
+import 'source_registry.dart';
 
 /// Repository settings never own installed rules or their enablement/data.
 class CatalogRepository {
@@ -157,7 +158,12 @@ class CatalogRepositoryLoader {
           return CatalogRepositoryResult(
             repository: repository,
             name: name,
-            entries: entries,
+            entries: [
+              for (final entry in entries)
+                if (developmentSourcesEnabled ||
+                    !developmentSourceIds.contains(entry.id))
+                  entry,
+            ],
           );
         }
         final marker = decoded is Map ? decoded['triomi'] : null;

@@ -26,6 +26,9 @@ class CatalogInstaller {
   static const maxBytes = 2 * 1024 * 1024;
 
   Future<SourceDescriptor> install(SourceCatalogEntry entry) async {
+    if (!developmentSourcesEnabled && developmentSourceIds.contains(entry.id)) {
+      throw StateError('当前构建不允许安装调试来源');
+    }
     SourceHostFeatures.requireSupported(
       entry.id,
       entry.requiresHost,

@@ -144,12 +144,19 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
 
   List<_CatalogOffer> get _offers => [
     for (final entry in _entries ?? const <SourceCatalogEntry>[])
-      _CatalogOffer(entry, 'builtin', '内置离线目录'),
+      if (developmentSourcesEnabled || !developmentSourceIds.contains(entry.id))
+        _CatalogOffer(entry, 'builtin', '内置离线目录'),
     for (final repository in ref.read(catalogRepositoriesProvider))
       for (final entry
           in _repositories[repository.id]?.entries ??
               const <SourceCatalogEntry>[])
-        _CatalogOffer(entry, repository.id, _repositories[repository.id]!.name),
+        if (developmentSourcesEnabled ||
+            !developmentSourceIds.contains(entry.id))
+          _CatalogOffer(
+            entry,
+            repository.id,
+            _repositories[repository.id]!.name,
+          ),
   ];
 
   Future<void> _manageRepositories() async {
@@ -249,6 +256,11 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
         searchText: [entry.id, entry.name, offer.repositoryName],
       );
     }).toList();
+    final typeEntries = entries.where(
+      (entry) => widget.type == null || entry.type == widget.type,
+    );
+    final totalIds = typeEntries.map((entry) => entry.id).toSet();
+    final visibleIds = visible.map((offer) => offer.entry.id).toSet();
     final idCounts = <String, int>{};
     for (final offer in offers) {
       idCounts.update(offer.entry.id, (count) => count + 1, ifAbsent: () => 1);
@@ -310,14 +322,12 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
                             )
                             .map((entry) => entry.lang),
                         onChanged: _setFilters,
-                        visibleCount: visible.length,
-                        totalCount: entries
-                            .where(
-                              (entry) =>
-                                  widget.type == null ||
-                                  entry.type == widget.type,
-                            )
-                            .length,
+                        visibleCount: visibleIds.length,
+                        totalCount: totalIds.length,
+                      ),
+                    if (entries.isNotEmpty)
+                      Text(
+                        '${totalIds.length} 个来源 · ${typeEntries.length} 条仓库条目（同 ID 只安装一次）',
                       ),
                     if (_loadError != null)
                       _CatalogErrorView(error: '$_loadError', onRetry: _load),

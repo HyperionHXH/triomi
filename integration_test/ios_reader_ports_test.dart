@@ -3,6 +3,8 @@ import '../test/host_features_test.dart' as host_features;
 import '../test/jmcomic_client_test.dart' as jmcomic_client;
 import '../test/jmcomic_image_test.dart' as jmcomic_image;
 import '../test/jmcomic_js_rule_test.dart' as jmcomic;
+import '../test/manga_page_image_state_test.dart' as image_state;
+import '../test/manga_reader_scroll_regression_test.dart' as reader_scroll;
 import '../test/reader_ports_pipeline_test.dart' as pipeline;
 import '../test/reader_ports_registry_test.dart' as registry;
 import '../test/wnacg_js_rule_test.dart' as wnacg;
@@ -21,4 +23,6 @@ void main() {
   jmcomic_client.main();
   jmcomic_image.main();
   ehentai.main();
+  reader_scroll.main();
+  image_state.main();
 }

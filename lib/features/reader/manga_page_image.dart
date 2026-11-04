@@ -92,7 +92,15 @@ class _MangaPageImageState extends State<MangaPageImage> {
   @override
   void didUpdateWidget(MangaPageImage old) {
     super.didUpdateWidget(old);
-    if (old.provider != widget.provider ||
+    final identityChanged =
+        old.url != widget.url || old.sourceId != widget.sourceId;
+    if (identityChanged) {
+      _info?.dispose();
+      _info = null;
+      _crop = null;
+    }
+    if (identityChanged ||
+        old.provider != widget.provider ||
         old.settings.trim != widget.settings.trim) {
       _resolve();
     }
@@ -100,6 +108,7 @@ class _MangaPageImageState extends State<MangaPageImage> {
 
   void _resolve() {
     final generation = ++_generation;
+    _failed = false;
     if (_listener != null) _stream?.removeListener(_listener!);
     final provider = widget.provider;
     _stream = provider.resolve(createLocalImageConfiguration(context));
@@ -165,13 +174,13 @@ class _MangaPageImageState extends State<MangaPageImage> {
   @override
   Widget build(BuildContext context) {
     if (_failed) {
-      return Center(
+      return _status(
         child: TextButton(
           onPressed: () async {
             await widget.provider.evict();
             if (!mounted) return;
             widget.onRetry();
-            _resolve();
+            setState(_resolve);
           },
           child: const Text('重新加载'),
         ),
@@ -179,7 +188,7 @@ class _MangaPageImageState extends State<MangaPageImage> {
     }
     final image = _info?.image, crop = _crop;
     if (image == null || crop == null) {
-      return const Center(child: CircularProgressIndicator());
+      return _status(child: const CircularProgressIndicator());
     }
     Widget content = SizedBox(
       width: crop.width,
@@ -285,6 +294,24 @@ class _MangaPageImageState extends State<MangaPageImage> {
       ),
     );
   }
+
+  Widget _status({required Widget child}) => LayoutBuilder(
+    builder: (context, constraints) {
+      if (constraints.hasBoundedHeight) {
+        return SizedBox.expand(child: Center(child: child));
+      }
+      final crop = _crop;
+      // An unbounded webtoon tile must occupy a page while loading or failed;
+      // tiny spinners otherwise mount dozens of images and collapse scrolling.
+      final height = crop == null
+          ? MediaQuery.sizeOf(context).height
+          : constraints.maxWidth * crop.height / crop.width;
+      return SizedBox(
+        height: height,
+        child: Center(child: child),
+      );
+    },
+  );
 }
 
 class _PagePainter extends CustomPainter {
