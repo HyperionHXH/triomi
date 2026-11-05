@@ -1,0 +1,29 @@
+name: Pica anonymous protocol comparison
+
+on:
+  push:
+    branches: [diagnostic/pica181-public-protocol]
+
+permissions:
+  contents: read
+
+jobs:
+  anonymous-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate offline safety contracts
+        run: python3 -m unittest discover -s tools/pica_public_probe -p 'test_pica_public_probe.py'
+      - name: Record exactly two anonymous category GET responses
+        run: python3 tools/pica_public_probe/pica_public_probe.py
+      - name: Preserve only fixed-class diagnostic results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pica-anonymous-protocol-result
+          path: pica-public-probe-result.json
+          if-no-files-found: error
+          retention-days: 3
