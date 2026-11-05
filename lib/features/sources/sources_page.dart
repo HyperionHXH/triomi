@@ -181,6 +181,11 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                         : '扩展仓库 → 安装扩展 → 启用来源阅读',
                   MediaType.novel => '选择小说站点 → 管理账号 → 阅读与缓存',
                 }, style: Theme.of(context).textTheme.bodySmall),
+                if (_type == MediaType.anime)
+                  Text(
+                    '番剧资料由应用提供，资料搜索不受规则启停或移除影响；播放站需在此启用。',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 const SizedBox(height: AppSpacing.xs),
                 FilledButton.icon(
                   onPressed: _busy ? null : _showAddSources,

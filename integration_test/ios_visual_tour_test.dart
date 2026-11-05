@@ -14,6 +14,7 @@ import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/library/data/anime_identity_repository.dart';
+import 'package:triomi/features/library/data/library_providers.dart';
 import 'package:triomi/features/novel/novel_shelf_view.dart';
 import 'package:triomi/features/novel/reader/novel_reader_page.dart';
 import 'package:triomi/features/player/danmaku_settings_page.dart';
@@ -23,6 +24,7 @@ import 'package:triomi/features/player/data/danmaku_settings.dart';
 import 'package:triomi/features/player/data/hybrid_danmaku_client.dart';
 import 'package:triomi/features/player/data/hybrid_danmaku_models.dart';
 import 'package:triomi/features/player/data/player_settings.dart';
+import 'package:triomi/features/player/episode_selector.dart';
 import 'package:triomi/features/player/player_page.dart';
 import 'package:triomi/features/reader/manga_page_image.dart';
 import 'package:triomi/features/reader/manga_reader_page.dart';
@@ -554,6 +556,95 @@ void main() {
         '03_detail.png',
         AppRoutes.detailFor(item),
         '生产作品详情、测试简介与实际章节目录',
+      );
+
+      // Metadata search remains available without an installed Bangumi rule.
+      final registry = await container.read(sourcesProvider.future);
+      expect(
+        registry.entries.where(
+          (entry) => entry.descriptor.id == 'bangumi-anime',
+        ),
+        isEmpty,
+      );
+      final metadataSearch = AppRoutes.searchFor(
+        MediaType.anime,
+        query: TourHttpClient.metadataQuery,
+      );
+      await go(metadataSearch);
+      await until(
+        () => find.text(TourHttpClient.metadataTitle).evaluate().isNotEmpty,
+        'metadata search must show the synthetic subject without a plugin rule',
+      );
+      expect(find.text('已完成 1 / 1 个来源'), findsOneWidget);
+      expect(fixtures.http.metadataRequests, hasLength(1));
+      await screenshot(
+        '03_anime_metadata_search.png',
+        metadataSearch,
+        '无 Bangumi 插件时，生产番剧资料搜索展示明确合成的公开资料夹具',
+      );
+      await tapText(TourHttpClient.metadataTitle);
+      await until(
+        () =>
+            find.text('尚未选择播放来源').evaluate().isNotEmpty &&
+            fixtures.http.metadataRequests.length == 2,
+        'subject detail must load metadata separately from playback sources',
+      );
+      await screenshot(
+        '03_anime_metadata_detail.png',
+        '/anime/detail?source=bangumi-anime&id=${TourHttpClient.metadataSubjectId}',
+        '生产资料详情保持公开资料身份，尚未选择播放站与剧集',
+      );
+      await tapText('开始 / 继续观看');
+      // Keep the first item untouched for the later native player/danmaku tour.
+      final playbackItem = fixtures.items[MediaType.anime]![1];
+      await until(
+        () => find.text(playbackItem.title).hitTestable().evaluate().isNotEmpty,
+        'production playback-source picker must execute the anime JS search',
+      );
+      await tapText(playbackItem.title);
+      await until(
+        () => find
+            .text(fixtures.catalog(MediaType.anime).last.title)
+            .hitTestable()
+            .evaluate()
+            .isNotEmpty,
+        'selected playback source must expose its actual fixture episodes',
+      );
+      final identity = container.read(animeIdentityRepositoryProvider);
+      final subject = await identity.subjectFor(playbackItem);
+      expect(subject?.sourceId, 'bangumi-anime');
+      expect(subject?.remoteId, TourHttpClient.metadataSubjectId);
+      expect(playbackItem.sourceId, isNot(subject?.sourceId));
+      await screenshot(
+        '03_anime_playback_selection.png',
+        '/anime/detail?source=bangumi-anime&id=${TourHttpClient.metadataSubjectId}',
+        '资料详情选择独立播放站后显示生产选集面板，未消费播放地址',
+      );
+      Navigator.of(
+        tester.element(find.byType(EpisodeSelector)),
+        rootNavigator: true,
+      ).pop();
+      await until(
+        () => find.byType(EpisodeSelector).evaluate().isEmpty,
+        'episode sheet must close before the next production route',
+      );
+      expect(await identity.subjectFor(fixtures.item(MediaType.anime)), isNull);
+
+      // The legacy tour source shares chapter IDs across its synthetic works.
+      // Restore the original player's directory after exercising another work.
+      final playerItem = fixtures.item(MediaType.anime);
+      final library = container.read(libraryRepositoryProvider);
+      await library.saveChapters(
+        itemSourceId: playerItem.sourceId,
+        itemRemoteId: playerItem.remoteId,
+        chapters: fixtures.catalog(MediaType.anime),
+      );
+      expect(
+        (await library.loadChapters(
+          playerItem.sourceId,
+          playerItem.remoteId,
+        )).map((chapter) => chapter.remoteId),
+        fixtures.catalog(MediaType.anime).map((chapter) => chapter.remoteId),
       );
 
       // Novel reader: content is provided by the JS source and menu is real.
@@ -1149,7 +1240,7 @@ void main() {
       debugPrint('IOS_VISUAL_TOUR_CAPTURES=$captureIndex');
       expect(
         captureIndex,
-        56,
+        59,
         reason: 'Every agreed production tour surface must be captured',
       );
     },

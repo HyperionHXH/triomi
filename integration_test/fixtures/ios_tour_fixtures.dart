@@ -7,6 +7,7 @@ import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/source/bangumi_public_client.dart';
+import 'package:triomi/core/source/bangumi_route_policy.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/source_repository.dart';
@@ -27,7 +28,26 @@ class TourHttpClient extends DioSourceHttpClient {
   final Uri origin;
   static const catalogHost = 'tour-catalog.invalid';
   static const catalogRepositoryUrl = 'https://$catalogHost/repo.json';
+  static const metadataSubjectId = '900002';
+  static const metadataTitle = '视觉巡检夹具 · 公开番剧资料';
+  static const metadataQuery = '公开番剧资料';
   final catalogRequests = <String>[];
+  final metadataRequests = <String>[];
+
+  Map<String, Object?> get metadataSubject => {
+    'id': int.parse(metadataSubjectId),
+    'type': 2,
+    'name_cn': metadataTitle,
+    'summary': '确定性合成番剧资料；播放站作品与剧集保留独立身份，不来自公开站点或账号。',
+    'images': {
+      'large': origin.resolve('/__tour/manga.png?metadata-cover=1').toString(),
+    },
+    'rating': {'score': 8.6},
+    'platform': 'TV',
+    'tags': [
+      {'name': '测试夹具'},
+    ],
+  };
 
   Future<SourceByteStream> _catalogDownload(
     String url, {
@@ -88,6 +108,49 @@ class TourHttpClient extends DioSourceHttpClient {
     SourceRequest request, {
     required String sourceId,
   }) {
+    // Recognize two exact public-client requests but never send them upstream.
+    // All other traffic retains the existing loopback GET-only boundary.
+    if (sourceId == BangumiPublicClient.sourceId) {
+      final searchUrl =
+          '${BangumiRoutePolicy.mirrorV0}/search/subjects?limit=24&offset=0';
+      final subjectUrl =
+          '${BangumiRoutePolicy.mirrorV0}/subjects/$metadataSubjectId';
+      final hasCredentials = request.headers.keys.any(
+        (key) => const {
+          'authorization',
+          'cookie',
+          'proxy-authorization',
+        }.contains(key.toLowerCase()),
+      );
+      if (hasCredentials || request.cancellation?.cancelled == true) {
+        throw StateError('Tour public metadata must be anonymous and active');
+      }
+      if (request.url == searchUrl && request.method == 'POST') {
+        final body = jsonDecode(request.body ?? 'null');
+        if (body is! Map ||
+            body['keyword'] != metadataQuery ||
+            body['filter'] is! Map ||
+            jsonEncode((body['filter'] as Map)['type']) != '[2]') {
+          throw StateError('Unexpected visual metadata search fixture');
+        }
+        metadataRequests.add(request.url);
+        return Future.value(
+          SourceResponse(
+            statusCode: 200,
+            body: jsonEncode({
+              'total': 1,
+              'data': [metadataSubject],
+            }),
+          ),
+        );
+      }
+      if (request.url == subjectUrl && request.method == 'GET') {
+        metadataRequests.add(request.url);
+        return Future.value(
+          SourceResponse(statusCode: 200, body: jsonEncode(metadataSubject)),
+        );
+      }
+    }
     _check(request.url, request.method);
     return super.send(
       SourceRequest(

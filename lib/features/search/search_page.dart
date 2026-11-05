@@ -88,6 +88,19 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   bool _tagBusy = false;
   AnimeFilter _animeFilter = const AnimeFilter();
   String get _historyKey => 'search.history.${widget.type.name}';
+  bool get _metadataSearch => widget.type == MediaType.anime && !_playbackSites;
+
+  SourceEntry _publicMetadataEntry() {
+    final source = BangumiSource.publicMetadata(
+      ref.read(bangumiPublicClientProvider),
+    );
+    return SourceEntry(
+      descriptor: source.descriptor,
+      source: source,
+      enabled: true,
+      canRemove: false,
+    );
+  }
 
   @override
   void initState() {
@@ -151,11 +164,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         );
       }
       if (!mounted || generation != _generation) return;
-      final snapshot = await ref.read(sourcesProvider.future);
+      // Public subject metadata shares the recommendation/detail client. A
+      // missing, disabled or restored plugin record must not hide this search.
+      final candidates = _metadataSearch
+          ? [_publicMetadataEntry()]
+          : (await ref.read(sourcesProvider.future))
+                .enabledWith(SourceCapability.search);
       if (!mounted || generation != _generation) return;
-      final sources = snapshot.enabledWith(SourceCapability.search).where((
-        entry,
-      ) {
+      final sources = candidates.where((entry) {
         if (entry.descriptor.type != widget.type) return false;
         if (_scopeId != null && entry.descriptor.id != _scopeId) return false;
         if (widget.type == MediaType.anime) {
@@ -221,10 +237,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final owner = SourceRequestCancellation();
     _requests[id] = owner;
     try {
-      final snapshot = await ref.read(sourcesProvider.future);
-      final active = snapshot.enabledEntries
-          .where((e) => e.descriptor.id == id)
-          .firstOrNull;
+      final active = _metadataSearch && id == BangumiPublicClient.sourceId
+          ? _publicMetadataEntry()
+          : (await ref.read(sourcesProvider.future)).enabledEntries
+                .where((e) => e.descriptor.id == id)
+                .firstOrNull;
       if (!mounted || generation != _generation || owner.cancelled) return;
       if (active == null || active.source is! SearchProvider) {
         throw StateError('来源已停用或不支持搜索');

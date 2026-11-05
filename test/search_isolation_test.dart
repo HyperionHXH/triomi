@@ -32,12 +32,15 @@ void main() {
     List<SearchProvider> sources, {
     List<String> tags = const [],
     String? sourceId,
+    SourceHttpClient? metadataHttp,
   }) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
         preferencesProvider.overrideWithValue(memoryPreferences()),
+        if (metadataHttp != null)
+          sourceHttpClientProvider.overrideWithValue(metadataHttp),
         sourcesProvider.overrideWith(
           () => _Sources(
             SourceRegistrySnapshot(
@@ -134,7 +137,7 @@ void main() {
         unrelatedCalls++;
         return [];
       }),
-    ], tags: ['奇幻'], sourceId: source.descriptor.id);
+    ], tags: ['奇幻'], sourceId: source.descriptor.id, metadataHttp: http);
     expect(http.requests, hasLength(1));
     final request = http.requests.single;
     expect(request.method, 'POST');

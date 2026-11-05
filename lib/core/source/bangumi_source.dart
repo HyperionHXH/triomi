@@ -17,6 +17,19 @@ class BangumiSource implements SearchProvider, DetailProvider {
     BangumiPublicClient? publicClient,
     BangumiRoutePolicy routes = const BangumiRoutePolicy(),
   }) : client = publicClient ?? BangumiPublicClient(http, routes: routes);
+
+  /// Public subject search is an application feature, independent of plugins.
+  BangumiSource.publicMetadata(this.client)
+    : rule = const SourceRule(
+        descriptor: SourceDescriptor(
+          id: BangumiPublicClient.sourceId,
+          name: 'Bangumi 番剧资料',
+          type: MediaType.anime,
+          kind: SourceKind.builtin,
+          baseUrl: 'https://api.bgm.tv',
+          capabilities: {SourceCapability.search, SourceCapability.detail},
+        ),
+      );
   final SourceRule rule;
   final BangumiPublicClient client;
   @override
