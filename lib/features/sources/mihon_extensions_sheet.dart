@@ -16,6 +16,7 @@ import '../../core/source/source_providers.dart';
 import '../../core/source/windows_mihon_host.dart';
 import '../../core/storage/preferences.dart';
 import '../manga/manga_extension_details_page.dart';
+import 'source_filter_controls.dart';
 
 const _mihonRepositoriesKey = 'mihon.repositories';
 const _mihonEnabledKey = 'mihon.enabledPackages';
@@ -580,6 +581,13 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                             const SizedBox(height: 8),
                             const Text('实际 APK SHA-256'),
                             SelectableText(candidate.apkHash),
+                            if (candidate.desktopJarSha256 != null) ...[
+                              const SizedBox(height: 12),
+                              const Text(
+                                '独立桌面 JAR：APK 签名不为这些代码背书。确认以下实际内容指纹后才会执行；备份中的信任不会迁移。',
+                              ),
+                              SelectableText(candidate.desktopJarSha256!),
+                            ],
                           ],
                         ),
                       ),
@@ -623,7 +631,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       title: Text('${row['packageName']}'),
       subtitle: Text(
         '恢复 APK · v${row['versionName']} (${row['versionCode']}) · ${sourceContentLabel(sourceNsfwFlag(row['nsfw']))} · 停用待确认\n'
-        '${Platform.isAndroid ? '未执行扩展代码；需确认实际发布者' : '当前平台不支持执行；仅保存可移植 APK 字节'}',
+        '${!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.windows) ? '未执行扩展代码；需确认实际发布者' : '当前平台不支持执行；仅保存可移植 APK 字节'}',
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -637,7 +645,9 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
           else
             TextButton(
               onPressed:
-                  Platform.isAndroid &&
+                  !kIsWeb &&
+                      (defaultTargetPlatform == TargetPlatform.android ||
+                          defaultTargetPlatform == TargetPlatform.windows) &&
                       !_removing.contains('${row['packageName']}')
                   ? () => unawaited(_activatePending(row))
                   : null,
@@ -668,15 +678,11 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
     final index = _index;
     final query = _filters.query.trim().toLowerCase();
     final entries =
-        index?.extensions
-            .where(
-              (entry) => [
-                entry.name,
-                entry.packageName,
-                ...entry.sources.map((source) => source.name),
-              ].any((value) => value.toLowerCase().contains(query)),
-            )
-            .toList() ??
+        index?.filter(
+          query: _filters.query,
+          language: _filters.language,
+          content: _filters.content,
+        ) ??
         const <MihonExtension>[];
     final packages = <String>{
       ..._installed.keys,
@@ -845,6 +851,28 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                       ),
                     ],
                   ),
+                if (_section == _ExtensionSection.browse)
+                  SourceFilterControls(
+                    filters: _filters,
+                    languages: [
+                      for (final extension
+                          in index?.extensions ?? const <MihonExtension>[])
+                        if (extension.sources.isEmpty) '',
+                      for (final extension
+                          in index?.extensions ?? const <MihonExtension>[])
+                        for (final source in extension.sources) source.language,
+                    ],
+                    types: const [],
+                    showQuery: false,
+                    visibleCount: entries.length,
+                    totalCount: index?.extensions.length ?? 0,
+                    onChanged: (value) {
+                      if (_searchController.text != value.query) {
+                        _searchController.text = value.query;
+                      }
+                      _setFilters(value);
+                    },
+                  ),
                 if (_section == _ExtensionSection.installed)
                   Expanded(
                     child: ListView(
@@ -884,7 +912,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                             child: Text(
                               _repositories.isEmpty
                                   ? '尚未添加扩展仓库。请在“仓库”中手动添加地址；应用不会自动提供仓库。'
-                                  : '没有匹配的扩展，请调整插件名称。',
+                                  : '没有匹配的扩展，请调整语言、内容分级或插件名称。',
                             ),
                           ),
                       ],

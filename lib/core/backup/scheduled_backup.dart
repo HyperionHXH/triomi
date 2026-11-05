@@ -9,6 +9,7 @@ import '../db/app_database.dart';
 import '../source/http_client.dart';
 import '../storage/preferences.dart';
 import 'backup_artifact_recovery.dart';
+import 'backup_location.dart';
 import 'backup_service.dart';
 
 const scheduledBackupKey = 'backup.schedule.enabled';
@@ -27,7 +28,10 @@ Future<bool> scheduleLocalBackups(
   const channel = MethodChannel('triomi/platform');
   final requested = prefs.get<bool>(scheduledBackupKey) ?? false;
   if (target == TargetPlatform.android) {
-    return await channel.invokeMethod<bool>('scheduleLocalBackups', requested) ??
+    return await channel.invokeMethod<bool>(
+          'scheduleLocalBackups',
+          requested,
+        ) ??
         false;
   }
   try {
@@ -63,18 +67,16 @@ Future<void> runScheduledBackupEntrypoint() async {
     if (prefs.get<bool>(scheduledBackupKey) != true) return;
     db = AppDatabase();
     if (!await BackupArtifactRecovery.recoverBeforeUse(db, prefs)) return;
+    final location = await BackupLocationStore(prefs).current();
+    if (location == null) throw StateError('请先选择卸载后保留的备份目录');
     final result =
         await BackupService(
           database: db,
           preferences: prefs,
           http: _MetadataOnlyHttpClient(),
-        ).exportToFile(
-          includeCovers: false,
-          includeOfflineContent: false,
-          includeDownloadedMedia: false,
-          includeSourceRules: false,
-          includeApkPackages: false,
-          directoryUri: prefs.get<String>(BackupService.exportDirectoryKey),
+        ).exportPortableBackup(
+          location: location,
+          metadataOnly: true,
           writeToTree: (uri, name, path) async =>
               await const MethodChannel('triomi/platform').invokeMethod<String>(
                 'writeToTree',
@@ -94,10 +96,7 @@ Future<void> runScheduledBackupEntrypoint() async {
     // Never log payloads, paths or credentials from a background exception.
     if (prefs != null) {
       try {
-        await prefs.set(
-          'backup.schedule.lastError',
-          '定时备份失败；旧备份保留，请检查存储与目录授权',
-        );
+        await prefs.set('backup.schedule.lastError', '定时备份失败；旧备份保留，请检查存储与目录授权');
         await prefs.set(
           'backup.schedule.lastAttempt',
           DateTime.now().toIso8601String(),
@@ -115,10 +114,8 @@ Future<void> runScheduledBackupEntrypoint() async {
       exitCode = 1;
     } finally {
       if (Platform.isWindows) {
-        await const MethodChannel('triomi/platform').invokeMethod<void>(
-          'completeLocalBackup',
-          exitCode,
-        );
+        await const MethodChannel('triomi/platform')
+            .invokeMethod<void>('completeLocalBackup', exitCode);
       } else {
         await const MethodChannel('triomi/backups').invokeMethod<void>('done');
       }
@@ -129,11 +126,14 @@ Future<void> runScheduledBackupEntrypoint() async {
 /// Enforce the scheduled worker's no-network contract even if export logic is
 /// later expanded. An accidental fetch fails the run instead of disclosing data.
 class _MetadataOnlyHttpClient implements SourceHttpClient {
-  Never _deny() => throw UnsupportedError('Scheduled backups cannot use network');
+  Never _deny() =>
+      throw UnsupportedError('Scheduled backups cannot use network');
 
   @override
-  Future<SourceResponse> send(SourceRequest request, {required String sourceId}) =>
-      _deny();
+  Future<SourceResponse> send(
+    SourceRequest request, {
+    required String sourceId,
+  }) => _deny();
 
   @override
   Future<List<int>> fetchBytes(

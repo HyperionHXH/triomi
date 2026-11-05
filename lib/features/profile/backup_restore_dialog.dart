@@ -107,3 +107,29 @@ Future<BackupRestoreOptions?> confirmBackupRestore(
     ),
   );
 }
+
+/// Only called after verified import and its database/settings commit succeed.
+Future<bool?> confirmDeleteRestoredBackup(
+  BuildContext context,
+  String original,
+) => showDialog<bool>(
+  context: context,
+  builder: (context) => AlertDialog(
+    title: const Text('恢复成功，要删除原备份吗？'),
+    content: SingleChildScrollView(
+      child: Text(
+        '本机数据已恢复。可选择保留备份（推荐），或仅删除下面这个原始ZIP文件；不会清理下载、其他备份或来源文件。\n\n$original\n\n删除无法撤销；目录权限不足时会保留原文件并提示。',
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context, false),
+        child: const Text('保留备份'),
+      ),
+      OutlinedButton(
+        onPressed: () => Navigator.pop(context, true),
+        child: const Text('删除这个原备份'),
+      ),
+    ],
+  ),
+);

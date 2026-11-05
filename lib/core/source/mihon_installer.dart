@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -8,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../backup/apk_backup_files.dart';
+import '../models/source_exception.dart';
 import '../platform/platform_channel.dart';
 import '../storage/preferences.dart';
 import 'http_client.dart';
@@ -82,25 +82,39 @@ class MihonInstaller {
     String? desktopJarHash;
     final candidate = File('${candidateDirectory.path}/extension.apk');
     try {
-      for (var attempt = 0; ; attempt++) {
-        try {
-          await _download(extension, candidate);
-          break;
-        } on DioException {
-          if (attempt >= 2) rethrow;
-          await Future<void>.delayed(Duration(seconds: attempt + 1));
-        } on IOException {
-          if (attempt >= 2) rethrow;
-          await Future<void>.delayed(Duration(seconds: attempt + 1));
+      try {
+        for (var attempt = 0; ; attempt++) {
+          try {
+            await _download(extension, candidate);
+            break;
+          } on DioException {
+            if (attempt >= 2) rethrow;
+            await Future<void>.delayed(Duration(seconds: attempt + 1));
+          } on IOException {
+            if (attempt >= 2) rethrow;
+            await Future<void>.delayed(Duration(seconds: attempt + 1));
+          }
         }
+      } catch (error) {
+        throw StateError(
+          'APK 下载失败（尚未验签或加载）。仓库提供的文件可能已移除，请刷新仓库或联系维护者；'
+          '不会自动替换下载来源。\n${SourceException.sanitizeMessage('$error')}',
+        );
       }
       if (desktop && extension.jarUrl != null) {
         desktopJar = File('${candidateDirectory.path}/extension.jar');
-        await _downloadUrl(
-          extension.jarUrl!,
-          extension.packageName,
-          desktopJar,
-        );
+        try {
+          await _downloadUrl(
+            extension.jarUrl!,
+            extension.packageName,
+            desktopJar,
+          );
+        } catch (error) {
+          throw StateError(
+            'APK 已下载，但桌面 JAR 下载失败（尚未加载）。请刷新仓库或联系维护者。\n'
+            '${SourceException.sanitizeMessage('$error')}',
+          );
+        }
         desktopJarHash = (await sha256.bind(desktopJar.openRead()).first)
             .toString();
         if (extension.jarSha256 != null &&
@@ -114,7 +128,7 @@ class MihonInstaller {
         versionCode: extension.versionCode,
       );
       if (metadata['ok'] != true || metadata['signatureVerified'] != true) {
-        throw StateError('${metadata['error'] ?? 'APK 签名验证失败'}');
+        throw StateError('APK 已下载，但静态签名验证失败：${metadata['error'] ?? '无有效验证结果'}');
       }
       final actualSigner = '${metadata['signerSha256']}'.toLowerCase();
       final actualHash = '${metadata['sha256']}'.toLowerCase();
@@ -174,7 +188,7 @@ class MihonInstaller {
       );
       if (status['ok'] != true || status['executable'] != true) {
         throw StateError(
-          '${status['hostError'] ?? status['error'] ?? 'APK 无法执行'}',
+          'APK 已下载并验签，但兼容宿主无法加载：${status['hostError'] ?? status['error'] ?? 'APK 无法执行'}',
         );
       }
       // Carry declarations only after the APK identity/hash checks above.
@@ -207,12 +221,14 @@ class MihonInstaller {
         ];
       }
       final installed = <String, Object?>{
-        ...?preferences.get<Map<dynamic, dynamic>>('mihon.installedPackages')
+        ...?preferences
+            .get<Map<dynamic, dynamic>>('mihon.installedPackages')
             ?.map((key, value) => MapEntry('$key', value)),
         extension.packageName: extension.versionName,
       };
       final hostStatus = <String, Object?>{
-        ...?preferences.get<Map<dynamic, dynamic>>('mihon.hostStatus')
+        ...?preferences
+            .get<Map<dynamic, dynamic>>('mihon.hostStatus')
             ?.map((key, value) => MapEntry('$key', value)),
         extension.packageName: status,
       };
@@ -233,6 +249,7 @@ class MihonInstaller {
     confirmPublisher,
   }) => _withMetadataLock(() async {
     final metadata = await files.inspectPending(packageName);
+    final desktop = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
     final accepted = await confirmPublisher(
       MihonPublisherCandidate(
         actualSigner: metadata['signerSha256'] as String,
@@ -241,17 +258,22 @@ class MihonInstaller {
         packageName: metadata['packageName'] as String,
         versionCode: metadata['versionCode'] as int,
         versionName: metadata['versionName'] as String,
+        desktopJarSha256: desktop
+            ? metadata['desktopJarSha256'] as String?
+            : null,
       ),
     );
     if (!accepted) throw StateError('尚未确认恢复 APK 的发布者；文件保持停用');
     // Confirmation can take arbitrarily long; recheck catalogue and bytes.
     final current = await files.inspectPending(packageName);
-    for (final key in const [
+    for (final key in [
       'sha256',
       'signerSha256',
       'versionCode',
       'versionName',
       'packageName',
+      if (desktop) 'desktopJarSha256',
+      if (desktop) 'desktopJarPath',
     ]) {
       if (metadata[key] != current[key]) throw StateError('确认期间 APK 已改变，请重新确认');
     }
@@ -261,6 +283,8 @@ class MihonInstaller {
       versionCode: current['versionCode'] as int,
       signerSha256: current['signerSha256'] as String,
       apkSha256: current['sha256'] as String,
+      desktopJarPath: desktop ? current['desktopJarPath'] as String? : null,
+      desktopJarSha256: desktop ? current['desktopJarSha256'] as String? : null,
     );
     if (status['ok'] != true || status['executable'] != true) {
       throw StateError(
@@ -272,13 +296,22 @@ class MihonInstaller {
     status['nsfw'] = restoredNsfw == true || manifestNsfw == true
         ? true
         : manifestNsfw ?? restoredNsfw;
+    if (!desktop && current['desktopJarPath'] is String) {
+      // Preserve portable desktop bytes without executing them or asserting any
+      // desktop publisher acceptance on Android. A future Windows restore must
+      // independently confirm the actual JAR fingerprint again.
+      status['backupDesktopJarPath'] = current['desktopJarPath'];
+      status['backupDesktopJarSha256'] = current['desktopJarSha256'];
+    }
     final installed = <String, Object?>{
-      ...?preferences.get<Map<dynamic, dynamic>>('mihon.installedPackages')
+      ...?preferences
+          .get<Map<dynamic, dynamic>>('mihon.installedPackages')
           ?.map((key, value) => MapEntry('$key', value)),
       packageName: current['versionName'],
     };
     final hostStatus = <String, Object?>{
-      ...?preferences.get<Map<dynamic, dynamic>>('mihon.hostStatus')
+      ...?preferences
+          .get<Map<dynamic, dynamic>>('mihon.hostStatus')
           ?.map((key, value) => MapEntry('$key', value)),
       packageName: status,
     };
@@ -289,60 +322,66 @@ class MihonInstaller {
     await files.removeActivated(packageName, current['sha256'] as String);
     return status;
   });
+
   /// Removes executable trust/installation records only. Reading data and each
   /// source's own preferences live in separate stores and are never deleted.
-  Future<void> uninstall(
-    String packageName, {
-    ApkBackupFiles? pendingFiles,
-  }) => _withMetadataLock(() async {
-    if (!RegExp(r'^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$')
-        .hasMatch(packageName)) {
-      throw const FormatException('扩展包身份无效');
-    }
-    // Always ask the host: a failed install can leave staged native files
-    // without any corresponding Dart metadata.
-    if (!await platformChannel.uninstallMihon(packageName)) {
-      throw StateError('宿主未完成卸载，已保留安装记录。请关闭正在使用的插件后重试；Windows 需完整的 extension-runtime 安装。');
-    }
-    final pending = pendingFiles?.pending[packageName];
-    if (pending != null) {
-      await pendingFiles!.removeActivated(packageName, pending['sha256'] as String);
-    }
-    final installed = <String, Object?>{
-        ...?preferences.get<Map<dynamic, dynamic>>('mihon.installedPackages')
-            ?.map((key, value) => MapEntry('$key', value)),
-      }..remove(packageName);
-      final statuses = <String, Object?>{
-        ...?preferences.get<Map<dynamic, dynamic>>('mihon.hostStatus')
-            ?.map((key, value) => MapEntry('$key', value)),
-      }..remove(packageName);
-      final enabled = <String>{
-        for (final value
-            in preferences.get<List<Object?>>('mihon.enabledPackages') ?? [])
-          '$value',
-      }..remove(packageName);
-      const keys = [
-        'mihon.enabledPackages',
-        'mihon.hostStatus',
-        'mihon.installedPackages',
-      ];
-      final before = preferences.exportAll();
-      final previous = <String, Object?>{
-        for (final key in keys)
-          if (before.containsKey(key)) key: before[key],
-      };
-      final missing = keys.where((key) => !before.containsKey(key)).toSet();
-      try {
-        await preferences.set('mihon.enabledPackages', enabled.toList());
-        await preferences.set('mihon.hostStatus', statuses);
-        await preferences.set('mihon.installedPackages', installed);
-        await preferences.flush();
-      } catch (_) {
-        await preferences.restoreSubset(previous, missing);
-        await preferences.flush();
-        rethrow;
-      }
-    });
+  Future<void> uninstall(String packageName, {ApkBackupFiles? pendingFiles}) =>
+      _withMetadataLock(() async {
+        if (!RegExp(r'^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$')
+            .hasMatch(packageName)) {
+          throw const FormatException('扩展包身份无效');
+        }
+        // Always ask the host: a failed install can leave staged native files
+        // without any corresponding Dart metadata.
+        if (!await platformChannel.uninstallMihon(packageName)) {
+          throw StateError(
+            '宿主未完成卸载，已保留安装记录。请关闭正在使用的插件后重试；Windows 需完整的 extension-runtime 安装。',
+          );
+        }
+        final pending = pendingFiles?.pending[packageName];
+        if (pending != null) {
+          await pendingFiles!.removeActivated(
+            packageName,
+            pending['sha256'] as String,
+          );
+        }
+        final installed = <String, Object?>{
+          ...?preferences
+              .get<Map<dynamic, dynamic>>('mihon.installedPackages')
+              ?.map((key, value) => MapEntry('$key', value)),
+        }..remove(packageName);
+        final statuses = <String, Object?>{
+          ...?preferences
+              .get<Map<dynamic, dynamic>>('mihon.hostStatus')
+              ?.map((key, value) => MapEntry('$key', value)),
+        }..remove(packageName);
+        final enabled = <String>{
+          for (final value
+              in preferences.get<List<Object?>>('mihon.enabledPackages') ?? [])
+            '$value',
+        }..remove(packageName);
+        const keys = [
+          'mihon.enabledPackages',
+          'mihon.hostStatus',
+          'mihon.installedPackages',
+        ];
+        final before = preferences.exportAll();
+        final previous = <String, Object?>{
+          for (final key in keys)
+            if (before.containsKey(key)) key: before[key],
+        };
+        final missing = keys.where((key) => !before.containsKey(key)).toSet();
+        try {
+          await preferences.set('mihon.enabledPackages', enabled.toList());
+          await preferences.set('mihon.hostStatus', statuses);
+          await preferences.set('mihon.installedPackages', installed);
+          await preferences.flush();
+        } catch (_) {
+          await preferences.restoreSubset(previous, missing);
+          await preferences.flush();
+          rethrow;
+        }
+      });
 
   Future<void> _download(MihonExtension extension, File candidate) =>
       _downloadUrl(extension.apkUrl, extension.packageName, candidate);

@@ -12,6 +12,7 @@ import 'package:triomi/features/discover/manga_feed_repository.dart';
 import 'package:triomi/features/library/data/anime_identity_repository.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 
+import 'fixtures/migration/v11_downloads_schema.dart';
 import 'fixtures/migration/v1_schema.dart';
 
 /// 真实执行 v1 → 当前结构升级，证明既有用户数据不丢。
@@ -90,6 +91,23 @@ void main() {
   }
 
   sqlite3.Database openRaw() => sqlite3.sqlite3.open(dbFile.path);
+
+  void restoreReleasedDownloadsSchema(sqlite3.Database raw) {
+    const columns =
+        'id, source_id, remote_id, chapter_source_id, chapter_remote_id, '
+        'status, progress, path, error_message, created_at, finished_at';
+    raw.execute('ALTER TABLE downloads RENAME TO generated_current_downloads');
+    raw.execute(v11DownloadsCreateStatement);
+    raw.execute(
+      'INSERT INTO downloads ($columns) SELECT $columns FROM generated_current_downloads',
+    );
+    raw.execute('DROP TABLE generated_current_downloads');
+    expect(
+      raw.select('PRAGMA table_info(downloads)').map((row) => row['name']),
+      isNot(contains('queue_position')),
+      reason: 'a historical fixture must not retain current generated columns',
+    );
+  }
 
   int countOf(String table) =>
       openRaw().select('SELECT COUNT(*) AS n FROM $table').first['n'] as int;
@@ -171,6 +189,16 @@ void main() {
         .where((row) => row['name'] == 'url')
         .toList();
     expect(columns, hasLength(1));
+    final download = raw.select('SELECT * FROM downloads').single;
+    expect(download['path'], '/offline/1001:1.txt');
+    expect(download['queue_position'], download['id']);
+    expect(download['retry_count'], 0);
+    expect(download['retry_at'], isNull);
+    expect(download['received_bytes'], 0);
+    expect(download['total_bytes'], isNull);
+    expect(download['completed_pages'], 0);
+    expect(download['total_pages'], isNull);
+    expect(download['speed_bytes_per_second'], 0);
     raw.close();
   });
 
@@ -180,6 +208,7 @@ void main() {
     await LibraryRepository(db).listLibrary();
     await db.close();
     final old = openRaw();
+    restoreReleasedDownloadsSchema(old);
     old.execute('ALTER TABLE categories DROP COLUMN hidden');
     old.execute('ALTER TABLE categories DROP COLUMN rules_json');
     old.execute('ALTER TABLE categories DROP COLUMN module');
@@ -237,6 +266,7 @@ void main() {
     const novelRule =
         '{"version":1,"sources":[],"type":"novel","unread":null,"status":"","query":"no matches","matchAll":false}';
     final old = openRaw();
+    restoreReleasedDownloadsSchema(old);
     old.execute('ALTER TABLE categories DROP COLUMN module');
     old.execute(
       "UPDATE categories SET name = '混合', sort_index = 17, hidden = 1 WHERE id = 1",
@@ -332,6 +362,7 @@ void main() {
       await LibraryRepository(before).listLibrary();
       await before.close();
       final old = openRaw();
+      restoreReleasedDownloadsSchema(old);
       old.execute('ALTER TABLE categories DROP COLUMN module');
       old.execute(
         "INSERT INTO media_items (source_id, remote_id, type, title) VALUES ('comic', '1001', 'manga', '漫画')",
@@ -422,6 +453,7 @@ void main() {
     );
     await before.close();
     final old = openRaw();
+    restoreReleasedDownloadsSchema(old);
     old.execute('DROP TABLE anime_source_links');
     old.execute('DROP TABLE manga_feeds');
     old.execute('ALTER TABLE categories DROP COLUMN hidden');
@@ -463,6 +495,7 @@ void main() {
     await LibraryRepository(before).listLibrary();
     await before.close();
     final old = openRaw();
+    restoreReleasedDownloadsSchema(old);
     old.execute('DROP TABLE manga_feeds');
     old.execute('ALTER TABLE categories DROP COLUMN hidden');
     old.execute('ALTER TABLE categories DROP COLUMN rules_json');
@@ -508,30 +541,55 @@ void main() {
     await prepare.select(prepare.mediaItems).get();
     await prepare.close();
     final raw = openRaw();
+    restoreReleasedDownloadsSchema(raw);
     raw.execute('DROP TABLE anime_follow_sync_states');
     raw.execute('PRAGMA user_version = 10');
     raw.close();
     final upgraded = AppDatabase.forTesting(NativeDatabase(dbFile));
     final changedAt = DateTime.utc(2026, 10, 16);
-    for (final (account, deleted) in [('account-a', true), ('account-b', false)]) {
-      await upgraded.into(upgraded.animeFollowSyncStates).insert(
-        AnimeFollowSyncStatesCompanion.insert(
-          accountKey: account, sourceId: 'bangumi-anime', remoteId: '1001',
-          changedAt: changedAt, deleted: Value(deleted),
-        ),
-      );
+    for (final (account, deleted) in [
+      ('account-a', true),
+      ('account-b', false),
+    ]) {
+      await upgraded
+          .into(upgraded.animeFollowSyncStates)
+          .insert(
+            AnimeFollowSyncStatesCompanion.insert(
+              accountKey: account,
+              sourceId: 'bangumi-anime',
+              remoteId: '1001',
+              changedAt: changedAt,
+              deleted: Value(deleted),
+            ),
+          );
     }
     await upgraded.close();
     final reopened = AppDatabase.forTesting(NativeDatabase(dbFile));
     try {
-      final states = await reopened.select(reopened.animeFollowSyncStates).get();
-      expect({for (final row in states) row.accountKey: row.deleted},
-          {'account-a': true, 'account-b': false});
+      final states = await reopened
+          .select(reopened.animeFollowSyncStates)
+          .get();
+      expect(
+        {for (final row in states) row.accountKey: row.deleted},
+        {'account-a': true, 'account-b': false},
+      );
       final books = await LibraryRepository(reopened).listLibrary();
-      expect({for (final book in books) book.item.sourceId: book.entry.progress},
-          {'lk': 3.0, 'lns': 9.5});
-      expect((await LibraryRepository(reopened).loadChapters('lk', '1001')).single.content!.html, '正文甲');
-      expect((await reopened.select(reopened.histories).get()).map((r) => r.position), [12.0, 5.0]);
+      expect(
+        {for (final book in books) book.item.sourceId: book.entry.progress},
+        {'lk': 3.0, 'lns': 9.5},
+      );
+      expect(
+        (await LibraryRepository(
+          reopened,
+        ).loadChapters('lk', '1001')).single.content!.html,
+        '正文甲',
+      );
+      expect(
+        (await reopened.select(reopened.histories).get()).map(
+          (r) => r.position,
+        ),
+        [12.0, 5.0],
+      );
     } finally {
       await reopened.close();
     }

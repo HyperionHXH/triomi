@@ -12,6 +12,8 @@ import 'features/library/data/library_auto_sync.dart';
 import 'features/settings/app_update_page.dart';
 import 'features/settings/app_update_service.dart';
 import 'features/settings/app_update_widgets.dart';
+import 'features/settings/onboarding_controller.dart';
+import 'features/settings/onboarding_page.dart';
 import 'features/settings/settings_controller.dart';
 
 /// 应用根组件：装配主题、路由与本地化。
@@ -30,8 +32,7 @@ class _TriomiAppState extends ConsumerState<TriomiApp>
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(libraryAutoSyncProvider.notifier).onResumed();
-      unawaited(_checkForStartupUpdate());
+      unawaited(_runStartup());
     });
   }
 
@@ -51,6 +52,22 @@ class _TriomiAppState extends ConsumerState<TriomiApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  Future<void> _runStartup() async {
+    if (ref.read(onboardingProvider)) {
+      final navigator = AppRouter.rootNavigator;
+      if (navigator != null) {
+        await navigator.push<void>(
+          MaterialPageRoute(
+            builder: (_) => const OnboardingPage(firstRun: true),
+          ),
+        );
+      }
+    }
+    if (!mounted) return;
+    ref.read(libraryAutoSyncProvider.notifier).onResumed();
+    await _checkForStartupUpdate();
   }
 
   Future<void> _checkForStartupUpdate() async {

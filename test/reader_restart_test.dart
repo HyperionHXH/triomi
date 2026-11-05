@@ -57,8 +57,28 @@ void main() {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 15)),
       );
-      await tester.pump();
+      await tester.pump(Duration.zero);
     }
+  }
+
+  Future<void> waitForMangaReady(WidgetTester tester) async {
+    await tester.pump(Duration.zero);
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (find.byType(PageView).evaluate().isEmpty &&
+        find.text('重试').evaluate().isEmpty &&
+        DateTime.now().isBefore(deadline)) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 15)),
+      );
+      await tester.pump(Duration.zero);
+    }
+    expect(
+      find.byType(PageView),
+      findsOneWidget,
+      reason:
+          'Wait for verified local manifest I/O, not a fixed number of pumps. '
+          'Reader text: ${tester.widgetList<Text>(find.byType(Text)).map((text) => text.data).join(' | ')}',
+    );
   }
 
   for (final type in [MediaType.manga, MediaType.novel]) {
@@ -67,7 +87,7 @@ void main() {
       (tester) async {
         final dir = Directory.systemTemp.createTempSync('triomi_restart_');
         final bytes = base64Decode(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
         );
         for (var i = 0; i < 12; i++) {
           File('${dir.path}/page-${i.toString().padLeft(2, '0')}.png')
@@ -103,7 +123,10 @@ void main() {
           await tester.pumpWidget(const SizedBox());
           await settle(tester);
           container.dispose();
-          await db.close();
+          await tester.pump(Duration.zero);
+          await tester.runAsync(
+            () => db.close().timeout(const Duration(seconds: 5)),
+          );
           dir.deleteSync(recursive: true);
           messenger.setMockMethodCallHandler(platform, null);
           messenger.setMockMethodCallHandler(paths, null);
@@ -141,7 +164,9 @@ void main() {
         await tester.pumpWidget(page());
         await settle(tester);
         if (type == MediaType.manga) {
+          await waitForMangaReady(tester);
           tester.widget<Slider>(find.byType(Slider)).onChanged!(8);
+          await tester.pump();
           await tester.pump(const Duration(milliseconds: 250));
         } else {
           for (var i = 0; i < 7; i++) {
@@ -168,6 +193,7 @@ void main() {
         await settle(tester);
         await tester.pumpWidget(page());
         await settle(tester);
+        if (type == MediaType.manga) await waitForMangaReady(tester);
         expect(indicator(), before);
         expect(tester.takeException(), isNull);
         if (type == MediaType.manga) {
@@ -185,13 +211,26 @@ void main() {
               .read(readerWorkSettingsRepositoryProvider)
               .set(work, 'doublePage', true);
           await settle(tester);
-          expect(indicator(), before, reason: '启用双页保留当前图片锚点，不退回第一页');
+          expect(indicator(), '7/12', reason: '双页显示包含原第8页的第7/8页组合，不退回第一页');
+          expect(
+            tester.widget<PageView>(find.byType(PageView)).controller!.page,
+            3,
+          );
+          for (final page in [6, 7]) {
+            final url = Uri.file(
+              '${dir.path}/page-${page.toString().padLeft(2, '0')}.png',
+            ).toString();
+            expect(find.byKey(ValueKey(url)).hitTestable(), findsOneWidget);
+          }
           await container
               .read(readerWorkSettingsRepositoryProvider)
               .reset(work);
           await settle(tester);
         }
         if (type == MediaType.manga) {
+          final beforeFailure = await tester.runAsync(
+            () => repo.chapterPositionOf('restart', 'book', chapter.remoteId),
+          );
           await tester.pumpWidget(const SizedBox());
           await settle(tester);
           downloads.fail = true;
@@ -202,7 +241,7 @@ void main() {
           );
           expect(
             afterFailure,
-            saved,
+            beforeFailure,
             reason: 'failed loads must preserve saved progress',
           );
         } else {
@@ -233,7 +272,7 @@ void main() {
     (tester) async {
       final dir = Directory.systemTemp.createTempSync('triomi_merged_reader_');
       final bytes = base64Decode(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
       );
       for (var i = 0; i < 12; i++) {
         File('${dir.path}/$i.png').writeAsBytesSync(bytes);
@@ -305,7 +344,10 @@ void main() {
         await tester.pumpWidget(const SizedBox());
         await settle(tester);
         container.dispose();
-        await db.close();
+        await tester.pump(Duration.zero);
+        await tester.runAsync(
+          () => db.close().timeout(const Duration(seconds: 5)),
+        );
         dir.deleteSync(recursive: true);
         messenger.setMockMethodCallHandler(
           const MethodChannel('triomi/platform'),
@@ -327,12 +369,14 @@ void main() {
           ),
         ),
       );
-      await settle(tester);
+      await waitForMangaReady(tester);
       expect(find.text('3/12'), findsOneWidget);
       await tester.tap(find.byTooltip('下一章'));
-      await settle(tester);
+      await waitForMangaReady(tester);
       expect(find.text('8/12'), findsOneWidget);
       tester.widget<Slider>(find.byType(Slider)).onChanged!(10);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
       await settle(tester);
       expect(
         await tester.runAsync(
@@ -348,6 +392,11 @@ void main() {
       );
       expect((await repo.loadChapters('a', 'work')).single.sourceId, 'a');
       expect((await repo.loadChapters('b', 'work')).single.sourceId, 'b');
+      // The binding verifies timer invariants before addTearDown callbacks.
+      // Dispose the live reader here so Drift's deferred query cancellation
+      // gets an event-loop turn before that automatic verification.
+      await tester.pumpWidget(const SizedBox());
+      await settle(tester);
     },
   );
 }

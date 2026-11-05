@@ -12,7 +12,13 @@ import 'versioned_webdav_backup.dart';
 /// An immutable private snapshot, with entries extracted to generated paths.
 /// Original ZIP names are identities only, never filesystem paths.
 class VerifiedBackupFile {
-  VerifiedBackupFile._(this.directory, this.hash, this.payload, this.files, this._lease);
+  VerifiedBackupFile._(
+    this.directory,
+    this.hash,
+    this.payload,
+    this.files,
+    this._lease,
+  );
 
   final Directory directory;
   final String hash;
@@ -58,7 +64,10 @@ class VerifiedBackupFile {
       var index = 0, actualTotal = 0;
       for (final (header, offset) in entries) {
         final file = File('${dir.path}/${index++}.entry');
-        final compressed = snapshot.openRead(offset, offset + header.compressedSize);
+        final compressed = snapshot.openRead(
+          offset,
+          offset + header.compressedSize,
+        );
         final decoded = header.compressionMethod == 8
             ? ZLibDecoder(raw: true).bind(compressed)
             : compressed;
@@ -93,7 +102,9 @@ class VerifiedBackupFile {
       }
       final manifestFile = files['manifest.json'];
       if (manifestFile != null) {
-        final manifest = jsonDecode(await _readJson(manifestFile, _maxManifestBytes));
+        final manifest = jsonDecode(
+          await _readJson(manifestFile, _maxManifestBytes),
+        );
         if (manifest is! Map ||
             manifest['version'] != 1 ||
             manifest['files'] is! Map) {
@@ -117,7 +128,9 @@ class VerifiedBackupFile {
       }
       final data = files['data.json'];
       if (data == null) throw StateError('备份包缺少 data.json');
-      final decoded = jsonDecode(await _readJson(data, VersionedWebDavBackup.maxBackupSize));
+      final decoded = jsonDecode(
+        await _readJson(data, VersionedWebDavBackup.maxBackupSize),
+      );
       if (decoded is! Map) throw StateError('备份数据格式不正确');
       return VerifiedBackupFile._(
         dir,
@@ -154,40 +167,63 @@ const _maxEntries = 50000;
 const _maxDirectoryBytes = 32 * 1024 * 1024;
 const _maxManifestBytes = 16 * 1024 * 1024;
 const _maxMediaTextBytes = 4 * 1024 * 1024;
-const _maxExpandedBytes = VersionedWebDavBackup.maxFileSize +
-    VersionedWebDavBackup.maxBackupSize + _maxManifestBytes;
+const _maxExpandedBytes =
+    VersionedWebDavBackup.maxFileSize +
+    VersionedWebDavBackup.maxBackupSize +
+    _maxManifestBytes;
 final _mediaMember = RegExp(r'^media/[0-9a-f]{64}/([^/]+)$');
-final _apkMember = RegExp(r'^apks/[0-9a-f]{64}\.apk$');
-final _imageExtension = RegExp(r'\.(img|jpg|jpeg|png|webp|gif|avif)$', caseSensitive: false);
-final _mediaExtension = RegExp(r'\.(jpg|jpeg|png|webp|gif|avif|mp4|mkv|webm|flv|mov|m4v|ts|m4s|aac)(\.part)?$', caseSensitive: false);
+final _apkMember = RegExp(r'^apks/[0-9a-f]{64}\.(apk|jar)$');
+final _imageExtension = RegExp(
+  r'\.(img|jpg|jpeg|png|webp|gif|avif)$',
+  caseSensitive: false,
+);
+final _mediaExtension = RegExp(
+  r'\.(jpg|jpeg|png|webp|gif|avif|mp4|mkv|webm|flv|mov|m4v|ts|m4s|aac)(\.part)?$',
+  caseSensitive: false,
+);
 
 int _entryLimit(String name) {
   if (name == 'data.json') return VersionedWebDavBackup.maxBackupSize;
   if (name == 'manifest.json') return _maxManifestBytes;
-  if (name.length > 1024 || name.contains('\\') || name.contains(':') || name.contains('\u0000')) {
+  if (name.length > 1024 ||
+      name.contains('\\') ||
+      name.contains(':') ||
+      name.contains('\u0000')) {
     throw const FormatException('备份成员身份无效');
   }
   if (_apkMember.hasMatch(name)) return ApkBackupFiles.maxBytes;
   final parts = name.split('/');
-  if (parts.length == 2 && parts.first == 'covers' &&
-      parts.last != '.' && parts.last != '..' && _imageExtension.hasMatch(parts.last)) {
+  if (parts.length == 2 &&
+      parts.first == 'covers' &&
+      parts.last != '.' &&
+      parts.last != '..' &&
+      _imageExtension.hasMatch(parts.last)) {
     return 64 * 1024 * 1024;
   }
   final media = _mediaMember.firstMatch(name)?.group(1);
   if (media != null) {
-    if (media == 'manifest.json' || media == 'download-pages.json' ||
+    if (media == 'chapter.json') return VersionedWebDavBackup.maxBackupSize;
+    if (media == 'manifest.json' ||
+        media == 'download-pages.json' ||
         media.endsWith('.m3u8') ||
-        RegExp(r'^video\.(mp4|mkv|webm|flv|mov|m4v|ts|m4s|aac)\.resume\.json$').hasMatch(media) ||
-        (media.endsWith('.json') && _mediaExtension.hasMatch(media.substring(0, media.length - 5)))) {
+        RegExp(r'^video\.(mp4|mkv|webm|flv|mov|m4v|ts|m4s|aac)\.resume\.json$')
+            .hasMatch(media) ||
+        (media.endsWith('.json') &&
+            _mediaExtension.hasMatch(media.substring(0, media.length - 5)))) {
       return _maxMediaTextBytes;
     }
     if (_imageExtension.hasMatch(media)) return 64 * 1024 * 1024;
-    if (_mediaExtension.hasMatch(media)) return VersionedWebDavBackup.maxFileSize;
+    if (_mediaExtension.hasMatch(media))
+      return VersionedWebDavBackup.maxFileSize;
   }
   throw const FormatException('备份包含未知或无效成员类型');
 }
 
-Future<String> _copySnapshot(File source, File destination, int expectedSize) async {
+Future<String> _copySnapshot(
+  File source,
+  File destination,
+  int expectedSize,
+) async {
   final digest = _DigestSink();
   final hash = sha256.startChunkedConversion(digest);
   final output = destination.openWrite();
@@ -215,7 +251,12 @@ Future<String> _readJson(File file, int limit) async {
   return file.readAsString();
 }
 
-Future<Uint8List> _readAt(RandomAccessFile input, int offset, int size, int length) async {
+Future<Uint8List> _readAt(
+  RandomAccessFile input,
+  int offset,
+  int size,
+  int length,
+) async {
   if (offset < 0 || size < 0 || offset > length - size) {
     throw const FormatException('备份ZIP目录或成员超出文件边界');
   }
@@ -252,15 +293,20 @@ Future<List<(ZipFileHeader, int)>> _preflight(File snapshot) async {
     // Large media exports use ZIP64 offsets/sizes. Bound that metadata before
     // letting archive parse any headers; do not reject all ZIP64 as comic ZIPs do.
     if (directoryEnd >= 20) {
-      final locator = ByteData.sublistView(await _readAt(input, directoryEnd - 20, 20, length));
+      final locator = ByteData.sublistView(
+        await _readAt(input, directoryEnd - 20, 20, length),
+      );
       if (locator.getUint32(0, Endian.little) == 0x07064b50) {
         final zip64Offset = locator.getUint64(8, Endian.little);
-        final zip64 = ByteData.sublistView(await _readAt(input, zip64Offset, 56, length));
+        final zip64 = ByteData.sublistView(
+          await _readAt(input, zip64Offset, 56, length),
+        );
         final recordSize = zip64.getUint64(4, Endian.little);
         if (locator.getUint32(4, Endian.little) != 0 ||
             locator.getUint32(16, Endian.little) != 1 ||
             zip64.getUint32(0, Endian.little) != 0x06064b50 ||
-            recordSize < 44 || recordSize > 1024 * 1024 ||
+            recordSize < 44 ||
+            recordSize > 1024 * 1024 ||
             zip64Offset + 12 + recordSize != directoryEnd - 20 ||
             zip64.getUint32(16, Endian.little) != 0) {
           throw const FormatException('备份ZIP64目录无效或不支持分卷');
@@ -273,8 +319,13 @@ Future<List<(ZipFileHeader, int)>> _preflight(File snapshot) async {
         directoryEnd = zip64Offset;
       }
     }
-    if (disk != 0 || count <= 0 || count != diskCount || count > _maxEntries ||
-        size < count * 46 || size > _maxDirectoryBytes || directoryOffset < 0 ||
+    if (disk != 0 ||
+        count <= 0 ||
+        count != diskCount ||
+        count > _maxEntries ||
+        size < count * 46 ||
+        size > _maxDirectoryBytes ||
+        directoryOffset < 0 ||
         directoryOffset + size != directoryEnd) {
       throw const FormatException('备份ZIP目录条目、大小或边界超限');
     }
@@ -282,33 +333,56 @@ Future<List<(ZipFileHeader, int)>> _preflight(File snapshot) async {
     final names = <String>{};
     var position = directoryOffset, declaredTotal = 0, compressedTotal = 0;
     for (var i = 0; i < count; i++) {
-      final fixed = ByteData.sublistView(await _readAt(input, position, 46, directoryEnd));
+      final fixed = ByteData.sublistView(
+        await _readAt(input, position, 46, directoryEnd),
+      );
       if (fixed.getUint32(0, Endian.little) != 0x02014b50) {
         throw const FormatException('备份ZIP目录成员无效');
       }
-      final variableSize = fixed.getUint16(28, Endian.little) +
-          fixed.getUint16(30, Endian.little) + fixed.getUint16(32, Endian.little);
-      final record = await _readAt(input, position + 4, 42 + variableSize, directoryEnd);
+      final variableSize =
+          fixed.getUint16(28, Endian.little) +
+          fixed.getUint16(30, Endian.little) +
+          fixed.getUint16(32, Endian.little);
+      final record = await _readAt(
+        input,
+        position + 4,
+        42 + variableSize,
+        directoryEnd,
+      );
       final header = ZipFileHeader()..read(InputMemoryStream(record));
       position += 46 + variableSize;
       final limit = _entryLimit(header.filename);
       final mode = (header.externalFileAttributes >> 16) & 0xf000;
       declaredTotal += header.uncompressedSize;
       compressedTotal += header.compressedSize;
-      if (!names.add(header.filename) || (mode != 0 && mode != 0x8000) ||
-          header.diskNumberStart != 0 || (header.generalPurposeBitFlag & ~0x080e) != 0 ||
+      if (!names.add(header.filename) ||
+          (mode != 0 && mode != 0x8000) ||
+          header.diskNumberStart != 0 ||
+          (header.generalPurposeBitFlag & ~0x080e) != 0 ||
           (header.compressionMethod != 0 && header.compressionMethod != 8) ||
-          header.uncompressedSize < 0 || header.uncompressedSize > limit ||
-          header.compressedSize < 0 || header.compressedSize > length ||
-          declaredTotal > _maxExpandedBytes || compressedTotal > length ||
-          (header.compressionMethod == 0 && header.compressedSize != header.uncompressedSize)) {
+          header.uncompressedSize < 0 ||
+          header.uncompressedSize > limit ||
+          header.compressedSize < 0 ||
+          header.compressedSize > length ||
+          declaredTotal > _maxExpandedBytes ||
+          compressedTotal > length ||
+          (header.compressionMethod == 0 &&
+              header.compressedSize != header.uncompressedSize)) {
         throw const FormatException('备份ZIP成员重复、类型无效或声明大小超限');
       }
-      final local = ByteData.sublistView(await _readAt(input, header.localHeaderOffset, 30, directoryOffset));
+      final local = ByteData.sublistView(
+        await _readAt(input, header.localHeaderOffset, 30, directoryOffset),
+      );
       final nameSize = local.getUint16(26, Endian.little);
       final extraSize = local.getUint16(28, Endian.little);
-      final contentOffset = header.localHeaderOffset + 30 + nameSize + extraSize;
-      final localName = await _readAt(input, header.localHeaderOffset + 30, nameSize, directoryOffset);
+      final contentOffset =
+          header.localHeaderOffset + 30 + nameSize + extraSize;
+      final localName = await _readAt(
+        input,
+        header.localHeaderOffset + 30,
+        nameSize,
+        directoryOffset,
+      );
       if (local.getUint32(0, Endian.little) != 0x04034b50 ||
           local.getUint16(6, Endian.little) != header.generalPurposeBitFlag ||
           local.getUint16(8, Endian.little) != header.compressionMethod ||
@@ -321,10 +395,13 @@ Future<List<(ZipFileHeader, int)>> _preflight(File snapshot) async {
     if (position != directoryEnd || !names.contains('data.json')) {
       throw const FormatException('备份ZIP目录不完整或缺少data.json');
     }
-    entries.sort((a, b) => a.$1.localHeaderOffset.compareTo(b.$1.localHeaderOffset));
+    entries.sort(
+      (a, b) => a.$1.localHeaderOffset.compareTo(b.$1.localHeaderOffset),
+    );
     var previousEnd = 0;
     for (final (header, contentOffset) in entries) {
-      if (header.localHeaderOffset < previousEnd) throw const FormatException('备份ZIP成员重叠');
+      if (header.localHeaderOffset < previousEnd)
+        throw const FormatException('备份ZIP成员重叠');
       previousEnd = contentOffset + header.compressedSize;
     }
     return entries;

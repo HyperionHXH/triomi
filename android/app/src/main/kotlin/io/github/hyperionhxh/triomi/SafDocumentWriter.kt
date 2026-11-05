@@ -28,6 +28,9 @@ object SafDocumentWriter {
         }
         val resolver = context.contentResolver
         val root = Uri.parse(treeUri)
+        // Revalidate saved grants too: an older selection must not publish a
+        // purported portable backup inside uninstall-scoped Android directories.
+        if (mime == "application/zip") BackupDestinationPolicy.validatePersistentTree(context, root)
         val parent = DocumentsContract.buildDocumentUriUsingTree(root, DocumentsContract.getTreeDocumentId(root))
         val created = DocumentsContract.createDocument(resolver, parent, mime, fileName)
             ?: throw IOException("Export document creation failed")

@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.source.online
 
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.network.MihonRequestScope
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
@@ -34,56 +35,56 @@ abstract class HttpSource : CatalogueSource {
     override fun toString(): String = "$name (${lang.uppercase()})"
 
     open fun fetchPopularManga(page: Int): Observable<MangasPage> = Observable.fromCallable {
-        client.newCall(popularMangaRequest(page)).execute().use { popularMangaParse(it) }
+        MihonRequestScope.execute(client, popularMangaRequest(page), ::popularMangaParse)
     }
     protected open fun popularMangaRequest(page: Int): Request = unsupported()
     protected open fun popularMangaParse(response: Response): MangasPage = unsupported()
     open fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> = Observable.fromCallable {
-        client.newCall(searchMangaRequest(page, query, filters)).execute().use { searchMangaParse(it) }
+        MihonRequestScope.execute(client, searchMangaRequest(page, query, filters), ::searchMangaParse)
     }
     protected open fun searchMangaRequest(page: Int, query: String, filters: FilterList): Request = unsupported()
     protected open fun searchMangaParse(response: Response): MangasPage = unsupported()
     open fun fetchLatestUpdates(page: Int): Observable<MangasPage> = Observable.fromCallable {
-        client.newCall(latestUpdatesRequest(page)).execute().use { latestUpdatesParse(it) }
+        MihonRequestScope.execute(client, latestUpdatesRequest(page), ::latestUpdatesParse)
     }
     protected open fun latestUpdatesRequest(page: Int): Request = unsupported()
     protected open fun latestUpdatesParse(response: Response): MangasPage = unsupported()
     open fun fetchMangaDetails(manga: SManga): Observable<SManga> = Observable.fromCallable {
-        client.newCall(mangaDetailsRequest(manga)).execute().use { mangaDetailsParse(it) }
+        MihonRequestScope.execute(client, mangaDetailsRequest(manga), ::mangaDetailsParse)
     }
     open fun mangaDetailsRequest(manga: SManga): Request = unsupported()
     protected open fun mangaDetailsParse(response: Response): SManga = unsupported()
     open fun fetchChapterList(manga: SManga): Observable<List<SChapter>> = Observable.fromCallable {
-        client.newCall(chapterListRequest(manga)).execute().use { chapterListParse(it) }
+        MihonRequestScope.execute(client, chapterListRequest(manga), ::chapterListParse)
     }
     protected open fun chapterListRequest(manga: SManga): Request = unsupported()
     protected open fun chapterListParse(response: Response): List<SChapter> = unsupported()
     open fun fetchPageList(chapter: SChapter): Observable<List<Page>> = Observable.fromCallable {
-        client.newCall(pageListRequest(chapter)).execute().use { pageListParse(it) }
+        MihonRequestScope.execute(client, pageListRequest(chapter), ::pageListParse)
     }
     protected open fun pageListRequest(chapter: SChapter): Request = unsupported()
     protected open fun pageListParse(response: Response): List<Page> = unsupported()
     open fun fetchImageUrl(page: Page): Observable<String> = Observable.fromCallable {
-        client.newCall(imageUrlRequest(page)).execute().use { imageUrlParse(it) }
+        MihonRequestScope.execute(client, imageUrlRequest(page), ::imageUrlParse)
     }
     open suspend fun getImageUrl(page: Page): String =
-        fetchImageUrl(page).toBlocking().single()
+        MihonRequestScope.awaitSingle(fetchImageUrl(page))
     protected open fun imageUrlRequest(page: Page): Request = Request.Builder().url(page.imageUrl ?: page.url).build()
     protected open fun imageUrlParse(response: Response): String = response.request.url.toString()
     open fun imageRequest(page: Page): Request = Request.Builder().url(page.imageUrl ?: page.url).headers(headers).build()
     override suspend fun getPopularManga(page: Int): MangasPage =
-        fetchPopularManga(page).toBlocking().single()
+        MihonRequestScope.awaitSingle(fetchPopularManga(page))
     override suspend fun getLatestUpdates(page: Int): MangasPage =
-        fetchLatestUpdates(page).toBlocking().single()
+        MihonRequestScope.awaitSingle(fetchLatestUpdates(page))
     override suspend fun getSearchManga(page: Int, query: String, filters: FilterList): MangasPage =
-        fetchSearchManga(page, query, filters).toBlocking().single()
+        MihonRequestScope.awaitSingle(fetchSearchManga(page, query, filters))
     override suspend fun getMangaUpdate(manga: SManga, chapters: List<SChapter>, fetchDetails: Boolean, fetchChapters: Boolean): SMangaUpdate {
-        val details = if (fetchDetails) fetchMangaDetails(manga).toBlocking().single() else manga
-        val loadedChapters = if (fetchChapters) fetchChapterList(details).toBlocking().single() else chapters
+        val details = if (fetchDetails) MihonRequestScope.awaitSingle(fetchMangaDetails(manga)) else manga
+        val loadedChapters = if (fetchChapters) MihonRequestScope.awaitSingle(fetchChapterList(details)) else chapters
         return SMangaUpdate(details, loadedChapters)
     }
     override suspend fun getPageList(chapter: SChapter): List<Page> =
-        fetchPageList(chapter).toBlocking().single()
+        MihonRequestScope.awaitSingle(fetchPageList(chapter))
     open fun getMangaUrl(manga: SManga): String = "$baseUrl${manga.url}"
     open fun getChapterUrl(chapter: SChapter): String = "$baseUrl${chapter.url}"
     fun setUrlWithoutDomain(chapter: SChapter, url: String) { chapter.url = url.removePrefix(baseUrl) }

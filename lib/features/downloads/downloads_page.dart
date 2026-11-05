@@ -5,13 +5,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/models/chapter.dart';
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/router/app_router.dart';
+import '../../core/storage/storage_paths.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../library/data/library_providers.dart';
+import '../novel/reader/novel_reader_page.dart';
+import '../player/player_page.dart';
+import '../reader/manga_reader_page.dart';
 import 'data/download_providers.dart';
 import 'data/download_repository.dart';
 import 'data/video_downloader.dart';
@@ -46,6 +51,10 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
           ],
         );
     final wifiOnly = ref.watch(downloadWifiOnlyProvider);
+    final notificationVisible = ref
+        .watch(downloadNotificationVisibilityProvider)
+        .asData
+        ?.value;
 
     return PageScaffold(
       title: widget.type == null ? '下载管理' : '${widget.type!.label}下载',
@@ -97,6 +106,31 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                 ),
               ),
             ),
+            if (notificationVisible == false)
+              const Padding(
+                padding: EdgeInsets.all(AppSpacing.lg),
+                child: Text(
+                  '系统通知权限未开启：后台下载仍在运行，'
+                  '但下载通知可能不可见。请在系统设置中允许通知以查看后台进度。',
+                ),
+              ),
+            groups.when(
+              data: (items) =>
+                  items.any((group) => group.entries.any(_isUpcoming))
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.lg,
+                      ),
+                      child: TextButton.icon(
+                        onPressed: () => unawaited(_reorder(items)),
+                        icon: const Icon(Icons.reorder),
+                        label: const Text('调整待下载顺序（当前任务不会被抢占）'),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+              loading: () => const SizedBox.shrink(),
+              error: (_, _) => const SizedBox.shrink(),
+            ),
             groups.when(
               loading: () => const Padding(
                 padding: EdgeInsets.all(AppSpacing.xl),
@@ -128,11 +162,9 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                                     .read(downloadsProvider.notifier)
                                     .removeItem(group.sourceId, group.remoteId),
                               ),
-                              onRetry: () => unawaited(
-                                ref
-                                    .read(downloadsProvider.notifier)
-                                    .retryFailed(type: widget.type),
-                              ),
+                              onEntryAction: _entryAction,
+                              onOpenChapter: (entry) =>
+                                  unawaited(_openChapter(group, entry)),
                               onOpen: () => unawaited(_openItem(group)),
                             ),
                           ),
@@ -143,6 +175,128 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _entryAction(DownloadEntry entry, String action) async {
+    final queue = ref.read(downloadsProvider.notifier);
+    try {
+      switch (action) {
+        case 'pause':
+          await queue.pauseEntry(entry.row.id);
+        case 'resume':
+          await queue.resumeEntry(entry.row.id);
+        case 'cancel':
+          await queue.cancelEntry(entry.row.id);
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('下载操作失败：$error')));
+      }
+    }
+  }
+
+  Future<void> _reorder(List<DownloadGroup> groups) async {
+    final entries =
+        [
+          for (final group in groups)
+            for (final entry in group.entries)
+              if (_isUpcoming(entry)) entry,
+        ]..sort((a, b) {
+          final order = a.row.queuePosition.compareTo(b.row.queuePosition);
+          return order == 0 ? a.row.id.compareTo(b.row.id) : order;
+        });
+    final ids = await showDialog<List<int>>(
+      context: context,
+      builder: (context) => _QueueOrderDialog(entries: entries),
+    );
+    if (ids == null || !mounted) return;
+    try {
+      await ref
+          .read(downloadsProvider.notifier)
+          .reorder(type: widget.type, orderedIds: ids);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('保存队列顺序失败，请重新打开排序：$error')));
+      }
+    }
+  }
+
+  Future<void> _openChapter(DownloadGroup group, DownloadEntry entry) async {
+    final library = ref.read(libraryRepositoryProvider);
+    final cached = await library.itemByKey(group.sourceId, group.remoteId);
+    final type = group.type;
+    if (type == null) return;
+    final item =
+        cached ??
+        MediaItem(
+          sourceId: group.sourceId,
+          remoteId: group.remoteId,
+          type: type,
+          title: group.title,
+        );
+    final cachedChapters = await library.loadChapters(
+      group.sourceId,
+      group.remoteId,
+    );
+    final chapters = [
+      for (final download in group.entries)
+        cachedChapters
+                .where(
+                  (chapter) =>
+                      chapter.sourceId == download.row.chapterSourceId &&
+                      chapter.remoteId == download.row.chapterRemoteId,
+                )
+                .firstOrNull ??
+            Chapter(
+              sourceId: download.row.chapterSourceId,
+              remoteId: download.row.chapterRemoteId,
+              title: download.chapterTitle,
+              volumeTitle: download.volumeTitle,
+            ),
+    ];
+    final index = chapters.indexWhere(
+      (chapter) =>
+          chapter.sourceId == entry.row.chapterSourceId &&
+          chapter.remoteId == entry.row.chapterRemoteId,
+    );
+    if (!mounted || index < 0) return;
+    switch (type) {
+      case MediaType.manga:
+        unawaited(
+          context.push(
+            AppRoutes.reader,
+            extra: MangaReaderArgs(
+              item: item,
+              chapters: chapters,
+              initialIndex: index,
+            ),
+          ),
+        );
+      case MediaType.anime:
+        unawaited(
+          context.push(
+            AppRoutes.player,
+            extra: PlayerArgs(
+              item: item,
+              chapters: chapters,
+              initialIndex: index,
+            ),
+          ),
+        );
+      case MediaType.novel:
+        unawaited(
+          context.push(
+            AppRoutes.novelReader,
+            extra: NovelReaderArgs(
+              item: item,
+              chapters: chapters,
+              initialIndex: index,
+            ),
+          ),
+        );
+    }
   }
 
   /// 打开作品详情：优先用缓存的完整快照，取不到就用分组里的基本信息兜底。
@@ -191,117 +345,65 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
   }
 }
 
+bool _isUpcoming(DownloadEntry entry) =>
+    entry.status == DownloadStatus.queued ||
+    entry.status == DownloadStatus.paused ||
+    entry.status == DownloadStatus.failed;
+
+String _bytes(num bytes) {
+  if (bytes >= 1048576) return '${(bytes / 1048576).toStringAsFixed(1)} MiB';
+  if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KiB';
+  return '${bytes.round()} B';
+}
+
 class _DownloadGroupCard extends StatelessWidget {
   const _DownloadGroupCard({
     required this.group,
     required this.onRemove,
-    required this.onRetry,
+    required this.onEntryAction,
+    required this.onOpenChapter,
     required this.onOpen,
   });
 
   final DownloadGroup group;
   final VoidCallback onRemove;
-  final VoidCallback onRetry;
-
-  /// 打开作品详情（下载过的作品断网也能进详情→读本地正文）。
+  final Future<void> Function(DownloadEntry, String) onEntryAction;
+  final ValueChanged<DownloadEntry> onOpenChapter;
   final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
-    final palette = Theme.of(context).colorScheme;
-    final total = group.entries.length;
-    final done = group.doneCount;
-    final failed = group.entries
-        .where((entry) => entry.status == DownloadStatus.failed)
-        .length;
     final running = group.entries
         .where((entry) => entry.status == DownloadStatus.running)
         .firstOrNull;
-
-    final paused = group.entries
-        .where((entry) => entry.status == DownloadStatus.paused)
-        .length;
-    // Paused browser jobs explain the foreground/unlock/source action needed.
-    final failedReason = group.entries
-        .where(
-          (entry) =>
-              entry.status == DownloadStatus.failed ||
-              entry.status == DownloadStatus.paused,
-        )
-        .map((entry) => entry.row.errorMessage?.trim())
-        .whereType<String>()
-        .where((message) => message.isNotEmpty)
-        .firstOrNull;
-
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
+        children: [
           Row(
-            children: <Widget>[
-              Icon(
-                switch (group.type) {
-                  MediaType.manga => Icons.photo_library_outlined,
-                  MediaType.novel => Icons.menu_book_outlined,
-                  MediaType.anime => Icons.movie_outlined,
-                  null => Icons.download_outlined,
-                },
-                size: 20,
-                color: palette.primary,
-              ),
-              const SizedBox(width: AppSpacing.xs),
+            children: [
               Expanded(
-                child: InkWell(
-                  onTap: onOpen,
-                  borderRadius: AppRadius.controlRadius,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.sm,
-                    ),
-                    child: Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: Text(
-                            group.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                        ),
-                        const Icon(Icons.chevron_right, size: 18),
-                      ],
-                    ),
+                child: TextButton(
+                  onPressed: onOpen,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(group.title),
                   ),
                 ),
               ),
               IconButton(
                 tooltip: '删除下载',
                 onPressed: onRemove,
-                icon: const Icon(Icons.delete_outline, size: 20),
+                icon: const Icon(Icons.delete_outline),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            running != null
-                ? '正在下载：${running.chapterTitle} · ${(running.row.progress * 100).round()}%'
-                : '已完成 $done / $total 章${failed > 0 ? '（$failed 章失败）' : ''}${paused > 0 ? ' · $paused 已暂停' : ''}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          ClipRRect(
-            borderRadius: const BorderRadius.all(Radius.circular(4)),
-            child: LinearProgressIndicator(
-              value: total == 0
-                  ? 0
-                  : group.entries.fold<double>(
-                          0,
-                          (sum, entry) => sum + entry.row.progress,
-                        ) /
-                        total,
-              minHeight: 6,
+          Text('已完成 ${group.doneCount} / ${group.entries.length} 章'),
+          if (running != null)
+            Text(
+              '正在下载：${running.chapterTitle} · '
+              '${_bytes(running.row.speedBytesPerSecond)}/s',
             ),
-          ),
           _DownloadSize(
             paths: group.entries
                 .map((e) => e.row.path)
@@ -309,40 +411,252 @@ class _DownloadGroupCard extends StatelessWidget {
                 .toSet(),
             revision: Object.hashAll(group.entries.map((e) => e.row.status)),
           ),
-          if (failed > 0) ...<Widget>[
-            if (failedReason != null)
-              Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.xxs),
-                child: Text(
-                  failedReason,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: Theme.of(context).colorScheme.error),
+          ExpansionTile(
+            key: PageStorageKey(
+              'downloads:${group.sourceId}:${group.remoteId}',
+            ),
+            tilePadding: EdgeInsets.zero,
+            title: const Text('剧集 / 章节与任务详情'),
+            children: [
+              for (final entry in group.entries)
+                _DownloadChapterTile(
+                  key: ValueKey(entry.row.id),
+                  entry: entry,
+                  onAction: (action) => unawaited(onEntryAction(entry, action)),
+                  onOpen: () => onOpenChapter(entry),
                 ),
-              ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('重试失败章节'),
-              ),
-            ),
-          ],
-          if (group.hasActive)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '队列执行中，可离开本页',
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: palette.onSurfaceVariant),
-              ),
-            ),
+            ],
+          ),
         ],
       ),
     );
   }
+}
+
+class _DownloadChapterTile extends StatelessWidget {
+  const _DownloadChapterTile({
+    super.key,
+    required this.entry,
+    required this.onAction,
+    required this.onOpen,
+  });
+  final DownloadEntry entry;
+  final ValueChanged<String> onAction;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = entry.row;
+    final running = entry.status == DownloadStatus.running;
+    final error = row.errorMessage?.trim();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            entry.chapterTitle,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          if (entry.volumeTitle?.isNotEmpty == true) Text(entry.volumeTitle!),
+          Text('${entry.status.label} · ${(row.progress * 100).round()}%'),
+          Text(
+            '${_bytes(row.receivedBytes)} / '
+            '${row.totalBytes == null ? '未知大小' : _bytes(row.totalBytes!)}'
+            '${running ? ' · ${_bytes(row.speedBytesPerSecond)}/s' : ''}',
+          ),
+          if (entry.type == MediaType.manga)
+            Text('已保存 ${row.completedPages} / ${row.totalPages ?? '?'} 页'),
+          if (running)
+            LinearProgressIndicator(value: row.progress.clamp(0.0, 1.0)),
+          if (error != null && error.isNotEmpty)
+            Text(
+              error,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          if (row.retryAt != null &&
+              (entry.status == DownloadStatus.queued ||
+                  entry.status == DownloadStatus.failed))
+            _RetryWaiting(at: row.retryAt!, count: row.retryCount),
+          if (row.retryAt == null &&
+              row.retryCount > 0 &&
+              (entry.status == DownloadStatus.failed ||
+                  entry.status == DownloadStatus.paused))
+            Text('已重试 ${row.retryCount} 次，可手动重试'),
+          Wrap(
+            spacing: AppSpacing.xs,
+            children: [
+              if (running || entry.status == DownloadStatus.queued)
+                TextButton(
+                  onPressed: () => onAction('pause'),
+                  child: const Text('暂停'),
+                ),
+              if (entry.status == DownloadStatus.paused ||
+                  entry.status == DownloadStatus.failed ||
+                  (entry.status == DownloadStatus.queued &&
+                      row.retryAt != null))
+                TextButton(
+                  onPressed: row.sourceId == 'local-comic'
+                      ? null
+                      : () => onAction('resume'),
+                  child: Text(
+                    entry.status == DownloadStatus.failed ||
+                            row.retryAt != null ||
+                            (entry.status == DownloadStatus.paused &&
+                                row.retryCount > 0)
+                        ? '立即重试'
+                        : '继续',
+                  ),
+                ),
+              TextButton(
+                onPressed: () => onAction('cancel'),
+                child: Text(
+                  entry.status == DownloadStatus.done ? '移除下载' : '取消任务',
+                ),
+              ),
+              if (entry.status == DownloadStatus.done && entry.type != null)
+                TextButton(onPressed: onOpen, child: const Text('打开章节')),
+              if (entry.type == MediaType.manga &&
+                  entry.status != DownloadStatus.done &&
+                  row.path != null)
+                _PartialChapterAction(entry: entry, onOpen: onOpen),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RetryWaiting extends StatefulWidget {
+  const _RetryWaiting({required this.at, required this.count});
+  final DateTime at;
+  final int count;
+  @override
+  State<_RetryWaiting> createState() => _RetryWaitingState();
+}
+
+class _RetryWaitingState extends State<_RetryWaiting> {
+  Timer? _timer;
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final seconds = widget.at.difference(DateTime.now()).inSeconds;
+    return Text(
+      seconds > 0
+          ? '自动重试等待 ${seconds}s · 已重试 ${widget.count} 次'
+          : '等待自动重试 · 已重试 ${widget.count} 次',
+    );
+  }
+}
+
+class _PartialChapterAction extends StatefulWidget {
+  const _PartialChapterAction({required this.entry, required this.onOpen});
+  final DownloadEntry entry;
+  final VoidCallback onOpen;
+  @override
+  State<_PartialChapterAction> createState() => _PartialChapterActionState();
+}
+
+class _PartialChapterActionState extends State<_PartialChapterAction> {
+  late Future<bool> _available = _load();
+  Future<bool> _load() async {
+    final path = widget.entry.row.path;
+    if (path == null) return false;
+    final manifest = await DownloadManifest.read(path);
+    // Manifest.read verifies partial page paths, byte lengths and checksums.
+    return manifest != null && manifest.files.isNotEmpty;
+  }
+
+  @override
+  void didUpdateWidget(_PartialChapterAction oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.entry.row.path != widget.entry.row.path ||
+        oldWidget.entry.row.completedPages != widget.entry.row.completedPages ||
+        oldWidget.entry.row.status != widget.entry.row.status) {
+      _available = _load();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<bool>(
+    future: _available,
+    builder: (context, snapshot) => snapshot.data == true
+        ? TextButton(onPressed: widget.onOpen, child: const Text('阅读已下载页面'))
+        : const SizedBox.shrink(),
+  );
+}
+
+class _QueueOrderDialog extends StatefulWidget {
+  const _QueueOrderDialog({required this.entries});
+  final List<DownloadEntry> entries;
+  @override
+  State<_QueueOrderDialog> createState() => _QueueOrderDialogState();
+}
+
+class _QueueOrderDialogState extends State<_QueueOrderDialog> {
+  late final List<DownloadEntry> _entries = [...widget.entries];
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('待下载顺序'),
+    content: SizedBox(
+      width: 480,
+      height: 400,
+      child: Column(
+        children: [
+          const Text(
+            '仅调整当前媒体范围的等待、暂停与失败任务；'
+            '不会抢占正在下载的章节，新顺序从下一任务开始生效。',
+          ),
+          Expanded(
+            child: ReorderableListView.builder(
+              itemCount: _entries.length,
+              onReorderItem: (oldIndex, newIndex) => setState(() {
+                _entries.insert(newIndex, _entries.removeAt(oldIndex));
+              }),
+              itemBuilder: (context, index) {
+                final entry = _entries[index];
+                return ListTile(
+                  key: ValueKey(entry.row.id),
+                  title: Text(entry.chapterTitle),
+                  subtitle: Text('${entry.itemTitle} · ${entry.status.label}'),
+                  trailing: Padding(
+                    padding: const EdgeInsets.only(right: 36),
+                    child: Text('${index + 1}'),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('取消'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, [
+          for (final entry in _entries) entry.row.id,
+        ]),
+        child: const Text('保存顺序'),
+      ),
+    ],
+  );
 }
 
 class _DownloadSize extends StatefulWidget {
@@ -359,9 +673,10 @@ class _DownloadSizeState extends State<_DownloadSize> {
     var bytes = 0;
     final directories = <String>{};
     for (final path in widget.paths) {
-      final file = File(path);
-      final directory = await FileSystemEntity.isDirectory(path)
-          ? path
+      final actual = storageFilePath(path);
+      final file = File(actual);
+      final directory = await FileSystemEntity.isDirectory(actual)
+          ? actual
           : file.parent.path;
       if (!directories.add(directory)) continue;
       bytes += await VideoDownloader.occupiedBytes(directory);

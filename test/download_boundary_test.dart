@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -473,9 +474,12 @@ void main() {
     await LibraryRepository(db).cacheItem(item);
     // Queue snapshots survive restoration even when no runtime directory exists.
     final row = await enqueueRow(item.sourceId, item.remoteId, '/1234/');
+    final image = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==',
+    );
     final http = FakeHttpClient(
       (_) async => const SourceResponse(statusCode: 200, body: ''),
-    )..bytesHandler = (_) => [1, 2, 3];
+    )..bytesHandler = (_) => image;
     await DownloadService(
       repository: repository,
       http: http,
@@ -491,7 +495,7 @@ void main() {
     final manifest = await DownloadManifest.read(saved.path!);
     expect(
       await File('${saved.path}/${manifest!.files.single}').readAsBytes(),
-      [1, 2, 3],
+      image,
     );
   });
 

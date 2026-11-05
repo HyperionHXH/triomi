@@ -63,13 +63,11 @@ class MangaPageImage extends StatefulWidget {
     required this.sourceId,
     required this.fit,
     required this.settings,
-    required this.onRetry,
   });
   final ImageProvider provider;
   final String url, sourceId;
   final BoxFit fit;
   final MangaViewSettings settings;
-  final VoidCallback onRetry;
   @override
   State<MangaPageImage> createState() => _MangaPageImageState();
 }
@@ -99,6 +97,10 @@ class _MangaPageImageState extends State<MangaPageImage> {
   void _resolve() {
     final generation = ++_generation;
     if (_listener != null) _stream?.removeListener(_listener!);
+    _info?.dispose();
+    _info = null;
+    _crop = null;
+    _failed = false;
     final provider = widget.provider;
     _stream = provider.resolve(createLocalImageConfiguration(context));
     _listener = ImageStreamListener(
@@ -160,16 +162,27 @@ class _MangaPageImageState extends State<MangaPageImage> {
     super.dispose();
   }
 
+  Widget _placeholder(Widget child) => LayoutBuilder(
+    builder: (context, constraints) => constraints.hasBoundedHeight
+        ? SizedBox.expand(child: Center(child: child))
+        : AspectRatio(
+            // A spinner/button alone collapses unread webtoon pages to a few
+            // pixels, letting a fast fling skip the whole pending chapter.
+            aspectRatio: 2 / 3,
+            child: Center(child: child),
+          ),
+  );
+
   @override
   Widget build(BuildContext context) {
     if (_failed) {
-      return Center(
-        child: TextButton(
+      return _placeholder(
+        TextButton(
           onPressed: () async {
             await widget.provider.evict();
             if (!mounted) return;
-            widget.onRetry();
             _resolve();
+            setState(() {});
           },
           child: const Text('重新加载'),
         ),
@@ -177,7 +190,7 @@ class _MangaPageImageState extends State<MangaPageImage> {
     }
     final image = _info?.image, crop = _crop;
     if (image == null || crop == null) {
-      return const Center(child: CircularProgressIndicator());
+      return _placeholder(const CircularProgressIndicator());
     }
     Widget content = SizedBox(
       width: crop.width,
@@ -270,6 +283,7 @@ class _MangaPageImageState extends State<MangaPageImage> {
             ),
     );
     return InteractiveViewer(
+      key: ValueKey((widget.url, widget.fit)),
       minScale: 1,
       maxScale: 4,
       child: GestureDetector(

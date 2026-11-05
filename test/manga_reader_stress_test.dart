@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
@@ -17,11 +18,15 @@ import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
+import 'package:triomi/core/storage/storage_paths.dart';
 import 'package:triomi/features/downloads/data/download_providers.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
+import 'package:triomi/features/downloads/data/image_download_checkpoint.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
+import 'package:triomi/features/reader/manga_page_image.dart';
 import 'package:triomi/features/reader/manga_reader_page.dart';
 import 'package:triomi/features/reader/reader_settings.dart';
+import 'package:triomi/features/reader/reader_work_settings.dart';
 
 import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
@@ -32,6 +37,7 @@ import 'fixtures/test_database.dart';
 /// 预取和正式加载各消费一条队列记录。
 class _ScriptedSource implements ContentSource, ContentProvider {
   final behaviors = <String, List<Future<ChapterContent> Function()>>{};
+  final requests = <String>[];
 
   @override
   SourceDescriptor get descriptor => const SourceDescriptor(
@@ -47,6 +53,7 @@ class _ScriptedSource implements ContentSource, ContentProvider {
 
   @override
   Future<ChapterContent> content(Chapter chapter) {
+    requests.add(chapter.remoteId);
     final queue = behaviors[chapter.remoteId];
     if (queue == null || queue.isEmpty) {
       throw StateError('脚本未给 ${chapter.remoteId} 安排行为（预取/加载各消费一条）');
@@ -57,7 +64,7 @@ class _ScriptedSource implements ContentSource, ContentProvider {
 
 /// 1x1 PNG（与 reader_restart_test 同款，避免依赖外网）。
 const String _pngBase64 =
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
 
 /// 在 [dir] 里写 [count] 张真 PNG，返回 file:// URI 列表。
 List<String> fileImages(Directory dir, String prefix, int count) {
@@ -114,7 +121,7 @@ void main() {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 15)),
       );
-      await tester.pump();
+      await tester.pump(Duration.zero);
     }
   }
 
@@ -124,29 +131,46 @@ void main() {
     required _ScriptedSource source,
     required List<Chapter> chapters,
     Future<void> Function(LibraryRepository repository)? seed,
+    ReadingMode mode = ReadingMode.ltr,
+    DownloadRepository Function(AppDatabase db)? downloads,
   }) async {
     final db = openTestDatabase();
     final repository = LibraryRepository(db);
     if (seed != null) await seed(repository);
+    final downloadRepository = downloads?.call(db) ?? _NoDownloads(db);
+    if (downloadRepository is _LiveDownloads) {
+      await tester.runAsync(() async {
+        downloadRepository.ioZone = Zone.current;
+      });
+    }
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
         preferencesProvider.overrideWithValue(memoryPreferences()),
         secureStoreProvider.overrideWithValue(MemorySecureStore()),
-        downloadRepositoryProvider.overrideWithValue(_NoDownloads(db)),
+        downloadRepositoryProvider.overrideWithValue(downloadRepository),
         sourcesProvider.overrideWith(() => _StubSources(source)),
       ],
     );
-    // 默认阅读模式是 RTL（right = 上一页）；压力测试统一用 LTR 语义。
-    await container
-        .read(readerSettingsProvider.notifier)
-        .setMode(ReadingMode.ltr);
+    // Keep keyboard semantics explicit while exercising each supported mode.
+    await container.read(readerSettingsProvider.notifier).setMode(mode);
     const platform = MethodChannel('triomi/platform');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(platform, (_) async => null);
     addTearDown(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(platform, null);
+    });
+    addTearDown(() async {
+      // Run even after an assertion fails, before temporary files are removed.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(Duration.zero);
+      container.dispose();
+      await tester.pump(Duration.zero);
+      await tester.runAsync(
+        () => db.close().timeout(const Duration(seconds: 5)),
+      );
+      await tester.pump(Duration.zero);
     });
 
     await tester.pumpWidget(
@@ -170,6 +194,34 @@ void main() {
       .widgetList<Text>(find.byType(Text))
       .map((widget) => widget.data ?? '')
       .firstWhere((text) => RegExp(r'^\d+\s*/\s*\d+$').hasMatch(text));
+
+  Future<void> waitUntil(
+    WidgetTester tester,
+    bool Function() ready,
+    String reason,
+  ) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    await tester.pump(Duration.zero);
+    while (!ready() && DateTime.now().isBefore(deadline)) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 15)),
+      );
+      await tester.pump(Duration.zero);
+    }
+    expect(
+      ready(),
+      true,
+      reason:
+          '$reason; reader text: ${tester.widgetList<Text>(find.byType(Text)).map((text) => text.data).join(' | ')}',
+    );
+  }
+
+  Future<void> realIo(
+    WidgetTester tester,
+    Future<void> Function() action,
+  ) async {
+    await tester.runAsync(() => action().timeout(const Duration(seconds: 5)));
+  }
 
   testWidgets('换章慢响应：加载期无滑杆无 0/0，完成后显示新章页码', (tester) async {
     final dir = Directory.systemTemp.createTempSync('triomi_d97_slow_');
@@ -416,6 +468,529 @@ void main() {
     await settle(tester);
     container.dispose();
   });
+  testWidgets('empty chapter lists show a recoverable empty state', (
+    tester,
+  ) async {
+    final (container, _) = await pumpReader(
+      tester,
+      source: _ScriptedSource(),
+      chapters: [],
+    );
+    await settle(tester);
+    expect(find.text('没有可阅读的章节'), findsOneWidget);
+    expect(find.byType(Slider), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+    container.dispose();
+  });
+
+  testWidgets('page keys during loading do not skip the pending chapter', (
+    tester,
+  ) async {
+    final dir = Directory.systemTemp.createTempSync('triomi_loading_keys_');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final images = fileImages(dir, 'pending', 2);
+    final source = _ScriptedSource();
+    final (gate, loader) = deferred();
+    source.behaviors[c1.remoteId] = [loader];
+    source.behaviors[c2.remoteId] = [() => instant(images)];
+    final (container, _) = await pumpReader(
+      tester,
+      source: source,
+      chapters: [c1, c2],
+    );
+    await settle(tester);
+    for (var i = 0; i < 8; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    }
+    expect(source.requests, [c1.remoteId]);
+    expect(find.text('第一话'), findsOneWidget);
+    gate.complete(ChapterContent(images: images));
+    await settle(tester);
+    expect(indicator(tester), '1/2');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+    container.dispose();
+  });
+
+  for (final mode in ReadingMode.values) {
+    testWidgets('${mode.name}: repeated fast end flings keep valid progress', (
+      tester,
+    ) async {
+      final dir = Directory.systemTemp.createTempSync('triomi_mode_end_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final images = fileImages(dir, 'end', 3);
+      final source = _ScriptedSource();
+      source.behaviors[c1.remoteId] = [() => instant(images)];
+      final (container, repository) = await pumpReader(
+        tester,
+        source: source,
+        chapters: [c1],
+        mode: mode,
+      );
+      await settle(tester);
+      tester.widget<Slider>(find.byType(Slider)).onChanged!(3);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      await settle(tester);
+      expect(indicator(tester), '3/3');
+      final body = find.byType(MangaReaderPage);
+      final delta = switch (mode) {
+        ReadingMode.rtl => const Offset(900, 0),
+        ReadingMode.ltr => const Offset(-900, 0),
+        _ => const Offset(0, -900),
+      };
+      for (var i = 0; i < 6; i++) {
+        await tester.fling(body, delta, 8000);
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+      await settle(tester);
+      expect(tester.takeException(), isNull);
+      expect(indicator(tester), '3/3');
+      final saved = await tester.runAsync(
+        () => repository.chapterPositionOf('stress-src', 'book', 'c1'),
+      );
+      expect(saved, 2);
+      expect(source.requests, [c1.remoteId]);
+      await tester.pumpWidget(const SizedBox());
+      await settle(tester);
+      container.dispose();
+    });
+    testWidgets('${mode.name}: empty content retries into a one-page chapter', (
+      tester,
+    ) async {
+      final dir = Directory.systemTemp.createTempSync('triomi_mode_single_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final images = fileImages(dir, 'one', 1);
+      final source = _ScriptedSource();
+      source.behaviors[c1.remoteId] = [
+        () => instant([]),
+        () => instant(images),
+      ];
+      final (container, _) = await pumpReader(
+        tester,
+        source: source,
+        chapters: [c1],
+        mode: mode,
+      );
+      await settle(tester);
+      expect(find.byType(Slider), findsNothing);
+      expect(find.text('重试'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+      expect(source.requests, [
+        c1.remoteId,
+      ], reason: 'an empty-content error cannot turn pages');
+      await tester.tap(find.text('重试'));
+      await settle(tester);
+      expect(indicator(tester), '1/1');
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+      await tester.pump();
+      expect(indicator(tester), '1/1');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await settle(tester);
+      container.dispose();
+    });
+  }
+
+  testWidgets('rotation and mode changes normalize spreads without resetting', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(500, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final dir = Directory.systemTemp.createTempSync('triomi_spread_');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final images = fileImages(dir, 'spread', 7);
+    final source = _ScriptedSource();
+    source.behaviors[c1.remoteId] = [() => instant(images)];
+    final (container, repository) = await pumpReader(
+      tester,
+      source: source,
+      chapters: [c1],
+      seed: (repository) => repository.recordHistory(
+        sourceId: 'stress-src',
+        remoteId: 'book',
+        chapter: c1,
+        position: 3,
+      ),
+    );
+    await settle(tester);
+    expect(indicator(tester), '4/7');
+    await container
+        .read(readerWorkSettingsRepositoryProvider)
+        .set(
+          (sourceId: item.sourceId, remoteId: item.remoteId),
+          'doublePage',
+          true,
+        );
+    await settle(tester);
+    tester.view.physicalSize = const Size(1000, 700);
+    await tester.pump();
+    await settle(tester);
+    expect(
+      indicator(tester),
+      '3/7',
+      reason: 'spread starts on the visible pair first page',
+    );
+    expect(tester.widget<PageView>(find.byType(PageView)).controller!.page, 1);
+    expect(find.byKey(ValueKey(images[2])).hitTestable(), findsOneWidget);
+    expect(find.byKey(ValueKey(images[3])).hitTestable(), findsOneWidget);
+    expect(find.byKey(ValueKey(images[6])).hitTestable(), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await settle(tester);
+    expect(tester.widget<PageView>(find.byType(PageView)).controller!.page, 2);
+    expect(find.byKey(ValueKey(images[4])).hitTestable(), findsOneWidget);
+    expect(find.byKey(ValueKey(images[5])).hitTestable(), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await settle(tester);
+    expect(tester.widget<PageView>(find.byType(PageView)).controller!.page, 1);
+    for (final mode in [
+      ReadingMode.rtl,
+      ReadingMode.vertical,
+      ReadingMode.webtoon,
+      ReadingMode.ltr,
+    ]) {
+      await container.read(readerSettingsProvider.notifier).setMode(mode);
+      await settle(tester);
+      expect(indicator(tester), '3/7');
+      expect(tester.takeException(), isNull);
+    }
+    final saved = await tester.runAsync(
+      () => repository.chapterPositionOf('stress-src', 'book', 'c1'),
+    );
+    expect(saved, 2);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+    container.dispose();
+  });
+  for (final mode in ReadingMode.values) {
+    testWidgets(
+      '${mode.name}: verified partial pages append without online load or reset',
+      (tester) async {
+        final dir = Directory.systemTemp.createTempSync(
+          'triomi_partial_reader_',
+        );
+        addTearDown(() => dir.deleteSync(recursive: true));
+        final names = ['0001.png', '0002.png', '0003.png'];
+        await realIo(tester, () async {
+          final checkpoint = await ImageDownloadCheckpoint.load(dir);
+          for (final name in names) {
+            await File('${dir.path}/$name')
+                .writeAsBytes(base64Decode(_pngBase64));
+            await checkpoint.record(name, 'https://example.test/$name');
+          }
+          await DownloadManifest.write(
+            directory: dir.path,
+            files: names.take(2).toList(),
+            title: c1.title,
+            totalPages: 3,
+            complete: false,
+          );
+        });
+        final source = _ScriptedSource();
+        late _LiveDownloads downloads;
+        final (container, repository) = await pumpReader(
+          tester,
+          source: source,
+          chapters: [c1, c2],
+          mode: mode,
+          downloads: (db) => downloads = _LiveDownloads(db, dir.path),
+        );
+        await waitUntil(
+          tester,
+          () => find.text('1/2').evaluate().isNotEmpty,
+          'verified initial prefix finishes loading',
+        );
+        expect(
+          source.requests,
+          isEmpty,
+          reason: 'offline prefix precedes provider lookup and prefetch',
+        );
+        expect(indicator(tester), '1/2');
+        tester.widget<Slider>(find.byType(Slider)).onChanged!(2);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        await settle(tester);
+        expect(indicator(tester), '2/2');
+        await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+        await tester.pump();
+        expect(find.text('已到已下载页面，等待后续下载'), findsOneWidget);
+        expect(
+          source.requests,
+          isEmpty,
+          reason: 'a partial boundary is not chapter end',
+        );
+        await realIo(
+          tester,
+          () => DownloadManifest.write(
+            directory: dir.path,
+            files: names,
+            title: c1.title,
+            totalPages: 3,
+            complete: false,
+          ),
+        );
+        downloads.changes.add(dir.path);
+        await waitUntil(
+          tester,
+          () => find.text('2/3').evaluate().isNotEmpty,
+          'verified prefix growth finishes loading',
+        );
+        expect(
+          indicator(tester),
+          '2/3',
+          reason: 'same directory update must retain page and controller',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        await settle(tester);
+        expect(indicator(tester), '3/3');
+        final saved = await tester.runAsync(
+          () => repository.chapterPositionOf('stress-src', 'book', 'c1'),
+        );
+        expect(saved, 2);
+        expect(source.requests, isEmpty);
+        final manifestPath =
+            '${dir.path}${Platform.pathSeparator}${DownloadManifest.fileName}';
+        late final String oldSnapshot;
+        await realIo(tester, () async {
+          oldSnapshot = await File(manifestPath).readAsString();
+        });
+        final reads = _ManifestReadOverrides(manifestPath, oldSnapshot);
+        final previousIo = IOOverrides.current;
+        IOOverrides.global = reads;
+        try {
+          downloads.changes.add(dir.path);
+          await waitUntil(
+            tester,
+            () => reads.started.isCompleted,
+            'the earlier manifest read is held before completion',
+          );
+          expect(reads.started.isCompleted, true);
+          await realIo(
+            tester,
+            () => DownloadManifest.write(
+              directory: dir.path,
+              files: names,
+              title: c1.title,
+              totalPages: 3,
+              complete: true,
+            ),
+          );
+          downloads.changes.add(dir.path);
+          await waitUntil(
+            tester,
+            () => find.textContaining('${c1.title} · 已下载').evaluate().isEmpty,
+            'the newer complete manifest wins before releasing the older read',
+          );
+          expect(find.textContaining('${c1.title} · 已下载'), findsNothing);
+          // Complete the earlier false snapshot after the true snapshot.
+          reads.release.complete();
+          await settle(tester, rounds: 40);
+          expect(find.textContaining('${c1.title} · 已下载'), findsNothing);
+        } finally {
+          if (!reads.release.isCompleted) reads.release.complete();
+          IOOverrides.global = previousIo;
+        }
+        source.behaviors[c2.remoteId] = [
+          () => instant([Uri.file('${dir.path}/${names.first}').toString()]),
+        ];
+        await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+        await waitUntil(
+          tester,
+          () => find.text('1/1').evaluate().isNotEmpty,
+          'completed chapter boundary enters the next chapter',
+        );
+        expect(find.text('第二话'), findsOneWidget);
+        expect(indicator(tester), '1/1');
+        expect(source.requests, [c2.remoteId]);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+        await settle(tester);
+        await realIo(tester, () async => downloads.changes.close());
+        container.dispose();
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
+    for (final navigate in [false, true]) {
+      testWidgets(
+        '${mode.name}: pending saved anchor survives prefix growth; navigate=$navigate',
+        (tester) async {
+          final dir = Directory.systemTemp.createTempSync(
+            'triomi_pending_anchor_',
+          );
+          addTearDown(() => dir.deleteSync(recursive: true));
+          final names = [
+            for (var i = 1; i <= 6; i++) '${i.toString().padLeft(4, '0')}.png',
+          ];
+          await realIo(tester, () async {
+            final checkpoint = await ImageDownloadCheckpoint.load(dir);
+            for (final name in names) {
+              await File('${dir.path}/$name')
+                  .writeAsBytes(base64Decode(_pngBase64));
+              await checkpoint.record(name, 'https://example.test/$name');
+            }
+          });
+          Future<void> publish(int count) => realIo(
+            tester,
+            () => DownloadManifest.write(
+              directory: dir.path,
+              files: names.take(count).toList(),
+              title: c1.title,
+              totalPages: names.length,
+              complete: false,
+            ),
+          );
+          await publish(2);
+          final source = _ScriptedSource();
+          late _LiveDownloads downloads;
+          final (container, repository) = await pumpReader(
+            tester,
+            source: source,
+            chapters: [c1],
+            mode: mode,
+            downloads: (db) => downloads = _LiveDownloads(db, dir.path),
+            seed: (repository) => repository.recordHistory(
+              sourceId: item.sourceId,
+              remoteId: item.remoteId,
+              chapter: c1,
+              position: 5,
+            ),
+          );
+          await waitUntil(
+            tester,
+            () => find.text('2/2').evaluate().isNotEmpty,
+            'verified partial prefix opens at its temporary displayable anchor',
+          );
+          expect(indicator(tester), '2/2');
+          expect(
+            await tester.runAsync(
+              () => repository.chapterPositionOf(
+                item.sourceId,
+                item.remoteId,
+                c1.remoteId,
+              ),
+            ),
+            5,
+            reason: 'opening a shorter prefix is not navigation',
+          );
+          if (navigate) {
+            tester.widget<Slider>(find.byType(Slider)).onChanged!(1);
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 250));
+            await settle(tester);
+          }
+          await publish(3);
+          downloads.changes.add(dir.path);
+          await waitUntil(
+            tester,
+            () => find.text(navigate ? '1/3' : '2/3').evaluate().isNotEmpty,
+            'intermediate prefix growth finishes verification',
+          );
+          expect(
+            await tester.runAsync(
+              () => repository.chapterPositionOf(
+                item.sourceId,
+                item.remoteId,
+                c1.remoteId,
+              ),
+            ),
+            navigate ? 0 : 5,
+          );
+          await publish(6);
+          downloads.changes.add(dir.path);
+          await waitUntil(
+            tester,
+            () => find.text(navigate ? '1/6' : '6/6').evaluate().isNotEmpty,
+            'available saved anchor restores after prefix verification',
+          );
+          expect(indicator(tester), navigate ? '1/6' : '6/6');
+          if (mode != ReadingMode.webtoon) {
+            expect(
+              tester.widget<PageView>(find.byType(PageView)).controller!.page,
+              navigate ? 0 : 5,
+            );
+          }
+          expect(
+            await tester.runAsync(
+              () => repository.chapterPositionOf(
+                item.sourceId,
+                item.remoteId,
+                c1.remoteId,
+              ),
+            ),
+            navigate ? 0 : 5,
+          );
+          expect(source.requests, isEmpty);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+          await settle(tester);
+          await realIo(tester, () async => downloads.changes.close());
+          container.dispose();
+        },
+        timeout: const Timeout(Duration(seconds: 30)),
+      );
+    }
+  }
+  testWidgets(
+    'Windows long storage paths decode offline images without leaking API prefixes into file URIs',
+    (tester) async {
+      final root = Directory.systemTemp.createTempSync('triomi_long_reader_');
+      addTearDown(
+        () => Directory(storageFilePath(root.path)).deleteSync(recursive: true),
+      );
+      final segment = List.filled(70, 'a').join();
+      final directory = Directory(
+        storageFilePath('${root.path}/$segment/$segment/$segment/$segment'),
+      );
+      final imagePath = storageFilePath('${directory.path}/0001.png');
+      await realIo(tester, () async {
+        await directory.create(recursive: true);
+        await File(imagePath).writeAsBytes(base64Decode(_pngBase64));
+        await DownloadManifest.write(
+          directory: directory.path,
+          files: ['0001.png'],
+          title: c1.title,
+        );
+      });
+      final source = _ScriptedSource();
+      final (container, _) = await pumpReader(
+        tester,
+        source: source,
+        chapters: [c1],
+        downloads: (db) => _LiveDownloads(db, directory.path),
+      );
+      await waitUntil(
+        tester,
+        () => find.byType(InteractiveViewer).evaluate().isNotEmpty,
+        'the verified long-path page actually decodes',
+      );
+      final image = tester.widget<MangaPageImage>(find.byType(MangaPageImage));
+      expect(Uri.parse(image.url).toFilePath(), storagePathIdentity(imagePath));
+      expect(image.url, isNot(contains('%3F')));
+      expect(find.text('重新加载'), findsNothing);
+      expect(indicator(tester), '1/1');
+      expect(source.requests, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await settle(tester);
+      final downloads =
+          container.read(downloadRepositoryProvider) as _LiveDownloads;
+      await realIo(tester, () async => downloads.changes.close());
+      container.dispose();
+    },
+    skip: !Platform.isWindows,
+    timeout: const Timeout(Duration(seconds: 30)),
+  );
 }
 
 class _StubSources extends SourceRegistryController {
@@ -441,4 +1016,82 @@ class _NoDownloads extends DownloadRepository {
     String sourceId,
     String chapterRemoteId,
   ) async => null;
+}
+
+class _LiveDownloads extends _NoDownloads {
+  _LiveDownloads(super.db, this.directory);
+  final String directory;
+  final changes = StreamController<String?>.broadcast();
+  late final Zone ioZone;
+
+  @override
+  Future<String?> localImageDir(
+    String sourceId,
+    String chapterRemoteId,
+  ) async => chapterRemoteId == 'c1' ? directory : null;
+
+  @override
+  Stream<String?> watchLocalImageDir(String sourceId, String chapterRemoteId) =>
+      _RealIoNotifications(changes.stream, ioZone);
+}
+
+/// Manifest verification consumes real OS file streams. Enter the runAsync
+/// zone at notification delivery, not just while publishing fixture bytes;
+/// otherwise each new hash stream inherits FakeAsync again.
+class _RealIoNotifications extends Stream<String?> {
+  _RealIoNotifications(this.source, this.zone);
+  final Stream<String?> source;
+  final Zone zone;
+
+  @override
+  StreamSubscription<String?> listen(
+    void Function(String?)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) => source.listen(
+    onData == null ? null : zone.bindUnaryCallback(onData),
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
+}
+
+/// Holds one real manifest read so the watcher finishes snapshots out of order.
+final class _ManifestReadOverrides extends IOOverrides {
+  _ManifestReadOverrides(this.manifestPath, this.oldSnapshot);
+  final String manifestPath;
+  final String oldSnapshot;
+  final started = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  File createFile(String path) {
+    final file = super.createFile(path);
+    return storagePathIdentity(path) == storagePathIdentity(manifestPath)
+        ? _HeldManifestFile(file, this)
+        : file;
+  }
+}
+
+class _HeldManifestFile implements File {
+  _HeldManifestFile(this.file, this.reads);
+  final File file;
+  final _ManifestReadOverrides reads;
+
+  @override
+  String get path => file.path;
+
+  @override
+  Future<String> readAsString({Encoding encoding = utf8}) async {
+    if (!reads.started.isCompleted) {
+      reads.started.complete();
+      await reads.release.future;
+      return reads.oldSnapshot;
+    }
+    return file.readAsString(encoding: encoding);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

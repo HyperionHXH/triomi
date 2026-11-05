@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import '../../../core/models/media_type.dart';
 import '../../../core/models/source_exception.dart';
 import '../../../core/source/http_client.dart';
+import '../../../core/storage/storage_paths.dart';
 import 'hls_playlist.dart';
 
 class DownloadPaused implements Exception {
@@ -24,6 +25,8 @@ class VideoDownloader {
     this.concurrency = 3,
     this.availableBytes,
     this.cookieForUrl,
+    this.onBytes,
+    this.onTotalBytes,
   });
   final SourceHttpClient http;
   final String sourceId;
@@ -31,6 +34,8 @@ class VideoDownloader {
   final bool Function()? shouldContinue;
   final int concurrency;
   final Future<int?> Function(String directory)? availableBytes;
+  final void Function(int bytes)? onBytes;
+  final void Function(int? bytes)? onTotalBytes;
 
   /// Exact URL lookup preserves native cookie domain/path/secure scoping.
   final Future<String?> Function(String url)? cookieForUrl;
@@ -43,7 +48,7 @@ class VideoDownloader {
     FutureOr<void> Function(double progress)? onProgress,
   }) async {
     final uri = _uri(url);
-    final dir = Directory(directory);
+    final dir = Directory(storageFilePath(directory));
     await dir.create(recursive: true);
     return mimeType == 'application/vnd.apple.mpegurl' || isHlsUrl(url)
         ? _hls(uri, dir, onProgress)
@@ -121,7 +126,19 @@ class VideoDownloader {
       if (!_redirect(response.statusCode)) {
         if (response.statusCode < 200 || response.statusCode >= 300) {
           await response.stream.listen(null).cancel();
-          throw _error('视频请求 HTTP ${response.statusCode}');
+          throw SourceException(
+            sourceId: sourceId,
+            type: response.statusCode == 429
+                ? SourceErrorType.rateLimited
+                : response.statusCode == 401 || response.statusCode == 403
+                ? SourceErrorType.auth
+                : SourceErrorType.network,
+            message: '视频请求 HTTP ${response.statusCode}',
+            statusCode: response.statusCode,
+            retryAfter: SourceException.parseRetryAfter(
+              response.headers['retry-after'],
+            ),
+          );
         }
         return response;
       }
@@ -147,7 +164,7 @@ class VideoDownloader {
   }
 
   Future<void> _json(File file, Map<String, Object?> data) async {
-    final temporary = File('${file.path}.tmp');
+    final temporary = File(storageFilePath('${file.path}.tmp'));
     await temporary.writeAsString(jsonEncode(data), flush: true);
     await _replace(temporary, file);
   }
@@ -163,9 +180,9 @@ class VideoDownloader {
     FutureOr<void> Function(double)? progress,
   ) async {
     final suffix = _extension(url);
-    final destination = File('${directory.path}/video$suffix');
-    final partial = File('${destination.path}.part');
-    final journal = File('${destination.path}.resume.json');
+    final destination = File(storageFilePath('${directory.path}/video$suffix'));
+    final partial = File(storageFilePath('${destination.path}.part'));
+    final journal = File(storageFilePath('${destination.path}.resume.json'));
     final state = await _state(journal);
     final identity = _hash(url.toString());
     var offset = await partial.exists() ? await partial.length() : 0;
@@ -198,6 +215,7 @@ class VideoDownloader {
       offset = 0;
       total = response.contentLength;
     }
+    onTotalBytes?.call(total == null ? null : total - offset);
     await _space(directory, response);
     await _json(journal, {
       'identity': identity,
@@ -214,6 +232,7 @@ class VideoDownloader {
         await _check();
         sink.add(chunk);
         received += chunk.length;
+        onBytes?.call(chunk.length);
         if (progress != null) {
           final value = total == null || total <= 0
               ? 0.0
@@ -263,9 +282,18 @@ class VideoDownloader {
         continue;
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw _error(
-          'HLS 列表 HTTP ${response.statusCode}',
-          type: SourceErrorType.network,
+        throw SourceException(
+          sourceId: sourceId,
+          type: response.statusCode == 429
+              ? SourceErrorType.rateLimited
+              : response.statusCode == 401 || response.statusCode == 403
+              ? SourceErrorType.auth
+              : SourceErrorType.network,
+          message: 'HLS 列表 HTTP ${response.statusCode}',
+          statusCode: response.statusCode,
+          retryAfter: SourceException.parseRetryAfter(
+            response.headers['retry-after'],
+          ),
         );
       }
       loaded = response;
@@ -307,15 +335,17 @@ class VideoDownloader {
         while (!failed && next < queue.length) {
           final resource = queue[next++];
           await _check();
-          final file = File('${directory.path}/${names[resource.identity]}');
-          final checksumFile = File('${file.path}.json');
+          final file = File(
+            storageFilePath('${directory.path}/${names[resource.identity]}'),
+          );
+          final checksumFile = File(storageFilePath('${file.path}.json'));
           final cached = await _state(checksumFile);
           final valid =
               await file.exists() &&
               cached['bytes'] == await file.length() &&
               cached['sha256'] == await _fileHash(file);
           if (!valid) {
-            final temporary = File('${file.path}.part');
+            final temporary = File(storageFilePath('${file.path}.part'));
             final response = await _bytes(
               resource.uri,
               url,
@@ -342,6 +372,7 @@ class VideoDownloader {
                 if (failed) throw const DownloadPaused();
                 sink.add(chunk);
                 received += chunk.length;
+                onBytes?.call(chunk.length);
               }
               await sink.flush();
             } finally {
@@ -373,8 +404,8 @@ class VideoDownloader {
 
     await Future.wait(List.generate(concurrency.clamp(1, 4), (_) => worker()));
     await _check();
-    final output = File('${directory.path}/video.m3u8');
-    final temporary = File('${output.path}.part');
+    final output = File(storageFilePath('${directory.path}/video.m3u8'));
+    final temporary = File(storageFilePath('${output.path}.part'));
     await temporary.writeAsString(playlist.offline(names), flush: true);
     await _replace(temporary, output);
     if (progress != null) await progress(1);
@@ -382,7 +413,7 @@ class VideoDownloader {
   }
 
   static Future<int> occupiedBytes(String path) async {
-    final directory = Directory(path);
+    final directory = Directory(storageFilePath(path));
     if (!await directory.exists()) return 0;
     var bytes = 0;
     await for (final entry in directory.list(

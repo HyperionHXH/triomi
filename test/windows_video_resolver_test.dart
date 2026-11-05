@@ -377,7 +377,7 @@ void main() {
     },
   );
   testWidgets(
-    'resolved download ignores page credentials and captures exact native cookie',
+    'minimized download resolves while ignoring page credentials and capturing exact native cookie',
     (tester) async {
       final messenger =
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -440,6 +440,7 @@ void main() {
                     webPage: true,
                     headers: {'User-Agent': 'configured-browser'},
                   ),
+                  allowBackground: true,
                 );
               },
             ),
@@ -450,6 +451,13 @@ void main() {
       await tester.tap(find.text('下载'));
       await pumpUntil(tester, () => loaded.isCompleted, 'player navigation');
       await tester.pumpAndSettle();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      await tester.pump();
+      expect(
+        closed.isCompleted,
+        isFalse,
+        reason: 'minimizing a download must not dispose its authorized browser',
+      );
       void reportMedia(String url) {
         // Enqueue platform events before pumping, never await their FakeAsync
         // acknowledgement before the callbacks that produce it can run.

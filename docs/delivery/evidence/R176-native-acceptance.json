@@ -1,0 +1,1105 @@
+{
+  "androidBackground": {
+    "fixture": true,
+    "platform": "android",
+    "updatedAt": "2026-11-05T10:27:18.515061Z",
+    "isolatedHive": true,
+    "isolatedSqlite": true,
+    "userCredentialsOpened": false,
+    "networkFixtureOnline": true,
+    "responseBytes": 4223778,
+    "httpRequests": {
+      "/manga-work-1-chapter-1/0.png": 1,
+      "/manga-work-1-chapter-1/1.png": 1,
+      "/manga-work-1-chapter-1/2.png": 1,
+      "/manga-work-1-chapter-1/3.png": 1,
+      "/novel-work-1-chapter-1/body.txt": 1,
+      "/anime-work-1-chapter-1/video.mp4": 1
+    },
+    "unavailableRequests": 0,
+    "partialReady": false,
+    "readerOpenedDuringDownload": false,
+    "workCount": 6,
+    "chapterCount": 12,
+    "downloads": [
+      {
+        "type": "novel",
+        "work": "novel-work-1",
+        "entries": [
+          {
+            "chapter": "novel-work-1-chapter-1",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 5991,
+            "totalBytes": null,
+            "completedPages": 0,
+            "totalPages": null,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          }
+        ]
+      },
+      {
+        "type": "anime",
+        "work": "anime-work-1",
+        "entries": [
+          {
+            "chapter": "anime-work-1-chapter-1",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 4194304,
+            "totalBytes": 4194304,
+            "completedPages": 0,
+            "totalPages": null,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          }
+        ]
+      },
+      {
+        "type": "manga",
+        "work": "manga-work-1",
+        "entries": [
+          {
+            "chapter": "manga-work-1-chapter-1",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 23483,
+            "totalBytes": null,
+            "completedPages": 4,
+            "totalPages": 4,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          }
+        ]
+      }
+    ],
+    "fileCount": 11,
+    "files": [
+      {
+        "path": "documents/triomi.sqlite",
+        "bytes": 135168
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/48d0fad97d739db7db7b90d69c158b9e72e4f16a65372901a3475cafbe8c95ce/manifest.json",
+        "bytes": 121
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/48d0fad97d739db7db7b90d69c158b9e72e4f16a65372901a3475cafbe8c95ce/0001.png",
+        "bytes": 5739
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/48d0fad97d739db7db7b90d69c158b9e72e4f16a65372901a3475cafbe8c95ce/download-pages.json",
+        "bytes": 759
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/48d0fad97d739db7db7b90d69c158b9e72e4f16a65372901a3475cafbe8c95ce/0002.png",
+        "bytes": 5804
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/48d0fad97d739db7db7b90d69c158b9e72e4f16a65372901a3475cafbe8c95ce/0003.png",
+        "bytes": 6081
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/48d0fad97d739db7db7b90d69c158b9e72e4f16a65372901a3475cafbe8c95ce/0004.png",
+        "bytes": 5859
+      },
+      {
+        "path": "documents/downloads/novel/0392d0c7541fd86ff6d03d6c569ca077a3cd4a87897c48ca5ffd5d5351bb8a5c/7de16b4117dbe7e7e2cc38b097fee674340a78ddac721334b8e55038acc09767/03042585ef237160540083f6b19e8020850deb091577bbbf4fba6a84cd8fa05d/chapter.json",
+        "bytes": 6186
+      },
+      {
+        "path": "documents/downloads/anime/31ec7ca9ce325266751dc76bc466dc319401920b57165ed968d8f0efd9e03266/688d8be0a3798339249d0a4dcf5a580025a165c5d2abb6c1523fab4be8f82d1c/f92105fcab1476a66a92968c21628f80026b0223ae65c3b7e15e2d04a702e890/video.mp4",
+        "bytes": 4194304
+      },
+      {
+        "path": "hive/settings.hive",
+        "bytes": 141
+      },
+      {
+        "path": "hive/settings.lock",
+        "bytes": 18
+      }
+    ],
+    "backupLocationSelected": false,
+    "backupUsesSaf": false,
+    "backupCount": 0,
+    "backupBytes": 0,
+    "events": [
+      {
+        "at": "2026-11-05T10:17:31.774932Z",
+        "event": "fixture_started",
+        "videoBytes": 4194304,
+        "pngPages": 4
+      },
+      {
+        "at": "2026-11-05T10:17:38.510116Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:17:39.236325Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:18:23.775868Z",
+        "event": "partial_setup_error",
+        "type": "TimeoutException"
+      },
+      {
+        "at": "2026-11-05T10:19:09.786649Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:19:10.055905Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:19:10.819346Z",
+        "event": "lifecycle",
+        "state": "hidden"
+      },
+      {
+        "at": "2026-11-05T10:19:10.821861Z",
+        "event": "lifecycle",
+        "state": "paused"
+      },
+      {
+        "at": "2026-11-05T10:19:26.742954Z",
+        "event": "lifecycle",
+        "state": "hidden"
+      },
+      {
+        "at": "2026-11-05T10:19:26.745026Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:19:26.964145Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:20:46.955453Z",
+        "event": "production_enqueue",
+        "requestedChapters": 3
+      },
+      {
+        "at": "2026-11-05T10:22:57.398699Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:22:58.019211Z",
+        "event": "lifecycle",
+        "state": "hidden"
+      },
+      {
+        "at": "2026-11-05T10:22:58.026103Z",
+        "event": "lifecycle",
+        "state": "paused"
+      }
+    ]
+  },
+  "androidPlugin": {
+    "claim": "Persisted production installer + real staged-file/host-source evidence",
+    "installedVersion": "1.6.1",
+    "enabledPackages": [
+      "eu.kanade.tachiyomi.extension.th.one08read"
+    ],
+    "status": {
+      "ok": true,
+      "packageName": "eu.kanade.tachiyomi.extension.th.one08read",
+      "versionCode": 106001,
+      "versionName": "1.6.1",
+      "signerSha256": "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2",
+      "factoryLoaded": false,
+      "executable": true,
+      "abi": "1.6",
+      "nsfw": true,
+      "sourceCount": 1,
+      "sources": [
+        {
+          "id": "64300093736011954",
+          "name": "108Read",
+          "lang": "th",
+          "supportsLatest": true,
+          "configurable": false,
+          "nsfw": true
+        }
+      ],
+      "sha256": "b0c0f9921c31a9af5f47481fc5249d5a88e20d705c5c66579ee4a73d96592ff6",
+      "stagedPath": "/data/user/0/io.github.hyperionhxh.triomi/files/mihon-staging/eu.kanade.tachiyomi.extension.th.one08read-b0c0f9921c31a9af5f47481fc5249d5a88e20d705c5c66579ee4a73d96592ff6.apk",
+      "signatureVerified": true,
+      "name": "108Read",
+      "lang": "th"
+    }
+  },
+  "windowsBackground": {
+    "fixture": true,
+    "platform": "windows",
+    "updatedAt": "2026-11-05T11:13:13.030441Z",
+    "isolatedHive": true,
+    "isolatedSqlite": true,
+    "userCredentialsOpened": false,
+    "networkFixtureOnline": true,
+    "responseBytes": 16930767,
+    "httpRequests": {
+      "/manga-work-1-chapter-1/0.png": 1,
+      "/manga-work-1-chapter-1/1.png": 1,
+      "/manga-work-1-chapter-1/2.png": 1,
+      "/manga-work-1-chapter-1/3.png": 1,
+      "/novel-work-1-chapter-1/body.txt": 1,
+      "/anime-work-1-chapter-1/video.mp4": 1,
+      "/manga-work-1-chapter-2/0.png": 1,
+      "/manga-work-1-chapter-2/1.png": 1,
+      "/manga-work-1-chapter-2/2.png": 1,
+      "/manga-work-1-chapter-2/3.png": 1,
+      "/manga-work-2-chapter-1/0.png": 1,
+      "/manga-work-2-chapter-1/1.png": 1,
+      "/manga-work-2-chapter-1/2.png": 1,
+      "/manga-work-2-chapter-1/3.png": 1,
+      "/manga-work-2-chapter-2/0.png": 1,
+      "/manga-work-2-chapter-2/1.png": 1,
+      "/manga-work-2-chapter-2/2.png": 1,
+      "/manga-work-2-chapter-2/3.png": 1,
+      "/novel-work-1-chapter-2/body.txt": 1,
+      "/novel-work-2-chapter-1/body.txt": 1,
+      "/novel-work-2-chapter-2/body.txt": 1,
+      "/anime-work-1-chapter-2/video.mp4": 1,
+      "/anime-work-2-chapter-1/video.mp4": 1,
+      "/anime-work-2-chapter-2/video.mp4": 1,
+      "/cover/1.png": 3,
+      "/cover/2.png": 3
+    },
+    "unavailableRequests": 0,
+    "partialReady": true,
+    "readerOpenedDuringDownload": true,
+    "workCount": 6,
+    "chapterCount": 12,
+    "downloads": [
+      {
+        "type": "anime",
+        "work": "anime-work-1",
+        "entries": [
+          {
+            "chapter": "anime-work-1-chapter-1",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 4194304,
+            "totalBytes": 4194304,
+            "completedPages": 0,
+            "totalPages": null,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          },
+          {
+            "chapter": "anime-work-1-chapter-2",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 4194304,
+            "totalBytes": 4194304,
+            "completedPages": 0,
+            "totalPages": null,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          }
+        ]
+      },
+      {
+        "type": "anime",
+        "work": "anime-work-2",
+        "entries": [
+          {
+            "chapter": "anime-work-2-chapter-1",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 4194304,
+            "totalBytes": 4194304,
+            "completedPages": 0,
+            "totalPages": null,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          },
+          {
+            "chapter": "anime-work-2-chapter-2",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 4194304,
+            "totalBytes": 4194304,
+            "completedPages": 0,
+            "totalPages": null,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          }
+        ]
+      },
+      {
+        "type": "manga",
+        "work": "manga-work-1",
+        "entries": [
+          {
+            "chapter": "manga-work-1-chapter-1",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 23483,
+            "totalBytes": null,
+            "completedPages": 4,
+            "totalPages": 4,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          },
+          {
+            "chapter": "manga-work-1-chapter-2",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 23483,
+            "totalBytes": null,
+            "completedPages": 4,
+            "totalPages": 4,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          }
+        ]
+      },
+      {
+        "type": "manga",
+        "work": "manga-work-2",
+        "entries": [
+          {
+            "chapter": "manga-work-2-chapter-1",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 23483,
+            "totalBytes": null,
+            "completedPages": 4,
+            "totalPages": 4,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          },
+          {
+            "chapter": "manga-work-2-chapter-2",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 23483,
+            "totalBytes": null,
+            "completedPages": 4,
+            "totalPages": 4,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          }
+        ]
+      },
+      {
+        "type": "novel",
+        "work": "novel-work-1",
+        "entries": [
+          {
+            "chapter": "novel-work-1-chapter-1",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 5991,
+            "totalBytes": null,
+            "completedPages": 0,
+            "totalPages": null,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          },
+          {
+            "chapter": "novel-work-1-chapter-2",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 5991,
+            "totalBytes": null,
+            "completedPages": 0,
+            "totalPages": null,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          }
+        ]
+      },
+      {
+        "type": "novel",
+        "work": "novel-work-2",
+        "entries": [
+          {
+            "chapter": "novel-work-2-chapter-1",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 5991,
+            "totalBytes": null,
+            "completedPages": 0,
+            "totalPages": null,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          },
+          {
+            "chapter": "novel-work-2-chapter-2",
+            "status": "done",
+            "progress": 1.0,
+            "receivedBytes": 5991,
+            "totalBytes": null,
+            "completedPages": 0,
+            "totalPages": null,
+            "speedBytesPerSecond": 0.0,
+            "retryCount": 0
+          }
+        ]
+      }
+    ],
+    "fileCount": 37,
+    "files": [
+      {
+        "path": "documents/covers/a095cea0062b39138f6bc801fe9d175b31faf7c68d2fc839c2353be2f5fdf97b.img",
+        "bytes": 6081
+      },
+      {
+        "path": "documents/covers/b1584c085e580f100e721e938761e359e3b224da672ceb8f49a5b399687befa5.img",
+        "bytes": 5804
+      },
+      {
+        "path": "documents/downloads/anime/31ec7ca9ce325266751dc76bc466dc319401920b57165ed968d8f0efd9e03266/688d8be0a3798339249d0a4dcf5a580025a165c5d2abb6c1523fab4be8f82d1c/cc038c1a60b6762b3c314793457b358bef7e255e4841c7f0d8ac23aee533b4e4/video.mp4",
+        "bytes": 4194304
+      },
+      {
+        "path": "documents/downloads/anime/31ec7ca9ce325266751dc76bc466dc319401920b57165ed968d8f0efd9e03266/688d8be0a3798339249d0a4dcf5a580025a165c5d2abb6c1523fab4be8f82d1c/f92105fcab1476a66a92968c21628f80026b0223ae65c3b7e15e2d04a702e890/video.mp4",
+        "bytes": 4194304
+      },
+      {
+        "path": "documents/downloads/anime/31ec7ca9ce325266751dc76bc466dc319401920b57165ed968d8f0efd9e03266/9a19e5d538b75417c27ddb0e2daf87623e94aa2a00147093c2a9e70d86be46f9/1ebc536ffb38c734cf85d9e091258ec8a8e2e31177bf536e5aced867916f0ecc/video.mp4",
+        "bytes": 4194304
+      },
+      {
+        "path": "documents/downloads/anime/31ec7ca9ce325266751dc76bc466dc319401920b57165ed968d8f0efd9e03266/9a19e5d538b75417c27ddb0e2daf87623e94aa2a00147093c2a9e70d86be46f9/bb9c788dbd75ef3da5e1da4339c0c81cc2749d5f97bb3140c6d130ed3595b726/video.mp4",
+        "bytes": 4194304
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/101ccec82726765b4b90dcb67ce66a9b0d4fcd3886a6b21bec1152b6fec21df9/11f071c73f0436a384401b4d85393be0015bebca6e49878cae8996161b4666a6/0001.png",
+        "bytes": 5739
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/101ccec82726765b4b90dcb67ce66a9b0d4fcd3886a6b21bec1152b6fec21df9/11f071c73f0436a384401b4d85393be0015bebca6e49878cae8996161b4666a6/0002.png",
+        "bytes": 5804
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/101ccec82726765b4b90dcb67ce66a9b0d4fcd3886a6b21bec1152b6fec21df9/11f071c73f0436a384401b4d85393be0015bebca6e49878cae8996161b4666a6/0003.png",
+        "bytes": 6081
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/101ccec82726765b4b90dcb67ce66a9b0d4fcd3886a6b21bec1152b6fec21df9/11f071c73f0436a384401b4d85393be0015bebca6e49878cae8996161b4666a6/0004.png",
+        "bytes": 5859
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/101ccec82726765b4b90dcb67ce66a9b0d4fcd3886a6b21bec1152b6fec21df9/11f071c73f0436a384401b4d85393be0015bebca6e49878cae8996161b4666a6/download-pages.json",
+        "bytes": 759
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/101ccec82726765b4b90dcb67ce66a9b0d4fcd3886a6b21bec1152b6fec21df9/11f071c73f0436a384401b4d85393be0015bebca6e49878cae8996161b4666a6/manifest.json",
+        "bytes": 121
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/101ccec82726765b4b90dcb67ce66a9b0d4fcd3886a6b21bec1152b6fec21df9/d5b19a248d1b9aa7bb89e2ee44090acb34a78419c84608ac89531be8f6e76332/0001.png",
+        "bytes": 5739
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/101ccec82726765b4b90dcb67ce66a9b0d4fcd3886a6b21bec1152b6fec21df9/d5b19a248d1b9aa7bb89e2ee44090acb34a78419c84608ac89531be8f6e76332/0002.png",
+        "bytes": 5804
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/101ccec82726765b4b90dcb67ce66a9b0d4fcd3886a6b21bec1152b6fec21df9/d5b19a248d1b9aa7bb89e2ee44090acb34a78419c84608ac89531be8f6e76332/0003.png",
+        "bytes": 6081
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/101ccec82726765b4b90dcb67ce66a9b0d4fcd3886a6b21bec1152b6fec21df9/d5b19a248d1b9aa7bb89e2ee44090acb34a78419c84608ac89531be8f6e76332/0004.png",
+        "bytes": 5859
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/101ccec82726765b4b90dcb67ce66a9b0d4fcd3886a6b21bec1152b6fec21df9/d5b19a248d1b9aa7bb89e2ee44090acb34a78419c84608ac89531be8f6e76332/download-pages.json",
+        "bytes": 759
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/101ccec82726765b4b90dcb67ce66a9b0d4fcd3886a6b21bec1152b6fec21df9/d5b19a248d1b9aa7bb89e2ee44090acb34a78419c84608ac89531be8f6e76332/manifest.json",
+        "bytes": 121
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/48d0fad97d739db7db7b90d69c158b9e72e4f16a65372901a3475cafbe8c95ce/0001.png",
+        "bytes": 5739
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/48d0fad97d739db7db7b90d69c158b9e72e4f16a65372901a3475cafbe8c95ce/0002.png",
+        "bytes": 5804
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/48d0fad97d739db7db7b90d69c158b9e72e4f16a65372901a3475cafbe8c95ce/0003.png",
+        "bytes": 6081
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/48d0fad97d739db7db7b90d69c158b9e72e4f16a65372901a3475cafbe8c95ce/0004.png",
+        "bytes": 5859
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/48d0fad97d739db7db7b90d69c158b9e72e4f16a65372901a3475cafbe8c95ce/download-pages.json",
+        "bytes": 759
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/48d0fad97d739db7db7b90d69c158b9e72e4f16a65372901a3475cafbe8c95ce/manifest.json",
+        "bytes": 121
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/daba7c7da65195281e2231c16d9aff496a66fb7fc937bb85e3a11791085381a8/0001.png",
+        "bytes": 5739
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/daba7c7da65195281e2231c16d9aff496a66fb7fc937bb85e3a11791085381a8/0002.png",
+        "bytes": 5804
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/daba7c7da65195281e2231c16d9aff496a66fb7fc937bb85e3a11791085381a8/0003.png",
+        "bytes": 6081
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/daba7c7da65195281e2231c16d9aff496a66fb7fc937bb85e3a11791085381a8/0004.png",
+        "bytes": 5859
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/daba7c7da65195281e2231c16d9aff496a66fb7fc937bb85e3a11791085381a8/download-pages.json",
+        "bytes": 759
+      },
+      {
+        "path": "documents/downloads/manga/bc8f2e7a4f71857bf30afefbf4fe327c0af884eab586e2dcf217b152521bc25b/a164912a75c7f310992c75927e4aef64da94b5f449587732e365ec91b33add53/daba7c7da65195281e2231c16d9aff496a66fb7fc937bb85e3a11791085381a8/manifest.json",
+        "bytes": 121
+      },
+      {
+        "path": "documents/downloads/novel/0392d0c7541fd86ff6d03d6c569ca077a3cd4a87897c48ca5ffd5d5351bb8a5c/0cd6180d76280cc5f8b3e7a8058872cdd73fb5590ae8c9ef521883ca92a987a4/2ec2153f31fcf0f04d2fa84cd1ecc104e476d16bd457e4f1a127d3fede58c265/chapter.json",
+        "bytes": 6186
+      },
+      {
+        "path": "documents/downloads/novel/0392d0c7541fd86ff6d03d6c569ca077a3cd4a87897c48ca5ffd5d5351bb8a5c/0cd6180d76280cc5f8b3e7a8058872cdd73fb5590ae8c9ef521883ca92a987a4/766f6e6d7e855b0b6a477ad96913902efac0fa4e5b567620f4ea89374f97fe8c/chapter.json",
+        "bytes": 6186
+      },
+      {
+        "path": "documents/downloads/novel/0392d0c7541fd86ff6d03d6c569ca077a3cd4a87897c48ca5ffd5d5351bb8a5c/7de16b4117dbe7e7e2cc38b097fee674340a78ddac721334b8e55038acc09767/03042585ef237160540083f6b19e8020850deb091577bbbf4fba6a84cd8fa05d/chapter.json",
+        "bytes": 6186
+      },
+      {
+        "path": "documents/downloads/novel/0392d0c7541fd86ff6d03d6c569ca077a3cd4a87897c48ca5ffd5d5351bb8a5c/7de16b4117dbe7e7e2cc38b097fee674340a78ddac721334b8e55038acc09767/62c0496d94347d9c756b1aa10115c1cc8097a014b87f4dd10b35353c14e00e73/chapter.json",
+        "bytes": 6186
+      },
+      {
+        "path": "documents/triomi.sqlite",
+        "bytes": 172032
+      },
+      {
+        "path": "hive/settings.hive",
+        "bytes": 550
+      },
+      {
+        "path": "hive/settings.lock",
+        "bytes": 18
+      }
+    ],
+    "backupLocationSelected": true,
+    "backupUsesSaf": false,
+    "backupCount": 1,
+    "backupBytes": 16949778,
+    "events": [
+      {
+        "at": "2026-11-05T10:24:39.755035Z",
+        "event": "fixture_started",
+        "videoBytes": 4194304,
+        "pngPages": 4
+      },
+      {
+        "at": "2026-11-05T10:24:43.037601Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:24:43.247183Z",
+        "event": "private_partial_ready",
+        "verified": true,
+        "pages": 1,
+        "totalPages": 4
+      },
+      {
+        "at": "2026-11-05T10:24:43.250516Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:24:43.506733Z",
+        "event": "production_enqueue",
+        "requestedChapters": 3
+      },
+      {
+        "at": "2026-11-05T10:24:43.518222Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:24:43.527744Z",
+        "event": "production_reader_open",
+        "mode": "rtl",
+        "queueRunning": true,
+        "partialReady": true
+      },
+      {
+        "at": "2026-11-05T10:24:43.723287Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:24:46.024708Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:24:49.030661Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:24:52.031007Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:24:55.038829Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:24:58.029321Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:01.027799Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:04.023823Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:07.036802Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:10.031016Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:13.027548Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:16.033797Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:19.025435Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:22.035249Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:25.032878Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:28.022556Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:31.022033Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:34.022481Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:37.024241Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:40.022794Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:43.023326Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:44.434712Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:25:44.449914Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:46.024794Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:49.031137Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:52.024556Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:55.035566Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:25:58.026012Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:01.032374Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:04.032846Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:07.034047Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:10.026982Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:13.028294Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:16.024709Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:19.035005Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:22.032758Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:25.030004Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:28.032068Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:31.024196Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:34.029488Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:37.030489Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:40.032817Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:43.024312Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:46.027946Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:26:49.026722Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:27:54.759244Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:27:54.795151Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:28:53.582499Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:28:53.612928Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:28:53.613434Z",
+        "event": "lifecycle",
+        "state": "hidden"
+      },
+      {
+        "at": "2026-11-05T10:29:25.962685Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:29:25.962685Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:29:45.885601Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:29:49.612091Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:29:50.039593Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:30:19.543114Z",
+        "event": "lifecycle",
+        "state": "hidden"
+      },
+      {
+        "at": "2026-11-05T10:31:05.479961Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:31:05.480971Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:31:06.196983Z",
+        "event": "production_enqueue",
+        "requestedChapters": 12
+      },
+      {
+        "at": "2026-11-05T10:31:10.297183Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:31:16.527195Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:31:18.270407Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:31:33.959059Z",
+        "event": "lifecycle",
+        "state": "hidden"
+      },
+      {
+        "at": "2026-11-05T10:32:46.045322Z",
+        "event": "evidence_error",
+        "type": "PathNotFoundException"
+      },
+      {
+        "at": "2026-11-05T10:45:42.740322Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:45:42.743190Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:45:46.877718Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:46:17.938705Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:46:26.634468Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:46:26.809582Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:46:27.733951Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:46:31.308627Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:46:33.399353Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:48:18.110132Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:49:16.727908Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:49:53.773223Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:53:33.916129Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:53:45.143890Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:53:47.340378Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:54:01.390419Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:54:02.632980Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:54:48.102799Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      },
+      {
+        "at": "2026-11-05T10:54:55.935759Z",
+        "event": "lifecycle",
+        "state": "inactive"
+      },
+      {
+        "at": "2026-11-05T10:56:09.292647Z",
+        "event": "lifecycle",
+        "state": "resumed"
+      }
+    ]
+  },
+  "checks": {
+    "flutterFull": {
+      "passed": 1618,
+      "skipped": 4,
+      "artifact": "artifact://7224",
+      "temporaryEntrypointsRemoved": true
+    },
+    "nativeDeniedIdleCancellationSaf": {
+      "reportedTests": 20,
+      "artifact": "bg_39"
+    },
+    "nativeGrantedNotification": {
+      "passed": 1,
+      "artifact": "bg_41"
+    },
+    "publicRepository": {
+      "commit": "5cb6eff",
+      "extensions": 1601,
+      "apkUrlsReachable": 1601,
+      "productionClientProbesPassed": 3
+    }
+  },
+  "boundaries": [
+    "Controlled real loopback media, not an all-provider compatibility/performance claim.",
+    "No user phone, normal Windows data, Kazumi credentials or existing backups modified.",
+    "iOS physical device not available.",
+    "Windows isolated plugin installer hit existing fixed-app-directory protection; APK/JAR download/hash/static check and confirmation only, not executable installation proof."
+  ],
+  "crossPlatformBackup": {
+    "androidZipBytes": 4267881,
+    "windowsZipBytes": 16949778,
+    "androidToWindowsMerge": "observed successful, kept original ZIP",
+    "windowsToAndroidMerge": "observed 12 complete chapters, removed only selected windows-full.zip, retained Android original"
+  }
+}

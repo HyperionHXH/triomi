@@ -29,7 +29,6 @@ class MangaUpdateJobService : JobService() {
             finished = true
             timeout.removeCallbacksAndMessages(null)
             MangaUpdatesRuntime.end(this)
-            MangaUpdatesRuntime.endDownloads(this)
             jobFinished(params,reschedule)
             executor.shutdownNow()
             jsWorker?.close(); jsWorker=null
@@ -37,18 +36,31 @@ class MangaUpdateJobService : JobService() {
         }
         MethodChannel(e.dartExecutor.binaryMessenger,"triomi/platform").setMethodCallHandler { call,result ->
             when (call.method) {
-                "beginDownloadQueue" -> result.success(MangaUpdatesRuntime.beginDownloads(this))
-                "endDownloadQueue" -> { MangaUpdatesRuntime.endDownloads(this); result.success(null) }
+                // Jobs do not have foreground-user initiation for a dataSync FGS.
+                "beginDownloadQueue" -> result.success(false)
+                "endDownloadQueue", "updateDownloadQueue" -> result.success(null)
+                "setDownloadQueueActive" -> result.success(false)
                 "canNotifyMangaUpdates" -> result.success(BackgroundUpdate.hasNotificationPermission(this))
                 "mangaUpdateConstraints" -> result.success(MangaUpdatesRuntime.allowed(this,call.argument<Boolean>("wifiOnly") != false,call.argument<Boolean>("batteryNotLow") != false))
                 "notifyMangaUpdate" -> { MangaUpdatesRuntime.notify(this,call.argument<String>("id") ?: "manga",call.argument<String>("title") ?: "漫画更新",call.argument<String>("body") ?: "",call.argument<String>("coverPath")); result.success(true) }
                 "mihonRequest" -> {
                     val args=call.arguments as? Map<*, *>
                     if(args==null) result.error("invalid_args","Mihon arguments required",null)
-                    else executor.execute {
-                        try { val value=host.request(args); timeout.post { if(!finished && engine === e) result.success(value) } }
-                        catch(_: Throwable) { timeout.post { if(!finished && engine === e) result.error("source_failed","Mihon background request failed",null) } }
+                    else if (finished || executor.isShutdown) result.error("source_failed", "Mihon background host is closed", null)
+                    else try {
+                        val request = host.prepareRequest(args)
+                        executor.execute {
+                            try { val value=request(); timeout.post { if(!finished && engine === e) result.success(value) } }
+                            catch(_: Throwable) { timeout.post { if(!finished && engine === e) result.error("source_failed","Mihon background request failed",null) } }
+                        }
+                    } catch (_: Throwable) {
+                        result.error("source_failed", "Mihon background request failed", null)
                     }
+                }
+                "mihonCancelRequest" -> {
+                    val requestId = call.argument<String>("requestId")
+                    if (requestId.isNullOrBlank()) result.error("invalid_args", "requestId is required", null)
+                    else result.success(host.cancelRequest(requestId))
                 }
                 else -> result.notImplemented()
             }
@@ -70,7 +82,6 @@ class MangaUpdateJobService : JobService() {
     override fun onStopJob(params: JobParameters?): Boolean {
         timeout.removeCallbacksAndMessages(null)
         MangaUpdatesRuntime.end(this)
-        MangaUpdatesRuntime.endDownloads(this)
         workers?.shutdownNow(); workers=null
         jsWorker?.close(); jsWorker=null
         engine?.destroy(); engine=null

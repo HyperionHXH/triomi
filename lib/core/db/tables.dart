@@ -231,6 +231,17 @@ class Downloads extends Table {
 
   RealColumn get progress => real().withDefault(const Constant<double>(0))();
 
+  /// Persistent next-task order. A running task is never preempted by reordering.
+  IntColumn get queuePosition => integer().withDefault(const Constant(0))();
+  IntColumn get retryCount => integer().withDefault(const Constant(0))();
+  DateTimeColumn get retryAt => dateTime().nullable()();
+  IntColumn get receivedBytes => integer().withDefault(const Constant(0))();
+  IntColumn get totalBytes => integer().nullable()();
+  IntColumn get completedPages => integer().withDefault(const Constant(0))();
+  IntColumn get totalPages => integer().nullable()();
+  RealColumn get speedBytesPerSecond =>
+      real().withDefault(const Constant<double>(0))();
+
   TextColumn get path => text().nullable()();
 
   TextColumn get errorMessage => text().nullable()();

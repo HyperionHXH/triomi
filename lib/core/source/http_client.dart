@@ -50,11 +50,15 @@ class SourceTransferProgress {
   SourceTransferProgress({
     this.onSend,
     this.onReceive,
+    this.onReceiveBytes,
     this.allowConflict = false,
     this.inactivityTimeout = const Duration(seconds: 30),
   });
   final void Function(int sent, int total)? onSend;
   final void Function(int received, int total)? onReceive;
+
+  /// Actual new wire bytes; separate requests retain independent counters.
+  final void Function(int bytes)? onReceiveBytes;
   final Duration inactivityTimeout;
   final bool allowConflict;
   static final Object _key = Object();
@@ -73,6 +77,12 @@ class SourceTransferProgress {
     if (_expire == null) return;
     _touch();
     onReceive?.call(count, total);
+  }
+
+  void receiveBytes(int bytes) {
+    if (_expire == null) return;
+    _touch();
+    onReceiveBytes?.call(bytes);
   }
 
   void _touch() {
@@ -243,6 +253,9 @@ class DioSourceHttpClient
                receiveDataWhenStatusError: true,
              ),
            ) {
+    // An injected Dio owns its adapter factory, which may intentionally return
+    // a shared client. Only application-created transports can be force-closed
+    // per request without closing someone else's session.
     if (dio == null) {
       configureSourceHttpAdapter(
         _dio,
@@ -404,6 +417,7 @@ class DioSourceHttpClient
         ),
         cancelToken:
             (request.cancellation ?? SourceRequestCancellation.current)?.token,
+        onReceiveProgress: _receiveProgress(),
       );
       late Response<String> response;
       try {
@@ -442,6 +456,10 @@ class DioSourceHttpClient
           sourceId: sourceId,
           type: _classifyStatus(result.statusCode),
           message: 'HTTP ${result.statusCode}${_bodyHint(result)}',
+          statusCode: result.statusCode,
+          retryAfter: SourceException.parseRetryAfter(
+            result.headers['retry-after'],
+          ),
         );
       }
       return result;
@@ -502,7 +520,7 @@ class DioSourceHttpClient
           receiveTimeout: timeout,
         ),
         cancelToken: SourceRequestCancellation.current?.token,
-        onReceiveProgress: SourceTransferProgress.current?.received,
+        onReceiveProgress: _receiveProgress(),
       );
       final status = response.statusCode ?? 0;
       if (status < 200 || status >= 400) {
@@ -510,6 +528,10 @@ class DioSourceHttpClient
           sourceId: sourceId,
           type: _classifyStatus(status),
           message: 'HTTP $status',
+          statusCode: status,
+          retryAfter: SourceException.parseRetryAfter(
+            response.headers.value('retry-after'),
+          ),
         );
       }
       return response.data ?? const <int>[];
@@ -547,6 +569,10 @@ class DioSourceHttpClient
           sourceId: sourceId,
           type: _classifyStatus(status),
           message: 'HTTP $status',
+          statusCode: status,
+          retryAfter: SourceException.parseRetryAfter(
+            response.headers.value('retry-after'),
+          ),
         );
       }
       final body = response.data;
@@ -558,8 +584,19 @@ class DioSourceHttpClient
         );
       }
       final length = response.headers.value(Headers.contentLengthHeader);
+      final transfer = SourceTransferProgress.current;
       return SourceByteStream(
-        stream: body.stream,
+        stream: body.stream
+            .map<List<int>>((chunk) {
+              transfer?.receiveBytes(chunk.length);
+              return chunk;
+            })
+            .handleError((Object error, StackTrace stack) {
+              Error.throwWithStackTrace(
+                SourceException.wrap(error, sourceId: sourceId, url: url),
+                stack,
+              );
+            }),
         contentLength: length == null ? null : int.tryParse(length),
         url: response.realUri.toString(),
         statusCode: status,
@@ -573,6 +610,18 @@ class DioSourceHttpClient
     } catch (error) {
       throw SourceException.wrap(error, sourceId: sourceId, url: url);
     }
+  }
+
+  void Function(int, int)? _receiveProgress() {
+    final transfer = SourceTransferProgress.current;
+    if (transfer == null) return null;
+    var previous = 0;
+    return (received, total) {
+      final delta = received - previous;
+      previous = received;
+      transfer.received(received, total);
+      if (delta > 0) transfer.receiveBytes(delta);
+    };
   }
 
   @override

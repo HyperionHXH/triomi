@@ -536,6 +536,11 @@ seg-1.ts
       await DownloadService.removeFiles(<DownloadRow>[
         DownloadRow(
           id: 1,
+          queuePosition: 0,
+          retryCount: 0,
+          receivedBytes: 0,
+          speedBytesPerSecond: 0,
+          completedPages: 0,
           sourceId: 's',
           remoteId: '1',
           chapterSourceId: 's',
@@ -547,6 +552,11 @@ seg-1.ts
         ),
         DownloadRow(
           id: 2,
+          queuePosition: 1,
+          retryCount: 0,
+          receivedBytes: 0,
+          speedBytesPerSecond: 0,
+          completedPages: 0,
           sourceId: 's',
           remoteId: '2',
           chapterSourceId: 's',

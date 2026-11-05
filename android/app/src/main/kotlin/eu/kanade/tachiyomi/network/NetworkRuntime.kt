@@ -134,6 +134,7 @@ class NetworkHelper(context: Context) {
     private val cookies = AndroidCookieJar(context)
     private val userAgent = WebSettings.getDefaultUserAgent(context)
     val client: OkHttpClient = OkHttpClient.Builder()
+        .eventListenerFactory(MihonRequestScope.eventListenerFactory)
         .cookieJar(cookies)
         .addInterceptor(UncaughtExceptionInterceptor())
         .addInterceptor(UserAgentInterceptor(::defaultUserAgentProvider))

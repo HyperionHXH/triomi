@@ -24,15 +24,6 @@ object MangaUpdatesRuntime {
         if (leaseOwner === owner) cancelAction = cancel
     }
     @Synchronized fun cancel() { cancelAction?.invoke() }
-    private var downloadOwner: Any? = null
-    @Synchronized fun beginDownloads(owner: Any): Boolean {
-        if(downloadOwner != null) return false
-        downloadOwner = owner
-        return true
-    }
-    @Synchronized fun endDownloads(owner: Any) {
-        if(downloadOwner === owner) downloadOwner = null
-    }
     @Synchronized fun begin(owner: Any): Boolean {
         if (leaseOwner != null) return false
         leaseOwner = owner

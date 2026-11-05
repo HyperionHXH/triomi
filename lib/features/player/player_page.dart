@@ -19,6 +19,7 @@ import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
 import '../../core/storage/preferences.dart';
+import '../../core/storage/storage_paths.dart';
 import '../../core/theme/app_tokens.dart';
 import '../detail/anime_source_sheet.dart';
 import '../downloads/data/download_providers.dart';
@@ -378,7 +379,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       if (localPath != null) {
         _lines = const <PlaySource>[];
         await _openLine(
-          Uri.file(localPath).toString(),
+          Uri.file(storagePathIdentity(localPath)).toString(),
           startPosition: startPosition,
         );
         if (mounted && seq == _loadSeq) {

@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/backup/backup_artifact_recovery.dart';
 import '../../core/db/database_provider.dart';
 import '../../core/models/media_item.dart';
+import '../../core/storage/preferences.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../detail/detail_page.dart';
 import '../downloads/data/download_repository.dart';
@@ -31,12 +32,21 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
   bool _busy = false;
   String? _notice;
 
-  Future<LocalComicImporter> _importer() async => LocalComicImporter(
-    database: ref.read(databaseProvider),
-    downloadRoot: Directory(
-      p.join((await getApplicationDocumentsDirectory()).path, 'downloads'),
-    ),
-  );
+  Future<LocalComicImporter> _importer() async {
+    final documents = await getApplicationDocumentsDirectory();
+    final custom = ref
+        .read(preferencesProvider)
+        .get<String>('downloads.storageRootPath');
+    final base = custom != null && custom.isNotEmpty ? custom : documents.path;
+    return LocalComicImporter(
+      database: ref.read(databaseProvider),
+      downloadRoot: Directory(p.join(base, 'downloads')),
+      additionalDownloadRoots: [
+        if (base != documents.path)
+          Directory(p.join(documents.path, 'downloads')),
+      ],
+    );
+  }
 
   @override
   void dispose() {
@@ -218,6 +228,7 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
     setState(() => _busy = true);
     try {
       await (await _importer()).remove(item.remoteId);
+      if (mounted) setState(() => _notice = '已移除此导入；原始文件未删除。');
     } catch (error) {
       if (mounted) {
         setState(() => _notice = '$error');

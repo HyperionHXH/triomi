@@ -4,11 +4,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/backup/backup_location.dart';
 import '../../core/backup/backup_restore_preview.dart';
-import '../../core/backup/backup_service.dart';
 import '../../core/backup/scheduled_backup.dart';
 import '../../core/db/database_provider.dart';
 import '../../core/platform/platform_channel.dart';
@@ -19,6 +18,8 @@ import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../library/data/library_providers.dart';
 import '../schedule/data/background_update_check.dart';
+import '../settings/settings_controller.dart';
+import 'backup_location_settings.dart';
 import 'backup_restore_dialog.dart';
 import 'data/sync_providers.dart';
 
@@ -34,16 +35,13 @@ class BackupPage extends ConsumerStatefulWidget {
 class _BackupPageState extends ConsumerState<BackupPage> {
   bool _busy = false;
   String? _status;
-  List<File> _local = const <File>[];
-
-  /// 用户授权的导出目录（T7-4）；为空时走应用私有目录。
-  String? _exportDirectory;
+  List<BackupDocument> _local = const [];
 
   /// 后台更新检查（T7-7）：设置位 + Android 原生周期任务（JobScheduler）。
   bool _backgroundCheck = false;
   bool _scheduledBackup = false;
-  bool _includeSourceRules = false;
-  bool _includeApkPackages = false;
+  bool _includeSourceRules = true;
+  bool _includeApkPackages = true;
 
   static const String backgroundCheckKey = backgroundCheckPreferenceKey;
 
@@ -57,9 +55,6 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   @override
   void initState() {
     super.initState();
-    _exportDirectory = ref
-        .read(preferencesProvider)
-        .get<String>(BackupService.exportDirectoryKey);
     _backgroundCheck =
         ref.read(preferencesProvider).get<bool>(backgroundCheckKey) ?? false;
     _scheduledBackup =
@@ -68,9 +63,20 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   }
 
   Future<void> _refreshLocal() async {
-    final files = await BackupService.localBackups();
-    if (!mounted) return;
-    setState(() => _local = files);
+    try {
+      final store = BackupLocationStore(ref.read(preferencesProvider));
+      final location = await store.current();
+      final files = location == null
+          ? <BackupDocument>[]
+          : await store.list(location);
+      if (mounted) setState(() => _local = files);
+    } catch (error) {
+      if (mounted)
+        setState(() {
+          _local = const [];
+          _status = '备份目录不可读取：$error';
+        });
+    }
   }
 
   @override
@@ -87,15 +93,15 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                 Text('导出备份', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  '打包书架、阅读进度、历史、目录缓存与设置，并带上封面图。'
-                  '凭据类设置（密码 / token）不会写入备份。',
+                  '默认完整备份：书架、进度、历史、小说正文缓存、漫画/动画完整及已校验的部分下载、封面和插件。'
+                  '需要额外临时磁盘空间。账号密码、token 和插件信任不会写入备份。',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('同时备份规则定义'),
                   subtitle: const Text(
-                    '仅本次本地导出，默认关闭；包括JSON/JS/Kazumi原文，不含APK包或发布者信任。规则代码可能含私人信息，导出前需确认。',
+                    '完整备份默认包含JSON/JS/Kazumi原文；恢复后停用。规则代码可能含私人信息，导出前需确认。',
                   ),
                   value: _includeSourceRules,
                   onChanged: _busy
@@ -106,7 +112,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('同时备份APK包'),
                   subtitle: const Text(
-                    '仅本次本地导出，默认关闭；含已安装或待确认的包文件与签名身份，不含发布者信任。恢复只暂存，加载前逐包确认。',
+                    '完整备份默认包含已安装或待确认的APK及签名身份；不备份发布者信任。恢复只暂存，加载前逐包确认。',
                   ),
                   value: _includeApkPackages,
                   onChanged: _busy
@@ -115,37 +121,14 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 FilledButton.icon(
-                  onPressed: _busy ? null : () => _export(includeCovers: true),
+                  onPressed: _busy ? null : _export,
                   icon: const Icon(Icons.archive_outlined, size: 18),
-                  label: const Text('导出完整备份（含封面）'),
+                  label: const Text('导出完整备份（下载、正文、插件）'),
                 ),
-                const SizedBox(height: AppSpacing.xs),
                 OutlinedButton.icon(
-                  onPressed: _busy ? null : () => _export(includeCovers: false),
+                  onPressed: _busy ? null : () => _export(metadataOnly: true),
                   icon: const Icon(Icons.archive_outlined, size: 18),
-                  label: const Text('导出精简备份（不含封面）'),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                OutlinedButton.icon(
-                  onPressed: _busy
-                      ? null
-                      : () => _export(
-                          includeCovers: false,
-                          includeOfflineContent: false,
-                        ),
-                  icon: const Icon(Icons.archive_outlined, size: 18),
-                  label: const Text('导出精简备份（不含封面与离线内容）'),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                OutlinedButton.icon(
-                  onPressed: _busy
-                      ? null
-                      : () => _export(
-                          includeCovers: true,
-                          includeDownloadedMedia: true,
-                        ),
-                  icon: const Icon(Icons.download_done_outlined, size: 18),
-                  label: const Text('导出含完整/部分下载媒体备份（需额外磁盘空间）'),
+                  label: const Text('仅导出元数据（不含下载、正文、封面、插件）'),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -153,7 +136,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                   subtitle: Text(
                     Platform.isWindows
                         ? 'Windows 每日 03:00 或登录后执行（仅当前用户登录且应用关闭时）；只备份元数据，不含封面、正文、媒体、规则、APK 或凭据，不联网、不上传，旧备份保留。'
-                        : 'Android 约每日执行，电量不足延后；不联网取封面、不上传。授权目录不可用时回退私有目录；旧备份保留。',
+                        : 'Android 约每日执行，电量不足延后；仅元数据，不联网、不上传。必须先授权外部目录；权限失效会失败，不会回退私有目录。旧备份保留。',
                   ),
                   value: _scheduledBackup,
                   onChanged:
@@ -174,26 +157,13 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                   onChanged: _busy ? null : _toggleBackgroundCheck,
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  leading: const Icon(Icons.folder_outlined),
-                  title: Text(
-                    _exportDirectory == null ? '导出到应用私有目录' : '导出到授权目录',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: _exportDirectory == null
-                      ? const Text('选择后备份包会写入该目录')
-                      : Text(
-                          _exportDirectory!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                  trailing: _exportDirectory == null
-                      ? const TextButton(onPressed: null, child: Text(''))
-                      : null,
-                  onTap: _busy ? null : _pickExportDirectory,
+                BackupLocationSettings(
+                  key: ValueKey(_busy),
+                  onChanged: () => unawaited(_refreshLocal()),
+                ),
+                TextButton(
+                  onPressed: _busy ? null : _refreshLocal,
+                  child: const Text('刷新所选目录文件'),
                 ),
               ],
             ),
@@ -212,9 +182,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _pickBackup,
                   icon: const Icon(Icons.file_open_outlined),
-                  label: Text(
-                    Platform.isAndroid ? '选择备份 ZIP 恢复' : '从文件路径恢复 ZIP',
-                  ),
+                  label: const Text('选择备份 ZIP 恢复'),
                 ),
               ],
             ),
@@ -234,15 +202,17 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                       dense: true,
                       leading: const Icon(Icons.insert_drive_file_outlined),
                       title: Text(
-                        file.uri.pathSegments.last,
+                        file.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       subtitle: Text(
-                        '${(file.lengthSync() / 1024).toStringAsFixed(1)} KB',
+                        '${(file.size / 1024).toStringAsFixed(1)} KB',
                       ),
                       trailing: TextButton(
-                        onPressed: _busy ? null : () => _import(file.path),
+                        onPressed: _busy
+                            ? null
+                            : () => _openBackup(file.location),
                         child: const Text('导入'),
                       ),
                     ),
@@ -279,24 +249,23 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     child: AppCard(child: child),
   );
 
-  Future<void> _export({
-    required bool includeCovers,
-    bool includeOfflineContent = true,
-    bool includeDownloadedMedia = false,
-  }) async {
+  Future<void> _export({bool metadataOnly = false}) async {
     setState(() {
       _busy = true;
       _status = null;
     });
     try {
-      final includeSourceRules = _includeSourceRules;
+      final store = BackupLocationStore(ref.read(preferencesProvider));
+      final destination = await store.current() ?? await store.choose();
+      if (destination == null || !mounted) return;
+      final includeSourceRules = !metadataOnly && _includeSourceRules;
       if (includeSourceRules) {
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('确认备份规则原文'),
             content: Text(
-              '保存到：${_exportDirectory ?? '应用私有目录'}\n'
+              '保存到：${destination.label}\n'
               '规则将原样携带代码，恢复后保持停用，已有规则不覆盖。不读取账号安全存储；显式凭据字段和凭据URL会拒绝导出，但无法证明任意代码中没有隐藏凭据。请自行核对并私下保管，不要分享含私人信息的备份。此选择不用于WebDAV或每日自动备份。',
             ),
             actions: [
@@ -313,24 +282,18 @@ class _BackupPageState extends ConsumerState<BackupPage> {
         );
         if (confirmed != true || !mounted) return;
       }
-      final directory = _exportDirectory;
       final result = await ref
           .read(backupServiceProvider)
-          .exportToFile(
-            includeCovers: includeCovers,
-            includeOfflineContent: includeOfflineContent,
-            includeDownloadedMedia: includeDownloadedMedia,
+          .exportPortableBackup(
+            location: destination,
+            metadataOnly: metadataOnly,
             includeSourceRules: includeSourceRules,
             includeApkPackages: _includeApkPackages,
-            directoryUri: directory,
             writeToTree: platformChannel.writeFileToTree,
           );
       await _refreshLocal();
       if (!mounted) return;
-      // D50：显式区分保存位置；回退是导出成功，不得报成导出失败。
-      final location = result.summary.savedToSaf
-          ? '已保存到授权目录'
-          : (directory == null ? '未选择授权目录，已保存到应用私有目录' : '授权目录写入失败，已保存到应用私有目录');
+      final location = '已保存到所选外部目录：${destination.label}';
       setState(() {
         _status =
             '已导出：${result.summary.libraryEntries} 条书架、'
@@ -351,6 +314,11 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     setState(() => _busy = true);
     final prefs = ref.read(preferencesProvider);
     try {
+      if (enabled && Platform.isAndroid) {
+        final store = BackupLocationStore(prefs);
+        if (await store.current() == null && await store.choose() == null)
+          return;
+      }
       await prefs.set(scheduledBackupKey, enabled);
       await prefs.flush();
       if (!await scheduleLocalBackups(prefs)) {
@@ -412,60 +380,31 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     });
   }
 
-  /// 选择导出目录（SAF），持久化到设置；再次选择后可在系统选择器里改选。
-  Future<void> _pickExportDirectory() async {
-    final uri = await platformChannel.pickDirectory();
-    if (!mounted) return;
-    final preferences = ref.read(preferencesProvider);
-    if (uri == null) return;
-    await preferences.set(BackupService.exportDirectoryKey, uri);
-    setState(() => _exportDirectory = uri);
-  }
-
   Future<void> _pickBackup() async {
-    String? path;
-    var temporary = false;
+    BackupImportSource? source;
     try {
-      if (Platform.isAndroid) {
-        path = await const MethodChannel('triomi/platform')
-            .invokeMethod<String>('pickBackupFile');
-        temporary = path != null;
-      } else {
-        final controller = TextEditingController();
-        path = await showDialog<String>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('本地备份文件路径'),
-            content: TextField(
-              controller: controller,
-              decoration: const InputDecoration(labelText: 'ZIP 文件绝对路径'),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, controller.text.trim()),
-                child: const Text('预览'),
-              ),
-            ],
-          ),
-        );
-        controller.dispose();
-      }
-      if (path != null && path.isNotEmpty && mounted) await _import(path);
+      source = await BackupImportSource.pick();
+      if (source != null && mounted) await _import(source);
     } catch (error) {
       if (mounted) setState(() => _status = '读取备份失败：$error');
     } finally {
-      if (temporary && path != null) {
-        final file = File(path);
-        if (await file.exists()) await file.delete();
-      }
+      await source?.dispose();
     }
   }
 
-  Future<void> _import(String path) async {
+  Future<void> _openBackup(String location) async {
+    BackupImportSource? source;
+    try {
+      source = await BackupImportSource.open(location);
+      if (mounted) await _import(source);
+    } catch (error) {
+      if (mounted) setState(() => _status = '读取备份失败：$error');
+    } finally {
+      await source?.dispose();
+    }
+  }
+
+  Future<void> _import(BackupImportSource source) async {
     setState(() {
       _busy = true;
       _status = '正在校验备份…';
@@ -473,7 +412,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     try {
       final preview = await previewBackupRestoreFile(
         ref.read(databaseProvider),
-        path,
+        source.path,
         preferences: ref.read(preferencesProvider),
         apkFiles: await ref.read(backupServiceProvider).openApkFiles(),
       );
@@ -481,19 +420,20 @@ class _BackupPageState extends ConsumerState<BackupPage> {
       final options = await confirmBackupRestore(
         context,
         preview,
-        target: path,
+        target: source.original,
       );
       if (options == null || !mounted) return;
       final summary = await ref
           .read(backupServiceProvider)
           .importFromFile(
-            path,
+            source.path,
             options: options,
             expectedHash: preview.byteHash,
           );
       // 导入写的是数据库，书架/历史是内存里的 AsyncNotifier：不刷新就要
       // 重启才看得到。
       ref.invalidate(libraryByTypeProvider);
+      ref.invalidate(appearanceProvider);
       ref.invalidate(libraryCategoriesForTypeProvider);
       ref.invalidate(historyProvider);
       ref.invalidate(sourcesProvider);
@@ -505,6 +445,20 @@ class _BackupPageState extends ConsumerState<BackupPage> {
             '封面 ${summary.covers}、完整媒体 ${summary.downloadedMedia}、部分下载 ${summary.partialDownloads}（暂停）、'
             '规则 ${summary.sourceRules}（停用）、APK ${summary.apkPackages}（待确认）、设置 ${summary.settings}';
       });
+      final remove = await confirmDeleteRestoredBackup(
+        context,
+        source.original,
+      );
+      if (remove == true) {
+        try {
+          await source.deleteOriginal(preview.byteHash);
+          if (mounted) setState(() => _status = '${_status!}\n已删除原备份文件。');
+        } catch (error) {
+          if (mounted)
+            setState(() => _status = '${_status!}\n恢复已成功，但原备份未删除：$error');
+        }
+      }
+      await _refreshLocal();
     } catch (error) {
       if (mounted) setState(() => _status = '导入失败：$error');
     } finally {

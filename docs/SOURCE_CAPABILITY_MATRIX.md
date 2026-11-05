@@ -22,7 +22,15 @@
 | Windows Mihon兼容宿主（Suwayomi v2.4.2366） | manga | 按插件 | 按插件 | 按插件 | 插件转换后的真实图片 | — | 随完整Windows包，不依赖外部Java/服务器；桌面JAR独立来源/指纹确认 | 普通应用已实跑xkcd仓库下载/确认/启用、5来源、真实设置保存重进、3311章及第1/2→2/2页真图；具体字节范围和最终包另见CURRENT_STATUS，不冒称全仓库 |
 
 
-R153请求生命周期：Dio已接每操作取消，真实loopback取消25ms并保留同客户端并行200；JS worker宿主使用parentId和各调用Zone归属，取消HTTP不终止其他来源会话。同步native JS仍依赖既有watchdog/销毁终止；Mihon/SignalR没有物理取消的调用允许在途完成但禁止过期结果发布，不宣称已停止。漫画来源明确不支持搜索时不请求，能力未知仍尝试，不从空结果推断不支持。
+R153请求生命周期（历史）：Dio已接每操作取消，真实loopback取消25ms并保留同客户端并行200；JS worker宿主使用parentId和各调用Zone归属，取消HTTP不终止其他来源会话。同步native JS仍依赖既有watchdog/销毁终止；不能物理取消的SignalR调用允许在途完成但禁止过期结果发布，不宣称已停止。Mihon的当前Android/Windows边界见下。漫画来源明确不支持搜索时不请求，能力未知仍尝试，不从空结果推断不支持。
+
+Android Mihon按每次`requestId`拥有独立协程、Rx订阅与实际OkHttp调用；`prepareRequest(args)`必须在平台通道线程、提交工作线程前同步预留，`mihonCancelRequest({requestId})`直接发出取消信号，不排在阻塞网络工作后、不在UI线程等待退出。原请求返回取消结构`ok:false/cancelled:true/errorCode:request_cancelled`，图片传输退出后清理本次独有的图片/MIME暂存文件，不删除其他订阅的暂存或已发布缓存，不调用全局`cancelAll`，TLS/Cookie/来源认证保持原配置。省略ID仅兼容旧调用；重试也必须新建唯一ID。活动ID及最近4096个已结束ID拒绝重放，未知/晚到取消不创建永久墓碑。默认HttpSource、图片与`awaitSuccess`真实HTTP异常保留`statusCode`及原始`retryAfter`，不从错误文字或先前已捕获响应推断状态。自建慢HTTP源的原生消费者回归源码覆盖图片字节中断/暂存清理、Rx跨线程来源HTTP、并行/同图订阅隔离、提前取消与重复ID、429秒数/日期和错误上下文隔离；本切片未运行，不能作为通过证据。插件自行替换事件监听器、创建完全独立客户端或离开协程/Rx进入自建裸线程的I/O不在宿主可追踪边界内，不承诺终止该类上游工作。
+
+Windows Mihon按每次`requestId`拥有本地取消与等待清理：停止该请求的Dio回环HTTP、恢复目录分页及后续章节/图片调用，等待图片流/文件句柄关闭并删除未发布的`.part`；同图加载按订阅计数，取消一个订阅不打断其他读者，最后一个取消才断开HTTP，JVM与共享启动/核验不随读者取消。Dio 5.11.1原生适配器仅调用`HttpClientRequest.abort()`，而Dart在响应头到达后不再用该方法销毁连接，因此可取消HTTP各自持有独立IO客户端，取消时强制关闭本次客户端；不关闭其他操作/无归属启动请求使用的共享客户端。实际HTTP失败仅转发该回环响应的`statusCode`和原始`Retry-After`，不从错误文本推断来源网站状态。真实慢HTTP适配器回归覆盖独立并行请求、目录/章节边界、共享图片、取消后缓存与请求ID清理；首次统一运行暴露了前述响应头后断连问题及Windows路径分隔符断言问题，本切片修正后未复跑，不作为通过证据。
+
+取消回归的服务端观察器直接接管已写HTTP头的真实Socket，发送合法chunked慢响应，以Socket输入EOF/错误确认对端断连；不使用`HttpResponse.done`代替连接事件，因为Dart在响应未结束期间暂停HTTP解析器，`done`/逐次`flush`可能持续等待或缓冲。首次重跑的共享图片完成/缓存路径断言已通过，但五个旧`done`观察器仍超时；观察器修正后本切片未复跑。
+
+上游边界已对照固定版本源码：[MangaAPI](https://github.com/Suwayomi/Suwayomi-Server/blob/v2.4.2366/server/src/main/kotlin/suwayomi/tachidesk/manga/MangaAPI.kt)的来源/章节/图片GET没有可取消fetch的任务ID或接口；[MangaController.pageRetrieve](https://github.com/Suwayomi/Suwayomi-Server/blob/v2.4.2366/server/src/main/kotlin/suwayomi/tachidesk/manga/controller/MangaController.kt#L465-L516)通过独立future获取图片后写响应；[JavalinSetup.future](https://github.com/Suwayomi/Suwayomi-Server/blob/v2.4.2366/server/src/main/kotlin/suwayomi/tachidesk/server/JavalinSetup.kt#L61-L67)使用共享`SupervisorJob`协程域。[DownloadController.stop/clear](https://github.com/Suwayomi/Suwayomi-Server/blob/v2.4.2366/server/src/main/kotlin/suwayomi/tachidesk/manga/controller/DownloadController.kt#L60-L101)操作全局下载队列而非本适配器的HTTP，不调用它们，也不重启/终止宿主。因此本地取消可确认不再接收/发布字节，但不冒称上游JVM协程、网站请求或上游自身缓存已物理停止。
 
 C153最终Android实际旅程：公开推荐/FX资料、保留原7sefun映射与21集目录、已下载小林第01集24:22/25:11真帧；MangaDex无需命名订阅确认→单源最近更新20部→原书库第76.2话5/14双页真图。该漫画是JS/API来源，不新增APK执行主张。API26/正式包原LK缓存正文20/22、3/37可读，双API小说已下载书架冷启恢复。上述在线API35临时经普通CONNECT代理解决模拟器DNS问题，结束恢复默认网络、停止临时服务；不证明默认网络可达或新网页视频解析。当前整套974通过/3跳过、85Python、analyze无问题；Windows仅本轮最终构建与50成员打包通过，缺专用桌面接口，当前UI旅程未验。完整边界见[C153](delivery/evidence/C153-final-acceptance.json)。
 

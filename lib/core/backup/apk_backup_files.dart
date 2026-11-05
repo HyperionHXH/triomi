@@ -53,6 +53,8 @@ class ApkBackupFiles {
               'sha256',
               'file',
               'nsfw',
+              'desktopJarSha256',
+              'desktopJarFile',
             }.contains(key),
           ) ||
           (item['nsfw'] != null && item['nsfw'] is! bool) ||
@@ -70,6 +72,14 @@ class ApkBackupFiles {
         throw const FormatException('APK 包身份或指纹无效');
       }
       final row = item.cast<String, Object?>();
+      final jarHash = row['desktopJarSha256'];
+      if ((jarHash == null) != (row['desktopJarFile'] == null) ||
+          (jarHash != null &&
+              (jarHash is! String ||
+                  !_fingerprint.hasMatch(jarHash) ||
+                  row['desktopJarFile'] != 'apks/$jarHash.jar'))) {
+        throw const FormatException('桌面JAR独立指纹或文件身份无效');
+      }
       if (row['file'] != member(row) ||
           !packages.add(row['packageName'] as String)) {
         throw const FormatException('APK 文件路径或重复包身份无效');
@@ -88,7 +98,10 @@ class ApkBackupFiles {
       if (entry.value is! Map) throw const FormatException('待确认 APK 项目损坏');
       final row = (entry.value as Map).cast<String, Object?>();
       final identity = validatePayload([_portable(row)]).single;
-      if (entry.key != identity['packageName'] || row['path'] is! String) {
+      if (entry.key != identity['packageName'] ||
+          row['path'] is! String ||
+          (row['desktopJarSha256'] != null &&
+              row['desktopJarPath'] is! String)) {
         throw const FormatException('待确认 APK 本机路径损坏');
       }
       result['${entry.key}'] = Map<String, Object?>.from(row);
@@ -107,6 +120,10 @@ class ApkBackupFiles {
     ])
       key: row[key],
     if (row['nsfw'] is bool) 'nsfw': row['nsfw'],
+    if (row['desktopJarSha256'] != null)
+      'desktopJarSha256': row['desktopJarSha256'],
+    if (row['desktopJarSha256'] != null)
+      'desktopJarFile': 'apks/${row['desktopJarSha256']}.jar',
   };
 
   Object? _installed(String packageName) =>
@@ -141,7 +158,9 @@ class ApkBackupFiles {
       final installed = _installed(packageName);
       checkUpdate(row, installed);
       final previous = existing[packageName];
-      if (previous != null && previous['sha256'] != row['sha256']) {
+      if (previous != null &&
+          (previous['sha256'] != row['sha256'] ||
+              previous['desktopJarSha256'] != row['desktopJarSha256'])) {
         throw StateError('已有不同的待确认 APK，保留原项目');
       }
       if ((installed is Map && installed['sha256'] == row['sha256']) ||
@@ -165,6 +184,11 @@ class ApkBackupFiles {
       final file = entries[row['file']];
       if (file == null) throw const FormatException('备份 APK 文件缺失');
       await _verify(file, row);
+      if (row['desktopJarFile'] != null) {
+        final jar = entries[row['desktopJarFile']];
+        if (jar == null) throw const FormatException('备份桌面JAR缺失');
+        await _verifyJar(jar, row['desktopJarSha256'] as String);
+      }
     }
     return counts;
   }
@@ -229,7 +253,9 @@ class ApkBackupFiles {
       'signerSha256',
       'sha256',
     ]) {
-      if (key == 'versionName' && recoverMissingVersionName && row[key] == null) {
+      if (key == 'versionName' &&
+          recoverMissingVersionName &&
+          row[key] == null) {
         continue;
       }
       if (metadata[key] != row[key]) {
@@ -237,6 +263,16 @@ class ApkBackupFiles {
       }
     }
     return metadata;
+  }
+
+  static Future<void> _verifyJar(
+    File file,
+    String expected, {
+    Directory? within,
+  }) async {
+    await _regular(file, within: within);
+    if (await hashBackupFile(file) != expected)
+      throw const FormatException('桌面JAR SHA-256 校验失败');
   }
 
   /// Snapshots files before streaming them into the archive; never buffers APKs.
@@ -259,6 +295,13 @@ class ApkBackupFiles {
       }
       candidates['${entry.key}'] = {
         ...status,
+        // Android installation cannot execute the desktop companion. Retain its
+        // independent, inert backup identity without turning it into host trust.
+        if (status['desktopJarPath'] == null &&
+            status['backupDesktopJarPath'] is String) ...{
+          'desktopJarPath': status['backupDesktopJarPath'],
+          'desktopJarSha256': status['backupDesktopJarSha256'],
+        },
         'packageName': '${entry.key}',
         'versionName':
             status['versionName'] ??
@@ -317,6 +360,32 @@ class ApkBackupFiles {
           'sha256': row['sha256'],
         };
       }
+      if (row['desktopJarFile'] != null) {
+        final sourceJar = File(candidate['desktopJarPath'] as String);
+        await _verifyJar(
+          sourceJar,
+          row['desktopJarSha256'] as String,
+          within: root.parent,
+        );
+        final jar = File('${directory.path}/extension.jar');
+        await copyBackupFile(sourceJar, jar);
+        await _verifyJar(jar, row['desktopJarSha256'] as String);
+        final jarName = row['desktopJarFile'] as String;
+        if (added.add(jarName)) {
+          if (filePaths != null) {
+            filePaths[jarName] = jar.path;
+          } else {
+            archive.addFile(
+              ArchiveFile.stream(jarName, InputFileStream(jar.path))
+                ..compression = CompressionType.none,
+            );
+          }
+          integrity[jarName] = {
+            'size': await jar.length(),
+            'sha256': row['desktopJarSha256'],
+          };
+        }
+      }
       result.add(row);
     }
     return result;
@@ -347,7 +416,9 @@ class ApkBackupFiles {
         final packageName = row['packageName'] as String;
         checkUpdate(row, _installed(packageName));
         final previous = before[packageName];
-        if (previous != null && previous['sha256'] != row['sha256']) {
+        if (previous != null &&
+            (previous['sha256'] != row['sha256'] ||
+                previous['desktopJarSha256'] != row['desktopJarSha256'])) {
           throw StateError('已有不同的待确认 APK，保留原项目');
         }
         final source = entries[row['file']];
@@ -357,6 +428,14 @@ class ApkBackupFiles {
         created.add(directory);
         final file = await source.copy('${directory.path}/extension.apk');
         final metadata = await _verify(file, row);
+        File? jar;
+        if (row['desktopJarFile'] != null) {
+          final jarSource = entries[row['desktopJarFile']];
+          if (jarSource == null) throw const FormatException('备份桌面JAR缺失');
+          await _verifyJar(jarSource, row['desktopJarSha256'] as String);
+          jar = await jarSource.copy('${directory.path}/extension.jar');
+          await _verifyJar(jar, row['desktopJarSha256'] as String);
+        }
         if (previous != null) {
           for (final key in const [
             'versionCode',
@@ -373,6 +452,13 @@ class ApkBackupFiles {
               row['sha256']) {
             throw const FormatException('已有待确认 APK 字节损坏');
           }
+          if (previous['desktopJarSha256'] != null) {
+            await _verifyJar(
+              File(previous['desktopJarPath'] as String),
+              previous['desktopJarSha256'] as String,
+              within: root,
+            );
+          }
           await directory.delete(recursive: true);
           created.remove(directory);
           continue;
@@ -388,6 +474,7 @@ class ApkBackupFiles {
           if (metadata['nsfw'] is bool)
             'nsfw': row['nsfw'] == true || metadata['nsfw'] == true,
           'path': file.path,
+          if (jar != null) 'desktopJarPath': jar.path,
           'signatureVerified': metadata['signatureVerified'] == true,
           'enabled': false,
         };
@@ -407,6 +494,13 @@ class ApkBackupFiles {
     await _regular(file, within: root);
     checkUpdate(row, _installed(packageName));
     final metadata = await _verify(file, _portable(row));
+    if (row['desktopJarSha256'] != null) {
+      await _verifyJar(
+        File(row['desktopJarPath'] as String),
+        row['desktopJarSha256'] as String,
+        within: root,
+      );
+    }
     if (metadata['signatureVerified'] != true) {
       throw StateError('当前平台不支持 APK 执行；仅保留可移植文件');
     }
@@ -424,7 +518,25 @@ class ApkBackupFiles {
     await _regular(file, within: root);
     if (p.basename(file.path) == 'extension.apk' &&
         p.basename(file.parent.path).startsWith('restore-')) {
-      await file.parent.delete(recursive: true);
+      final installed = _installed(packageName);
+      final retainedJar =
+          installed is Map &&
+          installed['sha256'] == hash &&
+          installed['backupDesktopJarPath'] == row['desktopJarPath'] &&
+          installed['backupDesktopJarSha256'] == row['desktopJarSha256'] &&
+          row['desktopJarSha256'] != null;
+      if (retainedJar) {
+        await _verifyJar(
+          File(row['desktopJarPath'] as String),
+          row['desktopJarSha256'] as String,
+          within: root,
+        );
+        // This directory now owns the inert companion referenced by the
+        // installed backup record, not a pending executable APK.
+        await file.delete();
+      } else {
+        await file.parent.delete(recursive: true);
+      }
     }
   }
 }

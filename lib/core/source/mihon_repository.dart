@@ -57,11 +57,13 @@ class MihonExtension {
   final bool? nsfw;
 
   bool? get declaredNsfw {
-    if (contentWarning?.trim().toLowerCase() == 'nsfw') return true;
+    final warning = contentWarning?.trim().toLowerCase();
+    if (warning == 'nsfw' || warning == 'content_warning_nsfw') return true;
     if (nsfw == true || sources.any((source) => source.nsfw == true)) {
       return true;
     }
     if (nsfw == false) return false;
+    if (warning == 'content_warning_safe') return false;
     if (sources.isNotEmpty && sources.every((source) => source.nsfw == false)) {
       return false;
     }
@@ -157,10 +159,7 @@ abstract final class MihonRepositoryParser {
     if (decoded is List) {
       final base = Uri.parse(resourceUrl ?? sourceUrl).resolve('./');
       decoded = <String, Object?>{
-        'extensions': [
-          for (final raw in decoded)
-            _legacyExtension(raw, base),
-        ],
+        'extensions': [for (final raw in decoded) _legacyExtension(raw, base)],
       };
     }
     if (decoded is! Map) {
@@ -235,8 +234,10 @@ abstract final class MihonRepositoryParser {
 
       final apkUrl = requiredText(resources['apkUrl'], 'resources.apkUrl');
       final apkUri = Uri.tryParse(apkUrl);
-      if (apkUri == null || apkUri.scheme != 'https' ||
-          apkUri.host.isEmpty || apkUri.userInfo.isNotEmpty) {
+      if (apkUri == null ||
+          apkUri.scheme != 'https' ||
+          apkUri.host.isEmpty ||
+          apkUri.userInfo.isNotEmpty) {
         throw MihonRepositoryParseException(
           '扩展 $packageName 的 APK 地址必须是 HTTPS',
         );
@@ -336,8 +337,11 @@ class MihonRepositoryClient {
 
   Future<MihonRepositoryIndex> fetch(String url) async {
     final uri = Uri.tryParse(url.trim());
-    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty || uri.hasFragment) {
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasFragment) {
       throw const SourceException(
         sourceId: 'mihon-repository',
         type: SourceErrorType.parse,
@@ -352,8 +356,11 @@ class MihonRepositoryClient {
     required String sourceUrl,
     int depth = 0,
   }) async {
-    if (depth > 2 || uri.scheme != 'https' || uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty || uri.hasFragment) {
+    if (depth > 2 ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasFragment) {
       throw const MihonRepositoryParseException('仓库扩展列表地址无效或重定向层级过多');
     }
     final response = await http.send(
@@ -361,8 +368,10 @@ class MihonRepositoryClient {
       sourceId: 'mihon-repository',
     );
     final transport = response.url.isEmpty ? uri : Uri.tryParse(response.url);
-    if (transport == null || transport.scheme != 'https' ||
-        transport.host.isEmpty || transport.userInfo.isNotEmpty ||
+    if (transport == null ||
+        transport.scheme != 'https' ||
+        transport.host.isEmpty ||
+        transport.userInfo.isNotEmpty ||
         transport.hasFragment) {
       throw const MihonRepositoryParseException('仓库响应地址必须是无凭据、无片段的 HTTPS URL');
     }
@@ -381,7 +390,8 @@ class MihonRepositoryClient {
         (decoded['extensionList'] == null ||
             decoded['extensionList'] is String)) {
       final meta = decoded['meta'];
-      final next = decoded['extensionList'] ??
+      final next =
+          decoded['extensionList'] ??
           decoded['extensionListUrl'] ??
           decoded['index_v2'] ??
           (meta is Map ? 'index.min.json' : null);
@@ -394,9 +404,10 @@ class MihonRepositoryClient {
         depth: depth + 1,
       );
       return MihonRepositoryIndex(
-        name: '${decoded['name'] ?? (meta is Map ? meta['name'] : null) ?? index.name}',
-        signingKey: '${decoded['signingKey'] ??
-            (meta is Map ? meta['signingKeyFingerprint'] : null) ?? index.signingKey}',
+        name:
+            '${decoded['name'] ?? (meta is Map ? meta['name'] : null) ?? index.name}',
+        signingKey:
+            '${decoded['signingKey'] ?? (meta is Map ? meta['signingKeyFingerprint'] : null) ?? index.signingKey}',
         extensions: index.extensions,
         sourceUrl: sourceUrl,
       );
@@ -423,7 +434,11 @@ class MihonRepositoryClient {
         scheme: 'https',
         host: 'api.github.com',
         pathSegments: [
-          'repos', parts[0], parts[1], 'contents', ...parts.skip(3),
+          'repos',
+          parts[0],
+          parts[1],
+          'contents',
+          ...parts.skip(3),
         ],
         queryParameters: {'ref': parts[2]},
       );

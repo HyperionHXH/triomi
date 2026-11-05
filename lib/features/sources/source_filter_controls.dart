@@ -13,6 +13,7 @@ class SourceFilterControls extends StatefulWidget {
     required this.totalCount,
     this.types = MediaType.values,
     this.showLanguage = true,
+    this.showQuery = true,
   });
 
   final SourceFilters filters;
@@ -22,6 +23,7 @@ class SourceFilterControls extends StatefulWidget {
   final int totalCount;
   final Iterable<MediaType> types;
   final bool showLanguage;
+  final bool showQuery;
 
   @override
   State<SourceFilterControls> createState() => _SourceFilterControlsState();
@@ -60,15 +62,16 @@ class _SourceFilterControlsState extends State<SourceFilterControls> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextFormField(
-          controller: _query,
-          decoration: const InputDecoration(
-            labelText: '搜索来源',
-            prefixIcon: Icon(Icons.search),
-            isDense: true,
+        if (widget.showQuery)
+          TextFormField(
+            controller: _query,
+            decoration: const InputDecoration(
+              labelText: '搜索来源',
+              prefixIcon: Icon(Icons.search),
+              isDense: true,
+            ),
+            onChanged: (value) => onChanged(filters.copyWith(query: value)),
           ),
-          onChanged: (value) => onChanged(filters.copyWith(query: value)),
-        ),
         Wrap(
           spacing: 12,
           crossAxisAlignment: WrapCrossAlignment.center,

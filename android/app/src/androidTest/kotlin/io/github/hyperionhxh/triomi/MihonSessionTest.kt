@@ -237,18 +237,13 @@ class MihonSessionTest {
                 assertEquals(false, host.inspect(path, pkg, version, "0".repeat(64))["executable"])
                 assertEquals("failed candidate must keep old runtime", true, host.request(args)["ok"])
                 host.setEnabled(pkg, false)
-                try {
-                    host.request(args)
-                    fail("disabled extension must reject browser and content requests")
-                } catch (expected: IllegalStateException) {
-                    assertTrue(expected.message.orEmpty().contains("disabled"))
-                    try {
-                        host.request(args + ("manga" to mapOf("url" to relativeMangaUrl)))
-                        fail("disabled extension must reject canonical manga URL resolution")
-                    } catch (disabled: IllegalStateException) {
-                        assertTrue(disabled.message.orEmpty().contains("disabled"))
-                    }
-                }
+                val disabled = host.request(args)
+                assertEquals(false, disabled["ok"])
+                assertEquals("source_request_failed", disabled["errorCode"])
+                assertTrue(disabled["error"].toString().contains("disabled"))
+                val disabledManga = host.request(args + ("manga" to mapOf("url" to relativeMangaUrl)))
+                assertEquals(false, disabledManga["ok"])
+                assertTrue(disabledManga["error"].toString().contains("disabled"))
             } finally {
                 host.setEnabled(pkg, wasEnabled)
             }

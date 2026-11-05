@@ -21,6 +21,7 @@ import 'features/library/data/manga_update_background.dart';
 import 'features/schedule/data/background_update_check.dart';
 import 'features/settings/app_update_service.dart';
 import 'features/settings/cache_management_service.dart';
+import 'features/settings/onboarding_controller.dart';
 import 'features/sources/catalog_sheet.dart';
 
 /// 后台更新检查的引擎入口（T7-7）。
@@ -83,6 +84,7 @@ Future<void> main([List<String> args = const []]) async {
     );
     return;
   }
+  await initializeOnboarding(preferences, database);
   if (Platform.isWindows) {
     await WindowsMihonHost.instance.configureProxy(
       preferences.get<String>('network.sourceProxy') ?? '',
