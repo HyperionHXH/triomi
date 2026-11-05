@@ -58,7 +58,16 @@ Future<void> _until(WidgetTester tester, bool Function() ready) async {
 }
 
 Future<void> _search(WidgetTester tester, String value) async {
-  await tester.enterText(find.byType(TextField), value);
+  final field = find.byType(TextField);
+  // Submission unfocuses the field; native input must reconnect before editing.
+  await tester.tap(field);
+  await tester.pump();
+  await tester.enterText(field, value);
+  expect(
+    tester.widget<EditableText>(find.byType(EditableText)).focusNode.hasFocus,
+    isTrue,
+  );
+  expect(tester.widget<TextField>(field).controller!.text, value);
   await tester.tap(find.byTooltip('搜索'));
   await _advance(tester);
 }
