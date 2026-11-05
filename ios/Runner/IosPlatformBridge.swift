@@ -1,5 +1,7 @@
 import AVFoundation
 import CFNetwork
+import CryptoKit
+import Darwin
 import Flutter
 import Photos
 import UIKit
@@ -12,6 +14,8 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
   private static var lastBackupStamp: UInt64 = 0
   private let channel: FlutterMethodChannel
   private let cacheChannel: FlutterMethodChannel
+  private let backupDocumentsChannel: FlutterMethodChannel
+  private let backupDocuments = IosBackupDocuments()
   private let files = FileManager.default
   private let worker = DispatchQueue(label: "triomi.ios.files", qos: .userInitiated)
   private let web = IosWebSession()
@@ -30,6 +34,7 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
   init(messenger: FlutterBinaryMessenger, channelName: String = "triomi/platform") {
     channel = FlutterMethodChannel(name: channelName, binaryMessenger: messenger)
     cacheChannel = FlutterMethodChannel(name: channelName == "triomi/platform" ? "triomi/cache-management" : channelName + "/cache-management", binaryMessenger: messenger)
+    backupDocumentsChannel = FlutterMethodChannel(name: channelName == "triomi/platform" ? "triomi/backupDocuments" : channelName + "/backupDocuments", binaryMessenger: messenger)
     super.init()
     channel.setMethodCallHandler { [weak self] call, result in
       self?.handle(call, result: result)
@@ -39,11 +44,15 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
       if call.method == "clearBrowserHttpCache" { self.web.clearHttpCache { result(true) } }
       else { result(FlutterMethodNotImplemented) }
     }
+    backupDocumentsChannel.setMethodCallHandler { [weak self] call, result in
+      self?.handleBackupDocuments(call, result: result)
+    }
   }
 
   deinit {
     channel.setMethodCallHandler(nil)
     cacheChannel.setMethodCallHandler(nil)
+    backupDocumentsChannel.setMethodCallHandler(nil)
     IosBackupArtifactRegistry.releaseOwner(artifactOwner)
   }
 
@@ -97,6 +106,44 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
     default: result(FlutterMethodNotImplemented)
     }
   }
+  func handleBackupDocuments(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    if call.method == "pickDirectory" || call.method == "pickBackup" {
+      presentPicker(call.method == "pickDirectory" ? "backupDirectory" : "backupDocument", directory: false, result: result)
+      return
+    }
+    let args = call.arguments as? [String: Any] ?? [:]
+    worker.async {
+      do {
+        let value: Any?
+        switch call.method {
+        case "list":
+          guard let token = args["treeUri"] as? String else { throw Self.error("A directory grant is required") }
+          value = try self.backupDocuments.list(token)
+        case "stage":
+          guard let token = args["uri"] as? String else { throw Self.error("An original document token is required") }
+          value = try self.stageBackupDocument(token)
+        case "delete":
+          guard let token = args["uri"] as? String, let hash = args["sha256"] as? String else { throw Self.error("An original document token and SHA-256 are required") }
+          value = try self.backupDocuments.delete(token, expectedHash: hash)
+        case "releaseStage":
+          guard let path = args["path"] as? String else { throw Self.error("A staged path is required") }
+          try self.backupDocuments.releaseStage(path); value = nil
+        default:
+          DispatchQueue.main.async { result(FlutterMethodNotImplemented) }; return
+        }
+        DispatchQueue.main.async { result(value) }
+      } catch { DispatchQueue.main.async { result(Self.failure("backup_document_failed", error)) } }
+    }
+  }
+
+  private func stageBackupDocument(_ token: String) throws -> String {
+    try backupDocuments.stage(token, cache: cacheRoot()) { source, target in
+      var total: Int64 = 0
+      try self.copyFile(source, to: target, limit: IosBackupDocuments.maxBackupBytes, total: &total,
+                        totalLimit: Int64.max, reserve: 64 * 1024 * 1024)
+    }
+  }
+
 
 
   static func presenter() -> UIViewController? {
@@ -116,7 +163,7 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
     }
     let types: [UTType]
     switch kind {
-    case "pickDirectory": types = [.folder]
+    case "pickDirectory", "backupDirectory": types = [.folder]
     case "pickLocalComic": types = directory ? [.folder] : [.data, .image, .zip]
     case "pickImage": types = [.image]
     default: types = [.data]
@@ -151,6 +198,14 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
         let value: Any
         if kind == "pickDirectory" {
           value = try IosExportDirectory.remember(urls[0])
+        } else if kind == "backupDirectory" {
+          guard !IosBackupDocuments.isPrivate(urls[0]) else { throw Self.error("Select a folder outside application-private storage") }
+          let token = try IosExportDirectory.remember(urls[0])
+          value = ["uri": token, "label": urls[0].lastPathComponent]
+        } else if kind == "backupDocument" {
+          let token = try self.backupDocuments.remember(urls[0])
+          do { value = ["uri": token, "path": try self.stageBackupDocument(token)] }
+          catch { self.backupDocuments.forget(token); throw error }
         } else if kind == "pickLocalComic" {
           let root = try self.stagingDirectory()
           cleanup = root
@@ -189,7 +244,7 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
           cleanup = target
           var total: Int64 = 0
           try Self.readCoordinated(urls[0]) { url in
-            try self.copyFile(url, to: target, limit: kind == "pickFontFile" ? 64 * 1024 * 1024 : Int64.max,
+            try self.copyFile(url, to: target, limit: kind == "pickFontFile" ? 64 * 1024 * 1024 : IosBackupDocuments.maxBackupBytes,
                               total: &total, totalLimit: Int64.max, reserve: 64 * 1024 * 1024)
           }
           value = target.resolvingSymlinksInPath().path
@@ -228,7 +283,7 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
     return root.resolvingSymlinksInPath()
   }
 
-  private static func nextBackupStamp() -> UInt64 {
+  fileprivate static func nextBackupStamp() -> UInt64 {
     backupNameLock.lock(); defer { backupNameLock.unlock() }
     let now = UInt64(Date().timeIntervalSince1970 * 1_000_000)
     lastBackupStamp = max(now, lastBackupStamp + 1)
@@ -297,10 +352,12 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
     return paths
   }
 
-  private func copyFile(_ source: URL, to target: URL, limit: Int64, total: inout Int64,
+  func copyFile(_ source: URL, to target: URL, limit: Int64, total: inout Int64,
                         totalLimit: Int64, reserve: Int64) throws {
-    let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+    let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
     guard values.isRegularFile == true, values.isSymbolicLink != true else { throw Self.error("Only regular documents are accepted") }
+    guard let size = values.fileSize, size > 0, Int64(size) <= limit,
+          total <= totalLimit - Int64(size) else { throw Self.error("The selected files exceed the import size limit") }
     let input = try FileHandle(forReadingFrom: source)
     defer { try? input.close() }
     guard files.createFile(atPath: target.path, contents: nil) else { throw Self.error("Cannot create private snapshot") }
@@ -494,7 +551,9 @@ enum IosExportDirectory {
   static func remember(_ url: URL) throws -> String {
     let scoped = url.startAccessingSecurityScopedResource()
     defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-    guard try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
+    let metadata = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+    guard metadata.isDirectory == true, metadata.isSymbolicLink != true,
+          url.standardizedFileURL.path == url.resolvingSymlinksInPath().path else {
       throw IosPlatformBridge.error("Select an export folder")
     }
     let data = try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
@@ -502,30 +561,44 @@ enum IosExportDirectory {
     UserDefaults.standard.set(data, forKey: storagePrefix + key)
     return prefix + key
   }
+  static func withDirectory<T>(_ token: String, body: (URL) throws -> T) throws -> T {
+    guard token.hasPrefix(prefix), UUID(uuidString: String(token.dropFirst(prefix.count))) != nil,
+          let bookmark = UserDefaults.standard.data(forKey: storagePrefix + String(token.dropFirst(prefix.count))) else {
+      throw IosPlatformBridge.error("Export folder grant is missing; select the folder again")
+    }
+    var stale = false
+    let directory = try URL(resolvingBookmarkData: bookmark, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &stale)
+    let scoped = directory.startAccessingSecurityScopedResource()
+    defer { if scoped { directory.stopAccessingSecurityScopedResource() } }
+    let values = try directory.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+    guard values.isDirectory == true, values.isSymbolicLink != true,
+          directory.standardizedFileURL.path == directory.resolvingSymlinksInPath().path else {
+      throw IosPlatformBridge.error("Export folder is unavailable")
+    }
+    if stale {
+      let refreshed = try directory.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
+      UserDefaults.standard.set(refreshed, forKey: storagePrefix + String(token.dropFirst(prefix.count)))
+    }
+    return try body(directory)
+  }
+
 
   static func write(_ args: [String: Any]) throws -> URL {
-    guard let token = args["treeUri"] as? String, token.hasPrefix(prefix),
-          let name = args["fileName"] as? String, IosPlatformBridge.safeName(name),
-          let bookmark = UserDefaults.standard.data(forKey: storagePrefix + String(token.dropFirst(prefix.count))) else {
+    guard let token = args["treeUri"] as? String,
+          let name = args["fileName"] as? String, IosPlatformBridge.safeName(name) else {
       throw IosPlatformBridge.error("Export folder grant is missing; select the folder again")
     }
     let bytes = (args["bytes"] as? FlutterStandardTypedData)?.data
     let source = args["sourcePath"] as? String
     guard (bytes != nil) != (source != nil) else { throw IosPlatformBridge.error("Exactly one export input is required") }
-    var stale = false
-    let directory = try URL(resolvingBookmarkData: bookmark, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &stale)
-    let scoped = directory.startAccessingSecurityScopedResource()
-    defer { if scoped { directory.stopAccessingSecurityScopedResource() } }
-    if stale {
-      let refreshed = try directory.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
-      UserDefaults.standard.set(refreshed, forKey: storagePrefix + String(token.dropFirst(prefix.count)))
-    }
+    return try withDirectory(token) { directory in
     var sourceURL: URL?
     if let source = source {
-      let url = URL(fileURLWithPath: source).resolvingSymlinksInPath()
+      let url = URL(fileURLWithPath: source).standardizedFileURL
       let home = URL(fileURLWithPath: NSHomeDirectory()).resolvingSymlinksInPath().path + "/"
       let metadata = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-      guard url.path.hasPrefix(home), metadata.isRegularFile == true, metadata.isSymbolicLink != true else {
+      guard url.path.hasPrefix(home), url.path == url.resolvingSymlinksInPath().path,
+            metadata.isRegularFile == true, metadata.isSymbolicLink != true else {
         throw IosPlatformBridge.error("Export source must be an application-private regular file")
       }
       sourceURL = url
@@ -550,5 +623,168 @@ enum IosExportDirectory {
     if let error = writeError { throw error }
     guard let output = output else { throw IosPlatformBridge.error("The file provider did not return an exported document") }
     return output
+    }
+  }
+}
+
+/// Original document grants never become Dart filesystem paths. This registry is
+/// worker-queue confined; stages retain the existing cross-engine cleanup lease.
+final class IosBackupDocuments {
+  static let maxBackupBytes: Int64 = 16 * 1024 * 1024 * 1024
+  private enum Original {
+    case child(directory: String, name: String)
+    case bookmark(Data)
+  }
+  private let owner = UUID().uuidString
+  private var originals = [String: Original]()
+  private var stages = [String: String]()
+
+  deinit { IosBackupArtifactRegistry.releaseOwner(owner) }
+
+  static func isPrivate(_ url: URL) -> Bool {
+    let home = URL(fileURLWithPath: NSHomeDirectory()).resolvingSymlinksInPath().path
+    let path = url.resolvingSymlinksInPath().path
+    return path == home || path.hasPrefix(home + "/")
+  }
+
+  private static func validateFile(_ url: URL) throws {
+    let metadata = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+    guard url.isFileURL, metadata.isRegularFile == true, metadata.isSymbolicLink != true,
+          url.standardizedFileURL.path == url.resolvingSymlinksInPath().path,
+          url.pathExtension.lowercased() == "zip" else {
+      throw IosPlatformBridge.error("Select a regular ZIP backup, not a symbolic link")
+    }
+    guard let size = metadata.fileSize, size > 0, Int64(size) <= maxBackupBytes else {
+      throw IosPlatformBridge.error("Select a nonempty ZIP backup no larger than 16 GiB")
+    }
+  }
+
+  func remember(_ url: URL) throws -> String {
+    let scoped = url.startAccessingSecurityScopedResource()
+    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+    try Self.validateFile(url)
+    let data = try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
+    let token = "ios-backup:" + UUID().uuidString
+    originals[token] = .bookmark(data)
+    return token
+  }
+
+  func forget(_ token: String) { originals.removeValue(forKey: token) }
+
+  func list(_ directory: String) throws -> [[String: Any]] {
+    try IosExportDirectory.withDirectory(directory) { root in
+      var result = [[String: Any]]()
+      try IosPlatformBridge.readCoordinated(root) { folder in
+        let children = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey])
+        for child in children where child.pathExtension.lowercased() == "zip" {
+          guard IosPlatformBridge.safeName(child.lastPathComponent),
+                (try? Self.validateFile(child)) != nil else { continue }
+          let token = "ios-backup:" + UUID().uuidString
+          originals[token] = .child(directory: directory, name: child.lastPathComponent)
+          let size = try child.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+          result.append(["uri": token, "name": child.lastPathComponent, "size": size])
+        }
+      }
+      return result.sorted { ($0["name"] as! String) > ($1["name"] as! String) }
+    }
+  }
+
+  private func withOriginal<T>(_ token: String, body: (URL) throws -> T) throws -> T {
+    guard token.hasPrefix("ios-backup:"), let original = originals[token] else {
+      throw IosPlatformBridge.error("Original document grant is missing; select the backup again")
+    }
+    switch original {
+    case let .child(directory, name):
+      guard IosPlatformBridge.safeName(name) else { throw IosPlatformBridge.error("Invalid backup name") }
+      return try IosExportDirectory.withDirectory(directory) { root in
+        let child = root.appendingPathComponent(name)
+        try Self.validateFile(child)
+        return try body(child)
+      }
+    case let .bookmark(data):
+      var stale = false
+      let url = try URL(resolvingBookmarkData: data, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &stale)
+      let scoped = url.startAccessingSecurityScopedResource()
+      defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+      try Self.validateFile(url)
+      if stale { originals[token] = .bookmark(try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)) }
+      return try body(url)
+    }
+  }
+
+  func stage(_ token: String, cache: URL, copy: (URL, URL) throws -> Void) throws -> String {
+    guard Self.isPrivate(cache), cache.standardizedFileURL.path == cache.resolvingSymlinksInPath().path,
+          try cache.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]).isDirectory == true else {
+      throw IosPlatformBridge.error("Invalid private staging directory")
+    }
+    guard let lease = IosBackupArtifactRegistry.acquire(owner: owner, cleanup: false) else { throw IosPlatformBridge.error("Backup storage is busy") }
+    var target: URL
+    repeat {
+      target = cache.appendingPathComponent("backup-import-\(IosPlatformBridge.nextBackupStamp()).zip")
+    } while FileManager.default.fileExists(atPath: target.path)
+    do {
+      try withOriginal(token) { source in
+        try IosPlatformBridge.readCoordinated(source) { readable in
+          try Self.validateFile(readable)
+          try copy(readable, target)
+        }
+      }
+      stages[target.path] = lease
+      return target.path
+    } catch {
+      try? FileManager.default.removeItem(at: target)
+      IosBackupArtifactRegistry.release(token: lease, owner: owner)
+      throw error
+    }
+  }
+
+  func releaseStage(_ path: String) throws {
+    // An unregistered path is never deleted (including an original ZIP path).
+    guard let lease = stages[path] else { return }
+    if FileManager.default.fileExists(atPath: path) {
+      try Self.validateFile(URL(fileURLWithPath: path))
+      try FileManager.default.removeItem(atPath: path)
+    }
+    stages.removeValue(forKey: path)
+    IosBackupArtifactRegistry.release(token: lease, owner: owner)
+  }
+
+  func delete(_ token: String, expectedHash: String) throws -> Bool {
+    guard expectedHash.count == 64, expectedHash.allSatisfy({ "0123456789abcdef".contains($0) }) else {
+      throw IosPlatformBridge.error("A lowercase SHA-256 is required")
+    }
+    try withOriginal(token) { source in
+      var coordinationError: NSError?; var operationError: Error?
+      NSFileCoordinator().coordinate(writingItemAt: source, options: .forDeleting, error: &coordinationError) { url in
+        do {
+          try Self.validateFile(url)
+          let fd = open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+          guard fd >= 0 else { throw IosPlatformBridge.error("Original backup cannot be opened") }
+          let input = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+          defer { try? input.close() }
+          var before = stat()
+          guard fstat(fd, &before) == 0, (before.st_mode & S_IFMT) == S_IFREG else { throw IosPlatformBridge.error("Original backup is not a regular file") }
+          var digest = SHA256()
+          while let bytes = try input.read(upToCount: 64 * 1024), !bytes.isEmpty { digest.update(data: bytes) }
+          let hash = digest.finalize().map { String(format: "%02x", $0) }.joined()
+          var after = stat()
+          guard hash == expectedHash, lstat(url.path, &after) == 0,
+                before.st_dev == after.st_dev, before.st_ino == after.st_ino,
+                before.st_size == after.st_size,
+                before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec,
+                before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec,
+                before.st_ctimespec.tv_sec == after.st_ctimespec.tv_sec,
+                before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec,
+                (after.st_mode & S_IFMT) == S_IFREG else {
+            throw IosPlatformBridge.error("Original backup changed; it will not be deleted")
+          }
+          try FileManager.default.removeItem(at: url)
+        } catch { operationError = error }
+      }
+      if let error = coordinationError { throw error }
+      if let error = operationError { throw error }
+    }
+    originals.removeValue(forKey: token)
+    return true
   }
 }

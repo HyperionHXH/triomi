@@ -19,8 +19,9 @@ suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation 
 suspend fun Call.awaitSuccess(): Response {
     val response = await()
     if (!response.isSuccessful) {
+        val failure = HttpException(response.code, response.message, response.header("Retry-After"))
         response.close()
-        throw HttpException(response.code, response.message)
+        throw failure
     }
     return response
 }

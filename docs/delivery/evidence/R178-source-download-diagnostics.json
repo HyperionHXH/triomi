@@ -1,0 +1,130 @@
+{
+  "recordedAt": "2026-11-05T13:01:05.468340+00:00",
+  "environment": "anonymous Windows host urllib HTTP observations; not app playback or download acceptance",
+  "publicGetObservations": [
+    {
+      "url": "https://www.7sefun.top/vodsearch/-------------.html?wd=%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2",
+      "status": 200,
+      "finalUrl": "https://www.7sefun.top/vodsearch/-------------.html?wd=%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2",
+      "contentType": "text/html; charset=utf-8",
+      "prefix": "<!DOCTYPE html>\r\n<html lang=\"zh-cn\">\r\n\t<head>\r\n\t\t<title>\r\n\t\t葬送的芙莉莲搜索结果 - 七色番动漫视频网 - (つェ&sub;) 7SeFuN\t\t</title>",
+      "seconds": 0.63
+    },
+    {
+      "url": "https://api.mangadex.org/manga?limit=1&title=Berserk",
+      "status": 200,
+      "finalUrl": "https://mangadex.org/edge/challenge?src=L21hbmdhP2xpbWl0PTEmdGl0bGU9QmVyc2Vyaw",
+      "contentType": "text/html",
+      "prefix": "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <meta name=\"robots\" content=\"noindex, nofollow\">\n  <link rel=\"",
+      "seconds": 1.79
+    },
+    {
+      "url": "https://www.lightnovel.us/",
+      "status": 200,
+      "finalUrl": "https://www.lightnovel.us/",
+      "contentType": "text/html",
+      "prefix": "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Redirecting...</title><style>#loading{position:fixed;top:50%;left:5",
+      "seconds": 5.74
+    },
+    {
+      "url": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+      "status": 200,
+      "finalUrl": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+      "contentType": "audio/mpegurl",
+      "prefix": "#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=2149280,CODECS=\"mp4a.40.2,avc1.64001f\",RESOLUTION=1280x720,NAME=\"720\"\nurl_0/193039199_mp4_h264_aac_hd_7.m3u8\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=2",
+      "seconds": 1.07
+    }
+  ],
+  "sevenColorSourceRuleTraversal": {
+    "rule": "7sefun.json",
+    "searchStatus": 200,
+    "searchRows": 6,
+    "detailUrl": "https://www.7sefun.top/voddetail/26976.html",
+    "detailStatus": 200,
+    "episodesByRoad": [
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        10
+      ],
+      [
+        2,
+        0
+      ],
+      [
+        3,
+        10
+      ]
+    ],
+    "selectedEpisodeUrl": "https://www.7sefun.top/vodplay/26976-2-1.html",
+    "selectedEpisodeStatus": 200,
+    "selectedEpisodeContentType": "text/html; charset=utf-8",
+    "selectedEpisodeContainsPlayerConfig": true,
+    "selectedEpisodeBytes": 26496,
+    "conclusion": "episode page accessible; WebView resolver/playback not exercised"
+  },
+  "lkActualProductionFeed": {
+    "url": "https://www.lightnovel.fun/api/pc-proxy/api/bff/home-feed-v1",
+    "method": "POST",
+    "status": 200,
+    "contentType": "application/json; charset=UTF-8",
+    "anonymousUserContext": {
+      "uid": 0,
+      "logged_in": 0
+    },
+    "conclusion": "anonymous feed reachable; chapter read/download not exercised"
+  },
+  "nativePublicResolverObservations": [
+    {
+      "platform": "windows",
+      "page": "http://127.0.0.1:17813/fixture-player",
+      "resolved": true,
+      "mediaHost": "127.0.0.1",
+      "mediaPath": "/native-media.m3u8",
+      "mime": null,
+      "mediaStatus": 200,
+      "responseType": "application/x-mpegURL",
+      "observedBytes": 93
+    },
+    {
+      "platform": "windows",
+      "page": "https://www.7sefun.top/vodplay/26976-2-1.html",
+      "resolved": true,
+      "mediaHost": "groupvideo.photo.qq.com",
+      "mediaPath": "/1071_0bc33madsaaaaaafwptwarus7wyehhnqaoka.f0.mp4",
+      "mime": null,
+      "error": "SourceException(r178-public, notFound): HTTP 404"
+    },
+    {
+      "platform": "android",
+      "page": "https://www.7sefun.top/vodplay/26976-2-1.html",
+      "error": "PlatformException(resolve_timeout, 播放页未返回可播放地址，请重试或换线路, null, null)"
+    }
+  ],
+  "productionAdapterBoundedProbe": {
+    "7sefun": {
+      "searchCount": 2,
+      "episodeCount": 20,
+      "pageStatus": 200,
+      "notVideoSuccess": true
+    },
+    "MXdm": {
+      "host": "www.dcc3.com",
+      "stage": "search",
+      "error": "connection timeout15s"
+    },
+    "DM84": {
+      "host": "dmbus.cc",
+      "stage": "search",
+      "error": "connection timeout15s"
+    },
+    "mux": {
+      "status": 200,
+      "mime": "audio/mpegurl",
+      "variants": 5
+    }
+  }
+}

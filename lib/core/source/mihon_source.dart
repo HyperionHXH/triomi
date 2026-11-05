@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -9,6 +11,7 @@ import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
 import '../models/source_exception.dart';
 import '../platform/platform_channel.dart';
+import 'http_client.dart';
 import 'mihon_image_bridge.dart';
 import 'source_api.dart';
 import 'source_website.dart';
@@ -52,6 +55,12 @@ class MihonSource
            SourceCapability.content,
          },
        );
+
+  static final String _requestSession = List.generate(
+    16,
+    (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'),
+  ).join();
+  static int _requestSequence = 0;
 
   final String packageName;
   final String hostSourceId;
@@ -337,30 +346,73 @@ class MihonSource
     List<Map<String, Object?>>? filters,
   }) async {
     if (!enabled) throw _error('Mihon 来源已停用');
-    final response = await platformChannel.mihonRequest(
-      packageName: packageName,
-      operation: operation,
-      apkPath: apkPath,
-      versionCode: versionCode,
-      signerSha256: signerSha256,
-      sourceId: hostSourceId,
-      page: page,
-      query: query,
-      manga: manga,
-      chapter: chapter,
-      filters: filters,
-      pageData: pageData == null
-          ? null
-          : <String, Object?>{
-              for (final entry in pageData.entries) '${entry.key}': entry.value,
-            },
-    );
-    if (response['ok'] != true) {
-      throw _error(
-        '${response['error'] ?? response['hostError'] ?? 'Mihon 请求失败'}',
+    final cancellation = SourceRequestCancellation.current;
+    if (cancellation?.cancelled == true) throw cancellation!.token.cancelError!;
+    final requestId = cancellation == null
+        ? null
+        : '$_requestSession-${_requestSequence++}';
+    var active = true;
+    Future<void>? cancelled;
+    if (cancellation != null) {
+      unawaited(
+        cancellation.token.whenCancel.then<void>((_) {
+          if (!active) return;
+          // A failed cancellation dispatch cannot release this invocation early:
+          // await the original host response and discard it before publishing.
+          cancelled = platformChannel
+              .mihonCancelRequest(requestId!)
+              .catchError((Object _) {});
+        }),
       );
     }
-    return response;
+    try {
+      final response = await platformChannel.mihonRequest(
+        packageName: packageName,
+        operation: operation,
+        apkPath: apkPath,
+        versionCode: versionCode,
+        signerSha256: signerSha256,
+        sourceId: hostSourceId,
+        requestId: requestId,
+        page: page,
+        query: query,
+        manga: manga,
+        chapter: chapter,
+        filters: filters,
+        pageData: pageData == null
+            ? null
+            : <String, Object?>{
+                for (final entry in pageData.entries)
+                  '${entry.key}': entry.value,
+              },
+      );
+      if (cancellation?.cancelled == true) {
+        throw cancellation!.token.cancelError!;
+      }
+      if (response['ok'] != true) {
+        final message =
+            '${response['error'] ?? response['hostError'] ?? 'Mihon 请求失败'}';
+        final status = (response['statusCode'] as num?)?.toInt();
+        throw SourceException(
+          sourceId: descriptor.id,
+          type: switch (status) {
+            401 || 403 => SourceErrorType.auth,
+            404 || 410 => SourceErrorType.notFound,
+            429 => SourceErrorType.rateLimited,
+            _ => _errorType(message),
+          },
+          message: message,
+          statusCode: status,
+          retryAfter: SourceException.parseRetryAfter(
+            response['retryAfter'] as String?,
+          ),
+        );
+      }
+      return response;
+    } finally {
+      active = false;
+      await cancelled;
+    }
   }
 
   List<MediaItem> _mangas(Map<String, Object?> response) {

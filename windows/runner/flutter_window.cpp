@@ -119,6 +119,7 @@ std::vector<PendingProxy> pending_proxies;
 #include "windows_backup.h"
 #include "app_update.h"
 #include "windows_web_session.h"
+#include "backup_documents.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project, bool worker,
                              bool backup_worker)
@@ -147,6 +148,7 @@ bool FlutterWindow::OnCreate() {
   if (!worker_ && !backup_worker_) RegisterPlugins(flutter_controller_->engine());
   if (!worker_ && !backup_worker_) {
     RegisterWindowsWebSession(flutter_controller_->engine()->messenger(), GetHandle());
+    RegisterBackupDocuments(flutter_controller_->engine()->messenger(), GetHandle());
   }
   if (!worker_) {
     platform_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(

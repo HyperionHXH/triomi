@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/app.dart';
+import 'package:triomi/core/backup/backup_location.dart';
+import 'package:triomi/core/backup/backup_restore_preview.dart';
 import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/router/app_router.dart';
@@ -26,8 +28,11 @@ import 'package:triomi/features/player/data/hybrid_danmaku_models.dart';
 import 'package:triomi/features/player/data/player_settings.dart';
 import 'package:triomi/features/player/episode_selector.dart';
 import 'package:triomi/features/player/player_page.dart';
+import 'package:triomi/features/profile/backup_restore_dialog.dart';
 import 'package:triomi/features/reader/manga_page_image.dart';
 import 'package:triomi/features/reader/manga_reader_page.dart';
+import 'package:triomi/features/settings/onboarding_page.dart';
+import 'package:triomi/features/settings/settings_controller.dart';
 
 import 'fixtures/ios_test_binding.dart';
 import 'fixtures/ios_tour_fixtures.dart';
@@ -170,21 +175,21 @@ void main() {
       Future<void> tapText(String text) async {
         final candidates = find.text(text, findRichText: true);
         expect(
-          candidates.evaluate(),
-          isNotEmpty,
-          reason: 'Expected production control "$text"',
+          candidates,
+          findsOneWidget,
+          reason: 'Production control "$text" must be unambiguous',
         );
         if (candidates.hitTestable().evaluate().isEmpty) {
-          await tester.ensureVisible(candidates.first);
+          await tester.ensureVisible(candidates);
           await pumpFor(const Duration(milliseconds: 200));
         }
         final visible = candidates.hitTestable();
         expect(
-          visible.evaluate(),
-          isNotEmpty,
+          visible,
+          findsOneWidget,
           reason: 'Production control "$text" must be reachable',
         );
-        await tester.tap(visible.first);
+        await tester.tap(visible);
         await pumpFor(const Duration(milliseconds: 350));
       }
 
@@ -196,15 +201,6 @@ void main() {
           reason: 'Expected production control key "$key"',
         );
         await tester.ensureVisible(target);
-        if (target.hitTestable().evaluate().isEmpty) {
-          await tester.scrollUntilVisible(
-            target,
-            300,
-            maxScrolls: 20,
-            scrollable: find.byType(Scrollable).last,
-          );
-          await pumpFor(const Duration(milliseconds: 200));
-        }
         expect(
           target.hitTestable(),
           findsOneWidget,
@@ -1068,10 +1064,71 @@ void main() {
 
       // Downloads and account/settings pages remain logged out and credential-free.
       await go(AppRoutes.downloads);
-      await until(
-        () => find.textContaining('已暂停').evaluate().isNotEmpty,
-        'production downloads must render the actual paused fixture queue',
+      final mangaDownloadGroup = find.byKey(
+        ValueKey((
+          fixtures.sourceId(MediaType.manga),
+          fixtures.item(MediaType.manga).remoteId,
+        )),
       );
+      await until(
+        () => mangaDownloadGroup.evaluate().length == 1,
+        'production downloads must render the seeded paused work group',
+      );
+      final mangaDownloadExpansion = find.descendant(
+        of: mangaDownloadGroup,
+        matching: find.byType(ExpansionTile),
+      );
+      final pausedChapter = find.descendant(
+        of: mangaDownloadGroup,
+        matching: find.text(fixtures.catalog(MediaType.manga)[0].title),
+      );
+      expect(mangaDownloadExpansion, findsOneWidget);
+      expect(
+        pausedChapter,
+        findsNothing,
+        reason: 'collapsed groups must not expose chapter actions',
+      );
+      await screenshot(
+        '07_downloads_collapsed.png',
+        AppRoutes.downloads,
+        '生产下载按作品折叠；未展开时没有章节操作，不伪造运行中任务',
+      );
+      await tester.tap(mangaDownloadExpansion);
+      await pumpFor();
+      expect(pausedChapter, findsOneWidget);
+      expect(
+        find
+            .descendant(
+              of: mangaDownloadGroup,
+              matching: find.textContaining('已暂停'),
+            )
+            .evaluate(),
+        isNotEmpty,
+      );
+      await screenshot(
+        '07_downloads_expanded.png',
+        AppRoutes.downloads,
+        '展开真实暂停的漫画队列，显示逐章进度和继续/取消入口',
+      );
+      await tester.tap(find.byTooltip('下载操作'));
+      await pumpFor();
+      for (final label in [
+        '仅 WiFi 下载',
+        '调整待下载顺序',
+        '暂停当前范围',
+        '继续当前范围',
+        '重试失败项',
+        '清理无文件的已完成记录',
+      ]) {
+        expect(find.text(label), findsOneWidget);
+      }
+      await screenshot(
+        '07_downloads_menu.png',
+        AppRoutes.downloads,
+        '生产下载全局菜单；仅检查作用域、网络及重试入口，不启动下载或删除',
+      );
+      router.pop();
+      await pumpFor();
       await screenshot(
         '07_downloads_settings.png',
         AppRoutes.downloads,
@@ -1142,6 +1199,75 @@ void main() {
           _ => throw StateError('Unspecified screenshot route $route'),
         };
         await screenshot(name, route, '生产配置页面，未登录且无账号凭据');
+        if (route == AppRoutes.backup) {
+          final verticalScroll = find
+              .byElementPredicate(
+                (element) =>
+                    element.widget is Scrollable &&
+                    (element.widget as Scrollable).axisDirection ==
+                        AxisDirection.down &&
+                    element.findAncestorWidgetOfExactType<ListView>() != null &&
+                    element.findAncestorStateOfType<EditableTextState>() ==
+                        null,
+              )
+              .hitTestable();
+          expect(verticalScroll, findsOneWidget);
+          await tester.scrollUntilVisible(
+            find.text('还没有本地备份'),
+            250,
+            scrollable: verticalScroll,
+          );
+          expect(find.text('还没有本地备份'), findsOneWidget);
+          expect(
+            await BackupLocationStore(fixtures.preferences).current(),
+            isNull,
+          );
+          await screenshot(
+            '08_portable_backup_empty.png',
+            route,
+            '没有外部目录授权就没有本地备份列表；不把私有暂存称为安全备份',
+          );
+          await tester.scrollUntilVisible(
+            find.text('选择目录'),
+            -250,
+            scrollable: verticalScroll,
+          );
+          expect(find.text('选择目录').hitTestable(), findsOneWidget);
+          expect(find.textContaining('尚未授权：首次导出前').evaluate(), isNotEmpty);
+          await screenshot(
+            '08_backup_location_choice_boundary.png',
+            route,
+            '真实原生目录选择前的授权边界；未调用或伪造UIDocumentPicker授权成功',
+          );
+          final backupPath = await fixtures.createRestorePreviewBackup();
+          final preview = await previewBackupRestoreFile(
+            fixtures.database,
+            backupPath,
+            preferences: fixtures.preferences,
+          );
+          expect(preview.localWins, greaterThan(0));
+          final result = confirmBackupRestore(
+            tester.element(find.text('备份与恢复')),
+            preview,
+            target: '隔离视觉夹具（私有暂存，不是外部安全备份）',
+          );
+          await pumpFor();
+          expect(find.text('恢复冲突预览'), findsOneWidget);
+          expect(find.text('确认合并当前备份'), findsOneWidget);
+          final replaceSettings = find.widgetWithText(
+            SwitchListTile,
+            '替换已有非敏感设置',
+          );
+          expect(tester.widget<SwitchListTile>(replaceSettings).value, isFalse);
+          await screenshot(
+            '08_backup_restore_preview.png',
+            route,
+            '真实生成并校验ZIP后的生产恢复冲突预览；默认保留本机设置，取消不导入',
+          );
+          await tapText('取消');
+          expect(await result, isNull);
+          expect(await File(backupPath).exists(), isTrue);
+        }
         if (route == AppRoutes.settings) {
           await tapText('缓存与存储');
           final rescan = find.byWidgetPredicate(
@@ -1230,6 +1356,64 @@ void main() {
           );
         }
       }
+      await go(AppRoutes.settings);
+      await tapText('新手设置');
+      expect(find.byType(OnboardingPage), findsOneWidget);
+      expect(find.text('选一个喜欢的外观'), findsOneWidget);
+      await tapText('深色');
+      expect(
+        Theme.of(tester.element(find.text('选一个喜欢的外观'))).brightness,
+        Brightness.dark,
+      );
+      await screenshot(
+        '08_onboarding_appearance.png',
+        AppRoutes.settings,
+        '生产新手设置实际切换深色主题预览；未连接账号或安装来源',
+      );
+      await tapText('下一步');
+      expect(find.text('把备份留在安全的位置'), findsOneWidget);
+      expect(find.textContaining('尚未授权：首次导出前').evaluate(), isNotEmpty);
+      await screenshot(
+        '08_onboarding_backup.png',
+        AppRoutes.settings,
+        '新手备份步骤如实说明外部授权、卸载风险及私有下载与备份的区别',
+      );
+      await tapText('下一步');
+      expect(find.text('准备好开始阅读'), findsOneWidget);
+      expect(find.text('账号与同步按需连接'), findsOneWidget);
+      expect(
+        find.byType(EditableText),
+        findsNothing,
+        reason: 'onboarding must not collect or populate account secrets',
+      );
+      await screenshot(
+        '08_onboarding_no_account.png',
+        AppRoutes.settings,
+        '新手最后一步无账号表单、不自动同步；只提供按需来源/恢复入口',
+      );
+      await tapText('完成设置');
+      expect(find.byType(OnboardingPage), findsNothing);
+      expect(container.read(appearanceProvider).themeMode, ThemeMode.dark);
+      await go(AppRoutes.manga);
+      expect(
+        Theme.of(
+          tester.element(find.text(fixtures.item(MediaType.manga).title)),
+        ).brightness,
+        Brightness.dark,
+      );
+      await screenshot(
+        '08_manga_dark.png',
+        AppRoutes.manga,
+        '保存后的深色主题应用于真实漫画书架，非孤立预览',
+      );
+      tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+      await go(AppRoutes.downloads);
+      expect(find.byTooltip('下载操作').hitTestable(), findsOneWidget);
+      await screenshot(
+        '08_downloads_dark_large_text.png',
+        AppRoutes.downloads,
+        '生产下载作品卡片在深色主题及140%系统字号下仍保留可达菜单',
+      );
       // A larger type-scale pass is still the same production UI and viewport.
       tester.platformDispatcher.textScaleFactorTestValue = 1.25;
       await go(AppRoutes.settings);
@@ -1242,7 +1426,7 @@ void main() {
       debugPrint('IOS_VISUAL_TOUR_CAPTURES=$captureIndex');
       expect(
         captureIndex,
-        59,
+        70,
         reason: 'Every agreed production tour surface must be captured',
       );
     },

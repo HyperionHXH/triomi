@@ -89,16 +89,21 @@ void main() {
         .get();
     return rows.first.data['n'] as int;
   }
-  test('portable backups exclude and cannot overwrite secure local settings', () async {
-    const key = 'secure.localPolicy';
-    await preferences.set(key, true);
-    final backup = await serviceOf().exportToBytes(includeCovers: false);
-    final payload = BackupService.validatedPayload(backup.bytes);
-    expect((payload['settingsValues'] as Map).containsKey(key), isFalse);
-    await serviceOf().importFromBytes(zipOf(payloadOf(settings: {key: false})));
-    expect(preferences.get<bool>(key), isTrue);
-  });
 
+  test(
+    'portable backups exclude and cannot overwrite secure local settings',
+    () async {
+      const key = 'secure.localPolicy';
+      await preferences.set(key, true);
+      final backup = await serviceOf().exportToBytes(includeCovers: false);
+      final payload = BackupService.validatedPayload(backup.bytes);
+      expect((payload['settingsValues'] as Map).containsKey(key), isFalse);
+      await serviceOf().importFromBytes(
+        zipOf(payloadOf(settings: {key: false})),
+      );
+      expect(preferences.get<bool>(key), isTrue);
+    },
+  );
 
   group('拒绝路径：旧数据不丢', () {
     setUp(() async {
@@ -863,19 +868,41 @@ void main() {
       );
     });
 
-    test('离线引用缺文件：路径行存在但文件不可读（不误判可读）', () async {
+    test('missing offline bytes cannot open, while their queue entry remains explicitly removable', () async {
       final repo = DownloadRepository(db);
       final id = await repo.enqueue(
         sourceId: 'lk',
         remoteId: '1',
         chapter: const Chapter(sourceId: 'lk', remoteId: '1:1', title: '第 1 章'),
       );
-      final missing = '${Directory.systemTemp.path}/triomi_d18_missing_dir';
+      final directory = await Directory.systemTemp.createTemp(
+        'missing-offline-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final missing =
+          '${directory.path}${Platform.pathSeparator}absent-chapter';
       await repo.markDone(id, path: missing);
 
-      // localImageDir 返回登记的路径；localVideoPath 对不存在的文件返回 null。
-      expect(await repo.localImageDir('lk', '1:1'), missing);
+      // Reader/player entrypoints must not offer an unreadable offline result.
+      // Looking up missing bytes must not silently delete the user's queue entry.
+      expect(await repo.localImageDir('lk', '1:1'), isNull);
       expect(await repo.localVideoPath('lk', '1:1'), isNull);
+      final indexed = await repo.findRow(
+        sourceId: 'lk',
+        remoteId: '1',
+        chapterRemoteId: '1:1',
+      );
+      expect(indexed, isNotNull);
+      expect(indexed!.path, missing);
+      await repo.deleteRow(id);
+      expect(
+        await repo.findRow(
+          sourceId: 'lk',
+          remoteId: '1',
+          chapterRemoteId: '1:1',
+        ),
+        isNull,
+      );
     });
   });
 

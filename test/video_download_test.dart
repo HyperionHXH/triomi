@@ -232,6 +232,38 @@ void main() {
     });
   });
 
+  test(
+    'standard HLS MIME aliases and parameters work without a filename suffix',
+    () async {
+      const url = 'https://cdn.example.com/stream?signature=fixture';
+      const body =
+          '#EXTM3U\n#EXT-X-TARGETDURATION:2\n'
+          '#EXTINF:2,\npart.ts\n#EXT-X-ENDLIST\n';
+      final mimeTypes = [
+        'application/vnd.apple.mpegurl; charset=utf-8',
+        'Application/X-MpegURL',
+        'audio/mpegurl',
+        'audio/x-mpegurl',
+      ];
+      for (var index = 0; index < mimeTypes.length; index++) {
+        final http = byteHttp({
+          url: utf8.encode(body),
+          'https://cdn.example.com/part.ts': [1, 2, 3],
+        });
+        final path = await VideoDownloader(http: http, sourceId: 's').download(
+          url: url,
+          mimeType: mimeTypes[index],
+          directory: '${tempDir.path}/$index',
+        );
+        expect(path, endsWith('video.m3u8'));
+        expect(http.requests.map((request) => request.url), [
+          url,
+          'https://cdn.example.com/part.ts',
+        ]);
+      }
+    },
+  );
+
   group('HLS 视频下载', () {
     const playlistUrl = 'https://cdn.example.com/hls/index.m3u8';
 
@@ -536,6 +568,11 @@ seg-1.ts
       await DownloadService.removeFiles(<DownloadRow>[
         DownloadRow(
           id: 1,
+          queuePosition: 0,
+          retryCount: 0,
+          receivedBytes: 0,
+          speedBytesPerSecond: 0,
+          completedPages: 0,
           sourceId: 's',
           remoteId: '1',
           chapterSourceId: 's',
@@ -547,6 +584,11 @@ seg-1.ts
         ),
         DownloadRow(
           id: 2,
+          queuePosition: 1,
+          retryCount: 0,
+          receivedBytes: 0,
+          speedBytesPerSecond: 0,
+          completedPages: 0,
           sourceId: 's',
           remoteId: '2',
           chapterSourceId: 's',

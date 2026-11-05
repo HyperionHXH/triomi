@@ -1,5 +1,6 @@
 import Darwin
 import CFNetwork
+import CryptoKit
 import AVFoundation
 import Flutter
 import UIKit
@@ -61,6 +62,143 @@ final class RunnerTests: XCTestCase {
     XCTAssertEqual((traversal as? FlutterError)?.code, "write_failed")
     let free = invoke(secondBridge, "availableDiskBytes", ["path": root.path]) as? NSNumber
     XCTAssertGreaterThan(try XCTUnwrap(free).int64Value, 0)
+  }
+  private func invokeBackup(_ bridge: IosPlatformBridge, _ method: String, _ arguments: Any? = nil) -> Any? {
+    let done = expectation(description: "backupDocuments/" + method)
+    var value: Any?
+    bridge.handleBackupDocuments(FlutterMethodCall(methodName: method, arguments: arguments)) {
+      value = $0; done.fulfill()
+    }
+    wait(for: [done], timeout: 15)
+    return value
+  }
+
+  func testBackupDocumentsReimportUsesOpaqueOriginalAndReleasesOnlyItsStage() throws {
+    let files = FileManager.default
+    let root = try files.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+      .resolvingSymlinksInPath().appendingPathComponent("portable-native-" + UUID().uuidString, isDirectory: true)
+    try files.createDirectory(at: root, withIntermediateDirectories: false)
+    defer { try? files.removeItem(at: root) }
+    let original = root.appendingPathComponent("original.zip")
+    let bytes = Data("reviewed original fixture".utf8)
+    try bytes.write(to: original)
+    try Data("not a backup".utf8).write(to: root.appendingPathComponent("skip.txt"))
+    let linked = root.appendingPathComponent("linked.zip")
+    try files.createSymbolicLink(at: linked, withDestinationURL: original)
+    let directory = try IosExportDirectory.remember(root)
+    defer { UserDefaults.standard.removeObject(forKey: "triomi.export-directory." + String(directory.dropFirst("ios-bookmark:".count))) }
+    // New bridge resolves the persisted directory bookmark; no picker URL survives.
+    let bridge = try makeBridge()
+    let documents = try XCTUnwrap(invokeBackup(bridge, "list", ["treeUri": directory]) as? [[String: Any]])
+    XCTAssertEqual(documents.count, 1)
+    XCTAssertEqual(documents.first?["name"] as? String, "original.zip")
+    let token = try XCTUnwrap(documents.first?["uri"] as? String)
+    XCTAssertTrue(token.hasPrefix("ios-backup:"))
+    XCTAssertFalse(token.contains(root.path))
+    let path = try XCTUnwrap(invokeBackup(bridge, "stage", ["uri": token]) as? String)
+    defer { _ = invokeBackup(bridge, "releaseStage", ["path": path]) }
+    XCTAssertNotEqual(path, original.path)
+    XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: path)), bytes)
+    // Cleanup must not accept an arbitrary path, even one under our own sandbox.
+    _ = invokeBackup(bridge, "releaseStage", ["path": original.path])
+    XCTAssertEqual(try Data(contentsOf: original), bytes)
+    XCTAssertNil(IosBackupArtifactRegistry.acquire(owner: "stage-cleanup-test", cleanup: true))
+    XCTAssertEqual((invokeBackup(bridge, "stage", ["uri": original.path]) as? FlutterError)?.code, "backup_document_failed")
+    XCTAssertEqual((invokeBackup(bridge, "list", ["treeUri": "ios-bookmark:" + UUID().uuidString]) as? FlutterError)?.code, "backup_document_failed")
+    let wrongHash = String(repeating: "0", count: 64)
+    XCTAssertEqual((invokeBackup(bridge, "delete", ["uri": token, "sha256": wrongHash]) as? FlutterError)?.code, "backup_document_failed")
+    XCTAssertTrue(files.fileExists(atPath: original.path))
+    _ = invokeBackup(bridge, "releaseStage", ["path": path])
+    XCTAssertFalse(files.fileExists(atPath: path))
+    XCTAssertTrue(files.fileExists(atPath: original.path))
+    // Change after review: the stage's old digest must never authorize deletion.
+    let reviewedHash = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+    let other = root.appendingPathComponent("other.zip")
+    try bytes.write(to: other)
+    try files.removeItem(at: original)
+    try files.createSymbolicLink(at: original, withDestinationURL: other)
+    XCTAssertEqual((invokeBackup(bridge, "delete", ["uri": token, "sha256": reviewedHash]) as? FlutterError)?.code, "backup_document_failed")
+    XCTAssertEqual(try Data(contentsOf: other), bytes)
+    try files.removeItem(at: original)
+    let replacement = Data("replacement original".utf8)
+    try replacement.write(to: original)
+    XCTAssertEqual((invokeBackup(bridge, "delete", ["uri": token, "sha256": reviewedHash]) as? FlutterError)?.code, "backup_document_failed")
+    XCTAssertEqual(try Data(contentsOf: original), replacement)
+    let replacementHash = SHA256.hash(data: replacement).map { String(format: "%02x", $0) }.joined()
+    XCTAssertEqual(invokeBackup(bridge, "delete", ["uri": token, "sha256": replacementHash]) as? Bool, true)
+    XCTAssertFalse(files.fileExists(atPath: original.path))
+  }
+
+  func testBackupGrantRejectsSymlinkAndTraversalInputs() throws {
+    let files = FileManager.default
+    let root = try files.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+      .resolvingSymlinksInPath().appendingPathComponent("grant-boundary-" + UUID().uuidString, isDirectory: true)
+    try files.createDirectory(at: root, withIntermediateDirectories: false)
+    defer { try? files.removeItem(at: root) }
+    let original = root.appendingPathComponent("original.zip")
+    try Data("original".utf8).write(to: original)
+    let link = root.appendingPathComponent("link.zip")
+    try files.createSymbolicLink(at: link, withDestinationURL: original)
+    let directoryLink = root.appendingPathComponent("directory-link")
+    try files.createSymbolicLink(at: directoryLink, withDestinationURL: root)
+    let documents = IosBackupDocuments()
+    XCTAssertThrowsError(try documents.remember(link))
+    XCTAssertThrowsError(try IosExportDirectory.remember(directoryLink))
+    XCTAssertTrue(IosBackupDocuments.isPrivate(root))
+    XCTAssertFalse(IosBackupDocuments.isPrivate(URL(fileURLWithPath: NSHomeDirectory() + "-other/backup")))
+    let token = try documents.remember(original)
+    XCTAssertTrue(token.hasPrefix("ios-backup:"))
+    XCTAssertThrowsError(try documents.delete("ios-backup:../original.zip", expectedHash: String(repeating: "0", count: 64)))
+    let directory = try IosExportDirectory.remember(root)
+    let stage = try documents.stage(token, cache: root) { source, target in
+      try files.copyItem(at: source, to: target)
+    }
+    defer { try? documents.releaseStage(stage) }
+    XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: stage)), Data("original".utf8))
+    try documents.releaseStage(original.path)
+    XCTAssertTrue(files.fileExists(atPath: original.path))
+    XCTAssertThrowsError(try documents.stage(token, cache: directoryLink) { _, _ in
+      XCTFail("Symlink staging roots must never reach the copy callback")
+    })
+    try documents.releaseStage(stage)
+    XCTAssertFalse(files.fileExists(atPath: stage))
+    XCTAssertTrue(files.fileExists(atPath: original.path))
+    defer { UserDefaults.standard.removeObject(forKey: "triomi.export-directory." + String(directory.dropFirst("ios-bookmark:".count))) }
+    XCTAssertThrowsError(try IosExportDirectory.write(["treeUri": directory, "fileName": "export.zip", "sourcePath": link.path]))
+    XCTAssertEqual(try Data(contentsOf: original), Data("original".utf8))
+  }
+
+
+  func testOversizedBackupIsRejectedBeforeAnySnapshotBytesAreCopied() throws {
+    let files = FileManager.default
+    let root = try files.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+      .resolvingSymlinksInPath().appendingPathComponent("backup-size-" + UUID().uuidString, isDirectory: true)
+    try files.createDirectory(at: root, withIntermediateDirectories: false)
+    defer { try? files.removeItem(at: root) }
+    let original = root.appendingPathComponent("growing.zip")
+    try Data("initial reviewed bytes".utf8).write(to: original)
+    let documents = IosBackupDocuments()
+    let token = try documents.remember(original)
+    let handle = try FileHandle(forWritingTo: original)
+    try handle.truncate(atOffset: UInt64(IosBackupDocuments.maxBackupBytes + 1))
+    try handle.close()
+    // Sparse metadata exercises 16 GiB + 1 without reading or allocating 16 GiB.
+    XCTAssertThrowsError(try documents.remember(original))
+    XCTAssertThrowsError(try documents.stage(token, cache: root) { _, _ in
+      XCTFail("An oversized original must be rejected before the copy callback")
+    })
+    // The legacy pickBackupFile path and new document path share this exact
+    // copy helper, whose preflight and streaming counter both use the limit.
+    let bridge = try makeBridge()
+    let target = root.appendingPathComponent("must-not-be-created.zip")
+    var total: Int64 = 0
+    XCTAssertThrowsError(try bridge.copyFile(original, to: target,
+      limit: IosBackupDocuments.maxBackupBytes, total: &total,
+      totalLimit: Int64.max, reserve: 0))
+    XCTAssertEqual(total, 0)
+    XCTAssertFalse(files.fileExists(atPath: target.path))
+    XCTAssertEqual(try files.attributesOfItem(atPath: original.path)[.size] as? NSNumber,
+                   NSNumber(value: IosBackupDocuments.maxBackupBytes + 1))
   }
 
   func testWebKitCookiesRemainURLScopedAndPlaybackIsolated() throws {

@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
+import 'package:triomi/core/backup/backup_service.dart';
 import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
@@ -296,6 +298,7 @@ class IosTourFixtures {
   final TourHttpClient http;
   final items = <MediaType, List<MediaItem>>{};
   final chapters = <MediaType, List<Chapter>>{};
+  Directory? _temporary;
 
   static const novelOpening = '海风掠过旧书店的窗沿';
 
@@ -308,6 +311,10 @@ class IosTourFixtures {
     if (Uri.parse(videoUrl).origin != base.origin) {
       throw StateError('Tour video must use the same loopback fixture server');
     }
+    // Downloads, generated preview ZIPs and cleanup stay inside this run's root.
+    // This is private staging, never an externally retained backup grant.
+    _temporary = await Directory.systemTemp.createTemp('ios-visual-tour-');
+    await preferences.set('downloads.storageRootPath', _temporary!.path);
     // Skip public packaged rules, but retain genuine logged-out LK/LNS adapters.
     await preferences.set(
       'sources.seededBuiltins',
@@ -453,8 +460,23 @@ function content(url, chapter) { return ${jsonEncode(fixtureContent)}; }
     }
   }
 
+  Future<String> createRestorePreviewBackup() async {
+    final snapshot =
+        await BackupService(
+          database: database,
+          preferences: preferences,
+          http: http,
+        ).exportToFile(
+          includeCovers: false,
+          includeOfflineContent: false,
+          outputDirectory: Directory('${_temporary!.path}/preview-staging'),
+        );
+    return snapshot.path;
+  }
+
   Future<void> close() async {
     http.close();
     await database.close();
+    await _temporary?.delete(recursive: true);
   }
 }

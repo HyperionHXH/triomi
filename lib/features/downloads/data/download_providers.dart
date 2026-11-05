@@ -11,6 +11,7 @@ import '../../../core/models/chapter.dart';
 import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
 import '../../../core/models/video_resolve_cancellation.dart';
+import '../../../core/platform/platform_channel.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/source/source_api.dart';
 import '../../../core/source/source_providers.dart';
@@ -28,6 +29,13 @@ final downloadRepositoryProvider = Provider<DownloadRepository>(
 final downloadGroupsProvider = StreamProvider<List<DownloadGroup>>(
   (ref) => ref.watch(downloadRepositoryProvider).watchGroups(),
 );
+
+final downloadNotificationVisibilityProvider = StreamProvider<bool?>((
+  ref,
+) async* {
+  yield platformChannel.downloadNotificationVisible;
+  yield* platformChannel.downloadNotificationVisibility;
+});
 
 /// Look up the root navigator only when resolution starts, never retain a page.
 final downloadResolveContextProvider = Provider<BuildContext? Function()>(
@@ -57,6 +65,7 @@ final downloadVideoResolverProvider = Provider<DownloadVideoResolver?>((ref) {
       context,
       source,
       cancellation: cancellation,
+      allowBackground: true,
     );
     return PlaySource(
       name: source.name,
@@ -78,8 +87,9 @@ final downloadServiceProvider = Provider<DownloadService>(
         !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
         ? WindowsSourceSession.videoCookies
         : !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
-        ? (url) => const MethodChannel('triomi/platform')
-            .invokeMethod<String>('videoCookieHeader', {'url': url})
+        ? (url) =>
+              const MethodChannel('triomi/platform')
+                  .invokeMethod<String>('videoCookieHeader', {'url': url})
         : null,
   ),
 );
@@ -92,18 +102,24 @@ Future<PlaySource> _resolveNativeVideo(
   final ios = defaultTargetPlatform == TargetPlatform.iOS;
   final requestId = UniqueKey().toString();
   void cancel() {
-    if (ios) {
-      unawaited(channel.invokeMethod<void>('cancelDownloadVideoResolve', {
-        'requestId': requestId,
-      }));
-    }
+    unawaited(
+      channel
+          .invokeMethod<void>(
+            'cancelDownloadVideoResolve',
+            ios ? {'requestId': requestId} : null,
+          )
+          .catchError((Object _) {}),
+    );
   }
+
+  cancellation.addListener(cancel);
   if (cancellation.isCancelled) {
+    cancellation.removeListener(cancel);
     throw VideoResolveCancelled(cancellation.reason);
   }
-  cancellation.addListener(cancel);
+  Map<String, Object?>? raw;
   try {
-    final raw = await channel.invokeMapMethod<String, Object?>(
+    raw = await channel.invokeMapMethod<String, Object?>(
       'resolveDownloadVideo',
       {
         'url': source.url,
@@ -114,27 +130,27 @@ Future<PlaySource> _resolveNativeVideo(
         if (ios && source.omitCookies) 'omitCookies': true,
       },
     );
-    if (cancellation.isCancelled) {
-      throw VideoResolveCancelled(cancellation.reason);
-    }
-    final url = raw?['url'] as String?;
-    final headers = raw?['headers'];
-    if (url == null || url.isEmpty) throw StateError('网页解析没有返回真实视频地址');
-    return PlaySource(
-      name: source.name,
-      url: url,
-      mimeType: raw?['mimeType'] == 'application/vnd.apple.mpegurl'
-          ? 'application/vnd.apple.mpegurl'
-          : null,
-      omitCookies: raw?['omitCookies'] == true,
-      headers: {
-        if (headers is Map)
-          for (final entry in headers.entries) '${entry.key}': '${entry.value}',
-      },
-    );
   } finally {
     cancellation.removeListener(cancel);
   }
+  if (cancellation.isCancelled) {
+    throw VideoResolveCancelled(cancellation.reason);
+  }
+  final url = raw?['url'] as String?;
+  final headers = raw?['headers'];
+  if (url == null || url.isEmpty) throw StateError('网页解析没有返回真实视频地址');
+  return PlaySource(
+    name: source.name,
+    url: url,
+    mimeType: raw?['mimeType'] == 'application/vnd.apple.mpegurl'
+        ? 'application/vnd.apple.mpegurl'
+        : null,
+    omitCookies: raw?['omitCookies'] == true,
+    headers: {
+      if (headers is Map)
+        for (final entry in headers.entries) '${entry.key}': '${entry.value}',
+    },
+  );
 }
 
 /// 下载队列：串行执行、逐条刷新状态；WiFi 限制不满足时保持排队。
@@ -145,7 +161,6 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
   static const _platformChannel = MethodChannel('triomi/platform');
   late final String _downloadWakeOwner = 'download:${UniqueKey()}';
   bool _pumping = false;
-  bool _resumeRequested = false;
   final _stopped = <int>{};
   final _resumeAfterStop = <int>{};
   final _lifecycleInterrupted = <int>{};
@@ -164,8 +179,11 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
   int _queueGeneration = 0;
 
   bool get _foregroundOnly =>
-      !kIsWeb && (defaultTargetPlatform == TargetPlatform.windows ||
-          defaultTargetPlatform == TargetPlatform.iOS);
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+  Timer? _retryTimer;
+  Completer<void>? _retryWake;
+  bool _pumpAgain = false;
+  StreamSubscription<List<DownloadGroup>>? _notifications;
 
   DownloadRepository get _repository => _queueRepository;
 
@@ -175,9 +193,48 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
     if (_foregroundOnly) {
       WidgetsBinding.instance.addObserver(this);
     }
+    platformChannel.setDownloadQueuePauseHandler(
+      (reason) {
+        final message = switch (reason) {
+          'timeout' => 'Android 后台数据同步已达到系统时限，请返回应用后继续',
+          'notification' => '下载已从通知栏暂停',
+          'activity_destroyed' => '应用下载会话已关闭，请重新打开后继续',
+          'wake_lock_failed' => '无法维持后台下载运行状态，请重新打开应用后继续',
+          _ => 'Android 后台下载服务已停止，请返回应用后继续',
+        };
+        unawaited(pauseAll(reason: message));
+      },
+      onWake: () {
+        _queueGeneration++;
+        _wakeQueue();
+      },
+    );
+    _notifications = _repository.watchGroups().listen((groups) {
+      if (_activeId == null) return;
+      if (kIsWeb || !Platform.isAndroid) return;
+      for (final group in groups) {
+        for (final entry in group.entries) {
+          if (entry.row.id == _activeId) {
+            unawaited(
+              platformChannel.updateDownloadQueue(
+                title: group.title,
+                chapter: entry.chapterTitle,
+                status: entry.status.label,
+                progress: entry.row.progress,
+                speed: entry.row.speedBytesPerSecond,
+              ),
+            );
+            return;
+          }
+        }
+      }
+    });
     ref.onDispose(() {
       _disposed = true;
-      WidgetsBinding.instance.removeObserver(this);
+      if (_foregroundOnly) WidgetsBinding.instance.removeObserver(this);
+      _wakeQueue();
+      unawaited(_notifications?.cancel());
+      platformChannel.setDownloadQueuePauseHandler(null);
       _activeResolve?.cancel('下载队列已关闭，请重新打开下载页继续');
       unawaited(_setDownloadWake(false));
     });
@@ -190,7 +247,8 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
       _sourceAvailable = snapshot.asData!.value.enabledEntries.any(
         (e) => e.descriptor.id == _activeSource,
       );
-      if (_foregroundOnly && !_sourceAvailable) {
+      if (!_sourceAvailable) {
+        if (_activeId != null) _resumeAfterStop.remove(_activeId);
         _activeResolve?.cancel('来源已停用或已移除，请启用来源后继续下载');
       }
     });
@@ -245,7 +303,8 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
     final sourceSnapshot = await ref.read(sourcesProvider.future);
     if (_disposed) return;
     final enabledSources = sourceSnapshot.enabledEntries
-        .map((entry) => entry.descriptor.id).toSet();
+        .map((entry) => entry.descriptor.id)
+        .toSet();
     for (final group in groups) {
       for (final entry in group.entries) {
         final id = entry.row.id;
@@ -273,12 +332,7 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (defaultTargetPlatform != TargetPlatform.iOS) {
-      if (state != AppLifecycleState.resumed) {
-        _activeResolve?.cancel('应用已进入后台，请返回前台后继续下载');
-      }
-      return;
-    }
+    if (!_foregroundOnly) return;
     if (state == AppLifecycleState.resumed) {
       if (!_lifecycleSuspended) return;
       _lifecycleSuspended = false;
@@ -297,6 +351,7 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
     if (_lifecycleSuspended) return;
     _lifecycleSuspended = true;
     _queueGeneration++;
+    _wakeQueue();
     final activeId = _activeId;
     if (activeId != null) {
       _lifecycleInterrupted.add(activeId);
@@ -339,9 +394,20 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
         remoteId: item.remoteId,
         chapter: chapter,
       );
-      if (id > 0) added += 1;
+      if (id > 0) {
+        added += 1;
+        _explicitlyPaused.remove(id);
+        _lifecycleInterrupted.remove(id);
+        if (_activeId == id && _stopped.contains(id)) {
+          _resumeAfterStop.add(id);
+        } else {
+          _stopped.remove(id);
+        }
+      }
     }
+    _queueGeneration++;
     await refresh();
+    _wakeQueue();
     unawaited(_pump());
     return added;
   }
@@ -357,23 +423,28 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
         }
       }
     }
+    _queueGeneration++;
     await refresh();
+    _wakeQueue();
     unawaited(_pump());
   }
 
   /// 继续执行队列（进入下载页时调用）。
   Future<void> resume() async {
     await _resumeLifecycleInterrupted();
+    _queueGeneration++;
+    _wakeQueue();
     await refresh();
     if (_pumping) {
-      _resumeRequested = true;
+      _pumpAgain = true;
       return;
     }
     unawaited(_pump());
   }
 
-  Future<void> pauseAll({MediaType? type}) async {
+  Future<void> pauseAll({MediaType? type, String? reason}) async {
     _queueGeneration++;
+    _wakeQueue();
     final groups = await _repository.grouped();
     final ids = {
       for (final group in groups)
@@ -389,20 +460,16 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
     _resumeAfterStop.removeAll(rows.map((row) => row.id));
     final ownsActive = ids.contains(_activeId);
     final done = ownsActive ? _activeDone?.future : null;
-    if (ownsActive) _activeResolve?.cancel('下载已暂停，请在下载页继续');
-    if (ownsActive &&
-        _activeId != null &&
-        !kIsWeb &&
-        defaultTargetPlatform == TargetPlatform.android) {
-      await _platformChannel.invokeMethod<void>('cancelDownloadVideoResolve');
-    }
+    if (ownsActive) _activeResolve?.cancel(reason ?? '下载已暂停，请在下载页继续');
     for (final row in rows) {
-      await _repository.markPaused(row.id);
+      await _repository.markPaused(row.id, message: reason);
     }
+    _queueGeneration++;
+    _wakeQueue();
     await refresh();
     if (done != null) await done;
     for (final row in rows) {
-      await _repository.markPaused(row.id);
+      await _repository.markPaused(row.id, message: reason);
     }
     await refresh();
   }
@@ -431,8 +498,87 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
       _resumeAfterStop.add(_activeId!);
     }
     _stopped.removeWhere((id) => ids.contains(id) && id != _activeId);
+    _queueGeneration++;
+    await refresh();
+    _wakeQueue();
+    unawaited(_pump());
+  }
+
+  Future<void> pauseEntry(int id) async {
+    final row = await _repository.rowById(id);
+    if (row == null || row.status == 'done') return;
+    _queueGeneration++;
+    _stopped.add(id);
+    _explicitlyPaused.add(id);
+    _lifecycleInterrupted.remove(id);
+    _resumeAfterStop.remove(id);
+    _wakeQueue();
+    final done = _activeId == id ? _activeDone?.future : null;
+    if (_activeId == id) _activeResolve?.cancel('下载已暂停，请手动继续');
+    await _repository.markPaused(id);
+    _queueGeneration++;
+    if (done != null) await done;
+    await refresh();
+  }
+
+  Future<void> resumeEntry(int id) async {
+    final row = await _repository.rowById(id);
+    if (row == null ||
+        row.status == 'done' ||
+        row.sourceId == 'local-comic' ||
+        row.status == 'running' && !_stopped.contains(id)) {
+      return;
+    }
+    _explicitlyPaused.remove(id);
+    _lifecycleInterrupted.remove(id);
+    if (_activeId == id && _stopped.contains(id)) {
+      _resumeAfterStop.add(id);
+    } else {
+      _stopped.remove(id);
+      await _repository.markQueued(id);
+    }
+    _queueGeneration++;
+    _wakeQueue();
     await refresh();
     unawaited(_pump());
+  }
+
+  Future<void> cancelEntry(int id) async {
+    final row = await _repository.rowById(id);
+    if (row == null) return;
+    await pauseEntry(id);
+    final stoppedRow = await _repository.rowById(id);
+    await _repository.deleteRow(id);
+    await DownloadService.removeFiles([?stoppedRow]);
+    _stopped.remove(id);
+    _resumeAfterStop.remove(id);
+    _queueGeneration++;
+    _wakeQueue();
+    await refresh();
+  }
+
+  Future<void> reorder({
+    required MediaType? type,
+    required List<int> orderedIds,
+  }) async {
+    await _repository.reorder(type: type, orderedIds: orderedIds);
+    _queueGeneration++;
+    _wakeQueue();
+    await refresh();
+  }
+
+  void _wakeQueue() {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    final wake = _retryWake;
+    _retryWake = null;
+    if (wake != null && !wake.isCompleted) wake.complete();
+  }
+
+  Future<void> _waitForWake(Duration delay) {
+    final wake = _retryWake = Completer<void>();
+    _retryTimer = Timer(delay, _wakeQueue);
+    return wake.future;
   }
 
   /// 清理无需文件索引的已完成记录；保留文件型离线内容的唯一持久引用。
@@ -453,6 +599,7 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
   /// 删除一本书的全部下载（记录 + 离线文件）。
   Future<void> removeItem(String sourceId, String remoteId) async {
     _queueGeneration++;
+    _wakeQueue();
     final rows = await _repository.listForItem(sourceId, remoteId);
     final ids = rows.map((row) => row.id).toSet();
     _stopped.addAll(ids);
@@ -466,55 +613,138 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
     }
     if (activeDone != null) {
       _activeResolve?.cancel('下载已删除');
-      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-        await const MethodChannel('triomi/platform')
-            .invokeMethod<void>('cancelDownloadVideoResolve');
-      }
       await activeDone;
     }
     final stoppedRows = await _repository.deleteForItem(sourceId, remoteId);
     await DownloadService.removeFiles(stoppedRows);
+    _queueGeneration++;
+    _wakeQueue();
     _stopped.removeAll(ids);
     await refresh();
   }
 
   Future<void> setWifiOnly(bool value) async {
-    await ref.read(downloadServiceProvider).setWifiOnly(value);
+    final service = ref.read(downloadServiceProvider);
+    await service.setWifiOnly(value);
+    _queueGeneration++;
     ref.invalidate(downloadWifiOnlyProvider);
+    if (value &&
+        !await service.isOnWifi() &&
+        _activeId != null &&
+        !_stopped.contains(_activeId) &&
+        _sourceAvailable) {
+      final done = _activeDone?.future;
+      _resumeAfterStop.add(_activeId!);
+      _activeResolve?.cancel('已开启仅 Wi-Fi，等待 Wi-Fi 后继续下载');
+      if (done != null) await done;
+    }
+    _wakeQueue();
+    await refresh();
+    unawaited(_pump());
   }
 
   /// 串行跑队列：一次只处理一个任务，避免并发抢带宽。
   Future<void> _pump() async {
     if (_pumping) {
-      _resumeRequested = true;
+      _pumpAgain = true;
       return;
     }
+    _pumpAgain = false;
     _pumping = true;
     var nativeLease = false;
     var wakeLease = false;
     try {
       if (!kIsWeb && Platform.isAndroid) {
-        nativeLease =
-            await _platformChannel.invokeMethod<bool>('beginDownloadQueue') ??
-            false;
-        if (!nativeLease) return;
+        // Permission denial hides the drawer notification but does not prohibit
+        // an Android dataSync foreground service (visible in Task Manager).
+        nativeLease = await platformChannel.beginDownloadQueue();
+        if (!nativeLease) {
+          for (final row in await _repository.pending()) {
+            await _repository.markPaused(
+              row.id,
+              message: '无法启动 Android 后台下载服务，请在应用前台手动继续',
+            );
+          }
+          return;
+        }
       }
       final service = ref.read(downloadServiceProvider);
       while (!_disposed) {
         if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
           final lifecycle = WidgetsBinding.instance.lifecycleState;
-          if (lifecycle != null && lifecycle != AppLifecycleState.resumed) break;
+          if (lifecycle != null && lifecycle != AppLifecycleState.resumed) {
+            break;
+          }
         }
         final generation = _queueGeneration;
         final pending = await _repository.pending();
         if (_disposed) break;
         if (generation != _queueGeneration) continue;
-        if (pending.isEmpty) break;
-        if (!wakeLease && defaultTargetPlatform == TargetPlatform.iOS) {
+        final eligible = pending
+            .where((row) => !_stopped.contains(row.id))
+            .toList();
+        if (eligible.isEmpty) break;
+        final onWifi = !service.wifiOnly || await service.isOnWifi();
+        if (_disposed) break;
+        if (generation != _queueGeneration) continue;
+        if (service.wifiOnly && !onWifi) {
+          if (nativeLease) {
+            if (!await platformChannel.setDownloadQueueActive(false)) {
+              await pauseAll(reason: '后台下载服务已停止，请返回应用后继续');
+              break;
+            }
+            await platformChannel.updateDownloadQueue(
+              title: '下载队列',
+              chapter: '等待 Wi-Fi',
+              status: '仅 Wi-Fi 下载已开启',
+              progress: 0,
+              speed: 0,
+            );
+          }
+          if (_disposed) break;
+          if (generation != _queueGeneration) continue;
+          // Keep the acquired foreground lease while waiting: a fresh service
+          // start after Home/lock would be prohibited by Android.
+          await _waitForWake(const Duration(seconds: 5));
+          continue;
+        }
+        final now = DateTime.now();
+        final row = eligible
+            .where((row) => row.retryAt == null || !row.retryAt!.isAfter(now))
+            .firstOrNull;
+        if (row == null) {
+          final next = eligible
+              .map((row) => row.retryAt!)
+              .reduce((a, b) => a.isBefore(b) ? a : b);
+          if (nativeLease &&
+              !await platformChannel.setDownloadQueueActive(false)) {
+            await pauseAll(reason: '后台下载服务已停止，请返回应用后继续');
+            break;
+          }
+          if (_disposed) break;
+          if (generation != _queueGeneration) continue;
+          await _waitForWake(next.difference(now));
+          continue;
+        }
+        if (_stopped.contains(row.id)) continue;
+        if (nativeLease) {
+          if (!await platformChannel.setDownloadQueueActive(true)) {
+            await pauseAll(reason: '无法维持后台下载运行状态，请重新打开应用后继续');
+            break;
+          }
+          if (_disposed ||
+              generation != _queueGeneration ||
+              _stopped.contains(row.id)) {
+            await platformChannel.setDownloadQueueActive(false);
+            if (_disposed) break;
+            continue;
+          }
+        }
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
           await _setDownloadWake(true);
           wakeLease = true;
+          if (_disposed || generation != _queueGeneration) continue;
         }
-        final row = pending.first;
         _activeId = row.id;
         final activeDone = _activeDone = Completer<void>();
         final cancellation = _activeResolve = VideoResolveCancellation();
@@ -540,7 +770,8 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
               row: row,
               provider: provider,
               cancellation: cancellation,
-              pauseUnavailableSource: _foregroundOnly,
+              scheduleTransientRetry: true,
+              pauseUnavailableSource: true,
               shouldContinue: () {
                 if (_foregroundOnly) {
                   final lifecycle = WidgetsBinding.instance.lifecycleState;
@@ -549,11 +780,10 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
                     throw VideoResolveCancelled('请返回应用前台，在下载页继续任务');
                   }
                 }
-                if (_foregroundOnly && !_sourceAvailable) {
+                if (!_sourceAvailable) {
                   throw VideoResolveCancelled('来源已停用或已移除，请启用来源后继续下载');
                 }
-                // Other platforms may finish the chapter already requested;
-                // the next job still checks the latest enabled snapshot.
+                // A source disable/cancel owns all in-flight IO through its token.
                 return !_disposed && !_stopped.contains(row.id);
               },
             );
@@ -568,8 +798,10 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
             );
             if (current?.status == DownloadStatus.paused.value ||
                 current?.status == DownloadStatus.running.value) {
-              await _repository.markPaused(row.id,
-                  message: _lifecycleInterruptedMessage);
+              await _repository.markPaused(
+                row.id,
+                message: _lifecycleInterruptedMessage,
+              );
             } else {
               _lifecycleInterrupted.remove(row.id);
               _resumeAfterStop.remove(row.id);
@@ -579,6 +811,7 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
           // Registry refresh failure must preserve a resumable cached job.
           await _repository.markPaused(row.id, message: '来源状态读取失败，请刷新来源后继续下载');
         } finally {
+          if (nativeLease) await platformChannel.setDownloadQueueActive(false);
           activeDone.complete();
           cancellation.dispose();
           _activeResolve = null;
@@ -590,29 +823,20 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
         if (_resumeAfterStop.remove(row.id)) {
           if (!_explicitlyPaused.contains(row.id)) {
             await _repository.markQueued(row.id);
+            _queueGeneration++;
           }
           _lifecycleInterrupted.remove(row.id);
         }
         if (_disposed) break;
         await refresh();
-        // WiFi 限制不满足时不再继续，等用户切网后重新 resume。
-        if (service.wifiOnly && !await service.isOnWifi()) {
-          break;
-        }
       }
     } finally {
-      if (wakeLease) {
-        await _setDownloadWake(false);
-      }
-      if (nativeLease) {
-        await _platformChannel.invokeMethod<void>('endDownloadQueue');
-      }
+      if (wakeLease) await _setDownloadWake(false);
+      if (nativeLease) await platformChannel.endDownloadQueue();
+      _wakeQueue();
       _pumping = false;
       if (!_disposed) await refresh();
-      if (!_disposed && _resumeRequested) {
-        _resumeRequested = false;
-        unawaited(_pump());
-      }
+      if (_pumpAgain && !_disposed) unawaited(_pump());
     }
   }
 

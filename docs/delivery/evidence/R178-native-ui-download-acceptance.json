@@ -1,0 +1,1124 @@
+{
+  "scope": "Actual Windows Profile and Android x64 Debug native UI with isolated Hive/SQLite/MemorySecureStore, six controlled works; real production Bangumi search separate; no user emulator5554 or physical phone touched",
+  "windows": {
+    "platform": "windows",
+    "root": "C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-5b8fb464",
+    "route": "/novel/detail?source=r178-novel&id=work-1",
+    "errors": [],
+    "events": [
+      {
+        "publicResolve": {
+          "platform": "windows",
+          "page": "http://127.0.0.1:17813/fixture-player",
+          "resolved": true,
+          "mediaHost": "127.0.0.1",
+          "mediaPath": "/native-media.m3u8",
+          "mime": null,
+          "mediaStatus": 200,
+          "responseType": "application/x-mpegURL",
+          "observedBytes": 93
+        }
+      },
+      {
+        "route": "/downloads?type=manga"
+      },
+      {
+        "publicResolve": {
+          "platform": "windows",
+          "page": "https://www.7sefun.top/vodplay/26976-2-1.html",
+          "resolved": true,
+          "mediaHost": "groupvideo.photo.qq.com",
+          "mediaPath": "/1071_0bc33madsaaaaaafwptwarus7wyehhnqaoka.f0.mp4",
+          "mime": null,
+          "error": "SourceException(r178-public, notFound): HTTP 404",
+          "stack": "#0      DioSourceHttpClient.downloadBytes (package:triomi/core/source/http_client.dart:633)\n<asynchronous suspension>\n#1      handle (package:triomi/_r178_ui_smoke.dart:263)\n<asynchronous suspension>\n"
+        }
+      },
+      {
+        "route": "/downloads?type=anime"
+      },
+      {
+        "route": "/downloads?type=novel"
+      },
+      {
+        "route": "/downloads?type=manga"
+      },
+      {
+        "route": "/novel/detail?source=r178-novel&id=work-1"
+      }
+    ],
+    "requests": {
+      "/resolve-local": 1,
+      "/fixture-player": 1,
+      "/native-media.m3u8": 1,
+      "/resolve-public": 1,
+      "/theme": 1,
+      "/route": 5,
+      "/page/0.png": 3,
+      "/page/1.png": 3,
+      "/page/2.png": 3,
+      "/page/3.png": 3,
+      "/page/4.png": 3,
+      "/state": 4,
+      "/stream": 3,
+      "/segment1.ts": 3,
+      "/segment2.ts": 3,
+      "/cover.png": 1
+    },
+    "downloads": [
+      {
+        "type": "anime",
+        "source": "r178-anime",
+        "work": "work-1",
+        "entries": [
+          {
+            "id": 1,
+            "chapter": "第 1 集 · 旅程的开始",
+            "status": "done",
+            "pages": 0,
+            "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-5b8fb464\\downloads\\downloads\\anime\\ed9fdff11668f6aa2c288d36cd37bf41c3dd6df2db11cc87f57e8a24b7ecfb90\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\5cf46d4a96b77f86c11427adc365815ce949319bd54b80188e931b63dad36657\\video.m3u8",
+            "error": null
+          },
+          {
+            "id": 2,
+            "chapter": "第 2 集 · 旅程的开始",
+            "status": "done",
+            "pages": 0,
+            "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-5b8fb464\\downloads\\downloads\\anime\\ed9fdff11668f6aa2c288d36cd37bf41c3dd6df2db11cc87f57e8a24b7ecfb90\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\fdb51c22cd5c77ebbcf61396c48fd7d6aa540b5a22be9b498ad085da5480d1df\\video.m3u8",
+            "error": null
+          },
+          {
+            "id": 3,
+            "chapter": "第 3 集 · 旅程的开始",
+            "status": "done",
+            "pages": 0,
+            "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-5b8fb464\\downloads\\downloads\\anime\\ed9fdff11668f6aa2c288d36cd37bf41c3dd6df2db11cc87f57e8a24b7ecfb90\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\665651e75cc542c58f030ec9414857b34b7574aced7cee8688d5c1a632ac0fd7\\video.m3u8",
+            "error": null
+          }
+        ]
+      },
+      {
+        "type": "anime",
+        "source": "r178-anime",
+        "work": "work-2",
+        "entries": [
+          {
+            "id": 4,
+            "chapter": "第 1 集 · 旅程的开始",
+            "status": "paused",
+            "pages": 0,
+            "path": null,
+            "error": null
+          },
+          {
+            "id": 5,
+            "chapter": "第 2 集 · 旅程的开始",
+            "status": "paused",
+            "pages": 0,
+            "path": null,
+            "error": null
+          },
+          {
+            "id": 6,
+            "chapter": "第 3 集 · 旅程的开始",
+            "status": "failed",
+            "pages": 0,
+            "path": null,
+            "error": "验收示例：来源服务器 HTTP 403，请先检查站点访问权限"
+          }
+        ]
+      },
+      {
+        "type": "manga",
+        "source": "r178-manga",
+        "work": "work-1",
+        "entries": [
+          {
+            "id": 7,
+            "chapter": "第 1 章 · 旅程的开始",
+            "status": "done",
+            "pages": 5,
+            "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-5b8fb464\\downloads\\downloads\\manga\\ef0d6818b243d56778a069b8d23700bcbf3feed424729706fd093247338c57f6\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\ecf8e004bace7151d55ec1f45e4ce256bc09a81d766bf63bbb96403d93bbaacc",
+            "error": null
+          },
+          {
+            "id": 8,
+            "chapter": "第 2 章 · 旅程的开始",
+            "status": "done",
+            "pages": 5,
+            "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-5b8fb464\\downloads\\downloads\\manga\\ef0d6818b243d56778a069b8d23700bcbf3feed424729706fd093247338c57f6\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\5536ccd153fc9513d4a886618c15bec3e03c8a8a32a8c274486d65ff95d0995a",
+            "error": null
+          },
+          {
+            "id": 9,
+            "chapter": "第 3 章 · 旅程的开始",
+            "status": "done",
+            "pages": 5,
+            "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-5b8fb464\\downloads\\downloads\\manga\\ef0d6818b243d56778a069b8d23700bcbf3feed424729706fd093247338c57f6\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\1a90062774f1c2f738d6f2aee002b62e967bed23b858c0e65ed3ee1fabcc38a7",
+            "error": null
+          }
+        ]
+      },
+      {
+        "type": "manga",
+        "source": "r178-manga",
+        "work": "work-2",
+        "entries": [
+          {
+            "id": 10,
+            "chapter": "第 1 章 · 旅程的开始",
+            "status": "paused",
+            "pages": 0,
+            "path": null,
+            "error": null
+          },
+          {
+            "id": 11,
+            "chapter": "第 2 章 · 旅程的开始",
+            "status": "paused",
+            "pages": 0,
+            "path": null,
+            "error": null
+          },
+          {
+            "id": 12,
+            "chapter": "第 3 章 · 旅程的开始",
+            "status": "failed",
+            "pages": 0,
+            "path": null,
+            "error": "验收示例：来源服务器 HTTP 403，请先检查站点访问权限"
+          }
+        ]
+      },
+      {
+        "type": "novel",
+        "source": "r178-novel",
+        "work": "work-1",
+        "entries": [
+          {
+            "id": 13,
+            "chapter": "第 1 章 · 旅程的开始",
+            "status": "done",
+            "pages": 0,
+            "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-5b8fb464\\downloads\\downloads\\novel\\b358b8c2824cc7c895e8339f96dfc86374ce520ab00f15438aae3de18bc38023\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\9d3e29c80d1a3d323d756b94b527d3ae3942bd6ade318ee0e0f2ede99da7ff51\\chapter.json",
+            "error": null
+          },
+          {
+            "id": 14,
+            "chapter": "第 2 章 · 旅程的开始",
+            "status": "done",
+            "pages": 0,
+            "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-5b8fb464\\downloads\\downloads\\novel\\b358b8c2824cc7c895e8339f96dfc86374ce520ab00f15438aae3de18bc38023\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\6632cc849b25316947974fed0058171bfed40f2658b312a653970d3b116525d5\\chapter.json",
+            "error": null
+          },
+          {
+            "id": 15,
+            "chapter": "第 3 章 · 旅程的开始",
+            "status": "done",
+            "pages": 0,
+            "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-5b8fb464\\downloads\\downloads\\novel\\b358b8c2824cc7c895e8339f96dfc86374ce520ab00f15438aae3de18bc38023\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\a9dfca7b957d50032abd7bfa8d97d59b9a22a8e9b4d066c0f700d7eec24106e6\\chapter.json",
+            "error": null
+          }
+        ]
+      },
+      {
+        "type": "novel",
+        "source": "r178-novel",
+        "work": "work-2",
+        "entries": [
+          {
+            "id": 16,
+            "chapter": "第 1 章 · 旅程的开始",
+            "status": "paused",
+            "pages": 0,
+            "path": null,
+            "error": null
+          },
+          {
+            "id": 17,
+            "chapter": "第 2 章 · 旅程的开始",
+            "status": "paused",
+            "pages": 0,
+            "path": null,
+            "error": null
+          },
+          {
+            "id": 18,
+            "chapter": "第 3 章 · 旅程的开始",
+            "status": "failed",
+            "pages": 0,
+            "path": null,
+            "error": "验收示例：来源服务器 HTTP 403，请先检查站点访问权限"
+          }
+        ]
+      }
+    ]
+  },
+  "android": {
+    "platform": "android",
+    "root": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-XNTSYR",
+    "route": "/novel/detail?source=r178-novel&id=work-1",
+    "errors": [],
+    "events": [
+      {
+        "publicResolve": {
+          "platform": "android",
+          "page": "http://127.0.0.1:17813/fixture-player",
+          "error": "PlatformException(resolve_cancelled, 播放解析已取消, null, null)",
+          "stack": "#0      StandardMethodCodec.decodeEnvelope (package:flutter/src/services/message_codecs.dart:653:7)\n#1      MethodChannel._invokeMethod (package:flutter/src/services/platform_channel.dart:366:18)\n<asynchronous suspension>\n#2      MethodChannel.invokeMapMethod (package:flutter/src/services/platform_channel.dart:566:43)\n<asynchronous suspension>\n#3      _resolveAndroidVideo (package:triomi/features/downloads/data/download_providers.dart:112:11)\n<asynchronous suspension>\n#4      handle (package:triomi/_r178_ui_smoke.dart:242:23)\n<asynchronous suspension>\n"
+        }
+      },
+      {
+        "route": "/downloads?type=manga"
+      },
+      {
+        "publicResolve": {
+          "platform": "android",
+          "page": "http://127.0.0.1:17813/fixture-player",
+          "resolved": true,
+          "mediaHost": "127.0.0.1",
+          "mediaPath": "/native-media.m3u8",
+          "mime": null,
+          "mediaStatus": 200,
+          "responseType": "application/x-mpegURL",
+          "observedBytes": 93
+        }
+      },
+      {
+        "route": "/downloads?type=anime"
+      },
+      {
+        "route": "/downloads?type=anime"
+      },
+      {
+        "route": "/downloads?type=novel"
+      },
+      {
+        "route": "/downloads?type=manga"
+      },
+      {
+        "route": "/novel/detail?source=r178-novel&id=work-1"
+      }
+    ],
+    "requests": {
+      "/resolve-local": 2,
+      "/fixture-player": 2,
+      "/native-media.m3u8": 3,
+      "/route": 6,
+      "/page/0.png": 4,
+      "/page/1.png": 4,
+      "/page/2.png": 4,
+      "/page/3.png": 4,
+      "/page/4.png": 4,
+      "/state": 7,
+      "/stream": 3,
+      "/segment1.ts": 3,
+      "/segment2.ts": 3,
+      "/cover.png": 1
+    },
+    "downloads": [
+      {
+        "type": "novel",
+        "source": "r178-novel",
+        "work": "work-2",
+        "entries": [
+          {
+            "id": 16,
+            "chapter": "第 1 章 · 旅程的开始",
+            "status": "done",
+            "pages": 0,
+            "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-XNTSYR/downloads/downloads/novel/b358b8c2824cc7c895e8339f96dfc86374ce520ab00f15438aae3de18bc38023/3fb74d6eaa52493f101f2baf86ec8245e38b63dfbd3db94a8751b8d9a1e69bbb/329b5dd7345b4dac04c39b017cca5f5cca103ca049d6099df939e41b31160d7d/chapter.json",
+            "error": null
+          },
+          {
+            "id": 17,
+            "chapter": "第 2 章 · 旅程的开始",
+            "status": "done",
+            "pages": 0,
+            "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-XNTSYR/downloads/downloads/novel/b358b8c2824cc7c895e8339f96dfc86374ce520ab00f15438aae3de18bc38023/3fb74d6eaa52493f101f2baf86ec8245e38b63dfbd3db94a8751b8d9a1e69bbb/67da7be7485fec745f12470dfb9684659880d19396523afefffb11a34e1ff69b/chapter.json",
+            "error": null
+          },
+          {
+            "id": 18,
+            "chapter": "第 3 章 · 旅程的开始",
+            "status": "failed",
+            "pages": 0,
+            "path": null,
+            "error": "验收示例：来源服务器 HTTP 403，请先检查站点访问权限"
+          }
+        ]
+      },
+      {
+        "type": "manga",
+        "source": "r178-manga",
+        "work": "work-1",
+        "entries": [
+          {
+            "id": 7,
+            "chapter": "第 1 章 · 旅程的开始",
+            "status": "done",
+            "pages": 5,
+            "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-XNTSYR/downloads/downloads/manga/ef0d6818b243d56778a069b8d23700bcbf3feed424729706fd093247338c57f6/274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414/ecf8e004bace7151d55ec1f45e4ce256bc09a81d766bf63bbb96403d93bbaacc",
+            "error": null
+          },
+          {
+            "id": 8,
+            "chapter": "第 2 章 · 旅程的开始",
+            "status": "done",
+            "pages": 5,
+            "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-XNTSYR/downloads/downloads/manga/ef0d6818b243d56778a069b8d23700bcbf3feed424729706fd093247338c57f6/274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414/5536ccd153fc9513d4a886618c15bec3e03c8a8a32a8c274486d65ff95d0995a",
+            "error": null
+          },
+          {
+            "id": 9,
+            "chapter": "第 3 章 · 旅程的开始",
+            "status": "done",
+            "pages": 5,
+            "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-XNTSYR/downloads/downloads/manga/ef0d6818b243d56778a069b8d23700bcbf3feed424729706fd093247338c57f6/274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414/1a90062774f1c2f738d6f2aee002b62e967bed23b858c0e65ed3ee1fabcc38a7",
+            "error": null
+          }
+        ]
+      },
+      {
+        "type": "manga",
+        "source": "r178-manga",
+        "work": "work-2",
+        "entries": [
+          {
+            "id": 10,
+            "chapter": "第 1 章 · 旅程的开始",
+            "status": "paused",
+            "pages": 0,
+            "path": null,
+            "error": null
+          },
+          {
+            "id": 11,
+            "chapter": "第 2 章 · 旅程的开始",
+            "status": "paused",
+            "pages": 0,
+            "path": null,
+            "error": null
+          },
+          {
+            "id": 12,
+            "chapter": "第 3 章 · 旅程的开始",
+            "status": "done",
+            "pages": 5,
+            "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-XNTSYR/downloads/downloads/manga/ef0d6818b243d56778a069b8d23700bcbf3feed424729706fd093247338c57f6/3fb74d6eaa52493f101f2baf86ec8245e38b63dfbd3db94a8751b8d9a1e69bbb/19165b62afc1c4cdd85ed7ed1f09ba92bdfbbb79a345575751f6aa6fba2eee47",
+            "error": null
+          }
+        ]
+      },
+      {
+        "type": "novel",
+        "source": "r178-novel",
+        "work": "work-1",
+        "entries": [
+          {
+            "id": 13,
+            "chapter": "第 1 章 · 旅程的开始",
+            "status": "paused",
+            "pages": 0,
+            "path": null,
+            "error": null
+          },
+          {
+            "id": 14,
+            "chapter": "第 2 章 · 旅程的开始",
+            "status": "paused",
+            "pages": 0,
+            "path": null,
+            "error": null
+          },
+          {
+            "id": 15,
+            "chapter": "第 3 章 · 旅程的开始",
+            "status": "paused",
+            "pages": 0,
+            "path": null,
+            "error": null
+          }
+        ]
+      },
+      {
+        "type": "anime",
+        "source": "r178-anime",
+        "work": "work-1",
+        "entries": [
+          {
+            "id": 1,
+            "chapter": "第 1 集 · 旅程的开始",
+            "status": "done",
+            "pages": 0,
+            "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-XNTSYR/downloads/downloads/anime/ed9fdff11668f6aa2c288d36cd37bf41c3dd6df2db11cc87f57e8a24b7ecfb90/274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414/5cf46d4a96b77f86c11427adc365815ce949319bd54b80188e931b63dad36657/video.m3u8",
+            "error": null
+          },
+          {
+            "id": 2,
+            "chapter": "第 2 集 · 旅程的开始",
+            "status": "done",
+            "pages": 0,
+            "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-XNTSYR/downloads/downloads/anime/ed9fdff11668f6aa2c288d36cd37bf41c3dd6df2db11cc87f57e8a24b7ecfb90/274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414/fdb51c22cd5c77ebbcf61396c48fd7d6aa540b5a22be9b498ad085da5480d1df/video.m3u8",
+            "error": null
+          },
+          {
+            "id": 3,
+            "chapter": "第 3 集 · 旅程的开始",
+            "status": "done",
+            "pages": 0,
+            "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-XNTSYR/downloads/downloads/anime/ed9fdff11668f6aa2c288d36cd37bf41c3dd6df2db11cc87f57e8a24b7ecfb90/274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414/665651e75cc542c58f030ec9414857b34b7574aced7cee8688d5c1a632ac0fd7/video.m3u8",
+            "error": null
+          }
+        ]
+      },
+      {
+        "type": "anime",
+        "source": "r178-anime",
+        "work": "work-2",
+        "entries": [
+          {
+            "id": 4,
+            "chapter": "第 1 集 · 旅程的开始",
+            "status": "paused",
+            "pages": 0,
+            "path": null,
+            "error": null
+          },
+          {
+            "id": 5,
+            "chapter": "第 2 集 · 旅程的开始",
+            "status": "paused",
+            "pages": 0,
+            "path": null,
+            "error": null
+          },
+          {
+            "id": 6,
+            "chapter": "第 3 集 · 旅程的开始",
+            "status": "failed",
+            "pages": 0,
+            "path": null,
+            "error": "验收示例：来源服务器 HTTP 403，请先检查站点访问权限"
+          }
+        ]
+      }
+    ]
+  },
+  "firstRound": {
+    "windows": {
+      "platform": "windows",
+      "root": "C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-ec39e554",
+      "route": "/settings",
+      "errors": [],
+      "events": [
+        {
+          "route": "/downloads?type=manga"
+        },
+        {
+          "route": "/novel/detail?source=r178-novel&id=work-1"
+        },
+        {
+          "publicResolve": {
+            "platform": "windows",
+            "page": "https://www.7sefun.top/vodplay/26976-2-1.html",
+            "error": "Null check operator used on a null value"
+          }
+        },
+        {
+          "route": "/anime/search?source=r178-anime&sourceOnly=true&q=%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2"
+        },
+        {
+          "route": "/profile"
+        },
+        {
+          "route": "/settings"
+        }
+      ],
+      "requests": {
+        "/state": 10,
+        "/stream": 3,
+        "/segment1.ts": 3,
+        "/segment2.ts": 3,
+        "/theme": 1,
+        "/route": 5,
+        "/page/0.png": 3,
+        "/page/1.png": 3,
+        "/page/2.png": 3,
+        "/page/3.png": 3,
+        "/page/4.png": 2,
+        "/cover.png": 2,
+        "/resolve-public": 1
+      },
+      "downloads": [
+        {
+          "type": "anime",
+          "source": "r178-anime",
+          "work": "work-1",
+          "entries": [
+            {
+              "id": 1,
+              "chapter": "第 1 集 · 旅程的开始",
+              "status": "done",
+              "pages": 0,
+              "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-ec39e554\\downloads\\downloads\\anime\\ed9fdff11668f6aa2c288d36cd37bf41c3dd6df2db11cc87f57e8a24b7ecfb90\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\5cf46d4a96b77f86c11427adc365815ce949319bd54b80188e931b63dad36657\\video.m3u8",
+              "error": null
+            },
+            {
+              "id": 2,
+              "chapter": "第 2 集 · 旅程的开始",
+              "status": "done",
+              "pages": 0,
+              "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-ec39e554\\downloads\\downloads\\anime\\ed9fdff11668f6aa2c288d36cd37bf41c3dd6df2db11cc87f57e8a24b7ecfb90\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\fdb51c22cd5c77ebbcf61396c48fd7d6aa540b5a22be9b498ad085da5480d1df\\video.m3u8",
+              "error": null
+            },
+            {
+              "id": 3,
+              "chapter": "第 3 集 · 旅程的开始",
+              "status": "done",
+              "pages": 0,
+              "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-ec39e554\\downloads\\downloads\\anime\\ed9fdff11668f6aa2c288d36cd37bf41c3dd6df2db11cc87f57e8a24b7ecfb90\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\665651e75cc542c58f030ec9414857b34b7574aced7cee8688d5c1a632ac0fd7\\video.m3u8",
+              "error": null
+            }
+          ]
+        },
+        {
+          "type": "anime",
+          "source": "r178-anime",
+          "work": "work-2",
+          "entries": [
+            {
+              "id": 4,
+              "chapter": "第 1 集 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 5,
+              "chapter": "第 2 集 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 6,
+              "chapter": "第 3 集 · 旅程的开始",
+              "status": "failed",
+              "pages": 0,
+              "path": null,
+              "error": "验收示例：来源服务器 HTTP 403，请先检查站点访问权限"
+            }
+          ]
+        },
+        {
+          "type": "manga",
+          "source": "r178-manga",
+          "work": "work-1",
+          "entries": [
+            {
+              "id": 7,
+              "chapter": "第 1 章 · 旅程的开始",
+              "status": "done",
+              "pages": 5,
+              "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-ec39e554\\downloads\\downloads\\manga\\ef0d6818b243d56778a069b8d23700bcbf3feed424729706fd093247338c57f6\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\ecf8e004bace7151d55ec1f45e4ce256bc09a81d766bf63bbb96403d93bbaacc",
+              "error": null
+            },
+            {
+              "id": 8,
+              "chapter": "第 2 章 · 旅程的开始",
+              "status": "done",
+              "pages": 5,
+              "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-ec39e554\\downloads\\downloads\\manga\\ef0d6818b243d56778a069b8d23700bcbf3feed424729706fd093247338c57f6\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\5536ccd153fc9513d4a886618c15bec3e03c8a8a32a8c274486d65ff95d0995a",
+              "error": null
+            },
+            {
+              "id": 9,
+              "chapter": "第 3 章 · 旅程的开始",
+              "status": "paused",
+              "pages": 3,
+              "path": "\\\\?\\C:\\Users\\MiunaH\\AppData\\Local\\Temp\\r178-native-ec39e554\\downloads\\downloads\\manga\\ef0d6818b243d56778a069b8d23700bcbf3feed424729706fd093247338c57f6\\274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414\\1a90062774f1c2f738d6f2aee002b62e967bed23b858c0e65ed3ee1fabcc38a7",
+              "error": "下载已暂停，请手动继续"
+            }
+          ]
+        },
+        {
+          "type": "manga",
+          "source": "r178-manga",
+          "work": "work-2",
+          "entries": [
+            {
+              "id": 10,
+              "chapter": "第 1 章 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 11,
+              "chapter": "第 2 章 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 12,
+              "chapter": "第 3 章 · 旅程的开始",
+              "status": "failed",
+              "pages": 0,
+              "path": null,
+              "error": "验收示例：来源服务器 HTTP 403，请先检查站点访问权限"
+            }
+          ]
+        },
+        {
+          "type": "novel",
+          "source": "r178-novel",
+          "work": "work-1",
+          "entries": [
+            {
+              "id": 13,
+              "chapter": "第 1 章 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 14,
+              "chapter": "第 2 章 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 15,
+              "chapter": "第 3 章 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            }
+          ]
+        },
+        {
+          "type": "novel",
+          "source": "r178-novel",
+          "work": "work-2",
+          "entries": [
+            {
+              "id": 16,
+              "chapter": "第 1 章 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 17,
+              "chapter": "第 2 章 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 18,
+              "chapter": "第 3 章 · 旅程的开始",
+              "status": "failed",
+              "pages": 0,
+              "path": null,
+              "error": "验收示例：来源服务器 HTTP 403，请先检查站点访问权限"
+            }
+          ]
+        }
+      ]
+    },
+    "android": {
+      "platform": "android",
+      "root": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-NBTTIO",
+      "route": "/manga",
+      "errors": [],
+      "events": [
+        {
+          "route": "/downloads?type=manga"
+        },
+        {
+          "route": "/novel/detail?source=r178-novel&id=work-1"
+        },
+        {
+          "route": "/anime/search?source=r178-anime&sourceOnly=true&q=%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2"
+        },
+        {
+          "publicResolve": {
+            "platform": "android",
+            "page": "https://www.7sefun.top/vodplay/26976-2-1.html",
+            "error": "PlatformException(resolve_timeout, 播放页未返回可播放地址，请重试或换线路, null, null)"
+          }
+        },
+        {
+          "route": "/downloads?type=manga"
+        },
+        {
+          "route": "/manga"
+        }
+      ],
+      "requests": {
+        "/state": 10,
+        "/route": 5,
+        "/page/0.png": 3,
+        "/page/1.png": 3,
+        "/page/2.png": 2,
+        "/page/3.png": 2,
+        "/page/4.png": 2,
+        "/theme": 2,
+        "/cover.png": 3,
+        "/resolve-public": 1
+      },
+      "downloads": [
+        {
+          "type": "novel",
+          "source": "r178-novel",
+          "work": "work-1",
+          "entries": [
+            {
+              "id": 13,
+              "chapter": "第 1 章 · 旅程的开始",
+              "status": "done",
+              "pages": 0,
+              "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-NBTTIO/downloads/downloads/novel/b358b8c2824cc7c895e8339f96dfc86374ce520ab00f15438aae3de18bc38023/274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414/9d3e29c80d1a3d323d756b94b527d3ae3942bd6ade318ee0e0f2ede99da7ff51/chapter.json",
+              "error": null
+            },
+            {
+              "id": 14,
+              "chapter": "第 2 章 · 旅程的开始",
+              "status": "done",
+              "pages": 0,
+              "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-NBTTIO/downloads/downloads/novel/b358b8c2824cc7c895e8339f96dfc86374ce520ab00f15438aae3de18bc38023/274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414/6632cc849b25316947974fed0058171bfed40f2658b312a653970d3b116525d5/chapter.json",
+              "error": null
+            },
+            {
+              "id": 15,
+              "chapter": "第 3 章 · 旅程的开始",
+              "status": "done",
+              "pages": 0,
+              "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-NBTTIO/downloads/downloads/novel/b358b8c2824cc7c895e8339f96dfc86374ce520ab00f15438aae3de18bc38023/274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414/a9dfca7b957d50032abd7bfa8d97d59b9a22a8e9b4d066c0f700d7eec24106e6/chapter.json",
+              "error": null
+            }
+          ]
+        },
+        {
+          "type": "novel",
+          "source": "r178-novel",
+          "work": "work-2",
+          "entries": [
+            {
+              "id": 16,
+              "chapter": "第 1 章 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 17,
+              "chapter": "第 2 章 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 18,
+              "chapter": "第 3 章 · 旅程的开始",
+              "status": "failed",
+              "pages": 0,
+              "path": null,
+              "error": "验收示例：来源服务器 HTTP 403，请先检查站点访问权限"
+            }
+          ]
+        },
+        {
+          "type": "anime",
+          "source": "r178-anime",
+          "work": "work-2",
+          "entries": [
+            {
+              "id": 4,
+              "chapter": "第 1 集 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 5,
+              "chapter": "第 2 集 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 6,
+              "chapter": "第 3 集 · 旅程的开始",
+              "status": "failed",
+              "pages": 0,
+              "path": null,
+              "error": "验收示例：来源服务器 HTTP 403，请先检查站点访问权限"
+            }
+          ]
+        },
+        {
+          "type": "manga",
+          "source": "r178-manga",
+          "work": "work-1",
+          "entries": [
+            {
+              "id": 7,
+              "chapter": "第 1 章 · 旅程的开始",
+              "status": "done",
+              "pages": 5,
+              "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-NBTTIO/downloads/downloads/manga/ef0d6818b243d56778a069b8d23700bcbf3feed424729706fd093247338c57f6/274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414/ecf8e004bace7151d55ec1f45e4ce256bc09a81d766bf63bbb96403d93bbaacc",
+              "error": null
+            },
+            {
+              "id": 8,
+              "chapter": "第 2 章 · 旅程的开始",
+              "status": "done",
+              "pages": 5,
+              "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-NBTTIO/downloads/downloads/manga/ef0d6818b243d56778a069b8d23700bcbf3feed424729706fd093247338c57f6/274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414/5536ccd153fc9513d4a886618c15bec3e03c8a8a32a8c274486d65ff95d0995a",
+              "error": null
+            },
+            {
+              "id": 9,
+              "chapter": "第 3 章 · 旅程的开始",
+              "status": "paused",
+              "pages": 1,
+              "path": "/data/user/0/io.github.hyperionhxh.triomi/cache/r178-native-NBTTIO/downloads/downloads/manga/ef0d6818b243d56778a069b8d23700bcbf3feed424729706fd093247338c57f6/274044f1e86d01b00e345c3b422cb759ab4c7077423951583fa3b2730a959414/1a90062774f1c2f738d6f2aee002b62e967bed23b858c0e65ed3ee1fabcc38a7",
+              "error": "下载已暂停，请手动继续"
+            }
+          ]
+        },
+        {
+          "type": "manga",
+          "source": "r178-manga",
+          "work": "work-2",
+          "entries": [
+            {
+              "id": 10,
+              "chapter": "第 1 章 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 11,
+              "chapter": "第 2 章 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 12,
+              "chapter": "第 3 章 · 旅程的开始",
+              "status": "failed",
+              "pages": 0,
+              "path": null,
+              "error": "验收示例：来源服务器 HTTP 403，请先检查站点访问权限"
+            }
+          ]
+        },
+        {
+          "type": "anime",
+          "source": "r178-anime",
+          "work": "work-1",
+          "entries": [
+            {
+              "id": 1,
+              "chapter": "第 1 集 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 2,
+              "chapter": "第 2 集 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            },
+            {
+              "id": 3,
+              "chapter": "第 3 集 · 旅程的开始",
+              "status": "paused",
+              "pages": 0,
+              "path": null,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    "interactions": [
+      {
+        "action": "Windows click",
+        "x": 1762,
+        "y": 268
+      },
+      {
+        "action": "Windows click",
+        "x": 1762,
+        "y": 268
+      },
+      {
+        "action": "Windows click",
+        "x": 942,
+        "y": 197
+      },
+      {
+        "action": "Android tap",
+        "label": "继续此作品",
+        "occurrence": 0
+      },
+      {
+        "action": "Windows click",
+        "x": 430,
+        "y": 267
+      },
+      {
+        "action": "Android tap",
+        "label": "0/3 已完成, 已收起",
+        "occurrence": 0
+      },
+      {
+        "action": "Windows click",
+        "x": 942,
+        "y": 197
+      },
+      {
+        "action": "Android tap",
+        "label": "暂停此作品",
+        "occurrence": 0
+      },
+      {
+        "action": "Windows click",
+        "x": 650,
+        "y": 562
+      },
+      {
+        "action": "Android tap",
+        "label": "阅读已下载页面",
+        "occurrence": 0
+      },
+      {
+        "action": "Android tap",
+        "label": "Got it",
+        "occurrence": 0
+      },
+      {
+        "action": "Windows click",
+        "x": 942,
+        "y": 197
+      },
+      {
+        "action": "Android tap",
+        "label": "继续此作品",
+        "occurrence": 0
+      },
+      {
+        "action": "Windows click",
+        "x": 400,
+        "y": 270
+      },
+      {
+        "action": "Android tap",
+        "label": "0/3 已完成, 已收起",
+        "occurrence": 0
+      },
+      {
+        "action": "Windows click",
+        "x": 942,
+        "y": 197
+      },
+      {
+        "action": "Windows click",
+        "x": 235,
+        "y": 603
+      },
+      {
+        "action": "Android tap",
+        "label": "打开章节",
+        "occurrence": 1
+      },
+      {
+        "action": "Windows click",
+        "x": 942,
+        "y": 197
+      },
+      {
+        "action": "Android tap",
+        "label": "继续此作品",
+        "occurrence": 0
+      },
+      {
+        "action": "Windows click",
+        "x": 942,
+        "y": 197
+      },
+      {
+        "action": "Android tap",
+        "label": "继续此作品",
+        "occurrence": 0
+      },
+      {
+        "action": "Android tap",
+        "label": "3/3 已完成, 已展开",
+        "occurrence": 0
+      },
+      {
+        "action": "Android tap",
+        "label": "重试此作品",
+        "occurrence": 0
+      }
+    ],
+    "scope": "isolated fixture works and actual Bangumi public search; original user emulator5554 untouched; Windows/Android partial manga pixels observed; final download alignment/icon and Windows root-overlay fix awaiting rebuilt smoke",
+    "stress": "Android 320dp/200percent font dark download headings observed with no Flutter errors"
+  },
+  "observations": [
+    "Collapsed bordered work cards shown in light and dark; controls carry accessible tooltips",
+    "Android320dp200percent work headings and retry controls remain visible; no Flutter errors",
+    "Final expanded chapter rows consistently left aligned and open actions are icons",
+    "Actual manga work-resume transfers five pages per chapter; partial pause retains files and opens actual reader image",
+    "Specific second downloaded manga chapter opened and displayed actual image",
+    "AndroidHome and minimizedWindows actual HLS queues both finish work1 three chapters; other work unchanged",
+    "Actual Androidretry work2 resumes only failed chapter12; paused10and11 remain paused",
+    "Novel work resume completes requested chapters; ordinary detail/source/reader flow retained",
+    "Public anime search launched from playback source still shows five Bangumi metadata entries; no playback tab",
+    "Novel long-tag outlines observed on both platforms light/dark; profile/settings/library/source layouts reviewed",
+    "Windows root-navigation resolver actual local browser returns HLS and93bytes after fix",
+    "Android local browser resolves and reads same HLS when route not interrupted; first cancellation observation retained",
+    "Windows7sefun exact productionUA page resolves media QQURL but HTTP404; Androidpublicpage timedout, not labelled success"
+  ],
+  "checks": {
+    "flutterFullPassed": 1645,
+    "platformSkipped": 4,
+    "analyze": "No issues",
+    "pythonToolsPassed": 87
+  },
+  "review": "Transfer and compactUI independent reviewers found no remaining findings after gzip/responseclose/narrowtitle/menu fixes; rootOverlay failing-before/passing-after regression additionally verified",
+  "limits": [
+    "No iOS physical device acceptance",
+    "Controlled HLS fragments validate downloader persistence and browser resolution, not actual video decoding; original readerPNG visually decoded",
+    "Not all sources/sites reachable; anonymous source challenge and connection timeout retained"
+  ]
+}

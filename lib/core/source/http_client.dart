@@ -52,11 +52,15 @@ class SourceTransferProgress {
   SourceTransferProgress({
     this.onSend,
     this.onReceive,
+    this.onReceiveBytes,
     this.allowConflict = false,
     this.inactivityTimeout = const Duration(seconds: 30),
   });
   final void Function(int sent, int total)? onSend;
   final void Function(int received, int total)? onReceive;
+
+  /// Actual new wire bytes; separate requests retain independent counters.
+  final void Function(int bytes)? onReceiveBytes;
   final Duration inactivityTimeout;
   final bool allowConflict;
   static final Object _key = Object();
@@ -75,6 +79,12 @@ class SourceTransferProgress {
     if (_expire == null) return;
     _touch();
     onReceive?.call(count, total);
+  }
+
+  void receiveBytes(int bytes) {
+    if (_expire == null) return;
+    _touch();
+    onReceiveBytes?.call(bytes);
   }
 
   void _touch() {
@@ -160,17 +170,25 @@ class SourceByteStream {
     this.contentLength,
     this.statusCode = 200,
     this.headers = const {},
+    this._onClose,
   });
 
   final Stream<List<int>> stream;
 
-  /// 响应头里的总长度；服务端没给（如分块传输）时为 null。
+  /// Expected stream bytes, or null when encoded wire length differs.
   final int? contentLength;
   final int statusCode;
   final Map<String, String> headers;
 
   /// 真实请求地址（跟随重定向后）。
   final String url;
+
+  final FutureOr<void> Function()? _onClose;
+
+  /// Detaches the body listener before aborting only this response's transport.
+  Future<void> close() async {
+    await _onClose?.call();
+  }
 }
 
 /// 来源网络层抽象。
@@ -247,6 +265,9 @@ class DioSourceHttpClient
                receiveDataWhenStatusError: true,
              ),
            ) {
+    // An injected Dio owns its adapter factory, which may intentionally return
+    // a shared client. Only application-created transports can be force-closed
+    // per request without closing someone else's session.
     if (dio == null) {
       configureSourceHttpAdapter(
         _dio,
@@ -425,6 +446,7 @@ class DioSourceHttpClient
         ),
         cancelToken:
             (request.cancellation ?? SourceRequestCancellation.current)?.token,
+        onReceiveProgress: _receiveProgress(),
       );
       late Response<String> response;
       try {
@@ -463,6 +485,10 @@ class DioSourceHttpClient
           sourceId: sourceId,
           type: _classifyStatus(result.statusCode),
           message: 'HTTP ${result.statusCode}${_bodyHint(result)}',
+          statusCode: result.statusCode,
+          retryAfter: SourceException.parseRetryAfter(
+            result.headers['retry-after'],
+          ),
         );
       }
       return result;
@@ -532,7 +558,7 @@ class DioSourceHttpClient
           receiveTimeout: timeout,
         ),
         cancelToken: SourceRequestCancellation.current?.token,
-        onReceiveProgress: SourceTransferProgress.current?.received,
+        onReceiveProgress: _receiveProgress(),
       );
       final status = response.statusCode ?? 0;
       if (status < 200 || status >= (ehPage ? 300 : 400)) {
@@ -540,6 +566,10 @@ class DioSourceHttpClient
           sourceId: sourceId,
           type: _classifyStatus(status),
           message: 'HTTP $status',
+          statusCode: status,
+          retryAfter: SourceException.parseRetryAfter(
+            response.headers.value('retry-after'),
+          ),
         );
       }
       final bytes = response.data ?? const <int>[];
@@ -558,6 +588,32 @@ class DioSourceHttpClient
     Map<String, String> headers = const <String, String>{},
     bool followRedirects = true,
   }) async {
+    final token = CancelToken();
+    final parent = SourceRequestCancellation.current?.token;
+    final parentCancellation = parent?.whenCancel.asStream().listen(
+      token.cancel,
+    );
+    StreamSubscription<List<int>>? bodySubscription;
+    StreamController<List<int>>? forwarding;
+    var detached = false;
+    Future<void>? closing;
+    Future<void> close() => closing ??= Future<void>.microtask(() async {
+      detached = true;
+      final cancellation = bodySubscription?.cancel();
+      // Detach synchronously, then abort before awaiting stream cleanup.
+      token.cancel('响应已释放');
+      final output = forwarding;
+      if (output != null) unawaited(output.close());
+      try {
+        await cancellation;
+      } on DioException catch (error) {
+        // Only a cancellation raised while detaching cleanup is ours to ignore.
+        if (!CancelToken.isCancel(error)) rethrow;
+      } finally {
+        await parentCancellation?.cancel();
+      }
+    });
+
     try {
       final response = await _dio.get<ResponseBody>(
         url,
@@ -569,18 +625,52 @@ class DioSourceHttpClient
           sendTimeout: timeout,
           receiveTimeout: timeout,
         ),
-        cancelToken: SourceRequestCancellation.current?.token,
+        cancelToken: token,
       );
+      final body = response.data;
+      final transfer = SourceTransferProgress.current;
+      final controller = StreamController<List<int>>(
+        sync: true,
+        onListen: () => bodySubscription?.resume(),
+        onPause: () => bodySubscription?.pause(),
+        onResume: () => bodySubscription?.resume(),
+        onCancel: close,
+      );
+      forwarding = controller;
+      if (body != null) {
+        bodySubscription = body.stream.listen(
+          (chunk) {
+            if (detached) return;
+            transfer?.receiveBytes(chunk.length);
+            controller.add(chunk);
+          },
+          onError: (Object error, StackTrace stack) {
+            if (detached) return;
+            controller.addError(
+              SourceException.wrap(error, sourceId: sourceId, url: url),
+              stack,
+            );
+            unawaited(close());
+          },
+          onDone: () {
+            if (detached) return;
+            unawaited(close());
+          },
+        )..pause();
+      }
       final status = response.statusCode ?? 0;
       if (status < 200 || status >= 400) {
-        await response.data?.stream.listen(null).cancel();
+        await close();
         throw SourceException(
           sourceId: sourceId,
           type: _classifyStatus(status),
           message: 'HTTP $status',
+          statusCode: status,
+          retryAfter: SourceException.parseRetryAfter(
+            response.headers.value('retry-after'),
+          ),
         );
       }
-      final body = response.data;
       if (body == null) {
         throw SourceException(
           sourceId: sourceId,
@@ -589,9 +679,15 @@ class DioSourceHttpClient
         );
       }
       final length = response.headers.value(Headers.contentLengthHeader);
+      final encoding = response.headers.value('content-encoding');
       return SourceByteStream(
-        stream: body.stream,
-        contentLength: length == null ? null : int.tryParse(length),
+        stream: controller.stream,
+        onClose: close,
+        contentLength:
+            length == null ||
+                encoding != null && encoding.toLowerCase() != 'identity'
+            ? null
+            : int.tryParse(length),
         url: response.realUri.toString(),
         statusCode: status,
         headers: {
@@ -600,10 +696,24 @@ class DioSourceHttpClient
         },
       );
     } on SourceException {
+      await close();
       rethrow;
     } catch (error) {
+      await close();
       throw SourceException.wrap(error, sourceId: sourceId, url: url);
     }
+  }
+
+  void Function(int, int)? _receiveProgress() {
+    final transfer = SourceTransferProgress.current;
+    if (transfer == null) return null;
+    var previous = 0;
+    return (received, total) {
+      final delta = received - previous;
+      previous = received;
+      transfer.received(received, total);
+      if (delta > 0) transfer.receiveBytes(delta);
+    };
   }
 
   @override

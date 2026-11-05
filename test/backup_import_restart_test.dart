@@ -12,6 +12,7 @@ import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/storage/preferences.dart';
 
 import 'fixtures/fake_http_client.dart';
+import 'fixtures/migration/v11_downloads_schema.dart';
 
 class _FailedCompensation extends Preferences {
   _FailedCompensation(super.box);
@@ -143,18 +144,35 @@ void main() {
       await BackupImportRecovery.recover(db, preferences);
     },
   );
-  test(
-    'version 2 upgrade creates journal and preserves existing library data',
-    () async {
-      await service(preferences).importFromBytes(_backup());
-      await db.customStatement('DROP TABLE backup_import_journals');
-      await db.customStatement('ALTER TABLE categories DROP COLUMN hidden');
-      await db.customStatement('ALTER TABLE categories DROP COLUMN rules_json');
-      await db.customStatement('ALTER TABLE categories DROP COLUMN module');
-      await db.customStatement('PRAGMA user_version = 2');
-      await reopen();
-      expect(await db.select(db.backupImportJournals).get(), isEmpty);
-      expect((await db.select(db.mediaItems).get()).single.title, 'Imported');
-    },
-  );
+  test('version 2 upgrade creates journal and preserves existing library data', () async {
+    await service(preferences).importFromBytes(_backup());
+    await db.customStatement('DROP TABLE backup_import_journals');
+    await db.customStatement('ALTER TABLE categories DROP COLUMN hidden');
+    await db.customStatement('ALTER TABLE categories DROP COLUMN rules_json');
+    await db.customStatement('ALTER TABLE categories DROP COLUMN module');
+    // The released v2 downloads table did not contain v12 queue/counter
+    // columns. Rebuild from frozen historical DDL, not today's generated schema.
+    const columns =
+        'id, source_id, remote_id, chapter_source_id, chapter_remote_id, '
+        'status, progress, path, error_message, created_at, finished_at';
+    await db.customStatement(
+      'ALTER TABLE downloads RENAME TO generated_current_downloads',
+    );
+    await db.customStatement(v11DownloadsCreateStatement);
+    await db.customStatement(
+      'INSERT INTO downloads ($columns) SELECT $columns FROM generated_current_downloads',
+    );
+    await db.customStatement('DROP TABLE generated_current_downloads');
+    final releasedColumns = await db
+        .customSelect('PRAGMA table_info(downloads)')
+        .get();
+    expect(
+      releasedColumns.map((row) => row.read<String>('name')),
+      isNot(contains('queue_position')),
+    );
+    await db.customStatement('PRAGMA user_version = 2');
+    await reopen();
+    expect(await db.select(db.backupImportJournals).get(), isEmpty);
+    expect((await db.select(db.mediaItems).get()).single.title, 'Imported');
+  });
 }

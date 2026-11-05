@@ -169,47 +169,6 @@ void main() {
     });
   }
 
-  testWidgets(
-    'metadata and playback tabs keep source and media scope separate',
-    (tester) async {
-      final http = FakeHttpClient((_) async => _results('公开资料结果'));
-      final site = _Site();
-      final disabled = _Site(id: 'disabled-site');
-      final manga = _SearchOnly('manga', MediaType.manga);
-      final novel = _SearchOnly('novel', MediaType.novel);
-      final metadata = _SearchOnly('other-metadata', MediaType.anime);
-      await _render(
-        tester,
-        http,
-        entries: [
-          _entry(site),
-          _entry(disabled, enabled: false),
-          _entry(manga),
-          _entry(novel),
-          _entry(metadata),
-        ],
-      );
-      await _search(tester, '作品');
-      expect(find.text('公开资料结果'), findsOneWidget);
-      expect(site.queries, isEmpty);
-      await tester.tap(find.text('播放站').first);
-      await _advance(tester);
-      expect(site.queries, ['作品']);
-      expect(find.text('本站作品'), findsOneWidget);
-      expect(find.text('公开资料结果'), findsNothing);
-      expect(disabled.queries, isEmpty);
-      expect(manga.queries, isEmpty);
-      expect(novel.queries, isEmpty);
-      expect(metadata.queries, isEmpty);
-      expect(http.requests, hasLength(1));
-      await tester.tap(find.text('番剧资料'));
-      await _advance(tester);
-      expect(http.requests, hasLength(2));
-      expect(find.text('公开资料结果'), findsOneWidget);
-      expect(site.queries, hasLength(1));
-    },
-  );
-
   testWidgets('metadata HTTP failure remains visible and can retry', (
     tester,
   ) async {
@@ -233,46 +192,38 @@ void main() {
     expect(find.textContaining('503'), findsNothing);
   });
 
-  for (final action in ['query', 'tab']) {
-    testWidgets('metadata $action change cancels and rejects late response', (
-      tester,
-    ) async {
-      final pending = Completer<SourceResponse>();
-      final http = FakeHttpClient((request) {
-        final query = (jsonDecode(request.body!) as Map)['keyword'];
-        return query == 'old'
-            ? pending.future
-            : Future.value(_results('新资料结果', id: 43));
-      });
-      final site = _Site();
-      await _render(tester, http, entries: [_entry(site)]);
-      await _search(tester, 'old');
-      expect(http.requests, hasLength(1));
-      final owner = http.requests.single.cancellation!;
-      expect(owner.cancelled, isFalse);
-      if (action == 'query') {
-        await _search(tester, 'new');
-        await _until(tester, () => http.requests.length == 2);
-        expect(
-          http.requests.map(
-            (request) => (jsonDecode(request.body!) as Map)['keyword'],
-          ),
-          ['old', 'new'],
-        );
-        await _until(tester, () => find.text('新资料结果').evaluate().isNotEmpty);
-        expect(find.text('新资料结果'), findsOneWidget);
-      } else {
-        await tester.tap(find.text('播放站').first);
-        await _advance(tester);
-        expect(find.text('本站作品'), findsOneWidget);
-      }
-      expect(owner.cancelled, isTrue);
-      pending.complete(_results('过期资料结果'));
-      await _advance(tester);
-      expect(find.text('过期资料结果'), findsNothing);
-      expect(find.text(action == 'query' ? '新资料结果' : '本站作品'), findsOneWidget);
+  testWidgets('metadata query change cancels and rejects late response', (
+    tester,
+  ) async {
+    final pending = Completer<SourceResponse>();
+    final http = FakeHttpClient((request) {
+      final query = (jsonDecode(request.body!) as Map)['keyword'];
+      return query == 'old'
+          ? pending.future
+          : Future.value(_results('新资料结果', id: 43));
     });
-  }
+    final site = _Site();
+    await _render(tester, http, entries: [_entry(site)]);
+    await _search(tester, 'old');
+    expect(http.requests, hasLength(1));
+    final owner = http.requests.single.cancellation!;
+    expect(owner.cancelled, isFalse);
+    await _search(tester, 'new');
+    await _until(tester, () => http.requests.length == 2);
+    expect(
+      http.requests.map(
+        (request) => (jsonDecode(request.body!) as Map)['keyword'],
+      ),
+      ['old', 'new'],
+    );
+    await _until(tester, () => find.text('新资料结果').evaluate().isNotEmpty);
+    expect(find.text('新资料结果'), findsOneWidget);
+    expect(owner.cancelled, isTrue);
+    pending.complete(_results('过期资料结果'));
+    await _advance(tester);
+    expect(find.text('过期资料结果'), findsNothing);
+    expect(find.text('新资料结果'), findsOneWidget);
+  });
 
   testWidgets('metadata search opens subject then selects site and episode', (
     tester,

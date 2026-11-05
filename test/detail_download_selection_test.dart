@@ -17,6 +17,7 @@ import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
+import 'package:triomi/core/storage/storage_paths.dart';
 import 'package:triomi/features/detail/chapter_download_picker.dart';
 import 'package:triomi/features/detail/detail_page.dart';
 import 'package:triomi/features/downloads/data/download_providers.dart';
@@ -394,6 +395,17 @@ void main() {
   test('LNS selected readable chapter uses normal content and persists offline body, not official files', () async {
     final db = openTestDatabase();
     addTearDown(db.close);
+    final documents = await Directory.systemTemp.createTemp(
+      'triomi-selection-novel-',
+    );
+    const paths = MethodChannel('plugins.flutter.io/path_provider');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(paths, (_) async => documents.path);
+    addTearDown(() async {
+      messenger.setMockMethodCallHandler(paths, null);
+      await Directory(storageFilePath(documents.path)).delete(recursive: true);
+    });
     final source = _lnsSource(withFont: true);
     const item = MediaItem(
       sourceId: LnsSource.id,
@@ -562,6 +574,33 @@ void main() {
         {('other', 'x'), ('site', 'x')},
       );
       expect(source.contentCalls, 0);
+      // Existing queue/database continuations belong to FakeAsync. Moving
+      // pauseAll into runAsync strands those completions; keep ownership here
+      // and pump them until the explicit pause barrier finishes.
+      await tester.pumpWidget(const SizedBox.shrink());
+      var paused = false;
+      Object? pauseError;
+      final stopping = harness.container
+          .read(downloadsProvider.notifier)
+          .pauseAll()
+          .then(
+            (_) => paused = true,
+            onError: (Object error) {
+              pauseError = error;
+              paused = true;
+            },
+          );
+      for (var attempt = 0; attempt < 200 && !paused; attempt++) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      expect(
+        paused,
+        isTrue,
+        reason: 'owned Wi-Fi wait must stop within bounded pumps',
+      );
+      expect(pauseError, isNull);
+      await stopping;
+      expect((await db.select(db.downloads).get()).single.status, 'paused');
     },
   );
 

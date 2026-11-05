@@ -208,7 +208,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     cardShadow: Color(0x1F000000), // 0 1px 4px rgba(0,0,0,.12)
     updateBadge: Color(0xFF33D17A),
     mutedForeground: Color(0xFF6E7175),
-    divider: Color(0xFFDDDBD9),
+    divider: Color(0xFFD0CECC),
     coverPlaceholder: Color(0xFFE8E6E4),
   );
 
@@ -219,7 +219,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     cardShadow: Color(0x00000000),
     updateBadge: Color(0xFF8FF0A4),
     mutedForeground: Color(0xFF9A9C9E),
-    divider: Color(0xFF3A3A3A),
+    divider: Color(0xFF505050),
     coverPlaceholder: Color(0xFF383838),
   );
 

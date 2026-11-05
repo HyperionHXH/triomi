@@ -1,0 +1,89 @@
+{
+  "recordedAt": "2026-11-05T09:25:45.710320+00:00",
+  "requests": [
+    {
+      "url": "https://raw.githubusercontent.com/HyperionHXH/Mihon-Extensions/main/repo/index.json",
+      "status": 200,
+      "finalUrl": "https://raw.githubusercontent.com/HyperionHXH/Mihon-Extensions/main/repo/index.json",
+      "bytes": 1632442,
+      "sha256": "f323528872f0913ad826aeb8783e8efab3071acca9b0840efd4bfb0fea43169e"
+    },
+    {
+      "url": "https://github.com/keiyoushi/extensions/releases/download/fc7a827-2/tachiyomi-th.one08read-v1.6.1.apk",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json",
+      "status": 200,
+      "finalUrl": "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json",
+      "bytes": 765,
+      "sha256": "a8a88c2ade5bd5a5ba8169b2d7da7b237fc597b059d214b52aee4f646bae9221"
+    },
+    {
+      "url": "https://api.github.com/repos/HyperionHXH/Mihon-Extensions",
+      "error": "HTTP Error 403: rate limit exceeded"
+    },
+    {
+      "url": "https://api.github.com/repos/keiyoushi/extensions/contents?ref=repo",
+      "error": "HTTP Error 403: rate limit exceeded"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb",
+      "status": 200,
+      "finalUrl": "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.pb",
+      "bytes": 107007,
+      "sha256": "b5e80cfa847e3995367468429bba5edefaea76fe3f7f30188bb16df12dd2b3cf"
+    },
+    {
+      "url": "https://keiyoushi.github.io/extensions/",
+      "status": 200,
+      "finalUrl": "https://keiyoushi.github.io/extensions/",
+      "bytes": 12976,
+      "sha256": "0fd2a27843e48ccfce44ff7ddc161b4f21d49dd57c70dee8bf2ad1e4edcee867"
+    },
+    {
+      "url": "https://github.com/keiyoushi/extensions/releases/download/726723b-2/tachiyomi-th.one08read-v1.6.1.apk",
+      "status": 200,
+      "finalUrl": "https://release-assets.githubusercontent.com/github-production-release-asset/740717768/aff4ed73-5036-46c2-a5d9-234ce9724d53",
+      "bytes": 102931,
+      "sha256": "b0c0f9921c31a9af5f47481fc5249d5a88e20d705c5c66579ee4a73d96592ff6"
+    },
+    {
+      "url": "https://github.com/keiyoushi/extensions/releases/download/726723b-2/tachiyomi-th.one08read-v1.6.1.jar",
+      "status": 200,
+      "finalUrl": "https://release-assets.githubusercontent.com/github-production-release-asset/740717768/75be2168-4679-4c68-8ef0-4d56e7394712",
+      "bytes": 144272,
+      "sha256": "2fe66208d6c3bb3be3cd5b6af024e42c493edce16109585e4cc6da6d48b621c9"
+    },
+    {
+      "url": "https://github.com/keiyoushi/extensions/releases/download/fc7a827-2/tachiyomi-th.one08read-v1.6.1.jar",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.json",
+      "status": 200,
+      "finalUrl": "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.json",
+      "bytes": 1499016,
+      "sha256": "0efd5b6de7f77e20ca13deaa476e2a23900532fb2ae670117fbbf26eb6fb2588"
+    }
+  ],
+  "configuredRepositoryProvenance": "triomi-main/docs/delivery/evidence/C109-mihon-repository.json",
+  "packageName": "eu.kanade.tachiyomi.extension.th.one08read",
+  "versionCode": "106001",
+  "versionName": "1.6.1",
+  "oldResources": {
+    "apkUrl": "https://github.com/keiyoushi/extensions/releases/download/fc7a827-2/tachiyomi-th.one08read-v1.6.1.apk",
+    "iconUrl": "https://cdn.jsdelivr.net/gh/keiyoushi/extensions-source@main/src/th/one08read/res/mipmap-xhdpi/ic_launcher.png",
+    "jarUrl": "https://github.com/keiyoushi/extensions/releases/download/fc7a827-2/tachiyomi-th.one08read-v1.6.1.jar"
+  },
+  "maintainedResources": {
+    "apkUrl": "https://github.com/keiyoushi/extensions/releases/download/726723b-2/tachiyomi-th.one08read-v1.6.1.apk",
+    "jarUrl": "https://github.com/keiyoushi/extensions/releases/download/726723b-2/tachiyomi-th.one08read-v1.6.1.jar"
+  },
+  "finding": "Configured aggregator release URLs return 404 before install; same-package same-version maintained upstream artifacts return 200. Modern JSON remains available; protobuf is not required for aggregator repair.",
+  "boundaries": [
+    "HTTP artifact retrieval is not signature verification or extension execution.",
+    "No third-party repository modified.",
+    "No package fallback URL baked into client."
+  ]
+}

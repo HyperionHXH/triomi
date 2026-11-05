@@ -16,6 +16,7 @@ import '../../core/source/mihon_source.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/storage/preferences.dart';
+import '../../core/storage/storage_paths.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/source_network_image.dart';
 import '../downloads/data/download_providers.dart';
@@ -62,10 +63,9 @@ class MangaReaderPage extends ConsumerStatefulWidget {
 
 class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     with WidgetsBindingObserver {
-  late int _chapterIndex = widget.args.initialIndex.clamp(
-    0,
-    _chapters.length - 1,
-  );
+  late int _chapterIndex = _chapters.isEmpty
+      ? 0
+      : widget.args.initialIndex.clamp(0, _chapters.length - 1);
   PageController _pageController = PageController();
   final ItemScrollController _itemScroll = ItemScrollController();
   final ItemPositionsListener _positions = ItemPositionsListener.create();
@@ -83,6 +83,8 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       _mode != ReadingMode.webtoon;
   int get _spreadSize => _doublePage ? 2 : 1;
   int _layoutSpreadSize = 1;
+  ReadingMode? _layoutMode;
+  int _layoutRevision = 0;
   Future<void> _saveQueue = Future<void>.value();
   ({String chapter, double page})? _lastQueuedProgress;
   bool _restoring = true;
@@ -93,6 +95,11 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   String? _commentMode;
   bool _commentsVisited = false;
   Map<String, String> _imageHeaders = const {};
+  StreamSubscription<String?>? _localImagesSubscription;
+  bool _localComplete = true;
+  int? _localTotalPages;
+  int? _pendingLocalPage;
+  int _localRefreshRevision = 0;
   String? _error;
   bool _loading = true;
   bool _chromeVisible = true;
@@ -182,6 +189,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   @override
   void dispose() {
     _autoScrollTimer?.cancel();
+    unawaited(_localImagesSubscription?.cancel());
     PaintingBinding.instance.imageCache.maximumSizeBytes = _previousCacheBytes;
     WidgetsBinding.instance.removeObserver(this);
     _positions.itemPositions.removeListener(_onScroll);
@@ -206,6 +214,12 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
   Future<void> _load() async {
     final seq = ++_requestSeq;
+    unawaited(_localImagesSubscription?.cancel());
+    _localImagesSubscription = null;
+    _localComplete = true;
+    _localTotalPages = null;
+    _pendingLocalPage = null;
+    _localRefreshRevision++;
     _restoring = true;
     setState(() {
       _loading = true;
@@ -219,6 +233,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     });
 
     try {
+      if (_chapters.isEmpty) throw StateError('没有可阅读的章节');
       final chapter = _chapter;
       if (chapter.locked) {
         throw StateError('章节已锁定，不能打开或缓存');
@@ -230,18 +245,26 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       );
       if (!mounted || seq != _requestSeq) return;
       // 离线优先：下载过的章节直接读本地图片目录。
-      final localImages = await _localImagesOf(chapter);
-      final cachedContent = await ref.read(downloadRepositoryProvider)
+      final local = await _localImagesOf(chapter);
+      final cachedContent = await ref
+          .read(downloadRepositoryProvider)
           .localChapterContent(chapter.sourceId, chapter.remoteId);
       if (!mounted || seq != _requestSeq) return;
-      if (localImages.isNotEmpty ||
-          (cachedContent?.commentMode != null && cachedContent!.images.isEmpty)) {
+      if (local != null ||
+          (cachedContent?.commentMode != null &&
+              cachedContent!.images.isEmpty)) {
         setState(() {
-          _images = localImages;
+          _images = local?.images ?? const [];
+          _localComplete = local?.complete ?? true;
+          _localTotalPages = local?.totalPages;
           _comments = cachedContent?.comments ?? const [];
           _commentMode = cachedContent?.commentMode;
           _imageHeaders = cachedContent?.imageHeaders ?? const {};
-          _page = _images.isEmpty ? 0 : (saved?.floor() ?? 0).clamp(0, _images.length - 1);
+          final savedPage = saved?.floor() ?? 0;
+          if (!_localComplete && savedPage >= _images.length) {
+            _pendingLocalPage = savedPage;
+          }
+          _page = _images.isEmpty ? 0 : savedPage.clamp(0, _images.length - 1);
           _loading = false;
         });
         unawaited(_cacheChapters());
@@ -249,6 +272,16 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           _restorePage(seq);
         } else {
           _restoring = false;
+        }
+        if (!_localComplete) {
+          _localImagesSubscription = ref
+              .read(downloadRepositoryProvider)
+              .watchLocalImageDir(chapter.sourceId, chapter.remoteId)
+              .listen((directory) {
+                if (directory != null) {
+                  unawaited(_refreshLocalImages(directory, seq));
+                }
+              });
         }
         return;
       }
@@ -310,7 +343,9 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
         _comments = content.comments;
         _commentMode = content.commentMode;
         _imageHeaders = content.imageHeaders;
-        _page = _images.isEmpty ? 0 : (saved?.floor() ?? 0).clamp(0, _images.length - 1);
+        _page = _images.isEmpty
+            ? 0
+            : (saved?.floor() ?? 0).clamp(0, _images.length - 1);
         _loading = false;
       });
 
@@ -332,26 +367,82 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   }
 
   void _restorePage(int seq) {
+    final revision = ++_layoutRevision;
+    _restoring = true;
+    if (_isPaged) _page = _page ~/ _spreadSize * _spreadSize;
     _resetPageController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || seq != _requestSeq) return;
+      if (!mounted || seq != _requestSeq || revision != _layoutRevision) return;
       _restoring = false;
       unawaited(_persistProgress());
     });
   }
 
-  /// 已下载章节的本地图片路径（file:// 形式）；没下载过返回空列表。
-  Future<List<String>> _localImagesOf(Chapter chapter) async {
+  /// Only verified manifest pages are eligible, including a running download.
+  Future<({List<String> images, bool complete, int? totalPages})?>
+  _localImagesOf(Chapter chapter) async {
     final directory = await ref
         .read(downloadRepositoryProvider)
         .localImageDir(chapter.sourceId, chapter.remoteId);
-    if (directory == null || directory.isEmpty) return const <String>[];
+    if (directory == null || directory.isEmpty) return null;
+    return _readLocalImages(directory);
+  }
+
+  Future<({List<String> images, bool complete, int? totalPages})?>
+  _readLocalImages(String directory) async {
     final manifest = await DownloadManifest.read(directory);
-    if (manifest == null || manifest.files.isEmpty) return const <String>[];
-    return <String>[
-      for (final name in manifest.files)
-        Uri.file('$directory${Platform.pathSeparator}$name').toString(),
-    ];
+    if (manifest == null || manifest.files.isEmpty) return null;
+    return (
+      images: [
+        for (final name in manifest.files)
+          Uri.file(
+            storagePathIdentity('$directory${Platform.pathSeparator}$name'),
+          ).toString(),
+      ],
+      complete: manifest.complete,
+      totalPages: manifest.totalPages,
+    );
+  }
+
+  Future<void> _refreshLocalImages(String directory, int seq) async {
+    if (!mounted || seq != _requestSeq) return;
+    final revision = ++_localRefreshRevision;
+    final local = await _readLocalImages(directory);
+    if (!mounted ||
+        seq != _requestSeq ||
+        revision != _localRefreshRevision ||
+        local == null) {
+      return;
+    }
+    // A slower earlier notification must not shrink or replace visible pages.
+    if (local.images.length < _images.length) return;
+    for (var index = 0; index < _images.length; index++) {
+      if (_images[index] != local.images[index]) return;
+    }
+    final complete = _localComplete || local.complete;
+    if (local.images.length == _images.length &&
+        complete == _localComplete &&
+        local.totalPages == _localTotalPages) {
+      return;
+    }
+    final pending = _pendingLocalPage;
+    final restorePending =
+        pending != null && (pending < local.images.length || complete);
+    setState(() {
+      _images = local.images;
+      _localComplete = complete;
+      _localTotalPages = local.totalPages;
+      if (restorePending) {
+        _page = pending.clamp(0, _images.length - 1);
+        _pendingLocalPage = null;
+      }
+    });
+    if (restorePending) _restorePage(seq);
+    if (complete) {
+      final subscription = _localImagesSubscription;
+      _localImagesSubscription = null;
+      unawaited(subscription?.cancel());
+    }
   }
 
   /// 内容形态不对时给出可执行的下一步，而不是一句"加载失败"。
@@ -379,7 +470,11 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   }
 
   Future<void> _persistProgress() {
-    if (_loading || _error != null || _images.isEmpty || _restoring) {
+    if (_loading ||
+        _error != null ||
+        _images.isEmpty ||
+        _restoring ||
+        _pendingLocalPage != null) {
       return Future<void>.value();
     }
     final repository = _libraryRepository;
@@ -510,6 +605,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           ..sort((a, b) => a.index.compareTo(b.index));
     if (visible.isEmpty) return;
     final index = visible.first.index;
+    if (index < 0 || index >= _images.length) return;
     if (index != _page) {
       setState(() => _page = index);
       unawaited(_persistProgress());
@@ -517,18 +613,21 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   }
 
   void _onPageChanged(int index) {
-    if (_restoring || _loading) return;
-    final page = index * _spreadSize;
+    if (!mounted || _restoring || _loading || _images.isEmpty) return;
+    final page = (index * _spreadSize).clamp(0, _images.length - 1);
     if (_page == page) return;
+    _pendingLocalPage = null;
     setState(() => _page = page);
     unawaited(_persistProgress());
   }
 
   void _goToPage(int index) {
+    if (!_canTurnPage) return;
     if (index < 0 || index >= _images.length) return;
     if (_isPaged) index = index ~/ _spreadSize * _spreadSize;
     if (_page == index) return;
     if (_isPaged) {
+      if (!_pageController.hasClients) return;
       _pageController.animateToPage(
         index ~/ _spreadSize,
         duration: const Duration(milliseconds: 180),
@@ -536,15 +635,26 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       );
     } else if (_itemScroll.isAttached) {
       _itemScroll.jumpTo(index: index);
+    } else {
+      return;
     }
+    _pendingLocalPage = null;
     setState(() => _page = index);
     unawaited(_persistProgress());
   }
 
+  bool get _canTurnPage =>
+      !_loading && !_restoring && _error == null && _images.isNotEmpty;
+
   void _nextPage() {
+    if (!_canTurnPage) return;
     if (_page + _spreadSize < _images.length) {
       _goToPage(_page + _spreadSize);
-    } else if (_images.isNotEmpty && _commentMode != null && !_commentsVisited) {
+    } else if (!_localComplete) {
+      _toast('已到已下载页面，等待后续下载');
+    } else if (_images.isNotEmpty &&
+        _commentMode != null &&
+        !_commentsVisited) {
       unawaited(_showComments());
     } else {
       _switchChapter(1);
@@ -552,6 +662,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   }
 
   void _previousPage() {
+    if (!_canTurnPage) return;
     if (_page > 0) {
       _goToPage((_page - _spreadSize).clamp(0, _images.length - 1));
     } else {
@@ -560,6 +671,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   }
 
   void _switchChapter(int delta) {
+    if (_chapters.isEmpty) return;
     final target = _chapterIndex + delta;
     if (target < 0 || target >= _chapters.length) {
       _toast(delta > 0 ? '已经是最后一章' : '已经是第一章');
@@ -579,7 +691,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   /// 旧的控制器要等本帧渲染完再释放：立即 dispose 会被仍在树上的 PageView 引用。
   void _resetPageController() {
     final old = _pageController;
-    _pageController = PageController(initialPage: _page ~/ _spreadSize);
+    _pageController = PageController(
+      initialPage: _page ~/ _spreadSize,
+      keepPage: false,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
   }
 
@@ -592,18 +707,6 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 1)),
     );
-  }
-
-  /// 图片加载失败后重试：先把缓存里的失败结果清掉，再重建。
-  void _retryImage(String url) {
-    unawaited(
-      SourceNetworkImage(
-        url,
-        http: ref.read(sourceHttpClientProvider),
-        sourceId: _chapter.sourceId,
-      ).evict(),
-    );
-    if (mounted) setState(() {});
   }
 
   void _handleTap(TapUpDetails details) {
@@ -702,16 +805,22 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       if (previous?.orientation != next.orientation) {
         unawaited(_applyOrientation(next.orientation));
       }
-      if (previous?.base.mode != next.base.mode ||
-          previous?.doublePage != next.doublePage) {
-        _resetPageController();
-      }
     });
-    if (_layoutSpreadSize != _spreadSize) {
+    if (_layoutMode != settings.mode || _layoutSpreadSize != _spreadSize) {
+      final initialized = _layoutMode != null;
+      _layoutMode = settings.mode;
       _layoutSpreadSize = _spreadSize;
-      _resetPageController();
+      if (initialized && !_loading && _images.isNotEmpty) {
+        _restorePage(_requestSeq);
+      }
     }
 
+    if (_chapters.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: Text(_item.title)),
+        body: const Center(child: Text('没有可阅读的章节')),
+      );
+    }
     return Scaffold(
       backgroundColor: settings.background.color,
       body: Focus(
@@ -724,7 +833,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
               child: Listener(
                 onPointerSignal: (event) {
                   if (event is! PointerScrollEvent) return;
-                  if (!_isPaged) return;
+                  if (!_isPaged) {
+                    _pendingLocalPage = null;
+                    return;
+                  }
                   event.scrollDelta.dy > 0 ? _nextPage() : _previousPage();
                 },
                 child: GestureDetector(
@@ -777,7 +889,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
     if (_images.isEmpty && _commentMode != null) {
       return Padding(
-        padding: EdgeInsets.only(top: _chromeVisible ? 88 : 0, bottom: _chromeVisible ? 80 : 0),
+        padding: EdgeInsets.only(
+          top: _chromeVisible ? 88 : 0,
+          bottom: _chromeVisible ? 80 : 0,
+        ),
         child: MangaChapterComments(
           key: ValueKey('comments:${_chapter.remoteId}'),
           comments: _comments,
@@ -787,19 +902,25 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     }
 
     if (settings.mode == ReadingMode.webtoon) {
-      return ScrollablePositionedList.builder(
-        key: ValueKey('$_chapterIndex:$_requestSeq'),
-        itemScrollController: _itemScroll,
-        itemPositionsListener: _positions,
-        initialScrollIndex: _page,
-        itemCount: _images.length,
-        scrollOffsetController: _scrollOffset,
-        itemBuilder: (context, index) => _imagePage(index, BoxFit.fitWidth),
+      return NotificationListener<ScrollUpdateNotification>(
+        onNotification: (notification) {
+          if (notification.dragDetails != null) _pendingLocalPage = null;
+          return false;
+        },
+        child: ScrollablePositionedList.builder(
+          key: ValueKey((_chapterIndex, _requestSeq, _layoutRevision)),
+          itemScrollController: _itemScroll,
+          itemPositionsListener: _positions,
+          initialScrollIndex: _page,
+          itemCount: _images.length,
+          scrollOffsetController: _scrollOffset,
+          itemBuilder: (context, index) => _imagePage(index, BoxFit.fitWidth),
+        ),
       );
     }
 
     return PageView.builder(
-      key: ValueKey<ReadingMode>(settings.mode),
+      key: ValueKey((settings.mode, _layoutRevision)),
       controller: _pageController,
       reverse: settings.mode == ReadingMode.rtl,
       scrollDirection: settings.mode == ReadingMode.vertical
@@ -830,9 +951,9 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   Widget _imagePage(int index, BoxFit fit) {
     final url = _images[index];
     final ImageProvider provider = url.startsWith('file://')
-        ? FileImage(File(Uri.parse(url).toFilePath()))
+        ? FileImage(File(storageFilePath(Uri.parse(url).toFilePath())))
         : !url.contains('://')
-        ? FileImage(File(url))
+        ? FileImage(File(storageFilePath(url)))
         : SourceNetworkImage(
             url,
             http: ref.watch(sourceHttpClientProvider),
@@ -845,6 +966,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                 _spreadSize)
             .round();
     return MangaPageImage(
+      key: ValueKey(url),
       provider: ResizeImage(
         provider,
         width: width.clamp(480, 2400),
@@ -856,7 +978,6 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       imageHeaders: _imageHeaders,
       fit: fit,
       settings: _viewSettings,
-      onRetry: () => _retryImage(url),
     );
   }
 
@@ -897,7 +1018,9 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                             ),
                           ),
                           Text(
-                            _chapter.title,
+                            _localComplete
+                                ? _chapter.title
+                                : '${_chapter.title} · 已下载 ${_images.length}/${_localTotalPages ?? '?'} 页',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall?.copyWith(
@@ -911,7 +1034,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                       IconButton(
                         tooltip: '吐槽',
                         onPressed: _showComments,
-                        icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+                        icon: const Icon(
+                          Icons.chat_bubble_outline,
+                          color: Colors.white,
+                        ),
                       ),
                     IconButton(
                       tooltip: '目录',
@@ -968,7 +1094,11 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                     ] else
                       Expanded(
                         child: Text(
-                          _loading ? '正在加载章节…' : _commentMode != null ? '吐槽 · ${_comments.length} 条' : '章节未加载',
+                          _loading
+                              ? '正在加载章节…'
+                              : _commentMode != null
+                              ? '吐槽 · ${_comments.length} 条'
+                              : '章节未加载',
                           textAlign: TextAlign.center,
                           style: const TextStyle(color: Colors.white70),
                         ),
@@ -996,7 +1126,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       showDragHandle: true,
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.85,
-        child: MangaChapterComments(comments: _comments, mode: _commentMode ?? 'merge'),
+        child: MangaChapterComments(
+          comments: _comments,
+          mode: _commentMode ?? 'merge',
+        ),
       ),
     );
   }

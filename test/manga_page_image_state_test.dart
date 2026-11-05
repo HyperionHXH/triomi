@@ -39,7 +39,6 @@ void main() {
     tester,
   ) async {
     final provider = _ControlledImage();
-    var retries = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: SingleChildScrollView(
@@ -49,7 +48,6 @@ void main() {
             sourceId: 'isolated',
             fit: BoxFit.fitWidth,
             settings: const MangaViewSettings(base: ReaderSettings()),
-            onRetry: () => retries++,
           ),
         ),
       ),
@@ -63,7 +61,7 @@ void main() {
     expect(tester.getSize(tile).height, pendingHeight);
     await tester.tap(find.text('重新加载'));
     await tester.pump();
-    expect(retries, 1);
+    expect(provider.streams, hasLength(2));
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(tester.getSize(tile).height, pendingHeight);
 
@@ -82,7 +80,7 @@ void main() {
     await tester.ensureVisible(find.text('重新加载'));
     await tester.tap(find.text('重新加载'));
     await tester.pump();
-    expect(retries, 2);
+    expect(provider.streams, hasLength(3));
     expect(tester.getSize(tile).height, decodedHeight);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

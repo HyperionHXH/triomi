@@ -7,7 +7,9 @@ import '../../../core/db/app_database.dart';
 import '../../../core/models/chapter.dart';
 import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
+import '../../../core/storage/storage_paths.dart';
 import '../../library/data/library_repository.dart';
+import 'image_download_checkpoint.dart';
 
 /// 下载任务状态。
 enum DownloadStatus {
@@ -76,10 +78,10 @@ class DownloadGroup {
 
 /// 下载任务与离线内容的读写。
 ///
-/// 离线内容有两种形态（对齐 Mixn 的离线模型）：
-/// - **小说**：正文 JSON 落在 `chapters.content_json`（体积小、可检索、随备份走）；
-/// - **漫画**：图片落到应用文档目录 `downloads/<sourceId>/<item>/<chapter>/`，
-///   目录内写 `manifest.json` 记录文件名顺序，`downloads.path` 存该目录。
+/// 小说正文以 `chapters.content_json` 为准，下载时另存可移植 chapter.json。
+/// 漫画与番剧写入各自作品目录；新目录使用类型与来源/作品/章节摘要，
+/// 已存在的旧目录保持原位。漫画 manifest.json 只发布已核验的有序页面，
+/// 部分清单也可供阅读，但不把下载任务提前标记完成。
 class DownloadRepository {
   DownloadRepository(this._db);
 
@@ -101,8 +103,10 @@ class DownloadRepository {
       chapterRemoteId: chapter.remoteId,
     );
     if (existing != null) {
-      // 已完成的不重复排队；失败或中断的重新排到队尾。
-      if (existing.status == DownloadStatus.done.value) return existing.id;
+      if (existing.status == DownloadStatus.done.value ||
+          existing.status == DownloadStatus.running.value) {
+        return existing.id;
+      }
       await markQueued(existing.id);
       return existing.id;
     }
@@ -116,6 +120,7 @@ class DownloadRepository {
             chapterRemoteId: chapter.remoteId,
             status: DownloadStatus.queued.value,
             createdAt: DateTime.now(),
+            queuePosition: Value(await _nextPosition()),
           ),
         );
   }
@@ -135,22 +140,50 @@ class DownloadRepository {
     return query.getSingleOrNull();
   }
 
-  Future<void> markQueued(int id) async {
-    // Reserved local imports have no network provider. Missing bytes are filled
-    // by local import/portable restore, never by the download retry controls.
-    await (_db.update(_db.downloads)
-      ..where((t) => t.id.equals(id) & t.sourceId.equals('local-comic').not()))
-        .write(const DownloadsCompanion(status: Value('queued'), errorMessage: Value(null)));
+  Future<int> _nextPosition() async {
+    final maximum = _db.downloads.queuePosition.max();
+    final value = await (_db.selectOnly(
+      _db.downloads,
+    )..addColumns([maximum])).getSingle();
+    return (value.read(maximum) ?? 0) + 1;
   }
 
-  Future<void> markRunning(int id) =>
-      _update(id, const DownloadsCompanion(status: Value('running')));
+  Future<DownloadRow?> rowById(int id) => (_db.select(
+    _db.downloads,
+  )..where((t) => t.id.equals(id))).getSingleOrNull();
+
+  Future<void> markQueued(int id, {bool resetRetries = true}) async {
+    await (_db.update(_db.downloads)..where(
+          (t) => t.id.equals(id) & t.sourceId.equals('local-comic').not(),
+        ))
+        .write(
+          DownloadsCompanion(
+            status: const Value('queued'),
+            errorMessage: const Value(null),
+            retryCount: resetRetries ? const Value(0) : const Value.absent(),
+            retryAt: const Value(null),
+            speedBytesPerSecond: const Value(0),
+          ),
+        );
+  }
+
+  Future<void> markRunning(int id) => _update(
+    id,
+    const DownloadsCompanion(
+      status: Value('running'),
+      retryAt: Value(null),
+      finishedAt: Value(null),
+      speedBytesPerSecond: Value(0),
+    ),
+  );
 
   Future<void> markPaused(int id, {String? message}) => _update(
     id,
     DownloadsCompanion(
       status: const Value('paused'),
       errorMessage: Value(message),
+      speedBytesPerSecond: const Value(0),
+      retryAt: const Value(null),
     ),
   );
 
@@ -158,35 +191,85 @@ class DownloadRepository {
       _update(id, DownloadsCompanion(path: Value(path)));
 
   Future<void> resumePaused() async {
-    await (_db.update(
-      _db.downloads,
-    )..where((t) => t.status.equals('paused') & t.sourceId.equals('local-comic').not())).write(
-      const DownloadsCompanion(
-        status: Value('queued'),
-        errorMessage: Value(null),
-      ),
-    );
+    await (_db.update(_db.downloads)..where(
+          (t) =>
+              t.status.equals('paused') &
+              t.sourceId.equals('local-comic').not(),
+        ))
+        .write(
+          const DownloadsCompanion(
+            status: Value('queued'),
+            errorMessage: Value(null),
+          ),
+        );
   }
 
-  Future<void> markProgress(int id, double progress) =>
-      _update(id, DownloadsCompanion(progress: Value(progress.clamp(0, 1))));
+  Future<void> markProgress(
+    int id,
+    double progress, {
+    bool onlyRunning = false,
+  }) => (onlyRunning ? _updateRunning : _update)(
+    id,
+    DownloadsCompanion(progress: Value(progress.clamp(0, 1))),
+  );
 
-  Future<void> markDone(int id, {String? path}) => _update(
+  Future<void> markTransfer(
+    int id, {
+    required int receivedBytes,
+    int? totalBytes,
+    required double speedBytesPerSecond,
+    int? completedPages,
+    int? totalPages,
+  }) => _updateRunning(
     id,
     DownloadsCompanion(
-      status: const Value('done'),
-      progress: const Value(1),
-      path: Value(path),
-      finishedAt: Value(DateTime.now()),
-      errorMessage: const Value(null),
+      receivedBytes: Value(receivedBytes),
+      totalBytes: Value(totalBytes),
+      speedBytesPerSecond: Value(speedBytesPerSecond),
+      completedPages: completedPages == null
+          ? const Value.absent()
+          : Value(completedPages),
+      totalPages: totalPages == null ? const Value.absent() : Value(totalPages),
     ),
   );
+
+  Future<void> scheduleRetry(
+    int id, {
+    required int count,
+    required DateTime at,
+    required String message,
+  }) => _updateRunning(
+    id,
+    DownloadsCompanion(
+      status: const Value('queued'),
+      retryCount: Value(count),
+      retryAt: Value(at),
+      errorMessage: Value(message),
+      speedBytesPerSecond: const Value(0),
+    ),
+  );
+
+  Future<void> markDone(int id, {String? path, bool onlyRunning = false}) =>
+      (onlyRunning ? _updateRunning : _update)(
+        id,
+        DownloadsCompanion(
+          status: const Value('done'),
+          progress: const Value(1),
+          path: Value(path),
+          finishedAt: Value(DateTime.now()),
+          errorMessage: const Value(null),
+          retryAt: const Value(null),
+          speedBytesPerSecond: const Value(0),
+        ),
+      );
 
   Future<void> markFailed(int id, String message) => _update(
     id,
     DownloadsCompanion(
       status: const Value('failed'),
       errorMessage: Value(message),
+      speedBytesPerSecond: const Value(0),
+      retryAt: const Value(null),
       finishedAt: Value(DateTime.now()),
     ),
   );
@@ -197,6 +280,49 @@ class DownloadRepository {
     return statement.write(companion);
   }
 
+  Future<void> _updateRunning(int id, DownloadsCompanion companion) =>
+      (_db.update(_db.downloads)..where(
+            (table) => table.id.equals(id) & table.status.equals('running'),
+          ))
+          .write(companion);
+
+  /// Reordering is atomic and validates the entire visible pending scope.
+  /// A running chapter retains ownership until it stops or finishes.
+  Future<void> reorder({
+    required MediaType? type,
+    required List<int> orderedIds,
+  }) async {
+    await _db.transaction(() async {
+      final groups = await grouped();
+      final expected = {
+        for (final group in groups)
+          if (type == null || group.type == type)
+            for (final entry in group.entries)
+              if (entry.status != DownloadStatus.done &&
+                  entry.status != DownloadStatus.running)
+                entry.row.id,
+      };
+      if (orderedIds.length != expected.length ||
+          orderedIds.toSet().length != orderedIds.length ||
+          !expected.containsAll(orderedIds)) {
+        throw StateError('下载队列已变化，请重新排序');
+      }
+      final all =
+          await (_db.select(_db.downloads)..orderBy([
+                (table) => OrderingTerm.asc(table.queuePosition),
+                (table) => OrderingTerm.asc(table.id),
+              ]))
+              .get();
+      var replacement = 0;
+      for (var index = 0; index < all.length; index++) {
+        final id = expected.contains(all[index].id)
+            ? orderedIds[replacement++]
+            : all[index].id;
+        await _update(id, DownloadsCompanion(queuePosition: Value(index + 1)));
+      }
+    });
+  }
+
   /// 待处理任务（按入队顺序）。
   Future<List<DownloadRow>> pending() async {
     final query = _db.select(_db.downloads)
@@ -204,7 +330,10 @@ class DownloadRepository {
         (table) =>
             table.status.equals('queued') | table.status.equals('running'),
       )
-      ..orderBy([(table) => OrderingTerm.asc(table.id)]);
+      ..orderBy([
+        (table) => OrderingTerm.asc(table.queuePosition),
+        (table) => OrderingTerm.asc(table.id),
+      ]);
     return query.get();
   }
 
@@ -233,7 +362,7 @@ class DownloadRepository {
       final download = row.readTable(_db.downloads);
       final chapter = row.readTableOrNull(_db.chapters);
       final item = row.readTableOrNull(_db.mediaItems);
-      final key = '${download.sourceId}|${download.remoteId}';
+      final key = jsonEncode([download.sourceId, download.remoteId]);
       final entry = DownloadEntry(
         row: download,
         chapterTitle: chapter?.title ?? download.chapterRemoteId,
@@ -255,7 +384,10 @@ class DownloadRepository {
       }
     }
     for (final group in groups.values) {
-      group.entries.sort((a, b) => a.row.id.compareTo(b.row.id));
+      group.entries.sort((a, b) {
+        final order = a.row.queuePosition.compareTo(b.row.queuePosition);
+        return order == 0 ? a.row.id.compareTo(b.row.id) : order;
+      });
     }
     return groups.values.toList();
   }
@@ -398,53 +530,136 @@ class DownloadRepository {
     }
   }
 
-  /// 漫画：离线图片目录（completed 任务的 path）。
+  /// A partial manga directory is readable only through its verified manifest.
   Future<String?> localImageDir(String sourceId, String chapterRemoteId) async {
-    final query = _db.select(_db.downloads)
-      ..where(
-        (table) =>
-            table.sourceId.equals(sourceId) &
-            table.chapterRemoteId.equals(chapterRemoteId) &
-            table.status.equals('done'),
-      );
-    final row = await query.getSingleOrNull();
-    return row?.path;
+    final rows =
+        await (_db.select(_db.downloads)..where(
+              (table) =>
+                  table.sourceId.equals(sourceId) &
+                  table.chapterRemoteId.equals(chapterRemoteId),
+            ))
+            .get();
+    for (final row in rows) {
+      final path = row.path;
+      if (path == null || path.isEmpty) continue;
+      final manifest = await DownloadManifest.read(path);
+      if (manifest != null && manifest.files.isNotEmpty) return path;
+    }
+    return null;
   }
 
-  /// 番剧：离线视频文件（completed 任务的 path 指向文件，不是目录）。
-  ///
-  /// 文件被外部删掉时返回 null（不把一个不存在的路径交给播放器）。
+  Stream<String?> watchLocalImageDir(String sourceId, String chapterRemoteId) =>
+      (_db.select(_db.downloads)..where(
+            (table) =>
+                table.sourceId.equals(sourceId) &
+                table.chapterRemoteId.equals(chapterRemoteId),
+          ))
+          .watch()
+          .distinct((previous, current) {
+            if (previous.length != current.length) return false;
+            for (var index = 0; index < previous.length; index++) {
+              final a = previous[index], b = current[index];
+              if (a.id != b.id ||
+                  a.path != b.path ||
+                  a.status != b.status ||
+                  a.progress != b.progress ||
+                  a.completedPages != b.completedPages ||
+                  a.totalPages != b.totalPages) {
+                return false;
+              }
+            }
+            return true;
+          })
+          .asyncMap((_) => localImageDir(sourceId, chapterRemoteId));
+
+  /// Video is never exposed before its complete payload has been published.
   Future<String?> localVideoPath(
     String sourceId,
     String chapterRemoteId,
   ) async {
-    final path = await localImageDir(sourceId, chapterRemoteId);
-    if (path == null || path.isEmpty) return null;
-    return File(path).existsSync() ? path : null;
+    final rows =
+        await (_db.select(_db.downloads)..where(
+              (table) =>
+                  table.sourceId.equals(sourceId) &
+                  table.chapterRemoteId.equals(chapterRemoteId) &
+                  table.status.equals('done'),
+            ))
+            .get();
+    for (final row in rows) {
+      if (row.path != null && await File(storageFilePath(row.path!)).exists()) {
+        return row.path;
+      }
+    }
+    return null;
   }
 }
 
 /// 离线图片目录的清单文件（记录有序文件名）。
 class DownloadManifest {
-  const DownloadManifest({required this.files, required this.title});
+  const DownloadManifest({
+    required this.files,
+    required this.title,
+    this.totalPages,
+    this.complete = true,
+  });
 
   final List<String> files;
   final String title;
-
+  final int? totalPages;
+  final bool complete;
   static const String fileName = 'manifest.json';
+  static final _pageName = RegExp(
+    r'^[A-Za-z0-9][A-Za-z0-9._-]*\.(jpg|jpeg|png|webp|gif|avif)$',
+  );
 
   static Future<DownloadManifest?> read(String directory) async {
-    final file = File('$directory${Platform.pathSeparator}$fileName');
-    if (!file.existsSync()) return null;
+    final file = File(
+      storageFilePath('$directory${Platform.pathSeparator}$fileName'),
+    );
     try {
+      if (await FileSystemEntity.type(file.path, followLinks: false) !=
+          FileSystemEntityType.file) {
+        return null;
+      }
       final decoded = jsonDecode(await file.readAsString());
-      if (decoded is! Map) return null;
+      if (decoded is! Map || decoded['files'] is! List) return null;
+      final names = (decoded['files'] as List);
+      if (names.any((name) => name is! String || !_pageName.hasMatch(name)) ||
+          names.toSet().length != names.length) {
+        return null;
+      }
+      final complete = decoded['complete'] != false;
+      if (!complete) {
+        for (var index = 0; index < names.length; index++) {
+          final number = RegExp(r'^(\d{4,})\.')
+              .firstMatch(names[index] as String);
+          if (number == null || int.parse(number[1]!) != index + 1) return null;
+        }
+      }
+      final total = decoded['totalPages'];
+      if (total != null && (total is! int || total < names.length)) return null;
+      final checkpoint = await ImageDownloadCheckpoint.load(
+        Directory(storageFilePath(directory)),
+      );
+      for (final name in names.cast<String>()) {
+        if (await FileSystemEntity.type(
+              storageFilePath('$directory${Platform.pathSeparator}$name'),
+              followLinks: false,
+            ) !=
+            FileSystemEntityType.file) {
+          return null;
+        }
+        // Old completed imports have no checksums. New/partial manifests do.
+        if ((!complete || checkpoint.pages.isNotEmpty) &&
+            !await checkpoint.valid(name)) {
+          return null;
+        }
+      }
       return DownloadManifest(
-        files: <String>[
-          for (final name in (decoded['files'] as List?) ?? const <Object?>[])
-            if (name != null) name.toString(),
-        ],
+        files: names.cast<String>(),
         title: '${decoded['title'] ?? ''}',
+        totalPages: total as int?,
+        complete: complete,
       );
     } catch (_) {
       return null;
@@ -455,12 +670,27 @@ class DownloadManifest {
     required String directory,
     required List<String> files,
     required String title,
+    int? totalPages,
+    bool complete = true,
   }) async {
-    final file = File('$directory${Platform.pathSeparator}$fileName');
-    await file.writeAsString(
-      jsonEncode(<String, Object?>{'files': files, 'title': title}),
+    if (files.any((name) => !_pageName.hasMatch(name)) ||
+        files.toSet().length != files.length) {
+      throw const FormatException('漫画清单文件名无效');
+    }
+    final target = storageFilePath(
+      '$directory${Platform.pathSeparator}$fileName',
+    );
+    final temporary = File(storageFilePath('$target.tmp'));
+    await temporary.writeAsString(
+      jsonEncode({
+        'files': files,
+        'title': title,
+        'totalPages': totalPages,
+        'complete': complete,
+      }),
       flush: true,
     );
+    await temporary.rename(target);
   }
 }
 
@@ -483,7 +713,7 @@ Future<void> purgeSourceOfflineData(
       final path = row.path;
       if (path == null || path.isEmpty) continue;
       try {
-        final file = File(path);
+        final file = File(storageFilePath(path));
         if (await file.exists()) await file.delete();
       } catch (_) {
         // 单个文件删除失败不阻塞登出。

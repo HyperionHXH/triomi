@@ -27,7 +27,6 @@ class MainActivity : FlutterActivity() {
     private lateinit var mihonHost: MihonHost
     private var pendingFontResult: MethodChannel.Result? = null
     private var pendingMihonSettingsResult: MethodChannel.Result? = null
-    private var pendingBackupResult: MethodChannel.Result? = null
     private var pendingNotificationResult: MethodChannel.Result? = null
     private val mihonExecutor = Executors.newCachedThreadPool()
     private val exportExecutor = Executors.newSingleThreadExecutor()
@@ -67,6 +66,8 @@ class MainActivity : FlutterActivity() {
     }
     private val localComicPicker by lazy { LocalComicPicker(this) }
     private lateinit var appUpdateHost: AppUpdateHost
+    private lateinit var downloadQueueHost: DownloadQueueHost
+    private lateinit var backupDocumentHost: BackupDocumentHost
 
     private fun notificationRoute(value: Intent): String? =
         value.getStringExtra("triomi_route")?.takeIf { it == "/anime" || it == "/manga/updates" }
@@ -77,6 +78,10 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         appUpdateHost = AppUpdateHost(this, flutterEngine.dartExecutor.binaryMessenger)
         BackupArtifactGuard.register(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
+        backupDocumentHost = BackupDocumentHost(this, flutterEngine.dartExecutor.binaryMessenger)
+        val platformChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "triomi/platform")
+        downloadQueueHost = DownloadQueueHost(this, platformChannel, { nativeForeground },
+            { result -> requestNotificationPermission(result) }, { downloadVideoResolver?.cancel() })
         JsWorkerController(this, flutterEngine)
         mihonHost = MihonHost(this)
         flutterEngine.platformViewsController.registry.registerViewFactory(
@@ -106,7 +111,7 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "triomi/platform")
+        platformChannel
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "resolveSystemProxy" -> {
@@ -150,27 +155,13 @@ class MainActivity : FlutterActivity() {
                             result.error("disk_unavailable", "cannot inspect destination disk", null)
                         }
                     }
-                    "pickBackupFile" -> {
-                        if (pendingBackupResult != null) result.error("busy", "Backup picker is already open", null)
-                        else {
-                            pendingBackupResult = result
-                            try {
-                                startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                                    addCategory(Intent.CATEGORY_OPENABLE)
-                                    type = "*/*"
-                                    putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/octet-stream"))
-                                }, REQUEST_PICK_BACKUP)
-                            } catch (_: Exception) {
-                                pendingBackupResult = null
-                                result.error("picker_failed", "Backup picker unavailable", null)
-                            }
-                        }
-                    }
                     "scheduleLocalBackups" -> result.success(LocalBackupJobService.schedule(this, call.arguments == true))
                     "beginMangaUpdate" -> result.success(MangaUpdatesRuntime.begin(this))
                     "endMangaUpdate" -> { MangaUpdatesRuntime.end(this); result.success(null) }
-                    "beginDownloadQueue" -> result.success(MangaUpdatesRuntime.beginDownloads(this))
-                    "endDownloadQueue" -> { MangaUpdatesRuntime.endDownloads(this); result.success(null) }
+                    "beginDownloadQueue" -> downloadQueueHost.begin(result)
+                    "endDownloadQueue" -> { downloadQueueHost.end(); result.success(null) }
+                    "updateDownloadQueue" -> result.success(downloadQueueHost.update(call))
+                    "setDownloadQueueActive" -> result.success(downloadQueueHost.setActive(call.argument<Boolean>("active") == true))
                     "canNotifyMangaUpdates" -> result.success(BackgroundUpdate.hasNotificationPermission(this))
                     "cancelMangaUpdate" -> {
                         MangaUpdatesRuntime.cancel()
@@ -302,6 +293,9 @@ class MainActivity : FlutterActivity() {
                             mihonExecutor.execute {
                                 try {
                                     val info = mihonHost.request(args + ("operation" to "browserInfo"))
+                                    check(info["ok"] == true) {
+                                        info["error"]?.toString() ?: "source browser request failed"
+                                    }
                                     runOnUiThread {
                                         if (!updateConsentCurrent(requestGeneration)) {
                                             mihonSessionPending = false
@@ -421,18 +415,30 @@ class MainActivity : FlutterActivity() {
                         val args = call.arguments as? Map<*, *>
                         if (args == null) {
                             result.error("invalid_args", "request arguments are required", null)
+                        } else if (mihonExecutor.isShutdown) {
+                            result.error("activity_inactive", "source request host is closed", null)
                         } else {
-                            mihonExecutor.execute {
-                                try {
-                                    val payload = mihonHost.request(args)
-                                    runOnUiThread { result.success(payload) }
-                                } catch (error: Throwable) {
-                                    runOnUiThread {
-                                        result.error("mihon_request_failed", error.message ?: error.javaClass.simpleName, null)
+                            try {
+                                val request = mihonHost.prepareRequest(args)
+                                mihonExecutor.execute {
+                                    try {
+                                        val payload = request()
+                                        runOnUiThread { result.success(payload) }
+                                    } catch (error: Throwable) {
+                                        runOnUiThread {
+                                            result.error("mihon_request_failed", error.message ?: error.javaClass.simpleName, null)
+                                        }
                                     }
                                 }
+                            } catch (error: Throwable) {
+                                result.error("mihon_request_failed", error.message ?: error.javaClass.simpleName, null)
                             }
                         }
+                    }
+                    "mihonCancelRequest" -> {
+                        val requestId = call.argument<String>("requestId")
+                        if (requestId.isNullOrBlank()) result.error("invalid_args", "requestId is required", null)
+                        else result.success(mihonHost.cancelRequest(requestId))
                     }
                     "resolveVideo" -> {
                         videoResolver?.cancel()
@@ -440,9 +446,13 @@ class MainActivity : FlutterActivity() {
                         videoResolver?.resolve(call, result)
                     }
                     "resolveDownloadVideo" -> {
-                        downloadVideoResolver?.cancel()
-                        downloadVideoResolver = WebVideoResolver(this)
-                        downloadVideoResolver?.resolve(call, result)
+                        if (!nativeForeground && !downloadQueueHost.active) {
+                            result.error("activity_inactive", "下载解析需要前台或活动的下载服务", null)
+                        } else {
+                            downloadVideoResolver?.cancel()
+                            downloadVideoResolver = WebVideoResolver(this)
+                            downloadVideoResolver?.resolve(call, result)
+                        }
                     }
                     "cancelDownloadVideoResolve" -> {
                         downloadVideoResolver?.cancel()
@@ -527,7 +537,9 @@ class MainActivity : FlutterActivity() {
         NativeVideoLifecycle.active?.onBackground(videoBackgroundAudio || pip, visiblePip = pip)
         mihonWebSession?.close()
         videoResolver?.cancel()
-        downloadVideoResolver?.cancel()
+        // Download-only resolver work remains authorized under the active FGS.
+        // Interactive source browsers above still close on pause.
+        if (!::downloadQueueHost.isInitialized || !downloadQueueHost.active) downloadVideoResolver?.cancel()
     }
 
     override fun onStop() {
@@ -540,12 +552,18 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         nativeForeground = true
+        if (::downloadQueueHost.isInitialized) downloadQueueHost.onResume()
         NativeVideoLifecycle.active?.onForeground()
     }
 
     override fun onDestroy() {
+        if (::downloadQueueHost.isInitialized) downloadQueueHost.close()
+        val notificationReply = pendingNotificationResult
+        pendingNotificationResult = null
+        notificationReply?.success(false)
         localComicPicker.close()
         if (::appUpdateHost.isInitialized) appUpdateHost.close()
+        if (::backupDocumentHost.isInitialized) backupDocumentHost.close()
         mihonWebSession?.close()
         takeMihonSettingsResult()?.success(false)
         videoResolver?.cancel()
@@ -553,7 +571,6 @@ class MainActivity : FlutterActivity() {
         mihonExecutor.shutdownNow()
         exportExecutor.shutdownNow()
         MangaUpdatesRuntime.end(this)
-        MangaUpdatesRuntime.endDownloads(this)
         super.onDestroy()
     }
 
@@ -678,6 +695,10 @@ class MainActivity : FlutterActivity() {
      * 首次申请由系统弹窗，结果在 onRequestPermissionsResult 里回给 Dart。
      */
     private fun requestNotificationPermission(result: MethodChannel.Result) {
+        if (pendingNotificationResult != null || !nativeForeground || isFinishing || isDestroyed) {
+            result.success(false)
+            return
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             result.success(true)
             return
@@ -687,10 +708,15 @@ class MainActivity : FlutterActivity() {
             return
         }
         pendingNotificationResult = result
-        requestPermissions(
-            arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
-            REQUEST_NOTIFICATION,
-        )
+        try {
+            requestPermissions(
+                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_NOTIFICATION,
+            )
+        } catch (_: RuntimeException) {
+            pendingNotificationResult = null
+            result.success(false)
+        }
     }
 
     @Deprecated("Deprecated in Java")
@@ -711,6 +737,7 @@ class MainActivity : FlutterActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (::backupDocumentHost.isInitialized && backupDocumentHost.onActivityResult(requestCode, resultCode, data)) return
         if (localComicPicker.onActivityResult(requestCode, resultCode, data)) return
         if (::appUpdateHost.isInitialized && appUpdateHost.onActivityResult(requestCode, resultCode, data)) return
         if (requestCode == REQUEST_MIHON_SETTINGS) {
@@ -719,50 +746,6 @@ class MainActivity : FlutterActivity() {
                 pending?.success(true)
             } else {
                 pending?.error("settings_unavailable", data?.getStringExtra("error") ?: "插件来源设置未能打开", null)
-            }
-            return
-        }
-        if (requestCode == REQUEST_PICK_BACKUP) {
-            val pending = pendingBackupResult
-            pendingBackupResult = null
-            if (pending == null) return
-            val uri = data?.data
-            if (resultCode != RESULT_OK || uri == null) { pending.success(null); return }
-            mihonExecutor.execute {
-                // The returned picker path remains useful between review and
-                // restore. Keep it pinned until process death on success; a
-                // cold-start exclusive sweep removes this app-owned cache ZIP.
-                val lease = BackupArtifactGuard.acquire(applicationContext)
-                if (lease == null) {
-                    runOnUiThread { pending.error("backup_busy", "Backup storage is busy", null) }
-                    return@execute
-                }
-                try {
-                    val file = java.io.File.createTempFile("backup-import-", ".zip", cacheDir)
-                    try {
-                        val input = contentResolver.openInputStream(uri) ?: throw java.io.IOException("Backup unavailable")
-                        input.use { stream ->
-                            file.outputStream().use { output ->
-                                val buffer = ByteArray(64 * 1024)
-                                // Local ZIPs are disk-backed, unlike bounded WebDAV buffers.
-                                val copyLimit = cacheDir.usableSpace - 64L * 1024 * 1024
-                                if (copyLimit <= 0) throw java.io.IOException("Insufficient backup cache space")
-                                var total = 0L
-                                while (true) {
-                                    val count = stream.read(buffer)
-                                    if (count < 0) break
-                                    total += count
-                                    if (total > copyLimit) throw java.io.IOException("Insufficient backup cache space")
-                                    output.write(buffer, 0, count)
-                                }
-                            }
-                        }
-                        runOnUiThread { pending.success(file.absolutePath) }
-                    } catch (error: Exception) { file.delete(); throw error }
-                } catch (_: Exception) {
-                    BackupArtifactGuard.release(lease)
-                    runOnUiThread { pending.error("backup_read_failed", "Backup unavailable or cache disk space insufficient", null) }
-                }
             }
             return
         }
@@ -852,7 +835,6 @@ class MainActivity : FlutterActivity() {
         private const val REQUEST_PICK_FONT = 4101
         private const val REQUEST_PICK_DIRECTORY = 4102
         private const val REQUEST_PICK_IMAGE = 4103
-        private const val REQUEST_PICK_BACKUP = 4105
         private const val REQUEST_NOTIFICATION = 4104
         private const val REQUEST_MIHON_SETTINGS = 4106
     }

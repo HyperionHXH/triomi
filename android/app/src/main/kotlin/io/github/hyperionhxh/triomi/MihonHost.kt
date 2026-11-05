@@ -8,6 +8,9 @@ import android.app.Application
 import com.android.apksig.ApkVerifier
 import dev.mihon.injekt.patchInjekt
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.network.MihonRequestRegistry
+import eu.kanade.tachiyomi.network.MihonRequestScope
+import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.MihonPreferences
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceFactory
@@ -30,15 +33,20 @@ import java.io.File
 import uy.kohesive.injekt.api.FullTypeReference
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CancellationException
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Android-only, in-process Mihon extension host. APKs are never installed. */
 class MihonHost(private val context: Context) {
     private val app = context.applicationContext
     private val prefs = app.getSharedPreferences("mihon.host", Context.MODE_PRIVATE)
     private val loaded = ConcurrentHashMap<String, LoadedExtension>()
+    private val requests = MihonRequestRegistry()
+    private val imageCacheLock = Any()
 
     init {
         patchInjekt()
+        MihonRequestScope.install()
         val injekt = Class.forName("uy.kohesive.injekt.InjektKt")
             .getMethod("getInjekt").invoke(null)
         injekt.javaClass.methods.first { it.name == "addSingleton" && it.parameterTypes.size == 2 }
@@ -220,80 +228,146 @@ class MihonHost(private val context: Context) {
         }
     }
 
-    fun request(args: Map<*, *>): Map<String, Any?> {
+    /** Compatibility entry; channel consumers must admit before worker submission. */
+    fun request(args: Map<*, *>): Map<String, Any?> = prepareRequest(args)()
+
+    /**
+     * Reserves the request synchronously, closing cancel-before-worker-start races.
+     * The returned operation is single-use. requestId is optional for legacy callers,
+     * otherwise opaque and unique per invocation (including retries).
+     */
+    fun prepareRequest(args: Map<*, *>): () -> Map<String, Any?> {
+        val rawId = args["requestId"]
+        val requestId = rawId as? String
+        val operation = args["operation"]?.toString()
+        if (rawId != null && (requestId == null || !validRequestId(requestId))) {
+            return { requestFailure(requestId, operation, "invalid_request_id", "requestId must be a nonblank string of at most 256 characters") }
+        }
+        val owner = requests.reserve(requestId)
+            ?: return { requestFailure(requestId, operation, "duplicate_request_id", "requestId has already been used") }
+        val invoked = AtomicBoolean()
+        return {
+            if (!invoked.compareAndSet(false, true)) {
+                requestFailure(requestId, operation, "duplicate_request_id", "admitted request has already been invoked")
+            } else {
+                try {
+                    owner.ensureActive()
+                    val payload = runBlocking(Dispatchers.IO + owner.job + MihonRequestScope.context(owner)) {
+                        executeRequest(args)
+                    }
+                    owner.complete { payload + ("ok" to true) }
+                } catch (error: Throwable) {
+                    val canceled = owner.isCancelled || generateSequence(error) { it.cause }.any { it is CancellationException }
+                    val httpFailure = if (canceled) null else generateSequence(error) { it.cause }.filterIsInstance<HttpException>().firstOrNull()
+                    val failure = requestFailure(requestId, operation, if (canceled) "request_cancelled" else "source_request_failed",
+                        if (canceled) "Mihon request canceled" else rootMessage(error), canceled)
+                    if (httpFailure == null) failure else failure + mapOf("statusCode" to httpFailure.statusCode,
+                        "retryAfter" to httpFailure.retryAfter)
+                } finally {
+                    owner.close()
+                    requests.release(owner)
+                }
+            }
+        }
+    }
+
+    /** Immediate, idempotent signal; never queues behind blocked request workers. */
+    fun cancelRequest(requestId: String): Map<String, Any?> {
+        if (!validRequestId(requestId)) {
+            return requestFailure(requestId, null, "invalid_request_id", "requestId must be a nonblank string of at most 256 characters")
+        }
+        return mapOf("ok" to true, "requestId" to requestId, "cancelled" to requests.cancel(requestId))
+    }
+
+    private fun validRequestId(requestId: String) = requestId.isNotBlank() && requestId.length <= 256
+
+    private fun requestFailure(requestId: String?, operation: String?, code: String, message: String, canceled: Boolean = false): Map<String, Any?> =
+        mapOf("ok" to false, "requestId" to requestId, "operation" to operation, "errorCode" to code, "error" to message) +
+            if (canceled) mapOf("cancelled" to true) else emptyMap()
+
+    private suspend fun executeRequest(args: Map<*, *>): Map<String, Any?> {
         val packageName = args["packageName"]?.toString() ?: error("packageName is required")
         check(prefs.getBoolean("enabled.$packageName", false)) { "extension is disabled" }
         val extension = loaded[packageName] ?: loadPersisted(packageName, args)
             ?: error("extension is not loaded; inspect it first")
         val source = selectSource(extension.sources, args["sourceId"]?.toString())
-        val operation = args["operation"]?.toString() ?: error("operation is required")
-        val payload = runBlocking(Dispatchers.IO) {
-            when (operation) {
-                "search" -> mangaPage(source.getSearchManga((args["page"] as? Number)?.toInt() ?: 1, args["query"]?.toString() ?: "", MihonFilters.apply(source.getFilterList(), args["filters"])))
-                "popular" -> mangaPage(source.getPopularManga((args["page"] as? Number)?.toInt() ?: 1))
-                "latest" -> mangaPage(source.getLatestUpdates((args["page"] as? Number)?.toInt() ?: 1))
-                "filters" -> mapOf("filters" to MihonFilters.describe(source.getFilterList()))
-                "relatedInfo" -> mapOf("supported" to (source.supportsRelatedMangas && !source.disableRelatedMangas))
-                "related" -> {
-                    require(source.supportsRelatedMangas && !source.disableRelatedMangas) { "Source does not expose related works" }
-                    mapOf("mangas" to source.fetchRelatedMangaList(mangaFrom(args["manga"])).map(::mangaMap))
-                }
-                "browserInfo" -> {
-                    require(source is HttpSource) { "此来源没有提供 HTTP 网站，无法在浏览器打开" }
-                    val manga = args["manga"]
-                    if (manga != null) {
-                        mapOf("url" to sourceWebsiteUrl(source.getMangaUrl(mangaFrom(manga))).toString())
-                    } else {
-                        mapOf("url" to sourceWebsiteUrl(source.getHomeUrl()).toString(), "userAgent" to (source.headers["User-Agent"]
-                            ?: source.network.defaultUserAgentProvider()))
-                    }
-                }
-                "detail" -> mangaMap(source.getMangaUpdate(mangaFrom(args["manga"]), emptyList(), true, false).manga)
-                "chapters" -> mapOf("chapters" to source.getMangaUpdate(mangaFrom(args["manga"]), emptyList(), false, true).chapters.map(::chapterMap))
-                "pages" -> mapOf("pages" to source.getPageList(chapterFrom(args["chapter"])).map(::pageMap))
-                "image" -> image(source, pageFrom(args["pageData"] ?: args["page"]))
-                "imageFile" -> image(source, pageFrom(args["pageData"]), fileOnly = true)
-                else -> error("unsupported operation: $operation")
+        return when (val operation = args["operation"]?.toString() ?: error("operation is required")) {
+            "search" -> mangaPage(source.getSearchManga((args["page"] as? Number)?.toInt() ?: 1, args["query"]?.toString() ?: "", MihonFilters.apply(source.getFilterList(), args["filters"])))
+            "popular" -> mangaPage(source.getPopularManga((args["page"] as? Number)?.toInt() ?: 1))
+            "latest" -> mangaPage(source.getLatestUpdates((args["page"] as? Number)?.toInt() ?: 1))
+            "filters" -> mapOf("filters" to MihonFilters.describe(source.getFilterList()))
+            "relatedInfo" -> mapOf("supported" to (source.supportsRelatedMangas && !source.disableRelatedMangas))
+            "related" -> {
+                require(source.supportsRelatedMangas && !source.disableRelatedMangas) { "Source does not expose related works" }
+                mapOf("mangas" to source.fetchRelatedMangaList(mangaFrom(args["manga"])).map(::mangaMap))
             }
+            "browserInfo" -> {
+                require(source is HttpSource) { "此来源没有提供 HTTP 网站，无法在浏览器打开" }
+                val manga = args["manga"]
+                if (manga != null) {
+                    mapOf("url" to sourceWebsiteUrl(source.getMangaUrl(mangaFrom(manga))).toString())
+                } else {
+                    mapOf("url" to sourceWebsiteUrl(source.getHomeUrl()).toString(), "userAgent" to (source.headers["User-Agent"]
+                        ?: source.network.defaultUserAgentProvider()))
+                }
+            }
+            "detail" -> mangaMap(source.getMangaUpdate(mangaFrom(args["manga"]), emptyList(), true, false).manga)
+            "chapters" -> mapOf("chapters" to source.getMangaUpdate(mangaFrom(args["manga"]), emptyList(), false, true).chapters.map(::chapterMap))
+            "pages" -> mapOf("pages" to source.getPageList(chapterFrom(args["chapter"])).map(::pageMap))
+            "image" -> image(source, pageFrom(args["pageData"] ?: args["page"]))
+            "imageFile" -> image(source, pageFrom(args["pageData"]), fileOnly = true)
+            else -> error("unsupported operation: $operation")
         }
-        return payload + ("ok" to true)
     }
 
-    private fun image(source: Source, page: Page, fileOnly: Boolean = false): Map<String, Any?> {
+    private suspend fun image(source: Source, page: Page, fileOnly: Boolean = false): Map<String, Any?> {
         require(source is HttpSource) { "source does not expose imageRequest" }
         if (page.imageUrl.isNullOrEmpty()) {
-            page.imageUrl = runBlocking(Dispatchers.IO) { source.getImageUrl(page) }
+            page.imageUrl = source.getImageUrl(page)
         }
         val request = source.imageRequest(page)
         val cache = File(app.cacheDir, "mihon-images").also { it.mkdirs() }
         val key = sha256(("${source.id}\n${request.url}\n${request.headers}").toByteArray())
         val cached = File(cache, "$key.image")
         val mimeFile = File(cache, "$key.mime")
-        if (fileOnly && cached.isFile && cached.length() > 0 && mimeFile.isFile) {
-            return mapOf("filePath" to cached.absolutePath, "mime" to mimeFile.readText(), "url" to request.url.toString(), "headers" to request.headers.toMap())
+        synchronized(imageCacheLock) {
+            if (fileOnly && cached.isFile && cached.length() > 0 && mimeFile.isFile) {
+                return mapOf("filePath" to cached.absolutePath, "mime" to mimeFile.readText(), "url" to request.url.toString(), "headers" to request.headers.toMap())
+            }
         }
-        source.client.newCall(request).execute().use { response ->
-            response.requireSuccessful()
+        return MihonRequestScope.execute(source.client, request) { response ->
             val mime = response.header("Content-Type") ?: "image/jpeg"
             require(mime.startsWith("image/")) { "Image request returned $mime" }
             if (fileOnly) {
+                // Each subscriber owns both staging files. Canceling one must not
+                // delete another reader/download's in-progress or published image.
                 val temporary = File.createTempFile(key, ".tmp", cache)
+                var mimeTemporary: File? = null
                 try {
                     response.body.byteStream().use { input -> temporary.outputStream().use { input.copyTo(it) } }
                     require(temporary.length() > 0) { "Image response is empty" }
-                    require(temporary.renameTo(cached)) { "Image cache publish failed" }
-                    mimeFile.writeText(mime)
+                    val stagedMime = File.createTempFile(key, ".mime.tmp", cache)
+                    mimeTemporary = stagedMime
+                    stagedMime.writeText(mime)
+                    MihonRequestScope.publish {
+                        synchronized(imageCacheLock) {
+                            require(temporary.renameTo(cached)) { "Image cache publish failed" }
+                            require(stagedMime.renameTo(mimeFile)) { "Image MIME cache publish failed" }
+                        }
+                    }
                 } finally {
                     temporary.delete()
+                    mimeTemporary?.delete()
                 }
-                return mapOf("filePath" to cached.absolutePath, "mime" to mime, "url" to request.url.toString(), "headers" to request.headers.toMap())
+                mapOf("filePath" to cached.absolutePath, "mime" to mime, "url" to request.url.toString(), "headers" to request.headers.toMap())
+            } else {
+                mapOf(
+                    "bytes" to response.body.bytes(),
+                    "mime" to mime,
+                    "url" to request.url.toString(),
+                    "headers" to request.headers.toMap(),
+                )
             }
-            return mapOf(
-                "bytes" to (response.body?.bytes() ?: ByteArray(0)),
-                "mime" to mime,
-                "url" to request.url.toString(),
-                "headers" to request.headers.toMap(),
-            )
         }
     }
 
@@ -494,9 +568,4 @@ class MihonHost(private val context: Context) {
             }
         }
     }
-}
-
-private fun okhttp3.Response.requireSuccessful(): okhttp3.Response {
-    if (!isSuccessful) throw java.io.IOException("HTTP $code: $message")
-    return this
 }

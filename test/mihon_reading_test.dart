@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -39,27 +40,35 @@ void main() {
     final image = File('${directory.path}/page.image');
     await image.writeAsBytes([1, 2, 3]);
     final operations = <String>[];
-    messenger.setMockMethodCallHandler(platform, (call) async {
-      final args = call.arguments as Map;
-      operations.add('${args['operation']}');
-      if (args['operation'] == 'pages') {
-        expect(
-          args['manga'],
-          isNull,
-          reason: 'Android page requests retain the chapter-only contract',
-        );
-        return {
-          'ok': true,
-          'pages': [
-            {'index': 0, 'url': '/page/1', 'imageUrl': 'https://image.test/1'},
-            {'index': 1, 'url': '/page/2', 'imageUrl': null},
-          ],
-        };
-      }
-      expect(args['sourceId'], '9223372036854775806');
-      expect(args['pageData'], containsPair('url', '/page/2'));
-      return {'ok': true, 'filePath': image.path, 'mime': 'image/png'};
-    });
+    final assertionZone = Zone.current;
+    messenger.setMockMethodCallHandler(
+      platform,
+      (call) => assertionZone.run(() async {
+        final args = call.arguments as Map;
+        operations.add('${args['operation']}');
+        if (args['operation'] == 'pages') {
+          expect(
+            args['manga'],
+            isNull,
+            reason: 'Android page requests retain the chapter-only contract',
+          );
+          return {
+            'ok': true,
+            'pages': [
+              {
+                'index': 0,
+                'url': '/page/1',
+                'imageUrl': 'https://image.test/1',
+              },
+              {'index': 1, 'url': '/page/2', 'imageUrl': null},
+            ],
+          };
+        }
+        expect(args['sourceId'], '9223372036854775806');
+        expect(args['pageData'], containsPair('url', '/page/2'));
+        return {'ok': true, 'filePath': image.path, 'mime': 'image/png'};
+      }),
+    );
     final source = MihonSource(
       packageName: 'pkg',
       hostSourceId: '9223372036854775806',

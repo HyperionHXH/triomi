@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -10,7 +12,7 @@ import '../source/windows_mihon_host.dart';
 ///
 /// 实现**不得合成** `treeUri/fileName` 形式的路径——系统可能对文件改名
 /// （重名加序号等），只有返回的 URI 才是真实位置。失败抛 [PlatformException]，
-/// 空/null URI 视为失败（由调用方回退应用私有目录）。
+/// 空/null URI 视为失败；保留本地备份并向用户报告，不能伪称已保存到授权目录。
 typedef SafTreeWriter = Future<String> Function(
   String treeUri,
   String fileName,
@@ -27,14 +29,108 @@ typedef SafFileTreeWriter = Future<String> Function(
 
 /// 平台能力通道（`triomi/platform`）的 Dart 侧封装。
 ///
-/// 约定：所有方法在平台未实现（测试环境 / 桌面端）或调用失败时静默降级
-/// （返回 null / false），不向调用方抛错——阅读器不该因平台差异崩溃。
+/// Optional presentation capabilities degrade to null/false. Explicit storage
+/// writes and owned-operation cancellation report failure to their caller.
 class PlatformChannel {
   const PlatformChannel._();
 
   static const MethodChannel _channel = MethodChannel('triomi/platform');
   static bool get _desktop =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+
+  static void Function(String)? _downloadPause;
+  static void Function()? _downloadWake;
+  static bool? _downloadNotificationVisible;
+  static final _downloadVisibility = StreamController<bool>.broadcast(
+    sync: true,
+  );
+  bool? get downloadNotificationVisible => _downloadNotificationVisible;
+  Stream<bool> get downloadNotificationVisibility => _downloadVisibility.stream;
+
+  /// One queue owner per Flutter engine. Other platform operations have no
+  /// incoming method handlers on this channel.
+  void setDownloadQueuePauseHandler(
+    void Function(String)? handler, {
+    void Function()? onWake,
+  }) {
+    _downloadPause = handler;
+    _downloadWake = handler == null ? null : onWake;
+    _channel.setMethodCallHandler(
+      handler == null
+          ? null
+          : (call) async {
+              final args = call.arguments;
+              if (call.method == 'downloadQueuePauseRequested') {
+                _downloadPause?.call(
+                  args is Map
+                      ? '${args['reason'] ?? 'service_stopped'}'
+                      : 'service_stopped',
+                );
+              } else if (call.method == 'downloadQueueNotificationVisibility') {
+                final visible = args is Map && args['visible'] == true;
+                _downloadNotificationVisible = visible;
+                _downloadVisibility.add(visible);
+              } else if (call.method == 'downloadQueueWakeRequested') {
+                _downloadWake?.call();
+              }
+            },
+    );
+  }
+
+  Future<bool> beginDownloadQueue() async {
+    try {
+      return await _channel.invokeMethod<bool>('beginDownloadQueue') ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  Future<bool> setDownloadQueueActive(bool active) async {
+    try {
+      return await _channel.invokeMethod<bool>('setDownloadQueueActive', {
+            'active': active,
+          }) ??
+          false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  Future<void> endDownloadQueue() async {
+    try {
+      await _channel.invokeMethod<void>('endDownloadQueue');
+    } on PlatformException {
+      // The service may already have stopped after an OS timeout.
+    } on MissingPluginException {
+      // No native service outside Android.
+    }
+  }
+
+  Future<void> updateDownloadQueue({
+    required String title,
+    required String chapter,
+    required String status,
+    required double progress,
+    required double speed,
+  }) async {
+    try {
+      await _channel.invokeMethod<bool>('updateDownloadQueue', {
+        'title': title,
+        'chapter': chapter,
+        'status': status,
+        'progress': progress,
+        'speed': speed,
+      });
+    } on PlatformException {
+      // Service disappearance is independently reported to the queue owner.
+    } on MissingPluginException {
+      // No notification outside Android.
+    }
+  }
 
   Future<bool> launchExternalUrl(String url) async {
     final uri = publicSourceWebsiteUri(url);
@@ -192,6 +288,7 @@ class PlatformChannel {
     int? versionCode,
     String? signerSha256,
     String? sourceId,
+    String? requestId,
     int page = 1,
     String query = '',
     Map<String, Object?>? manga,
@@ -206,6 +303,7 @@ class PlatformChannel {
       'versionCode': versionCode,
       'signerSha256': signerSha256,
       'sourceId': sourceId,
+      'requestId': ?requestId,
       'page': page,
       'query': query,
       'manga': manga,
@@ -228,6 +326,7 @@ class PlatformChannel {
           chapter: chapter,
           pageData: pageData,
           filters: filters,
+          requestId: requestId,
         );
       }
       final raw = await _channel.invokeMethod<Object?>('mihonRequest', args);
@@ -247,6 +346,17 @@ class PlatformChannel {
     } on Object catch (error) {
       return {'ok': false, 'error': SourceException.sanitizeMessage('$error')};
     }
+  }
+
+  /// Cancels only the explicitly owned invocation, never another source session.
+  Future<void> mihonCancelRequest(String requestId) async {
+    if (_desktop) {
+      await WindowsMihonHost.instance.cancelRequest(requestId);
+      return;
+    }
+    await _channel.invokeMethod<Object?>('mihonCancelRequest', {
+      'requestId': requestId,
+    });
   }
 
   Future<Map<String, Object?>> openMihonSession({
@@ -380,9 +490,9 @@ class PlatformChannel {
     }
   }
 
-  /// 向授权目录写文件（DocumentsContract.createDocument）。
-  ///
-  /// 失败抛 [PlatformException]——调用方（备份导出）据此回退应用私有目录。
+  /// Write to an Android SAF grant or an iOS opaque folder bookmark.
+  /// Returns the provider's actual content:// URI or iOS file:// receipt.
+  /// A grant failure is surfaced; callers must not silently change destination.
   Future<String?> writeToTree(
     String treeUri,
     String fileName,
@@ -404,7 +514,7 @@ class PlatformChannel {
     return uri;
   }
 
-  /// Copy an application-private file to SAF without channel byte buffers.
+  /// Copy a private file to SAF or an iOS bookmark without channel byte buffers.
   Future<String> writeFileToTree(
     String treeUri,
     String fileName,

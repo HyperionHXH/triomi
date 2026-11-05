@@ -26,13 +26,13 @@ class AppCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final decoration = ShapeDecoration(
-      color: palette.card,
-      shape: RoundedRectangleBorder(
-        borderRadius: AppRadius.cardRadius,
-        side: BorderSide(color: palette.divider),
-      ),
-      shadows: palette.cardShadow == const Color(0x00000000)
+    final shape = RoundedRectangleBorder(
+      borderRadius: AppRadius.cardRadius,
+      side: BorderSide(color: palette.divider),
+    );
+    final decoration = BoxDecoration(
+      borderRadius: AppRadius.cardRadius,
+      boxShadow: palette.cardShadow == const Color(0x00000000)
           ? null
           : <BoxShadow>[
               BoxShadow(
@@ -43,16 +43,17 @@ class AppCard extends StatelessWidget {
             ],
     );
 
-    // Material owns both the rounded clip and ink splash. Keeping the
-    // decoration in Ink prevents covers/actions from painting outside it.
+    // Paint the outline on the Material foreground, above opaque child
+    // Materials as well as images. Ink decoration would sit behind them.
     return Padding(
       padding: margin,
-      child: Material(
-        type: MaterialType.transparency,
-        shape: const RoundedRectangleBorder(borderRadius: AppRadius.cardRadius),
-        clipBehavior: clipBehavior,
-        child: Ink(
-          decoration: decoration,
+      child: DecoratedBox(
+        decoration: decoration,
+        child: Material(
+          color: palette.card,
+          shape: shape,
+          borderOnForeground: true,
+          clipBehavior: clipBehavior,
           child: InkWell(
             onTap: onTap,
             child: Padding(padding: padding, child: child),

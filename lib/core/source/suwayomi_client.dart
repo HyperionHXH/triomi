@@ -4,23 +4,126 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
+import 'package:flutter/foundation.dart';
 
 import 'http_client.dart';
+import 'owned_http_adapter.dart';
+
+void _checkSuwayomiCancellation() {
+  final owner = SourceRequestCancellation.current;
+  if (owner?.cancelled == true) throw owner!.token.cancelError!;
+}
+
+class _SuwayomiOperation {
+  _SuwayomiOperation(this.owner);
+  final SourceRequestCancellation owner;
+  final done = Completer<void>();
+}
+
+/// Operation IDs belong to one invocation, including activation/startup waits.
+/// Cancellation waits for local HTTP and temporary-file cleanup, not JVM exit.
+class SuwayomiRequestRegistry {
+  final _operations = <String, _SuwayomiOperation>{};
+  int get activeCount => _operations.length;
+
+  /// Stop waiting for shared startup/activation without cancelling that work.
+  static Future<T> wait<T>(Future<T> work) async {
+    _checkSuwayomiCancellation();
+    final owner = SourceRequestCancellation.current;
+    final value = owner == null
+        ? await work
+        : await Future.any([
+            work,
+            owner.token.whenCancel.then<T>((error) => throw error),
+          ]);
+    _checkSuwayomiCancellation();
+    return value;
+  }
+
+  Future<T> run<T>(String? requestId, Future<T> Function() action) async {
+    if (requestId != null && _operations.containsKey(requestId)) {
+      throw StateError('桌面扩展请求身份已在使用');
+    }
+    final parent = SourceRequestCancellation.current;
+    final operation = _SuwayomiOperation(SourceRequestCancellation());
+    // Parent cancellation cascades down; cancelling one request ID never
+    // cancels its parent Zone or another invocation sharing that parent.
+    final parentCancellation = parent?.token.whenCancel.asStream().listen(
+      (_) => operation.owner.cancel(),
+    );
+    if (parent?.cancelled == true) operation.owner.cancel();
+    if (requestId != null) _operations[requestId] = operation;
+    try {
+      return await operation.owner.run(() async {
+        _checkSuwayomiCancellation();
+        final result = await action();
+        _checkSuwayomiCancellation();
+        return result;
+      });
+    } finally {
+      await parentCancellation?.cancel();
+      if (requestId != null) _operations.remove(requestId);
+      operation.done.complete();
+    }
+  }
+
+  Future<void> cancel(String requestId) async {
+    final operation = _operations[requestId];
+    if (operation == null) return;
+    operation.owner.cancel();
+    await operation.done.future;
+  }
+}
+
+class _SuwayomiImageTransfer {
+  final owner = SourceRequestCancellation();
+  final subscribers = <Object>{};
+  late final Future<Map<String, Object?>> result;
+}
 
 /// Translates Suwayomi's private local API into the existing Mihon host values.
 /// Database IDs never become a Triomi work/chapter identity: plugin URLs do.
 class SuwayomiClient {
-  SuwayomiClient({required this.dio, required this.cache});
+  SuwayomiClient({required this.dio, required this.cache}) {
+    final adapter = dio.httpClientAdapter;
+    if (adapter is IOHttpClientAdapter) {
+      dio.httpClientAdapter = OwnedHttpClientAdapter(
+        shared: adapter,
+        create: () => IOHttpClientAdapter(
+          createHttpClient: adapter.createHttpClient,
+          validateCertificate: adapter.validateCertificate,
+        ),
+      );
+    }
+  }
   final Dio dio;
   final Directory cache;
+  final _requests = SuwayomiRequestRegistry();
+
+  @visibleForTesting
+  int get activeRequestCount => _requests.activeCount;
+
+  @visibleForTesting
+  int get activeImageTransferCount => _images.length;
+
+  @visibleForTesting
+  int get activeImageSubscriberCount => _images.values.fold(
+    0,
+    (count, transfer) => count + transfer.subscribers.length,
+  );
+
+  Future<void> cancelRequest(String requestId) => _requests.cancel(requestId);
 
   Future<Object?> _call(String path, {Object? data, String? method}) async {
+    _checkSuwayomiCancellation();
     final response = await dio.request<Object?>(
       path,
       data: data,
       options: Options(method: method ?? (data == null ? 'GET' : 'POST')),
       cancelToken: SourceRequestCancellation.current?.token,
     );
+    _checkSuwayomiCancellation();
     if (response.statusCode == 204 || response.data == '') return null;
     return response.data;
   }
@@ -120,6 +223,46 @@ class SuwayomiClient {
   }
 
   Future<Map<String, Object?>> request({
+    required String sourceId,
+    required String operation,
+    String? requestId,
+    int page = 1,
+    String query = '',
+    Map<String, Object?>? manga,
+    Map<String, Object?>? chapter,
+    Map<String, Object?>? pageData,
+    List<Map<String, Object?>>? filters,
+  }) => _requests.run(requestId, () async {
+    try {
+      return await _request(
+        sourceId: sourceId,
+        operation: operation,
+        page: page,
+        query: query,
+        manga: manga,
+        chapter: chapter,
+        pageData: pageData,
+        filters: filters,
+      );
+    } on DioException catch (error) {
+      final response = error.response;
+      final status = response?.statusCode;
+      if (error.type != DioExceptionType.badResponse || status == null) {
+        rethrow;
+      }
+      // These are the local API's actual HTTP headers/status. A backend 500
+      // may wrap a website 429; its text is not evidence of remote metadata.
+      final retryAfter = response!.headers.value('retry-after');
+      return {
+        'ok': false,
+        'error': error.message ?? '桌面扩展HTTP请求失败',
+        'statusCode': status,
+        'retryAfter': ?retryAfter,
+      };
+    }
+  });
+
+  Future<Map<String, Object?>> _request({
     required String sourceId,
     required String operation,
     int page = 1,
@@ -392,48 +535,135 @@ class SuwayomiClient {
       '/api/v1/manga/$id/thumbnail',
       '$source:${uri.queryParameters['url']}:cover:${uri.queryParameters['revision'] ?? 0}',
     );
-    return File(file['filePath'] as String).readAsBytes();
+    _checkSuwayomiCancellation();
+    final bytes = await File(file['filePath'] as String).readAsBytes();
+    _checkSuwayomiCancellation();
+    return bytes;
   }
 
-  final _images = <String, Future<Map<String, Object?>>>{};
+  final _images = <String, _SuwayomiImageTransfer>{};
+
   Future<Map<String, Object?>> _imageFile(String path, String identity) async {
+    _checkSuwayomiCancellation();
     final key = sha256.convert(utf8.encode(identity)).toString();
-    return _images.putIfAbsent(key, () async {
+    // A resumed/new consumer must not join a loader whose last owner is
+    // cancelling. Wait for its writer/part cleanup before reusing this key.
+    while (true) {
+      final pending = _images[key];
+      if (pending == null || !pending.owner.cancelled) break;
       try {
-        await cache.create(recursive: true);
-        final file = File('${cache.path}/$key');
-        if (!await file.exists()) {
-          final part = File('${file.path}.part');
-          final token = CancelToken();
-          try {
-            final response = await dio.download(
-              path,
-              part.path,
-              cancelToken: token,
-              onReceiveProgress: (received, total) {
-                if (received > 64 * 1024 * 1024 || total > 64 * 1024 * 1024) {
-                  token.cancel('漫画图片超过64MiB');
-                }
-              },
-            );
-            if ((await part.length()) == 0) {
-              throw const FormatException('来源图片为空');
-            }
-            await part.rename(file.path);
-            return {
-              'ok': true,
-              'filePath': file.path,
-              'mime': response.headers.value('content-type') ?? 'image/jpeg',
-            };
-          } finally {
-            if (await part.exists()) await part.delete();
-          }
-        }
-        return {'ok': true, 'filePath': file.path};
-      } finally {
-        unawaited(_images.remove(key));
+        await SuwayomiRequestRegistry.wait(pending.result);
+      } catch (_) {
+        _checkSuwayomiCancellation();
       }
+    }
+    final transfer = _images.putIfAbsent(key, () {
+      final transfer = _SuwayomiImageTransfer();
+      transfer.result = transfer.owner.run(() async {
+        try {
+          return await _downloadImage(path, key, transfer.owner);
+        } finally {
+          if (identical(_images[key], transfer)) _images.remove(key);
+        }
+      });
+      return transfer;
     });
+    final subscriber = Object();
+    transfer.subscribers.add(subscriber);
+    final owner = SourceRequestCancellation.current;
+    try {
+      final result = owner == null
+          ? await transfer.result
+          : await Future.any([
+              transfer.result,
+              owner.token.whenCancel.then<Map<String, Object?>>(
+                (error) => throw error,
+              ),
+            ]);
+      _checkSuwayomiCancellation();
+      return result;
+    } finally {
+      transfer.subscribers.remove(subscriber);
+      if (transfer.subscribers.isEmpty && identical(_images[key], transfer)) {
+        transfer.owner.cancel();
+        // A cancel acknowledgement cannot race a writer still closing/renaming.
+        try {
+          await transfer.result;
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<Map<String, Object?>> _downloadImage(
+    String path,
+    String key,
+    SourceRequestCancellation owner,
+  ) async {
+    _checkSuwayomiCancellation();
+    await cache.create(recursive: true);
+    _checkSuwayomiCancellation();
+    final file = File('${cache.path}/$key');
+    final exists = await file.exists();
+    _checkSuwayomiCancellation();
+    if (exists) return {'ok': true, 'filePath': file.path};
+    final part = File('${file.path}.part');
+    var published = false;
+    try {
+      // Dio.download races its cancellation future against asynchronous writer
+      // cleanup. Own the stream/writer so cancelRequest can await real quiescence.
+      final response = await dio.get<ResponseBody>(
+        path,
+        options: Options(responseType: ResponseType.stream),
+        cancelToken: owner.token,
+      );
+      _checkSuwayomiCancellation();
+      final writer = await part.open(mode: FileMode.write);
+      try {
+        _checkSuwayomiCancellation();
+        final total = int.tryParse(
+          response.headers.value('content-length') ?? '',
+        );
+        if (total != null && total > 64 * 1024 * 1024) {
+          owner.cancel('漫画图片超过64MiB');
+          _checkSuwayomiCancellation();
+        }
+        var received = 0;
+        await for (final bytes in response.data!.stream) {
+          _checkSuwayomiCancellation();
+          received += bytes.length;
+          if (received > 64 * 1024 * 1024) {
+            owner.cancel('漫画图片超过64MiB');
+            _checkSuwayomiCancellation();
+          }
+          await writer.writeFrom(bytes);
+          _checkSuwayomiCancellation();
+        }
+      } finally {
+        await writer.close();
+      }
+      _checkSuwayomiCancellation();
+      final length = await part.length();
+      _checkSuwayomiCancellation();
+      if (length == 0) throw const FormatException('来源图片为空');
+      await part.rename(file.path);
+      published = true;
+      _checkSuwayomiCancellation();
+      return {
+        'ok': true,
+        'filePath': file.path,
+        'mime': response.headers.value('content-type') ?? 'image/jpeg',
+      };
+    } catch (_) {
+      // Also disconnect on local disk/validation failures before stream EOF.
+      owner.cancel('漫画图片读取已结束');
+      rethrow;
+    } finally {
+      if (await part.exists()) await part.delete();
+      // Cancellation during the asynchronous rename must not publish a file.
+      if (published && owner.cancelled && await file.exists()) {
+        await file.delete();
+      }
+    }
   }
 
   static Map<String, Object?> _filter(Map<String, Object?> raw, int index) {

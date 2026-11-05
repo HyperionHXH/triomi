@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'http_client.dart' show SourceRequestCancellation;
 import 'suwayomi_client.dart';
 
 class WindowsMihonInstallationIssue {
@@ -37,6 +38,7 @@ class WindowsMihonHost {
   Future<void> _tail = Future.value(), _saving = Future.value();
   RandomAccessFile? _lock;
   String _proxy = '';
+  final _requests = SuwayomiRequestRegistry();
 
   /// Presence is not execution/trust verification. This read-only check keeps
   /// historical UI metadata from hiding the reinstall action after data loss.
@@ -61,7 +63,8 @@ class WindowsMihonHost {
           jar != null && (jar is! String || await File(jar).length() == 0) ||
           runtimeFile is! String ||
           p.basename(runtimeFile) != runtimeFile ||
-          await File(p.join(root.path, 'extensions', runtimeFile)).length() == 0) {
+          await File(p.join(root.path, 'extensions', runtimeFile)).length() ==
+              0) {
         return missing;
       }
       return null;
@@ -297,7 +300,11 @@ class WindowsMihonHost {
   }
 
   Future<SuwayomiClient> _client() =>
-      _connecting ??= _ensureClient().whenComplete(() => _connecting = null);
+      // Bootstrap/reconciliation is shared by readers. Its HTTP must not
+      // inherit the cancellation owner of whichever reader starts the JVM.
+      _connecting ??= SourceRequestCancellation()
+          .run(_ensureClient)
+          .whenComplete(() => _connecting = null);
 
   Future<SuwayomiClient> _ensureClient() async {
     final existing = _started;
@@ -729,10 +736,16 @@ class WindowsMihonHost {
     return record;
   }
 
+  /// Cancels only the named invocation and waits for its local I/O cleanup.
+  /// The pinned upstream API has no per-fetch job ID/cancel endpoint; closing
+  /// local HTTP does not prove that its independent JVM coroutine has stopped.
+  Future<void> cancelRequest(String requestId) => _requests.cancel(requestId);
+
   Future<Map<String, Object?>> request({
     required String package,
     required String sourceId,
     required String operation,
+    String? requestId,
     int? version,
     String? signer,
     int page = 1,
@@ -741,9 +754,12 @@ class WindowsMihonHost {
     Map<String, Object?>? chapter,
     Map<String, Object?>? pageData,
     List<Map<String, Object?>>? filters,
-  }) async {
-    await _active(package, sourceId, version: version, signer: signer);
-    return (await _client()).request(
+  }) => _requests.run(requestId, () async {
+    await SuwayomiRequestRegistry.wait(
+      _active(package, sourceId, version: version, signer: signer),
+    );
+    final client = await SuwayomiRequestRegistry.wait(_client());
+    return client.request(
       sourceId: sourceId,
       operation: operation,
       page: page,
@@ -753,7 +769,7 @@ class WindowsMihonHost {
       pageData: pageData,
       filters: filters,
     );
-  }
+  });
 
   Future<List<Map<String, Object?>>> preferences(
     String package,

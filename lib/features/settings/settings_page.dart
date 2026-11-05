@@ -20,6 +20,7 @@ import '../novel/novel_workspace_page.dart';
 import 'app_update_page.dart';
 import 'cache_management_page.dart';
 import 'cover_appearance_settings_page.dart';
+import 'onboarding_page.dart';
 import 'settings_controller.dart';
 
 /// 通用设置；界面外观与阅读器排版分别在独立页面配置。
@@ -49,6 +50,16 @@ class SettingsPage extends ConsumerWidget {
                   MaterialPageRoute<void>(
                     builder: (_) => const CoverAppearanceSettingsPage(),
                   ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.tune_outlined),
+                title: const Text('新手设置'),
+                subtitle: const Text('重新选择主题、备份位置并了解来源与同步'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(builder: (_) => const OnboardingPage()),
                 ),
               ),
             ],

@@ -28,18 +28,27 @@ Future<ResolvedDesktopVideo> resolveWindowsVideo(
   BuildContext context,
   PlaySource line, {
   VideoResolveCancellation? cancellation,
+  bool allowBackground = false,
 }) async {
   final owner = cancellation ?? VideoResolveCancellation();
   if (!context.mounted || owner.isCancelled) {
     throw VideoResolveCancelled(owner.reason);
   }
   final lifecycle = WidgetsBinding.instance.lifecycleState;
-  if (lifecycle == AppLifecycleState.hidden ||
-      lifecycle == AppLifecycleState.paused ||
-      lifecycle == AppLifecycleState.detached) {
+  if (lifecycle == AppLifecycleState.detached ||
+      !allowBackground &&
+          (lifecycle == AppLifecycleState.hidden ||
+              lifecycle == AppLifecycleState.paused)) {
     throw VideoResolveCancelled('请显示应用窗口后继续网页解析');
   }
-  final overlay = Overlay.of(context, rootOverlay: true);
+  // Queue resolution starts at the root Navigator itself, above its Overlay.
+  // Player pages already have an Overlay ancestor.
+  final overlay =
+      Overlay.maybeOf(context, rootOverlay: true) ??
+      Navigator.maybeOf(context, rootNavigator: true)?.overlay;
+  if (overlay == null || !overlay.mounted) {
+    throw VideoResolveCancelled('播放页面已关闭，请重新打开后继续解析');
+  }
   final result = Completer<ResolvedDesktopVideo>();
   final closed = Completer<void>();
   var created = false;
@@ -55,6 +64,7 @@ Future<ResolvedDesktopVideo> resolveWindowsVideo(
                 line: line,
                 owner: owner,
                 closed: closed,
+                allowBackground: allowBackground,
                 onResolved: (value) {
                   if (!result.isCompleted) result.complete(value);
                 },
@@ -78,12 +88,16 @@ Future<ResolvedDesktopVideo> resolveWindowsVideo(
 
   owner.addListener(cancel);
   overlay.insert(entry);
+  // A minimized window suppresses ordinary frames. Build the private browser
+  // once so its native network work can continue without a visible viewport.
+  if (allowBackground) WidgetsBinding.instance.scheduleForcedFrame();
   try {
     return await result.future;
   } finally {
     owner.removeListener(cancel);
     entry.remove();
     entry.dispose();
+    if (allowBackground) WidgetsBinding.instance.scheduleForcedFrame();
     if (!created && !closed.isCompleted) closed.complete();
     await closed.future;
     if (cancellation == null) owner.dispose();
@@ -95,12 +109,14 @@ class _DesktopVideoProbe extends StatefulWidget {
     required this.line,
     required this.owner,
     required this.closed,
+    required this.allowBackground,
     required this.onResolved,
     required this.onError,
   });
   final PlaySource line;
   final VideoResolveCancellation owner;
   final Completer<void> closed;
+  final bool allowBackground;
   final ValueChanged<ResolvedDesktopVideo> onResolved;
   final ValueChanged<String> onError;
 
@@ -170,9 +186,10 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Desktop inactive means visible but unfocused, not a hidden application.
     // WebView2 focus changes and normal multitasking must not cancel the page.
-    if (state == AppLifecycleState.hidden ||
-        state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
+    if (state == AppLifecycleState.detached ||
+        !widget.allowBackground &&
+            (state == AppLifecycleState.hidden ||
+                state == AppLifecycleState.paused)) {
       widget.owner.cancel('应用窗口已隐藏，请显示窗口后继续网页解析');
     }
   }

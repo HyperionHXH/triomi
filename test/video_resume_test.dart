@@ -38,6 +38,7 @@ b.ts
       ),
     );
     http.bytesHandler = (url) {
+      if (url.endsWith('.m3u8')) return null;
       requests.add(url);
       if (url.endsWith('b.ts') && !secondAvailable) {
         throw StateError('network interrupted');

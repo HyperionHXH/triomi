@@ -3,16 +3,21 @@ import 'dart:io';
 
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
 
+import '../../features/downloads/data/download_repository.dart';
 import '../../features/downloads/data/image_download_checkpoint.dart';
 import '../db/app_database.dart';
+import '../models/chapter.dart';
+import '../storage/storage_paths.dart';
 import 'backup_file_support.dart';
 import 'backup_progress.dart';
 
 /// Portable downloaded files, without device paths or transport/resume secrets.
 class DownloadBackupFiles {
-  DownloadBackupFiles(this.root);
+  DownloadBackupFiles(this.root, {this.additionalRoots = const []});
   final Directory root;
+  final List<Directory> additionalRoots;
 
   static bool safeName(String name) =>
       name.isNotEmpty &&
@@ -36,10 +41,11 @@ class DownloadBackupFiles {
       .toString();
 
   Future<List<String>> _names(String path) async {
+    path = storageFilePath(path);
     final kind = await FileSystemEntity.type(path, followLinks: false);
     if (kind == FileSystemEntityType.directory) {
       final manifest = jsonDecode(
-        await File('$path/manifest.json').readAsString(),
+        await File(storageFilePath('$path/manifest.json')).readAsString(),
       );
       if (manifest is! Map || manifest['files'] is! List) {
         throw const FormatException('离线漫画清单损坏');
@@ -62,7 +68,17 @@ class DownloadBackupFiles {
     if (kind != FileSystemEntityType.file) {
       throw const FormatException('离线媒体文件缺失');
     }
-    final name = File(path).uri.pathSegments.last;
+    final name = p.basename(storagePathIdentity(path));
+    if (name == 'chapter.json') {
+      final value = jsonDecode(await File(path).readAsString());
+      if (value is! Map ||
+          value['version'] != 1 ||
+          value['title'] is! String ||
+          ChapterContent.fromJson(value['content']) == null) {
+        throw const FormatException('离线小说正文文件损坏');
+      }
+      return [name];
+    }
     if (!safeName(name)) throw const FormatException('离线媒体文件身份损坏');
     if (!name.endsWith('.m3u8')) {
       if (!RegExp(r'^video\.(mp4|mkv|webm|flv|mov|m4v|ts|m4s|aac)$')
@@ -96,9 +112,9 @@ class DownloadBackupFiles {
     }
     for (final resource in resources) {
       checkBackupCancellation();
-      final file = File('${File(path).parent.path}/$resource');
+      final file = File(storageFilePath('${File(path).parent.path}/$resource'));
       final metadata = jsonDecode(
-        await File('${file.path}.json').readAsString(),
+        await File(storageFilePath('${file.path}.json')).readAsString(),
       );
       if (metadata is! Map ||
           metadata['bytes'] != await file.length() ||
@@ -127,19 +143,34 @@ class DownloadBackupFiles {
           throw const FormatException('部分漫画页校验失败');
         }
       }
-      return [ImageDownloadCheckpoint.fileName, ...names];
+      final manifest = File(storageFilePath('${directory.path}/manifest.json'));
+      if (await manifest.exists()) {
+        final published = await DownloadManifest.read(directory.path);
+        if (published == null ||
+            published.complete ||
+            published.files.any((name) => !names.contains(name))) {
+          throw const FormatException('部分漫画清单引用了未校验页');
+        }
+      }
+      return [
+        ImageDownloadCheckpoint.fileName,
+        ...names,
+        if (await manifest.exists()) 'manifest.json',
+      ];
     }
     final names = <String>[];
     await for (final entry in directory.list(followLinks: false)) {
       checkBackupCancellation();
       if (entry is! File) continue;
-      final name = entry.uri.pathSegments.last;
+      final name = p.basename(storagePathIdentity(entry.path));
       if (!RegExp(r'^video\.(mp4|mkv|webm|flv|mov|m4v|ts|m4s|aac)\.part$')
           .hasMatch(name)) {
         continue;
       }
       final journal = File(
-        '${entry.path.substring(0, entry.path.length - 5)}.resume.json',
+        storageFilePath(
+          '${entry.path.substring(0, entry.path.length - 5)}.resume.json',
+        ),
       );
       final state = jsonDecode(await journal.readAsString());
       final size = await entry.length();
@@ -153,19 +184,19 @@ class DownloadBackupFiles {
           size >= (state['total'] as int)) {
         throw const FormatException('部分视频缺少有效强ETag或字节范围');
       }
-      names.addAll([name, journal.uri.pathSegments.last]);
+      names.addAll([name, p.basename(storagePathIdentity(journal.path))]);
     }
     if (names.isEmpty) {
       await for (final entry in directory.list(followLinks: false)) {
         checkBackupCancellation();
         if (entry is! File) continue;
-        final name = entry.uri.pathSegments.last;
+        final name = p.basename(storagePathIdentity(entry.path));
         if (!RegExp(
           r'^part-[0-9a-f]{64}\.(mp4|mkv|webm|flv|mov|m4v|ts|m4s|aac)$',
         ).hasMatch(name)) {
           continue;
         }
-        final checksum = File('${entry.path}.json');
+        final checksum = File(storageFilePath('${entry.path}.json'));
         final state = jsonDecode(await checksum.readAsString());
         if (state is! Map ||
             await entry.length() == 0 ||
@@ -196,24 +227,38 @@ class DownloadBackupFiles {
     if (row.path == null) return null;
     final partial = row.status != 'done';
     try {
-      final rootPath = await root.resolveSymbolicLinks();
-      final kind = await FileSystemEntity.type(row.path!, followLinks: false);
+      final sourcePath = storageFilePath(row.path!);
+      final kind = await FileSystemEntity.type(sourcePath, followLinks: false);
       if (kind != FileSystemEntityType.file &&
           kind != FileSystemEntityType.directory) {
         return null;
       }
-      final canonical = kind == FileSystemEntityType.file
-          ? await File(row.path!).resolveSymbolicLinks()
-          : await Directory(row.path!).resolveSymbolicLinks();
-      if (!canonical.startsWith('$rootPath${Platform.pathSeparator}')) {
-        return null;
+      final canonical = storagePathIdentity(
+        kind == FileSystemEntityType.file
+            ? await File(sourcePath).resolveSymbolicLinks()
+            : await Directory(sourcePath).resolveSymbolicLinks(),
+      );
+      String? rootPath;
+      for (final candidate in [root, ...additionalRoots]) {
+        final directory = Directory(storageFilePath(candidate.path));
+        if (!await directory.exists()) continue;
+        final resolved = storagePathIdentity(
+          await directory.resolveSymbolicLinks(),
+        );
+        if (p.isWithin(resolved, canonical)) {
+          rootPath = resolved;
+          break;
+        }
       }
+      if (rootPath == null) return null;
       if (partial && kind != FileSystemEntityType.directory) return null;
       final names = partial
-          ? await _partialNames(Directory(canonical))
+          ? await _partialNames(Directory(storageFilePath(canonical)))
           : await _names(canonical);
       final isDirectory = kind == FileSystemEntityType.directory;
-      final dir = isDirectory ? Directory(canonical) : File(canonical).parent;
+      final dir = isDirectory
+          ? Directory(storageFilePath(canonical))
+          : File(storageFilePath(canonical)).parent;
       final rowData = <String, Object?>{
         'sourceId': row.sourceId,
         'remoteId': row.remoteId,
@@ -221,28 +266,28 @@ class DownloadBackupFiles {
         'chapterRemoteId': row.chapterRemoteId,
       };
       final id = identity(rowData);
-      final checkDir = await Directory('${staging.path}/$id').create();
+      final checkDir = await Directory(storageFilePath('${staging.path}/$id'))
+          .create();
       final copied = <String, File>{};
       final metadata = <String, Object?>{};
       var completedBytes = 0;
       var completedItems = 0;
       var totalBytes = 0;
       for (final name in names) {
-        totalBytes += await File('${dir.path}/$name').length();
+        totalBytes += await File(storageFilePath('${dir.path}/$name')).length();
       }
       for (final name in names) {
         checkBackupCancellation();
-        final source = File('${dir.path}/$name');
+        final source = File(storageFilePath('${dir.path}/$name'));
         if (await FileSystemEntity.type(source.path, followLinks: false) !=
                 FileSystemEntityType.file ||
-            (await source.resolveSymbolicLinks()).startsWith(
-                  '$rootPath${Platform.pathSeparator}',
-                ) ==
+            storagePathIdentity(await source.resolveSymbolicLinks())
+                    .startsWith('$rootPath${Platform.pathSeparator}') ==
                 false ||
             await source.length() == 0) {
           return null;
         }
-        final file = File('${checkDir.path}/$name');
+        final file = File(storageFilePath('${checkDir.path}/$name'));
         await copyBackupFile(
           source,
           file,
@@ -270,7 +315,19 @@ class DownloadBackupFiles {
               : name == ImageDownloadCheckpoint.fileName
               ? {'pages': ImageDownloadCheckpoint.parse(data).values.toList()}
               : name == 'manifest.json'
-              ? {'files': data['files'], 'title': data['title']}
+              ? {
+                  'files': data['files'],
+                  'title': data['title'],
+                  if (data['totalPages'] is int)
+                    'totalPages': data['totalPages'],
+                  'complete': partial ? false : data['complete'] != false,
+                }
+              : name == 'chapter.json'
+              ? {
+                  'version': data['version'],
+                  'title': data['title'],
+                  'content': data['content'],
+                }
               : {'bytes': data['bytes'], 'sha256': data['sha256']};
           await file.writeAsString(jsonEncode(sanitized), flush: true);
         }
@@ -318,6 +375,8 @@ class DownloadBackupFiles {
                   : names.first.startsWith('video.')
                   ? 'video-partial'
                   : 'hls-partial'
+            : names.first == 'chapter.json'
+            ? 'novel'
             : isDirectory
             ? 'images'
             : 'video',
@@ -344,6 +403,7 @@ class DownloadBackupFiles {
         ![
           'images',
           'video',
+          'novel',
           'video-partial',
           'hls-partial',
           'image-partial',
@@ -356,18 +416,48 @@ class DownloadBackupFiles {
         names.any((n) => !safeName(n))) {
       throw const FormatException('备份媒体文件名损坏');
     }
-    await root.create(recursive: true);
-    final stage = await root.createTemp('restore-$id-');
+    final storageRoot = Directory(storageFilePath(root.path));
+    await storageRoot.create(recursive: true);
+    final rootPath = storagePathIdentity(
+      await storageRoot.resolveSymbolicLinks(),
+    );
+    final type = media['kind'] == 'novel'
+        ? 'novel'
+        : media['kind'] == 'images' || media['kind'] == 'image-partial'
+        ? 'manga'
+        : 'anime';
+    String hash(Object? value) =>
+        sha256.convert(utf8.encode('$value')).toString();
+    final parent = Directory(
+      storageFilePath(
+        p.join(
+          rootPath,
+          type,
+          hash(row['sourceId']),
+          hash(row['remoteId']),
+          hash('${row['chapterSourceId']}\u0000${row['chapterRemoteId']}'),
+        ),
+      ),
+    );
+    await parent.create(recursive: true);
+    final resolvedParent = storagePathIdentity(
+      await parent.resolveSymbolicLinks(),
+    );
+    if (!p.isWithin(rootPath, resolvedParent) ||
+        !p.equals(storagePathIdentity(parent.absolute.path), resolvedParent)) {
+      throw const FormatException('离线媒体目标目录不安全');
+    }
+    final stage = await parent.createTemp('restore-$id-');
     try {
       for (final name in names) {
         final file = entries['media/$id/$name'];
         if (file == null || await file.length() == 0) {
           throw const FormatException('备份媒体文件缺失');
         }
-        await file.copy('${stage.path}/$name');
+        await file.copy(storageFilePath('${stage.path}/$name'));
       }
       final videoEntry = media['entry'];
-      if (media['kind'] == 'video' &&
+      if ((media['kind'] == 'video' || media['kind'] == 'novel') &&
           (videoEntry is! String || !names.contains(videoEntry))) {
         throw const FormatException('备份视频入口缺失');
       }
@@ -389,8 +479,8 @@ class DownloadBackupFiles {
       }
       final destination = '${stage.path}.${partial ? 'partial' : 'complete'}';
       await stage.rename(destination);
-      return media['kind'] == 'video'
-          ? '$destination/$videoEntry'
+      return media['kind'] == 'video' || media['kind'] == 'novel'
+          ? storageFilePath('$destination/$videoEntry')
           : destination;
     } catch (_) {
       if (await stage.exists()) await stage.delete(recursive: true);

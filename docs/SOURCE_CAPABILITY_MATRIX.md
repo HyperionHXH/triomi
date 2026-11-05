@@ -1,5 +1,8 @@
 # 来源能力矩阵与生产/夹具边界（D75）
 
+> 主线0.13.1同步iOS183进行中：便携完整备份/已验证部分下载恢复、按章节检查点、有限重试与作品级队列UI合并；iOS外部目录走安全书签/协调IO/摘要确认删除，APK成员只验完整性不抽取。系统挂起仍暂停，不沿用Android前台服务承诺。新增原生文件能力与实际IO门槛、70状态主巡检，待本轮macOS实际结果；旧182截图/测试不代替本轮。
+
+
 > 正式R182：a60e0fd/42023559330成功，398实际iOS综合、59主巡检+11Copy+9阅读共79图全部核验/实际读取、三录像完整解码。Latest182公开原IPA13,823,088字节，SHA-256 `4164b4e38386b3852f551f7cec795bb83014d3e9d72069df4eed366a9c814ff9`，服务器及匿名完整回读一致；178—181保留。公开资料搜索独立于插件状态，详情选站选集保持身份隔离；哔咔1.0.4大目录分页、来源兼容恢复/占位补装/失败移除实跑通过。17源16通过/喵趣原403失败保留；Copy正文及下一章通过、第二项搜索封面仍占位。匿名JM80/80、WN20/24、EH38/25，哔咔零请求，本轮真实账号/四源图片与真机低内存120Hz未验。中间WebContent启动超时报告保留、具体模拟器原因未证实，无新增超时/站点豁免。下方候选条目为历史。
 
 > 182新增资料搜索修正：公开番剧资料与推荐/详情共用独立客户端，不受规则缺失/停用/恢复占位阻断；搜索结果保持bangumi-anime身份，详情选站仍只用同类型已启用播放来源。生产页先红后绿、全量2011/4既有跳过后推送c567606；iOS42014043954实际397通过/1关键词测试失败，原生输入连接未重建已本地精确复现。仅修测试点击/焦点操作，39项相关回归及analyze通过，生产搜索不额外改动；实际iOS修正及3张新增流程截图待验收。原失败保留，不交付失败IPA或扩大豁免。正式客户端仍181。
@@ -22,6 +25,13 @@
 
 > R178已交付：Copy1.1.0按实际Android1.4.85 App API移植，最终0c27925的41600804216实际iOS完整490章/新旧正文/生产搜索滚动定位/翻页下一章/文字吐槽和设置账号入口通过；综合222项、56状态+Copy11截图，67图全部读取，两录像2016/470帧完整解码。共享imageHeaders接Reader/预载/下载/保存；跨错误Zone和屏蔽编辑框负键盘边距已修。旧17源16通过、喵趣403原始失败保留并按用户授权单列外部阻塞。原仓库f37db58公开4条更新、18条身份版本哈希实取及生产四条安装启用通过；独立iOS178已发布且匿名IPA摘要一致，见CURRENT_STATUS。下表旧轮次留作历史，不外推全网络/账号能力。
 
+## 0.13.0 下载诊断补充
+
+生产客户端匿名实网探测：7sefun搜索2项、20集目录与指定播放页HTTP200；MXdm的`www.dcc3.com`和DM84的`dmbus.cc`在本机连接15秒超时，失败发生在搜索阶段而非下载写盘。MangaDex API重定向到站点`/edge/challenge`返回HTML；LK生产公开feed匿名JSON可达，不据此认定付费/账号正文能下载。
+
+Windows原生解析修复根Navigator上下文无法找到Overlay的问题后，实际解析7sefun第1集取得`groupvideo.photo.qq.com`媒体地址，但媒体请求HTTP404；此结果属于已取得地址失效，不把页面可达或解析成功称为正片可下载。Android同页面仍出现解析超时。两端受控网页均通过生产解析器取得本机HLS并读取响应，受控三类下载另见验收证据。
+
+客户端另修无后缀/签名/重定向HLS实际MIME识别及gzip清单长度；HTTP200网页/JSON错误拒绝而不标记视频完成。旧新真实HTTP差分已复现并验证；加密、直播未闭合清单、外置音轨等离线限制仍明确拒绝，不绕过站点访问控制。
 
 ## 来源矩阵
 
@@ -60,7 +70,15 @@
 | Windows Mihon兼容宿主（Suwayomi v2.4.2366） | manga | 按插件 | 按插件 | 按插件 | 插件转换后的真实图片 | — | 随完整Windows包，不依赖外部Java/服务器；桌面JAR独立来源/指纹确认 | 普通应用已实跑xkcd仓库下载/确认/启用、5来源、真实设置保存重进、3311章及第1/2→2/2页真图；具体字节范围和最终包另见CURRENT_STATUS，不冒称全仓库 |
 
 
-R153请求生命周期：Dio已接每操作取消，真实loopback取消25ms并保留同客户端并行200；JS worker宿主使用parentId和各调用Zone归属，取消HTTP不终止其他来源会话。同步native JS仍依赖既有watchdog/销毁终止；Mihon/SignalR没有物理取消的调用允许在途完成但禁止过期结果发布，不宣称已停止。漫画来源明确不支持搜索时不请求，能力未知仍尝试，不从空结果推断不支持。
+R153请求生命周期（历史）：Dio已接每操作取消，真实loopback取消25ms并保留同客户端并行200；JS worker宿主使用parentId和各调用Zone归属，取消HTTP不终止其他来源会话。同步native JS仍依赖既有watchdog/销毁终止；不能物理取消的SignalR调用允许在途完成但禁止过期结果发布，不宣称已停止。Mihon的当前Android/Windows边界见下。漫画来源明确不支持搜索时不请求，能力未知仍尝试，不从空结果推断不支持。
+
+Android Mihon按每次`requestId`拥有独立协程、Rx订阅与实际OkHttp调用；`prepareRequest(args)`必须在平台通道线程、提交工作线程前同步预留，`mihonCancelRequest({requestId})`直接发出取消信号，不排在阻塞网络工作后、不在UI线程等待退出。原请求返回取消结构`ok:false/cancelled:true/errorCode:request_cancelled`，图片传输退出后清理本次独有的图片/MIME暂存文件，不删除其他订阅的暂存或已发布缓存，不调用全局`cancelAll`，TLS/Cookie/来源认证保持原配置。省略ID仅兼容旧调用；重试也必须新建唯一ID。活动ID及最近4096个已结束ID拒绝重放，未知/晚到取消不创建永久墓碑。默认HttpSource、图片与`awaitSuccess`真实HTTP异常保留`statusCode`及原始`retryAfter`，不从错误文字或先前已捕获响应推断状态。自建慢HTTP源的原生消费者回归源码覆盖图片字节中断/暂存清理、Rx跨线程来源HTTP、并行/同图订阅隔离、提前取消与重复ID、429秒数/日期和错误上下文隔离；本切片未运行，不能作为通过证据。插件自行替换事件监听器、创建完全独立客户端或离开协程/Rx进入自建裸线程的I/O不在宿主可追踪边界内，不承诺终止该类上游工作。
+
+Windows Mihon按每次`requestId`拥有本地取消与等待清理：停止该请求的Dio回环HTTP、恢复目录分页及后续章节/图片调用，等待图片流/文件句柄关闭并删除未发布的`.part`；同图加载按订阅计数，取消一个订阅不打断其他读者，最后一个取消才断开HTTP，JVM与共享启动/核验不随读者取消。Dio 5.11.1原生适配器仅调用`HttpClientRequest.abort()`，而Dart在响应头到达后不再用该方法销毁连接，因此可取消HTTP各自持有独立IO客户端，取消时强制关闭本次客户端；不关闭其他操作/无归属启动请求使用的共享客户端。实际HTTP失败仅转发该回环响应的`statusCode`和原始`Retry-After`，不从错误文本推断来源网站状态。真实慢HTTP适配器回归覆盖独立并行请求、目录/章节边界、共享图片、取消后缓存与请求ID清理；首次统一运行暴露了前述响应头后断连问题及Windows路径分隔符断言问题，本切片修正后未复跑，不作为通过证据。
+
+取消回归的服务端观察器直接接管已写HTTP头的真实Socket，发送合法chunked慢响应，以Socket输入EOF/错误确认对端断连；不使用`HttpResponse.done`代替连接事件，因为Dart在响应未结束期间暂停HTTP解析器，`done`/逐次`flush`可能持续等待或缓冲。首次重跑的共享图片完成/缓存路径断言已通过，但五个旧`done`观察器仍超时；观察器修正后本切片未复跑。
+
+上游边界已对照固定版本源码：[MangaAPI](https://github.com/Suwayomi/Suwayomi-Server/blob/v2.4.2366/server/src/main/kotlin/suwayomi/tachidesk/manga/MangaAPI.kt)的来源/章节/图片GET没有可取消fetch的任务ID或接口；[MangaController.pageRetrieve](https://github.com/Suwayomi/Suwayomi-Server/blob/v2.4.2366/server/src/main/kotlin/suwayomi/tachidesk/manga/controller/MangaController.kt#L465-L516)通过独立future获取图片后写响应；[JavalinSetup.future](https://github.com/Suwayomi/Suwayomi-Server/blob/v2.4.2366/server/src/main/kotlin/suwayomi/tachidesk/server/JavalinSetup.kt#L61-L67)使用共享`SupervisorJob`协程域。[DownloadController.stop/clear](https://github.com/Suwayomi/Suwayomi-Server/blob/v2.4.2366/server/src/main/kotlin/suwayomi/tachidesk/manga/controller/DownloadController.kt#L60-L101)操作全局下载队列而非本适配器的HTTP，不调用它们，也不重启/终止宿主。因此本地取消可确认不再接收/发布字节，但不冒称上游JVM协程、网站请求或上游自身缓存已物理停止。
 
 C153最终Android实际旅程：公开推荐/FX资料、保留原7sefun映射与21集目录、已下载小林第01集24:22/25:11真帧；MangaDex无需命名订阅确认→单源最近更新20部→原书库第76.2话5/14双页真图。该漫画是JS/API来源，不新增APK执行主张。API26/正式包原LK缓存正文20/22、3/37可读，双API小说已下载书架冷启恢复。上述在线API35临时经普通CONNECT代理解决模拟器DNS问题，结束恢复默认网络、停止临时服务；不证明默认网络可达或新网页视频解析。当前整套974通过/3跳过、85Python、analyze无问题；Windows仅本轮最终构建与50成员打包通过，缺专用桌面接口，当前UI旅程未验。完整边界见[C153](delivery/evidence/C153-final-acceptance.json)。
 

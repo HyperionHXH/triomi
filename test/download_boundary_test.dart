@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -14,12 +15,31 @@ import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/mihon_source.dart';
 import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/core/storage/storage_paths.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/downloads/data/download_service.dart';
+import 'package:triomi/features/downloads/data/image_download_checkpoint.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 
 import 'fixtures/fake_http_client.dart';
 import 'fixtures/fake_preferences.dart';
+import 'fixtures/png_image.dart';
+
+class RestoredImageHttp extends FakeHttpClient {
+  RestoredImageHttp(List<int> bytes)
+    : super((_) async => const SourceResponse(statusCode: 200, body: '')) {
+    bytesHandler = (_) => bytes;
+  }
+
+  @override
+  Future<SourceByteStream> downloadBytes(
+    String url, {
+    required String sourceId,
+    Map<String, String> headers = const {},
+    bool followRedirects = true,
+  }) async =>
+      throw StateError('Raw streaming bypasses the image transformation');
+}
 
 /// D19：下载失败、重试与离线状态边界。
 ///
@@ -114,6 +134,96 @@ void main() {
       ],
     );
   }
+
+  for (final sourceId in ['jmcomic', 'ehentai']) {
+    test(
+      '$sourceId transformed offline bytes and public headers survive checkpoint resume',
+      () async {
+        final png = base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==',
+        );
+        final http = RestoredImageHttp(png);
+        final row = await enqueueRow(sourceId, 'work', 'chapter');
+        final content = const ChapterContent(
+          images: ['https://images.test/page.png'],
+          imageHeaders: {'Referer': 'https://images.test/reader'},
+        );
+        final service = DownloadService(
+          repository: repository,
+          http: http,
+          preferences: preferences,
+        );
+        await service.run(row: row, provider: providerOf(content));
+        final saved = (await rowById(row.id))!;
+        expect(saved.status, DownloadStatus.done.value);
+        expect(http.requests.single.headers, content.imageHeaders);
+        expect(
+          await File(storageFilePath('${saved.path}/0001.png')).readAsBytes(),
+          png,
+        );
+        final checkpoint = await ImageDownloadCheckpoint.load(
+          Directory(storageFilePath(saved.path!)),
+        );
+        expect(
+          await checkpoint.valid('0001.png', url: content.images.single),
+          isTrue,
+        );
+        expect(
+          await checkpoint.valid(
+            '0001.png',
+            url: 'https://images.test/other.png',
+          ),
+          isFalse,
+        );
+        await repository.markQueued(row.id);
+        await service.run(
+          row: (await rowById(row.id))!,
+          provider: providerOf(content),
+        );
+        expect(http.requests, hasLength(1));
+        expect((await rowById(row.id))!.status, DownloadStatus.done.value);
+      },
+    );
+  }
+
+  test('readable partial pages retain headers and discussion before download completes', () async {
+    const content = ChapterContent(
+      images: ['https://images.test/one.png', 'https://images.test/two.png'],
+      imageHeaders: {'Referer': 'https://images.test/reader'},
+      commentMode: 'merge',
+      comments: [ChapterComment(author: 'fixture', text: 'saved discussion')],
+    );
+    final row = await enqueueRow('partial-comments', 'book', 'chapter');
+    final http =
+        FakeHttpClient(
+            (_) async => const SourceResponse(statusCode: 200, body: ''),
+          )
+          ..bytesHandler = (url) {
+            if (url.endsWith('two.png')) {
+              throw const SocketException('second page interrupted');
+            }
+            return onePixelPng(48);
+          };
+    await expectLater(
+      DownloadService(
+        repository: repository,
+        http: http,
+        preferences: preferences,
+      ).run(row: row, provider: providerOf(content)),
+      throwsA(isA<SocketException>()),
+    );
+    expect(
+      await repository.localImageDir('partial-comments', 'chapter'),
+      isNotNull,
+    );
+    final cached = await repository.localChapterContent(
+      'partial-comments',
+      'chapter',
+    );
+    expect(cached?.comments.single.text, 'saved discussion');
+    expect(cached?.commentMode, 'merge');
+    expect(cached?.imageHeaders, content.imageHeaders);
+  });
 
   group('run() 的任务状态机', () {
     test('网页播放地址不能下载为假视频或标记完成', () async {
@@ -473,9 +583,12 @@ void main() {
     await LibraryRepository(db).cacheItem(item);
     // Queue snapshots survive restoration even when no runtime directory exists.
     final row = await enqueueRow(item.sourceId, item.remoteId, '/1234/');
+    final image = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==',
+    );
     final http = FakeHttpClient(
       (_) async => const SourceResponse(statusCode: 200, body: ''),
-    )..bytesHandler = (_) => [1, 2, 3];
+    )..bytesHandler = (_) => image;
     await DownloadService(
       repository: repository,
       http: http,
@@ -491,7 +604,7 @@ void main() {
     final manifest = await DownloadManifest.read(saved.path!);
     expect(
       await File('${saved.path}/${manifest!.files.single}').readAsBytes(),
-      [1, 2, 3],
+      image,
     );
   });
 

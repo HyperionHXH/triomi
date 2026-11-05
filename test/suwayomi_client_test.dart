@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
+import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/suwayomi_client.dart';
 import 'package:triomi/core/source/windows_mihon_host.dart';
@@ -20,6 +23,7 @@ void main() {
   late Dio dio;
   late SuwayomiClient client;
   late Future<void> Function(HttpRequest) handle;
+  final detachedSockets = <Socket>{};
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('triomi-desktop-source-');
@@ -30,14 +34,20 @@ void main() {
       try {
         await handle(request);
       } catch (_) {
-        request.response.statusCode = 500;
+        // A cancelled real HTTP consumer may already have closed the socket.
       } finally {
-        await request.response.close();
+        try {
+          await request.response.close();
+        } catch (_) {}
       }
     });
   });
   tearDown(() async {
     dio.close(force: true);
+    for (final socket in detachedSockets) {
+      socket.destroy();
+    }
+    detachedSockets.clear();
     await server.close(force: true);
     await directory.delete(recursive: true);
   });
@@ -46,12 +56,463 @@ void main() {
     request.response.write(jsonEncode(value));
   }
 
-  test('installation presence checks never recreate missing runtime state', () async {
-    final root = Directory('${directory.path}/missing-runtime');
-    final issue = await WindowsMihonHost.installationIssue('org.example.plugin', root: root);
-    expect(issue?.requiresReinstall, isTrue);
-    expect(await root.exists(), isFalse);
-  });
+  final cancelled = throwsA(
+    isA<DioException>().having(
+      (error) => error.type,
+      'cancellation type',
+      DioExceptionType.cancel,
+    ),
+  );
+
+  Future<void> streamUntilDisconnected(
+    HttpRequest request,
+    Completer<void> started,
+    Completer<void> disconnected,
+  ) async {
+    request.response.headers.contentType = ContentType.binary;
+    request.response.headers.chunkedTransferEncoding = true;
+    // HttpServer pauses its parser while a response is open, so response.done
+    // need not observe peer FIN until the response is closed. Observe the real
+    // socket instead, still serving a valid HTTP chunked response to production
+    // Dio. This does not treat a cancellation token as proof of disconnect.
+    final socket = await request.response.detachSocket();
+    detachedSockets.add(socket);
+    var closed = false;
+    void finish() {
+      closed = true;
+      if (!disconnected.isCompleted) disconnected.complete();
+    }
+
+    final incoming = socket.listen(
+      (_) {},
+      onDone: finish,
+      onError: (Object error) => finish(),
+      cancelOnError: true,
+    );
+    final chunk = List<int>.filled(4096, 7);
+    try {
+      while (!closed) {
+        socket.add(ascii.encode('${chunk.length.toRadixString(16)}\r\n'));
+        socket.add(chunk);
+        socket.add(const [13, 10]);
+        await socket.flush();
+        if (!started.isCompleted) started.complete();
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    } catch (_) {
+      finish();
+    } finally {
+      detachedSockets.remove(socket);
+      socket.destroy();
+      await incoming.cancel();
+    }
+  }
+
+  Future<bool> resolveImageIdentity(HttpRequest request) async {
+    if (request.uri.path != '/api/graphql') return false;
+    final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+    final variables = body['variables'] as Map;
+    json(request, {
+      'data': variables.containsKey('source')
+          ? {
+              'mangas': {
+                'nodes': [
+                  {'id': 11},
+                ],
+              },
+            }
+          : {
+              'chapters': {
+                'nodes': [
+                  {
+                    'url': '/chapter',
+                    'sourceOrder': 2,
+                    'manga': {'id': 11, 'sourceId': '1', 'url': '/book'},
+                  },
+                ],
+              },
+            },
+    });
+    return true;
+  }
+
+  Future<Map<String, Object?>> imageRequest(String id, {int index = 0}) =>
+      client.request(
+        requestId: id,
+        sourceId: '1',
+        operation: 'imageFile',
+        pageData: {
+          'index': index,
+          'chapterUrl': '/chapter',
+          'manga': {'url': '/book'},
+        },
+      );
+
+  test(
+    'parent cancellation cascades without retaining operation IDs',
+    () async {
+      final registry = SuwayomiRequestRegistry();
+      final parent = SourceRequestCancellation();
+      final startup = Completer<int>();
+      final pending = parent.run(
+        () => registry.run(
+          'owned',
+          () => SuwayomiRequestRegistry.wait(startup.future),
+        ),
+      );
+      final result = expectLater(pending, cancelled);
+      await expectLater(registry.run('owned', () async => 0), throwsStateError);
+      expect(registry.activeCount, 1);
+      parent.cancel();
+      await result;
+      expect(registry.activeCount, 0);
+      startup.complete(42);
+      expect(await registry.run('owned', () async => 7), 7);
+    },
+  );
+
+  test(
+    'cancelled startup waits leave shared work alive and release IDs',
+    () async {
+      final registry = SuwayomiRequestRegistry();
+      final startup = Completer<int>();
+      final first = registry.run(
+        'first',
+        () => SuwayomiRequestRegistry.wait(startup.future),
+      );
+      final result = expectLater(first, cancelled);
+      final second = registry.run(
+        'second',
+        () => SuwayomiRequestRegistry.wait(startup.future),
+      );
+      expect(registry.activeCount, 2);
+      await registry.cancel('first');
+      await result;
+      expect(registry.activeCount, 1);
+      expect(startup.isCompleted, isFalse);
+      startup.complete(42);
+      expect(await second, 42);
+      expect(registry.activeCount, 0);
+    },
+  );
+
+  test(
+    'only actual HTTP response metadata crosses the desktop request map',
+    () async {
+      handle = (request) async {
+        request.response.statusCode = 429;
+        request.response.headers.set(
+          'Retry-After',
+          'Wed, 05 Nov 2031 08:00:00 GMT',
+        );
+        request.response.write('rate limited');
+      };
+      final limited = await client.request(
+        requestId: 'limited',
+        sourceId: '1',
+        operation: 'popular',
+      );
+      expect(limited['ok'], isFalse);
+      expect(limited['statusCode'], 429);
+      expect(limited['retryAfter'], 'Wed, 05 Nov 2031 08:00:00 GMT');
+      expect(client.activeRequestCount, 0);
+      handle = (request) async {
+        request.response.statusCode = 500;
+        request.response.write('wrapped website HTTP 429 Retry-After: 120');
+      };
+      final wrapped = await client.request(sourceId: '1', operation: 'latest');
+      expect(wrapped['statusCode'], 500);
+      expect(wrapped.containsKey('retryAfter'), isFalse);
+    },
+  );
+
+  test(
+    'cancelling a slow operation disconnects only its real HTTP request',
+    () async {
+      final started = Completer<void>();
+      final disconnected = Completer<void>();
+      final independentStarted = Completer<void>();
+      final releaseIndependent = Completer<void>();
+      handle = (request) async {
+        if (request.uri.path.endsWith('/popular/1')) {
+          await streamUntilDisconnected(request, started, disconnected);
+        } else if (request.uri.path.endsWith('/latest/1')) {
+          independentStarted.complete();
+          await releaseIndependent.future;
+          json(request, {'mangaList': <Object?>[], 'hasNextPage': false});
+        } else {
+          json(request, <Object?>[]);
+        }
+      };
+      final parent = SourceRequestCancellation();
+      final slow = parent.run(
+        () => client.request(
+          requestId: 'slow',
+          sourceId: '1',
+          operation: 'popular',
+        ),
+      );
+      final slowResult = expectLater(slow, cancelled);
+      await started.future;
+      final independent = parent.run(
+        () => client.request(
+          requestId: 'independent',
+          sourceId: '1',
+          operation: 'latest',
+        ),
+      );
+      await independentStarted.future;
+      expect(client.activeRequestCount, 2);
+      await client.cancelRequest('slow');
+      await slowResult;
+      expect(client.activeRequestCount, 1);
+      expect(parent.cancelled, isFalse);
+      await client.cancelRequest('slow');
+      releaseIndependent.complete();
+      expect((await independent)['ok'], isTrue);
+      await disconnected.future.timeout(const Duration(seconds: 3));
+      expect(client.activeRequestCount, 0);
+      // Completed/cancelled IDs are removed, not permanent cancellation tombstones.
+      expect(
+        (await client.request(
+          requestId: 'slow',
+          sourceId: '1',
+          operation: 'filters',
+        ))['ok'],
+        isTrue,
+      );
+      expect(client.activeRequestCount, 0);
+    },
+  );
+
+  test(
+    'cancellation stops restoration paging before catalogue or detail fallback',
+    () async {
+      final started = Completer<void>();
+      final disconnected = Completer<void>();
+      final paths = <String>[];
+      handle = (request) async {
+        paths.add(request.uri.toString());
+        if (request.uri.path == '/api/graphql') {
+          await request.drain<void>();
+          json(request, {
+            'data': {
+              'mangas': {'nodes': <Object?>[]},
+            },
+          });
+        } else if (request.uri.queryParameters['pageNum'] == '1') {
+          await request.drain<void>();
+          json(request, {'mangaList': <Object?>[], 'hasNextPage': true});
+        } else {
+          await request.drain<void>();
+          await streamUntilDisconnected(request, started, disconnected);
+        }
+      };
+      final pending = client.request(
+        requestId: 'paging',
+        sourceId: '1',
+        operation: 'detail',
+        manga: {'url': '/missing', 'title': 'Original title'},
+      );
+      final result = expectLater(pending, cancelled);
+      await started.future;
+      await client.cancelRequest('paging');
+      await result;
+      await disconnected.future.timeout(const Duration(seconds: 3));
+      expect(paths, [
+        '/api/graphql',
+        '/api/v1/source/1/quick-search?pageNum=1',
+        '/api/v1/source/1/quick-search?pageNum=2',
+      ]);
+      expect(client.activeRequestCount, 0);
+    },
+  );
+
+  test(
+    'cancelling a chapter lookup never starts its image HTTP request',
+    () async {
+      final started = Completer<void>();
+      final disconnected = Completer<void>();
+      var images = 0;
+      handle = (request) async {
+        if (request.uri.path == '/api/graphql') {
+          final body =
+              jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+          if ((body['variables'] as Map).containsKey('source')) {
+            json(request, {
+              'data': {
+                'mangas': {
+                  'nodes': [
+                    {'id': 11},
+                  ],
+                },
+              },
+            });
+          } else {
+            await streamUntilDisconnected(request, started, disconnected);
+          }
+        } else {
+          images++;
+        }
+      };
+      final pending = imageRequest('lookup');
+      final result = expectLater(pending, cancelled);
+      await started.future;
+      await client.cancelRequest('lookup');
+      await result;
+      await disconnected.future.timeout(const Duration(seconds: 3));
+      expect(images, 0);
+      expect(client.activeRequestCount, 0);
+      expect(await directory.list().toList(), isEmpty);
+    },
+  );
+
+  test(
+    'cancelled image downloads quiesce and never publish a late cache file',
+    () async {
+      final started = Completer<void>();
+      final disconnected = Completer<void>();
+      handle = (request) async {
+        if (await resolveImageIdentity(request)) return;
+        await streamUntilDisconnected(request, started, disconnected);
+      };
+      final image = imageRequest('image');
+      final result = expectLater(image, cancelled);
+      await started.future;
+      await client.cancelRequest('image');
+      await result;
+      await disconnected.future.timeout(const Duration(seconds: 3));
+      expect(await directory.list().toList(), isEmpty);
+      expect(client.activeRequestCount, 0);
+      expect(client.activeImageTransferCount, 0);
+      expect(client.activeImageSubscriberCount, 0);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(await directory.list().toList(), isEmpty);
+    },
+  );
+
+  test(
+    'a shared image stays alive until its final subscriber cancels',
+    () async {
+      final started = Completer<void>();
+      final disconnected = Completer<void>();
+      final secondResolved = Completer<void>();
+      var chapterLookups = 0;
+      var downloads = 0;
+      handle = (request) async {
+        if (request.uri.path == '/api/graphql') {
+          final body =
+              jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+          if ((body['variables'] as Map).containsKey('mangaId')) {
+            chapterLookups++;
+            if (chapterLookups == 2) secondResolved.complete();
+          }
+          json(request, {
+            'data': (body['variables'] as Map).containsKey('source')
+                ? {
+                    'mangas': {
+                      'nodes': [
+                        {'id': 11},
+                      ],
+                    },
+                  }
+                : {
+                    'chapters': {
+                      'nodes': [
+                        {
+                          'url': '/chapter',
+                          'sourceOrder': 2,
+                          'manga': {'id': 11, 'sourceId': '1', 'url': '/book'},
+                        },
+                      ],
+                    },
+                  },
+          });
+          return;
+        }
+        downloads++;
+        await streamUntilDisconnected(request, started, disconnected);
+      };
+      final first = imageRequest('first');
+      final firstResult = expectLater(first, cancelled);
+      await started.future;
+      final second = imageRequest('second');
+      final secondResult = expectLater(second, cancelled);
+      await secondResolved.future;
+      await Future.doWhile(() async {
+        if (client.activeImageSubscriberCount == 2) return false;
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        return true;
+      }).timeout(const Duration(seconds: 3));
+      await client.cancelRequest('first');
+      await firstResult;
+      expect(disconnected.isCompleted, isFalse);
+      expect(client.activeRequestCount, 1);
+      expect(downloads, 1);
+      await client.cancelRequest('second');
+      await secondResult;
+      await disconnected.future.timeout(const Duration(seconds: 3));
+      expect(client.activeRequestCount, 0);
+      expect(client.activeImageTransferCount, 0);
+      expect(client.activeImageSubscriberCount, 0);
+      expect(await directory.list().toList(), isEmpty);
+    },
+  );
+
+  test(
+    'cancelling one shared-image reader lets the other finish and cache',
+    () async {
+      final started = Completer<void>();
+      final release = Completer<void>();
+      var downloads = 0;
+      handle = (request) async {
+        if (await resolveImageIdentity(request)) return;
+        downloads++;
+        request.response.headers.contentType = ContentType.binary;
+        request.response.add([1, 2]);
+        await request.response.flush();
+        started.complete();
+        await release.future;
+        request.response.add([3, 4]);
+      };
+      final first = imageRequest('first');
+      final result = expectLater(first, cancelled);
+      await started.future;
+      final second = imageRequest('second');
+      await Future.doWhile(() async {
+        if (client.activeImageSubscriberCount == 2) return false;
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        return true;
+      }).timeout(const Duration(seconds: 3));
+      await client.cancelRequest('first');
+      await result;
+      release.complete();
+      final file = File((await second)['filePath'] as String);
+      expect(await file.readAsBytes(), [1, 2, 3, 4]);
+      final resumed = await imageRequest('first');
+      expect(resumed['filePath'], file.path);
+      expect(downloads, 1);
+      expect(client.activeRequestCount, 0);
+      expect(client.activeImageTransferCount, 0);
+      expect(client.activeImageSubscriberCount, 0);
+      final entries = await directory.list().toList();
+      expect(entries, hasLength(1));
+      expect(p.equals(entries.single.path, file.path), isTrue);
+    },
+  );
+
+  test(
+    'installation presence checks never recreate missing runtime state',
+    () async {
+      final root = Directory('${directory.path}/missing-runtime');
+      final issue = await WindowsMihonHost.installationIssue(
+        'org.example.plugin',
+        root: root,
+      );
+      expect(issue?.requiresReinstall, isTrue);
+      expect(await root.exists(), isFalse);
+    },
+  );
 
   test('installation presence checks require both verified originals and runtime JAR', () async {
     const package = 'org.example.plugin';
@@ -63,14 +524,26 @@ void main() {
       await file.writeAsBytes([1]);
     }
     final state = File('${directory.path}/state.json');
-    await state.writeAsString(jsonEncode({
-      package: {'stagedPath': apk.path, 'desktopJarPath': jar.path, 'runtimeFile': 'runtime.jar'},
-    }));
+    await state.writeAsString(
+      jsonEncode({
+        package: {
+          'stagedPath': apk.path,
+          'desktopJarPath': jar.path,
+          'runtimeFile': 'runtime.jar',
+        },
+      }),
+    );
     final originalState = await state.readAsBytes();
-    expect(await WindowsMihonHost.installationIssue(package, root: directory), isNull);
+    expect(
+      await WindowsMihonHost.installationIssue(package, root: directory),
+      isNull,
+    );
     await jar.delete();
     expect(
-      (await WindowsMihonHost.installationIssue(package, root: directory))?.requiresReinstall,
+      (await WindowsMihonHost.installationIssue(
+        package,
+        root: directory,
+      ))?.requiresReinstall,
       isTrue,
     );
     expect(await state.readAsBytes(), originalState);
@@ -78,57 +551,69 @@ void main() {
     expect(await runtime.exists(), isTrue);
   });
 
-  test('non-missing filesystem errors do not claim the installation was removed', () async {
-    final state = Directory('${directory.path}/state.json');
-    await state.create();
-    final issue = await WindowsMihonHost.installationIssue('org.example.plugin', root: directory);
-    expect(issue, isNotNull);
-    expect(issue?.requiresReinstall, isFalse);
-    expect(await state.exists(), isTrue);
-  });
+  test(
+    'non-missing filesystem errors do not claim the installation was removed',
+    () async {
+      final state = Directory('${directory.path}/state.json');
+      await state.create();
+      final issue = await WindowsMihonHost.installationIssue(
+        'org.example.plugin',
+        root: directory,
+      );
+      expect(issue, isNotNull);
+      expect(issue?.requiresReinstall, isFalse);
+      expect(await state.exists(), isTrue);
+    },
+  );
 
-  test('APK conversion failures identify the local compatibility stage', () async {
-    var installs = 0;
-    handle = (request) async {
-      installs++;
-      await request.drain<void>();
-      request.response.statusCode = 500;
-      request.response.write('Server Error');
-    };
-    final apk = File('${directory.path}/extension.apk');
-    await apk.writeAsBytes([1, 2, 3]);
-    await expectLater(
-      client.install(apk, nativeJar: false),
-      throwsA(
-        isA<UnsupportedError>().having(
-          (error) => error.message,
-          'compatibility stage',
-          allOf(contains('APK 转换或加载失败'), contains('不是来源网站的 HTTP 500')),
+  test(
+    'APK conversion failures identify the local compatibility stage',
+    () async {
+      var installs = 0;
+      handle = (request) async {
+        installs++;
+        await request.drain<void>();
+        request.response.statusCode = 500;
+        request.response.write('Server Error');
+      };
+      final apk = File('${directory.path}/extension.apk');
+      await apk.writeAsBytes([1, 2, 3]);
+      await expectLater(
+        client.install(apk, nativeJar: false),
+        throwsA(
+          isA<UnsupportedError>().having(
+            (error) => error.message,
+            'compatibility stage',
+            allOf(contains('APK 转换或加载失败'), contains('不是来源网站的 HTTP 500')),
+          ),
         ),
-      ),
-    );
-    expect(installs, 1);
-  });
+      );
+      expect(installs, 1);
+    },
+  );
 
-  test('native JAR loading failures do not claim an APK conversion failure', () async {
-    handle = (request) async {
-      await request.drain<void>();
-      request.response.statusCode = 500;
-      request.response.write('Server Error');
-    };
-    final jar = File('${directory.path}/extension.jar');
-    await jar.writeAsBytes([1, 2, 3]);
-    await expectLater(
-      client.install(jar, nativeJar: true),
-      throwsA(
-        isA<UnsupportedError>().having(
-          (error) => error.message,
-          'compatibility stage',
-          allOf(contains('原生 JAR 加载失败'), isNot(contains('APK 转换或加载失败'))),
+  test(
+    'native JAR loading failures do not claim an APK conversion failure',
+    () async {
+      handle = (request) async {
+        await request.drain<void>();
+        request.response.statusCode = 500;
+        request.response.write('Server Error');
+      };
+      final jar = File('${directory.path}/extension.jar');
+      await jar.writeAsBytes([1, 2, 3]);
+      await expectLater(
+        client.install(jar, nativeJar: true),
+        throwsA(
+          isA<UnsupportedError>().having(
+            (error) => error.message,
+            'compatibility stage',
+            allOf(contains('原生 JAR 加载失败'), isNot(contains('APK 转换或加载失败'))),
+          ),
         ),
-      ),
-    );
-  });
+      );
+    },
+  );
 
   test('host authentication failures retain their transport status', () async {
     handle = (request) async {
@@ -632,7 +1117,10 @@ void main() {
               jsonDecode(await utf8.decoder.bind(request).join()) as Map;
           final changes = (body['filter'] as List).cast<Map<String, Object?>>();
           final selections = changes
-              .map((row) => jsonDecode(row['state'] as String) as Map<String, Object?>)
+              .map(
+                (row) =>
+                    jsonDecode(row['state'] as String) as Map<String, Object?>,
+              )
               .toList();
           final matches =
               selections.any(

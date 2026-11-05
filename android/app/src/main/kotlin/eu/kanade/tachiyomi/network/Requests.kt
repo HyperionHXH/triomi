@@ -23,8 +23,16 @@ fun POST(url: String, headers: Headers = Headers.headersOf(), body: RequestBody,
 }
 
 fun Response.awaitSuccess(): Response {
-    if (!isSuccessful) { close(); throw HttpException(code, message) }
+    if (!isSuccessful) {
+        val failure = HttpException(code, message, header("Retry-After"))
+        close()
+        throw failure
+    }
     return this
 }
 
-class HttpException(val statusCode: Int, message: String) : java.io.IOException("HTTP $statusCode: $message")
+class HttpException @JvmOverloads constructor(
+    val statusCode: Int,
+    message: String,
+    val retryAfter: String? = null,
+) : java.io.IOException("HTTP $statusCode: $message")

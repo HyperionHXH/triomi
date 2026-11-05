@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:path_provider/path_provider.dart';
 
 import '../db/app_database.dart';
@@ -19,10 +21,12 @@ import '../source/kazumi_source.dart';
 import '../source/rule_schema.dart';
 import '../storage/cover_store.dart';
 import '../storage/preferences.dart';
+import '../storage/storage_paths.dart';
 import 'apk_backup_files.dart';
 import 'backup_artifact_recovery.dart';
 import 'backup_file_support.dart';
 import 'backup_import_recovery.dart';
+import 'backup_location.dart';
 import 'backup_progress.dart';
 import 'download_backup_files.dart';
 import 'verified_backup_file.dart';
@@ -114,6 +118,9 @@ class BackupService {
   final DownloadBackupFiles? downloadFiles;
   final ApkBackupFiles? apkFiles;
 
+  static bool get _supportsApkPackages =>
+      !Platform.isIOS && defaultTargetPlatform != TargetPlatform.iOS;
+
   Future<ApkBackupFiles> openApkFiles() async =>
       apkFiles ??
       ApkBackupFiles(
@@ -123,15 +130,31 @@ class BackupService {
         preferences: preferences,
       );
 
+  Future<DownloadBackupFiles> _openDownloadFiles() async {
+    if (downloadFiles != null) return downloadFiles!;
+    final documents = await getApplicationDocumentsDirectory();
+    final custom = preferences.get<String>('downloads.storageRootPath');
+    final base = custom != null && custom.isNotEmpty ? custom : documents.path;
+    return DownloadBackupFiles(
+      Directory('$base${Platform.pathSeparator}downloads'),
+      additionalRoots: [
+        if (base != documents.path)
+          Directory('${documents.path}${Platform.pathSeparator}downloads'),
+      ],
+    );
+  }
+
   static const String dataFileName = 'data.json';
   static const String coversDirName = 'covers';
 
   /// 不参与备份的设置键（凭据 / 设备相关）。
   static const List<String> _excludedSettingPrefixes = <String>[
+    'setup.onboarding.',
     'sources.seededBuiltins',
     'manga.updates.downloadIds',
+    'downloads.storageRootPath',
     'backup.schedule.',
-    'export.directoryUri',
+    'export.directory',
     'sync.webdav.config',
     'mihon.hostStatus',
     'mihon.enabledPackages',
@@ -167,11 +190,29 @@ class BackupService {
   /// 用户授权导出目录的设置键（T7-4）。
   static const String exportDirectoryKey = 'export.directoryUri';
 
-  /// 导出到应用文档目录 `backups/`，返回包路径与摘要。
-  ///
-  /// [includeOfflineContent] 为 false 时章节缓存的正文（contentJson）不进包
-  /// （T7-6：下载多时体积膨胀明显）；[directoryUri] 非空时写入用户授权的
-  /// SAF 目录（T7-4），失败回退应用私有目录。
+  /// Full local backup to an explicitly persistent destination, unlike internal
+  /// ZIP staging used by WebDAV. Never silently falls back after a grant failure.
+  Future<({String path, BackupSummary summary})> exportPortableBackup({
+    required BackupLocation location,
+    bool metadataOnly = false,
+    bool includeSourceRules = true,
+    bool includeApkPackages = true,
+    SafFileTreeWriter? writeToTree,
+    BackupProgressCallback? onStageProgress,
+  }) => exportToFile(
+    includeCovers: !metadataOnly,
+    includeOfflineContent: !metadataOnly,
+    includeDownloadedMedia: !metadataOnly,
+    includeSourceRules: !metadataOnly && includeSourceRules,
+    includeApkPackages: !metadataOnly && includeApkPackages,
+    directoryUri: location.isDocumentTree ? location.value : null,
+    outputDirectory: location.isDocumentTree ? null : Directory(location.value),
+    writeToTree: writeToTree,
+    onStageProgress: onStageProgress,
+  );
+
+  /// Internal publication defaults remain for WebDAV's disposable staging.
+  /// A requested SAF destination failing is an error, never a private fallback.
   Future<({String path, BackupSummary summary})> exportToFile({
     bool includeCovers = true,
     bool includeOfflineContent = true,
@@ -180,6 +221,7 @@ class BackupService {
     bool includeApkPackages = false,
     String? directoryUri,
     SafFileTreeWriter? writeToTree,
+    Directory? outputDirectory,
     void Function(int completed, int total)? onProgress,
     BackupProgressCallback? onStageProgress,
   }) async {
@@ -202,7 +244,7 @@ class BackupService {
         archive: archive,
         onProgress: onProgress,
         mediaStaging: includeDownloadedMedia ? staging : null,
-        apkStaging: includeApkPackages ? staging : null,
+        apkStaging: includeApkPackages && _supportsApkPackages ? staging : null,
         mediaIntegrity: integrity,
         archivePaths: archivePaths,
         coverStaging: staging,
@@ -212,8 +254,15 @@ class BackupService {
 
       final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
       String fileName;
-      final docs = await getApplicationDocumentsDirectory();
-      final dir = Directory('${docs.path}${Platform.pathSeparator}backups');
+      final docs = outputDirectory == null
+          ? await getApplicationDocumentsDirectory()
+          : null;
+      final dir = Directory(
+        storageFilePath(
+          outputDirectory?.path ??
+              '${docs!.path}${Platform.pathSeparator}backups',
+        ),
+      );
       await dir.create(recursive: true);
       File file;
       do {
@@ -237,34 +286,32 @@ class BackupService {
       await partial.rename(file.path);
       publishedFile = file;
 
-      // Publish the local file atomically before handing it to SAF. Native code
-      // copies from this path without transporting the ZIP through Dart/channel
-      // buffers. The complete local file is also the fallback if permission fails.
       var savedPath = file.path;
       var savedToTree = false;
-      if (directoryUri != null &&
-          directoryUri.isNotEmpty &&
-          writeToTree != null) {
-        try {
-          final documentUri = await writeToTree(
-            directoryUri,
-            fileName,
-            file.path,
-          );
-          if (documentUri.isNotEmpty) {
-            savedPath = documentUri;
-            savedToTree = true;
-          }
-        } catch (_) {
-          // Keep the completed local backup.
+      if (directoryUri != null && directoryUri.isNotEmpty) {
+        if (writeToTree == null) throw StateError('授权目录写入器不可用');
+        final documentUri = await writeToTree(
+          directoryUri,
+          fileName,
+          file.path,
+        );
+        final receipt = Uri.tryParse(documentUri);
+        final iosBookmarkReceipt =
+            directoryUri.startsWith('ios-bookmark:') &&
+            receipt != null &&
+            receipt.scheme == 'file' &&
+            receipt.host.isEmpty &&
+            receipt.path.startsWith('/') &&
+            receipt.pathSegments.isNotEmpty &&
+            receipt.pathSegments.last.isNotEmpty &&
+            !receipt.hasQuery &&
+            !receipt.hasFragment;
+        if (!documentUri.startsWith('content://') && !iosBookmarkReceipt) {
+          throw StateError('授权目录没有返回有效文件位置');
         }
-      }
-      if (savedToTree) {
-        try {
-          await file.delete();
-        } on FileSystemException {
-          // SAF succeeded; a redundant valid local backup is safe to retain.
-        }
+        savedPath = documentUri;
+        savedToTree = true;
+        await file.delete();
       }
 
       checkBackupCancellation();
@@ -394,13 +441,7 @@ class BackupService {
     collected();
     final media = <int, Map<String, Object?>>{};
     if (mediaStaging != null) {
-      final store =
-          downloadFiles ??
-          DownloadBackupFiles(
-            Directory(
-              '${(await getApplicationDocumentsDirectory()).path}/downloads',
-            ),
-          );
+      final store = await _openDownloadFiles();
       for (final row in downloads) {
         checkBackupCancellation();
         onStageProgress?.call(
@@ -545,6 +586,12 @@ class BackupService {
             'chapterRemoteId': row.chapterRemoteId,
             'status': row.status,
             'progress': row.progress,
+            'queuePosition': row.queuePosition,
+            'retryCount': row.retryCount,
+            'receivedBytes': row.receivedBytes,
+            'totalBytes': row.totalBytes,
+            'completedPages': row.completedPages,
+            'totalPages': row.totalPages,
             'createdAt': row.createdAt.toIso8601String(),
             'mediaFiles': ?media[row.id],
           },
@@ -695,7 +742,10 @@ class BackupService {
     BackupRestoreOptions options = const BackupRestoreOptions(),
     String? expectedHash,
   }) async {
-    final snapshot = await VerifiedBackupFile.open(path);
+    final snapshot = await VerifiedBackupFile.open(
+      path,
+      retainApkFiles: _supportsApkPackages && options.restoreApkPackages,
+    );
     final archive = Archive();
     try {
       if (expectedHash != null && snapshot.hash != expectedHash) {
@@ -898,18 +948,17 @@ class BackupService {
     final publishedMedia = <String>[];
     var localMediaFiles = verifiedFiles;
     final artifactLease = await BackupArtifactGuard.acquireOperation();
+    final restoreApks = _supportsApkPackages && options.restoreApkPackages;
+    bool needsMediaFile(ArchiveFile file) =>
+        file.name.startsWith('media/') ||
+        (restoreApks && file.name.startsWith('apks/'));
     try {
-      if (localMediaFiles == null &&
-          archive.files.any(
-            (f) => f.name.startsWith('media/') || f.name.startsWith('apks/'),
-          )) {
+      if (localMediaFiles == null && archive.files.any(needsMediaFile)) {
         mediaInput = await Directory.systemTemp.createTemp(
           'triomi-media-input-',
         );
         localMediaFiles = {};
-        for (final file in archive.files.where(
-          (f) => f.name.startsWith('media/') || f.name.startsWith('apks/'),
-        )) {
+        for (final file in archive.files.where(needsMediaFile)) {
           final outputFile = File(
             '${mediaInput.path}/${localMediaFiles.length}.entry',
           );
@@ -942,8 +991,7 @@ class BackupService {
             localSettings.containsKey(key) &&
             (!options.replaceSettings || isScopedLibraryPreference(key)),
       );
-      if (options.restoreApkPackages &&
-          (payload['apkPackages'] as List? ?? []).isNotEmpty) {
+      if (restoreApks && (payload['apkPackages'] as List? ?? []).isNotEmpty) {
         final files = await openApkFiles();
         restoredApks = files.preview(payload['apkPackages']).available;
         apkTransaction = await files.prepareRestore(
@@ -1595,7 +1643,9 @@ class BackupService {
                 existing.path == null &&
                 (existing.errorMessage == _missingRestoredMedia ||
                     existing.errorMessage == _missingRestoredLocalComic) &&
-                (mediaKind == 'images' || mediaKind == 'video');
+                (mediaKind == 'images' ||
+                    mediaKind == 'video' ||
+                    mediaKind == 'novel');
             if (existing != null && !fillMissingMedia) continue;
             String? restoredPath;
             final partial = [
@@ -1604,13 +1654,7 @@ class BackupService {
               'image-partial',
             ].contains((row['mediaFiles'] as Map?)?['kind']);
             if (row['mediaFiles'] != null) {
-              final store =
-                  downloadFiles ??
-                  DownloadBackupFiles(
-                    Directory(
-                      '${(await getApplicationDocumentsDirectory()).path}/downloads',
-                    ),
-                  );
+              final store = await _openDownloadFiles();
               restoredPath = await store.restore(row, localMediaFiles ?? {});
               publishedMedia.add(restoredPath);
               if (partial) {
@@ -1628,6 +1672,14 @@ class BackupService {
                   progress: const Value(1),
                   path: Value(restoredPath),
                   errorMessage: const Value(null),
+                  receivedBytes: Value(
+                    (row['receivedBytes'] as num?)?.toInt() ?? 0,
+                  ),
+                  totalBytes: Value((row['totalBytes'] as num?)?.toInt()),
+                  completedPages: Value(
+                    (row['completedPages'] as num?)?.toInt() ?? 0,
+                  ),
+                  totalPages: Value((row['totalPages'] as num?)?.toInt()),
                 ),
               );
               continue;
@@ -1647,6 +1699,24 @@ class BackupService {
                           : 1,
                     ),
                     path: Value(restoredPath),
+                    queuePosition: Value(
+                      (row['queuePosition'] as num?)?.toInt() ?? 0,
+                    ),
+                    retryCount: Value(
+                      (row['retryCount'] as num?)?.toInt() ?? 0,
+                    ),
+                    receivedBytes: Value(
+                      restoredPath == null
+                          ? 0
+                          : (row['receivedBytes'] as num?)?.toInt() ?? 0,
+                    ),
+                    totalBytes: Value((row['totalBytes'] as num?)?.toInt()),
+                    completedPages: Value(
+                      restoredPath == null
+                          ? 0
+                          : (row['completedPages'] as num?)?.toInt() ?? 0,
+                    ),
+                    totalPages: Value((row['totalPages'] as num?)?.toInt()),
                     createdAt: _dateOf(row['createdAt']) ?? _oldestTimestamp,
                     errorMessage: Value(
                       restoredPath == null

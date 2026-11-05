@@ -338,7 +338,7 @@ void main() {
     });
   });
 
-  group('T7-4 流式备份、真实URI与回退', () {
+  group('T7-4 流式备份、真实URI与权限失败', () {
     late Directory docsDir;
     const channel = MethodChannel('plugins.flutter.io/path_provider');
     setUp(() {
@@ -388,7 +388,7 @@ void main() {
       expect(await BackupService.localBackups(), isEmpty);
     });
 
-    test('权限失败或空URI保留完整本机ZIP而不发布部分文件', () async {
+    test('权限失败或空URI明确失败且不私有回退', () async {
       final db = openTestDatabase();
       addTearDown(db.close);
       final prefs = memoryPreferences();
@@ -401,33 +401,19 @@ void main() {
       );
       for (final failWithException in [true, false]) {
         await prefs.set('reader.fontSize', failWithException ? 20 : 24);
-        final result = await service.exportToFile(
-          includeCovers: false,
-          directoryUri: 'content://broken/tree',
-          writeToTree: (_, _, _) async {
-            if (failWithException) throw StateError('权限被回收');
-            return '';
-          },
+        await expectLater(
+          service.exportToFile(
+            includeCovers: false,
+            directoryUri: 'content://broken/tree',
+            writeToTree: (_, _, _) async {
+              if (failWithException) throw StateError('权限被回收');
+              return '';
+            },
+          ),
+          throwsStateError,
         );
-        expect(result.summary.savedToSaf, isFalse);
-        final payload = BackupService.validatedPayload(
-          await File(result.path).readAsBytes(),
-        );
-        expect(payload['settingsValues'], {
-          'reader.fontSize': failWithException ? 20 : 24,
-        });
       }
-      final backups = await BackupService.localBackups();
-      expect(
-        [
-          for (final file in backups)
-            (BackupService.validatedPayload(
-                  await file.readAsBytes(),
-                )['settingsValues']
-                as Map)['reader.fontSize'],
-        ]..sort(),
-        [20, 24],
-      );
+      expect(await BackupService.localBackups(), isEmpty);
       expect(
         Directory('${docsDir.path}/backups')
             .listSync()

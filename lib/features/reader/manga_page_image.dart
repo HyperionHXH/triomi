@@ -63,15 +63,13 @@ class MangaPageImage extends StatefulWidget {
     required this.sourceId,
     required this.fit,
     required this.settings,
-    required this.onRetry,
     this.imageHeaders = const {},
   });
   final ImageProvider provider;
   final String url, sourceId;
   final BoxFit fit;
-  final MangaViewSettings settings;
-  final VoidCallback onRetry;
   final Map<String, String> imageHeaders;
+  final MangaViewSettings settings;
   @override
   State<MangaPageImage> createState() => _MangaPageImageState();
 }
@@ -94,11 +92,6 @@ class _MangaPageImageState extends State<MangaPageImage> {
     super.didUpdateWidget(old);
     final identityChanged =
         old.url != widget.url || old.sourceId != widget.sourceId;
-    if (identityChanged) {
-      _info?.dispose();
-      _info = null;
-      _crop = null;
-    }
     if (identityChanged ||
         old.provider != widget.provider ||
         old.settings.trim != widget.settings.trim) {
@@ -106,10 +99,13 @@ class _MangaPageImageState extends State<MangaPageImage> {
     }
   }
 
-  void _resolve() {
+  void _resolve({bool retainGeometry = false}) {
     final generation = ++_generation;
-    _failed = false;
     if (_listener != null) _stream?.removeListener(_listener!);
+    _info?.dispose();
+    _info = null;
+    if (!retainGeometry) _crop = null;
+    _failed = false;
     final provider = widget.provider;
     _stream = provider.resolve(createLocalImageConfiguration(context));
     _listener = ImageStreamListener(
@@ -177,10 +173,11 @@ class _MangaPageImageState extends State<MangaPageImage> {
       return _status(
         child: TextButton(
           onPressed: () async {
+            final generation = _generation;
             await widget.provider.evict();
-            if (!mounted) return;
-            widget.onRetry();
-            setState(_resolve);
+            if (!mounted || generation != _generation) return;
+            _resolve(retainGeometry: true);
+            setState(() {});
           },
           child: const Text('重新加载'),
         ),
@@ -281,6 +278,7 @@ class _MangaPageImageState extends State<MangaPageImage> {
             ),
     );
     return InteractiveViewer(
+      key: ValueKey((widget.sourceId, widget.url, widget.fit)),
       minScale: 1,
       maxScale: 4,
       child: GestureDetector(

@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 
 import '../db/app_database.dart';
 import '../db/legacy_category_scopes.dart';
@@ -56,13 +60,20 @@ Future<BackupRestorePreview> previewBackupRestoreFile(
   ApkBackupFiles? apkFiles,
   Preferences? preferences,
 }) async {
-  final snapshot = await VerifiedBackupFile.open(path);
+  final supportsApkPackages =
+      !Platform.isIOS && defaultTargetPlatform != TargetPlatform.iOS;
+  final snapshot = await VerifiedBackupFile.open(
+    path,
+    retainApkFiles: supportsApkPackages,
+  );
   try {
     final packages = ApkBackupFiles.validatePayload(
       snapshot.payload['apkPackages'],
     );
     final counts = packages.isEmpty
         ? null
+        : !supportsApkPackages
+        ? (available: 0, protected: packages.length)
         : await (apkFiles ?? (throw StateError('APK 备份预览需要本机包验证器')))
               .verifiedPreview(packages, snapshot.files);
     return await _previewPayload(

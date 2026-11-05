@@ -80,7 +80,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   final _requests = <String, SourceRequestCancellation>{};
   int _generation = 0;
   String _query = '';
-  bool _starting = false, _playbackSites = false;
+  bool _starting = false;
   String? _scopeId;
   String? _error;
   late List<String> _tags = List.of(widget.initialTags);
@@ -88,7 +88,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   bool _tagBusy = false;
   AnimeFilter _animeFilter = const AnimeFilter();
   String get _historyKey => 'search.history.${widget.type.name}';
-  bool get _metadataSearch => widget.type == MediaType.anime && !_playbackSites;
+  bool get _metadataSearch => widget.type == MediaType.anime;
 
   SourceEntry _publicMetadataEntry() {
     final source = BangumiSource.publicMetadata(
@@ -105,14 +105,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   @override
   void initState() {
     super.initState();
-    _scopeId = widget.sourceOnly ? widget.initialSourceId : null;
+    // Anime always searches metadata, even when launched from a playback source.
+    _scopeId = widget.type != MediaType.anime && widget.sourceOnly
+        ? widget.initialSourceId
+        : null;
     if (widget.type == MediaType.anime) {
       _animeFilter = _animeFilter.withTags(_tags);
     }
-    _playbackSites =
-        widget.type == MediaType.anime &&
-        widget.initialSourceId != null &&
-        widget.initialSourceId != 'bangumi-anime';
     if (widget.initialQuery.trim().isNotEmpty || _tags.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _submit());
     }
@@ -173,12 +172,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       if (!mounted || generation != _generation) return;
       final sources = candidates.where((entry) {
         if (entry.descriptor.type != widget.type) return false;
-        if (_scopeId != null && entry.descriptor.id != _scopeId) return false;
         if (widget.type == MediaType.anime) {
-          return _playbackSites
-              ? entry.supports(SourceCapability.content)
-              : entry.descriptor.id == 'bangumi-anime';
+          return entry.descriptor.id == 'bangumi-anime';
         }
+        if (_scopeId != null && entry.descriptor.id != _scopeId) return false;
         return true;
       }).toList();
       if (widget.initialSourceId != null) {
@@ -451,7 +448,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   @override
   Widget build(BuildContext context) {
     final rows = _rows.values.toList();
-    final statuses = widget.type == MediaType.anime && !_playbackSites
+    final statuses = widget.type == MediaType.anime
         ? {
             for (final view
                 in ref.watch(animeFollowsProvider).asData?.value ?? [])
@@ -468,7 +465,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             page: row.page,
             hasMore: row.hasMore,
             items: row.items.where((item) {
-              if (widget.type != MediaType.anime || _playbackSites) return true;
+              if (widget.type != MediaType.anime) return true;
               final status = statuses[(item.sourceId, item.remoteId)];
               return (!_animeFilter.onlyWatching || status == 'doing') &&
                   (!_animeFilter.hideCompleted || status != 'done') &&
@@ -573,22 +570,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 ),
               ),
             ),
-          if (widget.type == MediaType.anime && !widget.sourceOnly)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text('番剧资料')),
-                  ButtonSegment(value: true, label: Text('播放站')),
-                ],
-                selected: {_playbackSites},
-                onSelectionChanged: (values) {
-                  setState(() => _playbackSites = values.single);
-                  if (_submitted) unawaited(_submit());
-                },
-              ),
-            ),
-          if (widget.type == MediaType.anime && !_playbackSites)
+          if (widget.type == MediaType.anime)
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(

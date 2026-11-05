@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:drift/native.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/db/app_database.dart';
@@ -14,6 +16,7 @@ import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/core/storage/storage_paths.dart';
 import 'package:triomi/features/downloads/data/download_providers.dart';
 import 'package:triomi/features/downloads/data/download_service.dart';
 
@@ -33,13 +36,28 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late AppDatabase db;
   late Preferences preferences;
+  late Directory documents;
 
-  setUp(() {
+  setUp(() async {
+    documents = await Directory.systemTemp.createTemp('triomi-wifi-scheduler-');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (_) async => documents.path,
+        );
     db = AppDatabase.forTesting(NativeDatabase.memory());
     preferences = memoryPreferences();
   });
 
-  tearDown(() => db.close);
+  tearDown(() async {
+    await db.close();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          null,
+        );
+    await Directory(storageFilePath(documents.path)).delete(recursive: true);
+  });
 
   const item = MediaItem(
     sourceId: 'd40-source',

@@ -1,4 +1,4 @@
-import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -59,20 +59,10 @@ void main() {
     Future<void> png() async {
       pngHits += 1;
       request.response.headers.contentType = ContentType('image', 'png');
-      await request.response.addStream(
-        Stream<List<int>>.fromIterable(<List<int>>[
-          <int>[
-            0x89,
-            0x50,
-            0x4E,
-            0x47,
-            0x0D,
-            0x0A,
-            0x1A,
-            0x0A,
-            ...List<int>.filled(16, 7),
-          ],
-        ]),
+      request.response.add(
+        base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==',
+        ),
       );
       await request.response.close();
     }

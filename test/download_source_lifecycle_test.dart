@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -12,6 +13,7 @@ import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_descriptor.dart';
+import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/models/video_resolve_cancellation.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_api.dart';
@@ -20,6 +22,7 @@ import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/features/downloads/data/download_providers.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
+import 'package:triomi/features/downloads/data/download_service.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 
 import 'fixtures/fake_http_client.dart';
@@ -76,6 +79,24 @@ class QueueSource implements ContentProvider {
       SourceEntry(descriptor: descriptor, source: this, enabled: enabled);
 }
 
+class TransientQueueSource extends QueueSource {
+  TransientQueueSource() : super('retry-source');
+  @override
+  Future<ChapterContent> content(Chapter chapter) async {
+    requested.add(chapter.remoteId);
+    if (chapter.remoteId == 'retry') {
+      throw SourceException(
+        sourceId: id,
+        type: SourceErrorType.rateLimited,
+        statusCode: 429,
+        retryAfter: DateTime.now().add(const Duration(seconds: 60)),
+        message: 'HTTP 429',
+      );
+    }
+    return result;
+  }
+}
+
 class QueueSources extends SourceRegistryController {
   QueueSources(this.snapshot);
   final SourceRegistrySnapshot snapshot;
@@ -83,6 +104,61 @@ class QueueSources extends SourceRegistryController {
   Future<SourceRegistrySnapshot> build() async => snapshot;
   void replace(List<SourceEntry> entries) =>
       state = AsyncData(SourceRegistrySnapshot(entries: entries, failures: []));
+  void loading() => state = const AsyncLoading();
+}
+
+class PendingPauseBarrierRepository extends DownloadRepository {
+  PendingPauseBarrierRepository(super.db);
+  final captured = Completer<void>();
+  final releaseSnapshot = Completer<void>();
+  final secondRead = Completer<void>();
+  final pauseStarted = Completer<void>();
+  final releasePause = Completer<void>();
+  var reads = 0;
+  @override
+  Future<List<DownloadRow>> pending() async {
+    final snapshot = await super.pending();
+    if (++reads == 1) {
+      captured.complete();
+      await releaseSnapshot.future;
+    } else if (!secondRead.isCompleted) {
+      secondRead.complete();
+    }
+    return snapshot;
+  }
+
+  @override
+  Future<void> markPaused(int id, {String? message}) async {
+    if (!pauseStarted.isCompleted) pauseStarted.complete();
+    await releasePause.future;
+    await super.markPaused(id, message: message);
+  }
+}
+
+class WifiQueueService extends DownloadService {
+  WifiQueueService(DownloadRepository repository)
+    : super(
+        repository: repository,
+        http: FakeHttpClient(
+          (_) async => const SourceResponse(statusCode: 200, body: ''),
+        ),
+        preferences: memoryPreferences(),
+      );
+  bool connected = false;
+  int probes = 0;
+  Completer<bool>? nextProbe;
+  Completer<void>? probeStarted;
+  @override
+  Future<bool> isOnWifi() async {
+    probes++;
+    final gate = nextProbe;
+    nextProbe = null;
+    if (gate != null) {
+      probeStarted?.complete();
+      return gate.future;
+    }
+    return connected;
+  }
 }
 
 void main() {
@@ -90,6 +166,15 @@ void main() {
   late AppDatabase db;
   late ProviderContainer container;
   late DownloadRepository repository;
+  late Directory documents;
+  setUp(() async {
+    documents = await Directory.systemTemp.createTemp('triomi-queue-docs-');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (_) async => documents.path,
+        );
+  });
   Future<void> waitUntil(bool Function() condition) async {
     for (var i = 0; i < 200 && !condition(); i++) {
       await Future<void>.delayed(const Duration(milliseconds: 5));
@@ -101,14 +186,19 @@ void main() {
     List<SourceEntry> entries, {
     SourceHttpClient? http,
     DownloadVideoResolver? resolver,
+    DownloadRepository Function(AppDatabase)? repositoryFactory,
+    DownloadService Function(DownloadRepository)? serviceFactory,
   }) async {
     db = openTestDatabase();
-    repository = DownloadRepository(db);
+    repository = repositoryFactory?.call(db) ?? DownloadRepository(db);
     container = ProviderContainer(
       overrides: [
         if (resolver != null)
           downloadVideoResolverProvider.overrideWithValue(resolver),
         databaseProvider.overrideWithValue(db),
+        downloadRepositoryProvider.overrideWithValue(repository),
+        if (serviceFactory != null)
+          downloadServiceProvider.overrideWithValue(serviceFactory(repository)),
         preferencesProvider.overrideWithValue(memoryPreferences()),
         sourceHttpClientProvider.overrideWithValue(
           http ??
@@ -171,7 +261,40 @@ void main() {
     container.dispose();
     debugDefaultTargetPlatformOverride = null;
     await db.close();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          null,
+        );
+    await documents.delete(recursive: true);
   });
+
+  test(
+    'explicitly re-enqueuing a paused waiting chapter makes it runnable again',
+    () async {
+      final source = QueueSource('requeued');
+      await setup([source.entry()]);
+      await enqueue(source.id, ['chapter']);
+      final row = (await repository.listForItem(source.id, 'book')).single;
+      final controller = container.read(downloadsProvider.notifier);
+      await controller.pauseEntry(row.id);
+      expect((await repository.rowById(row.id))!.status, 'paused');
+      await controller.enqueue(
+        item: MediaItem(
+          sourceId: source.id,
+          remoteId: 'book',
+          title: 'book',
+          type: MediaType.novel,
+        ),
+        chapters: [
+          Chapter(sourceId: source.id, remoteId: 'chapter', title: 'chapter'),
+        ],
+      );
+      await waitIdle();
+      expect(source.requested, ['chapter']);
+      expect((await repository.rowById(row.id))!.status, 'done');
+    },
+  );
 
   test('disabled source never receives a chapter request; another source continues', () async {
     final disabled = QueueSource('disabled');
@@ -188,7 +311,7 @@ void main() {
         .firstWhere((g) => g.sourceId == 'disabled')
         .entries
         .single;
-    expect(blocked.status, DownloadStatus.failed);
+    expect(blocked.status, DownloadStatus.paused);
     expect(blocked.row.errorMessage, contains('已停用或已移除'));
     expect(groups.firstWhere((g) => g.sourceId == 'good').doneCount, 1);
   });
@@ -213,24 +336,31 @@ void main() {
     final changingEntries = (await repository.grouped())
         .firstWhere((g) => g.sourceId == 'changing')
         .entries;
-    final completed = changingEntries
-        .firstWhere((e) => e.row.chapterRemoteId == 'first');
-    final failed = changingEntries
-        .firstWhere((e) => e.row.chapterRemoteId == 'second');
-    expect(completed.status, DownloadStatus.done,
-        reason: 'disabling a source must retain the already-requested chapter');
-    expect(failed.status, DownloadStatus.failed);
+    final completed = changingEntries.firstWhere(
+      (e) => e.row.chapterRemoteId == 'first',
+    );
+    final failed = changingEntries.firstWhere(
+      (e) => e.row.chapterRemoteId == 'second',
+    );
+    expect(
+      completed.status,
+      DownloadStatus.paused,
+      reason:
+          'disabling a source cancels owned IO and discards its late result',
+    );
+    expect(failed.status, DownloadStatus.paused);
     (container.read(sourcesProvider.notifier) as QueueSources).replace([
       changing.entry(),
       good.entry(),
     ]);
     await container.read(downloadsProvider.notifier).resume();
     await waitIdle();
-    expect(changing.requested, ['first'],
-        reason: 're-enabling and resuming must not redownload completed work');
-    await container.read(downloadsProvider.notifier).retryFailed();
+    expect(changing.requested, [
+      'first',
+    ], reason: 're-enabling alone does not restart paused downloads');
+    await container.read(downloadsProvider.notifier).resumePaused();
     await waitIdle();
-    expect(changing.requested, ['first', 'second']);
+    expect(changing.requested, ['first', 'first', 'second']);
     expect(
       (await repository.grouped())
           .firstWhere((g) => g.sourceId == 'changing')
@@ -339,194 +469,607 @@ void main() {
     expect((await repository.grouped()).single.doneCount, 1);
   });
   for (final platform in [TargetPlatform.windows, TargetPlatform.iOS]) {
-  test('$platform pause waits for owned browser disposal before returning', () async {
-    debugDefaultTargetPlatformOverride = platform;
-    final source = QueueSource('web')..result = const ChapterContent(
-      playSources: [PlaySource(name: 'page', url: 'https://site.test/play', webPage: true)],
+    test(
+      '$platform pause waits for owned browser disposal before returning',
+      () async {
+        debugDefaultTargetPlatformOverride = platform;
+        final source = QueueSource('web')
+          ..result = const ChapterContent(
+            playSources: [
+              PlaySource(
+                name: 'page',
+                url: 'https://site.test/play',
+                webPage: true,
+              ),
+            ],
+          );
+        final started = Completer<void>();
+        final cancelled = Completer<void>();
+        final browserDisposed = Completer<void>();
+        var resolves = 0;
+        await setup(
+          [source.entry()],
+          resolver: (line, owner) async {
+            resolves++;
+            owner.addListener(() {
+              if (!cancelled.isCompleted) cancelled.complete();
+            });
+            started.complete();
+            await browserDisposed.future;
+            throw VideoResolveCancelled(owner.reason);
+          },
+        );
+        await enqueue('web', ['episode']);
+        final controller = container.read(downloadsProvider.notifier);
+        await controller.resume();
+        await started.future;
+        var returned = false;
+        final pausing = controller
+            .pauseAll(reason: 'native pause reason')
+            .then((_) => returned = true);
+        await cancelled.future;
+        expect(returned, isFalse);
+        browserDisposed.complete();
+        await pausing;
+        expect(resolves, 1);
+        expect(
+          (await repository.grouped()).single.entries.single.status,
+          DownloadStatus.paused,
+        );
+        expect((await repository.grouped()).single.doneCount, 0);
+        expect(
+          (await repository.grouped()).single.entries.single.row.errorMessage,
+          'native pause reason',
+        );
+      },
     );
-    final started = Completer<void>();
-    final cancelled = Completer<void>();
-    final browserDisposed = Completer<void>();
-    var resolves = 0;
-    await setup([source.entry()], resolver: (line, owner) async {
-      resolves++;
-      owner.addListener(() {
-        if (!cancelled.isCompleted) cancelled.complete();
-      });
-      started.complete();
-      await browserDisposed.future;
-      throw VideoResolveCancelled(owner.reason);
-    });
-    await enqueue('web', ['episode']);
-    final controller = container.read(downloadsProvider.notifier);
-    await controller.resume();
-    await started.future;
-    var returned = false;
-    final pausing = controller.pauseAll().then((_) => returned = true);
-    await cancelled.future;
-    expect(returned, isFalse);
-    browserDisposed.complete();
-    await pausing;
-    expect(resolves, 1);
-    expect((await repository.grouped()).single.entries.single.status, DownloadStatus.paused);
-    expect((await repository.grouped()).single.doneCount, 0);
-  });
 
-  test('$platform source disable closes only active resolution and pauses job', () async {
-    debugDefaultTargetPlatformOverride = platform;
-    final source = QueueSource('web')..result = const ChapterContent(
-      playSources: [PlaySource(name: 'page', url: 'https://site.test/play', webPage: true)],
+    test(
+      '$platform source disable closes only active resolution and pauses job',
+      () async {
+        debugDefaultTargetPlatformOverride = platform;
+        final source = QueueSource('web')
+          ..result = const ChapterContent(
+            playSources: [
+              PlaySource(
+                name: 'page',
+                url: 'https://site.test/play',
+                webPage: true,
+              ),
+            ],
+          );
+        final started = Completer<void>();
+        final closed = Completer<void>();
+        await setup(
+          [source.entry()],
+          resolver: (line, owner) async {
+            owner.addListener(() {
+              if (!closed.isCompleted) closed.complete();
+            });
+            started.complete();
+            await closed.future;
+            throw VideoResolveCancelled(owner.reason);
+          },
+        );
+        await enqueue('web', ['episode']);
+        await container.read(downloadsProvider.notifier).resume();
+        await started.future;
+        (container.read(sourcesProvider.notifier) as QueueSources).replace([
+          source.entry(enabled: false),
+        ]);
+        await closed.future;
+        await waitIdle();
+        final entry = (await repository.grouped()).single.entries.single;
+        expect(entry.status, DownloadStatus.paused);
+        expect(entry.row.errorMessage, contains('来源已停用'));
+      },
     );
-    final started = Completer<void>();
-    final closed = Completer<void>();
-    await setup([source.entry()], resolver: (line, owner) async {
-      owner.addListener(() {
-        if (!closed.isCompleted) closed.complete();
-      });
-      started.complete();
-      await closed.future;
-      throw VideoResolveCancelled(owner.reason);
-    });
-    await enqueue('web', ['episode']);
-    await container.read(downloadsProvider.notifier).resume();
-    await started.future;
-    (container.read(sourcesProvider.notifier) as QueueSources).replace([
-      source.entry(enabled: false),
-    ]);
-    await closed.future;
-    await waitIdle();
-    final entry = (await repository.grouped()).single.entries.single;
-    expect(entry.status, DownloadStatus.paused);
-    expect(entry.row.errorMessage, contains('来源已停用'));
-  });
 
-  test('$platform queue disposal cancels resolution and cannot publish late result', () async {
-    debugDefaultTargetPlatformOverride = platform;
-    final source = QueueSource('web')..result = const ChapterContent(
-      playSources: [PlaySource(name: 'page', url: 'https://site.test/play', webPage: true)],
+    test(
+      '$platform queue disposal cancels resolution and cannot publish late result',
+      () async {
+        debugDefaultTargetPlatformOverride = platform;
+        final source = QueueSource('web')
+          ..result = const ChapterContent(
+            playSources: [
+              PlaySource(
+                name: 'page',
+                url: 'https://site.test/play',
+                webPage: true,
+              ),
+            ],
+          );
+        final started = Completer<void>();
+        final closed = Completer<void>();
+        await setup(
+          [source.entry()],
+          resolver: (line, owner) async {
+            owner.addListener(() {
+              if (!closed.isCompleted) closed.complete();
+            });
+            started.complete();
+            await closed.future;
+            return const PlaySource(
+              name: 'late',
+              url: 'https://cdn.test/video.mp4',
+            );
+          },
+        );
+        await enqueue('web', ['episode']);
+        await container.read(downloadsProvider.notifier).resume();
+        await started.future;
+        container.invalidate(downloadsProvider);
+        await closed.future;
+        await waitIdle();
+        expect(
+          (await repository.grouped()).single.entries.single.status,
+          DownloadStatus.paused,
+        );
+      },
     );
-    final started = Completer<void>();
-    final closed = Completer<void>();
-    await setup([source.entry()], resolver: (line, owner) async {
-      owner.addListener(() {
-        if (!closed.isCompleted) closed.complete();
-      });
-      started.complete();
-      await closed.future;
-      return const PlaySource(name: 'late', url: 'https://cdn.test/video.mp4');
-    });
-    await enqueue('web', ['episode']);
-    await container.read(downloadsProvider.notifier).resume();
-    await started.future;
-    container.invalidate(downloadsProvider);
-    await closed.future;
-    await waitIdle();
-    expect((await repository.grouped()).single.entries.single.status, DownloadStatus.paused);
-  });
   }
-  test('Windows missing root context pauses with an actionable explanation', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-    final source = QueueSource('web')..result = const ChapterContent(
-      playSources: [PlaySource(name: 'page', url: 'https://site.test/play', webPage: true)],
-    );
-    await setup([source.entry()]);
-    await enqueue('web', ['episode']);
-    await container.read(downloadsProvider.notifier).resume();
-    await waitIdle();
-    final entry = (await repository.grouped()).single.entries.single;
-    expect(entry.status, DownloadStatus.paused);
-    expect(entry.row.errorMessage, contains('请打开应用'));
-    expect(entry.row.path, isNull);
-  });
+  test(
+    'Windows missing root context pauses with an actionable explanation',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      final source = QueueSource('web')
+        ..result = const ChapterContent(
+          playSources: [
+            PlaySource(
+              name: 'page',
+              url: 'https://site.test/play',
+              webPage: true,
+            ),
+          ],
+        );
+      await setup([source.entry()]);
+      await enqueue('web', ['episode']);
+      await container.read(downloadsProvider.notifier).resume();
+      await waitIdle();
+      final entry = (await repository.grouped()).single.entries.single;
+      expect(entry.status, DownloadStatus.paused);
+      expect(entry.row.errorMessage, contains('请打开应用'));
+      expect(entry.row.path, isNull);
+    },
+  );
 
   for (final platform in [TargetPlatform.windows, TargetPlatform.iOS]) {
-  test('$platform deletion cancels browser and waits before deleting its job', () async {
-    debugDefaultTargetPlatformOverride = platform;
-    final source = QueueSource('web')..result = const ChapterContent(
-      playSources: [PlaySource(name: 'page', url: 'https://site.test/play', webPage: true)],
+    test(
+      '$platform deletion cancels browser and waits before deleting its job',
+      () async {
+        debugDefaultTargetPlatformOverride = platform;
+        final source = QueueSource('web')
+          ..result = const ChapterContent(
+            playSources: [
+              PlaySource(
+                name: 'page',
+                url: 'https://site.test/play',
+                webPage: true,
+              ),
+            ],
+          );
+        final started = Completer<void>();
+        final cancelled = Completer<void>();
+        final disposed = Completer<void>();
+        await setup(
+          [source.entry()],
+          resolver: (line, owner) async {
+            owner.addListener(() {
+              if (!cancelled.isCompleted) cancelled.complete();
+            });
+            started.complete();
+            await disposed.future;
+            throw VideoResolveCancelled(owner.reason);
+          },
+        );
+        await enqueue('web', ['episode']);
+        final controller = container.read(downloadsProvider.notifier);
+        await controller.resume();
+        await started.future;
+        var removed = false;
+        final removing = controller
+            .removeItem('web', 'book')
+            .then((_) => removed = true);
+        await cancelled.future;
+        expect(removed, isFalse);
+        expect(await repository.listForItem('web', 'book'), hasLength(1));
+        disposed.complete();
+        await removing;
+        expect(await repository.listForItem('web', 'book'), isEmpty);
+      },
     );
-    final started = Completer<void>();
-    final cancelled = Completer<void>();
-    final disposed = Completer<void>();
-    await setup([source.entry()], resolver: (line, owner) async {
-      owner.addListener(() {
-        if (!cancelled.isCompleted) cancelled.complete();
-      });
-      started.complete();
-      await disposed.future;
-      throw VideoResolveCancelled(owner.reason);
-    });
-    await enqueue('web', ['episode']);
-    final controller = container.read(downloadsProvider.notifier);
-    await controller.resume();
-    await started.future;
-    var removed = false;
-    final removing = controller.removeItem('web', 'book').then((_) => removed = true);
-    await cancelled.future;
-    expect(removed, isFalse);
-    expect(await repository.listForItem('web', 'book'), hasLength(1));
-    disposed.complete();
-    await removing;
-    expect(await repository.listForItem('web', 'book'), isEmpty);
-  });
-  }
-  for (final manualPause in [false, true]) {
-    test('iOS foreground return ${manualPause ? 'preserves explicit pause' : 'resumes interrupted chapter'} before stop settles', () async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-      final binding = TestWidgetsFlutterBinding.ensureInitialized();
-      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      final source = QueueSource('ios-resume')
-        ..first = Completer<ChapterContent>();
-      await setup([source.entry()]);
-      await enqueue(source.id, ['chapter']);
-      final controller = container.read(downloadsProvider.notifier);
-      await controller.resume();
-      await waitUntil(() => source.requested.isNotEmpty);
-      binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      Future<void>? pausing;
-      if (manualPause) pausing = controller.pauseAll();
-      source.first!.complete(const ChapterContent(text: 'first interrupted response'));
-      await pausing;
-      await waitIdle();
-      final row = (await repository.listForItem(source.id, 'book')).single;
-      if (manualPause) {
-        expect(row.status, DownloadStatus.paused.value);
-        expect(source.requested, ['chapter']);
-      } else {
-        expect(row.status, DownloadStatus.done.value);
-        expect(source.requested, ['chapter', 'chapter']);
-        expect((await repository.localChapterContent(source.id, 'chapter'))?.text,
-            'downloaded content');
-      }
-    });
   }
 
-  test('iOS cold queue rebuild resumes running row but not user-paused row', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-    final binding = TestWidgetsFlutterBinding.ensureInitialized();
-    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    final source = QueueSource('ios-cold');
+  test('persistent reorder changes only the next chapter boundary and paused entries stay stopped', () async {
+    final source = QueueSource('ordered')..first = Completer<ChapterContent>();
     await setup([source.entry()]);
-    await enqueue(source.id, ['interrupted', 'manual']);
-    final rows = await repository.listForItem(source.id, 'book');
-    await repository.markRunning(rows.first.id);
-    await repository.markPaused(rows.last.id);
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-    container.dispose();
-    container = ProviderContainer(overrides: [
-      databaseProvider.overrideWithValue(db),
-      preferencesProvider.overrideWithValue(memoryPreferences()),
-      sourceHttpClientProvider.overrideWithValue(FakeHttpClient(
-          (_) async => const SourceResponse(statusCode: 200, body: ''))),
-      sourcesProvider.overrideWith(() => QueueSources(
-          SourceRegistrySnapshot(entries: [source.entry()], failures: const []))),
-    ]);
-    await container.read(downloadsProvider.future);
+    await enqueue('ordered', ['first', 'second', 'third']);
+    final controller = container.read(downloadsProvider.notifier);
+    await controller.resume();
+    await waitUntil(() => source.requested.isNotEmpty);
+    final rows = await repository.listForItem('ordered', 'book');
+    final second = rows.firstWhere((row) => row.chapterRemoteId == 'second');
+    final third = rows.firstWhere((row) => row.chapterRemoteId == 'third');
+    await controller.reorder(
+      type: MediaType.novel,
+      orderedIds: [third.id, second.id],
+    );
+    expect(source.requested, [
+      'first',
+    ], reason: 'reorder never preempts the active request');
+    await controller.pauseEntry(second.id);
+    source.first!.complete(const ChapterContent(text: 'first done'));
     await waitIdle();
-    final result = await repository.listForItem(source.id, 'book');
-    expect(result.first.status, DownloadStatus.done.value);
-    expect(result.last.status, DownloadStatus.paused.value);
-    expect(source.requested, ['interrupted']);
+    expect(source.requested, ['first', 'third']);
+    expect((await repository.rowById(second.id))!.status, 'paused');
+    await controller.resumeEntry(second.id);
+    await waitIdle();
+    expect(source.requested, ['first', 'third', 'second']);
+    expect(
+      (await DownloadRepository(
+        db,
+      ).listForItem('ordered', 'book')).where((row) => row.status == 'done'),
+      hasLength(3),
+    );
   });
+  test(
+    'Windows minimized queue completes the current and next chapter',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      final binding = TestWidgetsFlutterBinding.ensureInitialized();
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      final source = QueueSource('windows-minimized')
+        ..first = Completer<ChapterContent>();
+      await setup([source.entry()]);
+      await enqueue(source.id, ['current', 'next']);
+      await container.read(downloadsProvider.notifier).resume();
+      await waitUntil(() => source.requested.isNotEmpty);
+      try {
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+        source.first!.complete(
+          const ChapterContent(text: 'minimized response'),
+        );
+        await waitIdle();
+        expect(source.requested, ['current', 'next']);
+        expect((await repository.grouped()).single.doneCount, 2);
+        expect(
+          (await repository.localChapterContent(source.id, 'current'))?.text,
+          'minimized response',
+        );
+      } finally {
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      }
+    },
+  );
+
+  for (final pauseAction in ['none', 'all', 'entry']) {
+    test(
+      'iOS foreground return preserves $pauseAction pause choice before stop settles',
+      () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final binding = TestWidgetsFlutterBinding.ensureInitialized();
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        final source = QueueSource('ios-resume')
+          ..first = Completer<ChapterContent>();
+        await setup([source.entry()]);
+        await enqueue(source.id, ['chapter']);
+        final controller = container.read(downloadsProvider.notifier);
+        await controller.resume();
+        await waitUntil(() => source.requested.isNotEmpty);
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        Future<void>? pausing;
+        if (pauseAction == 'all') pausing = controller.pauseAll();
+        if (pauseAction == 'entry') {
+          final row = (await repository.listForItem(source.id, 'book')).single;
+          pausing = controller.pauseEntry(row.id);
+        }
+        source.first!.complete(
+          const ChapterContent(text: 'first interrupted response'),
+        );
+        await pausing;
+        await waitIdle();
+        final row = (await repository.listForItem(source.id, 'book')).single;
+        if (pauseAction != 'none') {
+          expect(row.status, DownloadStatus.paused.value);
+          expect(source.requested, ['chapter']);
+        } else {
+          expect(row.status, DownloadStatus.done.value);
+          expect(source.requested, ['chapter', 'chapter']);
+          expect(
+            (await repository.localChapterContent(source.id, 'chapter'))?.text,
+            'downloaded content',
+          );
+        }
+      },
+    );
+  }
+
+  test(
+    'iOS cold queue rebuild resumes running row but not user-paused row',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      final binding = TestWidgetsFlutterBinding.ensureInitialized();
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      final source = QueueSource('ios-cold');
+      await setup([source.entry()]);
+      await enqueue(source.id, ['interrupted', 'manual']);
+      final rows = await repository.listForItem(source.id, 'book');
+      await repository.markRunning(rows.first.id);
+      await repository.markPaused(rows.last.id);
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      container.dispose();
+      container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          preferencesProvider.overrideWithValue(memoryPreferences()),
+          sourceHttpClientProvider.overrideWithValue(
+            FakeHttpClient(
+              (_) async => const SourceResponse(statusCode: 200, body: ''),
+            ),
+          ),
+          sourcesProvider.overrideWith(
+            () => QueueSources(
+              SourceRegistrySnapshot(
+                entries: [source.entry()],
+                failures: const [],
+              ),
+            ),
+          ),
+        ],
+      );
+      await container.read(downloadsProvider.future);
+      await waitIdle();
+      final result = await repository.listForItem(source.id, 'book');
+      expect(result.first.status, DownloadStatus.done.value);
+      expect(result.last.status, DownloadStatus.paused.value);
+      expect(source.requested, ['interrupted']);
+    },
+  );
+
+  test('scheduled Retry-After does not hot-loop or block other jobs and exhaustion pauses', () async {
+    final source = TransientQueueSource();
+    await setup([source.entry()]);
+    await enqueue(source.id, ['retry', 'other']);
+    final rows = await repository.listForItem(source.id, 'book');
+    final retry = rows.firstWhere((row) => row.chapterRemoteId == 'retry');
+    final other = rows.firstWhere((row) => row.chapterRemoteId == 'other');
+    final controller = container.read(downloadsProvider.notifier);
+    Future<DownloadRow> waitStatus(int id, String status) async {
+      for (var count = 0; count < 200; count++) {
+        final row = (await repository.rowById(id))!;
+        if (row.status == status) return row;
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      fail('row did not reach $status');
+    }
+
+    await controller.resume();
+    await waitStatus(other.id, 'done');
+    final waiting = await waitStatus(retry.id, 'queued');
+    expect(waiting.retryCount, 1);
+    expect(waiting.retryAt!.isAfter(DateTime.now()), isTrue);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(source.requested, ['retry', 'other']);
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      await (db.update(
+        db.downloads,
+      )..where((row) => row.id.equals(retry.id))).write(
+        DownloadsCompanion(
+          retryAt: Value(DateTime.now().subtract(const Duration(seconds: 1))),
+        ),
+      );
+      await controller.resume();
+      await waitUntil(() => source.requested.length >= attempt + 2);
+      final after = await waitStatus(
+        retry.id,
+        attempt == 3 ? 'paused' : 'queued',
+      );
+      expect(after.retryCount, attempt == 3 ? 3 : attempt + 1);
+    }
+    expect((await repository.rowById(retry.id))!.errorMessage, contains('上限'));
+    await controller.resumeEntry(retry.id);
+    await waitUntil(() => source.requested.length == 6);
+    final manuallyRetried = await waitStatus(retry.id, 'queued');
+    expect(
+      manuallyRetried.retryCount,
+      1,
+      reason: 'explicit manual retry resets the bounded attempt budget',
+    );
+    await controller.pauseEntry(retry.id);
+    expect((await repository.rowById(retry.id))!.status, 'paused');
+  });
+
+  test('individual cancel invalidates a captured queued snapshot before deleting its index', () async {
+    final source = QueueSource('race');
+    late PendingPauseBarrierRepository gate;
+    await setup([
+      source.entry(),
+    ], repositoryFactory: (db) => gate = PendingPauseBarrierRepository(db));
+    await enqueue(source.id, ['chapter']);
+    final row = (await repository.listForItem(source.id, 'book')).single;
+    final controller = container.read(downloadsProvider.notifier);
+    final registry = container.read(sourcesProvider.notifier) as QueueSources;
+    await controller.resume();
+    await gate.captured.future;
+    registry.loading();
+    try {
+      final cancellation = controller.cancelEntry(row.id);
+      await gate.pauseStarted.future;
+      gate.releaseSnapshot.complete();
+      // A stale snapshot must be discarded, not acquire an unobserved task
+      // ownership barrier while source loading is stalled.
+      await gate.secondRead.future.timeout(const Duration(seconds: 2));
+      gate.releasePause.complete();
+      await cancellation;
+      registry.replace([source.entry()]);
+      await controller.resume();
+      await waitIdle();
+      expect(source.requested, isEmpty);
+      expect(await repository.grouped(), isEmpty);
+      expect(await Directory('${documents.path}/downloads').exists(), isFalse);
+    } finally {
+      if (!gate.releaseSnapshot.isCompleted) gate.releaseSnapshot.complete();
+      if (!gate.releasePause.isCompleted) gate.releasePause.complete();
+      registry.replace([source.entry()]);
+    }
+  });
+
+  test('disabling Wi-Fi-only wakes the existing waiting queue without a second resume action', () async {
+    final source = QueueSource('wifi-policy');
+    late WifiQueueService wifi;
+    await setup([
+      source.entry(),
+    ], serviceFactory: (repository) => wifi = WifiQueueService(repository));
+    await wifi.setWifiOnly(true);
+    await enqueue(source.id, ['chapter']);
+    final controller = container.read(downloadsProvider.notifier);
+    await controller.resume();
+    await waitUntil(() => wifi.probes > 0);
+    expect(source.requested, isEmpty);
+    await controller.setWifiOnly(false);
+    await waitIdle();
+    expect(source.requested, ['chapter']);
+    expect((await repository.grouped()).single.doneCount, 1);
+  });
+
+  test('enabling Wi-Fi-only interrupts active IO and leaves an automatically resumable queue', () async {
+    final source = QueueSource('wifi-active')
+      ..first = Completer<ChapterContent>();
+    late WifiQueueService wifi;
+    await setup([
+      source.entry(),
+    ], serviceFactory: (repository) => wifi = WifiQueueService(repository));
+    await enqueue(source.id, ['chapter']);
+    final controller = container.read(downloadsProvider.notifier);
+    await controller.resume();
+    await waitUntil(() => source.requested.isNotEmpty);
+    final changingPolicy = controller.setWifiOnly(true);
+    await waitUntil(() => wifi.probes > 0);
+    source.first!.complete(const ChapterContent(text: 'late pre-policy body'));
+    await changingPolicy;
+    final row = (await repository.listForItem(source.id, 'book')).single;
+    for (var attempt = 0; attempt < 200; attempt++) {
+      if ((await repository.rowById(row.id))!.status == 'queued') break;
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    expect(source.requested, ['chapter']);
+    expect((await repository.rowById(row.id))!.status, 'queued');
+    expect(await repository.doneChapterIds(source.id, 'book'), isEmpty);
+    await controller.setWifiOnly(false);
+    await waitIdle();
+    expect(source.requested, ['chapter', 'chapter']);
+    expect((await repository.grouped()).single.doneCount, 1);
+  });
+
+  test(
+    'waiting Wi-Fi queue automatically continues after connectivity returns',
+    () async {
+      final source = QueueSource('wifi-return');
+      late WifiQueueService wifi;
+      await setup([
+        source.entry(),
+      ], serviceFactory: (repository) => wifi = WifiQueueService(repository));
+      await wifi.setWifiOnly(true);
+      await enqueue(source.id, ['chapter']);
+      await container.read(downloadsProvider.notifier).resume();
+      await waitUntil(() => wifi.probes > 0);
+      wifi.connected = true;
+      await Future<void>.delayed(const Duration(milliseconds: 5200));
+      await waitIdle();
+      expect(source.requested, ['chapter']);
+      expect((await repository.grouped()).single.doneCount, 1);
+    },
+  );
+
+  for (final action in ['entry', 'failed', 'paused', 'enqueue']) {
+    test(
+      '$action ready mutation invalidates retryAt captured before a gated Wi-Fi probe',
+      () async {
+        final source = QueueSource('ready-$action');
+        late WifiQueueService wifi;
+        await setup([
+          source.entry(),
+        ], serviceFactory: (repository) => wifi = WifiQueueService(repository));
+        wifi.connected = true;
+        await wifi.setWifiOnly(true);
+        await enqueue(
+          source.id,
+          action == 'failed' || action == 'paused'
+              ? ['delayed', 'fresh']
+              : ['delayed'],
+        );
+        final rows = await repository.listForItem(source.id, 'book');
+        final delayed = rows.firstWhere(
+          (row) => row.chapterRemoteId == 'delayed',
+        );
+        await repository.markRunning(delayed.id);
+        await repository.scheduleRetry(
+          delayed.id,
+          count: 1,
+          at: DateTime.now().add(const Duration(hours: 1)),
+          message: 'server delay',
+        );
+        if (action == 'failed') {
+          await repository.markFailed(
+            rows.firstWhere((row) => row.chapterRemoteId == 'fresh').id,
+            'failed',
+          );
+        } else if (action == 'paused') {
+          await repository.markPaused(
+            rows.firstWhere((row) => row.chapterRemoteId == 'fresh').id,
+          );
+        }
+        final gate = wifi.nextProbe = Completer<bool>();
+        wifi.probeStarted = Completer<void>();
+        final controller = container.read(downloadsProvider.notifier);
+        await controller.resume();
+        await wifi.probeStarted!.future;
+        try {
+          switch (action) {
+            case 'entry':
+              await controller.resumeEntry(delayed.id);
+            case 'failed':
+              await controller.retryFailed(type: MediaType.novel);
+            case 'paused':
+              await controller.resumePaused(type: MediaType.novel);
+            case 'enqueue':
+              await controller.enqueue(
+                item: MediaItem(
+                  sourceId: source.id,
+                  remoteId: 'book',
+                  title: 'Book',
+                  type: MediaType.novel,
+                ),
+                chapters: [
+                  for (final id in ['delayed', 'fresh'])
+                    Chapter(sourceId: source.id, remoteId: id, title: id),
+                ],
+                selectedChapterIds: {'fresh'},
+              );
+          }
+          gate.complete(true);
+          final expected = action == 'entry' ? 'delayed' : 'fresh';
+          await waitUntil(() => source.requested.contains(expected));
+          final completed = (await repository.listForItem(
+            source.id,
+            'book',
+          )).firstWhere((row) => row.chapterRemoteId == expected);
+          for (var attempt = 0; attempt < 200; attempt++) {
+            if ((await repository.rowById(completed.id))!.status == 'done') {
+              break;
+            }
+            await Future<void>.delayed(const Duration(milliseconds: 5));
+          }
+          expect((await repository.rowById(completed.id))!.status, 'done');
+          expect(source.requested, [
+            expected,
+          ], reason: 'manual wake must not retain the old one-hour timer');
+        } finally {
+          if (!gate.isCompleted) gate.complete(true);
+          await controller.pauseAll();
+        }
+      },
+    );
+  }
 }

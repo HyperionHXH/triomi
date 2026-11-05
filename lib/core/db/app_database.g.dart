@@ -4079,6 +4079,99 @@ class $DownloadsTable extends Downloads
     requiredDuringInsert: false,
     defaultValue: const Constant<double>(0),
   );
+  static const VerificationMeta _queuePositionMeta = const VerificationMeta(
+    'queuePosition',
+  );
+  @override
+  late final GeneratedColumn<int> queuePosition = GeneratedColumn<int>(
+    'queue_position',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _retryCountMeta = const VerificationMeta(
+    'retryCount',
+  );
+  @override
+  late final GeneratedColumn<int> retryCount = GeneratedColumn<int>(
+    'retry_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _retryAtMeta = const VerificationMeta(
+    'retryAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> retryAt = GeneratedColumn<DateTime>(
+    'retry_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _receivedBytesMeta = const VerificationMeta(
+    'receivedBytes',
+  );
+  @override
+  late final GeneratedColumn<int> receivedBytes = GeneratedColumn<int>(
+    'received_bytes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _totalBytesMeta = const VerificationMeta(
+    'totalBytes',
+  );
+  @override
+  late final GeneratedColumn<int> totalBytes = GeneratedColumn<int>(
+    'total_bytes',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _completedPagesMeta = const VerificationMeta(
+    'completedPages',
+  );
+  @override
+  late final GeneratedColumn<int> completedPages = GeneratedColumn<int>(
+    'completed_pages',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _totalPagesMeta = const VerificationMeta(
+    'totalPages',
+  );
+  @override
+  late final GeneratedColumn<int> totalPages = GeneratedColumn<int>(
+    'total_pages',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _speedBytesPerSecondMeta =
+      const VerificationMeta('speedBytesPerSecond');
+  @override
+  late final GeneratedColumn<double> speedBytesPerSecond =
+      GeneratedColumn<double>(
+        'speed_bytes_per_second',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant<double>(0),
+      );
   static const VerificationMeta _pathMeta = const VerificationMeta('path');
   @override
   late final GeneratedColumn<String> path = GeneratedColumn<String>(
@@ -4130,6 +4223,14 @@ class $DownloadsTable extends Downloads
     chapterRemoteId,
     status,
     progress,
+    queuePosition,
+    retryCount,
+    retryAt,
+    receivedBytes,
+    totalBytes,
+    completedPages,
+    totalPages,
+    speedBytesPerSecond,
     path,
     errorMessage,
     createdAt,
@@ -4202,6 +4303,66 @@ class $DownloadsTable extends Downloads
         progress.isAcceptableOrUnknown(data['progress']!, _progressMeta),
       );
     }
+    if (data.containsKey('queue_position')) {
+      context.handle(
+        _queuePositionMeta,
+        queuePosition.isAcceptableOrUnknown(
+          data['queue_position']!,
+          _queuePositionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('retry_count')) {
+      context.handle(
+        _retryCountMeta,
+        retryCount.isAcceptableOrUnknown(data['retry_count']!, _retryCountMeta),
+      );
+    }
+    if (data.containsKey('retry_at')) {
+      context.handle(
+        _retryAtMeta,
+        retryAt.isAcceptableOrUnknown(data['retry_at']!, _retryAtMeta),
+      );
+    }
+    if (data.containsKey('received_bytes')) {
+      context.handle(
+        _receivedBytesMeta,
+        receivedBytes.isAcceptableOrUnknown(
+          data['received_bytes']!,
+          _receivedBytesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('total_bytes')) {
+      context.handle(
+        _totalBytesMeta,
+        totalBytes.isAcceptableOrUnknown(data['total_bytes']!, _totalBytesMeta),
+      );
+    }
+    if (data.containsKey('completed_pages')) {
+      context.handle(
+        _completedPagesMeta,
+        completedPages.isAcceptableOrUnknown(
+          data['completed_pages']!,
+          _completedPagesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('total_pages')) {
+      context.handle(
+        _totalPagesMeta,
+        totalPages.isAcceptableOrUnknown(data['total_pages']!, _totalPagesMeta),
+      );
+    }
+    if (data.containsKey('speed_bytes_per_second')) {
+      context.handle(
+        _speedBytesPerSecondMeta,
+        speedBytesPerSecond.isAcceptableOrUnknown(
+          data['speed_bytes_per_second']!,
+          _speedBytesPerSecondMeta,
+        ),
+      );
+    }
     if (data.containsKey('path')) {
       context.handle(
         _pathMeta,
@@ -4268,6 +4429,38 @@ class $DownloadsTable extends Downloads
         DriftSqlType.double,
         data['${effectivePrefix}progress'],
       )!,
+      queuePosition: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}queue_position'],
+      )!,
+      retryCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}retry_count'],
+      )!,
+      retryAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}retry_at'],
+      ),
+      receivedBytes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}received_bytes'],
+      )!,
+      totalBytes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}total_bytes'],
+      ),
+      completedPages: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}completed_pages'],
+      )!,
+      totalPages: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}total_pages'],
+      ),
+      speedBytesPerSecond: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}speed_bytes_per_second'],
+      )!,
       path: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}path'],
@@ -4303,6 +4496,16 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
   /// queued / running / done / failed。
   final String status;
   final double progress;
+
+  /// Persistent next-task order. A running task is never preempted by reordering.
+  final int queuePosition;
+  final int retryCount;
+  final DateTime? retryAt;
+  final int receivedBytes;
+  final int? totalBytes;
+  final int completedPages;
+  final int? totalPages;
+  final double speedBytesPerSecond;
   final String? path;
   final String? errorMessage;
   final DateTime createdAt;
@@ -4315,6 +4518,14 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
     required this.chapterRemoteId,
     required this.status,
     required this.progress,
+    required this.queuePosition,
+    required this.retryCount,
+    this.retryAt,
+    required this.receivedBytes,
+    this.totalBytes,
+    required this.completedPages,
+    this.totalPages,
+    required this.speedBytesPerSecond,
     this.path,
     this.errorMessage,
     required this.createdAt,
@@ -4330,6 +4541,20 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
     map['chapter_remote_id'] = Variable<String>(chapterRemoteId);
     map['status'] = Variable<String>(status);
     map['progress'] = Variable<double>(progress);
+    map['queue_position'] = Variable<int>(queuePosition);
+    map['retry_count'] = Variable<int>(retryCount);
+    if (!nullToAbsent || retryAt != null) {
+      map['retry_at'] = Variable<DateTime>(retryAt);
+    }
+    map['received_bytes'] = Variable<int>(receivedBytes);
+    if (!nullToAbsent || totalBytes != null) {
+      map['total_bytes'] = Variable<int>(totalBytes);
+    }
+    map['completed_pages'] = Variable<int>(completedPages);
+    if (!nullToAbsent || totalPages != null) {
+      map['total_pages'] = Variable<int>(totalPages);
+    }
+    map['speed_bytes_per_second'] = Variable<double>(speedBytesPerSecond);
     if (!nullToAbsent || path != null) {
       map['path'] = Variable<String>(path);
     }
@@ -4352,6 +4577,20 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       chapterRemoteId: Value(chapterRemoteId),
       status: Value(status),
       progress: Value(progress),
+      queuePosition: Value(queuePosition),
+      retryCount: Value(retryCount),
+      retryAt: retryAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(retryAt),
+      receivedBytes: Value(receivedBytes),
+      totalBytes: totalBytes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(totalBytes),
+      completedPages: Value(completedPages),
+      totalPages: totalPages == null && nullToAbsent
+          ? const Value.absent()
+          : Value(totalPages),
+      speedBytesPerSecond: Value(speedBytesPerSecond),
       path: path == null && nullToAbsent ? const Value.absent() : Value(path),
       errorMessage: errorMessage == null && nullToAbsent
           ? const Value.absent()
@@ -4376,6 +4615,16 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       chapterRemoteId: serializer.fromJson<String>(json['chapterRemoteId']),
       status: serializer.fromJson<String>(json['status']),
       progress: serializer.fromJson<double>(json['progress']),
+      queuePosition: serializer.fromJson<int>(json['queuePosition']),
+      retryCount: serializer.fromJson<int>(json['retryCount']),
+      retryAt: serializer.fromJson<DateTime?>(json['retryAt']),
+      receivedBytes: serializer.fromJson<int>(json['receivedBytes']),
+      totalBytes: serializer.fromJson<int?>(json['totalBytes']),
+      completedPages: serializer.fromJson<int>(json['completedPages']),
+      totalPages: serializer.fromJson<int?>(json['totalPages']),
+      speedBytesPerSecond: serializer.fromJson<double>(
+        json['speedBytesPerSecond'],
+      ),
       path: serializer.fromJson<String?>(json['path']),
       errorMessage: serializer.fromJson<String?>(json['errorMessage']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -4393,6 +4642,14 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       'chapterRemoteId': serializer.toJson<String>(chapterRemoteId),
       'status': serializer.toJson<String>(status),
       'progress': serializer.toJson<double>(progress),
+      'queuePosition': serializer.toJson<int>(queuePosition),
+      'retryCount': serializer.toJson<int>(retryCount),
+      'retryAt': serializer.toJson<DateTime?>(retryAt),
+      'receivedBytes': serializer.toJson<int>(receivedBytes),
+      'totalBytes': serializer.toJson<int?>(totalBytes),
+      'completedPages': serializer.toJson<int>(completedPages),
+      'totalPages': serializer.toJson<int?>(totalPages),
+      'speedBytesPerSecond': serializer.toJson<double>(speedBytesPerSecond),
       'path': serializer.toJson<String?>(path),
       'errorMessage': serializer.toJson<String?>(errorMessage),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -4408,6 +4665,14 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
     String? chapterRemoteId,
     String? status,
     double? progress,
+    int? queuePosition,
+    int? retryCount,
+    Value<DateTime?> retryAt = const Value.absent(),
+    int? receivedBytes,
+    Value<int?> totalBytes = const Value.absent(),
+    int? completedPages,
+    Value<int?> totalPages = const Value.absent(),
+    double? speedBytesPerSecond,
     Value<String?> path = const Value.absent(),
     Value<String?> errorMessage = const Value.absent(),
     DateTime? createdAt,
@@ -4420,6 +4685,14 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
     chapterRemoteId: chapterRemoteId ?? this.chapterRemoteId,
     status: status ?? this.status,
     progress: progress ?? this.progress,
+    queuePosition: queuePosition ?? this.queuePosition,
+    retryCount: retryCount ?? this.retryCount,
+    retryAt: retryAt.present ? retryAt.value : this.retryAt,
+    receivedBytes: receivedBytes ?? this.receivedBytes,
+    totalBytes: totalBytes.present ? totalBytes.value : this.totalBytes,
+    completedPages: completedPages ?? this.completedPages,
+    totalPages: totalPages.present ? totalPages.value : this.totalPages,
+    speedBytesPerSecond: speedBytesPerSecond ?? this.speedBytesPerSecond,
     path: path.present ? path.value : this.path,
     errorMessage: errorMessage.present ? errorMessage.value : this.errorMessage,
     createdAt: createdAt ?? this.createdAt,
@@ -4438,6 +4711,28 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
           : this.chapterRemoteId,
       status: data.status.present ? data.status.value : this.status,
       progress: data.progress.present ? data.progress.value : this.progress,
+      queuePosition: data.queuePosition.present
+          ? data.queuePosition.value
+          : this.queuePosition,
+      retryCount: data.retryCount.present
+          ? data.retryCount.value
+          : this.retryCount,
+      retryAt: data.retryAt.present ? data.retryAt.value : this.retryAt,
+      receivedBytes: data.receivedBytes.present
+          ? data.receivedBytes.value
+          : this.receivedBytes,
+      totalBytes: data.totalBytes.present
+          ? data.totalBytes.value
+          : this.totalBytes,
+      completedPages: data.completedPages.present
+          ? data.completedPages.value
+          : this.completedPages,
+      totalPages: data.totalPages.present
+          ? data.totalPages.value
+          : this.totalPages,
+      speedBytesPerSecond: data.speedBytesPerSecond.present
+          ? data.speedBytesPerSecond.value
+          : this.speedBytesPerSecond,
       path: data.path.present ? data.path.value : this.path,
       errorMessage: data.errorMessage.present
           ? data.errorMessage.value
@@ -4459,6 +4754,14 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
           ..write('chapterRemoteId: $chapterRemoteId, ')
           ..write('status: $status, ')
           ..write('progress: $progress, ')
+          ..write('queuePosition: $queuePosition, ')
+          ..write('retryCount: $retryCount, ')
+          ..write('retryAt: $retryAt, ')
+          ..write('receivedBytes: $receivedBytes, ')
+          ..write('totalBytes: $totalBytes, ')
+          ..write('completedPages: $completedPages, ')
+          ..write('totalPages: $totalPages, ')
+          ..write('speedBytesPerSecond: $speedBytesPerSecond, ')
           ..write('path: $path, ')
           ..write('errorMessage: $errorMessage, ')
           ..write('createdAt: $createdAt, ')
@@ -4476,6 +4779,14 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
     chapterRemoteId,
     status,
     progress,
+    queuePosition,
+    retryCount,
+    retryAt,
+    receivedBytes,
+    totalBytes,
+    completedPages,
+    totalPages,
+    speedBytesPerSecond,
     path,
     errorMessage,
     createdAt,
@@ -4492,6 +4803,14 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
           other.chapterRemoteId == this.chapterRemoteId &&
           other.status == this.status &&
           other.progress == this.progress &&
+          other.queuePosition == this.queuePosition &&
+          other.retryCount == this.retryCount &&
+          other.retryAt == this.retryAt &&
+          other.receivedBytes == this.receivedBytes &&
+          other.totalBytes == this.totalBytes &&
+          other.completedPages == this.completedPages &&
+          other.totalPages == this.totalPages &&
+          other.speedBytesPerSecond == this.speedBytesPerSecond &&
           other.path == this.path &&
           other.errorMessage == this.errorMessage &&
           other.createdAt == this.createdAt &&
@@ -4506,6 +4825,14 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
   final Value<String> chapterRemoteId;
   final Value<String> status;
   final Value<double> progress;
+  final Value<int> queuePosition;
+  final Value<int> retryCount;
+  final Value<DateTime?> retryAt;
+  final Value<int> receivedBytes;
+  final Value<int?> totalBytes;
+  final Value<int> completedPages;
+  final Value<int?> totalPages;
+  final Value<double> speedBytesPerSecond;
   final Value<String?> path;
   final Value<String?> errorMessage;
   final Value<DateTime> createdAt;
@@ -4518,6 +4845,14 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     this.chapterRemoteId = const Value.absent(),
     this.status = const Value.absent(),
     this.progress = const Value.absent(),
+    this.queuePosition = const Value.absent(),
+    this.retryCount = const Value.absent(),
+    this.retryAt = const Value.absent(),
+    this.receivedBytes = const Value.absent(),
+    this.totalBytes = const Value.absent(),
+    this.completedPages = const Value.absent(),
+    this.totalPages = const Value.absent(),
+    this.speedBytesPerSecond = const Value.absent(),
     this.path = const Value.absent(),
     this.errorMessage = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -4531,6 +4866,14 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     required String chapterRemoteId,
     required String status,
     this.progress = const Value.absent(),
+    this.queuePosition = const Value.absent(),
+    this.retryCount = const Value.absent(),
+    this.retryAt = const Value.absent(),
+    this.receivedBytes = const Value.absent(),
+    this.totalBytes = const Value.absent(),
+    this.completedPages = const Value.absent(),
+    this.totalPages = const Value.absent(),
+    this.speedBytesPerSecond = const Value.absent(),
     this.path = const Value.absent(),
     this.errorMessage = const Value.absent(),
     required DateTime createdAt,
@@ -4549,6 +4892,14 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     Expression<String>? chapterRemoteId,
     Expression<String>? status,
     Expression<double>? progress,
+    Expression<int>? queuePosition,
+    Expression<int>? retryCount,
+    Expression<DateTime>? retryAt,
+    Expression<int>? receivedBytes,
+    Expression<int>? totalBytes,
+    Expression<int>? completedPages,
+    Expression<int>? totalPages,
+    Expression<double>? speedBytesPerSecond,
     Expression<String>? path,
     Expression<String>? errorMessage,
     Expression<DateTime>? createdAt,
@@ -4562,6 +4913,15 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
       if (chapterRemoteId != null) 'chapter_remote_id': chapterRemoteId,
       if (status != null) 'status': status,
       if (progress != null) 'progress': progress,
+      if (queuePosition != null) 'queue_position': queuePosition,
+      if (retryCount != null) 'retry_count': retryCount,
+      if (retryAt != null) 'retry_at': retryAt,
+      if (receivedBytes != null) 'received_bytes': receivedBytes,
+      if (totalBytes != null) 'total_bytes': totalBytes,
+      if (completedPages != null) 'completed_pages': completedPages,
+      if (totalPages != null) 'total_pages': totalPages,
+      if (speedBytesPerSecond != null)
+        'speed_bytes_per_second': speedBytesPerSecond,
       if (path != null) 'path': path,
       if (errorMessage != null) 'error_message': errorMessage,
       if (createdAt != null) 'created_at': createdAt,
@@ -4577,6 +4937,14 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     Value<String>? chapterRemoteId,
     Value<String>? status,
     Value<double>? progress,
+    Value<int>? queuePosition,
+    Value<int>? retryCount,
+    Value<DateTime?>? retryAt,
+    Value<int>? receivedBytes,
+    Value<int?>? totalBytes,
+    Value<int>? completedPages,
+    Value<int?>? totalPages,
+    Value<double>? speedBytesPerSecond,
     Value<String?>? path,
     Value<String?>? errorMessage,
     Value<DateTime>? createdAt,
@@ -4590,6 +4958,14 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
       chapterRemoteId: chapterRemoteId ?? this.chapterRemoteId,
       status: status ?? this.status,
       progress: progress ?? this.progress,
+      queuePosition: queuePosition ?? this.queuePosition,
+      retryCount: retryCount ?? this.retryCount,
+      retryAt: retryAt ?? this.retryAt,
+      receivedBytes: receivedBytes ?? this.receivedBytes,
+      totalBytes: totalBytes ?? this.totalBytes,
+      completedPages: completedPages ?? this.completedPages,
+      totalPages: totalPages ?? this.totalPages,
+      speedBytesPerSecond: speedBytesPerSecond ?? this.speedBytesPerSecond,
       path: path ?? this.path,
       errorMessage: errorMessage ?? this.errorMessage,
       createdAt: createdAt ?? this.createdAt,
@@ -4621,6 +4997,32 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     if (progress.present) {
       map['progress'] = Variable<double>(progress.value);
     }
+    if (queuePosition.present) {
+      map['queue_position'] = Variable<int>(queuePosition.value);
+    }
+    if (retryCount.present) {
+      map['retry_count'] = Variable<int>(retryCount.value);
+    }
+    if (retryAt.present) {
+      map['retry_at'] = Variable<DateTime>(retryAt.value);
+    }
+    if (receivedBytes.present) {
+      map['received_bytes'] = Variable<int>(receivedBytes.value);
+    }
+    if (totalBytes.present) {
+      map['total_bytes'] = Variable<int>(totalBytes.value);
+    }
+    if (completedPages.present) {
+      map['completed_pages'] = Variable<int>(completedPages.value);
+    }
+    if (totalPages.present) {
+      map['total_pages'] = Variable<int>(totalPages.value);
+    }
+    if (speedBytesPerSecond.present) {
+      map['speed_bytes_per_second'] = Variable<double>(
+        speedBytesPerSecond.value,
+      );
+    }
     if (path.present) {
       map['path'] = Variable<String>(path.value);
     }
@@ -4646,6 +5048,14 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
           ..write('chapterRemoteId: $chapterRemoteId, ')
           ..write('status: $status, ')
           ..write('progress: $progress, ')
+          ..write('queuePosition: $queuePosition, ')
+          ..write('retryCount: $retryCount, ')
+          ..write('retryAt: $retryAt, ')
+          ..write('receivedBytes: $receivedBytes, ')
+          ..write('totalBytes: $totalBytes, ')
+          ..write('completedPages: $completedPages, ')
+          ..write('totalPages: $totalPages, ')
+          ..write('speedBytesPerSecond: $speedBytesPerSecond, ')
           ..write('path: $path, ')
           ..write('errorMessage: $errorMessage, ')
           ..write('createdAt: $createdAt, ')
@@ -10192,6 +10602,14 @@ typedef $$DownloadsTableCreateCompanionBuilder = DownloadsCompanion Function({
   required String chapterRemoteId,
   required String status,
   Value<double> progress,
+  Value<int> queuePosition,
+  Value<int> retryCount,
+  Value<DateTime?> retryAt,
+  Value<int> receivedBytes,
+  Value<int?> totalBytes,
+  Value<int> completedPages,
+  Value<int?> totalPages,
+  Value<double> speedBytesPerSecond,
   Value<String?> path,
   Value<String?> errorMessage,
   required DateTime createdAt,
@@ -10205,6 +10623,14 @@ typedef $$DownloadsTableUpdateCompanionBuilder = DownloadsCompanion Function({
   Value<String> chapterRemoteId,
   Value<String> status,
   Value<double> progress,
+  Value<int> queuePosition,
+  Value<int> retryCount,
+  Value<DateTime?> retryAt,
+  Value<int> receivedBytes,
+  Value<int?> totalBytes,
+  Value<int> completedPages,
+  Value<int?> totalPages,
+  Value<double> speedBytesPerSecond,
   Value<String?> path,
   Value<String?> errorMessage,
   Value<DateTime> createdAt,
@@ -10252,6 +10678,46 @@ class $$DownloadsTableFilterComposer
 
   ColumnFilters<double> get progress => $composableBuilder(
     column: $table.progress,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get queuePosition => $composableBuilder(
+    column: $table.queuePosition,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get retryAt => $composableBuilder(
+    column: $table.retryAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get receivedBytes => $composableBuilder(
+    column: $table.receivedBytes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get totalBytes => $composableBuilder(
+    column: $table.totalBytes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get completedPages => $composableBuilder(
+    column: $table.completedPages,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get totalPages => $composableBuilder(
+    column: $table.totalPages,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get speedBytesPerSecond => $composableBuilder(
+    column: $table.speedBytesPerSecond,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10320,6 +10786,46 @@ class $$DownloadsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get queuePosition => $composableBuilder(
+    column: $table.queuePosition,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get retryAt => $composableBuilder(
+    column: $table.retryAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get receivedBytes => $composableBuilder(
+    column: $table.receivedBytes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get totalBytes => $composableBuilder(
+    column: $table.totalBytes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get completedPages => $composableBuilder(
+    column: $table.completedPages,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get totalPages => $composableBuilder(
+    column: $table.totalPages,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get speedBytesPerSecond => $composableBuilder(
+    column: $table.speedBytesPerSecond,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get path => $composableBuilder(
     column: $table.path,
     builder: (column) => ColumnOrderings(column),
@@ -10374,6 +10880,44 @@ class $$DownloadsTableAnnotationComposer
 
   GeneratedColumn<double> get progress =>
       $composableBuilder(column: $table.progress, builder: (column) => column);
+
+  GeneratedColumn<int> get queuePosition => $composableBuilder(
+    column: $table.queuePosition,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get retryAt =>
+      $composableBuilder(column: $table.retryAt, builder: (column) => column);
+
+  GeneratedColumn<int> get receivedBytes => $composableBuilder(
+    column: $table.receivedBytes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get totalBytes => $composableBuilder(
+    column: $table.totalBytes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get completedPages => $composableBuilder(
+    column: $table.completedPages,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get totalPages => $composableBuilder(
+    column: $table.totalPages,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get speedBytesPerSecond => $composableBuilder(
+    column: $table.speedBytesPerSecond,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get path =>
       $composableBuilder(column: $table.path, builder: (column) => column);
@@ -10430,6 +10974,14 @@ class $$DownloadsTableTableManager
                 Value<String> chapterRemoteId = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<double> progress = const Value.absent(),
+                Value<int> queuePosition = const Value.absent(),
+                Value<int> retryCount = const Value.absent(),
+                Value<DateTime?> retryAt = const Value.absent(),
+                Value<int> receivedBytes = const Value.absent(),
+                Value<int?> totalBytes = const Value.absent(),
+                Value<int> completedPages = const Value.absent(),
+                Value<int?> totalPages = const Value.absent(),
+                Value<double> speedBytesPerSecond = const Value.absent(),
                 Value<String?> path = const Value.absent(),
                 Value<String?> errorMessage = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -10442,6 +10994,14 @@ class $$DownloadsTableTableManager
                 chapterRemoteId: chapterRemoteId,
                 status: status,
                 progress: progress,
+                queuePosition: queuePosition,
+                retryCount: retryCount,
+                retryAt: retryAt,
+                receivedBytes: receivedBytes,
+                totalBytes: totalBytes,
+                completedPages: completedPages,
+                totalPages: totalPages,
+                speedBytesPerSecond: speedBytesPerSecond,
                 path: path,
                 errorMessage: errorMessage,
                 createdAt: createdAt,
@@ -10456,6 +11016,14 @@ class $$DownloadsTableTableManager
                 required String chapterRemoteId,
                 required String status,
                 Value<double> progress = const Value.absent(),
+                Value<int> queuePosition = const Value.absent(),
+                Value<int> retryCount = const Value.absent(),
+                Value<DateTime?> retryAt = const Value.absent(),
+                Value<int> receivedBytes = const Value.absent(),
+                Value<int?> totalBytes = const Value.absent(),
+                Value<int> completedPages = const Value.absent(),
+                Value<int?> totalPages = const Value.absent(),
+                Value<double> speedBytesPerSecond = const Value.absent(),
                 Value<String?> path = const Value.absent(),
                 Value<String?> errorMessage = const Value.absent(),
                 required DateTime createdAt,
@@ -10468,6 +11036,14 @@ class $$DownloadsTableTableManager
                 chapterRemoteId: chapterRemoteId,
                 status: status,
                 progress: progress,
+                queuePosition: queuePosition,
+                retryCount: retryCount,
+                retryAt: retryAt,
+                receivedBytes: receivedBytes,
+                totalBytes: totalBytes,
+                completedPages: completedPages,
+                totalPages: totalPages,
+                speedBytesPerSecond: speedBytesPerSecond,
                 path: path,
                 errorMessage: errorMessage,
                 createdAt: createdAt,

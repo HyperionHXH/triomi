@@ -8,6 +8,7 @@ import 'package:dio/io.dart';
 import 'bangumi_ech_adapter.dart';
 import 'bangumi_route_policy.dart';
 import 'lk_tls_socket.dart';
+import 'owned_http_adapter.dart';
 import 'system_proxy_adapter.dart';
 
 // Only built-in novel-site hosts use this fallback. TLS still authenticates the
@@ -53,18 +54,26 @@ void configureSourceHttpAdapter(
 
   // Explicit application settings take precedence over the user's OS route.
   // VPN routing stays in the OS; Wi-Fi/PAC settings use the platform bridge.
-  dio.httpClientAdapter =
-      proxy.isEmpty && (Platform.isWindows || Platform.isAndroid || Platform.isIOS)
-      ? SystemProxyHttpClientAdapter(createClient: createClient)
-      : IOHttpClientAdapter(createHttpClient: createClient);
-  if (bangumiRoutes.mirrorEnabled || bangumiRoutesResolver != null) {
-    dio.httpClientAdapter = BangumiEchAdapter(
-      fallback: dio.httpClientAdapter,
-      policy: bangumiRoutes,
-      policyResolver: bangumiRoutesResolver,
-      explicitProxy: proxy,
-    );
+  HttpClientAdapter createAdapter() {
+    final HttpClientAdapter adapter =
+        proxy.isEmpty &&
+            (Platform.isWindows || Platform.isAndroid || Platform.isIOS)
+        ? SystemProxyHttpClientAdapter(createClient: createClient)
+        : IOHttpClientAdapter(createHttpClient: createClient);
+    return bangumiRoutes.mirrorEnabled || bangumiRoutesResolver != null
+        ? BangumiEchAdapter(
+            fallback: adapter,
+            policy: bangumiRoutes,
+            policyResolver: bangumiRoutesResolver,
+            explicitProxy: proxy,
+          )
+        : adapter;
   }
+
+  dio.httpClientAdapter = OwnedHttpClientAdapter(
+    shared: createAdapter(),
+    create: createAdapter,
+  );
 }
 
 /// Each attempt owns its TCP/TLS socket until it is handed to HttpClient.
