@@ -417,7 +417,7 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
         setState(() {
           _failed = false;
           _status =
-              '完整备份合并完成：作品 ${summary.items}、书架 ${summary.libraryEntries}、历史 ${summary.historyEntries}、目录 ${summary.cachedChapters}、规则 ${summary.sourceRules}（停用）';
+              '完整备份合并完成：作品 ${summary.items}、书架 ${summary.libraryEntries}、历史 ${summary.historyEntries}、目录 ${summary.cachedChapters}、规则 ${summary.sourceRules}（停用）、不兼容规则 ${summary.unsupportedSourceRules}（未恢复代码，请从目录安装）';
         });
       }
     } catch (error) {

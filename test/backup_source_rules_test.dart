@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/backup/backup_restore_preview.dart';
 import 'package:triomi/core/backup/backup_service.dart';
+import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/source_repository.dart';
@@ -43,7 +45,8 @@ void main() {
     );
     addTearDown(original.dispose);
     await original.importFromText(
-      jsRuleText(script: 'throw new Error("must stay disabled");').replaceFirst('"type":', '"nsfw": true, "type":'),
+      jsRuleText(script: 'throw new Error("must stay disabled");')
+          .replaceFirst('"type":', '"nsfw": true, "type":'),
     );
     await original.importFromText(
       '''{"id":"plain","name":"Plain","type":"manga","version":"1","baseUrl":"https://example.test","search":{"url":"/search?q={keyword}","list":".item","fields":{"title":".title","remoteId":"a@href"}}}''',
@@ -97,7 +100,13 @@ void main() {
     final snapshot = await registry.load();
     expect(snapshot.failures, isEmpty);
     expect(snapshot.enabledEntries, isEmpty);
-    expect(snapshot.entries.singleWhere((entry) => entry.descriptor.id == 'js-source').descriptor.nsfw, isTrue);
+    expect(
+      snapshot.entries
+          .singleWhere((entry) => entry.descriptor.id == 'js-source')
+          .descriptor
+          .nsfw,
+      isTrue,
+    );
     expect(
       (await SourceRepository(target).byId(kazumiDescriptor.id))!.ruleText,
       kazumi,
@@ -122,7 +131,133 @@ void main() {
     );
   });
 
-  for (final invalid in ['identity', 'duplicate', 'cookie', 'url']) {
+  test('unsupported host rules remain metadata while compatible rules restore disabled and local rules win', () async {
+    final source = openTestDatabase(), target = openTestDatabase();
+    addTearDown(source.close);
+    addTearDown(target.close);
+    final http = FakeHttpClient(
+      (_) async => throw StateError('No network expected'),
+    );
+    String text(String id, String feature) {
+      final rule = jsonDecode(
+        jsRuleText(script: 'throw new Error("must not execute");'),
+      ) as Map<String, dynamic>;
+      rule['id'] = id;
+      rule['requiresHost'] = [feature];
+      return jsonEncode(rule);
+    }
+
+    final sourceRepository = SourceRepository(source);
+    for (final id in ['future', 'compatible', 'local']) {
+      await sourceRepository.upsert(
+        id: id,
+        name: id,
+        type: MediaType.manga,
+        kind: SourceKind.plugin,
+        ruleText: text(
+          id,
+          id == 'compatible'
+              ? 'picacomic.account.v3'
+              : 'picacomic.account.v999',
+        ),
+      );
+    }
+    await source
+        .into(source.mediaItems)
+        .insert(
+          MediaItemsCompanion.insert(
+            sourceId: 'future',
+            remoteId: 'book',
+            type: MediaType.manga,
+            title: 'Kept book',
+          ),
+        );
+    await source
+        .into(source.libraryEntries)
+        .insert(
+          LibraryEntriesCompanion.insert(
+            sourceId: 'future',
+            remoteId: 'book',
+            type: MediaType.manga,
+            progress: const Value(7),
+            addedAt: DateTime.utc(2026),
+            updatedAt: DateTime.utc(2026),
+          ),
+        );
+    await source
+        .into(source.histories)
+        .insert(
+          HistoriesCompanion.insert(
+            sourceId: 'future',
+            remoteId: 'book',
+            chapterSourceId: 'future',
+            chapterRemoteId: 'chapter',
+            position: const Value(3),
+            visitedAt: DateTime.utc(2026),
+          ),
+        );
+    final localText = text('local', 'picacomic.account.v3');
+    final targetRepository = SourceRepository(target);
+    await targetRepository.upsert(
+      id: 'local',
+      name: 'Current local rule',
+      type: MediaType.manga,
+      kind: SourceKind.plugin,
+      ruleText: localText,
+      enabled: true,
+    );
+    final backup = await BackupService(
+      database: source,
+      preferences: memoryPreferences(),
+      http: http,
+    ).exportToFile(includeCovers: false, includeSourceRules: true);
+    final preview = await previewBackupRestoreFile(target, backup.path);
+    expect(preview.incomingSourceRules, 1);
+    expect(preview.unsupportedSourceRules, 1);
+    expect(preview.keptSourceRules, 1);
+    final importer = BackupService(
+      database: target,
+      preferences: memoryPreferences(),
+      http: http,
+    );
+    final defaultImport = await importer.importFromFile(backup.path);
+    expect(defaultImport.sourceRules, 0);
+    expect((await targetRepository.byId('future'))!.ruleText, isNull);
+    expect((await targetRepository.byId('compatible'))!.ruleText, isNull);
+    final restored = await importer.importFromFile(
+      backup.path,
+      options: const BackupRestoreOptions(restoreSourceRules: true),
+    );
+    expect(restored.sourceRules, 1);
+    expect(restored.unsupportedSourceRules, 1);
+    final future = (await targetRepository.byId('future'))!;
+    expect(future.ruleText, isNull);
+    expect(future.enabled, false);
+    final compatible = (await targetRepository.byId('compatible'))!;
+    expect(compatible.ruleText, contains('picacomic.account.v3'));
+    expect(compatible.enabled, false);
+    final local = (await targetRepository.byId('local'))!;
+    expect(local.ruleText, localText);
+    expect(local.enabled, true);
+    expect(
+      (await target.select(target.mediaItems).get()).single.title,
+      'Kept book',
+    );
+    expect(
+      (await target.select(target.libraryEntries).get()).single.progress,
+      7,
+    );
+    expect((await target.select(target.histories).get()).single.position, 3);
+    expect(http.requests, isEmpty);
+  });
+
+  for (final invalid in [
+    'identity',
+    'duplicate',
+    'cookie',
+    'url',
+    'requiresHost',
+  ]) {
     test(
       'rejects $invalid rules before settings or database mutation',
       () async {
@@ -137,6 +272,9 @@ void main() {
         }
         if (invalid == 'url') {
           rule['baseUrl'] = 'https://example.test/?token=fixture-private';
+        }
+        if (invalid == 'requiresHost') {
+          rule['requiresHost'] = ['invalid feature'];
         }
         final definition = {'id': 'js-source', 'ruleText': jsonEncode(rule)};
         final payload = {

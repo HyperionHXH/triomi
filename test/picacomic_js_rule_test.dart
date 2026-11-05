@@ -165,6 +165,119 @@ void main() {
     ); // Native login only.
   });
 
+  sourceRuleTest(
+    'Pica large catalogs fetch one page for discovery, favourites and search',
+    () async {
+      final http = api((request) async {
+        final page = int.parse(Uri.parse(request.url).queryParameters['page']!);
+        return ok({
+          'comics': {
+            'page': page,
+            'pages': 10000,
+            'docs': [comic()],
+          },
+        });
+      });
+      final source = await prepare(http);
+      for (final page in [1, 10000]) {
+        for (final feed in source.feeds.where(
+          (feed) => feed.id == 'newest' || feed.id == 'favourite',
+        )) {
+          final before = http.requests.length;
+          expect(await source.discover(feed, page: page), hasLength(1));
+          expect(http.requests.length - before, 1);
+        }
+        final before = http.requests.length;
+        expect(await source.search('fixture', page: page), hasLength(1));
+        expect(http.requests.length - before, 1);
+      }
+    },
+  );
+
+  for (final data in [
+    {'page': 1, 'pages': -1, 'docs': <Object?>[]},
+    {'page': 1, 'pages': 1.5, 'docs': <Object?>[]},
+    {'page': 1, 'pages': 9007199254740992, 'docs': <Object?>[]},
+    {'page': '1', 'pages': 10000, 'docs': <Object?>[]},
+    {'page': 2, 'pages': 10000, 'docs': <Object?>[]},
+    {
+      'page': 1,
+      'pages': 0,
+      'docs': [comic()],
+    },
+  ]) {
+    sourceRuleTest(
+      'Pica malformed catalog pagination fails without another request: ${jsonEncode(data)}',
+      () async {
+        final http = api((_) async => ok({'comics': data}));
+        final source = await prepare(http);
+        await expectLater(
+          source.discover(source.feeds.first),
+          throwsA(isA<SourceException>()),
+        );
+        expect(http.requests, hasLength(2)); // Login and one list page.
+      },
+    );
+  }
+
+  sourceRuleTest(
+    'Pica empty and exhausted catalogs remain valid empty pages',
+    () async {
+      var pages = 0;
+      final http = api(
+        (request) async => ok({
+          'comics': {
+            'page': int.parse(Uri.parse(request.url).queryParameters['page']!),
+            'pages': pages,
+            'docs': <Object?>[],
+          },
+        }),
+      );
+      final source = await prepare(http);
+      expect(await source.discover(source.feeds.first), isEmpty);
+      pages = 10000;
+      expect(await source.discover(source.feeds.first, page: 10001), isEmpty);
+    },
+  );
+
+  for (final field in ['eps', 'pages']) {
+    sourceRuleTest(
+      'Pica full $field traversal keeps its 200-request budget',
+      () async {
+        final http = api(
+          (request) async => ok(
+            request.url == '$picaApi/comics/fixture-comic'
+                ? {'comic': comic()}
+                : {
+                    field: {'page': 1, 'pages': 201, 'docs': <Object?>[]},
+                  },
+          ),
+        );
+        final source = await prepare(http);
+        await expectLater(
+          field == 'eps' ? source.chapters(manga) : source.content(chapter),
+          throwsA(isA<SourceException>()),
+        );
+        expect(http.requests, hasLength(field == 'eps' ? 3 : 2));
+      },
+    );
+  }
+
+  sourceRuleTest('Pica full traversal rejects an oversized first page before further requests', () async {
+    final http = api(
+      (_) async => ok({
+        'pages': {
+          'page': 1,
+          'pages': 2,
+          'docs': List.filled(20001, <String, Object?>{}),
+        },
+      }),
+    );
+    final source = await prepare(http);
+    await expectLater(source.content(chapter), throwsA(isA<SourceException>()));
+    expect(http.requests, hasLength(2));
+  });
+
   sourceRuleTest('Pica detail traverses every episode page then orders for the production reader', () async {
     final http = api((request) async {
       if (request.url == '$picaApi/comics/fixture-comic') {

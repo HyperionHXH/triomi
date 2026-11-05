@@ -64,6 +64,7 @@ Future<Widget> harness({
   required Future<List<SourceCatalogEntry>> Function() loader,
   FakeHttpClient? http,
   String? installedVersion,
+  bool metadataOnly = false,
 }) async {
   final db = AppDatabase.forTesting(NativeDatabase.memory());
   final prefs = memoryPreferences();
@@ -74,10 +75,12 @@ Future<Widget> harness({
       type: MediaType.manga,
       kind: SourceKind.plugin,
       version: installedVersion,
-      ruleText: ruleJson.replaceAll(
-        '"version": "1.0.0"',
-        '"version": "$installedVersion"',
-      ),
+      ruleText: metadataOnly
+          ? null
+          : ruleJson.replaceAll(
+              '"version": "1.0.0"',
+              '"version": "$installedVersion"',
+            ),
       enabled: false,
     );
   }
@@ -173,6 +176,36 @@ void main() {
       if (!succeed) expect(find.textContaining('更新失败，已保留原版本'), findsOneWidget);
     });
   }
+
+  testWidgets('restored metadata can reinstall the same catalog version', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      await harness(
+        installedVersion: '1.0.0',
+        metadataOnly: true,
+        loader: () async => [entryOf(id: 'catalog-manga')],
+        http: FakeHttpClient(
+          (request) async =>
+              SourceResponse(statusCode: 200, url: request.url, body: ruleJson),
+        ),
+      ),
+    );
+    await settle(tester, rounds: 10);
+    expect(find.text('安装'), findsOneWidget);
+    expect(find.text('已安装'), findsNothing);
+    await tester.ensureVisible(find.text('安装'));
+    await tester.tap(find.text('安装'));
+    await settle(tester, rounds: 10);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(CatalogSheet)),
+    );
+    final row = await SourceRepository(container.read(databaseProvider))
+        .byId('catalog-manga');
+    expect(row!.ruleText, ruleJson);
+    expect(row.enabled, isFalse);
+    expect(find.text('已安装'), findsOneWidget);
+  });
 
   testWidgets('安装成功：规则入库并显示已安装', (tester) async {
     final http = FakeHttpClient(

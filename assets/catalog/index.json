@@ -58,7 +58,7 @@
       "type": "manga",
       "lang": "zh",
       "nsfw": true,
-      "version": "1.0.3",
+      "version": "1.0.4",
       "url": "asset://assets/rules/picacomic-js.json",
       "capabilities": [
         "discover",

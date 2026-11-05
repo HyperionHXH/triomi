@@ -76,12 +76,15 @@ class SourceRepository {
     required String version,
     required String ruleText,
     required String repoUrl,
+    bool allowMetadataPlaceholder = false,
   }) => _db.transaction(() async {
     final current = await byId(id);
     if (current != expected) {
       throw StateError('来源在更新期间发生了变更，请刷新后重试');
     }
-    if (current != null && (current.type != type || current.ruleText == null)) {
+    if (current != null &&
+        (current.type != type ||
+            (current.ruleText == null && !allowMetadataPlaceholder))) {
       throw StateError('不能替换内置适配器或改变来源类型');
     }
     await upsert(

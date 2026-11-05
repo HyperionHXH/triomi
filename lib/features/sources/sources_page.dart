@@ -283,7 +283,12 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                         onToggle: (value) => ref
                             .read(sourcesProvider.notifier)
                             .setEnabled(entry.descriptor.id, enabled: value),
-                        onDelete: () => _confirmDelete(entry),
+                        onDelete: entry.canRemove && !_busy
+                            ? () => _confirmDelete(
+                                entry.descriptor.id,
+                                entry.descriptor.name,
+                              )
+                            : null,
                         onAccount: entry.source is AccountProvider
                             ? () => _showAccountSheet(entry)
                             : null,
@@ -317,9 +322,15 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                                 }
                               }
                             : entry.enabled && entry.source is PicacomicJsSource
-                            ? () => showPicacomicSettingsSheet(context, entry.source as PicacomicJsSource)
+                            ? () => showPicacomicSettingsSheet(
+                                context,
+                                entry.source as PicacomicJsSource,
+                              )
                             : entry.enabled && entry.source is CopyMangaJsSource
-                            ? () => showCopyMangaSettingsSheet(context, entry.source as CopyMangaJsSource)
+                            ? () => showCopyMangaSettingsSheet(
+                                context,
+                                entry.source as CopyMangaJsSource,
+                              )
                             : entry.enabled &&
                                   entry.source is JsSource &&
                                   supportsMangaDexDataSaver(
@@ -330,7 +341,12 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                             : null,
                       ),
                     for (final failure in failures)
-                      _FailureTile(failure: failure),
+                      _FailureTile(
+                        failure: failure,
+                        onDelete: failure.canRemove && !_busy
+                            ? () => _confirmDelete(failure.id, failure.name)
+                            : null,
+                      ),
                   ],
                 );
               },
@@ -689,12 +705,16 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
     passwordController.dispose();
   }
 
-  Future<void> _confirmDelete(SourceEntry entry) async {
+  Future<void> _confirmDelete(String id, String name) async {
+    if (_busy) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('移除来源'),
-        content: Text('确定要移除「${entry.descriptor.name}」吗？书架里来自该源的内容将无法继续更新。'),
+        content: Text(
+          '确定要移除「$name」吗？仅移除来源定义，书架、阅读记录和已下载内容保留。'
+          '重新安装同一来源后可继续在线更新。',
+        ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -707,10 +727,16 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
         ],
       ),
     );
-    if (confirmed != true) return;
-    await ref.read(sourcesProvider.notifier).remove(entry.descriptor.id);
-    if (!mounted) return;
-    _toast('已移除「${entry.descriptor.name}」');
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(sourcesProvider.notifier).remove(id);
+      if (mounted) _toast('已移除「$name」');
+    } catch (error) {
+      if (mounted) _toast('移除来源失败：$error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _showImportSheet() => showModalBottomSheet<void>(
@@ -851,7 +877,7 @@ class _SourceTile extends StatelessWidget {
 
   final SourceEntry entry;
   final ValueChanged<bool> onToggle;
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
 
   /// 有账号能力的来源显示「账号」入口（登录 / 登出）。
   final VoidCallback? onAccount;
@@ -943,32 +969,39 @@ class _SourceTile extends StatelessWidget {
                       icon: const Icon(Icons.person_outline, size: 20),
                       label: const Text('站点账号'),
                     ),
-                  PopupMenuButton<String>(
-                    tooltip: '${descriptor.name}更多操作',
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'session':
-                          onWebSession?.call();
-                        case 'settings':
-                          onSettings?.call();
-                        case 'remove':
-                          onDelete();
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      if (onSettings != null)
-                        const PopupMenuItem(
-                          value: 'settings',
-                          child: Text('来源设置'),
-                        ),
-                      if (onWebSession != null)
-                        const PopupMenuItem(
-                          value: 'session',
-                          child: Text('打开站点与验证'),
-                        ),
-                      const PopupMenuItem(value: 'remove', child: Text('移除来源')),
-                    ],
-                  ),
+                  if (onDelete != null ||
+                      onSettings != null ||
+                      onWebSession != null)
+                    PopupMenuButton<String>(
+                      tooltip: '${descriptor.name}更多操作',
+                      onSelected: (value) {
+                        switch (value) {
+                          case 'session':
+                            onWebSession?.call();
+                          case 'settings':
+                            onSettings?.call();
+                          case 'remove':
+                            onDelete?.call();
+                        }
+                      },
+                      itemBuilder: (_) => [
+                        if (onSettings != null)
+                          const PopupMenuItem(
+                            value: 'settings',
+                            child: Text('来源设置'),
+                          ),
+                        if (onWebSession != null)
+                          const PopupMenuItem(
+                            value: 'session',
+                            child: Text('打开站点与验证'),
+                          ),
+                        if (onDelete != null)
+                          const PopupMenuItem(
+                            value: 'remove',
+                            child: Text('移除来源'),
+                          ),
+                      ],
+                    ),
                 ],
               ),
             ],
@@ -981,9 +1014,10 @@ class _SourceTile extends StatelessWidget {
 }
 
 class _FailureTile extends StatelessWidget {
-  const _FailureTile({required this.failure});
+  const _FailureTile({required this.failure, this.onDelete});
 
   final SourceFailure failure;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -994,6 +1028,13 @@ class _FailureTile extends StatelessWidget {
         vertical: AppSpacing.xxs,
       ),
       leading: Icon(Icons.error_outline, color: theme.colorScheme.error),
+      trailing: onDelete == null
+          ? null
+          : IconButton(
+              tooltip: '移除来源 ${failure.name}',
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline),
+            ),
       onTap: failure.id.startsWith('mihon:')
           ? () => Navigator.push(
               context,

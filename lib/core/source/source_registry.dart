@@ -36,9 +36,12 @@ class SourceEntry {
     required this.enabled,
     this.ruleText,
     this.repoUrl,
+    bool? canRemove,
     // Keep the public descriptor: argument while exposing live JS capabilities.
     // ignore: prefer_initializing_formals
-  }) : _descriptor = descriptor;
+  }) : _descriptor = descriptor,
+       // ignore: prefer_initializing_formals
+       _canRemove = canRemove;
 
   final SourceDescriptor _descriptor;
   SourceDescriptor get descriptor => source is JsSource && source.isReady
@@ -48,8 +51,10 @@ class SourceEntry {
   final bool enabled;
   final String? ruleText;
   final String? repoUrl;
+  final bool? _canRemove;
 
   bool get isBuiltin => descriptor.kind == SourceKind.builtin;
+  bool get canRemove => _canRemove ?? (!isBuiltin || ruleText != null);
 
   bool supports(SourceCapability capability) => descriptor.supports(capability);
 }
@@ -66,6 +71,7 @@ class SourceFailure {
     this.lang = '',
     this.type,
     this.nsfw,
+    this.canRemove = true,
   });
 
   final String id;
@@ -74,6 +80,7 @@ class SourceFailure {
   final String lang;
   final MediaType? type;
   final bool? nsfw;
+  final bool canRemove;
 }
 
 /// 一次注册表加载的完整结果。
@@ -247,6 +254,7 @@ class SourceRegistry {
               descriptor: adapter.descriptor.copyWith(kind: row.kind),
               source: adapter,
               enabled: row.enabled,
+              canRemove: false,
             ),
           );
           continue;
@@ -257,10 +265,8 @@ class SourceRegistry {
             name: row.name,
             lang: row.lang,
             type: row.type,
-            // 这句话会显示在来源管理页（前缀「规则无法加载：」）。旧文案是
-            // 「内置适配器尚未实现（M4 落地 LK / LNS）」——M4 早已落地，留着只会
-            // 误导用户，这里改说真实原因：这行记录既没有规则文本，也不是内置来源。
-            message: '这条记录没有规则文本，也不属于内置来源（多为旧版本残留），删除后重新添加即可',
+            canRemove: !builtinAdapters.containsKey(row.id),
+            message: '仅有来源信息，尚未安装规则；请从来源目录安装兼容版本，也可移除此记录。书架与下载保留。',
           ),
         );
         continue;
@@ -280,6 +286,7 @@ class SourceRegistry {
               enabled: row.enabled,
               ruleText: text,
               repoUrl: row.repoUrl,
+              canRemove: !builtinAdapters.containsKey(row.id),
             ),
           );
           continue;
@@ -301,6 +308,7 @@ class SourceRegistry {
               enabled: row.enabled,
               ruleText: text,
               repoUrl: row.repoUrl,
+              canRemove: !builtinAdapters.containsKey(row.id),
             ),
           );
           continue;
@@ -320,6 +328,7 @@ class SourceRegistry {
             enabled: row.enabled,
             ruleText: text,
             repoUrl: row.repoUrl,
+            canRemove: !builtinAdapters.containsKey(row.id),
           ),
         );
       } on RuleFormatException catch (error) {
@@ -331,6 +340,7 @@ class SourceRegistry {
             lang: metadata?.lang ?? row.lang,
             type: row.type,
             nsfw: metadata?.nsfw,
+            canRemove: !builtinAdapters.containsKey(row.id),
           ),
         );
       } on SourceException catch (error) {
@@ -342,6 +352,7 @@ class SourceRegistry {
             lang: metadata?.lang ?? row.lang,
             type: row.type,
             nsfw: metadata?.nsfw,
+            canRemove: !builtinAdapters.containsKey(row.id),
           ),
         );
       } catch (error) {
@@ -353,6 +364,7 @@ class SourceRegistry {
             lang: metadata?.lang ?? row.lang,
             type: row.type,
             nsfw: metadata?.nsfw,
+            canRemove: !builtinAdapters.containsKey(row.id),
           ),
         );
       }
@@ -478,7 +490,13 @@ class SourceRegistry {
     if (!enabled) _scripts.remove(id)?.instance.dispose();
   }
 
-  Future<void> remove(String id) => repository.remove(id);
+  Future<void> remove(String id) async {
+    if (builtinAdapters.containsKey(id)) {
+      throw StateError('内置来源不能移除，可以停用');
+    }
+    await repository.remove(id);
+    _scripts.remove(id)?.instance.dispose();
+  }
 
   /// 把来源异常转换成可直接展示的文案（区分是哪个源出的问题）。
   static String describeError(SourceException error, String sourceName) =>

@@ -414,7 +414,8 @@ final _installedIdsProvider = Provider<Map<String, String?>>((ref) {
   final snapshot = ref.watch(sourcesProvider).value;
   return <String, String?>{
     for (final entry in snapshot?.entries ?? const <SourceEntry>[])
-      entry.descriptor.id: entry.descriptor.version,
+      if (entry.ruleText != null || !entry.canRemove)
+        entry.descriptor.id: entry.descriptor.version,
   };
 });
 

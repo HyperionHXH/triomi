@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_descriptor.dart';
@@ -275,6 +276,144 @@ void main() {
     },
   );
   test(
+    'removal retires its engine immediately and preserves local content',
+    () async {
+      final db = openTestDatabase();
+      addTearDown(db.close);
+      final repository = SourceRepository(db);
+      final engine = FakeJsRuntime(functions: {'search'});
+      final registry = SourceRegistry(
+        repository: repository,
+        http: FakeHttpClient(
+          (_) async => throw StateError('No network expected'),
+        ),
+        jsRuntimeFactory: () => engine,
+      );
+      addTearDown(registry.dispose);
+      await registry.importFromText(jsRuleText());
+      final active = (await registry.load()).entries.single.source as JsSource;
+      await active.initialize();
+      final now = DateTime.now();
+      await db
+          .into(db.mediaItems)
+          .insert(
+            MediaItemsCompanion.insert(
+              sourceId: 'js-source',
+              remoteId: 'book',
+              type: MediaType.manga,
+              title: 'Book',
+            ),
+          );
+      await db
+          .into(db.libraryEntries)
+          .insert(
+            LibraryEntriesCompanion.insert(
+              sourceId: 'js-source',
+              remoteId: 'book',
+              type: MediaType.manga,
+              addedAt: now,
+              updatedAt: now,
+            ),
+          );
+      await db
+          .into(db.histories)
+          .insert(
+            HistoriesCompanion.insert(
+              sourceId: 'js-source',
+              remoteId: 'book',
+              chapterSourceId: 'js-source',
+              chapterRemoteId: 'chapter',
+              visitedAt: now,
+            ),
+          );
+      await db
+          .into(db.downloads)
+          .insert(
+            DownloadsCompanion.insert(
+              sourceId: 'js-source',
+              remoteId: 'book',
+              chapterSourceId: 'js-source',
+              chapterRemoteId: 'chapter',
+              status: 'done',
+              createdAt: now,
+            ),
+          );
+      await registry.remove('js-source');
+      expect(engine.disposed, true);
+      expect(active.isReady, false);
+      expect(await repository.byId('js-source'), isNull);
+      expect(await db.select(db.mediaItems).get(), hasLength(1));
+      expect(await db.select(db.libraryEntries).get(), hasLength(1));
+      expect(await db.select(db.histories).get(), hasLength(1));
+      expect(await db.select(db.downloads).get(), hasLength(1));
+    },
+  );
+
+  test(
+    'failed database removal preserves the active rule and engine',
+    () async {
+      final db = openTestDatabase();
+      addTearDown(db.close);
+      final repository = _RemovalFailsRepository(db);
+      final engine = FakeJsRuntime(functions: {'search'});
+      final registry = SourceRegistry(
+        repository: repository,
+        http: FakeHttpClient(
+          (_) async => throw StateError('No network expected'),
+        ),
+        jsRuntimeFactory: () => engine,
+      );
+      addTearDown(registry.dispose);
+      await registry.importFromText(jsRuleText());
+      final source = (await registry.load()).entries.single.source as JsSource;
+      await source.initialize();
+      await expectLater(registry.remove('js-source'), throwsStateError);
+      expect(engine.disposed, false);
+      expect(source.isReady, true);
+      expect(await repository.byId('js-source'), isNotNull);
+    },
+  );
+
+  test('native adapters cannot be removed through the registry', () async {
+    final db = openTestDatabase();
+    addTearDown(db.close);
+    final repository = SourceRepository(db);
+    final registry = SourceRegistry(
+      repository: repository,
+      http: FakeHttpClient(
+        (_) async => throw StateError('No network expected'),
+      ),
+      builtinAdapters: {'native': _NativeSource()},
+    );
+    addTearDown(registry.dispose);
+    await repository.upsert(
+      id: 'native',
+      name: 'Native',
+      type: MediaType.novel,
+      kind: SourceKind.builtin,
+    );
+    expect((await registry.load()).entries.single.canRemove, false);
+    await expectLater(registry.remove('native'), throwsStateError);
+    expect(await repository.byId('native'), isNotNull);
+  });
+  test('removed bundled rule is not seeded again', () async {
+    final db = openTestDatabase();
+    addTearDown(db.close);
+    final repository = SourceRepository(db);
+    final registry = SourceRegistry(
+      repository: repository,
+      http: FakeHttpClient(
+        (_) async => throw StateError('No network expected'),
+      ),
+    );
+    addTearDown(registry.dispose);
+    final seeded = await registry.seedBuiltins(alreadySeeded: {});
+    expect(await repository.byId('mangadex'), isNotNull);
+    await registry.remove('mangadex');
+    await registry.seedBuiltins(alreadySeeded: seeded);
+    expect(await repository.byId('mangadex'), isNull);
+  });
+  test(
     'changing JS to invalid or declarative rules retires the engine',
     () async {
       final db = openTestDatabase();
@@ -318,6 +457,24 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(engines.last.disposed, true);
     },
+  );
+}
+
+class _RemovalFailsRepository extends SourceRepository {
+  _RemovalFailsRepository(super.database);
+
+  @override
+  Future<void> remove(String id) =>
+      Future.error(StateError('Database removal rejected'));
+}
+
+class _NativeSource extends ContentSource {
+  @override
+  SourceDescriptor get descriptor => const SourceDescriptor(
+    id: 'native',
+    name: 'Native',
+    type: MediaType.novel,
+    kind: SourceKind.builtin,
   );
 }
 

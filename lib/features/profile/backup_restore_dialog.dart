@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/backup/backup_restore_preview.dart';
@@ -33,17 +34,23 @@ Future<BackupRestoreOptions?> confirmBackupRestore(
                 '分模块书架设置：补充 ${preview.incomingScopedLibrarySettings} 项；保留本机 ${preview.keptScopedLibrarySettings} 项。',
               ),
               const Divider(height: 24),
-              if (preview.incomingSourceRules + preview.keptSourceRules >
+              if (preview.incomingSourceRules +
+                      preview.keptSourceRules +
+                      preview.unsupportedSourceRules >
                   0) ...[
                 Text(
                   '规则定义：可新增/补全 ${preview.incomingSourceRules} 个；'
                   '已有规则或内置身份保留 ${preview.keptSourceRules} 个。',
                 ),
+                if (preview.unsupportedSourceRules > 0)
+                  Text(
+                    '另有 ${preview.unsupportedSourceRules} 个规则需要当前应用不支持的原生能力，代码不会恢复；书架和阅读记录仍可恢复，请从来源目录安装兼容版本。',
+                  ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('恢复规则定义（保持停用）'),
                   subtitle: const Text(
-                    '默认不恢复代码；仅可信备份才开启。JSON/JS/Kazumi静态校验后入库，已有规则与原生内置身份不覆盖；不导入发布者信任，之后需在来源管理中手动启用。',
+                    '默认不恢复代码，建议从来源目录重新安装兼容版本；旧备份不会替换本机已有规则。仅可信备份才开启，兼容的JSON/JS/Kazumi静态校验后保持停用，不导入发布者信任。',
                   ),
                   value: restoreSourceRules,
                   onChanged: preview.incomingSourceRules == 0
@@ -56,17 +63,20 @@ Future<BackupRestoreOptions?> confirmBackupRestore(
                 Text(
                   'APK 包：可新增暂存 ${preview.incomingApkPackages} 个；保留本机 ${preview.keptApkPackages} 个。',
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('暂存APK包（不加载、不导入信任）'),
-                  subtitle: const Text(
-                    '默认关闭；支持签名验证的平台重新验证实际包名、版本、签名和文件哈希，其他平台仅校验字节且不可执行。需到来源管理逐包确认身份后才可加载；降级、换签名和同版本异内容拒绝。',
+                if (defaultTargetPlatform == TargetPlatform.iOS)
+                  const Text('iOS不能运行APK扩展，本次不恢复APK包；漫画来源请从JS / API来源目录安装。')
+                else
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('暂存APK包（不加载、不导入信任）'),
+                    subtitle: const Text(
+                      '默认关闭；支持签名验证的平台重新验证实际包名、版本、签名和文件哈希，其他平台仅校验字节且不可执行。需到来源管理逐包确认身份后才可加载；降级、换签名和同版本异内容拒绝。',
+                    ),
+                    value: restoreApkPackages,
+                    onChanged: preview.incomingApkPackages == 0
+                        ? null
+                        : (value) => setState(() => restoreApkPackages = value),
                   ),
-                  value: restoreApkPackages,
-                  onChanged: preview.incomingApkPackages == 0
-                      ? null
-                      : (value) => setState(() => restoreApkPackages = value),
-                ),
               ],
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,

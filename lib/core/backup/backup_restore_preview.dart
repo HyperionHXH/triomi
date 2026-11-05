@@ -16,6 +16,7 @@ class BackupRestorePreview {
     required this.byteHash,
     this.incomingSourceRules = 0,
     this.keptSourceRules = 0,
+    this.unsupportedSourceRules = 0,
     this.incomingApkPackages = 0,
     this.keptApkPackages = 0,
     this.downloadedMedia = 0,
@@ -28,6 +29,7 @@ class BackupRestorePreview {
   final int incomingWins, localWins, equalTimestampConflicts;
   final String byteHash;
   final int incomingSourceRules, keptSourceRules;
+  final int unsupportedSourceRules;
   final int incomingApkPackages, keptApkPackages;
   final int downloadedMedia, partialDownloads;
   final int incomingCategories, keptCategories;
@@ -91,13 +93,20 @@ Future<BackupRestorePreview> _previewPayload(
       apkCounts == null) {
     throw const FormatException('含APK的备份必须从本地文件静态验证后预览');
   }
-  var incomingRules = 0, keptRules = 0;
+  var incomingRules = 0, keptRules = 0, unsupportedRules = 0;
   for (final entry in BackupService.sourceRulesOf(payload).entries) {
     final existing = await (db.select(
       db.sources,
     )..where((t) => t.id.equals(entry.key))).getSingleOrNull();
     if (BackupService.canRestoreSourceRule(existing, entry.value.descriptor)) {
-      incomingRules++;
+      if (BackupService.supportsSourceRule(
+        entry.key,
+        entry.value.requiresHost,
+      )) {
+        incomingRules++;
+      } else {
+        unsupportedRules++;
+      }
     } else {
       keptRules++;
     }
@@ -176,6 +185,7 @@ Future<BackupRestorePreview> _previewPayload(
     byteHash: hash,
     incomingSourceRules: incomingRules,
     keptSourceRules: keptRules,
+    unsupportedSourceRules: unsupportedRules,
     incomingApkPackages: apkCounts?.available ?? 0,
     keptApkPackages: apkCounts?.protected ?? 0,
     downloadedMedia: payload['downloadedMedia'] as int? ?? 0,

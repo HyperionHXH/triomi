@@ -35,8 +35,14 @@ class CatalogInstaller {
       available: hostFeatures,
     );
     final old = await registry.repository.byId(entry.id);
+    if (registry.builtinAdapters.containsKey(entry.id)) {
+      throw StateError('不能替换应用内置适配器');
+    }
+    // A backup's metadata has no installed executable version to downgrade.
+    final metadataOnly = old != null && old.ruleText == null;
     final oldVersion = CatalogVersion.tryParse(old?.version ?? '');
     if (old != null &&
+        !metadataOnly &&
         (oldVersion == null || !entry.version.isNewerThan(oldVersion))) {
       throw StateError('仅允许升级到比已安装版本更新的有效版本');
     }
@@ -120,6 +126,7 @@ class CatalogInstaller {
       version: descriptor.version!,
       ruleText: text,
       repoUrl: entry.url,
+      allowMetadataPlaceholder: metadataOnly,
     );
     return descriptor;
   }

@@ -88,6 +88,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   '打包书架、阅读进度、历史、目录缓存与设置，并带上封面图。'
+                  '默认不包含插件代码或APK；来源身份用于关联书架，恢复后可从来源目录重新安装。'
                   '凭据类设置（密码 / token）不会写入备份。',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
@@ -95,24 +96,26 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('同时备份规则定义'),
                   subtitle: const Text(
-                    '仅本次本地导出，默认关闭；包括JSON/JS/Kazumi原文，不含APK包或发布者信任。规则代码可能含私人信息，导出前需确认。',
+                    '仅本次本地导出，默认关闭；包括JSON/JS/Kazumi原文。旧规则不保证适配新版本，恢复不会替换本机规则；建议从来源目录安装兼容版本。不含APK包或发布者信任，代码可能含私人信息。',
                   ),
                   value: _includeSourceRules,
                   onChanged: _busy
                       ? null
                       : (value) => setState(() => _includeSourceRules = value),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('同时备份APK包'),
-                  subtitle: const Text(
-                    '仅本次本地导出，默认关闭；含已安装或待确认的包文件与签名身份，不含发布者信任。恢复只暂存，加载前逐包确认。',
+                if (!Platform.isIOS)
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('同时备份APK包'),
+                    subtitle: const Text(
+                      '仅本次本地导出，默认关闭；含已安装或待确认的包文件与签名身份，不含发布者信任。恢复只暂存，加载前逐包确认。',
+                    ),
+                    value: _includeApkPackages,
+                    onChanged: _busy
+                        ? null
+                        : (value) =>
+                              setState(() => _includeApkPackages = value),
                   ),
-                  value: _includeApkPackages,
-                  onChanged: _busy
-                      ? null
-                      : (value) => setState(() => _includeApkPackages = value),
-                ),
                 const SizedBox(height: AppSpacing.sm),
                 FilledButton.icon(
                   onPressed: _busy ? null : () => _export(includeCovers: true),
@@ -174,7 +177,9 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                         : '联网检查追番更新并通知；默认关闭，开启后需要通知权限，仅在 WiFi 下检查。',
                   ),
                   value: _backgroundCheck,
-                  onChanged: _busy || Platform.isIOS ? null : _toggleBackgroundCheck,
+                  onChanged: _busy || Platform.isIOS
+                      ? null
+                      : _toggleBackgroundCheck,
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 ListTile(
@@ -508,7 +513,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
             '导入完成：作品 ${summary.items}、书架 ${summary.libraryEntries}、'
             '历史 ${summary.historyEntries}、目录 ${summary.cachedChapters}、'
             '封面 ${summary.covers}、完整媒体 ${summary.downloadedMedia}、部分下载 ${summary.partialDownloads}（暂停）、'
-            '规则 ${summary.sourceRules}（停用）、APK ${summary.apkPackages}（待确认）、设置 ${summary.settings}';
+            '规则 ${summary.sourceRules}（停用）、不兼容规则 ${summary.unsupportedSourceRules}（未恢复代码，请从目录安装）、APK ${summary.apkPackages}（待确认）、设置 ${summary.settings}';
       });
     } catch (error) {
       if (mounted) setState(() => _status = '导入失败：$error');

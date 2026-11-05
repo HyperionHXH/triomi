@@ -13,6 +13,7 @@ import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
 import '../platform/platform_channel.dart';
 import '../source/catalog_installer.dart';
+import '../source/host_features.dart';
 import '../source/http_client.dart';
 import '../source/kazumi_source.dart';
 import '../source/rule_schema.dart';
@@ -42,6 +43,7 @@ class BackupSummary {
     this.partialDownloads = 0,
     this.apkPackages = 0,
     this.sourceRules = 0,
+    this.unsupportedSourceRules = 0,
   });
 
   final int items;
@@ -54,6 +56,7 @@ class BackupSummary {
   final int partialDownloads;
   final int apkPackages;
   final int sourceRules;
+  final int unsupportedSourceRules;
   final DateTime exportedAt;
 
   /// 本地备份包路径（从文件导入或导出后回填）。
@@ -882,6 +885,7 @@ class BackupService {
     ApkBackupFiles.validatePayload(payload['apkPackages']);
     ApkRestoreTransaction? apkTransaction;
     var restoredRules = 0;
+    var unsupportedRules = 0;
     var libraryCount = 0;
     var historyCount = 0;
     var chapterCount = 0;
@@ -1515,7 +1519,15 @@ class BackupService {
             final existing = await (database.select(
               database.sources,
             )..where((t) => t.id.equals(id))).getSingleOrNull();
-            final rule = options.restoreSourceRules ? rules[id] : null;
+            final candidate = options.restoreSourceRules ? rules[id] : null;
+            final supported =
+                candidate == null ||
+                supportsSourceRule(id, candidate.requiresHost);
+            if (!supported &&
+                canRestoreSourceRule(existing, candidate.descriptor)) {
+              unsupportedRules++;
+            }
+            final rule = supported ? candidate : null;
             if (existing != null) {
               if (rule != null &&
                   canRestoreSourceRule(existing, rule.descriptor)) {
@@ -1680,6 +1692,7 @@ class BackupService {
         partialDownloads: restoredPartial,
         apkPackages: restoredApks,
         sourceRules: restoredRules,
+        unsupportedSourceRules: unsupportedRules,
         exportedAt:
             DateTime.tryParse('${payload['exportedAt'] ?? ''}') ??
             DateTime.now(),
@@ -1696,7 +1709,10 @@ class BackupService {
   }
 
   /// Static validation only: never instantiate or probe a script to review it.
-  static Map<String, ({String text, SourceDescriptor descriptor})>
+  static Map<
+    String,
+    ({String text, SourceDescriptor descriptor, List<String> requiresHost})
+  >
   sourceRulesOf(Map<String, Object?> payload) {
     final raw = payload['sourceRuleDefinitions'];
     if (raw == null) return const {};
@@ -1709,7 +1725,15 @@ class BackupService {
       }
       rows[id] = row;
     }
-    final rules = <String, ({String text, SourceDescriptor descriptor})>{};
+    final rules =
+        <
+          String,
+          ({
+            String text,
+            SourceDescriptor descriptor,
+            List<String> requiresHost,
+          })
+        >{};
     for (final entry in raw) {
       if (entry is! Map ||
           entry['id'] is! String ||
@@ -1734,20 +1758,36 @@ class BackupService {
         throw const FormatException('来源规则包含凭据字段或凭据URL，不能备份/恢复；请先移除凭据');
       }
       final SourceDescriptor descriptor;
+      final List<String> requiresHost;
       try {
-        descriptor = KazumiRule.recognizes(text)
-            ? KazumiRule.parse(text).descriptor
-            : SourceRule.parseMap(decoded).descriptor;
+        if (KazumiRule.recognizes(text)) {
+          descriptor = KazumiRule.parse(text).descriptor;
+          requiresHost = const [];
+        } else {
+          final rule = SourceRule.parseMap(decoded);
+          descriptor = rule.descriptor;
+          requiresHost = rule.requiresHost;
+        }
       } catch (_) {
         throw const FormatException('备份来源规则格式无效；未执行脚本');
       }
       if (descriptor.id != id || descriptor.type.name != row['type']) {
         throw const FormatException('备份规则与来源身份或内容类型不一致');
       }
-      rules[id] = (text: text, descriptor: descriptor);
+      rules[id] = (
+        text: text,
+        descriptor: descriptor,
+        requiresHost: requiresHost,
+      );
     }
     return rules;
   }
+
+  static bool supportsSourceRule(String id, Iterable<String> requiresHost) =>
+      SourceHostFeatures.requiredFor(
+        id,
+        requiresHost,
+      ).difference(SourceHostFeatures.supported).isEmpty;
 
   static bool canRestoreSourceRule(
     SourceRow? existing,

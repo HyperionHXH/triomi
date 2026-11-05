@@ -8,6 +8,7 @@ import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_descriptor.dart';
 import 'package:triomi/core/source/catalog_installer.dart';
 import 'package:triomi/core/source/http_client.dart';
+import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_catalog.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/source_repository.dart';
@@ -30,6 +31,16 @@ class _ChunkedHttp extends FakeHttpClient {
       List.filled(CatalogInstaller.maxBytes, 32),
       [32],
     ]),
+  );
+}
+
+class _NativeAdapter extends ContentSource {
+  @override
+  SourceDescriptor get descriptor => const SourceDescriptor(
+    id: 'upgrade',
+    name: 'Native',
+    type: MediaType.manga,
+    kind: SourceKind.builtin,
   );
 }
 
@@ -120,6 +131,130 @@ void main() {
       expect(CatalogVersion.tryParse(bad), isNull);
     }
   });
+  for (final kind in [SourceKind.plugin, SourceKind.builtin]) {
+    for (final version in ['1.1.0', '9.0.0', 'legacy']) {
+      test(
+        'catalog fills restored $kind metadata with version $version',
+        () async {
+          final db = openTestDatabase();
+          addTearDown(db.close);
+          final repo = SourceRepository(db);
+          await repo.upsert(
+            id: 'upgrade',
+            name: 'Restored metadata',
+            type: MediaType.manga,
+            kind: kind,
+            version: version,
+            enabled: false,
+          );
+          final library = LibraryRepository(db);
+          await library.addToLibrary(
+            const MediaItem(
+              sourceId: 'upgrade',
+              remoteId: 'book',
+              title: 'Kept book',
+              type: MediaType.manga,
+            ),
+          );
+          final shelf = await db.select(db.libraryEntries).get();
+          final registry = SourceRegistry(
+            repository: repo,
+            http: FakeHttpClient(
+              (request) async => SourceResponse(
+                statusCode: 200,
+                url: request.url,
+                body: rule(),
+              ),
+            ),
+          );
+          addTearDown(registry.dispose);
+          await CatalogInstaller(registry).install(entry());
+          final installed = (await repo.byId('upgrade'))!;
+          expect(installed.ruleText, rule());
+          expect(installed.version, '1.1.0');
+          expect(installed.enabled, isFalse);
+          expect(installed.kind, kind);
+          expect(await db.select(db.libraryEntries).get(), shelf);
+          await expectLater(
+            CatalogInstaller(registry).install(entry()),
+            throwsStateError,
+          );
+        },
+      );
+    }
+  }
+
+  test(
+    'metadata completion retains hash, type and concurrent edit checks',
+    () async {
+      final db = openTestDatabase();
+      addTearDown(db.close);
+      final repo = SourceRepository(db);
+      await repo.upsert(
+        id: 'upgrade',
+        name: 'Metadata',
+        type: MediaType.manga,
+        kind: SourceKind.plugin,
+        version: '1.1.0',
+        enabled: false,
+      );
+      final old = await repo.byId('upgrade');
+      final gate = Completer<SourceResponse>();
+      var concurrent = false;
+      final http = FakeHttpClient(
+        (request) async => concurrent
+            ? gate.future
+            : SourceResponse(statusCode: 200, url: request.url, body: rule()),
+      );
+      final registry = SourceRegistry(repository: repo, http: http);
+      addTearDown(registry.dispose);
+      final installer = CatalogInstaller(registry);
+      await expectLater(
+        installer.install(entry(hash: '0' * 64)),
+        throwsStateError,
+      );
+      expect(await repo.byId('upgrade'), old);
+      concurrent = true;
+      final pending = installer.install(entry());
+      final rejected = expectLater(pending, throwsStateError);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await repo.setEnabled('upgrade', enabled: true);
+      gate.complete(SourceResponse(statusCode: 200, body: rule()));
+      await rejected;
+      expect((await repo.byId('upgrade'))!.enabled, isTrue);
+      expect((await repo.byId('upgrade'))!.ruleText, isNull);
+    },
+  );
+
+  test('catalog cannot fill an actual native adapter metadata row', () async {
+    final db = openTestDatabase();
+    addTearDown(db.close);
+    final repo = SourceRepository(db);
+    await repo.upsert(
+      id: 'upgrade',
+      name: 'Native',
+      type: MediaType.manga,
+      kind: SourceKind.builtin,
+      version: '1.0.0',
+    );
+    final old = await repo.byId('upgrade');
+    final http = FakeHttpClient(
+      (_) async => throw StateError('No download allowed'),
+    );
+    final registry = SourceRegistry(
+      repository: repo,
+      http: http,
+      builtinAdapters: {'upgrade': _NativeAdapter()},
+    );
+    addTearDown(registry.dispose);
+    await expectLater(
+      CatalogInstaller(registry).install(entry()),
+      throwsStateError,
+    );
+    expect(await repo.byId('upgrade'), old);
+    expect(http.requests, isEmpty);
+  });
+
   for (final scenario in [
     'success',
     'identity',
