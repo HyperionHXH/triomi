@@ -1,0 +1,16 @@
+name: Check two failed iOS181 endpoints
+on:
+  push:
+    branches: [diagnostic/ios181-connectivity]
+permissions:
+  contents: read
+jobs:
+  connectivity:
+    runs-on: macos-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check original Kuaikan endpoint once
+        run: curl --fail --silent --show-error --connect-timeout 20 --max-time 20 --user-agent 'Triomi/0.1.0' --output /dev/null --write-out 'kuaikan HTTP%{http_code}\n' 'https://api.kkmh.com/v1/search/topic?q=%E6%80%A6%E7%84%B6%E5%BF%83%E5%8A%A8&since=0&size=10'
+      - name: Check original Dongman CDN endpoint once
+        if: always()
+        run: curl --fail --silent --show-error --connect-timeout 20 --max-time 20 --user-agent 'Mozilla/5.0' --referer 'https://www.dongmanmanhua.cn/' --output /dev/null --write-out 'dongman HTTP%{http_code}\n' 'https://cdn.dongmanmanhua.cn/1642470818446195411.jpg'
