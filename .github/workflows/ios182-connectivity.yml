@@ -1,0 +1,13 @@
+name: Check failed iOS182 WNACG endpoint
+on:
+  push:
+    branches: [diagnostic/ios182-connectivity]
+permissions:
+  contents: read
+jobs:
+  connectivity:
+    runs-on: macos-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check original WNACG endpoint once
+        run: curl --fail --silent --show-error --connect-timeout 20 --max-time 20 --user-agent 'Triomi/0.1.0' --output /dev/null --write-out 'wnacg HTTP%{http_code}\n' 'https://www.wnacg.buzz/albums-favorite_ranking-page-1-type-week.html'
