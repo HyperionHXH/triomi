@@ -55,7 +55,7 @@ void main() {
         expect(request.method, 'POST');
         expect(request.followRedirects, false);
         expect(request.contentType, 'application/json; charset=UTF-8');
-        expect(request.headers['authorization'], isNull);
+        expect(request.headers['authorization'], '');
         expect(request.headers['nonce'], matches(RegExp(r'^[a-zA-Z0-9]{32}$')));
         expect(
           request.headers['signature'],
@@ -149,6 +149,61 @@ void main() {
         }
       },
     );
+  }
+
+  for (final fixture in [
+    ('Invalid email or password', SourceErrorType.auth, '账号或密码不匹配'),
+    ('Invalid signature', SourceErrorType.network, '请求校验失败'),
+    ('Invalid API key', SourceErrorType.network, '请求校验失败'),
+    ('Invalid timestamp', SourceErrorType.network, '请求时间校验失败'),
+    ('fixture-private-token', SourceErrorType.network, '未识别的 JSON 错误'),
+  ]) {
+    sourceRuleTest('Pica 400 safely classifies ${fixture.$1}', () async {
+      final adapter = _WireAdapter(
+        (_, _) => ResponseBody.fromString(
+          jsonEncode({
+            'code': 400,
+            'message': fixture.$1,
+            'detail': 'fixture-password fixture-reader fixture-private-token',
+          }),
+          400,
+        ),
+      );
+      final http = _transport(adapter);
+      final store = MemorySecureStore();
+      final client = PicacomicClient(
+        http: http,
+        store: store,
+        fingerprint: 'wire-fixture',
+        quality: () => 'original',
+      );
+      try {
+        await expectLater(
+          client.login('fixture-reader', 'fixture-password'),
+          throwsA(
+            isA<SourceException>()
+                .having((e) => e.type, 'classification', fixture.$2)
+                .having(
+                  (e) => e.message,
+                  'fixed explanation',
+                  contains(fixture.$3),
+                )
+                .having(
+                  (e) => e.toString(),
+                  'no response echo',
+                  isNot(contains('fixture-')),
+                )
+                .having((e) => e.cause, 'no response cause', isNull),
+          ),
+        );
+        expect(adapter.requests, hasLength(1));
+        expect(client.isLoggedIn, false);
+        expect(store.keys, isEmpty);
+      } finally {
+        client.close();
+        http.close();
+      }
+    });
   }
 
   sourceRuleTest('transport preserves case insensitive explicit media types and body defaults', () async {

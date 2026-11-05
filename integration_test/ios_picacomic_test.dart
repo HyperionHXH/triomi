@@ -2,6 +2,7 @@
 import '../test/picacomic_client_test.dart' as picacomic_client;
 import '../test/picacomic_js_rule_test.dart' as picacomic;
 import '../test/picacomic_settings_test.dart' as picacomic_settings;
+import '../test/picacomic_socket_test.dart' as picacomic_socket;
 import '../test/picacomic_wire_test.dart' as picacomic_wire;
 import 'fixtures/ios_test_binding.dart';
 
@@ -11,4 +12,5 @@ void main() {
   picacomic_client.main();
   picacomic_settings.main();
   picacomic_wire.main();
+  picacomic_socket.main();
 }

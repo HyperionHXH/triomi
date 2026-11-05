@@ -146,7 +146,8 @@ class PicacomicClient implements SourceHttpClient {
               nonce,
               method,
             ),
-            'authorization': ?token,
+            // Both reference clients send this header even before login.
+            'authorization': token ?? '',
           },
         ),
         sourceId: 'picacomic',
@@ -172,6 +173,7 @@ class PicacomicClient implements SourceHttpClient {
     if (response.statusCode == 404) {
       throw _error('哔咔内容不存在或已下架', SourceErrorType.notFound);
     }
+    if (response.statusCode == 400) throw _badRequest(response.body);
     if (response.statusCode != 200) {
       throw _error(
         '哔咔接口返回 HTTP ${response.statusCode}',
@@ -189,6 +191,39 @@ class PicacomicClient implements SourceHttpClient {
       // Never include remote bodies in errors; they may contain account state.
     }
     throw _error('哔咔接口响应无效', SourceErrorType.parse);
+  }
+
+  SourceException _badRequest(String body) {
+    // Only fixed explanations leave this boundary. Remote text may echo a
+    // password or token, including in a seemingly harmless error message.
+    if (body.length <= 8192) {
+      try {
+        final data = jsonDecode(body);
+        if (data is Map && data['code'] == 400) {
+          final message = data['message'];
+          switch (message is String ? message.toLowerCase() : null) {
+            case 'invalid email or password':
+              return _error('哔咔账号或密码不匹配（HTTP 400）');
+            case 'invalid signature':
+            case 'invalid api key':
+              return _error(
+                '哔咔请求校验失败（HTTP 400：签名或接口协议）',
+                SourceErrorType.network,
+              );
+            case 'invalid timestamp':
+            case 'request expired':
+              return _error(
+                '哔咔请求时间校验失败（HTTP 400），请检查系统日期和时间',
+                SourceErrorType.network,
+              );
+          }
+        }
+        return _error('哔咔接口返回 HTTP 400（未识别的 JSON 错误）', SourceErrorType.network);
+      } on FormatException {
+        return _error('哔咔接口返回 HTTP 400（非 JSON 错误响应）', SourceErrorType.network);
+      }
+    }
+    return _error('哔咔接口返回 HTTP 400（错误响应过长）', SourceErrorType.network);
   }
 
   Future<void> _authenticate(

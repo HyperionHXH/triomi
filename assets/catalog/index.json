@@ -58,7 +58,7 @@
       "type": "manga",
       "lang": "zh",
       "nsfw": true,
-      "version": "1.0.2",
+      "version": "1.0.3",
       "url": "asset://assets/rules/picacomic-js.json",
       "capabilities": [
         "discover",
@@ -68,7 +68,7 @@
       ],
       "license": "Triomi API 协议适配 / 内容权利归各自权利人",
       "requiresHost": [
-        "picacomic.account.v2"
+        "picacomic.account.v3"
       ]
     },
     {

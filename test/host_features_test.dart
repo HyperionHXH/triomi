@@ -43,6 +43,18 @@ void main() {
     );
     SourceHostFeatures.requireSupported('picacomic', required);
   });
+  test('Pica 1.0.3 requires the reference login header contract', () {
+    const required = ['picacomic.account.v3'];
+    expect(
+      () => SourceHostFeatures.requireSupported(
+        'picacomic',
+        required,
+        available: {'picacomic.account.v1', 'picacomic.account.v2'},
+      ),
+      throwsStateError,
+    );
+    SourceHostFeatures.requireSupported('picacomic', required);
+  });
   for (final invalid in [
     'jmcomic.api.v1',
     [1],

@@ -42,3 +42,15 @@ method bridge, binary script download or proxy server is introduced.
   merely adding an ID to JSON never implements a new source gateway.
 - Synthetic account/image tests and native iOS execution are distinct from real
   user account login and live upstream image acceptance.
+
+## Account contract updates
+
+Host180 added `picacomic.account.v2` to preserve the exact JSON Content-Type
+through Dio. Host181 adds `picacomic.account.v3`: login sends an empty
+Authorization header, matching both independent reference clients, and HTTP400
+responses map only bounded known messages to fixed local explanations. Unknown
+responses remain failures and are never echoed. Pica1.0.3 requires v3; earlier
+contracts remain supported by the new host. Socket fixtures validate actual
+HTTP framing and empty-header preservation, not real upstream account acceptance.
+The reported upstream400 cause is still unconfirmed without its safe response
+classification; protocol conformance alone is not proof of account recovery.

@@ -43,6 +43,10 @@ void main() {
       '9b1d5f9116cd1e5fc640918cd9fc6576eda58fe2b217dbbf94445c61176a495c',
     );
     expect(
+      picaSignature('auth/sign-in', 1700000000, 'abc123', 'POST'),
+      'c8e2e39883c698f808c2c87970ba3e8736420c3f51bf520d2359292075c518c0',
+    );
+    expect(
       picaSignature('comics?page=1&s=dd', 1700000000, 'abc123', 'GET'),
       isNot(picaSignature('comics?page=2&s=dd', 1700000000, 'abc123', 'GET')),
     );
@@ -93,7 +97,7 @@ void main() {
           'email': 'fixture-reader',
           'password': 'fixture-password',
         });
-        expect(request.headers['authorization'], isNull);
+        expect(request.headers['authorization'], '');
         return _ok({'token': 'fixture-private-session'});
       }
       expect(request.headers['authorization'], 'fixture-private-session');
