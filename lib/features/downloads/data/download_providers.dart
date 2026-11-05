@@ -121,8 +121,9 @@ Future<PlaySource> _resolveAndroidVideo(
   } finally {
     cancellation.removeListener(cancel);
   }
-  if (cancellation.isCancelled)
+  if (cancellation.isCancelled) {
     throw VideoResolveCancelled(cancellation.reason);
+  }
   final url = raw?['url'] as String?;
   final headers = raw?['headers'];
   if (url == null || url.isEmpty) throw StateError('网页解析没有返回真实视频地址');

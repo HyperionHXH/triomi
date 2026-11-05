@@ -904,8 +904,9 @@ void main() {
             'book',
           )).firstWhere((row) => row.chapterRemoteId == expected);
           for (var attempt = 0; attempt < 200; attempt++) {
-            if ((await repository.rowById(completed.id))!.status == 'done')
+            if ((await repository.rowById(completed.id))!.status == 'done') {
               break;
+            }
             await Future<void>.delayed(const Duration(milliseconds: 5));
           }
           expect((await repository.rowById(completed.id))!.status, 'done');

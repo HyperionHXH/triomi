@@ -18,16 +18,18 @@ class DownloadRetryPolicy {
     if (error is! SourceException) return false;
     final text = (error.message ?? '').toLowerCase();
     if (RegExp(r'captcha|challenge|cloudflare|登录|登陆|验证|付费|锁定|解锁')
-        .hasMatch(text))
+        .hasMatch(text)) {
       return false;
+    }
     if (error.type != SourceErrorType.network &&
         error.type != SourceErrorType.timeout &&
         error.type != SourceErrorType.rateLimited) {
       return false;
     }
     final status = error.statusCode;
-    if (status != null)
+    if (status != null) {
       return status == 408 || status == 429 || status >= 500 && status <= 599;
+    }
     return true;
   }
 

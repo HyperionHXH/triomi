@@ -129,8 +129,9 @@ class BackupImportSource {
   }
 
   static Future<BackupImportSource> open(String location) async {
-    if (!location.startsWith('content://'))
+    if (!location.startsWith('content://')) {
       return BackupImportSource(path: location, original: location);
+    }
     final path = await backupDocumentsChannel.invokeMethod<String>('stage', {
       'uri': location,
     });

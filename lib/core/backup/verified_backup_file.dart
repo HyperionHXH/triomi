@@ -213,8 +213,9 @@ int _entryLimit(String name) {
       return _maxMediaTextBytes;
     }
     if (_imageExtension.hasMatch(media)) return 64 * 1024 * 1024;
-    if (_mediaExtension.hasMatch(media))
+    if (_mediaExtension.hasMatch(media)) {
       return VersionedWebDavBackup.maxFileSize;
+    }
   }
   throw const FormatException('备份包含未知或无效成员类型');
 }
@@ -400,8 +401,9 @@ Future<List<(ZipFileHeader, int)>> _preflight(File snapshot) async {
     );
     var previousEnd = 0;
     for (final (header, contentOffset) in entries) {
-      if (header.localHeaderOffset < previousEnd)
+      if (header.localHeaderOffset < previousEnd) {
         throw const FormatException('备份ZIP成员重叠');
+      }
       previousEnd = contentOffset + header.compressedSize;
     }
     return entries;

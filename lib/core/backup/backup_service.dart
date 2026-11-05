@@ -287,8 +287,9 @@ class BackupService {
           fileName,
           file.path,
         );
-        if (!documentUri.startsWith('content://'))
+        if (!documentUri.startsWith('content://')) {
           throw StateError('授权目录没有返回有效文件位置');
+        }
         savedPath = documentUri;
         savedToTree = true;
         await file.delete();

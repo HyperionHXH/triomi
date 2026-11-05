@@ -77,8 +77,9 @@ class LocalComicImporter {
     LocalComicCancellation? cancellation,
     void Function(LocalComicProgress)? onProgress,
   }) async {
-    if (title.trim().isEmpty || paths.isEmpty)
+    if (title.trim().isEmpty || paths.isEmpty) {
       throw ArgumentError('请选择本地文件并填写作品名');
+    }
     final token = cancellation ?? LocalComicCancellation();
     final lease = await BackupArtifactGuard.acquireOperation();
     Directory? stage, published;
@@ -96,8 +97,9 @@ class LocalComicImporter {
       Future<File> copy(File file, int limit, String name) async {
         await _regular(file.path);
         final length = await file.length();
-        if (length <= 0 || length > limit)
+        if (length <= 0 || length > limit) {
           throw const FormatException('本地文件为空或超过大小限制');
+        }
         final destination = File(p.join(snapshots.path, name));
         var count = 0;
         final output = destination.openWrite();
@@ -106,8 +108,9 @@ class LocalComicImporter {
             token.check();
             count += chunk.length;
             copied += chunk.length;
-            if (count > limit || copied > maxTotalBytes + maxArchiveBytes)
+            if (count > limit || copied > maxTotalBytes + maxArchiveBytes) {
               throw const FormatException('导入超过字节限制');
+            }
             output.add(chunk);
             await output.flush();
             progress('复制到私有存储');
@@ -121,16 +124,20 @@ class LocalComicImporter {
 
       Future<void> addImage(File file, String name) async {
         token.check();
-        if (!imageNames.add(name.toLowerCase()))
+        if (!imageNames.add(name.toLowerCase())) {
           throw const FormatException('图片名称重复');
-        if (pages.length >= maxPages)
+        }
+        if (pages.length >= maxPages) {
           throw const FormatException('图片数量超过5000页限制');
+        }
         final bytes = await file.length();
-        if (bytes <= 0 || bytes > maxFileBytes)
+        if (bytes <= 0 || bytes > maxFileBytes) {
           throw const FormatException('单张图片超过64MiB限制');
+        }
         imageBytes += bytes;
-        if (imageBytes > maxTotalBytes)
+        if (imageBytes > maxTotalBytes) {
           throw const FormatException('图片总量超过2GiB限制');
+        }
         await _validateImage(file);
         final digest = (await sha256.bind(file.openRead()).first).toString();
         final ext = p.extension(name).toLowerCase();
@@ -145,8 +152,9 @@ class LocalComicImporter {
       Future<void> collectFolder(Directory root, Directory dir) async {
         await for (final entity in dir.list(followLinks: false)) {
           token.check();
-          if (++scanned > maxEntries)
+          if (++scanned > maxEntries) {
             throw const FormatException('目录条目超过20000限制');
+          }
           final type = await FileSystemEntity.type(
             entity.path,
             followLinks: false,
@@ -178,8 +186,9 @@ class LocalComicImporter {
         final path = paths[index].trim();
         if (path.contains('://') ||
             path.startsWith('//') ||
-            path.startsWith('\\\\'))
+            path.startsWith('\\\\')) {
           throw const FormatException('只接受本机文件，不接受远端URL或网络共享');
+        }
         if (!p.isAbsolute(path)) throw const FormatException('请输入本机绝对路径');
         final type = await FileSystemEntity.type(path, followLinks: false);
         await _noAliases(path);
@@ -310,8 +319,9 @@ class LocalComicImporter {
       );
       await database.transaction(() async {
         token.check();
-        if (await library.itemByKey(localComicSourceId, id) != null)
+        if (await library.itemByKey(localComicSourceId, id) != null) {
           throw StateError('相同作品已在另一个导入中发布，请重新打开列表');
+        }
         await library.addToLibrary(item);
         await library.saveChapters(
           itemSourceId: localComicSourceId,
@@ -338,10 +348,12 @@ class LocalComicImporter {
       return LocalComicImportResult(item);
     } finally {
       try {
-        if (stage != null && await stage.exists())
+        if (stage != null && await stage.exists()) {
           await stage.delete(recursive: true);
-        if (!committed && published != null && await published.exists())
+        }
+        if (!committed && published != null && await published.exists()) {
           await published.delete(recursive: true);
+        }
       } finally {
         await lease.release();
       }
@@ -351,8 +363,9 @@ class LocalComicImporter {
   /// Removes only this exact reserved-source identity and its indexed generated
   /// chapter directories. It never derives deletion paths from the source input.
   Future<void> remove(String remoteId) async {
-    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(remoteId))
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(remoteId)) {
       throw ArgumentError('本地作品身份无效');
+    }
     final lease = await BackupArtifactGuard.acquireOperation();
     try {
       final rows = await DownloadRepository(database)
@@ -474,8 +487,9 @@ class LocalComicImporter {
           descriptor.height <= 0 ||
           descriptor.width > 32000 ||
           descriptor.height > 32000 ||
-          descriptor.width * descriptor.height > 40000000)
+          descriptor.width * descriptor.height > 40000000) {
         throw const FormatException('图片解码尺寸超过4000万像素限制');
+      }
       codec = await descriptor.instantiateCodec();
       image = (await codec.getNextFrame()).image;
     } finally {
@@ -488,16 +502,18 @@ class LocalComicImporter {
 
   static Future<void> _regular(String path) async {
     if (await FileSystemEntity.type(path, followLinks: false) !=
-        FileSystemEntityType.file)
+        FileSystemEntityType.file) {
       throw const FormatException('不接受符号链接或特殊文件');
+    }
     await _noAliases(path);
   }
 
   static Future<void> _regularOrDirectory(String path) async {
     final type = await FileSystemEntity.type(path, followLinks: false);
     if (type != FileSystemEntityType.file &&
-        type != FileSystemEntityType.directory)
+        type != FileSystemEntityType.directory) {
       throw const FormatException('不接受符号链接或特殊文件');
+    }
   }
 
   static Future<void> _noAliases(String path) async {
@@ -532,8 +548,9 @@ class LocalComicImporter {
         name.contains(':') ||
         name.contains('\u0000') ||
         name.startsWith('/') ||
-        parts.any((s) => s == '..' || s == '.' || s.isEmpty))
+        parts.any((s) => s == '..' || s == '.' || s.isEmpty)) {
       throw const FormatException('压缩包包含不安全路径');
+    }
   }
 
   static Future<void> _extract(
@@ -568,8 +585,9 @@ class LocalComicImporter {
           data.getUint32(offset + 12, Endian.little) > 8 * 1024 * 1024 ||
           data.getUint32(offset + 16, Endian.little) +
                   data.getUint32(offset + 12, Endian.little) !=
-              start + offset)
+              start + offset) {
         throw const FormatException('ZIP目录无效、分卷或ZIP64不受支持/超过限制');
+      }
     } finally {
       await handle.close();
     }
@@ -578,8 +596,9 @@ class LocalComicImporter {
       final directory = zip.ZipDirectory()..read(input);
       if (directory.fileHeaders.length > maxEntries ||
           directory.fileHeaders.length !=
-              directory.totalCentralDirectoryEntries)
+              directory.totalCentralDirectoryEntries) {
         throw const FormatException('ZIP目录条目无效');
+      }
       final names = <String>{};
       var total = 0, index = 0;
       for (final header in directory.fileHeaders) {
@@ -602,12 +621,14 @@ class LocalComicImporter {
         if (header.uncompressedSize < 0 ||
             header.uncompressedSize > maxFileBytes ||
             total > maxTotalBytes ||
-            header.uncompressedSize > (header.compressedSize + 1) * 200)
+            header.uncompressedSize > (header.compressedSize + 1) * 200) {
           throw const FormatException('ZIP解压大小或压缩比超过限制');
+        }
       }
       for (final header in directory.fileHeaders) {
-        if (!supportedImage(header.filename) || header.filename.endsWith('/'))
+        if (!supportedImage(header.filename) || header.filename.endsWith('/')) {
           continue;
+        }
         token.check();
         final compressed = header.file!.getStream(decompress: false);
         Stream<List<int>> chunks() async* {
@@ -637,8 +658,9 @@ class LocalComicImporter {
           await for (final chunk in decoded) {
             token.check();
             count += chunk.length;
-            if (count > header.uncompressedSize || count > maxFileBytes)
+            if (count > header.uncompressedSize || count > maxFileBytes) {
               throw const FormatException('ZIP解压实际大小超过限制');
+            }
             crc = zip.getCrc32(chunk, crc);
             sink.add(chunk);
             await sink.flush();
@@ -647,8 +669,9 @@ class LocalComicImporter {
         } finally {
           await sink.close();
         }
-        if (count != header.uncompressedSize || crc != header.crc32)
+        if (count != header.uncompressedSize || crc != header.crc32) {
           throw const FormatException('ZIP图片大小/CRC校验失败');
+        }
         await accept(destination, header.filename);
       }
     } finally {

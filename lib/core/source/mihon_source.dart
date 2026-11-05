@@ -386,8 +386,9 @@ class MihonSource
                   '${entry.key}': entry.value,
               },
       );
-      if (cancellation?.cancelled == true)
+      if (cancellation?.cancelled == true) {
         throw cancellation!.token.cancelError!;
+      }
       if (response['ok'] != true) {
         final message =
             '${response['error'] ?? response['hostError'] ?? 'Mihon 请求失败'}';

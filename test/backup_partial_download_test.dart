@@ -80,8 +80,9 @@ class _HlsHttp extends FakeHttpClient {
     bool followRedirects = true,
   }) async {
     fragments.add(url);
-    if (interrupt && url.endsWith('b.ts'))
+    if (interrupt && url.endsWith('b.ts')) {
       throw const SocketException('second fragment interrupted');
+    }
     return super.downloadBytes(
       url,
       sourceId: sourceId,
@@ -340,8 +341,9 @@ void main() {
           )
           ..bytesHandler = (url) {
             requested.add(url);
-            if (interrupt && url.endsWith('2.png'))
+            if (interrupt && url.endsWith('2.png')) {
               throw const SocketException('page interrupted');
+            }
             return url.endsWith('1.png') ? onePixelPng(24) : onePixelPng(96);
           };
     final provider = StubContentProvider(
@@ -467,8 +469,9 @@ void main() {
               )
               ..bytesHandler = (url) {
                 requested.add(url);
-                if (interrupt && url.endsWith('2.png'))
+                if (interrupt && url.endsWith('2.png')) {
                   throw const SocketException('interrupted');
+                }
                 return interrupt ? onePixelPng(24) : onePixelPng(96);
               };
         final service = DownloadService(
@@ -497,8 +500,9 @@ void main() {
           remoteId: 'book',
           chapterRemoteId: 'comic',
         ))!;
-        if (boundary == 'corrupted page bytes')
+        if (boundary == 'corrupted page bytes') {
           await File('${interrupted.path}/0001.png').writeAsBytes([9, 9, 9]);
+        }
         final currentUrl = boundary == 'changed page URL'
             ? '$firstUrl?revision=new'
             : firstUrl;

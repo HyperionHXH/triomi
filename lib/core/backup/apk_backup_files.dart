@@ -271,8 +271,9 @@ class ApkBackupFiles {
     Directory? within,
   }) async {
     await _regular(file, within: within);
-    if (await hashBackupFile(file) != expected)
+    if (await hashBackupFile(file) != expected) {
       throw const FormatException('桌面JAR SHA-256 校验失败');
+    }
   }
 
   /// Snapshots files before streaming them into the archive; never buffers APKs.

@@ -71,11 +71,12 @@ class _BackupPageState extends ConsumerState<BackupPage> {
           : await store.list(location);
       if (mounted) setState(() => _local = files);
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _local = const [];
           _status = '备份目录不可读取：$error';
         });
+      }
     }
   }
 
@@ -316,8 +317,9 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     try {
       if (enabled && Platform.isAndroid) {
         final store = BackupLocationStore(prefs);
-        if (await store.current() == null && await store.choose() == null)
+        if (await store.current() == null && await store.choose() == null) {
           return;
+        }
       }
       await prefs.set(scheduledBackupKey, enabled);
       await prefs.flush();
@@ -454,8 +456,9 @@ class _BackupPageState extends ConsumerState<BackupPage> {
           await source.deleteOriginal(preview.byteHash);
           if (mounted) setState(() => _status = '${_status!}\n已删除原备份文件。');
         } catch (error) {
-          if (mounted)
+          if (mounted) {
             setState(() => _status = '${_status!}\n恢复已成功，但原备份未删除：$error');
+          }
         }
       }
       await _refreshLocal();

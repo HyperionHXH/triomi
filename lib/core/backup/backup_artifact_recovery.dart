@@ -291,29 +291,34 @@ abstract final class BackupArtifactRecovery {
     final pending = prefs.get<Object?>('mihon.pendingPackages');
     final apkPaths = <String>{};
     if (pending != null) {
-      if (pending is! Map)
+      if (pending is! Map) {
         throw const FormatException('Invalid pending APK catalogue');
+      }
       for (final row in pending.values) {
-        if (row is! Map || row['path'] is! String)
+        if (row is! Map || row['path'] is! String) {
           throw const FormatException('Invalid pending APK path');
+        }
         apkPaths.add(await _referencePath(row['path'] as String));
         if (row['desktopJarPath'] != null) {
-          if (row['desktopJarPath'] is! String)
+          if (row['desktopJarPath'] is! String) {
             throw const FormatException('Invalid pending companion path');
+          }
           apkPaths.add(await _referencePath(row['desktopJarPath'] as String));
         }
       }
     }
     final installed = prefs.get<Object?>('mihon.hostStatus');
     if (installed != null) {
-      if (installed is! Map)
+      if (installed is! Map) {
         throw const FormatException('Invalid installed APK catalogue');
+      }
       final ownedRoot = storagePathIdentity(
         p.join(roots.support.path, 'mihon-pending'),
       );
       for (final row in installed.values) {
-        if (row is! Map)
+        if (row is! Map) {
           throw const FormatException('Invalid installed APK record');
+        }
         final companion = row['backupDesktopJarPath'];
         if (companion == null) continue;
         final hash = row['backupDesktopJarSha256'];
@@ -350,8 +355,9 @@ abstract final class BackupArtifactRecovery {
       roots.support,
       if (roots.pickerCache != null) roots.pickerCache!,
     ]) {
-      if (!await _realDirectory(root))
+      if (!await _realDirectory(root)) {
         throw const FileSystemException('Unverified backup root');
+      }
     }
     for (final directory in [
       Directory(p.join(roots.documents.path, 'backups')),
@@ -448,8 +454,9 @@ abstract final class BackupArtifactRecovery {
     Future<void> hashes(Directory parent, int remaining) async {
       await for (final entity in parent.list(followLinks: false)) {
         if (entity is! Directory ||
-            !_identityName.hasMatch(p.basename(entity.path)))
+            !_identityName.hasMatch(p.basename(entity.path))) {
           continue;
+        }
         if (!await _optionalRealDirectory(entity)) continue;
         if (remaining == 1) {
           await _directories(entity, _mediaName, protected);
@@ -462,8 +469,9 @@ abstract final class BackupArtifactRecovery {
     for (final type in const ['manga', 'anime', 'novel']) {
       final directory = Directory(p.join(root.path, type));
       if (await FileSystemEntity.type(directory.path, followLinks: false) !=
-          FileSystemEntityType.directory)
+          FileSystemEntityType.directory) {
         continue;
+      }
       if (await _optionalRealDirectory(directory)) await hashes(directory, 3);
     }
   }
@@ -497,22 +505,25 @@ abstract final class BackupArtifactRecovery {
     await for (final entity in root.list(followLinks: false)) {
       if (!names.hasMatch(p.basename(entity.path))) continue;
       if (await FileSystemEntity.type(entity.path, followLinks: false) !=
-          FileSystemEntityType.directory)
+          FileSystemEntityType.directory) {
         continue;
+      }
       final path = _verifiedCanonicalPath(
         entity.absolute.path,
         await Directory(entity.path).resolveSymbolicLinks(),
       );
       if (protected.any(
         (reference) => p.equals(path, reference) || p.isWithin(path, reference),
-      ))
+      )) {
         continue;
+      }
       if (await FileSystemEntity.type(
             storageFilePath(path),
             followLinks: false,
           ) !=
-          FileSystemEntityType.directory)
+          FileSystemEntityType.directory) {
         continue;
+      }
       final directory = Directory(storageFilePath(path));
       if (!await _realDirectory(directory)) continue;
       var safe = true;
@@ -538,10 +549,12 @@ abstract final class BackupArtifactRecovery {
 Future<bool> _optionalRealDirectory(Directory directory) async {
   directory = Directory(storageFilePath(directory.path));
   if (await FileSystemEntity.type(directory.path, followLinks: false) ==
-      FileSystemEntityType.notFound)
+      FileSystemEntityType.notFound) {
     return false;
-  if (!await _realDirectory(directory))
+  }
+  if (!await _realDirectory(directory)) {
     throw const FileSystemException('Unverified artifact directory');
+  }
   return true;
 }
 

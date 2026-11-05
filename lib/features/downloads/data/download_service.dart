@@ -460,8 +460,9 @@ class DownloadService {
         );
         final rootPath = storagePathIdentity(await root.resolveSymbolicLinks());
         // Existing application-owned layouts and restored subroots are retained.
-        if (canonical.startsWith('$rootPath${Platform.pathSeparator}'))
+        if (canonical.startsWith('$rootPath${Platform.pathSeparator}')) {
           return storageFilePath(canonical);
+        }
         final legacyDocs = await getApplicationDocumentsDirectory();
         final legacyRoot = Directory(
           storageFilePath(
@@ -472,8 +473,9 @@ class DownloadService {
           final legacy = storagePathIdentity(
             await legacyRoot.resolveSymbolicLinks(),
           );
-          if (canonical.startsWith('$legacy${Platform.pathSeparator}'))
+          if (canonical.startsWith('$legacy${Platform.pathSeparator}')) {
             return storageFilePath(canonical);
+          }
         }
       }
     }
@@ -522,8 +524,9 @@ class DownloadService {
                 }
               }
             }
-            if (await directory.list(followLinks: false).isEmpty)
+            if (await directory.list(followLinks: false).isEmpty) {
               await directory.delete();
+            }
           default:
             break;
         }

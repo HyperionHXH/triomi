@@ -586,8 +586,9 @@ class DownloadRepository {
             ))
             .get();
     for (final row in rows) {
-      if (row.path != null && await File(storageFilePath(row.path!)).exists())
+      if (row.path != null && await File(storageFilePath(row.path!)).exists()) {
         return row.path;
+      }
     }
     return null;
   }

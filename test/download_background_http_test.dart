@@ -423,8 +423,9 @@ void main() {
           socket.add(List.filled(1024, value));
           sentVideoBytes += 1024;
           await socket.flush();
-          if (value == 7)
+          if (value == 7) {
             await Future<void>.delayed(const Duration(milliseconds: 500));
+          }
         }
         samplesSent.complete();
         await release.future;
