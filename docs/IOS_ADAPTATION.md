@@ -1,5 +1,13 @@
 # Triomi iOS 端适配改动说明与自签安装指南
 
+## 当前正式下载：181
+
+[v0.12.0-ios.181](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-ios.181)已公开并设为Latest。下载Assets中的`Triomi-iOS-Unsigned.ipa`，不是Source code ZIP；0.12.0+181、最低iOS15、未签名，需要合法签名安装。IPA13,818,695字节，SHA-256 `358905e4d3b81bba3d7335ce3a367d4c266c421e3e55a2431bb70af7924beddc`，另附SHA256SUMS.txt；服务器摘要及无登录完整回读均匹配。覆盖升级沿用原Bundle ID和签名身份以保留数据/Keychain访问，178/179/180原Release保留。
+
+升级顺序：先更新181客户端，再在原兼容仓库刷新并更新哔咔1.0.3（account.v3），然后只在应用内登录；179/180缺少v3会提示升级。原目录地址`https://raw.githubusercontent.com/HyperionHXH/Mihon-Extensions/main/repo/triomi/index.json`及JM1.0.1/WN1.0.1/EH1.1.1保持，规则更新可能撤销旧会话。无需提供GitHub账号Secrets。
+
+本版对齐参考登录协议并补充固定安全400分类；两种头部对合成无效账号均被上游拒绝，因此真实账号400根因及恢复状态仍未证实。若仍失败，仅反馈界面固定错误分类，不提供账号、密码或原始响应。fc47a2a的iOS41949380542第2次尝试通过374项集成、76张截图全部核验/实际读取及三录像完整解码；Copy搜索封面本轮显示、长条fling未跳底。真实账号、四源实际图片阅读、低内存真机/120Hz未验，喵趣403原失败保留。后文180/179章节为历史，以本节为当前下载依据。
+
 ## 当前正式下载：180
 
 已发布为Latest：[v0.12.0-ios.180](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-ios.180)。下载Assets中的`Triomi-iOS-Unsigned.ipa`，不是Source code ZIP；0.12.0+180、最低iOS15、未签名，普通iPhone需要合法签名安装。IPA13,819,502字节，SHA-256 `7d2e49d2bbeadc283c4a46628c99abbee3d5ca5be2b7d4988111ff1990310ea9`，另附SHA256SUMS.txt；服务器与无登录公开回读均匹配。覆盖升级沿用原Bundle ID和签名身份以保留数据/Keychain访问。178/179原Release保留。

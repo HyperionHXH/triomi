@@ -1,12 +1,18 @@
 # Triomi 当前状态
 
-## 当前请求：iOS181 哔咔登录协议对齐（2026-11-05，待云端验收）
+## 正式发布：iOS181 哔咔登录协议与错误诊断更新（2026-11-05）
 
-用户报告180哔咔登录仍为HTTP400、Copy可以，按已发生事实处理，未重复本人账号请求。完整生产Dio→系统代理→IO→真实回环socket检查确认精确Content-Type、JSON字段、UTF-8长度和签名没有被改写；独立Python登录HMAC向量匹配。两个独立参考（本地Keiyoushi及PicaComic公开提交155cf0c）登录都发送空Authorization，而180省略该头。181最小对齐此差异，不更换分流、DNS或TLS策略。它是已证实的协议差异，尚未证实就是用户这次400的根因；本机匿名站点连通检查超时，不能声称上游账号接受已恢复。
+[v0.12.0-ios.181](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-ios.181)已公开并设为Latest，标签精确指向`fc47a2a0becdbc6a7c1c4182c2b5af178e265f6d`。[41949380542第2次尝试](https://github.com/HyperionHXH/triomi/actions/runs/41949380542/attempts/2)成功：设备Release/IPA、原生桥/JSC、374项实际iOS集成通过；56主巡检、Copy11、阅读9张截图共76张全部核验并实际读取。三录像完整解码2089帧/225.84秒、461帧/163.005秒、694帧/168.015秒，未完整观看。Copy搜索封面本轮显示，长条快速fling停2/176未跳底。原17源16通过，喵趣原HTTP403失败保留、仅沿用既有精确政策；匿名元数据WN20/24、JM80/80、EH67/25，哔咔未登录零请求。真实哔咔账号恢复及其HTTP400根因仍未证实。
+
+第1次尝试因快看搜索、咚漫图片连接超时失败，未交付其IPA。隔离macOS运行41960619660对两个原失败URL各一次GET均HTTP200后，才重跑同提交失败任务一次；未修改代码、超时或新增豁免。标签自动触发的重复构建41965763809已取消，交付依据始终为上述成功尝试。
+
+直接公开该成功尝试原IPA：13,818,695字节，SHA-256 `358905e4d3b81bba3d7335ce3a367d4c266c421e3e55a2431bb70af7924beddc`。GitHub服务器摘要和无认证公开资产API完整回读均匹配，内部0.12.0+181/iOS15+/原Bundle ID、四份规则与提交逐字节一致。117成员有限私钥/GitHub-token模式扫描零命中，不等同完整凭据审计。178/179/180原Release说明、目标、资产ID/大小/摘要未变。未签名，普通iPhone仍需合法签名安装；先更新应用181，再在原仓库更新哔咔1.0.3/account.v3，只在应用内输入账号。证据`release_ios/41949380542-attempt2/acceptance-review.json`及`release181-published-verification.json`。
+
+用户报告180哔咔登录仍为HTTP400、Copy可以，按已发生事实处理，未重复本人账号请求。完整生产Dio→系统代理→IO→真实回环socket检查确认精确Content-Type、JSON字段、UTF-8长度和签名没有被改写；独立Python登录HMAC向量匹配。两个独立参考（本地Keiyoushi及PicaComic公开提交155cf0c）登录都发送空Authorization，而180省略该头。181最小对齐此差异，不更换分流、DNS或TLS策略。它是已证实的协议差异，但随后隔离云端对照（41950070065/41950830022）表明：缺头/空头的匿名目录均401，reserved.invalid合成账号登录均400且固定分类invalidCredentials。空头未改变这组拒绝，不能认定它是用户400根因。所测正常协议能到达账号校验阶段；真实账号接受仍未验，不称登录故障已确认修复。当前交付定位为协议对齐与安全错误诊断更新。
 
 400只将有界JSON中的已知英文错误映射为固定本地分类（账号、协议、时间）；未知JSON、非JSON及超长响应保留HTTP400失败，不回显远端message/detail或附加原始cause。成功仍要求合法token和安全存储完成，失败不写登录状态，不自动重试密码或追随重定向。应用0.12.0+181，随包/公开哔咔1.0.3要求picacomic.account.v3；179/180拒绝新版规则，须先升级应用。
 
-先红后绿：wire旧实现6失败，修正后含真实socket的200/400/401/302及Pica生产脚本/设置/宿主共50项通过。代码和安全只读审查未发现新增可行动问题。本地完整1970通过/4既有跳过、analyze零问题、Python128通过、Windows和Android debug编译通过，未安装或改用户数据。插件8d5ed84已推送，42项Python及目录41949156021/安全41949155918双CI通过，Pica公开规则SHA-256 13c31da849375596e8926c3a031000c17050673422a9a3dcdd15c60355071e30。新增socket用例已接入实际iOS综合测试；云端构建和发布待后续实际结果，不以夹具成功冒充真实登录成功。既有私有账号workflow/relay/test草稿保留未提交、不执行、不使用Secrets。证据目录release_ios/reader-ports/host181-fixes/。
+先红后绿：wire旧实现6失败，修正后含真实socket的200/400/401/302及Pica生产脚本/设置/宿主共50项通过。代码和安全只读审查未发现新增可行动问题。本地完整1970通过/4既有跳过、analyze零问题、Python128通过、Windows和Android debug编译通过，未安装或改用户数据。插件8d5ed84已推送，42项Python及目录41949156021/安全41949155918双CI通过，Pica公开规则SHA-256 13c31da849375596e8926c3a031000c17050673422a9a3dcdd15c60355071e30。新增socket用例已在本次实际iOS综合测试通过，不以夹具成功冒充真实登录成功。既有私有账号workflow/relay/test草稿保留未提交、不执行、不使用Secrets。诊断证据目录release_ios/reader-ports/host181-fixes/。
 
 ## 正式发布：iOS180 与哔咔1.0.2（2026-11-04）
 
