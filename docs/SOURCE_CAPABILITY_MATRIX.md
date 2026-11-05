@@ -2,6 +2,14 @@
 
 > 当前来源边界（R171）：没有保存仓库设置时默认启用官方 KazumiRules；已有自定义列表及用户显式清空状态保留。番剧支持兼容 api1–9 XPath/API 子集，包括 API9 `sourceTemplate`，官方17条规则导入检查通过不代表各站验证、视频解析或播放均成功。两端补齐无后缀 HLS 嗅探及格式传递；只有规则声明旧解析时读取 iframe 查询中的媒体地址，不绕过验证码/TLS。Mihon仓库策略及原生/桌面宿主不变，不自动删除用户设置。当前产物、有限实际播放及发布状态以[CURRENT_STATUS](CURRENT_STATUS.md)为准；下方带轮次记录保留历史事实。
 
+## 0.13.0 下载诊断补充
+
+生产客户端匿名实网探测：7sefun搜索2项、20集目录与指定播放页HTTP200；MXdm的`www.dcc3.com`和DM84的`dmbus.cc`在本机连接15秒超时，失败发生在搜索阶段而非下载写盘。MangaDex API重定向到站点`/edge/challenge`返回HTML；LK生产公开feed匿名JSON可达，不据此认定付费/账号正文能下载。
+
+Windows原生解析修复根Navigator上下文无法找到Overlay的问题后，实际解析7sefun第1集取得`groupvideo.photo.qq.com`媒体地址，但媒体请求HTTP404；此结果属于已取得地址失效，不把页面可达或解析成功称为正片可下载。Android同页面仍出现解析超时。两端受控网页均通过生产解析器取得本机HLS并读取响应，受控三类下载另见验收证据。
+
+客户端另修无后缀/签名/重定向HLS实际MIME识别及gzip清单长度；HTTP200网页/JSON错误拒绝而不标记视频完成。旧新真实HTTP差分已复现并验证；加密、直播未闭合清单、外置音轨等离线限制仍明确拒绝，不绕过站点访问控制。
+
 ## 来源矩阵
 
 | 来源 | 类型 | discover | search | detail | content | 播放线路 | 生产/调试 | 证据 |

@@ -350,10 +350,13 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     final current = _current;
     if (current == null) return '请先读取当前安装版本。';
     if (!_supported) return '此平台请使用对应的平台发布渠道。';
-    if (release.versionCode < current.versionCode) {
+    final versionOrder = release.compareVersionTo(current);
+    if (versionOrder == null) return '当前安装版本无法识别，请先核对安装包。';
+    final build = release.advertisedBuild;
+    if (versionOrder < 0 || (build != null && build < current.versionCode)) {
       return '这是较早的版本，为保护应用数据不提供降级。';
     }
-    if (release.versionCode == current.versionCode) return '已安装此构建，无需重复安装。';
+    if (build == current.versionCode) return '已安装此构建，无需重复安装。';
     if (!release.assets.containsKey(_assetName)) {
       return '此版本尚未提供 ${_windows ? 'Windows 完整 ZIP' : 'Android APK'}，可选择其他发布版本。';
     }
@@ -400,7 +403,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     final release = _selected;
     if (_locked || release == null || _releaseIssue(release) != null) return;
     final consent = await _confirm(
-      '下载 ${release.version} · 构建 ${release.versionCode}',
+      '下载 ${release.versionLabel}',
       '从官方 GitHub $appUpdateRepository 匿名下载${_windows ? '完整 Windows ZIP 与成员清单' : 'Android APK'}。'
           '下载后将核对文件大小、SHA-256 和实际版本，最多 512 MiB，不会自动安装。\n\n'
           '${_windows ? 'Windows 包未签名：完整性校验不等同发布者签名。' : 'Android 还需通过系统验签，并匹配当前实际安装证书。'}',
@@ -415,7 +418,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         downloaded = await _service.downloadRelease(release, token);
         await _acceptCandidate(downloaded, token);
       },
-      targetLabel: '${release.version} · 构建 ${release.versionCode}',
+      targetLabel: release.versionLabel,
       retry: _downloadRelease,
     );
     if (mounted && identical(downloaded, _candidate)) {
@@ -631,7 +634,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
               ),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: Text('包含测试版。只允许更高构建，文件仍需下载后完整核验。'),
+                child: Text('包含历史测试版。禁止版本降级，实际构建必须更高；下载后仍需完整核验。'),
               ),
               const SizedBox(height: AppSpacing.sm),
               Expanded(
@@ -644,9 +647,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                     final release = releases[index];
                     final chosen = identical(release, _selected);
                     return AppCard(
-                      key: ValueKey(
-                        'app-update-release-${release.versionCode}',
-                      ),
+                      key: ValueKey('app-update-release-${release.identity}'),
                       onTap: () => Navigator.pop(context, release),
                       child: Row(
                         children: [
@@ -664,7 +665,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '${release.version} · 构建 ${release.versionCode}',
+                                  release.versionLabel,
                                   style: Theme.of(context).textTheme.titleSmall,
                                 ),
                                 Text(
@@ -1055,7 +1056,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                             ],
                           ),
                           Text(
-                            '构建 ${selected.versionCode} · ${_releaseDate(selected.publishedAt)}',
+                            '${selected.advertisedBuild == null ? '正式版' : '构建 ${selected.advertisedBuild}'} · ${_releaseDate(selected.publishedAt)}',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -1077,7 +1078,9 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                             ),
                             child: Text(
                               issue ??
-                                  '构建 ${current!.versionCode} → ${selected.versionCode} · 可更新',
+                                  (selected.advertisedBuild == null
+                                      ? '${current!.version} → ${selected.version} · 下载后核验实际构建'
+                                      : '构建 ${current!.versionCode} → ${selected.advertisedBuild} · 可更新'),
                               style: theme.textTheme.bodyMedium,
                             ),
                           ),

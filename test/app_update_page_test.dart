@@ -27,15 +27,18 @@ List<AppUpdateRelease> _releases(
   List<int> codes, {
   Set<int> missing = const {},
   String platform = 'android',
+  String? stableVersion,
 }) => AppUpdateRelease.parse(
   utf8.encode(
     jsonEncode([
       for (final code in codes)
         {
-          'tag_name': 'v0.11.0-test.$code',
+          'tag_name': stableVersion == null
+              ? 'v0.11.0-test.$code'
+              : 'v$stableVersion',
           'name': 'Triomi $code',
           'draft': false,
-          'prerelease': true,
+          'prerelease': stableVersion == null,
           'published_at': '2026-10-18T10:00:00Z',
           'body': 'Release $code\n\n- Keep the complete release notes.',
           'assets': [
@@ -50,7 +53,7 @@ List<AppUpdateRelease> _releases(
                   'size': 1024,
                   'digest': 'sha256:$_hash',
                   'browser_download_url':
-                      'https://github.com/HyperionHXH/triomi/releases/download/v0.11.0-test.$code/$name',
+                      'https://github.com/HyperionHXH/triomi/releases/download/${stableVersion == null ? 'v0.11.0-test.$code' : 'v$stableVersion'}/$name',
                 },
           ],
         },
@@ -121,10 +124,11 @@ class _UpdateService extends AppUpdateService {
     AppUpdateRelease release,
     AppUpdateCancellation token,
   ) async {
-    downloaded.add(release.versionCode);
+    final build = release.advertisedBuild;
+    if (build != null) downloaded.add(build);
     tokens.add(token);
     if (download != null) return download!(release, token);
-    return candidate(release.versionCode);
+    return candidate(release.advertisedBuild!);
   }
 
   @override
@@ -291,6 +295,33 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
   testWidgets(
+    'stable release displays no invented build and retains selectable test history',
+    (tester) async {
+      final stable = _releases([178], stableVersion: '0.13.0').single;
+      final legacy = _releases([163]).single;
+      final service = _UpdateService(available: [stable, legacy]);
+      await _open(tester, service);
+      await _tap(tester, 'app-update-check');
+      expect(find.text('0.13.0'), findsOneWidget);
+      expect(find.textContaining('null'), findsNothing);
+      await _tap(tester, 'app-update-download');
+      expect(
+        find.byKey(const ValueKey('app-update-download-confirm')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('null'), findsNothing);
+      expect(service.downloaded, isEmpty);
+      await _tap(tester, 'app-update-confirm-cancel');
+      await _tap(tester, 'app-update-history');
+      await _tap(tester, 'app-update-release-${legacy.identity}');
+      expect(find.text('0.11.0'), findsOneWidget);
+      await _tap(tester, 'app-update-history');
+      await _tap(tester, 'app-update-release-${stable.identity}');
+      expect(find.text('0.13.0'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'entry only reads installed identity and selecting an older release cannot download',
     (tester) async {
       final service = _UpdateService();
@@ -309,7 +340,7 @@ void main() {
         isNotNull,
       );
       await _tap(tester, 'app-update-history');
-      await _tap(tester, 'app-update-release-159');
+      await _tap(tester, 'app-update-release-0.11.0-test.159');
       expect(
         tester
             .widget<FilledButton>(
@@ -320,7 +351,7 @@ void main() {
       );
       expect(service.downloaded, isEmpty);
       await _tap(tester, 'app-update-history');
-      await _tap(tester, 'app-update-release-163');
+      await _tap(tester, 'app-update-release-0.11.0-test.163');
       await _download(tester);
       expect(service.downloaded, [163]);
       expect(service.handedOff, isEmpty);
@@ -346,7 +377,7 @@ void main() {
       isNull,
     );
     await _tap(tester, 'app-update-history');
-    await _tap(tester, 'app-update-release-162');
+    await _tap(tester, 'app-update-release-0.11.0-test.162');
     expect(
       tester
           .widget<FilledButton>(
@@ -758,7 +789,7 @@ void main() {
           failed = true;
           throw const HttpException('Network interrupted');
         }
-        return service.candidate(release.versionCode);
+        return service.candidate(release.advertisedBuild!);
       };
       await _open(tester, service);
       await _tap(tester, 'app-update-check');
@@ -929,14 +960,14 @@ void main() {
         ..launchResult = launch.future;
       final offeredRelease = service.available.first;
       final olderRelease = service.available.last;
-      final retained = service.candidate(offeredRelease.versionCode);
+      final retained = service.candidate(offeredRelease.advertisedBuild!);
       service.download = (_, _) async => retained;
       await _open(tester, service);
       await _tap(tester, 'app-update-check');
       await _download(tester);
       await _tap(tester, 'app-update-ready-later');
       await _tap(tester, 'app-update-history');
-      await _tap(tester, 'app-update-release-${olderRelease.versionCode}');
+      await _tap(tester, 'app-update-release-${olderRelease.identity}');
       await _tap(tester, 'app-update-ready-install');
       final confirm = await _reveal(
         tester,
@@ -952,7 +983,7 @@ void main() {
       );
       expect(
         tester.widget<AppUpdateTransferView>(transfer).versionLabel,
-        isNot(contains('${olderRelease.versionCode}')),
+        isNot(contains('${olderRelease.advertisedBuild}')),
       );
       permission.complete(true);
       await tester.pump();
@@ -965,7 +996,7 @@ void main() {
       launch.complete();
       await tester.pumpAndSettle();
       await _reveal(tester, find.byType(AppUpdateHandoffView));
-      expect(service.downloaded, [offeredRelease.versionCode]);
+      expect(service.downloaded, [offeredRelease.advertisedBuild]);
       expect(service.handedOff, [retained]);
       await tester.pumpWidget(const SizedBox.shrink());
       expect(service.discarded, [retained]);

@@ -41,21 +41,63 @@ Map<String, Object?> _release({
 AppUpdateRelease _parse(Map<String, Object?> raw) =>
     AppUpdateRelease.parse(utf8.encode(jsonEncode([raw]))).single;
 
+Map<String, Object?> _taggedRelease(
+  String tag, {
+  int code = 156,
+  List<Map<String, Object?>>? assets,
+}) {
+  final release = _release(code: code, assets: assets);
+  return {
+    ...release,
+    'tag_name': tag,
+    'prerelease': tag.contains('-test.'),
+    'assets': [
+      for (final asset in release['assets'] as List<Map<String, Object?>>)
+        {
+          ...asset,
+          'browser_download_url':
+              'https://github.com/$appUpdateRepository/releases/download/$tag/${asset['name']}',
+        },
+    ],
+  };
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  test('release build boundaries agree with Windows PE build field and reject unknown conventions', () {
-    expect(appUpdateReleaseCode('v0.1.0-test.156'), 156);
-    expect(appUpdateReleaseCode('0.1.0-test.65535'), 65535);
+  test('stable and historical tags validate semantic components and package build bounds', () {
+    expect(_parse(_release()).advertisedBuild, 156);
+    expect(_parse(_taggedRelease('0.1.0-test.65535')).advertisedBuild, 65535);
+    final stable = _parse(_taggedRelease('v0.13.0'));
+    expect(stable.version, '0.13.0');
+    expect(stable.advertisedBuild, isNull);
+    expect(stable.prerelease, isFalse);
+    expect(stable.versionLabel, isNot(contains('null')));
+    expect(
+      _parse(_taggedRelease('v65535.65535.65535')).version,
+      '65535.65535.65535',
+    );
     for (final tag in [
       'v0.1.0-test.0',
       'v0.1.0-test.65536',
       'v0.1.0-test.-1',
       'v0.1.0-test.0156',
-      'v0.1.0',
+      'v00.13.0',
+      'v0.013.0',
+      'v0.13.00',
+      'v65536.0.0',
+      'v0.65536.0',
+      'v0.0.65536',
+      'v999999999999999999999.1.0',
       'test.156',
+      'v0.13.0-rc.1',
+      'v0.13.0+178',
       'v0.1.0-test.156-extra',
     ]) {
-      expect(appUpdateReleaseCode(tag), null, reason: tag);
+      expect(
+        AppUpdateRelease.parse(utf8.encode(jsonEncode([_taggedRelease(tag)]))),
+        isEmpty,
+        reason: tag,
+      );
     }
   });
   test('prereleases are retained and ordered by actual build instead of lexical title or date', () {
@@ -70,7 +112,7 @@ void main() {
         ]),
       ),
     );
-    expect(releases.map((release) => release.versionCode), [156, 155, 99]);
+    expect(releases.map((release) => release.advertisedBuild), [156, 155, 99]);
     expect(releases.first.prerelease, true);
     expect(releases.first.version, '0.1.0');
     expect(releases.first.notes, 'Real release notes');
@@ -83,6 +125,101 @@ void main() {
     );
     expect(releases.first.isNewerThan(installed), false);
     expect(_parse(_release(code: 157)).isNewerThan(installed), true);
+  });
+  test(
+    'semantic order precedes build order and stable precedes its test history',
+    () {
+      final releases = AppUpdateRelease.parse(
+        utf8.encode(
+          jsonEncode([
+            _taggedRelease('v0.12.0-test.600'),
+            _taggedRelease('v0.13.0-test.178'),
+            _taggedRelease('v0.13.0'),
+            _taggedRelease('v0.13.0-test.179'),
+            _taggedRelease('v0.14.0-test.180'),
+          ]),
+        ),
+      );
+      expect(releases.map((release) => release.identity), [
+        '0.14.0-test.180',
+        '0.13.0',
+        '0.13.0-test.179',
+        '0.13.0-test.178',
+        '0.12.0-test.600',
+      ]);
+    },
+  );
+  test('release identities reject stable aliases, repeated tags and reused legacy builds', () {
+    for (final tags in [
+      ['v0.13.0', '0.13.0'],
+      ['v0.13.0', 'v0.13.0'],
+      ['v0.12.0-test.177', 'v0.13.0-test.177'],
+    ]) {
+      expect(
+        () => AppUpdateRelease.parse(
+          utf8.encode(
+            jsonEncode([for (final tag in tags) _taggedRelease(tag)]),
+          ),
+        ),
+        throwsFormatException,
+      );
+    }
+  });
+  test('stable discovery uses semantics and legacy builds never permit version downgrade', () {
+    const current = AppUpdateInfo(
+      packageName: 'io.github.hyperionhxh.triomi',
+      versionCode: 177,
+      version: '0.12.0',
+      sha256: _hash,
+      platform: 'android',
+    );
+    final stable = _parse(_taggedRelease('v0.13.0'));
+    expect(stable.isNewerThan(current), isTrue);
+    expect(_parse(_taggedRelease('v0.12.0')).isNewerThan(current), isFalse);
+    expect(
+      _parse(_taggedRelease('v0.11.0-test.600')).isNewerThan(current),
+      isFalse,
+    );
+    expect(
+      _parse(_taggedRelease('v0.12.0-test.178')).isNewerThan(current),
+      isTrue,
+    );
+    expect(
+      _parse(_taggedRelease('v0.13.0-test.176')).isNewerThan(current),
+      isFalse,
+    );
+    const newer = AppUpdateInfo(
+      packageName: 'io.github.hyperionhxh.triomi',
+      versionCode: 178,
+      version: '0.13.0',
+      sha256: _hash,
+      platform: 'android',
+    );
+    expect(stable.isNewerThan(newer), isFalse);
+    expect(
+      _parse(_taggedRelease('v0.12.0-test.600')).isNewerThan(newer),
+      isFalse,
+    );
+    const prerelease = AppUpdateInfo(
+      packageName: 'io.github.hyperionhxh.triomi',
+      versionCode: 178,
+      version: '0.13.0-test.178',
+      sha256: _hash,
+      platform: 'android',
+    );
+    expect(stable.isNewerThan(prerelease), isTrue);
+  });
+  test('release package identity requires exact version and only advertised legacy builds', () {
+    final stable = _parse(_taggedRelease('v0.13.0'));
+    expect(stable.matchesPackage('0.13.0', 178), isTrue);
+    expect(stable.matchesPackage('0.12.0', 178), isFalse);
+    expect(stable.matchesPackage('0.13.0-test.178', 178), isFalse);
+    for (final build in [null, '178', 0, -1, 65536]) {
+      expect(stable.matchesPackage('0.13.0', build), isFalse);
+    }
+    final legacy = _parse(_taggedRelease('v0.13.0-test.178'));
+    expect(legacy.matchesPackage('0.13.0', 178), isTrue);
+    expect(legacy.matchesPackage('0.13.0', 179), isFalse);
   });
   test('startup update selects the newest complete package for the installed platform', () {
     const android = AppUpdateInfo(
@@ -134,6 +271,48 @@ void main() {
       ),
     );
     expect(newestAppUpdateRelease(windows, [windowsPackage]), windowsPackage);
+  });
+  test('stable startup selection skips incomplete assets and prefers stable over matching test history', () {
+    const android = AppUpdateInfo(
+      packageName: 'io.github.hyperionhxh.triomi',
+      versionCode: 177,
+      version: '0.12.0',
+      sha256: _hash,
+      platform: 'android',
+    );
+    final stable = _parse(
+      _taggedRelease(
+        'v0.13.0',
+        assets: [_asset('triomi-android.apk'), _asset('SHA256SUMS.txt')],
+      ),
+    );
+    final legacy = _parse(
+      _taggedRelease(
+        'v0.13.0-test.179',
+        assets: [_asset('triomi-android.apk'), _asset('SHA256SUMS.txt')],
+      ),
+    );
+    final incomplete = _parse(_taggedRelease('v0.14.0'));
+    expect(
+      newestAppUpdateRelease(android, [legacy, incomplete, stable]),
+      stable,
+    );
+    expect(newestAppUpdateRelease(android, [stable, legacy]), stable);
+    expect(newestAppUpdateRelease(android, [incomplete]), isNull);
+    const windows = AppUpdateInfo(
+      packageName: 'io.github.hyperionhxh.triomi',
+      versionCode: 177,
+      version: '0.12.0',
+      sha256: _hash,
+      platform: 'windows',
+    );
+    final missingManifest = _parse(
+      _taggedRelease(
+        'v0.13.0',
+        assets: [_asset('triomi-windows.zip'), _asset('SHA256SUMS.txt')],
+      ),
+    );
+    expect(newestAppUpdateRelease(windows, [missingManifest]), isNull);
   });
   test('asset selection rejects foreign repo, foreign tag, duplicate, missing size and bad digest', () {
     for (final asset in [
@@ -222,7 +401,7 @@ void main() {
     final service = AppUpdateService(dio: dio);
     try {
       final releases = await service.releases(AppUpdateCancellation());
-      expect(releases.single.versionCode, 156);
+      expect(releases.single.advertisedBuild, 156);
       expect(adapter.requests.single.toString(), appUpdateReleasesApi);
     } finally {
       service.close();
@@ -431,6 +610,14 @@ void main() {
   }
   for (final scenario in [
     'valid',
+    'stable-valid',
+    'legacy-advertised-build-mismatch',
+    'stable-native-version-mismatch',
+    'stable-package-version-mismatch',
+    'stable-pe-version-mismatch',
+    'stable-build-downgrade',
+    'stable-build-equal',
+    'stable-semantic-downgrade',
     'pe-version-mismatch',
     'member-hash-mismatch',
     'late-cancel',
@@ -446,6 +633,16 @@ void main() {
             TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
         final executable = [1, 2, 3], dll = [4, 5, 6];
         final token = AppUpdateCancellation();
+        final stable = scenario.startsWith('stable-');
+        final packageVersion = stable ? '0.13.0' : '0.1.0';
+        final packageBuild = stable ? 178 : 156;
+        final tag = scenario == 'stable-package-version-mismatch'
+            ? 'v0.14.0'
+            : scenario == 'legacy-advertised-build-mismatch'
+            ? 'v0.1.0-test.155'
+            : stable
+            ? 'v0.13.0'
+            : 'v0.1.0-test.156';
         final archive = zip.Archive()
           ..addFile(
             zip.ArchiveFile('triomi.exe', executable.length, executable),
@@ -457,8 +654,8 @@ void main() {
           jsonEncode({
             'platform': 'windows',
             'packageName': 'io.github.hyperionhxh.triomi',
-            'versionCode': 156,
-            'version': '0.1.0',
+            'versionCode': packageBuild,
+            'version': packageVersion,
             'sha256': zipHash,
             'files': {
               'triomi.exe': {
@@ -484,7 +681,8 @@ void main() {
           'SHA256SUMS.txt': sums,
         };
         final release = _parse(
-          _release(
+          _taggedRelease(
+            tag,
             assets: payloads.entries
                 .map(
                   (entry) => _asset(
@@ -526,25 +724,53 @@ void main() {
               );
               if (scenario == 'late-cancel') token.cancel();
               return {
-                'versionCode': scenario == 'pe-version-mismatch' ? 155 : 156,
-                'version': '0.1.0',
+                'versionCode': scenario.endsWith('pe-version-mismatch')
+                    ? packageBuild - 1
+                    : packageBuild,
+                'version': scenario == 'stable-native-version-mismatch'
+                    ? '0.14.0'
+                    : packageVersion,
               };
             }
             if (call.method == 'currentAppUpdateInfo') {
               return {
                 'packageName': 'io.github.hyperionhxh.triomi',
                 'platform': 'windows',
-                'versionCode': 155,
-                'version': '0.1.0',
+                'versionCode': scenario == 'stable-build-downgrade'
+                    ? 179
+                    : scenario == 'stable-build-equal'
+                    ? 178
+                    : stable
+                    ? 177
+                    : 155,
+                'version': scenario == 'stable-semantic-downgrade'
+                    ? '0.14.0'
+                    : stable
+                    ? '0.12.0'
+                    : '0.1.0',
                 'path': current.path,
               };
             }
             throw StateError('No install or execution is expected');
           });
-          if (scenario == 'valid') {
+          final deniedBuild =
+              scenario == 'stable-build-downgrade' ||
+              scenario == 'stable-build-equal' ||
+              scenario == 'stable-semantic-downgrade';
+          if (scenario == 'valid' ||
+              scenario == 'stable-valid' ||
+              deniedBuild) {
             final candidate = await service.downloadRelease(release, token);
-            expect(candidate.decision, 'upgrade');
-            expect(candidate.offered.versionCode, 156);
+            expect(
+              candidate.decision,
+              deniedBuild
+                  ? scenario == 'stable-build-equal'
+                        ? 'sameVersionChanged'
+                        : 'downgrade'
+                  : 'upgrade',
+            );
+            expect(candidate.canInstall, !deniedBuild);
+            expect(candidate.offered.versionCode, packageBuild);
             expect(candidate.signatureVerified, false);
             expect(await File(candidate.path).readAsBytes(), bundle);
             expect(
@@ -571,10 +797,8 @@ void main() {
                   ? throwsA(isA<AppUpdateCancelled>())
                   : throwsFormatException,
             );
-            expect(
-              await Directory('${directory.path}/stage').list().isEmpty,
-              true,
-            );
+            final root = Directory('${directory.path}/stage');
+            expect(!await root.exists() || await root.list().isEmpty, isTrue);
           }
         } finally {
           messenger.setMockMethodCallHandler(channel, null);

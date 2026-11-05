@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 
@@ -50,7 +51,7 @@ class VideoDownloader {
     final uri = _uri(url);
     final dir = Directory(storageFilePath(directory));
     await dir.create(recursive: true);
-    return mimeType == 'application/vnd.apple.mpegurl' || isHlsUrl(url)
+    return _isHlsMime(mimeType) || isHlsUrl(url)
         ? _hls(uri, dir, onProgress)
         : _progressive(uri, dir, onProgress);
   }
@@ -59,6 +60,16 @@ class VideoDownloader {
     final path = (Uri.tryParse(url)?.path ?? url).toLowerCase();
     return path.endsWith('.m3u8') || path.endsWith('.m3u');
   }
+
+  static String _mediaType(String? value) =>
+      (value ?? '').split(';').first.trim().toLowerCase();
+
+  static bool _isHlsMime(String? value) => const {
+    'application/vnd.apple.mpegurl',
+    'application/x-mpegurl',
+    'audio/mpegurl',
+    'audio/x-mpegurl',
+  }.contains(_mediaType(value));
 
   Future<void> _check() async {
     if (shouldContinue != null && !shouldContinue!()) {
@@ -75,7 +86,7 @@ class VideoDownloader {
         throw _error('磁盘可用空间不足，未标记下载完成', type: SourceErrorType.permission);
       }
     } catch (_) {
-      await response.stream.listen(null).cancel();
+      await response.close();
       rethrow;
     }
   }
@@ -125,7 +136,7 @@ class VideoDownloader {
       );
       if (!_redirect(response.statusCode)) {
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          await response.stream.listen(null).cancel();
+          await response.close();
           throw SourceException(
             sourceId: sourceId,
             type: response.statusCode == 429
@@ -140,9 +151,17 @@ class VideoDownloader {
             ),
           );
         }
+        final type = _mediaType(response.headers['content-type']);
+        if (type == 'text/html' ||
+            type == 'application/xhtml+xml' ||
+            type == 'application/json' ||
+            type.endsWith('+json')) {
+          await response.close();
+          throw _error('视频地址返回了网页或接口错误，而非视频；请在来源网站检查登录/验证后重新解析下载');
+        }
         return response;
       }
-      await response.stream.listen(null).cancel();
+      await response.close();
       final target = response.headers['location'];
       if (target == null || hop == 5) throw _error('视频重定向无效或次数过多');
       uri = _uri(target, base: uri);
@@ -202,69 +221,110 @@ class VideoDownloader {
         if (offset > 0) 'If-Range': etag!,
       },
     );
-    int? total;
-    if (response.statusCode == 206) {
-      final range = RegExp(r'^bytes (\d+)-(\d+)/(\d+)$')
-          .firstMatch(response.headers['content-range'] ?? '');
-      if (range == null || int.parse(range[1]!) != offset) {
-        await response.stream.listen(null).cancel();
-        throw _error('服务器断点响应范围不匹配');
-      }
-      total = int.parse(range[3]!);
-    } else {
-      offset = 0;
-      total = response.contentLength;
-    }
-    onTotalBytes?.call(total == null ? null : total - offset);
-    await _space(directory, response);
-    await _json(journal, {
-      'identity': identity,
-      'etag': response.headers['etag'],
-      'total': total,
-    });
-    final sink = partial.openWrite(
-      mode: offset == 0 ? FileMode.write : FileMode.append,
-    );
-    var received = 0;
-    var notifiedProgress = -1.0;
     try {
-      await for (final chunk in response.stream) {
-        await _check();
-        sink.add(chunk);
-        received += chunk.length;
-        onBytes?.call(chunk.length);
-        if (progress != null) {
-          final value = total == null || total <= 0
-              ? 0.0
-              : ((offset + received) / total).clamp(0.0, .999).toDouble();
-          if (value - notifiedProgress >= .01) {
-            notifiedProgress = value;
-            await progress(value);
+      // A signed endpoint (or its redirect) need not have a .m3u8 suffix.
+      // Reuse the observed response so expiring URLs are not requested twice.
+      if (_isHlsMime(response.headers['content-type'])) {
+        if (response.statusCode != 200) {
+          await response.close();
+          throw _error('视频地址已变为 HLS，请重新解析后下载');
+        }
+        final bytes = BytesBuilder(copy: false);
+        await for (final chunk in response.stream) {
+          await _check();
+          if (bytes.length + chunk.length > 2 * 1024 * 1024) {
+            throw _error('HLS 列表超过 2 MiB，不能作为离线清单');
+          }
+          bytes.add(chunk);
+          onBytes?.call(chunk.length);
+        }
+        if (response.contentLength != null &&
+            bytes.length != response.contentLength) {
+          throw _error('HLS 列表下载不完整', type: SourceErrorType.network);
+        }
+        return await _hls(
+          url,
+          directory,
+          progress,
+          initialResponse: SourceResponse(
+            statusCode: response.statusCode,
+            body: utf8.decode(bytes.takeBytes()),
+            headers: response.headers,
+            url: response.url,
+          ),
+        );
+      }
+      int? total;
+      if (response.statusCode == 206) {
+        final range = RegExp(r'^bytes (\d+)-(\d+)/(\d+)$')
+            .firstMatch(response.headers['content-range'] ?? '');
+        if (range == null || int.parse(range[1]!) != offset) {
+          await response.close();
+          throw _error('服务器断点响应范围不匹配');
+        }
+        total = int.parse(range[3]!);
+      } else {
+        offset = 0;
+        total = response.contentLength;
+      }
+      onTotalBytes?.call(total == null ? null : total - offset);
+      await _space(directory, response);
+      await _json(journal, {
+        'identity': identity,
+        'etag': response.headers['etag'],
+        'total': total,
+      });
+      final sink = partial.openWrite(
+        mode: offset == 0 ? FileMode.write : FileMode.append,
+      );
+      var received = 0;
+      var notifiedProgress = -1.0;
+      try {
+        await for (final chunk in response.stream) {
+          await _check();
+          sink.add(chunk);
+          received += chunk.length;
+          onBytes?.call(chunk.length);
+          if (progress != null) {
+            final value = total == null || total <= 0
+                ? 0.0
+                : ((offset + received) / total).clamp(0.0, .999).toDouble();
+            if (value - notifiedProgress >= .01) {
+              notifiedProgress = value;
+              await progress(value);
+            }
           }
         }
+        await sink.flush();
+      } finally {
+        await sink.close();
       }
-      await sink.flush();
+      if (received == 0 ||
+          (response.contentLength != null &&
+              received != response.contentLength) ||
+          (total != null && offset + received != total)) {
+        throw _error('下载不完整（收到 $received 字节）', type: SourceErrorType.network);
+      }
+      await _check();
+      await _replace(partial, destination);
+      await journal.delete();
+      if (progress != null) await progress(1);
+      return destination.path;
     } finally {
-      await sink.close();
+      await response.close();
     }
-    if (received == 0 ||
-        (response.contentLength != null &&
-            received != response.contentLength) ||
-        (total != null && offset + received != total)) {
-      throw _error('下载不完整（收到 $received 字节）', type: SourceErrorType.network);
-    }
-    await _check();
-    await _replace(partial, destination);
-    await journal.delete();
-    if (progress != null) await progress(1);
-    return destination.path;
   }
 
-  Future<HlsPlaylist> _playlist(Uri uri, Uri origin, Set<Uri> visited) async {
+  Future<HlsPlaylist> _playlist(
+    Uri uri,
+    Uri origin,
+    Set<Uri> visited, {
+    SourceResponse? initialResponse,
+  }) async {
     await _check();
     if (visited.length >= 8 || !visited.add(uri)) throw _error('HLS 列表循环或层级过深');
-    SourceResponse? loaded;
-    for (var hop = 0; hop <= 5; hop++) {
+    SourceResponse? loaded = initialResponse;
+    for (var hop = 0; loaded == null && hop <= 5; hop++) {
       await _check();
       final response = await http.send(
         SourceRequest(
@@ -316,9 +376,15 @@ class VideoDownloader {
   Future<String> _hls(
     Uri url,
     Directory directory,
-    FutureOr<void> Function(double)? progress,
-  ) async {
-    final playlist = await _playlist(url, url, <Uri>{});
+    FutureOr<void> Function(double)? progress, {
+    SourceResponse? initialResponse,
+  }) async {
+    final playlist = await _playlist(
+      url,
+      url,
+      <Uri>{},
+      initialResponse: initialResponse,
+    );
     final unique = {
       for (final resource in playlist.resources) resource.identity: resource,
     };
@@ -355,41 +421,45 @@ class VideoDownloader {
                       'bytes=${resource.offset}-${resource.offset! + resource.length! - 1}',
               },
             );
-            if (resource.length != null &&
-                (response.statusCode != 206 ||
-                    !RegExp(
-                      '^bytes ${resource.offset}-${resource.offset! + resource.length! - 1}/',
-                    ).hasMatch(response.headers['content-range'] ?? ''))) {
-              await response.stream.listen(null).cancel();
-              throw _error('HLS BYTERANGE 响应不匹配');
-            }
-            await _space(directory, response);
-            final sink = temporary.openWrite();
-            var received = 0;
             try {
-              await for (final chunk in response.stream) {
-                await _check();
-                if (failed) throw const DownloadPaused();
-                sink.add(chunk);
-                received += chunk.length;
-                onBytes?.call(chunk.length);
+              if (resource.length != null &&
+                  (response.statusCode != 206 ||
+                      !RegExp(
+                        '^bytes ${resource.offset}-${resource.offset! + resource.length! - 1}/',
+                      ).hasMatch(response.headers['content-range'] ?? ''))) {
+                await response.close();
+                throw _error('HLS BYTERANGE 响应不匹配');
               }
-              await sink.flush();
+              await _space(directory, response);
+              final sink = temporary.openWrite();
+              var received = 0;
+              try {
+                await for (final chunk in response.stream) {
+                  await _check();
+                  if (failed) throw const DownloadPaused();
+                  sink.add(chunk);
+                  received += chunk.length;
+                  onBytes?.call(chunk.length);
+                }
+                await sink.flush();
+              } finally {
+                await sink.close();
+              }
+              if (received == 0 ||
+                  (response.contentLength != null &&
+                      received != response.contentLength) ||
+                  (resource.length != null && received != resource.length)) {
+                throw _error('HLS 分段下载不完整', type: SourceErrorType.network);
+              }
+              await _check();
+              await _replace(temporary, file);
+              await _json(checksumFile, {
+                'bytes': received,
+                'sha256': await _fileHash(file),
+              });
             } finally {
-              await sink.close();
+              await response.close();
             }
-            if (received == 0 ||
-                (response.contentLength != null &&
-                    received != response.contentLength) ||
-                (resource.length != null && received != resource.length)) {
-              throw _error('HLS 分段下载不完整', type: SourceErrorType.network);
-            }
-            await _check();
-            await _replace(temporary, file);
-            await _json(checksumFile, {
-              'bytes': received,
-              'sha256': await _fileHash(file),
-            });
           }
           completed++;
           if (progress != null) {

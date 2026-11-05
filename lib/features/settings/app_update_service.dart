@@ -107,6 +107,12 @@ String appUpdateDecision(
           current.signerSha256 != offered.signerSha256)) {
     return 'wrongSigner';
   }
+  final currentVersion = _AppUpdateVersion.parse(current.version);
+  final offeredVersion = _AppUpdateVersion.parse(offered.version);
+  if (currentVersion == null || offeredVersion == null) {
+    throw const FormatException('应用版本必须是受支持的语义版本');
+  }
+  if (offeredVersion.compareVersion(currentVersion) < 0) return 'downgrade';
   if (offered.versionCode < current.versionCode) return 'downgrade';
   if (offered.versionCode == current.versionCode) {
     return (offered.artifactSha256 ?? offered.sha256) == current.sha256
@@ -177,12 +183,50 @@ const appUpdateRepository = 'HyperionHXH/triomi';
 const appUpdateReleasesApi =
     'https://api.github.com/repos/$appUpdateRepository/releases?per_page=30';
 
-/// Release tags carry the same build number as Android and the Windows PE.
-/// Unknown tag conventions are deliberately not guessed from release titles.
-int? appUpdateReleaseCode(String tag) {
-  final match = RegExp(r'^v?(\d+\.\d+\.\d+)-test\.([1-9]\d*)$').firstMatch(tag);
-  final code = match == null ? null : int.tryParse(match[2]!);
-  return code != null && code <= 65535 ? code : null;
+/// Stable tags advertise a semantic version, never an invented package build.
+/// Historical test tags additionally advertise the exact Android/Windows build.
+final _releaseTagPattern = RegExp(
+  r'^v?(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})\.(0|[1-9]\d{0,4})(?:-test\.([1-9]\d{0,4}))?$',
+);
+
+class _AppUpdateVersion {
+  const _AppUpdateVersion(this.major, this.minor, this.patch, this.build);
+  final int major, minor, patch;
+  final int? build;
+  String get version => '$major.$minor.$patch';
+  String get identity => '$version${build == null ? '' : '-test.$build'}';
+
+  static _AppUpdateVersion? parse(String value) {
+    final match = _releaseTagPattern.firstMatch(value);
+    if (match == null || match.end != value.length) return null;
+    final major = int.parse(match[1]!);
+    final minor = int.parse(match[2]!);
+    final patch = int.parse(match[3]!);
+    final build = match[4] == null ? null : int.parse(match[4]!);
+    // Windows PE version components and historical builds are unsigned WORDs.
+    if (major > 65535 ||
+        minor > 65535 ||
+        patch > 65535 ||
+        (build != null && build > 65535)) {
+      return null;
+    }
+    return _AppUpdateVersion(major, minor, patch, build);
+  }
+
+  int compareVersion(_AppUpdateVersion other) {
+    final majorOrder = major.compareTo(other.major);
+    if (majorOrder != 0) return majorOrder;
+    final minorOrder = minor.compareTo(other.minor);
+    return minorOrder != 0 ? minorOrder : patch.compareTo(other.patch);
+  }
+
+  int compareTo(_AppUpdateVersion other) {
+    final versionOrder = compareVersion(other);
+    if (versionOrder != 0) return versionOrder;
+    if (build == null) return other.build == null ? 0 : 1;
+    if (other.build == null) return -1;
+    return build!.compareTo(other.build!);
+  }
 }
 
 class AppUpdateReleaseAsset {
@@ -197,19 +241,45 @@ class AppUpdateRelease {
   const AppUpdateRelease._({
     required this.tag,
     required this.name,
-    required this.version,
-    required this.versionCode,
+    required this._version,
     required this.notes,
     required this.prerelease,
     required this.publishedAt,
     required this.assets,
   });
-  final String tag, name, version, notes, publishedAt;
-  final int versionCode;
+  final String tag, name, notes, publishedAt;
+  final _AppUpdateVersion _version;
+  String get version => _version.version;
+  int? get advertisedBuild => _version.build;
+  String get identity => _version.identity;
+  String get versionLabel =>
+      '$version${advertisedBuild == null ? '' : ' · 构建 $advertisedBuild'}';
   final bool prerelease;
   final Map<String, AppUpdateReleaseAsset> assets;
-  bool isNewerThan(AppUpdateInfo installed) =>
-      versionCode > installed.versionCode;
+  int compareTo(AppUpdateRelease other) => _version.compareTo(other._version);
+  int? compareVersionTo(AppUpdateInfo installed) {
+    final current = _AppUpdateVersion.parse(installed.version);
+    return current == null ? null : _version.compareVersion(current);
+  }
+
+  bool isNewerThan(AppUpdateInfo installed) {
+    final current = _AppUpdateVersion.parse(installed.version);
+    if (current == null) return false;
+    final order = _version.compareVersion(current);
+    if (order < 0) return false;
+    final build = advertisedBuild;
+    if (build != null && build <= installed.versionCode) return false;
+    return order > 0 ||
+        (build != null && build > installed.versionCode) ||
+        (build == null && current.build != null);
+  }
+
+  bool matchesPackage(String packageVersion, Object? packageBuild) =>
+      packageVersion == version &&
+      packageBuild is int &&
+      packageBuild > 0 &&
+      packageBuild <= 65535 &&
+      (advertisedBuild == null || packageBuild == advertisedBuild);
 
   static List<AppUpdateRelease> parse(List<int> bytes) {
     if (bytes.length > 4 * 1024 * 1024) {
@@ -220,6 +290,7 @@ class AppUpdateRelease {
       throw const FormatException('GitHub 版本列表格式无效');
     }
     final releases = <AppUpdateRelease>[];
+    final identities = <String>{};
     final codes = <int>{};
     for (final item in raw) {
       if (item is! Map ||
@@ -228,9 +299,12 @@ class AppUpdateRelease {
         continue;
       }
       final tag = item['tag_name'] as String;
-      final code = appUpdateReleaseCode(tag);
-      if (code == null) continue;
-      if (!codes.add(code)) throw const FormatException('发布版本的构建号重复');
+      final version = _AppUpdateVersion.parse(tag);
+      if (version == null) continue;
+      if (!identities.add(version.identity) ||
+          (version.build != null && !codes.add(version.build!))) {
+        throw const FormatException('发布版本的身份或构建号重复');
+      }
       final assets = <String, AppUpdateReleaseAsset>{};
       if (item['assets'] is! List || (item['assets'] as List).length > 30) {
         throw const FormatException('GitHub 发布资产格式无效');
@@ -284,10 +358,9 @@ class AppUpdateRelease {
         AppUpdateRelease._(
           tag: tag,
           name: name,
-          version: tag.replaceFirst(RegExp(r'^v'), '').split('-test.').first,
-          versionCode: code,
+          version: version,
           notes: notes,
-          prerelease: item['prerelease'] == true,
+          prerelease: version.build != null || item['prerelease'] == true,
           publishedAt: item['published_at'] is String
               ? item['published_at'] as String
               : '',
@@ -295,7 +368,7 @@ class AppUpdateRelease {
         ),
       );
     }
-    releases.sort((a, b) => b.versionCode.compareTo(a.versionCode));
+    releases.sort((a, b) => b.compareTo(a));
     return releases;
   }
 }
@@ -321,7 +394,7 @@ AppUpdateRelease? newestAppUpdateRelease(
             !release.assets.containsKey('triomi-windows.update.json'))) {
       continue;
     }
-    if (best == null || release.versionCode > best.versionCode) best = release;
+    if (best == null || release.compareTo(best) > 0) best = release;
   }
   return best;
 }
@@ -754,8 +827,8 @@ class AppUpdateService {
     }
     final raw = jsonDecode(utf8.decode(manifestBytes));
     if (raw is! Map ||
-        raw['versionCode'] != release.versionCode ||
-        raw['version'] != release.version ||
+        raw['version'] is! String ||
+        !release.matchesPackage(raw['version'] as String, raw['versionCode']) ||
         raw['sha256'] != hash) {
       throw const FormatException('Windows 清单与 GitHub 版本或 ZIP 摘要不符');
     }
@@ -934,8 +1007,10 @@ class AppUpdateService {
       expectedBytes: asset.bytes,
       source: '官方 GitHub $appUpdateRepository · ${release.tag}',
     );
-    if (candidate.offered.versionCode != release.versionCode ||
-        candidate.offered.version != release.version) {
+    if (!release.matchesPackage(
+      candidate.offered.version,
+      candidate.offered.versionCode,
+    )) {
       await discard(candidate);
       throw const FormatException('APK 实际版本与发布版本不符');
     }

@@ -232,6 +232,38 @@ void main() {
     });
   });
 
+  test(
+    'standard HLS MIME aliases and parameters work without a filename suffix',
+    () async {
+      const url = 'https://cdn.example.com/stream?signature=fixture';
+      const body =
+          '#EXTM3U\n#EXT-X-TARGETDURATION:2\n'
+          '#EXTINF:2,\npart.ts\n#EXT-X-ENDLIST\n';
+      final mimeTypes = [
+        'application/vnd.apple.mpegurl; charset=utf-8',
+        'Application/X-MpegURL',
+        'audio/mpegurl',
+        'audio/x-mpegurl',
+      ];
+      for (var index = 0; index < mimeTypes.length; index++) {
+        final http = byteHttp({
+          url: utf8.encode(body),
+          'https://cdn.example.com/part.ts': [1, 2, 3],
+        });
+        final path = await VideoDownloader(http: http, sourceId: 's').download(
+          url: url,
+          mimeType: mimeTypes[index],
+          directory: '${tempDir.path}/$index',
+        );
+        expect(path, endsWith('video.m3u8'));
+        expect(http.requests.map((request) => request.url), [
+          url,
+          'https://cdn.example.com/part.ts',
+        ]);
+      }
+    },
+  );
+
   group('HLS 视频下载', () {
     const playlistUrl = 'https://cdn.example.com/hls/index.m3u8';
 

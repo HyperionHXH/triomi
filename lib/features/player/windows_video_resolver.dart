@@ -41,7 +41,14 @@ Future<ResolvedDesktopVideo> resolveWindowsVideo(
               lifecycle == AppLifecycleState.paused)) {
     throw VideoResolveCancelled('请显示应用窗口后继续网页解析');
   }
-  final overlay = Overlay.of(context, rootOverlay: true);
+  // Queue resolution starts at the root Navigator itself, above its Overlay.
+  // Player pages already have an Overlay ancestor.
+  final overlay =
+      Overlay.maybeOf(context, rootOverlay: true) ??
+      Navigator.maybeOf(context, rootNavigator: true)?.overlay;
+  if (overlay == null || !overlay.mounted) {
+    throw VideoResolveCancelled('播放页面已关闭，请重新打开后继续解析');
+  }
   final result = Completer<ResolvedDesktopVideo>();
   final closed = Completer<void>();
   var created = false;

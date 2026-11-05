@@ -41,6 +41,8 @@ Triomi 是一款面向 Android 与 Windows 的开源聚合客户端，把看番�
 
 在 [GitHub Releases](https://github.com/HyperionHXH/triomi/releases) 下载，版本变化统一查看对应发布说明。
 
+正式版按 `0.13.0`、`0.13.1` 等版本号迭代。旧测试版首次升级到正式版需在此页下载安装；正式版支持后续版本的应用内更新。
+
 | 平台 | 文件 | 安装方式 |
 | --- | --- | --- |
 | Android 7.0 及以上 | `triomi-android.apk` | 下载后安装；同签名正式版可覆盖更新 |

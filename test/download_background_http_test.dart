@@ -18,6 +18,7 @@ import 'package:triomi/core/storage/storage_paths.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/downloads/data/download_retry_policy.dart';
 import 'package:triomi/features/downloads/data/download_service.dart';
+import 'package:triomi/features/downloads/data/video_downloader.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 
 import 'fixtures/fake_preferences.dart';
@@ -140,6 +141,264 @@ void main() {
       chapter: entry,
     );
     return (await repository.rowById(id))!;
+  }
+
+  test('real HTTP extensionless redirected HLS keeps final base and signed request headers', () async {
+    final visited = <String>[];
+    respond = (request) async {
+      visited.add(request.uri.toString());
+      if (request.uri.path == '/content/anime') {
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode({
+            'play': [
+              {
+                'name': 'signed stream',
+                'url': '$base/start?signature=manifest',
+                'headers': {
+                  'Referer': '$base/episode/selected',
+                  'Cookie': 'session=fixture',
+                  'Authorization': 'Bearer fixture',
+                },
+              },
+            ],
+          }),
+        );
+      } else {
+        expect(request.headers.value('referer'), '$base/episode/selected');
+        expect(request.headers.value('cookie'), 'session=fixture');
+        expect(request.headers.value('authorization'), 'Bearer fixture');
+        if (request.uri.path == '/start') {
+          request.response.statusCode = HttpStatus.found;
+          request.response.headers.set(
+            'location',
+            '/signed/list?signature=manifest',
+          );
+        } else if (request.uri.path == '/signed/list') {
+          expect(request.uri.queryParameters['signature'], 'manifest');
+          request.response.headers.set(
+            'content-type',
+            'application/x-mpegURL; charset=utf-8',
+          );
+          request.response.write(
+            '#EXTM3U\n#EXT-X-TARGETDURATION:2\n'
+            '#EXTINF:2,\npart.ts?signature=segment\n#EXT-X-ENDLIST\n',
+          );
+        } else if (request.uri.path == '/signed/part.ts') {
+          expect(request.uri.queryParameters['signature'], 'segment');
+          request.response.headers.contentType = ContentType('video', 'mp2t');
+          request.response.add([1, 2, 3, 4]);
+        } else {
+          request.response.statusCode = HttpStatus.notFound;
+        }
+      }
+      await request.response.close();
+    };
+    final row = await add(MediaType.anime);
+    await service.run(
+      row: row,
+      provider: _HttpProvider(http, '$base/content/anime', MediaType.anime),
+    );
+    final done = (await repository.rowById(row.id))!;
+    expect(done.status, 'done');
+    expect(done.path, endsWith('video.m3u8'));
+    final manifest = await File(storageFilePath(done.path!)).readAsString();
+    expect(manifest, contains('#EXTM3U'));
+    expect(manifest, isNot(contains('http')));
+    expect(manifest, isNot(contains('signature')));
+    expect(visited, [
+      '/content/anime',
+      '/start?signature=manifest',
+      '/signed/list?signature=manifest',
+      '/signed/part.ts?signature=segment',
+    ]);
+  });
+
+  test(
+    'real HTTP 200 verification HTML is failed instead of published as video',
+    () async {
+      respond = (request) async {
+        if (request.uri.path == '/content/anime') {
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode({
+              'play': [
+                {'name': 'line', 'url': '$base/video.mp4?signature=expired'},
+              ],
+            }),
+          );
+        } else {
+          request.response.headers.contentType = ContentType.html;
+          request.response.write(
+            '<!doctype html><title>Verify your session</title>',
+          );
+        }
+        await request.response.close();
+      };
+      final row = await add(MediaType.anime);
+      await expectLater(
+        service.run(
+          row: row,
+          provider: _HttpProvider(http, '$base/content/anime', MediaType.anime),
+          scheduleTransientRetry: true,
+        ),
+        throwsA(
+          isA<SourceException>().having(
+            (error) => error.type,
+            'classification',
+            SourceErrorType.parse,
+          ),
+        ),
+      );
+      final failed = (await repository.rowById(row.id))!;
+      expect(failed.status, 'failed');
+      expect(failed.retryCount, 0);
+      expect(failed.errorMessage, contains('验证'));
+      expect(
+        await File(storageFilePath('${failed.path!}/video.mp4')).exists(),
+        isFalse,
+      );
+    },
+  );
+
+  test('real HTTP gzip extensionless HLS uses decoded manifest bytes, not wire Content-Length', () async {
+    const manifest =
+        '#EXTM3U\n#EXT-X-TARGETDURATION:2\n'
+        '#EXTINF:2,\npart.ts\n#EXT-X-ENDLIST\n';
+    final encoded = gzip.encode(utf8.encode(manifest));
+    expect(encoded.length, isNot(utf8.encode(manifest).length));
+    respond = (request) async {
+      if (request.uri.path == '/stream') {
+        request.response.headers.set('content-type', 'application/x-mpegURL');
+        request.response.headers.set('content-encoding', 'gzip');
+        request.response.contentLength = encoded.length;
+        request.response.add(encoded);
+      } else {
+        request.response.add([1, 2, 3, 4]);
+      }
+      await request.response.close();
+    };
+    final path = await VideoDownloader(
+      http: http,
+      sourceId: 'gzip',
+    ).download(url: '$base/stream', directory: '${docs.path}/gzip');
+    expect(path, endsWith('video.m3u8'));
+    final offline = await File(storageFilePath(path)).readAsString();
+    expect(offline, contains('#EXTM3U'));
+    expect(offline, isNot(contains('http')));
+  });
+
+  for (final oversized in [false, true]) {
+    test(
+      'standalone downloader disconnects ${oversized ? 'oversized HLS' : 'HTML'} origin before EOF without canceling sibling',
+      () async {
+        final disconnected = Completer<void>();
+        final releaseSibling = Completer<void>();
+        final origin = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        Socket? peer;
+        var shuttingDown = false;
+        var originBytesSent = 0;
+        void noticeDisconnect() {
+          if (!shuttingDown && !disconnected.isCompleted) {
+            disconnected.complete();
+          }
+        }
+
+        Future<void> sendUnfinishedResponse(Socket socket) async {
+          socket.write(
+            'HTTP/1.1 200 OK\r\n'
+            'Content-Type: ${oversized ? 'application/x-mpegURL' : 'text/html'}\r\n'
+            'Transfer-Encoding: chunked\r\n'
+            'Connection: close\r\n\r\n',
+          );
+          final chunk = List<int>.filled(16 * 1024, 65);
+          try {
+            // Bounded writes with backpressure; deliberately never send HTTP EOF.
+            for (
+              var index = 0;
+              index < 2048 && !disconnected.isCompleted && !shuttingDown;
+              index++
+            ) {
+              socket.write('${chunk.length.toRadixString(16)}\r\n');
+              socket.add(chunk);
+              socket.write('\r\n');
+              originBytesSent += chunk.length;
+              await socket.flush();
+              await Future<void>.delayed(const Duration(milliseconds: 1));
+            }
+          } on SocketException {
+            noticeDisconnect();
+          } on StateError {
+            noticeDisconnect();
+          }
+        }
+
+        origin.listen((socket) {
+          peer = socket;
+          socket.setOption(SocketOption.tcpNoDelay, true);
+          final request = StringBuffer();
+          var started = false;
+          socket.listen(
+            (bytes) {
+              if (started) return;
+              request.write(ascii.decode(bytes));
+              if (request.toString().contains('\r\n\r\n')) {
+                started = true;
+                unawaited(sendUnfinishedResponse(socket));
+              }
+            },
+            onDone: noticeDisconnect,
+            onError: (Object _) => noticeDisconnect(),
+          );
+        });
+        respond = (request) async {
+          request.response.write('sibling');
+          await request.response.flush();
+          await releaseSibling.future;
+          request.response.write('-complete');
+          await request.response.close();
+        };
+        final sibling = await http.downloadBytes(
+          '$base/sibling',
+          sourceId: 'sibling',
+        );
+        final siblingBytes = sibling.stream.expand((chunk) => chunk).toList();
+        try {
+          try {
+            await expectLater(
+              VideoDownloader(http: http, sourceId: 'reject').download(
+                url: 'http://127.0.0.1:${origin.port}/rejected',
+                directory: '${docs.path}/rejected',
+              ),
+              throwsA(
+                isA<SourceException>().having(
+                  (error) => error.type,
+                  'classification',
+                  SourceErrorType.parse,
+                ),
+              ),
+            );
+            await disconnected.future.timeout(const Duration(seconds: 3));
+            if (oversized) {
+              expect(originBytesSent, greaterThan(2 * 1024 * 1024));
+            }
+          } finally {
+            releaseSibling.complete();
+            // Await even on assertion failure, so teardown cannot mimic cross-cancel.
+            expect(utf8.decode(await siblingBytes), 'sibling-complete');
+          }
+          expect(
+            await File(storageFilePath('${docs.path}/rejected/video.mp4'))
+                .exists(),
+            isFalse,
+          );
+        } finally {
+          shuttingDown = true;
+          peer?.destroy();
+          await origin.close();
+        }
+      },
+    );
   }
 
   test('real HTTP consumers publish all three types into separate hashed work folders', () async {

@@ -65,6 +65,7 @@ void main() {
       });
       closed = true;
     }
+
     addTearDown(close);
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -72,8 +73,10 @@ void main() {
         child: MaterialApp(
           theme: AppTheme.light(),
           home: SearchPage(
-            type: type, initialTags: tags,
-            initialSourceId: sourceId, sourceOnly: sourceId != null,
+            type: type,
+            initialTags: tags,
+            initialSourceId: sourceId,
+            sourceOnly: sourceId != null,
           ),
         ),
       ),
@@ -83,117 +86,218 @@ void main() {
   }
 
   for (final type in [MediaType.manga, MediaType.novel]) {
-    testWidgets('${type.name} tag-only online search revokes late results when cleared', (tester) async {
-      final pending = Completer<List<MediaItem>>();
-      final tagged = _TaggedSource(pending, type: type);
+    testWidgets(
+      '${type.name} tag-only online search revokes late results when cleared',
+      (tester) async {
+        final pending = Completer<List<MediaItem>>();
+        final tagged = _TaggedSource(pending, type: type);
+        var unrelatedCalls = 0;
+        final close = await render(
+          tester,
+          type,
+          [
+            tagged,
+            _SearchSource('other', type, (_) async {
+              unrelatedCalls++;
+              return [];
+            }),
+            _SearchSource('wrong-media', MediaType.anime, (_) async {
+              unrelatedCalls++;
+              return [];
+            }),
+          ],
+          tags: ['奇幻'],
+          sourceId: tagged.id,
+        );
+        expect(tagged.requests, hasLength(1));
+        expect(tagged.requests.single.$1, '');
+        expect(tagged.requests.single.$2, ['奇幻']);
+        expect(tagged.requests.single.$3, 1);
+        expect(tagged.owner?.cancelled, isFalse);
+        expect(unrelatedCalls, 0);
+        await tester.tap(find.byTooltip('移除标签 奇幻'));
+        await advance(tester);
+        expect(tagged.owner?.cancelled, isTrue);
+        pending.complete([
+          MediaItem(
+            sourceId: tagged.id,
+            remoteId: 'late',
+            type: type,
+            title: 'late-tagged-book',
+          ),
+        ]);
+        await advance(tester);
+        expect(find.text('late-tagged-book'), findsNothing);
+        expect(find.byType(InputChip), findsNothing);
+        expect(tagged.requests, hasLength(1));
+        expect(unrelatedCalls, 0);
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        await close();
+      },
+    );
+  }
+
+  testWidgets(
+    'anime search from a scoped playback source still searches metadata only',
+    (tester) async {
+      final http = FakeHttpClient(
+        (_) async => SourceResponse(
+          statusCode: 200,
+          body: jsonEncode({
+            'data': [
+              {'id': 42, 'type': 2, 'name': 'Metadata result'},
+            ],
+            'total': 1,
+          }),
+        ),
+      );
+      final metadata = BangumiSource(
+        rule: SourceRule.parseJson(
+          File('assets/rules/bangumi-anime.json').readAsStringSync(),
+        ),
+        http: http,
+      );
+      var playbackCalls = 0;
+      final close = await render(tester, MediaType.anime, [
+        metadata,
+        _SearchSource('playback-site', MediaType.anime, (_) async {
+          playbackCalls++;
+          return [];
+        }),
+      ], sourceId: 'playback-site');
+      await search(tester, 'keyword');
+      expect(http.requests, hasLength(1));
+      final body = jsonDecode(http.requests.single.body!) as Map;
+      expect(body['keyword'], 'keyword');
+      expect(playbackCalls, 0);
+      expect(find.text('Metadata result'), findsOneWidget);
+      await close();
+    },
+  );
+
+  testWidgets(
+    'anime tag-only search sends online filters and cancels when cleared',
+    (tester) async {
+      final pending = Completer<SourceResponse>();
+      final http = FakeHttpClient((_) => pending.future);
+      final source = BangumiSource(
+        rule: SourceRule.parseJson(
+          File('assets/rules/bangumi-anime.json').readAsStringSync(),
+        ),
+        http: http,
+      );
       var unrelatedCalls = 0;
-      final close = await render(tester, type, [
-        tagged,
-        _SearchSource('other', type, (_) async {
-          unrelatedCalls++;
-          return [];
-        }),
-        _SearchSource('wrong-media', MediaType.anime, (_) async {
-          unrelatedCalls++;
-          return [];
-        }),
-      ], tags: ['奇幻'], sourceId: tagged.id);
-      expect(tagged.requests, hasLength(1));
-      expect(tagged.requests.single.$1, '');
-      expect(tagged.requests.single.$2, ['奇幻']);
-      expect(tagged.requests.single.$3, 1);
-      expect(tagged.owner?.cancelled, isFalse);
-      expect(unrelatedCalls, 0);
+      final close = await render(
+        tester,
+        MediaType.anime,
+        [
+          source,
+          _SearchSource('wrong-media', MediaType.novel, (_) async {
+            unrelatedCalls++;
+            return [];
+          }),
+        ],
+        tags: ['奇幻'],
+        sourceId: source.descriptor.id,
+      );
+      expect(http.requests, hasLength(1));
+      final request = http.requests.single;
+      expect(request.method, 'POST');
+      final body = jsonDecode(request.body!) as Map<String, dynamic>;
+      expect(body['keyword'], '');
+      expect((body['filter'] as Map)['tag'], ['奇幻']);
+      expect(request.cancellation?.cancelled, isFalse);
       await tester.tap(find.byTooltip('移除标签 奇幻'));
       await advance(tester);
-      expect(tagged.owner?.cancelled, isTrue);
-      pending.complete([
-        MediaItem(sourceId: tagged.id, remoteId: 'late', type: type, title: 'late-tagged-book'),
-      ]);
+      expect(request.cancellation?.cancelled, isTrue);
+      pending.complete(
+        SourceResponse(
+          statusCode: 200,
+          body: jsonEncode({
+            'data': [
+              {'id': 1, 'type': 2, 'name': 'late-anime'},
+            ],
+            'total': 1,
+          }),
+        ),
+      );
       await advance(tester);
-      expect(find.text('late-tagged-book'), findsNothing);
+      expect(find.text('late-anime'), findsNothing);
       expect(find.byType(InputChip), findsNothing);
-      expect(tagged.requests, hasLength(1));
+      expect(http.requests, hasLength(1));
       expect(unrelatedCalls, 0);
       expect(find.byType(LinearProgressIndicator), findsNothing);
       await close();
-    });
-  }
+    },
+  );
 
-  testWidgets('anime tag-only search sends online filters and cancels when cleared', (tester) async {
-    final pending = Completer<SourceResponse>();
-    final http = FakeHttpClient((_) => pending.future);
-    final source = BangumiSource(
-      rule: SourceRule.parseJson(File('assets/rules/bangumi-anime.json').readAsStringSync()),
-      http: http,
-    );
-    var unrelatedCalls = 0;
-    final close = await render(tester, MediaType.anime, [
-      source,
-      _SearchSource('wrong-media', MediaType.novel, (_) async {
-        unrelatedCalls++;
-        return [];
-      }),
-    ], tags: ['奇幻'], sourceId: source.descriptor.id);
-    expect(http.requests, hasLength(1));
-    final request = http.requests.single;
-    expect(request.method, 'POST');
-    final body = jsonDecode(request.body!) as Map<String, dynamic>;
-    expect(body['keyword'], '');
-    expect((body['filter'] as Map)['tag'], ['奇幻']);
-    expect(request.cancellation?.cancelled, isFalse);
-    await tester.tap(find.byTooltip('移除标签 奇幻'));
-    await advance(tester);
-    expect(request.cancellation?.cancelled, isTrue);
-    pending.complete(SourceResponse(statusCode: 200, body: jsonEncode({
-      'data': [{'id': 1, 'type': 2, 'name': 'late-anime'}],
-      'total': 1,
-    })));
-    await advance(tester);
-    expect(find.text('late-anime'), findsNothing);
-    expect(find.byType(InputChip), findsNothing);
-    expect(http.requests, hasLength(1));
-    expect(unrelatedCalls, 0);
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    await close();
-  });
-
-  testWidgets('source taxonomy choice submits its ID online without filtering server results', (tester) async {
-    final pending = Completer<List<MediaItem>>();
-    final source = _TaggedSource(pending);
-    final close = await render(tester, MediaType.novel, [source]);
-    await tester.tap(find.text('题材标签'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilterChip, '奇幻'));
-    await tester.tap(find.widgetWithText(TextButton, '搜索'));
-    await advance(tester);
-    expect(source.requests, hasLength(1));
-    expect(source.requests.single.$1, '');
-    expect(source.requests.single.$2, ['fantasy']);
-    pending.complete([
-      const MediaItem(sourceId: 'tagged', remoteId: 'online', type: MediaType.novel, title: 'Server response without matching local tags'),
-    ]);
-    await advance(tester);
-    expect(find.text('Server response without matching local tags'), findsOneWidget);
-    await close();
-  });
+  testWidgets(
+    'source taxonomy choice submits its ID online without filtering server results',
+    (tester) async {
+      final pending = Completer<List<MediaItem>>();
+      final source = _TaggedSource(pending);
+      final close = await render(tester, MediaType.novel, [source]);
+      await tester.tap(find.text('题材标签'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilterChip, '奇幻'));
+      await tester.tap(find.widgetWithText(TextButton, '搜索'));
+      await advance(tester);
+      expect(source.requests, hasLength(1));
+      expect(source.requests.single.$1, '');
+      expect(source.requests.single.$2, ['fantasy']);
+      pending.complete([
+        const MediaItem(
+          sourceId: 'tagged',
+          remoteId: 'online',
+          type: MediaType.novel,
+          title: 'Server response without matching local tags',
+        ),
+      ]);
+      await advance(tester);
+      expect(
+        find.text('Server response without matching local tags'),
+        findsOneWidget,
+      );
+      await close();
+    },
+  );
 
   for (final type in [MediaType.manga, MediaType.novel]) {
-    testWidgets('${type.name} legacy source sends tags as online keywords', (tester) async {
+    testWidgets('${type.name} legacy source sends tags as online keywords', (
+      tester,
+    ) async {
       final requests = <String>[];
-      final close = await render(tester, type, [
-        _SearchSource('legacy', type, (query) async {
-          requests.add(query);
-          return [MediaItem(sourceId: 'legacy', remoteId: 'online', type: type,
-            title: 'Online result without local tag metadata')];
-        }),
-      ], tags: ['奇幻'], sourceId: 'legacy');
+      final close = await render(
+        tester,
+        type,
+        [
+          _SearchSource('legacy', type, (query) async {
+            requests.add(query);
+            return [
+              MediaItem(
+                sourceId: 'legacy',
+                remoteId: 'online',
+                type: type,
+                title: 'Online result without local tag metadata',
+              ),
+            ];
+          }),
+        ],
+        tags: ['奇幻'],
+        sourceId: 'legacy',
+      );
       expect(requests, ['奇幻']);
-      expect(find.text('Online result without local tag metadata'), findsOneWidget);
+      expect(
+        find.text('Online result without local tag metadata'),
+        findsOneWidget,
+      );
       await tester.tap(find.byTooltip('移除标签 奇幻'));
       await advance(tester);
       expect(requests, ['奇幻']);
-      expect(find.text('Online result without local tag metadata'), findsNothing);
+      expect(
+        find.text('Online result without local tag metadata'),
+        findsNothing,
+      );
       await close();
     });
   }
@@ -332,16 +436,19 @@ class _SearchSource implements SearchProvider {
 
 class _TaggedSource extends _SearchSource implements TagSearchProvider {
   _TaggedSource(this.pending, {MediaType type = MediaType.novel})
-      : super('tagged', type, (_) async => []);
+    : super('tagged', type, (_) async => []);
   final Completer<List<MediaItem>> pending;
   final requests = <(String, List<String>, int)>[];
   SourceRequestCancellation? owner;
   @override
-  Future<List<SearchTag>> searchTags() async =>
-      const [SearchTag(id: 'fantasy', label: '奇幻')];
+  Future<List<SearchTag>> searchTags() async => const [
+    SearchTag(id: 'fantasy', label: '奇幻'),
+  ];
   @override
-  Future<List<MediaItem>> searchTagged(String keyword, {
-    required List<String> tags, int page = 1,
+  Future<List<MediaItem>> searchTagged(
+    String keyword, {
+    required List<String> tags,
+    int page = 1,
   }) {
     requests.add((keyword, List.of(tags), page));
     owner = SourceRequestCancellation.current;

@@ -93,10 +93,15 @@ class _AnimeHero extends StatelessWidget {
 }
 
 class _AnimeDetailTabs extends SliverPersistentHeaderDelegate {
-  _AnimeDetailTabs({required BuildContext context,
-    required this.section, required this.onSelected}) {
-    final style = Theme.of(context).chipTheme.labelStyle ??
-        Theme.of(context).textTheme.labelLarge ?? const TextStyle(fontSize: 14);
+  _AnimeDetailTabs({
+    required BuildContext context,
+    required this.section,
+    required this.onSelected,
+  }) {
+    final style =
+        Theme.of(context).chipTheme.labelStyle ??
+        Theme.of(context).textTheme.labelLarge ??
+        const TextStyle(fontSize: 14);
     final painter = TextPainter(
       text: TextSpan(text: '评论 / 吐槽', style: style),
       textDirection: Directionality.of(context),
@@ -117,33 +122,45 @@ class _AnimeDetailTabs extends SliverPersistentHeaderDelegate {
   double get maxExtent => _extent;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return SizedBox(
       height: _extent,
       child: Material(
-      color: Theme.of(context).colorScheme.surface,
-      elevation: overlapsContent ? 2 : 0,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(children: [
-          for (final entry in const {
-            'info': '概览', 'comments': '评论 / 吐槽', 'characters': '角色',
-            'subjects': '关联', 'persons': '制作人员',
-          }.entries)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                key: ValueKey(entry.key == 'comments'
-                    ? 'anime-comments-entry' : 'anime-detail-tab:${entry.key}'),
-                label: Text(entry.value),
-                selected: section == entry.key,
-                showCheckmark: false,
-                onSelected: (_) => onSelected(entry.key),
-              ),
-            ),
-        ]),
-      ),
+        color: Theme.of(context).colorScheme.surface,
+        elevation: overlapsContent ? 2 : 0,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              for (final entry in const {
+                'info': '概览',
+                'comments': '评论 / 吐槽',
+                'characters': '角色',
+                'subjects': '关联',
+                'persons': '制作人员',
+              }.entries)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    key: ValueKey(
+                      entry.key == 'comments'
+                          ? 'anime-comments-entry'
+                          : 'anime-detail-tab:${entry.key}',
+                    ),
+                    label: Text(entry.value),
+                    selected: section == entry.key,
+                    showCheckmark: false,
+                    onSelected: (_) => onSelected(entry.key),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -425,12 +442,17 @@ class _DetailTags extends StatelessWidget {
       : Padding(
           padding: const EdgeInsets.only(top: 12),
           child: Wrap(
-            spacing: 6,
-            runSpacing: 4,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               for (final tag in item.tags)
                 ActionChip(
-                  label: Text(tag),
+                  tooltip: tag,
+                  label: Text(
+                    tag,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   onPressed: () => SearchPage.open(
                     context,
                     type: item.type,

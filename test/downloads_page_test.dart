@@ -170,8 +170,8 @@ Future<void> _mount(
 }
 
 Future<void> _expand(WidgetTester tester) async {
-  await tester.tap(find.text('剧集 / 章节与任务详情').first);
-  // The first frame starts the ExpansionTile controller; only then advance it.
+  await tester.tap(find.byType(ExpansionTile).first);
+  // Start the expansion animation before advancing it.
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
 }
@@ -198,8 +198,11 @@ void main() {
           ]),
         ],
       );
+      expect(find.byTooltip('后台通知不可见'), findsOneWidget);
+      expect(find.byTooltip('暂停此作品'), findsOneWidget);
+      await tester.tap(find.byTooltip('后台通知不可见'));
+      await tester.pumpAndSettle();
       expect(find.textContaining('后台下载仍在运行'), findsOneWidget);
-      expect(find.textContaining('正在下载：Chapter 1'), findsOneWidget);
     },
   );
 
@@ -226,14 +229,24 @@ void main() {
       await _expand(tester);
       expect(find.text('Chapter 1'), findsOneWidget);
       expect(find.textContaining('3.0 KiB/s'), findsNWidgets(2));
-      expect(find.text('已保存 1 / 2 页'), findsNWidgets(3));
-      expect(find.text('通知权限未授予，请允许后台下载'), findsOneWidget);
-      expect(find.text('HTTP 503'), findsOneWidget);
+      expect(find.text('HTTP 503'), findsNothing);
+      await _tapVisible(tester, find.byTooltip('查看下载错误与详情').first);
+      expect(find.textContaining('通知权限未授予，请允许后台下载'), findsOneWidget);
+      expect(find.textContaining('已保存 1 / 2 页'), findsOneWidget);
+      await tester.tap(find.text('关闭'));
+      await tester.pumpAndSettle();
+      await _tapVisible(tester, find.byTooltip('查看下载错误与详情').last);
+      expect(find.textContaining('HTTP 503'), findsOneWidget);
+      await tester.tap(find.text('关闭'));
+      await tester.pumpAndSettle();
       expect(find.textContaining('自动重试等待'), findsOneWidget);
-      await _tapVisible(tester, find.text('暂停').first);
-      await _tapVisible(tester, find.text('继续'));
-      await _tapVisible(tester, find.text('立即重试'));
-      await _tapVisible(tester, find.text('取消任务').first);
+      await _tapVisible(tester, find.byTooltip('暂停').first);
+      await _tapVisible(tester, find.byTooltip('继续'));
+      await _tapVisible(tester, find.byTooltip('立即重试'));
+      await _tapVisible(tester, find.byTooltip('取消任务').first);
+      expect(queue.actions, [('pause', 1), ('resume', 2), ('resume', 3)]);
+      await tester.tap(find.text('确认移除'));
+      await tester.pumpAndSettle();
       expect(queue.actions, [
         ('pause', 1),
         ('resume', 2),
@@ -270,6 +283,79 @@ void main() {
   );
 
   testWidgets(
+    'collapsed work controls affect only that work and remain collapsed',
+    (tester) async {
+      final queue = _Queue();
+      await _mount(
+        tester,
+        queue: queue,
+        groups: [
+          _group(MediaType.manga, [
+            _entry(1, DownloadStatus.running),
+            _entry(2, DownloadStatus.queued),
+            _entry(3, DownloadStatus.paused),
+            _entry(4, DownloadStatus.failed),
+          ]),
+          _group(MediaType.anime, [
+            _entry(5, DownloadStatus.running, type: MediaType.anime),
+            _entry(6, DownloadStatus.failed, type: MediaType.anime),
+          ]),
+        ],
+      );
+      expect(find.text('Chapter 1'), findsNothing);
+      await _tapVisible(tester, find.byTooltip('暂停此作品').first);
+      await _tapVisible(tester, find.byTooltip('继续此作品'));
+      await _tapVisible(tester, find.byTooltip('重试此作品').first);
+      expect(queue.actions, [
+        ('pause', 1),
+        ('pause', 2),
+        ('resume', 3),
+        ('resume', 4),
+      ]);
+      expect(find.text('Chapter 1'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'open work menu remains actionable when completion reflows narrow controls',
+    (tester) async {
+      final stream = StreamController<List<DownloadGroup>>();
+      addTearDown(stream.close);
+      final queue = _Queue();
+      await _mount(tester, queue: queue, groups: [], stream: stream.stream);
+      tester.view.physicalSize = const Size(320, 900);
+      stream.add([
+        _group(MediaType.anime, [
+          _entry(1, DownloadStatus.running, type: MediaType.anime),
+          _entry(2, DownloadStatus.failed, type: MediaType.anime),
+        ]),
+      ]);
+      await tester.pumpAndSettle();
+      await _tapVisible(tester, find.byTooltip('作品下载操作'));
+      await tester.pumpAndSettle();
+      stream.add([
+        _group(MediaType.anime, [
+          _entry(1, DownloadStatus.done, type: MediaType.anime),
+          _entry(2, DownloadStatus.failed, type: MediaType.anime),
+        ]),
+      ]);
+      await tester.pump();
+      await tester.tap(find.text('删除作品下载…'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextButton),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(queue.actions, isEmpty);
+    },
+  );
+
+  testWidgets(
     'reorder submits every upcoming scoped ID and excludes running and done',
     (tester) async {
       final queue = _Queue();
@@ -297,9 +383,10 @@ void main() {
           ]),
         ],
       );
-      await tester.tap(find.text('调整待下载顺序（当前任务不会被抢占）'));
+      await tester.tap(find.byTooltip('下载操作'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('新顺序从下一任务开始生效'), findsOneWidget);
+      await tester.tap(find.text('调整待下载顺序'));
+      await tester.pumpAndSettle();
       expect(
         find.descendant(
           of: find.byType(AlertDialog),
@@ -340,11 +427,14 @@ void main() {
           library: library,
           onRoute: (args) => routed = args,
           groups: [
-            _group(type, [_entry(1, DownloadStatus.done, type: type)]),
+            _group(type, [
+              _entry(1, DownloadStatus.done, type: type),
+              _entry(2, DownloadStatus.done, type: type),
+            ]),
           ],
         );
         await _expand(tester);
-        await _tapVisible(tester, find.text('打开章节'));
+        await _tapVisible(tester, find.byTooltip('打开章节').last);
         await tester.pumpAndSettle();
         final List<Chapter> chapters;
         final int index;
@@ -363,8 +453,9 @@ void main() {
             index = (routed as NovelReaderArgs).initialIndex;
         }
         expect(chapters[index].sourceId, 'chapter-source');
-        expect(chapters[index].remoteId, 'actual/1');
-        expect(chapters[index].title, 'Cached chapter');
+        expect(index, 1);
+        expect(chapters[index].remoteId, 'actual/2');
+        expect(chapters.first.title, 'Cached chapter');
         expect(library.requests, [('work-source', 'work-${type.name}')]);
       },
     );
@@ -416,7 +507,7 @@ void main() {
         await availability.future;
       });
       await tester.pump();
-      expect(find.text('阅读已下载页面'), findsNothing);
+      expect(find.byTooltip('阅读已下载页面'), findsNothing);
       await tester.runAsync(() async {
         await File('${directory.path}${Platform.pathSeparator}0001.jpg')
             .writeAsBytes([1, 2, 3]);
@@ -436,8 +527,8 @@ void main() {
         await availability.future;
       });
       await tester.pump();
-      expect(find.text('阅读已下载页面'), findsOneWidget);
-      await _tapVisible(tester, find.text('阅读已下载页面'));
+      expect(find.byTooltip('阅读已下载页面'), findsOneWidget);
+      await _tapVisible(tester, find.byTooltip('阅读已下载页面'));
       await tester.pumpAndSettle();
       expect(routed, isA<MangaReaderArgs>());
       expect((routed as MangaReaderArgs).chapters.first.remoteId, 'actual/1');

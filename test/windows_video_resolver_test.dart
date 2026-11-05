@@ -426,14 +426,16 @@ void main() {
         messenger.setMockMethodCallHandler(session, null);
       });
       ResolvedDesktopVideo? result;
+      final navigatorKey = GlobalKey<NavigatorState>();
       await tester.pumpWidget(
         MaterialApp(
+          navigatorKey: navigatorKey,
           home: Builder(
             builder: (context) => TextButton(
               child: const Text('下载'),
               onPressed: () async {
                 result = await resolveWindowsVideo(
-                  context,
+                  navigatorKey.currentState!.context,
                   const PlaySource(
                     name: 'page',
                     url: 'https://site.test/play',

@@ -113,9 +113,41 @@ abstract final class AppTheme {
       ),
 
       chipTheme: ChipThemeData(
-        backgroundColor: palette.card,
-        side: BorderSide(color: colorScheme.outline),
-        labelStyle: textTheme.bodySmall,
+        color: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return colorScheme.onSurface.withValues(alpha: 0.06);
+          }
+          if (states.contains(WidgetState.selected)) {
+            return colorScheme.primaryContainer;
+          }
+          return palette.card;
+        }),
+        side: WidgetStateBorderSide.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return BorderSide(
+              color: colorScheme.onSurface.withValues(alpha: 0.12),
+            );
+          }
+          if (states.contains(WidgetState.focused)) {
+            return BorderSide(color: colorScheme.primary, width: 1.6);
+          }
+          return BorderSide(
+            color: states.contains(WidgetState.selected)
+                ? colorScheme.primary
+                : colorScheme.outline,
+          );
+        }),
+        labelStyle: textTheme.bodySmall?.copyWith(
+          color: WidgetStateColor.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return colorScheme.onSurface.withValues(alpha: 0.38);
+            }
+            return states.contains(WidgetState.selected)
+                ? colorScheme.onPrimaryContainer
+                : colorScheme.onSurface;
+          }),
+        ),
+        checkmarkColor: colorScheme.onPrimaryContainer,
         shape: const RoundedRectangleBorder(borderRadius: AppRadius.pillRadius),
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.sm,

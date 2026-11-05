@@ -11,7 +11,6 @@ import '../../core/models/media_type.dart';
 import '../../core/router/app_router.dart';
 import '../../core/storage/storage_paths.dart';
 import '../../core/theme/app_tokens.dart';
-import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../library/data/library_providers.dart';
 import '../novel/reader/novel_reader_page.dart';
@@ -72,13 +71,53 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                 unawaited(queue.retryFailed(type: widget.type));
               case 'clear':
                 unawaited(_confirmClear());
+              case 'reorder':
+                final items = groups.asData?.value;
+                if (items != null) unawaited(_reorder(items));
+              case 'wifi':
+                unawaited(queue.setWifiOnly(!wifiOnly));
+              case 'network-info':
+                unawaited(
+                  showDialog<void>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('下载设置'),
+                      content: const Text(
+                        '仅 WiFi 下载对全部任务生效。开启后，移动网络下队列会暂停，回到 WiFi 自动继续。\n\n'
+                        '调整待下载顺序不会抢占当前任务，新顺序从下一任务开始生效。',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('知道了'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
             }
           },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'pause', child: Text('暂停当前范围')),
-            PopupMenuItem(value: 'resume', child: Text('继续当前范围')),
-            PopupMenuItem(value: 'retry', child: Text('重试失败项')),
-            PopupMenuItem(value: 'clear', child: Text('清理无文件的已完成记录')),
+          itemBuilder: (_) => [
+            CheckedPopupMenuItem(
+              value: 'wifi',
+              checked: wifiOnly,
+              child: const Text('仅 WiFi 下载'),
+            ),
+            const PopupMenuItem(value: 'network-info', child: Text('网络与队列说明')),
+            PopupMenuItem(
+              value: 'reorder',
+              enabled:
+                  groups.asData?.value.any(
+                    (group) => group.entries.any(_isUpcoming),
+                  ) ??
+                  false,
+              child: const Text('调整待下载顺序'),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem(value: 'pause', child: Text('暂停当前范围')),
+            const PopupMenuItem(value: 'resume', child: Text('继续当前范围')),
+            const PopupMenuItem(value: 'retry', child: Text('重试失败项')),
+            const PopupMenuItem(value: 'clear', child: Text('清理无文件的已完成记录')),
           ],
         ),
       ],
@@ -90,46 +129,47 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.lg,
-                AppSpacing.md,
+                AppSpacing.sm,
                 AppSpacing.lg,
                 0,
               ),
-              child: AppCard(
-                child: SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: wifiOnly,
-                  title: const Text('仅 WiFi 下载（全部任务）'),
-                  subtitle: const Text('移动网络下队列会暂停，回到 WiFi 自动继续'),
-                  onChanged: (value) => unawaited(
-                    ref.read(downloadsProvider.notifier).setWifiOnly(value),
+              child: Row(
+                children: [
+                  Icon(
+                    wifiOnly ? Icons.wifi : Icons.network_check,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                ),
-              ),
-            ),
-            if (notificationVisible == false)
-              const Padding(
-                padding: EdgeInsets.all(AppSpacing.lg),
-                child: Text(
-                  '系统通知权限未开启：后台下载仍在运行，'
-                  '但下载通知可能不可见。请在系统设置中允许通知以查看后台进度。',
-                ),
-              ),
-            groups.when(
-              data: (items) =>
-                  items.any((group) => group.entries.any(_isUpcoming))
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.lg,
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      wifiOnly ? '仅 WiFi · 全部任务' : '允许移动网络',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  if (notificationVisible == false)
+                    IconButton(
+                      tooltip: '后台通知不可见',
+                      icon: const Icon(Icons.notifications_off_outlined),
+                      onPressed: () => showDialog<void>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('后台通知不可见'),
+                          content: const Text(
+                            '后台下载仍在运行，但系统通知权限未开启，下载通知可能不可见。'
+                            '请在系统设置中允许通知以查看后台进度。',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('知道了'),
+                            ),
+                          ],
+                        ),
                       ),
-                      child: TextButton.icon(
-                        onPressed: () => unawaited(_reorder(items)),
-                        icon: const Icon(Icons.reorder),
-                        label: const Text('调整待下载顺序（当前任务不会被抢占）'),
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-              loading: () => const SizedBox.shrink(),
-              error: (_, _) => const SizedBox.shrink(),
+                    ),
+                ],
+              ),
             ),
             groups.when(
               loading: () => const Padding(
@@ -149,6 +189,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                       children: <Widget>[
                         for (final group in items)
                           Padding(
+                            key: ValueKey((group.sourceId, group.remoteId)),
                             padding: const EdgeInsets.fromLTRB(
                               AppSpacing.lg,
                               AppSpacing.md,
@@ -157,11 +198,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                             ),
                             child: _DownloadGroupCard(
                               group: group,
-                              onRemove: () => unawaited(
-                                ref
-                                    .read(downloadsProvider.notifier)
-                                    .removeItem(group.sourceId, group.remoteId),
-                              ),
+                              onRemove: () => unawaited(_confirmRemove(group)),
                               onEntryAction: _entryAction,
                               onOpenChapter: (entry) =>
                                   unawaited(_openChapter(group, entry)),
@@ -192,6 +229,37 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('下载操作失败：$error')));
+      }
+    }
+  }
+
+  Future<void> _confirmRemove(DownloadGroup group) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除作品下载？'),
+        content: Text('将删除「${group.title}」的全部下载任务与离线文件，无法撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('保留'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除下载'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ref
+          .read(downloadsProvider.notifier)
+          .removeItem(group.sourceId, group.remoteId);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('删除下载失败：$error')));
       }
     }
   }
@@ -373,51 +441,189 @@ class _DownloadGroupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final running = group.entries
-        .where((entry) => entry.status == DownloadStatus.running)
-        .firstOrNull;
-    return AppCard(
+    final running = group.entries.where(
+      (entry) => entry.status == DownloadStatus.running,
+    );
+    final active = group.entries
+        .where(
+          (entry) =>
+              entry.status == DownloadStatus.running ||
+              entry.status == DownloadStatus.queued,
+        )
+        .toList();
+    final paused = group.entries
+        .where(
+          (entry) =>
+              entry.status == DownloadStatus.paused &&
+              entry.row.sourceId != 'local-comic',
+        )
+        .toList();
+    final failed = group.entries
+        .where(
+          (entry) =>
+              entry.row.sourceId != 'local-comic' &&
+              (entry.status == DownloadStatus.failed ||
+                  (entry.status == DownloadStatus.queued &&
+                      entry.row.retryAt != null)),
+        )
+        .toList();
+    final speed = running.fold<double>(
+      0,
+      (total, entry) => total + entry.row.speedBytesPerSecond,
+    );
+    final progress = group.entries.isEmpty
+        ? 0.0
+        : group.entries.fold<double>(
+                0,
+                (total, entry) =>
+                    total +
+                    (entry.status == DownloadStatus.done
+                        ? 1.0
+                        : entry.row.progress.clamp(0.0, 1.0)),
+              ) /
+              group.entries.length;
+    Future<void> act(String action, List<DownloadEntry> entries) async {
+      for (final entry in entries) {
+        await onEntryAction(entry, action);
+      }
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: AppRadius.cardRadius,
+        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextButton(
-                  onPressed: onOpen,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(group.title),
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: '删除下载',
-                onPressed: onRemove,
-                icon: const Icon(Icons.delete_outline),
-              ),
-            ],
-          ),
-          Text('已完成 ${group.doneCount} / ${group.entries.length} 章'),
-          if (running != null)
-            Text(
-              '正在下载：${running.chapterTitle} · '
-              '${_bytes(running.row.speedBytesPerSecond)}/s',
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.xs,
+              AppSpacing.xs,
+              0,
             ),
-          _DownloadSize(
-            paths: group.entries
-                .map((e) => e.row.path)
-                .whereType<String>()
-                .toSet(),
-            revision: Object.hashAll(group.entries.map((e) => e.row.status)),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final heading = Row(
+                  children: [
+                    Tooltip(
+                      message:
+                          '${group.type?.label ?? '下载'} · 来源：${group.sourceId}',
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: AppSpacing.sm),
+                        child: Icon(
+                          switch (group.type) {
+                            MediaType.manga => Icons.menu_book_outlined,
+                            MediaType.anime => Icons.movie_outlined,
+                            MediaType.novel => Icons.article_outlined,
+                            null => Icons.download_outlined,
+                          },
+                          size: 20,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        group.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                  ],
+                );
+                final actions = <Widget>[
+                  if (active.isNotEmpty)
+                    IconButton(
+                      tooltip: '暂停此作品',
+                      onPressed: () => unawaited(act('pause', active)),
+                      icon: const Icon(Icons.pause_rounded),
+                    ),
+                  if (paused.isNotEmpty)
+                    IconButton(
+                      tooltip: '继续此作品',
+                      onPressed: () => unawaited(act('resume', paused)),
+                      icon: const Icon(Icons.play_arrow_rounded),
+                    ),
+                  if (failed.isNotEmpty)
+                    IconButton(
+                      tooltip: '重试此作品',
+                      onPressed: () => unawaited(act('resume', failed)),
+                      icon: const Icon(Icons.refresh_rounded),
+                    ),
+                  PopupMenuButton<String>(
+                    tooltip: '作品下载操作',
+                    onSelected: (action) {
+                      if (action == 'open') onOpen();
+                      if (action == 'remove') onRemove();
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'open', child: Text('打开作品详情')),
+                      PopupMenuItem(value: 'remove', child: Text('删除作品下载…')),
+                    ],
+                  ),
+                ];
+                final stacked =
+                    constraints.maxWidth < 240 ||
+                    (constraints.maxWidth < 420 &&
+                        (actions.length > 2 ||
+                            MediaQuery.textScalerOf(context).scale(14) > 18));
+                // Keep the action subtree mounted while transfer snapshots
+                // change its width; an already-open menu must still respond.
+                return Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: stacked
+                          ? constraints.maxWidth
+                          : (constraints.maxWidth - actions.length * 48).clamp(
+                              0.0,
+                              constraints.maxWidth,
+                            ),
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          top: stacked ? AppSpacing.sm : 0,
+                        ),
+                        child: heading,
+                      ),
+                    ),
+                    ...actions,
+                  ],
+                );
+              },
+            ),
           ),
           ExpansionTile(
-            key: PageStorageKey(
-              'downloads:${group.sourceId}:${group.remoteId}',
+            key: PageStorageKey((group.sourceId, group.remoteId)),
+            initiallyExpanded: false,
+            expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+            shape: const Border(),
+            collapsedShape: const Border(),
+            title: Text(
+              '${group.doneCount}/${group.entries.length} 已完成'
+              '${failed.isNotEmpty ? ' · ${failed.length} 失败/重试' : ''}'
+              '${running.isNotEmpty && speed > 0 ? ' · ${_bytes(speed)}/s' : ''}',
             ),
-            tilePadding: EdgeInsets.zero,
-            title: const Text('剧集 / 章节与任务详情'),
+            childrenPadding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+            ),
             children: [
+              _DownloadSize(
+                paths: group.entries
+                    .map((e) => e.row.path)
+                    .whereType<String>()
+                    .toSet(),
+                revision: Object.hashAll(
+                  group.entries.map((e) => e.row.status),
+                ),
+              ),
               for (final entry in group.entries)
                 _DownloadChapterTile(
                   key: ValueKey(entry.row.id),
@@ -427,6 +633,8 @@ class _DownloadGroupCard extends StatelessWidget {
                 ),
             ],
           ),
+          if (group.doneCount < group.entries.length)
+            LinearProgressIndicator(value: progress),
         ],
       ),
     );
@@ -458,64 +666,118 @@ class _DownloadChapterTile extends StatelessWidget {
             entry.chapterTitle,
             style: Theme.of(context).textTheme.titleSmall,
           ),
-          if (entry.volumeTitle?.isNotEmpty == true) Text(entry.volumeTitle!),
-          Text('${entry.status.label} · ${(row.progress * 100).round()}%'),
           Text(
-            '${_bytes(row.receivedBytes)} / '
-            '${row.totalBytes == null ? '未知大小' : _bytes(row.totalBytes!)}'
-            '${running ? ' · ${_bytes(row.speedBytesPerSecond)}/s' : ''}',
+            '${entry.status.label} · ${(row.progress * 100).round()}%'
+            '${entry.type == MediaType.manga ? ' · ${row.completedPages}/${row.totalPages ?? '?'} 页' : ''}'
+            '${running && row.speedBytesPerSecond > 0 ? ' · ${_bytes(row.speedBytesPerSecond)}/s' : ''}',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
-          if (entry.type == MediaType.manga)
-            Text('已保存 ${row.completedPages} / ${row.totalPages ?? '?'} 页'),
           if (running)
             LinearProgressIndicator(value: row.progress.clamp(0.0, 1.0)),
-          if (error != null && error.isNotEmpty)
-            Text(
-              error,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
           if (row.retryAt != null &&
               (entry.status == DownloadStatus.queued ||
                   entry.status == DownloadStatus.failed))
             _RetryWaiting(at: row.retryAt!, count: row.retryCount),
-          if (row.retryAt == null &&
-              row.retryCount > 0 &&
-              (entry.status == DownloadStatus.failed ||
-                  entry.status == DownloadStatus.paused))
-            Text('已重试 ${row.retryCount} 次，可手动重试'),
           Wrap(
             spacing: AppSpacing.xs,
             children: [
+              IconButton(
+                tooltip: error != null && error.isNotEmpty
+                    ? '查看下载错误与详情'
+                    : '查看下载详情',
+                icon: Icon(
+                  error != null && error.isNotEmpty
+                      ? Icons.error_outline
+                      : Icons.info_outline,
+                  color: error != null && error.isNotEmpty
+                      ? Theme.of(context).colorScheme.error
+                      : null,
+                ),
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: Text(entry.chapterTitle),
+                    content: SingleChildScrollView(
+                      child: SelectableText(
+                        [
+                          if (entry.volumeTitle?.isNotEmpty == true)
+                            entry.volumeTitle!,
+                          '${entry.status.label} · ${(row.progress * 100).round()}%',
+                          '${_bytes(row.receivedBytes)} / '
+                              '${row.totalBytes == null ? '未知大小' : _bytes(row.totalBytes!)}',
+                          if (entry.type == MediaType.manga)
+                            '已保存 ${row.completedPages} / ${row.totalPages ?? '?'} 页',
+                          if (row.retryCount > 0) '已重试 ${row.retryCount} 次',
+                          if (error != null && error.isNotEmpty) error,
+                        ].join('\n\n'),
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('关闭'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               if (running || entry.status == DownloadStatus.queued)
-                TextButton(
+                IconButton(
                   onPressed: () => onAction('pause'),
-                  child: const Text('暂停'),
+                  tooltip: '暂停',
+                  icon: const Icon(Icons.pause_rounded),
                 ),
               if (entry.status == DownloadStatus.paused ||
                   entry.status == DownloadStatus.failed ||
                   (entry.status == DownloadStatus.queued &&
                       row.retryAt != null))
-                TextButton(
+                IconButton(
                   onPressed: row.sourceId == 'local-comic'
                       ? null
                       : () => onAction('resume'),
-                  child: Text(
-                    entry.status == DownloadStatus.failed ||
-                            row.retryAt != null ||
-                            (entry.status == DownloadStatus.paused &&
-                                row.retryCount > 0)
-                        ? '立即重试'
-                        : '继续',
+                  icon: Icon(
+                    entry.status == DownloadStatus.paused && row.retryCount == 0
+                        ? Icons.play_arrow_rounded
+                        : Icons.refresh_rounded,
                   ),
+                  tooltip:
+                      entry.status == DownloadStatus.failed ||
+                          row.retryAt != null ||
+                          (entry.status == DownloadStatus.paused &&
+                              row.retryCount > 0)
+                      ? '立即重试'
+                      : '继续',
                 ),
-              TextButton(
-                onPressed: () => onAction('cancel'),
-                child: Text(
-                  entry.status == DownloadStatus.done ? '移除下载' : '取消任务',
-                ),
+              IconButton(
+                tooltip: entry.status == DownloadStatus.done ? '移除下载' : '取消任务',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('移除章节下载？'),
+                      content: Text('将移除「${entry.chapterTitle}」的任务与离线文件，无法撤销。'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('保留'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('确认移除'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) onAction('cancel');
+                },
               ),
               if (entry.status == DownloadStatus.done && entry.type != null)
-                TextButton(onPressed: onOpen, child: const Text('打开章节')),
+                IconButton(
+                  tooltip: '打开章节',
+                  onPressed: onOpen,
+                  icon: const Icon(Icons.menu_book_outlined),
+                ),
               if (entry.type == MediaType.manga &&
                   entry.status != DownloadStatus.done &&
                   row.path != null)
@@ -595,7 +857,11 @@ class _PartialChapterActionState extends State<_PartialChapterAction> {
   Widget build(BuildContext context) => FutureBuilder<bool>(
     future: _available,
     builder: (context, snapshot) => snapshot.data == true
-        ? TextButton(onPressed: widget.onOpen, child: const Text('阅读已下载页面'))
+        ? IconButton(
+            onPressed: widget.onOpen,
+            tooltip: '阅读已下载页面',
+            icon: const Icon(Icons.menu_book_outlined),
+          )
         : const SizedBox.shrink(),
   );
 }

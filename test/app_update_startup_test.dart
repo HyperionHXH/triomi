@@ -19,13 +19,16 @@ import 'fixtures/fake_preferences.dart';
 
 /// Replace only the HTTP transport, not the production release request/parser.
 class _ReleaseTransport implements HttpClientAdapter {
+  _ReleaseTransport({this.tag = 'v0.12.0-test.172'});
+  final String tag;
   final requests = <Uri>[];
-  static String get body => jsonEncode([
+  static String get body => bodyFor('v0.12.0-test.172');
+  static String bodyFor(String tag) => jsonEncode([
     {
-      'tag_name': 'v0.12.0-test.172',
-      'name': 'Triomi test.172',
+      'tag_name': tag,
+      'name': 'Triomi $tag',
       'draft': false,
-      'prerelease': true,
+      'prerelease': tag.contains('-test.'),
       'published_at': '2026-10-22T00:00:00Z',
       'body': 'Protocol fixture release notes',
       'assets': [
@@ -36,7 +39,7 @@ class _ReleaseTransport implements HttpClientAdapter {
             'size': 3,
             'digest': 'sha256:${'1' * 64}',
             'browser_download_url':
-                'https://github.com/HyperionHXH/triomi/releases/download/v0.12.0-test.172/$name',
+                'https://github.com/HyperionHXH/triomi/releases/download/$tag/$name',
           },
       ],
     },
@@ -50,7 +53,7 @@ class _ReleaseTransport implements HttpClientAdapter {
   ) async {
     requests.add(options.uri);
     return ResponseBody.fromString(
-      body,
+      bodyFor(tag),
       200,
       headers: {
         Headers.contentTypeHeader: ['application/json'],
@@ -108,7 +111,8 @@ class _LocalReleaseTransport extends _ReleaseTransport {
 }
 
 class _StartupService extends AppUpdateService {
-  _StartupService() : this._(_ReleaseTransport());
+  _StartupService({bool stable = false})
+    : this._(_ReleaseTransport(tag: stable ? 'v0.13.0' : 'v0.12.0-test.172'));
   _StartupService._(this.transport)
     : super(dio: Dio()..httpClientAdapter = transport);
 
@@ -152,12 +156,26 @@ void main() {
         preferences,
         createService: () => service,
       );
-      expect(update?.release.versionCode, 172);
+      expect(update?.release.advertisedBuild, 172);
       expect(service.currentReads, 1);
       expect(service.transport.requests, [Uri.parse(appUpdateReleasesApi)]);
       expect(service.closes, 1);
     },
   );
+
+  test('stable startup release is offered with only the production metadata request', () async {
+    final preferences = memoryPreferences();
+    final service = _StartupService(stable: true);
+    final update = await checkStartupAppUpdate(
+      preferences,
+      createService: () => service,
+    );
+    expect(update?.release.tag, 'v0.13.0');
+    expect(update?.release.advertisedBuild, isNull);
+    expect(service.transport.requests, [Uri.parse(appUpdateReleasesApi)]);
+    expect(service.currentReads, 1);
+    expect(service.closes, 1);
+  });
 
   test('disabled startup never constructs a service or starts a network check', () async {
     final preferences = memoryPreferences();
@@ -258,7 +276,7 @@ void main() {
     requests[1].response.write(_ReleaseTransport.body);
     await requests[1].response.close();
     final releases = await manualReleases.timeout(const Duration(seconds: 2));
-    expect(releases.single.versionCode, 172);
+    expect(releases.single.advertisedBuild, 172);
     expect(preferences.automaticAppUpdateCheckEnabled, isFalse);
     expect(startupTransport.requests, [Uri.parse(appUpdateReleasesApi)]);
     expect(manualTransport.requests, [Uri.parse(appUpdateReleasesApi)]);

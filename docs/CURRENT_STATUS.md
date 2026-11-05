@@ -1,6 +1,20 @@
 # Triomi 当前状态
 
-## 当前请求：R176/R177 插件语言筛选、完整本地备份与后台下载（0.12.0+177，发布验收中）
+## 当前请求：0.13.0 下载界面、来源兼容与主要界面一致性（构建178，本机验收完成）
+
+参考 [Kazumi 下载作品卡片](https://github.com/Predidit/Kazumi/blob/02afdabf72af7eee04a7403786ee60236701086c/lib/pages/download/download_widgets.dart)及同提交的下载页、分集操作：作品为主要层级，默认收起章节，暂停、继续、重试使用带辅助说明的图标；具体剧集、漫画已下载页数和离线打开仍保留。WiFi、排序及批量操作集中到下载菜单，完整错误和字节信息按需查看，不静默隐藏失败。
+
+共享卡片原描边位于 Ink 背景，可能被内部不透明 Material 遮挡；改为前景描边，并统一浅色/深色标签的未选、选中、禁用和焦点状态。小说长标签保留完整提示。番剧全局搜索仅查资料，不再显示播放站切换；详情内的选站播放、独立来源库和缺源迁移搜索不移除。
+
+正式版本改用 `v0.13.0`，应用包为 `0.13.0+178`，后续修复用补丁版本递增。更新器识别正式语义版本与历史测试标签，以下载后真实包版本/构建号及平台校验作安装依据，不从语义版本虚构构建号。旧177及以前的更新器无法识别纯正式标签，首次升级需从 Releases 手动下载安装；不为兼容另发用户已取消的测试版本。
+
+真实HTTP旧新差分复现：旧下载器把无后缀重定向HLS清单、HTTP200验证HTML保存为`video.mp4`并报告完成；修复后识别实际MIME、按最终响应URL获取相对分片并保留精确请求头，HTML/JSON错误明确拒绝。gzip清单不再把压缩长度作为解码后字节数；超大清单和错误响应通过请求独有连接关闭，不取消同客户端的其他传输。原生Windows实测还复现根Navigator上下文无Overlay导致下载网页解析直接空值失败；修正后生产浏览器已取得受控HLS与93字节响应，同样公开7sefun页面解析得到QQ媒体URL但请求404。Android公开页面解析超时；MXdm/DM84生产搜索连接超时、MangaDex返回站点challenge。上述均不冒称已可下载，见[来源诊断](delivery/evidence/R178-source-download-diagnostics.json)及[支持矩阵](SOURCE_CAPABILITY_MATRIX.md#0130-下载诊断补充)。
+
+两组独立review修复gzip、失败响应释放、窄屏标题和打开菜单期间状态变化丢操作；原生实测再修正展开章节左右对齐，并将部分漫画打开也改为图标。最终全量Flutter **1645通过、4项平台条件跳过**，Python发布工具 **87通过**，`flutter analyze --no-pub`零问题。像素回归初次受FakeAsync阻塞，改为真实异步捕获后通过；Windows根导航回归已观察修复前`No Overlay widget found`与修复后完整后台解析/精确Cookie关闭屏障通过，不隐藏初轮失败。
+
+隔离Windows Profile与Android x64 Debug实际观察浅深主题作品描边、展开章节/打开第二章、漫画暂停前缀的真实PNG、小说长标签、个人/设置分组、漫画书库及公开番剧资料搜索5条。Android320dp/200%字号标题与重试图标可见，无Flutter异常。两端真实受控漫画每章5页完成，Android Home与Windows最小化后3章HLS全部完成，未操作的作品仍暂停；Android作品重试只恢复失败第12项而保留暂停第10/11项。受控媒体不扩大为正片解码或全部站点可用，未做iOS真机验收，详细状态见[原生证据](delivery/evidence/R178-native-ui-download-acceptance.json)。临时验收入口已删除，正常main构建与最终公开资产核验另记。
+
+## 已发布：R176/R177 插件语言筛选、完整本地备份与后台下载（0.12.0+177）
 
 插件浏览真正应用持久语言筛选，区分全部语言与多语言扩展。108Read 的旧 Keiyoushi 发布资源已404，同版本新资源有效；自有仓库沿用完整生成和校验流程，刷新频率改为每日。云仓库提交 `5cb6eff` 已推送，1601项APK地址全量可达；公网生产客户端重新解析全部索引并下载108Read APK/JAR，大小与独立SHA-256一致。Android实际宿主安装并启用108Read，未将下载成功等同于全部站点可用。
 
@@ -52,7 +66,7 @@
 
 本轮日常验证：应用内更新留存、Android媒体音量原生测试共19项通过；Flutter全量测试1453项通过、4项跳过，`flutter analyze --no-pub`零问题。Android Debug APK与Windows Profile构建成功。源码提交`ddc6823`已推送；发布版本元数据`0.12.0+174`提交`4b9eaec`与标签`v0.12.0-test.174`已推送，正式签名Android及Windows ZIP/MSI流水线[40182350865](https://github.com/HyperionHXH/triomi/actions/runs/40182350865)正在构建并发布。发布资产完成后再补核验结果。
 
-交付约定：用户要求此后每次推送都创建新Release。后续推送源码后，必须递增Android build number、建立不重复的`v0.12.0-test.<build>`标签，运行`.github/workflows/release.yml`并核验Android APK、Windows ZIP/MSI、更新清单及校验和；不得把“已推送提交”称作“已发布”。
+交付约定：用户要求此后每次推送都创建新Release。自0.13.0起使用不带`test`后缀的正式语义版本标签，Android build number继续单调递增；运行`.github/workflows/release.yml`并核验Android APK、Windows ZIP/MSI、更新清单及校验和；不得把“已推送提交”称作“已发布”。
 
 ## 当前请求：R173 菜单、评论与三源弹幕（已发布0.12.0+173）
 
