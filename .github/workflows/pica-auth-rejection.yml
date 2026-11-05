@@ -1,0 +1,29 @@
+name: Pica synthetic authentication rejection comparison
+
+on:
+  push:
+    branches: [diagnostic/pica181-auth-rejection]
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-rejection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate offline safety contracts
+        run: python3 -m unittest discover -s tools/pica_auth_rejection -p 'test_pica_auth_rejection_probe.py'
+      - name: Record exactly two reserved-account sign-in rejections
+        run: python3 tools/pica_auth_rejection/pica_auth_rejection_probe.py
+      - name: Preserve only fixed-class diagnostic results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pica-auth-rejection-result
+          path: pica-auth-rejection-result.json
+          if-no-files-found: error
+          retention-days: 3
