@@ -620,12 +620,14 @@ void main() {
         '/anime/detail?source=bangumi-anime&id=${TourHttpClient.metadataSubjectId}',
         '资料详情选择独立播放站后显示生产选集面板，未消费播放地址',
       );
-      Navigator.of(
-        tester.element(find.byType(EpisodeSelector)),
-        rootNavigator: true,
-      ).pop();
+      final episodeSheet = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(EpisodeSelector),
+      );
+      expect(episodeSheet, findsOneWidget);
+      Navigator.of(tester.element(episodeSheet), rootNavigator: true).pop();
       await until(
-        () => find.byType(EpisodeSelector).evaluate().isEmpty,
+        () => episodeSheet.evaluate().isEmpty,
         'episode sheet must close before the next production route',
       );
       expect(await identity.subjectFor(fixtures.item(MediaType.anime)), isNull);

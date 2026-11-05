@@ -23,6 +23,7 @@ import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/core/theme/app_theme.dart';
 import 'package:triomi/features/detail/detail_page.dart';
 import 'package:triomi/features/library/data/anime_identity_repository.dart';
+import 'package:triomi/features/player/episode_selector.dart';
 import 'package:triomi/features/player/player_page.dart';
 import 'package:triomi/features/search/search_page.dart';
 
@@ -325,7 +326,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(opened, isNull);
     expect(site.contentRequests, 0);
-    await tester.tap(find.text('第二集').last);
+    final episodeSheet = find.descendant(
+      of: find.byType(BottomSheet),
+      matching: find.byType(EpisodeSelector),
+    );
+    expect(episodeSheet, findsOneWidget);
+    Navigator.of(tester.element(episodeSheet), rootNavigator: true).pop();
+    await tester.pumpAndSettle();
+    expect(episodeSheet, findsNothing);
+    expect(find.byType(EpisodeSelector), findsOneWidget);
+    expect(find.byType(DetailPage), findsOneWidget);
+    await tester.ensureVisible(find.text('第二集'));
+    await tester.pumpAndSettle();
+    expect(find.text('第二集').hitTestable(), findsOneWidget);
+    await tester.tap(find.text('第二集'));
     await tester.pumpAndSettle();
     expect(opened!.item.sourceId, site.descriptor.id);
     expect(opened!.item.remoteId, 'site-work');
