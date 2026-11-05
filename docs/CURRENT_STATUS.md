@@ -1,5 +1,11 @@
 # Triomi 当前状态
 
+## 181发布后：授权测试账号登录通过（2026-11-05）
+
+用户提供并授权一次实际账号验收。直接测试进程到官方接口连接超时、未收到HTTP；无凭据HEAD检查发现本机已有Windows系统代理可以收到官方响应后，使用该既有代理调用未修改的181生产`PicacomicClient`/`DioSourceHttpClient`，一次登录HTTP200且有效会话写入纯内存存储，另一实例内存恢复成功，带认证分类GET为HTTP200/47项。随后logout清空内存存储和一次性回环凭据，测试进程退出；没有把账号、密码、token写入文件、日志、GitHub Secrets或证据，没有设备安装或应用数据变更。临时测试入口删除，只保留固定字段脱敏结果。
+
+这是Windows隔离环境的真实账号/官方接口证据，确认181在本次既有代理网络路径可登录；不是实际iOS Keychain、用户原设备网络或四源真实图片验收，也不能反推原设备400具体原因。无需新增应用/插件版本或重复构建。公开交付仍为181/哔咔1.0.3；下面发布当时“真实账号未验”为历史状态，以本次有限实际验证补充。脱敏证据`release_ios/reader-ports/host181-fixes/private-account/sanitized-os-proxy-result.json`，直连超时另记`sanitized-result.json`。
+
 ## 正式发布：iOS181 哔咔登录协议与错误诊断更新（2026-11-05）
 
 [v0.12.0-ios.181](https://github.com/HyperionHXH/triomi/releases/tag/v0.12.0-ios.181)已公开并设为Latest，标签精确指向`fc47a2a0becdbc6a7c1c4182c2b5af178e265f6d`。[41949380542第2次尝试](https://github.com/HyperionHXH/triomi/actions/runs/41949380542/attempts/2)成功：设备Release/IPA、原生桥/JSC、374项实际iOS集成通过；56主巡检、Copy11、阅读9张截图共76张全部核验并实际读取。三录像完整解码2089帧/225.84秒、461帧/163.005秒、694帧/168.015秒，未完整观看。Copy搜索封面本轮显示，长条快速fling停2/176未跳底。原17源16通过，喵趣原HTTP403失败保留、仅沿用既有精确政策；匿名元数据WN20/24、JM80/80、EH67/25，哔咔未登录零请求。真实哔咔账号恢复及其HTTP400根因仍未证实。
