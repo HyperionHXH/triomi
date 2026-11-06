@@ -1,5 +1,9 @@
 # Triomi 当前状态
 
+## 发布收尾：0.15.1（构建186）规则字节跨平台一致性
+
+0.15.0/185功能提交2678440已推送，但发布前review发现Windows的autocrlf检出可改变随包规则字节，使固定摘要的公开协议头证明失效，进而影响默认完整备份。已停止185正式发布流水线42275247566，未交付其Windows资产；不重写标签或替换字节。本次以`.gitattributes`将规则JSON及官方目录固定为LF，不放宽备份凭据校验；Git在`core.autocrlf=true`下重新检出xfdmnext的实际文件仍为1927字节、零CRLF、SHA256为44aedb07ba77c822835f2f3e09fe18eeda82ee46cb3c69624fe39cca0db5c176。按每次推送新Release约定递增0.15.1+186；功能与185已实测行为相同，重新跑正式签名和完整远端检查。
+
 ## 当前请求：0.15.0 目录下载、完整番剧规则与后台更新（构建185，验收中）
 
 漫画、小说目录提供逐章下载图标：等待/下载中可暂停，暂停/失败可继续，完成后直接打开对应章。原入口改为可选批量菜单：全部与未读；未读按当前作品的来源限定章节历史判断。小说参考[MixN当前分卷卡片](https://github.com/HyperionHXH/lightnovel-android-aggregator/blob/e0ef4f43cca2fd3864fe026ff49042ea3fc1e351/app/src/main/java/io/github/jiangyuyi/lightnovel/feature/sources/SourceBookScreen.kt)，默认收起、一次展开一卷，卷标题下可直接下载本卷；批量未读按卷组织实际未读章节，跳过已读及锁定项。原番剧播放列表选集下载保持不变，LNS逐章权限/专用字体及独立官方文件下载边界保留。

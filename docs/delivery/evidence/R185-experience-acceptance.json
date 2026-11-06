@@ -67,5 +67,16 @@
     "normalAndroidMainX64Debug": true,
     "androidDebugAbi": 128,
     "legacyPrivateNeedleScanner": "Unavailable hardcoded signing.properties prerequisite; no pass claim"
+  },
+  "releasePatch": {
+    "version": "0.15.1+186",
+    "reason": "Pin attested rule JSON LF across Windows checkouts before publication;185releasecancelled",
+    "autocrlfTrueCheckout": {
+      "bytes": 1927,
+      "crlfCount": 0,
+      "sha256": "44aedb07ba77c822835f2f3e09fe18eeda82ee46cb3c69624fe39cca0db5c176"
+    },
+    "targetedSourceAndBackupPassed": 28,
+    "businessLogicUnchanged": true
   }
 }
