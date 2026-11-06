@@ -608,8 +608,10 @@ void main() {
         await tester.runAsync(
           () => repo.chapterPositionOf(item.sourceId, item.remoteId, 'ep1'),
         ),
-        120,
+        0,
       );
+      // A completed episode remains in history but resumes as a replay, never
+      // at EOF where the decoder would immediately advance again.
       final opensAtLastEpisode = opens.length;
       await event('prepared', {
         'position': 0,
@@ -630,8 +632,9 @@ void main() {
       expect(opens.length, opensAtLastEpisode, reason: '末集不得自动串入另一播放列表');
       await tester.tap(previous);
       await settle();
+      expect(opens.last['startMilliseconds'], 0);
       await event('prepared', {
-        'position': 120000,
+        'position': 0,
         'duration': 180000,
         'playing': true,
       });
@@ -639,7 +642,7 @@ void main() {
       await tester.tap(next);
       await settle();
       await event('prepared', {
-        'position': 100000,
+        'position': 0,
         'duration': 180000,
         'playing': true,
       });
@@ -691,6 +694,88 @@ void main() {
         150,
         reason: '正常播放和退出持续保存实际播放位置',
       );
+      await const PlayerSettings(autoNext: false)
+          .save(container.read(preferencesProvider));
+      await tester.pumpWidget(page(1));
+      await settle();
+      await event('prepared', {
+        'position': 0,
+        'duration': 100000,
+        'playing': true,
+      });
+      await event('completed', {
+        'position': 100000,
+        'duration': 100000,
+        'playing': false,
+      });
+      await tester.pump(const Duration(seconds: 6));
+      await settle();
+      expect(
+        await tester.runAsync(
+          () => repo.chapterPositionOf(item.sourceId, item.remoteId, 'ep2'),
+        ),
+        0,
+        reason: 'timer writes after completion must not restore the EOF anchor',
+      );
+      await event('state', {
+        'position': 12000,
+        'duration': 100000,
+        'playing': true,
+      });
+      await tester.pump(const Duration(seconds: 6));
+      await settle();
+      expect(
+        await tester.runAsync(
+          () => repo.chapterPositionOf(item.sourceId, item.remoteId, 'ep2'),
+        ),
+        12,
+        reason:
+            'notification/Bluetooth replay must resume saving actual progress',
+      );
+      await event('completed', {
+        'position': 100000,
+        'duration': 100000,
+        'playing': false,
+      });
+      await tester.pumpWidget(const SizedBox());
+      await settle();
+      expect(
+        await tester.runAsync(
+          () => repo.chapterPositionOf(item.sourceId, item.remoteId, 'ep2'),
+        ),
+        0,
+        reason: 'disposal must preserve the completed replay anchor',
+      );
+      await const PlayerSettings().save(container.read(preferencesProvider));
+      await tester.runAsync(
+        () => repo.recordHistory(
+          sourceId: item.sourceId,
+          remoteId: item.remoteId,
+          chapter: chapters.first,
+          position: 119,
+        ),
+      );
+      await tester.pumpWidget(page(0));
+      await settle();
+      final legacyOpens = opens.length;
+      await event('prepared', {
+        'position': 119000,
+        'duration': 120000,
+        'playing': true,
+      });
+      await event('completed', {
+        'position': 120000,
+        'duration': 120000,
+        'playing': false,
+      });
+      expect(
+        opens.length,
+        legacyOpens,
+        reason: 'legacy last-second anchors replay instead of auto-skipping',
+      );
+      expect(getSeekTarget(), 0);
+      await tester.pumpWidget(const SizedBox());
+      await settle();
       final openCount = opens.length;
       await tester.pumpWidget(page(-1));
       await settle();

@@ -15,6 +15,7 @@ import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/models/video_resolve_cancellation.dart';
+import '../../core/platform/platform_channel.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
@@ -130,6 +131,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   bool _chromeVisible = true;
   bool _danmakuOn = true;
   bool _fullscreen = false;
+  bool _fullscreenBusy = false;
   bool _episodesOpen = false;
   bool _menuOpen = false;
   bool _menuActionActive = false;
@@ -150,6 +152,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   Duration _bufferedPosition = Duration.zero;
+  bool _chapterCompleted = false;
+  Duration _resumeStart = Duration.zero;
   bool _playing = false;
 
   @override
@@ -278,6 +282,12 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   void _onPosition(Duration position) {
     if (_awaitingPlaybackStart || _scrubbing) return;
     _position = position;
+    if (_chapterCompleted &&
+        _playing &&
+        _duration > Duration.zero &&
+        position < _duration - const Duration(seconds: 1)) {
+      _chapterCompleted = false;
+    }
     _danmaku.update(
       position,
       playing: _playing,
@@ -300,6 +310,14 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _duration = state.duration;
     _bufferedPosition = state.bufferedPosition;
     _playing = state.playing;
+    // Notification/Bluetooth replay seeks the native player without using the
+    // in-app seek controls. Resume normal progress once replay actually starts.
+    if (_chapterCompleted &&
+        _playing &&
+        _duration > Duration.zero &&
+        _position < _duration - const Duration(seconds: 1)) {
+      _chapterCompleted = false;
+    }
     // Keep the danmaku clock driven by the same position source as the
     // Android native player.  Desktop receives this through media_kit's
     // position stream; the TextureView path reports it over the method
@@ -487,6 +505,22 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     }
     _advancing = true;
     try {
+      // Older builds stored EOF as the resume anchor. Replaying such a chapter
+      // must restart it rather than immediately interpreting EOF as a new watch.
+      if (_duration > Duration.zero &&
+          _resumeStart > Duration.zero &&
+          _resumeStart >= _duration - const Duration(seconds: 1)) {
+        _resumeStart = Duration.zero;
+        await _seekTo(Duration.zero);
+        if (!mounted) return;
+        if (_useNativeAndroidVideo) {
+          await _nativeVideoController.play();
+        } else {
+          await _player.play();
+        }
+        return;
+      }
+      _chapterCompleted = true;
       if (_duration > Duration.zero) _position = _duration;
       await _persistProgress();
       if (!mounted || !_settings.autoNext) return;
@@ -591,6 +625,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       throw StateError('播放来源没有返回有效的视频地址，请更换来源或剧集');
     }
     _position = startPosition;
+    _chapterCompleted = false;
+    _resumeStart = startPosition;
     _duration = Duration.zero;
     _bufferedPosition = startPosition;
     _danmaku.seek(startPosition);
@@ -747,7 +783,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     final identity = _animeIdentity;
     if (repository == null || identity == null) return;
     final chapter = _chapter;
-    final position = _position;
+    final position = _chapterCompleted ? Duration.zero : _position;
     try {
       final subject = await identity.db.transaction(() async {
         await identity.recordSelection(_item, chapter);
@@ -825,22 +861,43 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   // ---------------------------------------------------------------- 全屏
 
   Future<void> _setFullscreen(bool value) async {
-    _scaffoldKey.currentState?.closeEndDrawer();
-    setState(() {
-      _fullscreen = value;
-      _episodesOpen = false;
-    });
-    if (value) {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
-    } else {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-      await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
-        DeviceOrientation.portraitUp,
-      ]);
+    if (!mounted || _fullscreenBusy || value == _fullscreen) return;
+    final windows = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+    _fullscreenBusy = true;
+    try {
+      if (windows) {
+        await platformChannel.setWindowFullscreen(value);
+        if (!mounted) {
+          if (value) await platformChannel.setWindowFullscreen(false);
+          return;
+        }
+      }
+      _scaffoldKey.currentState?.closeEndDrawer();
+      setState(() {
+        _fullscreen = value;
+        _episodesOpen = false;
+      });
+      if (windows) return;
+      if (value) {
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+        await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+      } else {
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
+          DeviceOrientation.portraitUp,
+        ]);
+      }
+    } catch (error) {
+      if (mounted) {
+        _toast('全屏切换失败，请重试');
+      } else {
+        debugPrint('Windows fullscreen restore failed: $error');
+      }
+    } finally {
+      _fullscreenBusy = false;
     }
   }
 
@@ -1173,6 +1230,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       } else {
         await _player.seek(target);
       }
+      if (mounted && sequence == _loadSeq) {
+        _chapterCompleted = false;
+        _resumeStart = Duration.zero;
+      }
       if (mounted && sequence == _loadSeq) _danmaku.seek(target);
     } catch (_) {
       if (mounted && sequence == _loadSeq) _toast('跳转未成功，请重试');
@@ -1182,6 +1243,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   Future<void> _togglePlay() async {
     if (_loading || _awaitingPlaybackStart || _error != null) return;
     _revealChrome();
+    if (_chapterCompleted && !_playing) {
+      await _seekTo(Duration.zero);
+      if (!mounted) return;
+    }
     if (_useNativeAndroidVideo) {
       _playing
           ? await _nativeVideoController.pause()
@@ -2045,7 +2110,13 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _nativeVideoController.dispose();
     if (!_useNativeAndroidVideo) _player.dispose();
     _danmaku.dispose();
-    if (_fullscreen) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      unawaited(
+        platformChannel.setWindowFullscreen(false).catchError((Object error) {
+          debugPrint('Windows fullscreen restore failed: $error');
+        }),
+      );
+    } else if (_fullscreen) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       SystemChrome.setPreferredOrientations(<DeviceOrientation>[
         DeviceOrientation.portraitUp,

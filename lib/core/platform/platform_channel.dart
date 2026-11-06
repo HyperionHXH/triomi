@@ -38,6 +38,23 @@ class PlatformChannel {
   static bool get _desktop =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
 
+  /// Changes the native Windows window, not just Flutter's content/system UI.
+  /// Callers must await this before changing their fullscreen presentation state
+  /// and request false when disposing the owning player. Native failures and a
+  /// missing/inconsistent acknowledgement are never treated as success.
+  Future<void> setWindowFullscreen(bool enabled) async {
+    final acknowledged = await _channel.invokeMethod<Object?>(
+      'setWindowFullscreen',
+      {'enabled': enabled},
+    );
+    if (acknowledged != enabled) {
+      throw PlatformException(
+        code: 'window_fullscreen_failed',
+        message: 'Windows did not acknowledge the requested fullscreen state',
+      );
+    }
+  }
+
   static void Function(String)? _downloadPause;
   static void Function()? _downloadWake;
   static bool? _downloadNotificationVisible;

@@ -13,7 +13,9 @@ import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/theme/app_theme.dart';
 import 'package:triomi/features/library/data/library_preferences.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
+import 'package:triomi/features/library/library_categories_page.dart';
 import 'package:triomi/features/library/library_page.dart';
+import 'package:triomi/features/settings/settings_page.dart';
 
 import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
@@ -32,6 +34,16 @@ const MediaItem anime = MediaItem(
   type: MediaType.anime,
   title: '命运石之门',
 );
+
+class _FailingFilterBox extends MemBox {
+  @override
+  Future<void> put(dynamic key, dynamic value) async {
+    if (key == 'library.manga.readStatus') {
+      throw StateError('Simulated filter preference write failure');
+    }
+    await super.put(key, value);
+  }
+}
 
 void main() {
   late AppDatabase db;
@@ -89,12 +101,147 @@ void main() {
   }
 
   Future<void> openCategories(WidgetTester tester) async {
-    await tester.tap(find.byTooltip('筛选书库'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('管理书架分类'));
-    await tester.tap(find.text('管理书架分类'));
+    Navigator.of(tester.element(find.byType(LibraryPage))).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const LibraryCategoriesPage(type: MediaType.manga),
+      ),
+    );
     await tester.pumpAndSettle();
   }
+
+  libraryTest('漫画书库和独立搜索的筛选不含管理入口且修改自动保留', (tester) async {
+    await repository.addToLibrary(manga);
+    await pumpLibrary(tester);
+    for (final search in [false, true]) {
+      if (search) await openLocalSearch(tester);
+      await tester.tap(find.byTooltip('筛选书库'));
+      await tester.pumpAndSettle();
+      for (final label in ['管理', '管理书架分类', '本地漫画库', '阅读历史', '下载管理', '持久迁移计划']) {
+        expect(find.text(label), findsNothing);
+      }
+      final downloaded = find.widgetWithText(FilterChip, '仅已下载');
+      final completed = find.widgetWithText(FilterChip, '仅已完结');
+      expect(tester.getTopLeft(downloaded).dy, tester.getTopLeft(completed).dy);
+      await tester.tap(find.widgetWithText(ChoiceChip, '未读'));
+      await tester.pumpAndSettle();
+      expect(preferences.get<String>('library.manga.readStatus'), 'unread');
+      await tester.tap(find.byTooltip('关闭筛选'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('筛选书库'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '未读'))
+            .selected,
+        isTrue,
+      );
+      await tester.tap(find.widgetWithText(TextButton, '重置'));
+      await tester.pumpAndSettle();
+      expect(preferences.get<String>('library.manga.readStatus'), 'all');
+      await tester.tap(find.byTooltip('关闭筛选'));
+      await tester.pumpAndSettle();
+    }
+  });
+
+  libraryTest('漫画管理功能保留在漫画设置中并能打开分类', (tester) async {
+    await pumpLibrary(tester);
+    Navigator.of(tester.element(find.byType(LibraryPage))).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const WorkspaceSettingsPage(type: MediaType.manga),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('本地漫画库'), 150);
+    expect(find.text('本地漫画库'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('漫画本地分类'), 150);
+    await tester.tap(find.text('漫画本地分类'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LibraryCategoriesPage), findsOneWidget);
+    expect(find.text('新建分类'), findsOneWidget);
+  });
+
+  libraryTest('独立书库搜索修改来源与重置后返回同步外层筛选', (tester) async {
+    await repository.addToLibrary(manga);
+    await repository.addToLibrary(
+      const MediaItem(
+        sourceId: 'other',
+        remoteId: '2',
+        type: MediaType.manga,
+        title: '作品乙',
+      ),
+    );
+    await pumpLibrary(tester);
+    await tester.tap(find.byTooltip('筛选书库'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, manga.sourceId));
+    await tester.tap(find.byTooltip('关闭筛选'));
+    await tester.pumpAndSettle();
+    await openLocalSearch(tester);
+    expect(find.text('作品甲'), findsOneWidget);
+    expect(find.text('作品乙'), findsNothing);
+    await tester.tap(find.byTooltip('筛选书库'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'other'));
+    await tester.tap(find.byTooltip('关闭筛选'));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('作品甲'), findsNothing);
+    expect(find.text('作品乙'), findsOneWidget);
+    await openLocalSearch(tester);
+    await tester.tap(find.byTooltip('筛选书库'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '重置'));
+    await tester.tap(find.byTooltip('关闭筛选'));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('作品甲'), findsOneWidget);
+    expect(find.text('作品乙'), findsOneWidget);
+    expect(preferences.get<String>('library.manga.source'), '');
+  });
+
+  libraryTest('漫画筛选写入失败提示用户且不抛出未处理异常', (tester) async {
+    preferences = Preferences(_FailingFilterBox());
+    await pumpLibrary(tester);
+    await tester.tap(find.byTooltip('筛选书库'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, '未读'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('书库筛选保存失败，重新打开页面后可能恢复原条件'), findsOneWidget);
+    expect(
+      tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '未读')).selected,
+      isTrue,
+    );
+  });
+
+  libraryTest('空结果清空筛选会保存并同步搜索返回与书库重建', (tester) async {
+    await repository.addToLibrary(manga);
+    await pumpLibrary(tester);
+    for (final search in [false, true]) {
+      if (search) await openLocalSearch(tester);
+      await tester.tap(find.byTooltip('筛选书库'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ChoiceChip, '已读'));
+      await tester.tap(find.byTooltip('关闭筛选'));
+      await tester.pumpAndSettle();
+      expect(find.text('作品甲'), findsNothing);
+      expect(preferences.get<String>('library.manga.readStatus'), 'read');
+      await tester.tap(find.widgetWithText(TextButton, '清空筛选'));
+      await tester.pumpAndSettle();
+      expect(find.text('作品甲'), findsOneWidget);
+      expect(preferences.get<String>('library.manga.readStatus'), 'all');
+      if (search) {
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.text('作品甲'), findsOneWidget);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpLibrary(tester);
+      expect(find.text('作品甲'), findsOneWidget);
+    }
+  });
 
   libraryTest('阅读状态过滤后全选只处理可见作品，改变分类立即退出选择', (tester) async {
     const other = MediaItem(
@@ -199,12 +346,27 @@ void main() {
     await pumpLibrary(tester);
     await tester.tap(find.byTooltip('筛选书库'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(SwitchListTile, '仅已完结'));
+    await tester.tap(find.widgetWithText(FilterChip, '仅已完结'));
     await tester.tap(find.byTooltip('关闭筛选'));
     await tester.pumpAndSettle();
     expect(find.text('APK完结作品'), findsOneWidget);
     expect(find.text('APK连载作品'), findsNothing);
     expect(find.text('未知状态作品'), findsNothing);
+    await openLocalSearch(tester);
+    expect(find.text('APK完结作品'), findsOneWidget);
+    expect(find.text('APK连载作品'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpLibrary(tester);
+    expect(find.text('APK完结作品'), findsOneWidget);
+    expect(find.text('APK连载作品'), findsNothing);
+    await tester.tap(find.byTooltip('筛选书库'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '重置'));
+    await tester.tap(find.byTooltip('关闭筛选'));
+    await tester.pumpAndSettle();
+    expect(find.text('APK完结作品'), findsOneWidget);
+    expect(find.text('APK连载作品'), findsOneWidget);
+    expect(find.text('未知状态作品'), findsOneWidget);
   });
 
   libraryTest('已读作品新增缓存章节后进入阅读中而不消失于阅读筛选', (tester) async {
@@ -263,8 +425,13 @@ void main() {
     expect(find.text('排序'), findsOneWidget);
     expect(find.text('显示'), findsOneWidget);
     expect(find.text('分组'), findsOneWidget);
+    final filterHeight = tester.getSize(find.byType(BottomSheet)).height;
     await tester.tap(find.text('排序'));
     await tester.pumpAndSettle();
+    expect(
+      tester.getSize(find.byType(BottomSheet)).height,
+      lessThan(filterHeight),
+    );
     await tester.tap(find.widgetWithText(ChoiceChip, '标题'));
     await tester.pumpAndSettle();
     expect(preferences.get<String>('library.manga.sort'), 'title');

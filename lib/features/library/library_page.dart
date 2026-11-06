@@ -15,7 +15,6 @@ import '../detail/chapter_download_picker.dart';
 import '../discover/widgets/media_item_card.dart';
 import '../downloads/data/download_providers.dart';
 import '../downloads/data/download_repository.dart';
-import '../local/local_comic_library_page.dart';
 import '../manga/manga_item_actions.dart';
 import '../search/search_page.dart';
 import 'data/library_preferences.dart';
@@ -23,7 +22,6 @@ import 'data/library_providers.dart';
 import 'data/library_repository.dart';
 import 'library_categories_page.dart';
 import 'merged_manga_page.dart';
-import 'migration_plans_page.dart';
 import 'source_migration_page.dart';
 
 /// Selection changes come from the library State, including provider updates.
@@ -158,7 +156,42 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
       if (const {'grid', 'list', 'adaptive'}.contains(layout)) {
         _options.layout = layout!;
       }
+      if (widget.type == MediaType.manga) {
+        final readStatus = preferences.get<String>('$_prefix.readStatus');
+        if (const {'all', 'unread', 'reading', 'read'}.contains(readStatus)) {
+          _options.readStatus = readStatus!;
+        }
+        final group = preferences.get<String>('$_prefix.group');
+        if (const {'none', 'source', 'status'}.contains(group)) {
+          _options.group = group!;
+        }
+        _options.source = preferences.get<String>('$_prefix.source') ?? '';
+        _options.downloaded =
+            preferences.get<bool>('$_prefix.downloaded') ?? false;
+        _options.completed =
+            preferences.get<bool>('$_prefix.completed') ?? false;
+      }
     });
+  }
+
+  Future<void> _saveMangaOptions() async {
+    try {
+      final preferences = ref.read(preferencesProvider);
+      await Future.wait([
+        preferences.set('$_prefix.sort', _options.sort),
+        preferences.set('$_prefix.layout', _options.layout),
+        preferences.set('$_prefix.group', _options.group),
+        preferences.set('$_prefix.readStatus', _options.readStatus),
+        preferences.set('$_prefix.source', _options.source),
+        preferences.set('$_prefix.downloaded', _options.downloaded),
+        preferences.set('$_prefix.completed', _options.completed),
+      ]);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(const SnackBar(content: Text('书库筛选保存失败，重新打开页面后可能恢复原条件')));
+    }
   }
 
   @override
@@ -195,6 +228,7 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
         ),
       ),
     );
+    if (mounted) await _loadPreferences();
   }
 
   void _changeQuery(String value) {
@@ -463,6 +497,9 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
                           onPressed: () {
                             setState(() => _options = _LibraryOptions());
                             _clearQuery();
+                            if (widget.type == MediaType.manga) {
+                              unawaited(_saveMangaOptions());
+                            }
                           },
                           child: const Text('清空筛选'),
                         ),
@@ -676,12 +713,14 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
       useSafeArea: true,
       builder: (sheet) => StatefulBuilder(
         builder: (sheet, update) {
+          final manga = widget.type == MediaType.manga;
           void change(VoidCallback action) {
             setState(() {
               action();
               _exitSelection();
             });
             update(() {});
+            if (manga) unawaited(_saveMangaOptions());
           }
 
           Widget choices(
@@ -694,14 +733,23 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
             children: [
               for (final value in values.entries)
                 ChoiceChip(
+                  visualDensity: manga ? VisualDensity.compact : null,
                   label: Text(value.value),
                   selected: current == value.key,
                   onSelected: (_) => change(() => onChanged(value.key)),
                 ),
             ],
           );
-          Widget page(List<Widget> children) =>
-              ListView(padding: const EdgeInsets.all(16), children: children);
+          Widget page(List<Widget> children) => manga
+              ? SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: children,
+                  ),
+                )
+              : ListView(padding: const EdgeInsets.all(16), children: children);
           final labels = ref.read(librarySourceLabelsProvider);
           final sources = {
             for (final view
@@ -710,131 +758,187 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
               view.item.sourceId:
                   labels[view.item.sourceId] ?? view.item.sourceId,
           };
+          final header = Row(
+            children: [
+              const Expanded(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('书库选项'),
+                ),
+              ),
+              if (manga)
+                TextButton(
+                  onPressed: () => change(() {
+                    _options = _LibraryOptions();
+                  }),
+                  child: const Text('重置'),
+                ),
+              IconButton(
+                tooltip: '关闭筛选',
+                onPressed: () => Navigator.pop(sheet),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          );
+          final tabs = TabBar(
+            isScrollable: true,
+            tabAlignment: manga ? TabAlignment.start : null,
+            tabs: const [
+              Tab(text: '过滤'),
+              Tab(text: '排序'),
+              Tab(text: '显示'),
+              Tab(text: '分组'),
+            ],
+          );
+          final pages = [
+            page([
+              const Text('本地阅读状态'),
+              if (manga) const SizedBox(height: 6),
+              choices(
+                const {
+                  'all': '全部',
+                  'unread': '未读',
+                  'reading': '阅读中',
+                  'read': '已读',
+                },
+                _options.readStatus,
+                (value) => _options.readStatus = value,
+              ),
+              if (manga) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    FilterChip(
+                      label: const Text('仅已下载'),
+                      selected: _options.downloaded,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (value) =>
+                          change(() => _options.downloaded = value),
+                    ),
+                    FilterChip(
+                      label: const Text('仅已完结'),
+                      selected: _options.completed,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (value) =>
+                          change(() => _options.completed = value),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ] else ...[
+                SwitchListTile(
+                  title: const Text('仅已下载'),
+                  value: _options.downloaded,
+                  onChanged: (value) =>
+                      change(() => _options.downloaded = value),
+                ),
+                SwitchListTile(
+                  title: const Text('仅已完结'),
+                  value: _options.completed,
+                  onChanged: (value) =>
+                      change(() => _options.completed = value),
+                ),
+              ],
+              Text(manga ? '来源' : '来源（离线收藏仍保留）'),
+              if (manga) const SizedBox(height: 6),
+              choices(
+                {'': '全部来源', ...sources},
+                _options.source,
+                (value) => _options.source = value,
+              ),
+              if (!manga) ...[
+                const Divider(),
+                const Text('管理'),
+                for (final item in {
+                  'categories': '管理书架分类',
+                  'history': '阅读历史',
+                  'downloads': '下载管理',
+                }.entries)
+                  ListTile(
+                    title: Text(item.value),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.pop(sheet);
+                      _openManagement(item.key);
+                    },
+                  ),
+              ],
+            ]),
+            page([
+              choices(_sorts, _options.sort, (value) {
+                _options.sort = value;
+                if (!manga) {
+                  unawaited(
+                    ref.read(preferencesProvider).set('$_prefix.sort', value),
+                  );
+                }
+              }),
+            ]),
+            page([
+              choices(
+                const {'grid': '封面网格', 'list': '列表', 'adaptive': '自适应封面'},
+                _options.layout,
+                (value) {
+                  _options.layout = value;
+                  if (!manga) {
+                    unawaited(
+                      ref
+                          .read(preferencesProvider)
+                          .set('$_prefix.layout', value),
+                    );
+                  }
+                },
+              ),
+            ]),
+            page([
+              choices(
+                const {'none': '不分组', 'source': '按来源', 'status': '按连载状态'},
+                _options.group,
+                (value) => _options.group = value,
+              ),
+            ]),
+          ];
+          if (manga) {
+            return DefaultTabController(
+              length: 4,
+              child: Builder(
+                builder: (context) {
+                  final controller = DefaultTabController.of(context);
+                  return AnimatedBuilder(
+                    animation: controller,
+                    builder: (context, _) => AnimatedSize(
+                      duration: const Duration(milliseconds: 160),
+                      alignment: Alignment.bottomCenter,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.sizeOf(sheet).height * .78,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            header,
+                            tabs,
+                            Flexible(child: pages[controller.index]),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          }
           return SizedBox(
             height: MediaQuery.sizeOf(sheet).height * .78,
             child: DefaultTabController(
               length: 4,
               child: Column(
                 children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Text('书库选项'),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: '关闭筛选',
-                        onPressed: () => Navigator.pop(sheet),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                  const TabBar(
-                    isScrollable: true,
-                    tabs: [
-                      Tab(text: '过滤'),
-                      Tab(text: '排序'),
-                      Tab(text: '显示'),
-                      Tab(text: '分组'),
-                    ],
-                  ),
-                  Expanded(
-                    child: TabBarView(
-                      children: [
-                        page([
-                          const Text('本地阅读状态'),
-                          choices(
-                            const {
-                              'all': '全部',
-                              'unread': '未读',
-                              'reading': '阅读中',
-                              'read': '已读',
-                            },
-                            _options.readStatus,
-                            (value) => _options.readStatus = value,
-                          ),
-                          SwitchListTile(
-                            title: const Text('仅已下载'),
-                            value: _options.downloaded,
-                            onChanged: (value) =>
-                                change(() => _options.downloaded = value),
-                          ),
-                          SwitchListTile(
-                            title: const Text('仅已完结'),
-                            value: _options.completed,
-                            onChanged: (value) =>
-                                change(() => _options.completed = value),
-                          ),
-                          const Text('来源（离线收藏仍保留）'),
-                          choices(
-                            {'': '全部来源', ...sources},
-                            _options.source,
-                            (value) => _options.source = value,
-                          ),
-                          const Divider(),
-                          const Text('管理'),
-                          for (final item in {
-                            'categories': '管理书架分类',
-                            'history': '阅读历史',
-                            'downloads': '下载管理',
-                            if (widget.type == MediaType.manga)
-                              'local': '本地漫画库',
-                            if (widget.type == MediaType.manga)
-                              'migration': '持久迁移计划',
-                          }.entries)
-                            ListTile(
-                              title: Text(item.value),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: () {
-                                Navigator.pop(sheet);
-                                _openManagement(item.key);
-                              },
-                            ),
-                        ]),
-                        page([
-                          choices(_sorts, _options.sort, (value) {
-                            _options.sort = value;
-                            unawaited(
-                              ref
-                                  .read(preferencesProvider)
-                                  .set('$_prefix.sort', value),
-                            );
-                          }),
-                        ]),
-                        page([
-                          choices(
-                            const {
-                              'grid': '封面网格',
-                              'list': '列表',
-                              'adaptive': '自适应封面',
-                            },
-                            _options.layout,
-                            (value) {
-                              _options.layout = value;
-                              unawaited(
-                                ref
-                                    .read(preferencesProvider)
-                                    .set('$_prefix.layout', value),
-                              );
-                            },
-                          ),
-                        ]),
-                        page([
-                          choices(
-                            const {
-                              'none': '不分组',
-                              'source': '按来源',
-                              'status': '按连载状态',
-                            },
-                            _options.group,
-                            (value) => _options.group = value,
-                          ),
-                        ]),
-                      ],
-                    ),
-                  ),
+                  header,
+                  tabs,
+                  Expanded(child: TabBarView(children: pages)),
                 ],
               ),
             ),
@@ -982,18 +1086,6 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
         context.push(AppRoutes.historyFor(widget.type));
       case 'downloads':
         context.push(AppRoutes.downloadsFor(widget.type));
-      case 'local':
-        Navigator.push(
-          context,
-          MaterialPageRoute<void>(
-            builder: (_) => const LocalComicLibraryPage(),
-          ),
-        );
-      case 'migration':
-        Navigator.push(
-          context,
-          MaterialPageRoute<void>(builder: (_) => const MigrationPlansPage()),
-        );
     }
   }
 

@@ -153,6 +153,135 @@ bool Win32Window::Show() {
   return ShowWindow(window_handle_, SW_SHOWNORMAL);
 }
 
+bool Win32Window::RestoreWindowedState(std::string* failure_stage, DWORD* error) {
+  if (!windowed_state_saved_) return true;
+  fullscreen_ = false;
+  fullscreen_transition_ = true;
+  const auto fail = [&](const char* stage) {
+    *failure_stage = stage;
+    *error = GetLastError();
+    fullscreen_transition_ = false;
+    return false;
+  };
+  SetLastError(ERROR_SUCCESS);
+  if (!SetWindowLongPtr(window_handle_, GWL_STYLE,
+                        windowed_style_ & ~(WS_MAXIMIZE | WS_MINIMIZE)) &&
+      GetLastError() != ERROR_SUCCESS) {
+    return fail("restore_style");
+  }
+  SetLastError(ERROR_SUCCESS);
+  if (!SetWindowLongPtr(window_handle_, GWL_EXSTYLE, windowed_ex_style_) &&
+      GetLastError() != ERROR_SUCCESS) {
+    return fail("restore_extended_style");
+  }
+  if (!SetWindowPlacement(window_handle_, &windowed_placement_)) {
+    return fail("restore_placement");
+  }
+  if (!SetWindowPos(window_handle_, nullptr, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                        SWP_FRAMECHANGED)) {
+    return fail("restore_frame");
+  }
+  windowed_state_saved_ = false;
+  fullscreen_transition_ = false;
+  return true;
+}
+
+bool Win32Window::SetFullscreen(bool enabled, std::string* failure_stage,
+                                DWORD* error) {
+  failure_stage->clear();
+  *error = ERROR_SUCCESS;
+  if (!window_handle_ || !IsWindow(window_handle_)) {
+    *failure_stage = "window_unavailable";
+    *error = ERROR_INVALID_WINDOW_HANDLE;
+    return false;
+  }
+  if (enabled && fullscreen_) return true;
+  // Also finishes a rollback that previously failed, without losing its snapshot.
+  if (!RestoreWindowedState(failure_stage, error)) return false;
+  if (!enabled) return true;
+
+  MONITORINFO monitor_info = {};
+  monitor_info.cbSize = sizeof(monitor_info);
+  const HMONITOR monitor =
+      MonitorFromWindow(window_handle_, MONITOR_DEFAULTTONEAREST);
+  if (!GetMonitorInfo(monitor, &monitor_info)) {
+    *failure_stage = "monitor_bounds";
+    *error = GetLastError();
+    return false;
+  }
+  windowed_placement_.length = sizeof(windowed_placement_);
+  if (!GetWindowPlacement(window_handle_, &windowed_placement_)) {
+    *failure_stage = "save_placement";
+    *error = GetLastError();
+    return false;
+  }
+  SetLastError(ERROR_SUCCESS);
+  windowed_style_ = GetWindowLongPtr(window_handle_, GWL_STYLE);
+  if (!windowed_style_ && GetLastError() != ERROR_SUCCESS) {
+    *failure_stage = "save_style";
+    *error = GetLastError();
+    return false;
+  }
+  SetLastError(ERROR_SUCCESS);
+  windowed_ex_style_ = GetWindowLongPtr(window_handle_, GWL_EXSTYLE);
+  if (!windowed_ex_style_ && GetLastError() != ERROR_SUCCESS) {
+    *failure_stage = "save_extended_style";
+    *error = GetLastError();
+    return false;
+  }
+  windowed_state_saved_ = true;
+  fullscreen_transition_ = true;
+  const auto fail = [&](const char* stage) {
+    const DWORD original_error = GetLastError();
+    std::string rollback_stage;
+    DWORD rollback_error = ERROR_SUCCESS;
+    const bool restored = RestoreWindowedState(&rollback_stage, &rollback_error);
+    *failure_stage = stage;
+    if (!restored) *failure_stage += "/rollback_" + rollback_stage;
+    *error = original_error;
+    return false;
+  };
+  // Clear native maximization before applying physical monitor bounds. The
+  // original WINDOWPLACEMENT remains untouched for restoring a maximized window.
+  if (IsZoomed(window_handle_) || IsIconic(window_handle_)) {
+    ShowWindow(window_handle_, SW_RESTORE);
+  }
+  SetLastError(ERROR_SUCCESS);
+  const LONG_PTR fullscreen_style =
+      (windowed_style_ & ~(WS_OVERLAPPEDWINDOW | WS_MAXIMIZE | WS_MINIMIZE)) |
+      WS_POPUP;
+  if (!SetWindowLongPtr(window_handle_, GWL_STYLE, fullscreen_style) &&
+      GetLastError() != ERROR_SUCCESS) {
+    return fail("enter_style");
+  }
+  SetLastError(ERROR_SUCCESS);
+  if (!SetWindowLongPtr(window_handle_, GWL_EXSTYLE,
+                        windowed_ex_style_ & ~(WS_EX_WINDOWEDGE |
+                            WS_EX_CLIENTEDGE | WS_EX_DLGMODALFRAME |
+                            WS_EX_STATICEDGE)) &&
+      GetLastError() != ERROR_SUCCESS) {
+    return fail("enter_extended_style");
+  }
+  // rcMonitor, not rcWork: the active borderless window covers the taskbar too.
+  // Do not make it permanently topmost; Alt+Tab must keep working normally.
+  const RECT& bounds = monitor_info.rcMonitor;
+  if (!SetWindowPos(window_handle_, HWND_TOP, bounds.left, bounds.top,
+                    bounds.right - bounds.left, bounds.bottom - bounds.top,
+                    SWP_FRAMECHANGED | SWP_NOOWNERZORDER)) {
+    return fail("enter_monitor_bounds");
+  }
+  RECT actual = {};
+  if (!GetWindowRect(window_handle_, &actual)) return fail("verify_bounds");
+  if (!EqualRect(&actual, &bounds)) {
+    SetLastError(ERROR_INVALID_STATE);
+    return fail("verify_bounds");
+  }
+  fullscreen_ = true;
+  fullscreen_transition_ = false;
+  return true;
+}
+
 // static
 LRESULT CALLBACK Win32Window::WndProc(HWND const window,
                                       UINT const message,
@@ -187,14 +316,32 @@ Win32Window::MessageHandler(HWND hwnd,
       }
       return 0;
 
+    case WM_DISPLAYCHANGE:
     case WM_DPICHANGED: {
-      auto newRectSize = reinterpret_cast<RECT*>(lparam);
-      LONG newWidth = newRectSize->right - newRectSize->left;
-      LONG newHeight = newRectSize->bottom - newRectSize->top;
-
-      SetWindowPos(hwnd, nullptr, newRectSize->left, newRectSize->top, newWidth,
-                   newHeight, SWP_NOZORDER | SWP_NOACTIVATE);
-
+      if (fullscreen_transition_) return 0;
+      if (!fullscreen_) {
+        if (message == WM_DISPLAYCHANGE) break;
+        auto suggested = reinterpret_cast<RECT*>(lparam);
+        SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
+                     suggested->right - suggested->left,
+                     suggested->bottom - suggested->top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        return 0;
+      }
+      // A different-DPI monitor's suggested rectangle is a windowed size.
+      // Keep fullscreen pinned to the actual new monitor, including negative
+      // virtual-screen coordinates and display-removal fallback.
+      const HMONITOR monitor = message == WM_DPICHANGED
+          ? MonitorFromRect(reinterpret_cast<RECT*>(lparam), MONITOR_DEFAULTTONEAREST)
+          : MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+      MONITORINFO info = {};
+      info.cbSize = sizeof(info);
+      if (GetMonitorInfo(monitor, &info)) {
+        const RECT& bounds = info.rcMonitor;
+        SetWindowPos(hwnd, nullptr, bounds.left, bounds.top,
+                     bounds.right - bounds.left, bounds.bottom - bounds.top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+      }
       return 0;
     }
     case WM_SIZE: {
@@ -222,6 +369,14 @@ Win32Window::MessageHandler(HWND hwnd,
 }
 
 void Win32Window::Destroy() {
+  if (window_handle_ && windowed_state_saved_) {
+    std::string stage;
+    DWORD error = ERROR_SUCCESS;
+    if (!RestoreWindowedState(&stage, &error)) {
+      OutputDebugStringA(("triomi fullscreen disposal restore failed: " + stage +
+                          " (" + std::to_string(error) + ")\n").c_str());
+    }
+  }
   OnDestroy();
 
   if (window_handle_) {

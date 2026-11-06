@@ -573,6 +573,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                     title: '没有可搜索的${widget.type.label}来源',
                     message: '请在当前模块启用来源。',
                   )
+                : widget.type == MediaType.anime && rows.isNotEmpty
+                ? _animeResults(rows.single)
                 : ListView.separated(
                     itemCount: rows.length,
                     separatorBuilder: (_, _) => const Divider(height: 24),
@@ -584,7 +586,21 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     );
   }
 
-  Widget _resultSection(_SearchRow row) {
+  Widget _animeResults(_SearchRow row) {
+    return MediaItemCollection(
+      items: row.items,
+      sourceName: row.entry.descriptor.name,
+      preferGrid: true,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      header: _resultHeader(row),
+      footer: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [_resultStatus(row), _resultPagination(row)],
+      ),
+    );
+  }
+
+  Widget _resultHeader(_SearchRow row) {
     final descriptor = row.entry.descriptor;
     final isManga = widget.type == MediaType.manga;
     void openSource() {
@@ -600,21 +616,25 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       );
     }
 
+    return ListTile(
+      title: Text(descriptor.name),
+      subtitle: Text(
+        '${descriptor.lang}${row.pending
+            ? ' · 搜索中'
+            : row.error == null
+            ? ' · ${row.items.length} 条'
+            : ''}',
+      ),
+      trailing: isManga ? const Icon(Icons.chevron_right) : null,
+      onTap: isManga ? openSource : null,
+    );
+  }
+
+  Widget _resultStatus(_SearchRow row) {
+    final descriptor = row.entry.descriptor;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ListTile(
-          title: Text(descriptor.name),
-          subtitle: Text(
-            '${descriptor.lang}${row.pending
-                ? ' · 搜索中'
-                : row.error == null
-                ? ' · ${row.items.length} 条'
-                : ''}',
-          ),
-          trailing: isManga ? const Icon(Icons.chevron_right) : null,
-          onTap: isManga ? openSource : null,
-        ),
         if (row.pending && row.items.isEmpty)
           const Padding(padding: EdgeInsets.all(16), child: Text('正在搜索本站…')),
         if (row.error != null)
@@ -673,6 +693,18 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           ),
         if (!row.pending && row.error == null && row.items.isEmpty)
           const Padding(padding: EdgeInsets.all(16), child: Text('没有找到匹配内容')),
+      ],
+    );
+  }
+
+  Widget _resultSection(_SearchRow row) {
+    final descriptor = row.entry.descriptor;
+    final isManga = widget.type == MediaType.manga;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _resultHeader(row),
+        _resultStatus(row),
         if (row.items.isNotEmpty && isManga)
           SizedBox(
             height: MediaQuery.textScalerOf(context).scale(13) * 3 + 190,
@@ -702,36 +734,37 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               },
             ),
           ),
-        if (row.items.isNotEmpty && !isManga) ...[
+        if (row.items.isNotEmpty && widget.type == MediaType.novel)
           SizedBox(
             height: 380,
-            child: widget.type == MediaType.novel
-                ? ListView.builder(
-                    itemCount: row.items.length,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemBuilder: (_, index) => NovelBookCard(
-                      item: row.items[index],
-                      sourceLabel: descriptor.name,
-                    ),
-                  )
-                : MediaItemCollection(
-                    items: row.items,
-                    sourceName: descriptor.name,
-                    preferGrid: widget.type == MediaType.anime,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                  ),
+            child: ListView.builder(
+              itemCount: row.items.length,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemBuilder: (_, index) => NovelBookCard(
+                item: row.items[index],
+                sourceLabel: descriptor.name,
+              ),
+            ),
           ),
-        ],
-        if (!isManga && row.page > 0 && row.hasMore && row.error == null)
-          TextButton(
-            onPressed: row.pending
-                ? null
-                : () => unawaited(
-                    _searchOne(row.entry, _query, _generation, append: true),
-                  ),
-            child: Text(row.pending ? '正在加载本站下一页…' : '加载本站下一页'),
-          ),
+        _resultPagination(row),
       ],
+    );
+  }
+
+  Widget _resultPagination(_SearchRow row) {
+    if (widget.type == MediaType.manga ||
+        row.page <= 0 ||
+        !row.hasMore ||
+        row.error != null) {
+      return const SizedBox.shrink();
+    }
+    return TextButton(
+      onPressed: row.pending
+          ? null
+          : () => unawaited(
+              _searchOne(row.entry, _query, _generation, append: true),
+            ),
+      child: Text(row.pending ? '正在加载本站下一页…' : '加载本站下一页'),
     );
   }
 }

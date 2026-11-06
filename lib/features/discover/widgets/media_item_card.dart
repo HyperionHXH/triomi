@@ -28,6 +28,7 @@ class MediaItemCollection extends StatelessWidget {
     this.onTapItem,
     this.onLongPressItem,
     this.badgeOf,
+    this.header,
     this.footer,
     this.controller,
     this.preferGrid = false,
@@ -37,6 +38,9 @@ class MediaItemCollection extends StatelessWidget {
   final String sourceName;
   final String Function(MediaItem item)? sourceNameOf;
   final EdgeInsets padding;
+
+  /// 集合顶部的附加内容，与作品和尾部共享同一个滚动视口。
+  final Widget? header;
 
   /// 列表尾部的附加内容（如「已经到底了」提示、加载指示器）。
   final Widget? footer;
@@ -68,7 +72,8 @@ class MediaItemCollection extends StatelessWidget {
       context.push(AppRoutes.detailFor(item), extra: item);
     }
 
-    final extra = footer == null ? 0 : 1;
+    final leading = header == null ? 0 : 1;
+    final extra = leading + (footer == null ? 0 : 1);
     Map<(String, String, MediaType), int>? indices;
     int? indexOfKey(Key key) {
       if (key is! ValueKey<(String, String, MediaType)>) return null;
@@ -91,10 +96,15 @@ class MediaItemCollection extends StatelessWidget {
         key: PageStorageKey('media/list/$sourceName'),
         padding: padding,
         itemCount: items.length + extra,
-        findChildIndexCallback: indexOfKey,
+        findChildIndexCallback: (key) {
+          final index = indexOfKey(key);
+          return index == null ? null : index + leading;
+        },
         itemBuilder: (context, index) {
-          if (footer != null && index == items.length) return footer!;
-          final item = items[index];
+          if (header != null && index == 0) return header!;
+          final itemIndex = index - leading;
+          if (footer != null && itemIndex == items.length) return footer!;
+          final item = items[itemIndex];
           return MediaItemRow(
             key: ValueKey((item.sourceId, item.remoteId, item.type)),
             item: item,
@@ -136,6 +146,7 @@ class MediaItemCollection extends StatelessWidget {
           key: PageStorageKey('media/grid/$sourceName'),
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
+            if (header != null) SliverToBoxAdapter(child: header),
             SliverPadding(
               padding: padding,
               sliver: SliverGrid(
