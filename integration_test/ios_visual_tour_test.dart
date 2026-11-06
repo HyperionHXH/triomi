@@ -1422,7 +1422,11 @@ void main() {
         '新手最后一步无账号表单、不自动同步；只提供按需来源/恢复入口',
       );
       await tapText('完成设置');
-      expect(find.byType(OnboardingPage), findsNothing);
+      await until(
+        () => find.byType(OnboardingPage).evaluate().isEmpty,
+        'completion must persist configuration and finish its native route transition',
+      );
+      cleanExceptions(AppRoutes.settings);
       expect(container.read(appearanceProvider).themeMode, ThemeMode.dark);
       await go(AppRoutes.manga);
       expect(
