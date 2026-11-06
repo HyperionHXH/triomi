@@ -1250,11 +1250,12 @@ void main() {
             route,
             '没有外部目录授权就没有本地备份列表；不把私有暂存称为安全备份',
           );
-          await tester.scrollUntilVisible(
-            find.text('选择目录'),
-            -250,
-            scrollable: verticalScroll,
+          await Scrollable.ensureVisible(
+            tester.element(find.text('备份保存目录')),
+            alignment: .15,
+            duration: const Duration(milliseconds: 300),
           );
+          await pumpFor();
           expect(find.text('选择目录').hitTestable(), findsOneWidget);
           expect(find.textContaining('尚未授权：首次导出前').evaluate(), isNotEmpty);
           await screenshot(
