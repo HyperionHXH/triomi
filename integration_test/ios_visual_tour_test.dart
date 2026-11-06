@@ -43,6 +43,14 @@ void main() {
   testWidgets(
     'iOS production visual tour',
     (tester) async {
+      // The binding retains only the exception object; preserve its original
+      // layout diagnostics before the next capture consumes that exception.
+      final reportError = FlutterError.onError;
+      FlutterError.onError = (details) {
+        FlutterError.dumpErrorToConsole(details, forceReport: true);
+        reportError?.call(details);
+      };
+      addTearDown(() => FlutterError.onError = reportError);
       final rawBase = const String.fromEnvironment('TRIOMI_TOUR_BASE_URL');
       final videoUrl = const String.fromEnvironment('TRIOMI_VIDEO_URL');
       expect(
