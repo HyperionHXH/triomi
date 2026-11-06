@@ -1,6 +1,6 @@
 {
   "version": "0.14.2+182",
-  "status": "local-validation-completed-publication-pending",
+  "status": "published-and-public-artifacts-verified",
   "scope": [
     "Standalone search pages for manga sources, installed extensions and repository installation",
     "Pending chapter state and detail-to-directory plugin snapshot ordering",
@@ -54,7 +54,37 @@
     "fixtureMediaAndTextEncoding": "passed",
     "uiDocDriftErrors": 0,
     "deliveryConsistencyErrors": 0,
-    "historicalDeliveryTemplateWarnings": 35
+    "historicalDeliveryTemplateWarnings": 35,
+    "remoteFinalBuild": {
+      "id": 42220873735,
+      "url": "https://github.com/HyperionHXH/triomi/actions/runs/42220873735",
+      "commit": "26906f96faa5682ff91fc07db1e53a5534541903",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "python-tools",
+          "conclusion": "success"
+        },
+        {
+          "name": "test",
+          "conclusion": "success"
+        },
+        {
+          "name": "windows",
+          "conclusion": "success"
+        },
+        {
+          "name": "android",
+          "conclusion": "success"
+        }
+      ]
+    },
+    "remoteFlutterAnalyzeIssues": 0,
+    "remotePythonTestsPassed": 117,
+    "remoteFlutterTests": {
+      "passed": 1709,
+      "skipped": 1
+    }
   },
   "builds": {
     "android": {
@@ -83,8 +113,100 @@
   "publication": {
     "requested": true,
     "tag": "v0.14.2",
-    "pushed": false,
-    "published": false
+    "pushed": true,
+    "published": true,
+    "sourceCommit": "26906f96faa5682ff91fc07db1e53a5534541903",
+    "releaseWorkflow": {
+      "id": 42220883487,
+      "url": "https://github.com/HyperionHXH/triomi/actions/runs/42220883487",
+      "commit": "26906f96faa5682ff91fc07db1e53a5534541903",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "android",
+          "conclusion": "success"
+        },
+        {
+          "name": "windows",
+          "conclusion": "success"
+        },
+        {
+          "name": "publish",
+          "conclusion": "success"
+        }
+      ]
+    },
+    "buildWorkflow": {
+      "id": 42220873735,
+      "url": "https://github.com/HyperionHXH/triomi/actions/runs/42220873735",
+      "commit": "26906f96faa5682ff91fc07db1e53a5534541903",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "python-tools",
+          "conclusion": "success"
+        },
+        {
+          "name": "test",
+          "conclusion": "success"
+        },
+        {
+          "name": "windows",
+          "conclusion": "success"
+        },
+        {
+          "name": "android",
+          "conclusion": "success"
+        }
+      ]
+    },
+    "publicArtifactVerification": {
+      "status": "passed",
+      "tag": "v0.14.2",
+      "version": "0.14.2+182",
+      "url": "https://github.com/HyperionHXH/triomi/releases/tag/v0.14.2",
+      "publishedAt": "2026-11-06T13:02:07Z",
+      "assets": {
+        "SHA256SUMS.txt": {
+          "sha256": "f1e721764407cf21a21c745129b07404e4922e85bf1367ee03a6b14700e57ee6",
+          "bytes": 348
+        },
+        "triomi-android.apk": {
+          "sha256": "ea3a0d55bbffee62f27164d533e5131371c85a826a661e9f7326fe3aad122a15",
+          "bytes": 161925242
+        },
+        "triomi-windows.zip": {
+          "sha256": "3ea478be08a389fbda527b3014d59c6ecd2cc08daad8f50849a14ba90cb605d1",
+          "bytes": 255472487
+        },
+        "triomi-windows.msi": {
+          "sha256": "2f39d8999c0a8b860b10e8de966bc7bdff07f45ac6b981273fd6a06e382778cf",
+          "bytes": 244187332
+        },
+        "triomi-windows.update.json": {
+          "sha256": "a62548171607e34af48cf1b39235f074bbec6fb88d36a4d9cf687a4253440d42",
+          "bytes": 78619
+        }
+      },
+      "android": {
+        "signerSha256": "731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309",
+        "matchesPublic180Signer": true,
+        "signatureSchemeV2": true,
+        "requiredAbiDescriptors": 128,
+        "nativeArchitectures": [
+          "arm64-v8a",
+          "armeabi-v7a",
+          "x86_64"
+        ],
+        "versionVerified": true
+      },
+      "windows": {
+        "manifestFilesVerified": 451,
+        "ordinaryMain": true,
+        "sourceProvenanceVerified": true,
+        "helperJarSha256": "6a480a85d62c129be09400d408898fdb8ccfe4ea808a11c4c9a88512237074af"
+      }
+    }
   },
   "limits": [
     "CopyManga HTTP 210 is reproduced in Komikku; this release does not claim to bypass or resolve the site restriction.",
