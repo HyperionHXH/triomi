@@ -751,6 +751,17 @@ class $MediaItemsTable extends MediaItems
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _sourceMetadataJsonMeta =
+      const VerificationMeta('sourceMetadataJson');
+  @override
+  late final GeneratedColumn<String> sourceMetadataJson =
+      GeneratedColumn<String>(
+        'source_metadata_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _cachedAtMeta = const VerificationMeta(
     'cachedAt',
   );
@@ -776,6 +787,7 @@ class $MediaItemsTable extends MediaItems
     rating,
     status,
     detailJson,
+    sourceMetadataJson,
     cachedAt,
   ];
   @override
@@ -865,6 +877,15 @@ class $MediaItemsTable extends MediaItems
         detailJson.isAcceptableOrUnknown(data['detail_json']!, _detailJsonMeta),
       );
     }
+    if (data.containsKey('source_metadata_json')) {
+      context.handle(
+        _sourceMetadataJsonMeta,
+        sourceMetadataJson.isAcceptableOrUnknown(
+          data['source_metadata_json']!,
+          _sourceMetadataJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('cached_at')) {
       context.handle(
         _cachedAtMeta,
@@ -930,6 +951,10 @@ class $MediaItemsTable extends MediaItems
         DriftSqlType.string,
         data['${effectivePrefix}detail_json'],
       ),
+      sourceMetadataJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_metadata_json'],
+      ),
       cachedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}cached_at'],
@@ -969,6 +994,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
 
   /// 详情页扩展字段（同书版本、关联推荐等），JSON。
   final String? detailJson;
+  final String? sourceMetadataJson;
   final DateTime? cachedAt;
   const MediaItemRow({
     required this.sourceId,
@@ -983,6 +1009,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
     this.rating,
     this.status,
     this.detailJson,
+    this.sourceMetadataJson,
     this.cachedAt,
   });
   @override
@@ -1020,6 +1047,9 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
     if (!nullToAbsent || detailJson != null) {
       map['detail_json'] = Variable<String>(detailJson);
     }
+    if (!nullToAbsent || sourceMetadataJson != null) {
+      map['source_metadata_json'] = Variable<String>(sourceMetadataJson);
+    }
     if (!nullToAbsent || cachedAt != null) {
       map['cached_at'] = Variable<DateTime>(cachedAt);
     }
@@ -1054,6 +1084,9 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
       detailJson: detailJson == null && nullToAbsent
           ? const Value.absent()
           : Value(detailJson),
+      sourceMetadataJson: sourceMetadataJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceMetadataJson),
       cachedAt: cachedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(cachedAt),
@@ -1080,6 +1113,9 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
       rating: serializer.fromJson<double?>(json['rating']),
       status: serializer.fromJson<String?>(json['status']),
       detailJson: serializer.fromJson<String?>(json['detailJson']),
+      sourceMetadataJson: serializer.fromJson<String?>(
+        json['sourceMetadataJson'],
+      ),
       cachedAt: serializer.fromJson<DateTime?>(json['cachedAt']),
     );
   }
@@ -1101,6 +1137,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
       'rating': serializer.toJson<double?>(rating),
       'status': serializer.toJson<String?>(status),
       'detailJson': serializer.toJson<String?>(detailJson),
+      'sourceMetadataJson': serializer.toJson<String?>(sourceMetadataJson),
       'cachedAt': serializer.toJson<DateTime?>(cachedAt),
     };
   }
@@ -1118,6 +1155,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
     Value<double?> rating = const Value.absent(),
     Value<String?> status = const Value.absent(),
     Value<String?> detailJson = const Value.absent(),
+    Value<String?> sourceMetadataJson = const Value.absent(),
     Value<DateTime?> cachedAt = const Value.absent(),
   }) => MediaItemRow(
     sourceId: sourceId ?? this.sourceId,
@@ -1132,6 +1170,9 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
     rating: rating.present ? rating.value : this.rating,
     status: status.present ? status.value : this.status,
     detailJson: detailJson.present ? detailJson.value : this.detailJson,
+    sourceMetadataJson: sourceMetadataJson.present
+        ? sourceMetadataJson.value
+        : this.sourceMetadataJson,
     cachedAt: cachedAt.present ? cachedAt.value : this.cachedAt,
   );
   MediaItemRow copyWithCompanion(MediaItemsCompanion data) {
@@ -1152,6 +1193,9 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
       detailJson: data.detailJson.present
           ? data.detailJson.value
           : this.detailJson,
+      sourceMetadataJson: data.sourceMetadataJson.present
+          ? data.sourceMetadataJson.value
+          : this.sourceMetadataJson,
       cachedAt: data.cachedAt.present ? data.cachedAt.value : this.cachedAt,
     );
   }
@@ -1171,6 +1215,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
           ..write('rating: $rating, ')
           ..write('status: $status, ')
           ..write('detailJson: $detailJson, ')
+          ..write('sourceMetadataJson: $sourceMetadataJson, ')
           ..write('cachedAt: $cachedAt')
           ..write(')'))
         .toString();
@@ -1190,6 +1235,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
     rating,
     status,
     detailJson,
+    sourceMetadataJson,
     cachedAt,
   );
   @override
@@ -1208,6 +1254,7 @@ class MediaItemRow extends DataClass implements Insertable<MediaItemRow> {
           other.rating == this.rating &&
           other.status == this.status &&
           other.detailJson == this.detailJson &&
+          other.sourceMetadataJson == this.sourceMetadataJson &&
           other.cachedAt == this.cachedAt);
 }
 
@@ -1224,6 +1271,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
   final Value<double?> rating;
   final Value<String?> status;
   final Value<String?> detailJson;
+  final Value<String?> sourceMetadataJson;
   final Value<DateTime?> cachedAt;
   final Value<int> rowid;
   const MediaItemsCompanion({
@@ -1239,6 +1287,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
     this.rating = const Value.absent(),
     this.status = const Value.absent(),
     this.detailJson = const Value.absent(),
+    this.sourceMetadataJson = const Value.absent(),
     this.cachedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1255,6 +1304,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
     this.rating = const Value.absent(),
     this.status = const Value.absent(),
     this.detailJson = const Value.absent(),
+    this.sourceMetadataJson = const Value.absent(),
     this.cachedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : sourceId = Value(sourceId),
@@ -1274,6 +1324,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
     Expression<double>? rating,
     Expression<String>? status,
     Expression<String>? detailJson,
+    Expression<String>? sourceMetadataJson,
     Expression<DateTime>? cachedAt,
     Expression<int>? rowid,
   }) {
@@ -1290,6 +1341,8 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
       if (rating != null) 'rating': rating,
       if (status != null) 'status': status,
       if (detailJson != null) 'detail_json': detailJson,
+      if (sourceMetadataJson != null)
+        'source_metadata_json': sourceMetadataJson,
       if (cachedAt != null) 'cached_at': cachedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1308,6 +1361,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
     Value<double?>? rating,
     Value<String?>? status,
     Value<String?>? detailJson,
+    Value<String?>? sourceMetadataJson,
     Value<DateTime?>? cachedAt,
     Value<int>? rowid,
   }) {
@@ -1324,6 +1378,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
       rating: rating ?? this.rating,
       status: status ?? this.status,
       detailJson: detailJson ?? this.detailJson,
+      sourceMetadataJson: sourceMetadataJson ?? this.sourceMetadataJson,
       cachedAt: cachedAt ?? this.cachedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1370,6 +1425,9 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
     if (detailJson.present) {
       map['detail_json'] = Variable<String>(detailJson.value);
     }
+    if (sourceMetadataJson.present) {
+      map['source_metadata_json'] = Variable<String>(sourceMetadataJson.value);
+    }
     if (cachedAt.present) {
       map['cached_at'] = Variable<DateTime>(cachedAt.value);
     }
@@ -1394,6 +1452,7 @@ class MediaItemsCompanion extends UpdateCompanion<MediaItemRow> {
           ..write('rating: $rating, ')
           ..write('status: $status, ')
           ..write('detailJson: $detailJson, ')
+          ..write('sourceMetadataJson: $sourceMetadataJson, ')
           ..write('cachedAt: $cachedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -1536,6 +1595,17 @@ class $ChaptersTable extends Chapters
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _sourceMetadataJsonMeta =
+      const VerificationMeta('sourceMetadataJson');
+  @override
+  late final GeneratedColumn<String> sourceMetadataJson =
+      GeneratedColumn<String>(
+        'source_metadata_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     sourceId,
@@ -1550,6 +1620,7 @@ class $ChaptersTable extends Chapters
     releaseDate,
     locked,
     contentJson,
+    sourceMetadataJson,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1660,6 +1731,15 @@ class $ChaptersTable extends Chapters
         ),
       );
     }
+    if (data.containsKey('source_metadata_json')) {
+      context.handle(
+        _sourceMetadataJsonMeta,
+        sourceMetadataJson.isAcceptableOrUnknown(
+          data['source_metadata_json']!,
+          _sourceMetadataJsonMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1717,6 +1797,10 @@ class $ChaptersTable extends Chapters
         DriftSqlType.string,
         data['${effectivePrefix}content_json'],
       ),
+      sourceMetadataJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_metadata_json'],
+      ),
     );
   }
 
@@ -1751,6 +1835,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
 
   /// 正文 / 图片列表 / 播放线路，JSON。
   final String? contentJson;
+  final String? sourceMetadataJson;
   const ChapterRow({
     required this.sourceId,
     required this.remoteId,
@@ -1764,6 +1849,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
     this.releaseDate,
     required this.locked,
     this.contentJson,
+    this.sourceMetadataJson,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1790,6 +1876,9 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
     if (!nullToAbsent || contentJson != null) {
       map['content_json'] = Variable<String>(contentJson);
     }
+    if (!nullToAbsent || sourceMetadataJson != null) {
+      map['source_metadata_json'] = Variable<String>(sourceMetadataJson);
+    }
     return map;
   }
 
@@ -1815,6 +1904,9 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
       contentJson: contentJson == null && nullToAbsent
           ? const Value.absent()
           : Value(contentJson),
+      sourceMetadataJson: sourceMetadataJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceMetadataJson),
     );
   }
 
@@ -1836,6 +1928,9 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
       releaseDate: serializer.fromJson<DateTime?>(json['releaseDate']),
       locked: serializer.fromJson<bool>(json['locked']),
       contentJson: serializer.fromJson<String?>(json['contentJson']),
+      sourceMetadataJson: serializer.fromJson<String?>(
+        json['sourceMetadataJson'],
+      ),
     );
   }
   @override
@@ -1854,6 +1949,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
       'releaseDate': serializer.toJson<DateTime?>(releaseDate),
       'locked': serializer.toJson<bool>(locked),
       'contentJson': serializer.toJson<String?>(contentJson),
+      'sourceMetadataJson': serializer.toJson<String?>(sourceMetadataJson),
     };
   }
 
@@ -1870,6 +1966,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
     Value<DateTime?> releaseDate = const Value.absent(),
     bool? locked,
     Value<String?> contentJson = const Value.absent(),
+    Value<String?> sourceMetadataJson = const Value.absent(),
   }) => ChapterRow(
     sourceId: sourceId ?? this.sourceId,
     remoteId: remoteId ?? this.remoteId,
@@ -1883,6 +1980,9 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
     releaseDate: releaseDate.present ? releaseDate.value : this.releaseDate,
     locked: locked ?? this.locked,
     contentJson: contentJson.present ? contentJson.value : this.contentJson,
+    sourceMetadataJson: sourceMetadataJson.present
+        ? sourceMetadataJson.value
+        : this.sourceMetadataJson,
   );
   ChapterRow copyWithCompanion(ChaptersCompanion data) {
     return ChapterRow(
@@ -1908,6 +2008,9 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
       contentJson: data.contentJson.present
           ? data.contentJson.value
           : this.contentJson,
+      sourceMetadataJson: data.sourceMetadataJson.present
+          ? data.sourceMetadataJson.value
+          : this.sourceMetadataJson,
     );
   }
 
@@ -1925,7 +2028,8 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
           ..write('volumeTitle: $volumeTitle, ')
           ..write('releaseDate: $releaseDate, ')
           ..write('locked: $locked, ')
-          ..write('contentJson: $contentJson')
+          ..write('contentJson: $contentJson, ')
+          ..write('sourceMetadataJson: $sourceMetadataJson')
           ..write(')'))
         .toString();
   }
@@ -1944,6 +2048,7 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
     releaseDate,
     locked,
     contentJson,
+    sourceMetadataJson,
   );
   @override
   bool operator ==(Object other) =>
@@ -1960,7 +2065,8 @@ class ChapterRow extends DataClass implements Insertable<ChapterRow> {
           other.volumeTitle == this.volumeTitle &&
           other.releaseDate == this.releaseDate &&
           other.locked == this.locked &&
-          other.contentJson == this.contentJson);
+          other.contentJson == this.contentJson &&
+          other.sourceMetadataJson == this.sourceMetadataJson);
 }
 
 class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
@@ -1976,6 +2082,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
   final Value<DateTime?> releaseDate;
   final Value<bool> locked;
   final Value<String?> contentJson;
+  final Value<String?> sourceMetadataJson;
   final Value<int> rowid;
   const ChaptersCompanion({
     this.sourceId = const Value.absent(),
@@ -1990,6 +2097,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
     this.releaseDate = const Value.absent(),
     this.locked = const Value.absent(),
     this.contentJson = const Value.absent(),
+    this.sourceMetadataJson = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ChaptersCompanion.insert({
@@ -2005,6 +2113,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
     this.releaseDate = const Value.absent(),
     this.locked = const Value.absent(),
     this.contentJson = const Value.absent(),
+    this.sourceMetadataJson = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : sourceId = Value(sourceId),
        remoteId = Value(remoteId),
@@ -2024,6 +2133,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
     Expression<DateTime>? releaseDate,
     Expression<bool>? locked,
     Expression<String>? contentJson,
+    Expression<String>? sourceMetadataJson,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2039,6 +2149,8 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
       if (releaseDate != null) 'release_date': releaseDate,
       if (locked != null) 'locked': locked,
       if (contentJson != null) 'content_json': contentJson,
+      if (sourceMetadataJson != null)
+        'source_metadata_json': sourceMetadataJson,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2056,6 +2168,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
     Value<DateTime?>? releaseDate,
     Value<bool>? locked,
     Value<String?>? contentJson,
+    Value<String?>? sourceMetadataJson,
     Value<int>? rowid,
   }) {
     return ChaptersCompanion(
@@ -2071,6 +2184,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
       releaseDate: releaseDate ?? this.releaseDate,
       locked: locked ?? this.locked,
       contentJson: contentJson ?? this.contentJson,
+      sourceMetadataJson: sourceMetadataJson ?? this.sourceMetadataJson,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2114,6 +2228,9 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
     if (contentJson.present) {
       map['content_json'] = Variable<String>(contentJson.value);
     }
+    if (sourceMetadataJson.present) {
+      map['source_metadata_json'] = Variable<String>(sourceMetadataJson.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2135,6 +2252,7 @@ class ChaptersCompanion extends UpdateCompanion<ChapterRow> {
           ..write('releaseDate: $releaseDate, ')
           ..write('locked: $locked, ')
           ..write('contentJson: $contentJson, ')
+          ..write('sourceMetadataJson: $sourceMetadataJson, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8893,6 +9011,7 @@ typedef $$MediaItemsTableCreateCompanionBuilder = MediaItemsCompanion Function({
   Value<double?> rating,
   Value<String?> status,
   Value<String?> detailJson,
+  Value<String?> sourceMetadataJson,
   Value<DateTime?> cachedAt,
   Value<int> rowid,
 });
@@ -8909,6 +9028,7 @@ typedef $$MediaItemsTableUpdateCompanionBuilder = MediaItemsCompanion Function({
   Value<double?> rating,
   Value<String?> status,
   Value<String?> detailJson,
+  Value<String?> sourceMetadataJson,
   Value<DateTime?> cachedAt,
   Value<int> rowid,
 });
@@ -8980,6 +9100,11 @@ class $$MediaItemsTableFilterComposer
 
   ColumnFilters<String> get detailJson => $composableBuilder(
     column: $table.detailJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceMetadataJson => $composableBuilder(
+    column: $table.sourceMetadataJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9058,6 +9183,11 @@ class $$MediaItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get sourceMetadataJson => $composableBuilder(
+    column: $table.sourceMetadataJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get cachedAt => $composableBuilder(
     column: $table.cachedAt,
     builder: (column) => ColumnOrderings(column),
@@ -9113,6 +9243,11 @@ class $$MediaItemsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get sourceMetadataJson => $composableBuilder(
+    column: $table.sourceMetadataJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get cachedAt =>
       $composableBuilder(column: $table.cachedAt, builder: (column) => column);
 }
@@ -9160,6 +9295,7 @@ class $$MediaItemsTableTableManager
                 Value<double?> rating = const Value.absent(),
                 Value<String?> status = const Value.absent(),
                 Value<String?> detailJson = const Value.absent(),
+                Value<String?> sourceMetadataJson = const Value.absent(),
                 Value<DateTime?> cachedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MediaItemsCompanion(
@@ -9175,6 +9311,7 @@ class $$MediaItemsTableTableManager
                 rating: rating,
                 status: status,
                 detailJson: detailJson,
+                sourceMetadataJson: sourceMetadataJson,
                 cachedAt: cachedAt,
                 rowid: rowid,
               ),
@@ -9192,6 +9329,7 @@ class $$MediaItemsTableTableManager
                 Value<double?> rating = const Value.absent(),
                 Value<String?> status = const Value.absent(),
                 Value<String?> detailJson = const Value.absent(),
+                Value<String?> sourceMetadataJson = const Value.absent(),
                 Value<DateTime?> cachedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MediaItemsCompanion.insert(
@@ -9207,6 +9345,7 @@ class $$MediaItemsTableTableManager
                 rating: rating,
                 status: status,
                 detailJson: detailJson,
+                sourceMetadataJson: sourceMetadataJson,
                 cachedAt: cachedAt,
                 rowid: rowid,
               ),
@@ -9257,6 +9396,7 @@ typedef $$ChaptersTableCreateCompanionBuilder = ChaptersCompanion Function({
   Value<DateTime?> releaseDate,
   Value<bool> locked,
   Value<String?> contentJson,
+  Value<String?> sourceMetadataJson,
   Value<int> rowid,
 });
 typedef $$ChaptersTableUpdateCompanionBuilder = ChaptersCompanion Function({
@@ -9272,6 +9412,7 @@ typedef $$ChaptersTableUpdateCompanionBuilder = ChaptersCompanion Function({
   Value<DateTime?> releaseDate,
   Value<bool> locked,
   Value<String?> contentJson,
+  Value<String?> sourceMetadataJson,
   Value<int> rowid,
 });
 
@@ -9341,6 +9482,11 @@ class $$ChaptersTableFilterComposer
 
   ColumnFilters<String> get contentJson => $composableBuilder(
     column: $table.contentJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceMetadataJson => $composableBuilder(
+    column: $table.sourceMetadataJson,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -9413,6 +9559,11 @@ class $$ChaptersTableOrderingComposer
     column: $table.contentJson,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get sourceMetadataJson => $composableBuilder(
+    column: $table.sourceMetadataJson,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ChaptersTableAnnotationComposer
@@ -9469,6 +9620,11 @@ class $$ChaptersTableAnnotationComposer
     column: $table.contentJson,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get sourceMetadataJson => $composableBuilder(
+    column: $table.sourceMetadataJson,
+    builder: (column) => column,
+  );
 }
 
 class $$ChaptersTableTableManager
@@ -9514,6 +9670,7 @@ class $$ChaptersTableTableManager
                 Value<DateTime?> releaseDate = const Value.absent(),
                 Value<bool> locked = const Value.absent(),
                 Value<String?> contentJson = const Value.absent(),
+                Value<String?> sourceMetadataJson = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ChaptersCompanion(
                 sourceId: sourceId,
@@ -9528,6 +9685,7 @@ class $$ChaptersTableTableManager
                 releaseDate: releaseDate,
                 locked: locked,
                 contentJson: contentJson,
+                sourceMetadataJson: sourceMetadataJson,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -9544,6 +9702,7 @@ class $$ChaptersTableTableManager
                 Value<DateTime?> releaseDate = const Value.absent(),
                 Value<bool> locked = const Value.absent(),
                 Value<String?> contentJson = const Value.absent(),
+                Value<String?> sourceMetadataJson = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ChaptersCompanion.insert(
                 sourceId: sourceId,
@@ -9558,6 +9717,7 @@ class $$ChaptersTableTableManager
                 releaseDate: releaseDate,
                 locked: locked,
                 contentJson: contentJson,
+                sourceMetadataJson: sourceMetadataJson,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

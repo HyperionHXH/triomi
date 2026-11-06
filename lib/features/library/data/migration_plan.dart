@@ -38,6 +38,7 @@ Map<String, Object?> migrationChapterJson(Chapter c) => {
   'volumeTitle': c.volumeTitle,
   'releaseDate': c.releaseDate?.toIso8601String(),
   'locked': c.locked,
+  if (c.sourceMetadata != null) 'sourceMetadata': c.sourceMetadata!.toJson(),
 };
 Chapter _migrationChapter(Map<String, Object?> c) => Chapter(
   sourceId: c['sourceId'] as String,
@@ -49,6 +50,7 @@ Chapter _migrationChapter(Map<String, Object?> c) => Chapter(
   volumeTitle: c['volumeTitle'] as String?,
   releaseDate: DateTime.tryParse('${c['releaseDate']}'),
   locked: c['locked'] == true,
+  sourceMetadata: SourceMetadata.fromJson(c['sourceMetadata']),
 );
 MediaItem _migrationItem(Object? raw) {
   final json = Map<String, Object?>.from(raw as Map);

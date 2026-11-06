@@ -10,7 +10,7 @@ import dev.mihon.injekt.patchInjekt
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.MihonRequestRegistry
 import eu.kanade.tachiyomi.network.MihonRequestScope
-import eu.kanade.tachiyomi.network.HttpException
+import eu.kanade.tachiyomi.network.HttpResponseException
 import eu.kanade.tachiyomi.source.MihonPreferences
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceFactory
@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.SMangaUpdate
+import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.source.online.MihonRuntime
 import dalvik.system.DexClassLoader
@@ -28,6 +29,7 @@ import dalvik.system.DexFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import okhttp3.Headers
 import java.io.File
 import uy.kohesive.injekt.api.FullTypeReference
@@ -59,7 +61,10 @@ class MihonHost(private val context: Context) {
                 explicitNulls = false
             })
         MihonPreferences.install(app)
-        MihonRuntime.install(NetworkHelper(app))
+        val network = NetworkHelper(app)
+        injekt.javaClass.methods.first { it.name == "addSingleton" && it.parameterTypes.size == 2 }
+            .invoke(injekt, object : FullTypeReference<NetworkHelper>() {}, network)
+        MihonRuntime.install(network)
     }
 
     @Synchronized fun metadata(apkPath: String?, packageName: String?, versionCode: Long?): Map<String, Any?> {
@@ -258,7 +263,7 @@ class MihonHost(private val context: Context) {
                     owner.complete { payload + ("ok" to true) }
                 } catch (error: Throwable) {
                     val canceled = owner.isCancelled || generateSequence(error) { it.cause }.any { it is CancellationException }
-                    val httpFailure = if (canceled) null else generateSequence(error) { it.cause }.filterIsInstance<HttpException>().firstOrNull()
+                    val httpFailure = if (canceled) null else generateSequence(error) { it.cause }.filterIsInstance<HttpResponseException>().firstOrNull()
                     val failure = requestFailure(requestId, operation, if (canceled) "request_cancelled" else "source_request_failed",
                         if (canceled) "Mihon request canceled" else rootMessage(error), canceled)
                     if (httpFailure == null) failure else failure + mapOf("statusCode" to httpFailure.statusCode,
@@ -547,12 +552,12 @@ class MihonHost(private val context: Context) {
         }
     }
     private fun mangaPage(page: MangasPage) = mapOf("mangas" to page.mangas.map(::mangaMap), "hasNextPage" to page.hasNextPage)
-    private fun mangaMap(manga: SManga) = mapOf("url" to manga.url, "title" to manga.title, "thumbnailUrl" to manga.thumbnail_url, "artist" to manga.artist, "author" to manga.author, "status" to manga.status, "description" to manga.description, "genre" to manga.genre, "initialized" to manga.initialized)
-    private fun chapterMap(chapter: SChapter) = mapOf("url" to chapter.url, "name" to chapter.name, "chapterNumber" to chapter.chapter_number, "scanlator" to chapter.scanlator, "dateUpload" to chapter.date_upload)
+    private fun mangaMap(manga: SManga) = mapOf("url" to manga.url, "title" to manga.title, "thumbnailUrl" to manga.thumbnail_url, "artist" to manga.artist, "author" to manga.author, "status" to manga.status, "description" to manga.description, "genre" to manga.genre, "initialized" to manga.initialized, "updateStrategy" to manga.update_strategy.name, "extensionMemo" to manga.memo.toString().also { require(it.toByteArray(Charsets.UTF_8).size <= 256 * 1024) { "Extension memo exceeds 256 KiB" } })
+    private fun chapterMap(chapter: SChapter) = mapOf("url" to chapter.url, "name" to chapter.name, "chapterNumber" to chapter.chapter_number, "scanlator" to chapter.scanlator, "dateUpload" to chapter.date_upload, "extensionMemo" to chapter.memo.toString().also { require(it.toByteArray(Charsets.UTF_8).size <= 256 * 1024) { "Extension memo exceeds 256 KiB" } })
     private fun pageMap(page: Page) = mapOf("index" to page.index, "url" to page.url, "imageUrl" to page.imageUrl)
 
-    private fun mangaFrom(raw: Any?): SManga = (raw as? Map<*, *>)?.let { map -> SManga.create().also { it.url = map["url"]?.toString() ?: ""; it.title = map["title"]?.toString() ?: ""; it.thumbnail_url = map["thumbnailUrl"]?.toString(); it.artist = map["artist"]?.toString(); it.author = map["author"]?.toString(); it.status = (map["status"] as? Number)?.toInt() ?: 0; it.description = map["description"]?.toString(); it.genre = map["genre"]?.toString(); it.initialized = map["initialized"] as? Boolean ?: false } } ?: error("manga is required")
-    private fun chapterFrom(raw: Any?): SChapter = (raw as? Map<*, *>)?.let { map -> SChapter.create().also { it.url = map["url"]?.toString() ?: ""; it.name = map["name"]?.toString() ?: ""; it.chapter_number = (map["chapterNumber"] as? Number)?.toFloat() ?: -1f; it.scanlator = map["scanlator"]?.toString(); it.date_upload = (map["dateUpload"] as? Number)?.toLong() ?: 0L } } ?: error("chapter is required")
+    private fun mangaFrom(raw: Any?): SManga = (raw as? Map<*, *>)?.let { map -> SManga.create().also { it.url = map["url"]?.toString() ?: ""; it.title = map["title"]?.toString() ?: ""; it.thumbnail_url = map["thumbnailUrl"]?.toString(); it.artist = map["artist"]?.toString(); it.author = map["author"]?.toString(); it.status = (map["status"] as? Number)?.toInt() ?: 0; it.description = map["description"]?.toString(); it.genre = map["genre"]?.toString(); it.initialized = map["initialized"] as? Boolean ?: false; map["updateStrategy"]?.let { value -> it.update_strategy = UpdateStrategy.valueOf(value.toString()) }; map["extensionMemo"]?.let { value -> require(value is String && value.toByteArray(Charsets.UTF_8).size <= 256 * 1024) { "Invalid extension memo" }; it.memo = Json.parseToJsonElement(value) as? JsonObject ?: error("Extension memo must be a JSON object") } } } ?: error("manga is required")
+    private fun chapterFrom(raw: Any?): SChapter = (raw as? Map<*, *>)?.let { map -> SChapter.create().also { it.url = map["url"]?.toString() ?: ""; it.name = map["name"]?.toString() ?: ""; it.chapter_number = (map["chapterNumber"] as? Number)?.toFloat() ?: -1f; it.scanlator = map["scanlator"]?.toString(); it.date_upload = (map["dateUpload"] as? Number)?.toLong() ?: 0L; map["extensionMemo"]?.let { value -> require(value is String && value.toByteArray(Charsets.UTF_8).size <= 256 * 1024) { "Invalid extension memo" }; it.memo = Json.parseToJsonElement(value) as? JsonObject ?: error("Extension memo must be a JSON object") } } } ?: error("chapter is required")
     private fun pageFrom(raw: Any?): Page = (raw as? Map<*, *>)?.let { map -> Page((map["index"] as? Number)?.toInt() ?: 0, map["url"]?.toString() ?: "", map["imageUrl"]?.toString()) } ?: error("page is required")
 
     private fun rootMessage(error: Throwable): String = generateSequence(error) { it.cause }.last().message ?: error::class.java.simpleName

@@ -384,6 +384,271 @@ void main() {
     },
   );
 
+  test('missing JM tags recover exact APK and JAR from captured public releases', () async {
+    // Reduced from keiyoushi/extensions public releases on 2026-11-06; the
+    // retired index tag is 726723b-2, while 4591fbc-2 retains version 1.6.64.
+    final releases = File('test/fixtures/github_jm_recent_releases.json')
+        .readAsStringSync();
+    for (final firstAttemptTimeout in [false, true]) {
+      for (final extension in ['apk', 'jar']) {
+        final name = 'tachiyomi-zh.jinmantiantang-v1.6.64.$extension';
+        final declared =
+            'https://github.com/keiyoushi/extensions/releases/download/726723b-2/$name';
+        final assetId = extension == 'apk' ? 713805874 : 713805893;
+        final adapter = _Adapter((options) {
+          expect(options.followRedirects, isFalse);
+          if (options.uri.host == 'github.com') {
+            if (firstAttemptTimeout) throw unavailable(options);
+            return ResponseBody.fromString('', 404);
+          }
+          if (options.uri.path.endsWith('/tags/726723b-2')) {
+            return ResponseBody.fromString('{}', 404);
+          }
+          if (options.uri.path == '/repos/keiyoushi/extensions/releases') {
+            expect(options.uri.queryParameters, {'per_page': '10'});
+            expect(options.headers['Accept'], 'application/vnd.github+json');
+            return ResponseBody.fromString(releases, 200);
+          }
+          if (options.uri.host == 'api.github.com') {
+            expect(
+              options.uri.path,
+              '/repos/keiyoushi/extensions/releases/assets/$assetId',
+            );
+            expect(options.headers['Accept'], 'application/octet-stream');
+            return ResponseBody.fromString(
+              '',
+              302,
+              headers: {
+                'location': [
+                  'https://release-assets.githubusercontent.com/$name',
+                ],
+              },
+            );
+          }
+          expect(options.uri.host, 'release-assets.githubusercontent.com');
+          return ResponseBody.fromBytes([1, 2, 3], 200);
+        });
+        final http = DioSourceHttpClient(
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        addTearDown(http.close);
+        final response = await http.downloadRuleBytes(
+          declared,
+          sourceId: 'mihon:jinman',
+        );
+        expect(await response.stream.expand((chunk) => chunk).toList(), [
+          1,
+          2,
+          3,
+        ]);
+        expect(adapter.requests, hasLength(5));
+      }
+    }
+  });
+
+  test('only a missing tag may search recent public releases', () async {
+    for (final status in [403, 429, 500]) {
+      final adapter = _Adapter((options) {
+        if (options.uri.host == 'github.com') throw unavailable(options);
+        expect(options.uri.path, '/repos/owner/repo/releases/tags/v1');
+        return ResponseBody.fromString('{}', status);
+      });
+      final http = DioSourceHttpClient(dio: Dio()..httpClientAdapter = adapter);
+      addTearDown(http.close);
+      await expectLater(
+        http.downloadRuleBytes(assetUrl, sourceId: 'mihon:plugin'),
+        throwsStateError,
+      );
+      expect(adapter.requests, hasLength(2));
+    }
+  });
+
+  test(
+    'recent releases cannot replace repository filename or public origin',
+    () async {
+      for (final invalid in <Map<String, Object?>>[
+        {'draft': true},
+        {'tag_name': 'another-tag'},
+        {'name': 'another-version.jar'},
+        {
+          'browser_download_url':
+              'https://github.com/other/repo/releases/download/new/plugin.jar',
+        },
+        {
+          'browser_download_url':
+              'https://github.com/owner/other/releases/download/new/plugin.jar',
+        },
+        {
+          'browser_download_url':
+              'http://github.com/owner/repo/releases/download/new/plugin.jar',
+        },
+        {
+          'browser_download_url': 'https://github.com/owner/repo/releases/download/new/plugin.jar?token=secret',
+        },
+        {'browser_download_url': 'https://attacker.test/plugin.jar'},
+      ]) {
+        final adapter = _Adapter((options) {
+          if (options.uri.host == 'github.com') {
+            return ResponseBody.fromString('', 404);
+          }
+          if (options.uri.path.endsWith('/tags/v1')) {
+            return ResponseBody.fromString('{}', 404);
+          }
+          expect(options.uri.path, '/repos/owner/repo/releases');
+          expect(options.uri.queryParameters, {'per_page': '10'});
+          return ResponseBody.fromString(
+            jsonEncode([
+              {
+                'draft': invalid['draft'] ?? false,
+                'tag_name': invalid['tag_name'] ?? 'new',
+                'assets': [
+                  {
+                    'id': 7,
+                    'name': invalid['name'] ?? 'plugin.jar',
+                    'browser_download_url': invalid['browser_download_url'] ?? 'https://github.com/owner/repo/releases/download/new/plugin.jar',
+                  },
+                ],
+              },
+            ]),
+            200,
+          );
+        });
+        final http = DioSourceHttpClient(
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        addTearDown(http.close);
+        await expectLater(
+          http.downloadRuleBytes(assetUrl, sourceId: 'mihon:plugin'),
+          throwsStateError,
+        );
+        expect(adapter.requests, hasLength(3));
+      }
+    },
+  );
+
+  test('direct HTTP failures keep proxy credentials cancellation and source boundaries', () async {
+    final cases =
+        <
+          ({
+            String proxy,
+            Map<String, String> headers,
+            String source,
+            int status,
+            String url,
+          })
+        >[
+          (
+            proxy: 'http://127.0.0.1:9',
+            headers: {},
+            source: 'mihon:plugin',
+            status: 404,
+            url: assetUrl,
+          ),
+          for (final name in ['Authorization', 'Cookie', 'Proxy-Authorization'])
+            (
+              proxy: '',
+              headers: {name: 'secret'},
+              source: 'mihon:plugin',
+              status: 404,
+              url: assetUrl,
+            ),
+          (
+            proxy: '',
+            headers: {},
+            source: 'other:plugin',
+            status: 404,
+            url: assetUrl,
+          ),
+          (
+            proxy: '',
+            headers: {},
+            source: 'mihon:plugin',
+            status: 403,
+            url: assetUrl,
+          ),
+          (
+            proxy: '',
+            headers: {},
+            source: 'mihon:plugin',
+            status: 500,
+            url: assetUrl,
+          ),
+          (
+            proxy: '',
+            headers: {},
+            source: 'mihon:plugin',
+            status: 404,
+            url: 'https://other.test/plugin.jar',
+          ),
+          (
+            proxy: '',
+            headers: {},
+            source: 'mihon:plugin',
+            status: 404,
+            url: '$assetUrl?token=secret',
+          ),
+        ];
+    for (final scenario in cases) {
+      final adapter = _Adapter(
+        (options) => ResponseBody.fromString('', scenario.status),
+      );
+      final http = DioSourceHttpClient(
+        dio: Dio(BaseOptions(headers: scenario.headers))
+          ..httpClientAdapter = adapter,
+        proxy: scenario.proxy,
+      );
+      addTearDown(http.close);
+      await expectLater(
+        http.downloadRuleBytes(scenario.url, sourceId: scenario.source),
+        throwsStateError,
+      );
+      expect(adapter.requests, hasLength(1));
+    }
+
+    final cancellation = SourceRequestCancellation();
+    final adapter = _Adapter((options) {
+      if (options.uri.host == 'github.com') {
+        return ResponseBody.fromString('', 404);
+      }
+      cancellation.cancel();
+      return ResponseBody.fromString('{}', 404);
+    });
+    final http = DioSourceHttpClient(dio: Dio()..httpClientAdapter = adapter);
+    addTearDown(http.close);
+    await expectLater(
+      cancellation.run(
+        () => http.downloadRuleBytes(assetUrl, sourceId: 'mihon:plugin'),
+      ),
+      throwsA(isA<DioException>()),
+    );
+    expect(adapter.requests, hasLength(2));
+  });
+
+  test(
+    'credentials injected onto the actual 404 request never change route',
+    () async {
+      for (final header in ['Authorization', 'Cookie', 'Proxy-Authorization']) {
+        final adapter = _Adapter((options) => ResponseBody.fromString('', 404));
+        final dio = Dio()..httpClientAdapter = adapter;
+        dio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              options.headers[header] = 'secret';
+              handler.next(options);
+            },
+          ),
+        );
+        final http = DioSourceHttpClient(dio: dio);
+        addTearDown(http.close);
+        await expectLater(
+          http.downloadRuleBytes(assetUrl, sourceId: 'mihon:plugin'),
+          throwsStateError,
+        );
+        expect(adapter.requests, hasLength(1));
+      }
+    },
+  );
+
   test(
     'explicit proxy failure does not switch to direct or API delivery',
     () async {

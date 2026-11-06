@@ -151,6 +151,8 @@ object MihonRequestScope {
 
     fun context(owner: MihonRequestOwner) = current.asContextElement(owner)
 
+    internal fun currentOwner(): MihonRequestOwner? = current.get()
+
     /** Factory.create runs in newCall's caller, before OkHttp changes threads. */
     val eventListenerFactory = EventListener.Factory {
         val owner = current.get()
@@ -169,7 +171,7 @@ object MihonRequestScope {
         owner?.track(call)
         return try {
             call.execute().use { response ->
-                if (!response.isSuccessful) throw HttpException(response.code, response.message, response.header("Retry-After"))
+                if (!response.isSuccessful) throw HttpResponseException(response)
                 consume(response)
             }
         } finally {

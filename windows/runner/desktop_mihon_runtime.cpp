@@ -160,6 +160,57 @@ bool StatePath(const std::string& text, std::wstring* path) {
   return false;
 }
 
+#if defined(TRIOMI_MIHON_ACCEPTANCE_BUILD)
+class AcceptanceDirectoryPins {
+ public:
+  ~AcceptanceDirectoryPins() {
+    for (HANDLE directory : handles) CloseHandle(directory);
+  }
+  std::vector<HANDLE> handles;
+};
+
+bool AcceptanceRoot(const std::string& text, std::wstring* root) {
+  if (!StatePath(text, root)) return false;
+  const std::wstring prefix =
+      L"D:\\noval_and_manga\\_tools\\jm-apk-debug\\windows-flutter-acceptance-";
+  const std::wstring suffix = L"\\support\\mihon-desktop";
+  if (root->size() <= prefix.size() + suffix.size() ||
+      !SamePath(root->substr(0, prefix.size()), prefix) ||
+      !SamePath(root->substr(root->size() - suffix.size()), suffix)) return false;
+  const auto end = root->size() - suffix.size();
+  for (size_t i = prefix.size(); i < end; ++i) {
+    const wchar_t ch = (*root)[i];
+    if (!((ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z') ||
+          (ch >= L'0' && ch <= L'9') || ch == L'-' || ch == L'_')) return false;
+  }
+  return true;
+}
+
+bool PinAcceptanceRoot(const std::wstring& root, std::vector<HANDLE>* pinned) {
+  // Pin every ancestor without DELETE sharing; junctions, aliases and ancestor
+  // replacement cannot redirect this test build into the user's profile.
+  size_t end = 2;
+  for (;;) {
+    const std::wstring path = end == 2 ? root.substr(0, 3) : root.substr(0, end);
+    ScopedHandle directory(CreateFileW(path.c_str(), GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+    BY_HANDLE_FILE_INFORMATION information = {};
+    std::wstring resolved;
+    if (directory.get() == INVALID_HANDLE_VALUE ||
+        !GetFileInformationByHandle(directory.get(), &information) ||
+        !(information.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+        (information.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ||
+        !FinalPath(directory.get(), &resolved) ||
+        !SamePath(resolved, L"\\\\?\\" + path)) return false;
+    pinned->push_back(directory.release());
+    if (end == root.size()) return true;
+    end = root.find(L'\\', end + 1);
+    if (end == std::wstring::npos) end = root.size();
+  }
+}
+#endif
+
 bool PlainFile(HANDLE file, DWORD* error) {
   BY_HANDLE_FILE_INFORMATION information = {};
   if (!GetFileInformationByHandle(file, &information)) {
@@ -315,9 +366,13 @@ bool DesktopMihonRuntime::ReplaceStateFile(const std::string& source,
                                          std::string* failure_stage, DWORD* error) {
   failure_stage->clear();
   *error = ERROR_SUCCESS;
-  const auto fail = [failure_stage, error](const char* stage, DWORD code) {
+  state_failure_stage_.clear();
+  state_failure_error_ = ERROR_SUCCESS;
+  const auto fail = [this, failure_stage, error](const char* stage, DWORD code) {
     *failure_stage = stage;
     *error = code;
+    state_failure_stage_ = stage;
+    state_failure_error_ = code;
     return false;
   };
   std::wstring from;
@@ -336,6 +391,15 @@ bool DesktopMihonRuntime::ReplaceStateFile(const std::string& source,
     return fail("validate_state_names", ERROR_INVALID_PARAMETER);
   }
 
+#if defined(TRIOMI_MIHON_ACCEPTANCE_BUILD)
+  std::wstring expected;
+  if (acceptance_directories_.empty() ||
+      !AcceptanceRoot(source.substr(0, source_separator), &expected) ||
+      !SamePath(expected, acceptance_root_)) {
+    return fail("validate_acceptance_runtime_root", ERROR_ACCESS_DENIED);
+  }
+  const HANDLE expected_handle = acceptance_directories_.back();
+#else
   PWSTR roaming = nullptr;
   const HRESULT roaming_result = SHGetKnownFolderPath(
       FOLDERID_RoamingAppData, 0, nullptr, &roaming);
@@ -352,6 +416,8 @@ bool DesktopMihonRuntime::ReplaceStateFile(const std::string& source,
   if (expected_directory.get() == INVALID_HANDLE_VALUE) {
     return fail("open_app_support", GetLastError());
   }
+  const HANDLE expected_handle = expected_directory.get();
+#endif
   ScopedHandle directory(CreateFileW(from.substr(0, source_separator).c_str(),
       FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
       OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
@@ -370,11 +436,11 @@ bool DesktopMihonRuntime::ReplaceStateFile(const std::string& source,
   std::wstring parent;
   std::wstring expected_parent;
   if (!FinalPath(directory.get(), &parent) ||
-      !FinalPath(expected_directory.get(), &expected_parent)) {
+      !FinalPath(expected_handle, &expected_parent)) {
     return fail("resolve_parent", GetLastError());
   }
   if (!SamePath(parent, expected_parent) ||
-      !SameFile(directory.get(), expected_directory.get())) {
+      !SameFile(directory.get(), expected_handle)) {
     return fail("validate_app_support_parent", ERROR_ACCESS_DENIED);
   }
 
@@ -429,12 +495,30 @@ void DesktopMihonRuntime::Stop() {
     process_ = nullptr;
   }
   pid_ = 0;
+#if defined(TRIOMI_MIHON_ACCEPTANCE_BUILD)
+  for (HANDLE directory : acceptance_directories_) CloseHandle(directory);
+  acceptance_directories_.clear();
+  acceptance_root_.clear();
+#endif
+}
+
+bool DesktopMihonRuntime::AcceptanceBuild() {
+#if defined(TRIOMI_MIHON_ACCEPTANCE_BUILD)
+  return true;
+#else
+  return false;
+#endif
 }
 
 bool DesktopMihonRuntime::Start(const std::string& text,
                                const std::string& proxy_host,
                                int proxy_port, DWORD* pid) {
   if (!ValidProxy(proxy_host, proxy_port)) return false;
+#if defined(TRIOMI_MIHON_ACCEPTANCE_BUILD)
+  std::wstring requested;
+  if (!AcceptanceRoot(text, &requested)) return false;
+  if (Alive() && !SamePath(requested, acceptance_root_)) return false;
+#endif
   if (Alive()) {
     *pid = pid_;
     return true;
@@ -443,6 +527,10 @@ bool DesktopMihonRuntime::Start(const std::string& text,
   std::wstring root;
   std::wstring java;
   std::wstring jar;
+#if defined(TRIOMI_MIHON_ACCEPTANCE_BUILD)
+  AcceptanceDirectoryPins pins;
+  if (!PinAcceptanceRoot(requested, &pins.handles)) return false;
+#endif
   if (!AbsoluteRoot(text, &root) || !BundledPaths(root, &java, &jar)) return false;
 
   std::wstring command = Quote(java) + L" -Xmx384m -Djava.awt.headless=true " +
@@ -456,7 +544,14 @@ bool DesktopMihonRuntime::Start(const std::string& text,
         L" " + Quote(L"-Dhttps.proxyPort=" + port) +
         L" " + Quote(L"-Dhttp.nonProxyHosts=127.*|localhost|[::1]");
   }
-  command += L" -jar " + Quote(jar);
+  const std::wstring launcher =
+      java.substr(0, java.size() - std::wstring(L"java\\bin\\java.exe").size()) +
+      L"triomi-apk-inspector.jar";
+  const DWORD launcher_attributes = GetFileAttributesW(launcher.c_str());
+  if (launcher_attributes == INVALID_FILE_ATTRIBUTES ||
+      (launcher_attributes & FILE_ATTRIBUTE_DIRECTORY) != 0) return false;
+  command += L" -cp " + Quote(launcher + L";" + jar) +
+      L" triomi.desktop.DesktopLauncher";
   // CreateJobObject's default security attributes do not permit inheritance.
   HANDLE job = KillOnCloseJob();
   if (!job) return false;
@@ -484,6 +579,10 @@ bool DesktopMihonRuntime::Start(const std::string& text,
   job_ = job;
   process_ = process.hProcess;
   pid_ = process.dwProcessId;
+#if defined(TRIOMI_MIHON_ACCEPTANCE_BUILD)
+  acceptance_root_ = requested;
+  acceptance_directories_.swap(pins.handles);
+#endif
   *pid = pid_;
   return true;
 }

@@ -1,5 +1,20 @@
 # Triomi 主线执行清单
 
+## 当前增量：0.14.1 Komikku 插件兼容（构建181，本机验收完成，发布待认证）
+
+JM原始APK的Android ABI故障已修复，最终R8完整链路与Windows生产安装至Flutter
+阅读器均通过。冻结仓库中2224个不同原始APK加载/筛选全部通过，覆盖3056/3070条
+记录；Windows原生JAR的3014/3065个URL通过，51个精确旧版404保留未验证。
+真实大型筛选树、QuickJS/Protobuf/解码依赖、持久memo、递归GraphQL、显式空排序和
+Tenkaiscan图像链均有专项证据。Flutter全量1693通过/4跳过，后续桌面增量37通过，
+原生38通过、release运行8组、DEX ABI128项通过；analyze零问题、Python117通过。
+普通WindowsRelease已构建；本机APK为验收签名，正式签名产物需远端发布流程。
+当前剩余发布事项为恢复失效GitHub认证、推送版本并核验远端产物，不宣称已公开更新。
+仓库覆盖不等于所有站点的账号、网络与阅读路径均已验证。
+
+具体主线、身份和覆盖限制统一记录于[当前状态](CURRENT_STATUS.md)及
+[R181证据](delivery/evidence/R181-jm-compatibility.json)。
+
 当前执行入口只有本文件和 `docs/CURRENT_STATUS.md`。历史交付、审计和设备日志保留在 `docs/delivery/`，通过 `docs/archive/README.md` 查阅，不再作为待办清单重复阅读。
 
 每个小步都要满足四件事：用户动作可观察、生产代码已接线、行为测试覆盖、证据等级写清楚。测试通过只能证明测试覆盖的层级，不能替代真实网络、模拟器或账号验收。

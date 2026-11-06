@@ -10,6 +10,7 @@ import '../models/media_item.dart';
 import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
 import '../models/source_exception.dart';
+import '../models/source_metadata.dart';
 import '../platform/platform_channel.dart';
 import 'http_client.dart';
 import 'mihon_image_bridge.dart';
@@ -283,7 +284,7 @@ class MihonSource
     if (rawManga is! Map) {
       throw _error('宿主没有返回作品详情');
     }
-    return _toMediaItem(Map<Object?, Object?>.from(rawManga));
+    return _toMediaItem(Map<Object?, Object?>.from(rawManga), previous: item);
   }
 
   @override
@@ -311,6 +312,7 @@ class MihonSource
       operation: 'pages',
       manga: desktop ? _mangaJson(item!) : null,
       chapter: <String, Object?>{
+        ..._nativeMetadata(chapter.sourceMetadata),
         'url': chapter.url ?? chapter.remoteId,
         'name': chapter.title,
         'chapterNumber': chapter.number,
@@ -424,21 +426,23 @@ class MihonSource
     ];
   }
 
-  MediaItem _toMediaItem(Map<Object?, Object?> value) => MediaItem(
-    sourceId: descriptor.id,
-    remoteId: '${value['url'] ?? ''}',
-    type: MediaType.manga,
-    title: '${value['title'] ?? ''}',
-    url: value['url']?.toString(),
-    coverUrl: value['thumbnailUrl']?.toString(),
-    author: value['author']?.toString() ?? value['artist']?.toString(),
-    description: value['description']?.toString(),
-    tags: '${value['genre'] ?? ''}'
-        .split(', ')
-        .where((tag) => tag.isNotEmpty)
-        .toList(),
-    status: value['status']?.toString(),
-  );
+  MediaItem _toMediaItem(Map<Object?, Object?> value, {MediaItem? previous}) =>
+      MediaItem(
+        sourceId: descriptor.id,
+        remoteId: '${value['url'] ?? ''}',
+        type: MediaType.manga,
+        title: '${value['title'] ?? ''}',
+        url: value['url']?.toString(),
+        coverUrl: value['thumbnailUrl']?.toString(),
+        author: value['author']?.toString() ?? value['artist']?.toString(),
+        description: value['description']?.toString(),
+        tags: '${value['genre'] ?? ''}'
+            .split(', ')
+            .where((tag) => tag.isNotEmpty)
+            .toList(),
+        status: value['status']?.toString(),
+        sourceMetadata: _captureNativeMetadata(value, previous?.sourceMetadata),
+      );
 
   Chapter _toChapter(Map<Object?, Object?> value, int index) {
     final title = '${value['name'] ?? ''}';
@@ -450,6 +454,7 @@ class MihonSource
       number: double.tryParse('${value['chapterNumber']}'),
       sortIndex: index,
       releaseDate: _date(value['dateUpload']),
+      sourceMetadata: _captureNativeMetadata(value),
     );
   }
 
@@ -462,7 +467,50 @@ class MihonSource
     'author': item.sourceAuthor,
     'description': item.sourceDescription,
     'genre': item.tags.join(', '),
+    ..._nativeMetadata(item.sourceMetadata),
   };
+
+  static bool get _usesAndroidMetadata =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  static Map<String, Object?> _nativeMetadata(SourceMetadata? metadata) {
+    if (!_usesAndroidMetadata) return const {};
+    final raw = metadata?.toJson()['mihonAndroid'];
+    return raw is Map ? Map<String, Object?>.from(raw) : const {};
+  }
+
+  static SourceMetadata? _captureNativeMetadata(
+    Map<Object?, Object?> value, [
+    SourceMetadata? previous,
+  ]) {
+    if (!_usesAndroidMetadata) return null;
+    final snapshot = <String, Object?>{
+      ..._nativeMetadata(previous),
+      for (final field in const [
+        'url',
+        'title',
+        'thumbnailUrl',
+        'artist',
+        'author',
+        'status',
+        'description',
+        'genre',
+        'initialized',
+        'updateStrategy',
+        'extensionMemo',
+        'name',
+        'chapterNumber',
+        'scanlator',
+        'dateUpload',
+      ])
+        if (value.containsKey(field)) field: value[field],
+    };
+    final memo = snapshot['extensionMemo'];
+    if (memo != null && (memo is! String || jsonDecode(memo) is! Map)) {
+      throw const FormatException('扩展 memo 必须是 JSON 对象文本');
+    }
+    return SourceMetadata({'mihonAndroid': snapshot});
+  }
 
   SourceException _error(String message) => SourceException(
     sourceId: descriptor.id,

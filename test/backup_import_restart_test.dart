@@ -13,6 +13,7 @@ import 'package:triomi/core/storage/preferences.dart';
 
 import 'fixtures/fake_http_client.dart';
 import 'fixtures/migration/v11_downloads_schema.dart';
+import 'fixtures/migration/v12_source_metadata_schema.dart';
 
 class _FailedCompensation extends Preferences {
   _FailedCompensation(super.box);
@@ -150,6 +151,9 @@ void main() {
     await db.customStatement('ALTER TABLE categories DROP COLUMN hidden');
     await db.customStatement('ALTER TABLE categories DROP COLUMN rules_json');
     await db.customStatement('ALTER TABLE categories DROP COLUMN module');
+    for (final statement in restoreV12SourceMetadataStatements()) {
+      await db.customStatement(statement);
+    }
     // The released v2 downloads table did not contain v12 queue/counter
     // columns. Rebuild from frozen historical DDL, not today's generated schema.
     const columns =

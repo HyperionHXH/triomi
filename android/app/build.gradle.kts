@@ -2,6 +2,7 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.plugin.serialization")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -37,17 +38,22 @@ dependencies {
     implementation("androidx.preference:preference-ktx:1.2.1")
     // Mihon 1.6 extensions are compiled against the OkHttp 5 ABI (including
     // the Duration-mangled CacheControl builder methods).
-    implementation("com.squareup.okhttp3:okhttp:5.3.2")
-    implementation("com.squareup.okhttp3:okhttp-brotli:5.3.2")
-    implementation("com.squareup.okhttp3:okhttp-zstd:5.3.2")
-    implementation("com.squareup.okio:okio:3.15.0")
+    implementation("com.squareup.okhttp3:okhttp:5.4.0")
+    implementation("com.squareup.okhttp3:okhttp-brotli:5.4.0")
+    implementation("com.squareup.okhttp3:okhttp-zstd:5.4.0")
+    implementation("com.squareup.okio:okio:3.17.0")
     implementation("io.reactivex:rxjava:1.3.8")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1")
+    implementation(platform("org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.11.0"))
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     // Komikku/Mihon source-api 1.6 is built against the current
     // serialization runtime; generated serializers use its extended ABI.
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-okio-jvm:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-protobuf-jvm:1.11.0")
+    // Source DEX calls these runtimes directly, including their native decoders.
+    implementation("com.github.zhanghai.quickjs-java:quickjs-android:547f5b1597")
+    implementation("com.github.tachiyomiorg:image-decoder:41c059e540")
     implementation("org.jsoup:jsoup:1.22.2")
     implementation("com.github.mihonapp:injekt:91edab2317")
     androidTestImplementation("androidx.test:runner:1.6.2")

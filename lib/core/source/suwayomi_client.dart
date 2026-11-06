@@ -280,27 +280,39 @@ class SuwayomiClient {
       case 'latest':
       case 'search':
         if (page < 1) throw const FormatException('无效的来源页码');
+        final nullableSort = filters != null && _hasNullSort(filters);
         final raw = operation == 'search'
-            ? await _call(
-                '/api/v1/source/$sourceId/quick-search?pageNum=$page',
-                data: {
-                  'searchTerm': query,
-                  'filter': filters == null ? null : _filterChanges(filters),
-                },
+            ? _map(
+                (await _graphql(_searchQuery(nullableSort), {
+                  'input': {
+                    'source': sourceId,
+                    'type': 'SEARCH',
+                    'page': page,
+                    'query': query,
+                    'filters': filters == null || nullableSort
+                        ? null
+                        : _filterChanges(filters),
+                  },
+                  if (nullableSort) 'triomiFilters': jsonEncode(filters),
+                }))['fetchSourceManga'],
               )
             : await _call('/api/v1/source/$sourceId/$operation/$page');
         final data = _map(raw);
         return {
           'ok': true,
           'mangas': [
-            for (final row in data['mangaList'] as List)
+            for (final row
+                in data[operation == 'search' ? 'mangas' : 'mangaList'] as List)
               _manga(_map(row), sourceId),
           ],
           'hasNextPage': data['hasNextPage'] == true,
         };
       case 'filters':
-        final rows =
-            await _call('/api/v1/source/$sourceId/filters?reset=true') as List;
+        // The REST endpoint serializes plugin option objects as beans, which
+        // fails for obfuscated Select values. Upstream GraphQL uses displayValues
+        // (each option's toString) and preserves the original selection index.
+        final data = await _graphql(_filterQuery, {'source': sourceId});
+        final rows = _map(data['source'])['filters'] as List;
         return {
           'ok': true,
           'filters': [
@@ -666,37 +678,90 @@ class SuwayomiClient {
     }
   }
 
-  static Map<String, Object?> _filter(Map<String, Object?> raw, int index) {
-    final row = _map(raw['filter']);
-    final type = switch (raw['type']) {
-      'Header' => 'header',
-      'Separator' => 'separator',
-      'Select' => 'select',
-      'Text' => 'text',
-      'CheckBox' => 'check',
-      'TriState' => 'tri',
-      'Group' => 'group',
-      'Sort' => 'sort',
+  static final _filterQuery = () {
+    const fields = '''__typename
+      ... on HeaderFilter { name }
+      ... on SeparatorFilter { name }
+      ... on SelectFilter { name values selectState: default }
+      ... on TextFilter { name textState: default }
+      ... on CheckBoxFilter { name checkState: default }
+      ... on TriStateFilter { name triState: default }
+      ... on SortFilter { name values sortState: default { index ascending } }
+    ''';
+    var nested = fields;
+    // GraphQL cannot select recursive fragments. Reject deeper groups in the
+    // mapper instead of silently returning an incomplete filter snapshot.
+    for (var depth = 0; depth < 8; depth++) {
+      nested = '$fields ... on GroupFilter { name filters { $nested } }';
+    }
+    return 'query(\$source: LongString!) { source(id: \$source) { filters { $nested } } }';
+  }();
+
+  static String _searchQuery(bool nullableSort) =>
+      '''mutation(\$input: FetchSourceMangaInput!${nullableSort ? r', $triomiFilters: String!' : ''}) {
+        fetchSourceManga(input: \$input${nullableSort ? r', triomiFilters: $triomiFilters' : ''}) {
+          hasNextPage mangas {
+            id sourceId url title thumbnailUrl thumbnailUrlLastFetched
+            initialized artist author description genre status
+          }
+        }
+      }''';
+
+  static bool _hasNullSort(List<Map<String, Object?>> rows) => rows.any(
+    (row) =>
+        (row['type'] == 'sort' && row['state'] == null) ||
+        (row['type'] == 'group' &&
+            _hasNullSort([
+              for (final child in row['state'] as List) _map(child),
+            ])),
+  );
+
+  static Map<String, Object?> _filter(Map<String, Object?> row, int index) {
+    final type = switch (row['__typename']) {
+      'HeaderFilter' => 'header',
+      'SeparatorFilter' => 'separator',
+      'SelectFilter' => 'select',
+      'TextFilter' => 'text',
+      'CheckBoxFilter' => 'check',
+      'TriStateFilter' => 'tri',
+      'GroupFilter' => 'group',
+      'SortFilter' => 'sort',
       _ => throw const FormatException('未知的来源筛选类型'),
     };
     return {
       'index': index,
       'type': type,
-      'name': row['name'] ?? '',
+      'name': row['name'] as String,
       'values': switch (type) {
         'select' => [
-          for (final value in row['values'] as List) value.toString(),
+          for (final value in row['values'] as List) value as String,
         ],
-        'sort' => row['values'],
+        'sort' => [for (final value in row['values'] as List) value as String],
         _ => null,
       },
       'state': switch (type) {
         'group' => [
-          for (var i = 0; i < (row['state'] as List).length; i++)
-            _filter(_map((row['state'] as List)[i]), i),
+          for (var i = 0; i < (row['filters'] as List).length; i++)
+            _filter(_map((row['filters'] as List)[i]), i),
         ],
         'header' || 'separator' => null,
-        _ => row['state'],
+        'select' => row['selectState'] as int,
+        'text' => row['textState'] as String,
+        'check' => row['checkState'] as bool,
+        'tri' => switch (row['triState']) {
+          'IGNORE' => 0,
+          'INCLUDE' => 1,
+          'EXCLUDE' => 2,
+          _ => throw const FormatException('Invalid desktop tri-state filter'),
+        },
+        'sort' =>
+          row['sortState'] == null
+              ? null
+              : {
+                  'index': _map(row['sortState'])['index'] as int,
+                  'ascending': _map(row['sortState'])['ascending'] as bool,
+                },
+        _ => throw const FormatException('Invalid desktop filter state'),
       },
     };
   }
@@ -704,26 +769,34 @@ class SuwayomiClient {
   static List<Map<String, Object?>> _filterChanges(
     List<Map<String, Object?>> rows,
   ) {
-    String state(Map<String, Object?> row) => switch (row['type']) {
-      'check' => row['state'] == true ? 'true' : 'false',
-      'sort' => jsonEncode(row['state']),
-      'select' || 'tri' => '${row['state'] as int}',
-      'text' => '${row['state'] ?? ''}',
-      _ => throw const FormatException('来源筛选类型不能提交'),
-    };
+    Map<String, Object?> state(Map<String, Object?> row) =>
+        switch (row['type']) {
+          'check' => {'checkBoxState': row['state'] as bool},
+          'sort' => {'sortState': row['state']},
+          'select' => {'selectState': row['state'] as int},
+          'tri' => {
+            'triState': switch (row['state']) {
+              0 => 'IGNORE',
+              1 => 'INCLUDE',
+              2 => 'EXCLUDE',
+              _ => throw const FormatException(
+                'Invalid desktop tri-state filter',
+              ),
+            },
+          },
+          'text' => {'textState': row['state'] as String},
+          _ => throw const FormatException('来源筛选类型不能提交'),
+        };
     return [
       for (var i = 0; i < rows.length; i++)
-        if (rows[i]['type'] == 'group')
-          for (var j = 0; j < (rows[i]['state'] as List).length; j++)
-            {
-              'position': i,
-              'state': jsonEncode({
-                'position': j,
-                'state': state(_map((rows[i]['state'] as List)[j])),
-              }),
-            }
-        else if (rows[i]['type'] != 'header' && rows[i]['type'] != 'separator')
-          {'position': i, 'state': state(rows[i])},
+        if (rows[i]['type'] == 'group') ...[
+          for (final change in _filterChanges([
+            for (final row in rows[i]['state'] as List) _map(row),
+          ]))
+            {'position': i, 'groupChange': change},
+        ] else if (rows[i]['type'] != 'header' &&
+            rows[i]['type'] != 'separator')
+          {'position': i, ...state(rows[i])},
     ];
   }
 }

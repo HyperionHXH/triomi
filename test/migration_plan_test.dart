@@ -8,6 +8,7 @@ import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
+import 'package:triomi/core/models/source_metadata.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
@@ -122,6 +123,51 @@ void main() {
       'completed',
     );
   });
+  test('persistent migration retains exact target source memo through reopen and execution', () async {
+    const mangaMemo = '{"id":9223372036854775000}';
+    const chapterMemo =
+        '{"episode":6286738698187452081,"nested":{"request":"state"}}';
+    final destination = MediaItem.fromJson({
+      ...target.toJson(),
+      'sourceMetadata': {
+        'mihonAndroid': {'extensionMemo': mangaMemo},
+      },
+    }, sourceId: target.sourceId);
+    final chapter = Chapter(
+      sourceId: targetChapter.sourceId,
+      remoteId: targetChapter.remoteId,
+      title: targetChapter.title,
+      number: targetChapter.number,
+      sourceMetadata: SourceMetadata({
+        'mihonAndroid': {'extensionMemo': chapterMemo},
+      }),
+    );
+    final plan = await repo.prepareMigration(
+      origin: await repo.origin(old),
+      target: destination,
+      chapters: [chapter],
+      resumeChapterId: chapter.remoteId,
+    );
+    await db.close();
+    db = AppDatabase.forTesting(NativeDatabase(databaseFile));
+    library = LibraryRepository(db);
+    repo = SourceMigrationRepository(db);
+    await repo.executeMigration(plan);
+    final restored = (await library.loadChapters(
+      target.sourceId,
+      target.remoteId,
+    )).single;
+    expect(restored.sourceMetadata!.encoded, chapter.sourceMetadata!.encoded);
+    expect(
+      (await library.itemByKey(
+        target.sourceId,
+        target.remoteId,
+      ))!.sourceMetadata!.encoded,
+      destination.sourceMetadata!.encoded,
+    );
+    expect(restored.content, isNull);
+  });
+
   test('changed file cannot publish target; restoring exact reviewed bytes permits explicit resume', () async {
     await offline();
     final file = File('${dir.path}/old-images/001.png');

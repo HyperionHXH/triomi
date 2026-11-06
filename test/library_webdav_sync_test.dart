@@ -7,6 +7,8 @@ import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
+import 'package:triomi/core/models/source_metadata.dart';
+import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/library/data/anime_identity_repository.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/library/data/library_webdav_sync.dart';
@@ -220,6 +222,176 @@ void main() {
               row.chapterRemoteId.equals(chapter.remoteId),
         ))
         .write(HistoriesCompanion(visitedAt: Value(at)));
+  }
+
+  test('source metadata crosses portable sync without becoming offline chapter content', () async {
+    final item = MediaItem(
+      sourceId: manga.sourceId,
+      remoteId: manga.remoteId,
+      type: manga.type,
+      title: manga.sourceTitle,
+      url: manga.url,
+      sourceMetadata: SourceMetadata({
+        'mihonAndroid': {'extensionMemo': '{"id":9223372036854775000}'},
+      }),
+    );
+    final chapter = Chapter(
+      sourceId: comicChapter.sourceId,
+      remoteId: comicChapter.remoteId,
+      title: comicChapter.title,
+      url: comicChapter.url,
+      sourceMetadata: SourceMetadata({
+        'mihonAndroid': {'extensionMemo': '{"key":"opaque"}'},
+      }),
+    );
+    await favorite(a, one, item, DateTime.utc(2026, 11, 6));
+    await one.saveChapters(
+      itemSourceId: item.sourceId,
+      itemRemoteId: item.remoteId,
+      chapters: [chapter],
+    );
+    await history(a, one, item, chapter, 2, DateTime.utc(2026, 11, 6, 1));
+    await service(a, one).sync();
+    await service(b, two).sync();
+    expect(
+      (await two.itemByKey(
+        item.sourceId,
+        item.remoteId,
+      ))!.sourceMetadata!.encoded,
+      item.sourceMetadata!.encoded,
+    );
+    final restored = (await two.loadChapters(
+      item.sourceId,
+      item.remoteId,
+    )).single;
+    expect(restored.sourceMetadata!.encoded, chapter.sourceMetadata!.encoded);
+    expect(restored.content, isNull);
+    expect((await b.select(b.chapters).getSingle()).contentJson, isNull);
+  });
+
+  for (final (partial, clearMemo) in [
+    (false, false),
+    (true, false),
+    (true, true),
+  ]) {
+    test(
+      'existing history-only cache merges remote source metadata (partial=$partial clear=$clearMemo)',
+      () async {
+        const mangaMemo = '{"id":9223372036854775000}';
+        const chapterMemo = '{"episode":6286738698187452081}';
+        final item = MediaItem.fromJson({
+          ...manga.toJson(),
+          'sourceMetadata': {
+            'mihonAndroid': {'extensionMemo': mangaMemo, 'status': 6},
+          },
+        }, sourceId: manga.sourceId);
+        final chapter = Chapter(
+          sourceId: comicChapter.sourceId,
+          remoteId: comicChapter.remoteId,
+          title: comicChapter.title,
+          number: comicChapter.number,
+          url: comicChapter.url,
+          sourceMetadata: SourceMetadata({
+            'mihonAndroid': {
+              'extensionMemo': chapterMemo,
+              'scanlator': 'Remote',
+            },
+          }),
+        );
+        final localItem = partial
+            ? MediaItem.fromJson({
+                ...manga.toJson(),
+                'sourceMetadata': {
+                  'mihonAndroid': {
+                    'status': 2,
+                    'localKey': 'keep',
+                    if (clearMemo) 'extensionMemo': null,
+                  },
+                },
+              }, sourceId: manga.sourceId)
+            : manga;
+        final localChapter = Chapter(
+          sourceId: comicChapter.sourceId,
+          remoteId: comicChapter.remoteId,
+          title: comicChapter.title,
+          number: comicChapter.number,
+          url: comicChapter.url,
+          content: const ChapterContent(text: 'Keep local offline body'),
+          sourceMetadata: partial
+              ? SourceMetadata({
+                  'mihonAndroid': {
+                    'scanlator': 'Local',
+                    'localKey': 'keep',
+                    if (clearMemo) 'extensionMemo': '{}',
+                  },
+                })
+              : null,
+        );
+        await history(a, one, item, chapter, 1, DateTime.utc(2026, 11, 6));
+        await two.saveChapters(
+          itemSourceId: manga.sourceId,
+          itemRemoteId: manga.remoteId,
+          chapters: [localChapter],
+        );
+        await history(
+          b,
+          two,
+          localItem,
+          localChapter,
+          2,
+          DateTime.utc(2026, 11, 6, 1),
+        );
+        await DownloadRepository(b).saveChapterContent(localChapter);
+        await service(a, one).sync();
+        await service(b, two).sync();
+        final restoredItem = (await two.itemByKey(
+          manga.sourceId,
+          manga.remoteId,
+        ))!;
+        final restoredChapter = (await two.loadChapters(
+          manga.sourceId,
+          manga.remoteId,
+        )).single;
+        final itemState =
+            restoredItem.sourceMetadata!.toJson()['mihonAndroid'] as Map;
+        final chapterState =
+            restoredChapter.sourceMetadata!.toJson()['mihonAndroid'] as Map;
+        expect(itemState['extensionMemo'], clearMemo ? null : mangaMemo);
+        expect(chapterState['extensionMemo'], clearMemo ? '{}' : chapterMemo);
+        expect(itemState['status'], partial ? 2 : 6);
+        expect(chapterState['scanlator'], partial ? 'Local' : 'Remote');
+        if (partial) {
+          expect(itemState['localKey'], 'keep');
+          expect(chapterState['localKey'], 'keep');
+        }
+        expect(restoredChapter.content!.text, 'Keep local offline body');
+        expect(await two.listLibrary(), isEmpty);
+        final published = dav.payload(service(b, two).document);
+        final publishedItem =
+            ((published['items'] as List).single as Map)['item'] as Map;
+        final publishedChapter = (published['chapters'] as List).single as Map;
+        expect(
+          ((publishedItem['sourceMetadata'] as Map)['mihonAndroid']
+              as Map)['extensionMemo'],
+          clearMemo ? null : mangaMemo,
+        );
+        expect(
+          ((publishedChapter['sourceMetadata'] as Map)['mihonAndroid']
+              as Map)['extensionMemo'],
+          clearMemo ? '{}' : chapterMemo,
+        );
+        // B must also preserve memo in the document it publishes back to A.
+        await service(a, one).sync();
+        expect(
+          ((await one.itemByKey(
+                manga.sourceId,
+                manga.remoteId,
+              ))!.sourceMetadata!.toJson()['mihonAndroid']
+              as Map)['extensionMemo'],
+          mangaMemo,
+        );
+      },
+    );
   }
 
   test('two devices exchange manga anime exact histories links and missing plugin hints', () async {

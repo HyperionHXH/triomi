@@ -8,6 +8,7 @@ import '../../../core/models/chapter.dart';
 import '../../../core/models/manga_metadata_override.dart';
 import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
+import '../../../core/models/source_metadata.dart';
 import 'library_category.dart';
 
 String _libraryJournalNamespace(MediaType type) =>
@@ -96,6 +97,12 @@ class LibraryRepository {
             rating: Value(item.rating),
             status: Value(item.status),
             detailJson: Value(previous?.detailJson),
+            sourceMetadataJson: Value(
+              SourceMetadata.mergeStorage(
+                previous?.sourceMetadataJson,
+                item.sourceMetadata,
+              ),
+            ),
             cachedAt: Value(DateTime.now()),
           ),
         );
@@ -865,6 +872,9 @@ class LibraryRepository {
       final offlineContent = <String, String?>{
         for (final row in existing) row.remoteId: row.contentJson,
       };
+      final metadata = <String, String?>{
+        for (final row in existing) row.remoteId: row.sourceMetadataJson,
+      };
       final existingChapterIds = <String>{
         for (final row in existing) row.remoteId,
       };
@@ -901,6 +911,12 @@ class LibraryRepository {
                 releaseDate: Value(chapter.releaseDate),
                 locked: Value(chapter.locked),
                 contentJson: Value(offlineContent[chapter.remoteId]),
+                sourceMetadataJson: Value(
+                  SourceMetadata.mergeStorage(
+                    metadata[chapter.remoteId],
+                    chapter.sourceMetadata,
+                  ),
+                ),
               ),
             );
       }
@@ -1129,11 +1145,28 @@ class LibraryRepository {
                 number: Value(chapter.number),
                 sortIndex: Value(chapter.sortIndex),
                 locked: Value(chapter.locked),
+                sourceMetadataJson: Value(chapter.sourceMetadata?.encoded),
               ),
             );
       } else if (cached.itemSourceId != sourceId ||
           cached.itemRemoteId != remoteId) {
         throw StateError('History chapter belongs to another work');
+      } else if (chapter.sourceMetadata != null) {
+        await (_db.update(_db.chapters)..where(
+              (row) =>
+                  row.sourceId.equals(chapter.sourceId) &
+                  row.remoteId.equals(chapter.remoteId),
+            ))
+            .write(
+              ChaptersCompanion(
+                sourceMetadataJson: Value(
+                  SourceMetadata.mergeStorage(
+                    cached.sourceMetadataJson,
+                    chapter.sourceMetadata,
+                  ),
+                ),
+              ),
+            );
       }
       final deleteStatement = _db.delete(_db.histories)
         ..where(
@@ -1285,6 +1318,7 @@ class LibraryRepository {
     localMangaMetadata: row.type == MediaType.manga
         ? MangaMetadataOverride.readOptionalDetailJson(row.detailJson)
         : null,
+    sourceMetadata: SourceMetadata.fromStorage(row.sourceMetadataJson),
   );
 
   Chapter _toChapter(ChapterRow row) => Chapter(
@@ -1298,6 +1332,7 @@ class LibraryRepository {
     releaseDate: row.releaseDate,
     locked: row.locked,
     content: _decodeContent(row.contentJson),
+    sourceMetadata: SourceMetadata.fromStorage(row.sourceMetadataJson),
   );
 
   /// 离线缓存的正文（下载后写入，未下载为 null）。

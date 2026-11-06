@@ -23,5 +23,7 @@
 -keep class com.squareup.zstd.** { *; }
 -keep class kotlinx.serialization.** { *; }
 -keep class kotlinx.coroutines.** { *; }
+-keep class app.cash.quickjs.** { *; }
+-keep class tachiyomi.decoder.** { *; }
 -keep class kotlin.** { *; }
 -keepattributes Signature,InnerClasses,EnclosingMethod,RuntimeVisibleAnnotations,AnnotationDefault

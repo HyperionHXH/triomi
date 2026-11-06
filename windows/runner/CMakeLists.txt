@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.14)
 project(runner LANGUAGES CXX)
 
+option(TRIOMI_MIHON_ACCEPTANCE_BUILD "Allow only isolated local Mihon acceptance roots" OFF)
+
 # Define the application target. To change its name, change BINARY_NAME in the
 # top-level CMakeLists.txt, not the value here, or `flutter run` will no longer
 # work.
@@ -23,6 +25,11 @@ add_executable(${BINARY_NAME} WIN32
 # Apply the standard set of build settings. This can be removed for applications
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
+
+if(TRIOMI_MIHON_ACCEPTANCE_BUILD)
+  target_compile_definitions(${BINARY_NAME} PRIVATE TRIOMI_MIHON_ACCEPTANCE_BUILD
+    "$<$<CONFIG:Release>:TRIOMI_MIHON_ACCEPTANCE_RELEASE_FORBIDDEN>")
+endif()
 
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")

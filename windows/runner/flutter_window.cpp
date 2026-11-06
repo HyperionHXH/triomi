@@ -185,6 +185,7 @@ bool FlutterWindow::OnCreate() {
               call.method_name() == "desktopMihonAlive" ||
               call.method_name() == "desktopMihonTrackVerifier" ||
               call.method_name() == "desktopMihonUntrackVerifier" ||
+              call.method_name() == "desktopMihonAcceptanceDiagnostics" ||
               call.method_name() == "desktopMihonReplaceFile") {
             if (worker_ || backup_worker_) {
               result->Error("runtime_unavailable", "extension runtime is unavailable in workers");
@@ -197,6 +198,16 @@ bool FlutterWindow::OnCreate() {
             }
             if (call.method_name() == "desktopMihonAlive") {
               result->Success(flutter::EncodableValue(mihon_runtime_.Alive()));
+              return;
+            }
+            if (call.method_name() == "desktopMihonAcceptanceDiagnostics") {
+              result->Success(flutter::EncodableValue(flutter::EncodableMap{
+                  {flutter::EncodableValue("isolatedBuild"),
+                   flutter::EncodableValue(DesktopMihonRuntime::AcceptanceBuild())},
+                  {flutter::EncodableValue("stateFailureStage"),
+                   flutter::EncodableValue(mihon_runtime_.StateFailureStage())},
+                  {flutter::EncodableValue("win32Error"),
+                   flutter::EncodableValue(static_cast<int64_t>(mihon_runtime_.StateFailureError()))}}));
               return;
             }
             const auto* args = call.arguments() == nullptr ? nullptr :
@@ -240,7 +251,7 @@ bool FlutterWindow::OnCreate() {
               }
               std::string failure_stage;
               DWORD error = ERROR_SUCCESS;
-              if (!DesktopMihonRuntime::ReplaceStateFile(
+              if (!mihon_runtime_.ReplaceStateFile(
                   *source, *destination, &failure_stage, &error)) {
                 result->Error("state_replace_failed",
                     "could not atomically publish application runtime state: " +

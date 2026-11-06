@@ -22,6 +22,7 @@ const _mihonRepositoriesKey = 'mihon.repositories';
 const _mihonEnabledKey = 'mihon.enabledPackages';
 const _mihonInstalledKey = 'mihon.installedPackages';
 const _mihonHostStatusKey = 'mihon.hostStatus';
+const _unknownProbeAction = '请先手动启用，再打开来源设置并重试';
 
 /// Mihon/Komikku 扩展管理。下载、启停状态与 Triomi 规则来源分开保存。
 class MihonExtensionsSheet extends ConsumerStatefulWidget {
@@ -366,7 +367,9 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                     context: context,
                     builder: (dialogContext) => AlertDialog(
                       title: Text(
-                        candidate.desktopJarSha256 == null
+                        candidate.localApkConversion
+                            ? '确认转换并执行 APK'
+                            : candidate.desktopJarSha256 == null
                             ? '确认扩展发布者'
                             : '确认桌面扩展代码',
                       ),
@@ -376,7 +379,9 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              candidate.desktopJarSha256 == null
+                              candidate.localApkConversion
+                                  ? '${extension.name} 的仓库未提供桌面 JAR。将使用本机兼容运行时转换已验签 APK 并执行；转换产物会记录独立 SHA-256，APK 签名仅覆盖原件。扩展在本机执行，不是权限沙箱。'
+                                  : candidate.desktopJarSha256 == null
                                   ? '${extension.name} 的 APK 签名已验证，但发布者与聚合仓库默认签名不同。确认发布者指纹后才能加载。'
                                   : '${extension.name} 使用仓库提供的原生桌面 JAR，避免 APK 转换不兼容。APK 签名不为 JAR 背书；请同时核对桌面代码来源与独立指纹。扩展在本机执行，不是权限沙箱。',
                             ),
@@ -392,12 +397,22 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                                   ? '未提供'
                                   : candidate.repositorySigner,
                             ),
+                            if (candidate.localApkConversion) ...[
+                              const SizedBox(height: 12),
+                              const Text('原始 APK SHA-256'),
+                              SelectableText(candidate.apkHash),
+                              const SizedBox(height: 8),
+                              const Text('仓库声明的 APK 地址'),
+                              SelectableText(
+                                candidate.apkUrl ?? '本机备份中已验签的 APK',
+                              ),
+                            ],
                             if (candidate.desktopJarSha256 != null) ...[
                               const SizedBox(height: 12),
                               const Text('独立的桌面 JAR SHA-256'),
                               SelectableText(candidate.desktopJarSha256!),
                               const SizedBox(height: 8),
-                              const Text('桌面代码下载地址'),
+                              const Text('仓库声明的桌面代码地址'),
                               SelectableText(candidate.desktopJarUrl ?? ''),
                             ],
                           ],
@@ -422,6 +437,9 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
           );
       _installed[extension.packageName] = extension.versionName;
       _hostStatus[extension.packageName] = probe;
+      if (probe['filterProbe'] == 'unknown') {
+        _enabled.remove(extension.packageName);
+      }
       _failedExtensions.remove(extension.packageName);
       _installationIssues.remove(extension.packageName);
       _installationGeneration++;
@@ -445,7 +463,9 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
         setState(() {});
         final ok = probe['ok'] == true;
         final detail = ok
-            ? '已加载 ${probe['sourceCount'] ?? 0} 个来源'
+            ? probe['filterProbe'] == 'unknown'
+                  ? '已安装，筛选探测未完成；$_unknownProbeAction'
+                  : '已加载 ${probe['sourceCount'] ?? 0} 个来源'
             : (probe['factoryLoaded'] == true
                   ? '已发现工厂，但宿主未执行：${probe['hostError'] ?? '等待 Mihon source-api 运行时'}'
                   : '宿主未加载：${probe['hostError'] ?? probe['error'] ?? '未知原因'}');
@@ -592,6 +612,12 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                             const Text(
                               '以下信息已从本机 APK 静态验证。备份中的信任不会迁移；确认后才会首次执行扩展代码。请仅接受你认识的发布者。',
                             ),
+                            if (candidate.localApkConversion) ...[
+                              const SizedBox(height: 12),
+                              const Text(
+                                '此备份没有独立桌面 JAR。确认后将转换并执行已验签 APK；本机转换产物会记录独立 SHA-256，APK 签名仅覆盖原件。',
+                              ),
+                            ],
                             const SizedBox(height: 12),
                             const Text('实际包名'),
                             SelectableText(candidate.packageName),
@@ -997,7 +1023,11 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
         builder: (_) => MangaExtensionDetailsPage(
           packageName: package,
           diagnostic:
-              _installErrors[package] ?? _installationIssues[package]?.message,
+              _installErrors[package] ??
+              _installationIssues[package]?.message ??
+              (_hostStatus[package]?['filterProbe'] == 'unknown'
+                  ? '扩展已安装，但筛选探测未完成；这也可能由网络、登录或来源设置引起。$_unknownProbeAction。'
+                  : null),
         ),
       ),
     );
@@ -1017,7 +1047,8 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       onTap: () => unawaited(_details(package)),
       title: Text(_packageName(package)),
       subtitle: Text(
-        'v${_installed[package] ?? host?['versionName'] ?? host?['versionCode'] ?? '未知'}',
+        'v${_installed[package] ?? host?['versionName'] ?? host?['versionCode'] ?? '未知'}'
+        '${host?['filterProbe'] == 'unknown' ? ' · 筛选待验证，$_unknownProbeAction' : ''}',
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,

@@ -76,6 +76,8 @@ class MediaItems extends Table {
   /// 详情页扩展字段（同书版本、关联推荐等），JSON。
   TextColumn get detailJson => text().nullable()();
 
+  TextColumn get sourceMetadataJson => text().nullable()();
+
   DateTimeColumn get cachedAt => dateTime().nullable()();
 
   @override
@@ -117,6 +119,8 @@ class Chapters extends Table {
 
   /// 正文 / 图片列表 / 播放线路，JSON。
   TextColumn get contentJson => text().nullable()();
+
+  TextColumn get sourceMetadataJson => text().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => <Column<Object>>{sourceId, remoteId};

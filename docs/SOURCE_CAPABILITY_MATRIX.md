@@ -4,6 +4,13 @@
 
 ## 0.13.0 下载诊断补充
 
+R181本机验收：Android最终R8原始JM1.6.64已通过搜索48项、详情、296页列表；Windows配套
+原始JAR已通过生产安装器及Flutter阅读器图片绘制。冻结索引中2224个不同原始APK
+加载/筛选通过，覆盖3056/3070条记录；Windows原生JAR 3014/3065个URL通过，其余
+51个精确旧版404未验证。加载/筛选通过不等于全部站点联网阅读通过。Android DEX与Windows
+JVM分开记录，iOS规则来源不引用此结论。最终版本、原始包身份与验证层级见
+[当前状态](CURRENT_STATUS.md)和[R181证据](delivery/evidence/R181-jm-compatibility.json)。
+
 生产客户端匿名实网探测：7sefun搜索2项、20集目录与指定播放页HTTP200；MXdm的`www.dcc3.com`和DM84的`dmbus.cc`在本机连接15秒超时，失败发生在搜索阶段而非下载写盘。MangaDex API重定向到站点`/edge/challenge`返回HTML；LK生产公开feed匿名JSON可达，不据此认定付费/账号正文能下载。
 
 Windows原生解析修复根Navigator上下文无法找到Overlay的问题后，实际解析7sefun第1集取得`groupvideo.photo.qq.com`媒体地址，但媒体请求HTTP404；此结果属于已取得地址失效，不把页面可达或解析成功称为正片可下载。Android同页面仍出现解析超时。两端受控网页均通过生产解析器取得本机HLS并读取响应，受控三类下载另见验收证据。

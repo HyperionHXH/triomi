@@ -9,6 +9,7 @@ import '../../../core/db/app_database.dart';
 import '../../../core/db/database_provider.dart';
 import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
+import '../../../core/models/source_metadata.dart';
 import '../../../core/source/http_client.dart';
 import '../../library/data/library_providers.dart';
 import '../../library/data/library_repository.dart';
@@ -552,7 +553,8 @@ class LibraryWebDavSync {
 
     final items = <(String, String), _PortableItem>{
       ...remote.items,
-      ...local.items,
+      for (final pair in local.items.entries)
+        pair.key: pair.value.mergeMetadata(remote.items[pair.key]),
     };
     final histories = <(String, String, String, String), _History>{
       for (final row in remote.histories) row.key: row,
@@ -584,7 +586,13 @@ class LibraryWebDavSync {
 
     final chapters = <(String, String, String, String), _PortableChapter>{
       ...remote.chapters,
-      ...local.chapters,
+      for (final pair in local.chapters.entries)
+        pair.key: pair.value.withSourceMetadata(
+          SourceMetadata.merge(
+            remote.chapters[pair.key]?.sourceMetadata,
+            pair.value.sourceMetadata,
+          ),
+        ),
     };
     final links = <(String, String, String), _AnimeLink>{
       for (final row in remote.links) row.key: row,
@@ -753,8 +761,28 @@ class LibraryWebDavSync {
       }
     }
     for (final pair in value.items.entries) {
-      if (await library.itemByKey(pair.key.$1, pair.key.$2) == null) {
+      final existing =
+          await (db.select(db.mediaItems)..where(
+                (row) =>
+                    row.sourceId.equals(pair.key.$1) &
+                    row.remoteId.equals(pair.key.$2),
+              ))
+              .getSingleOrNull();
+      if (existing == null) {
         await library.cacheItem(pair.value.item);
+      } else {
+        final metadata = SourceMetadata.mergeStorage(
+          existing.sourceMetadataJson,
+          pair.value.item.sourceMetadata,
+        );
+        if (metadata != existing.sourceMetadataJson) {
+          await (db.update(db.mediaItems)..where(
+                (row) =>
+                    row.sourceId.equals(pair.key.$1) &
+                    row.remoteId.equals(pair.key.$2),
+              ))
+              .write(MediaItemsCompanion(sourceMetadataJson: Value(metadata)));
+        }
       }
       if (pair.value.hint != null) {
         await storeSyncedSourceHint(db, pair.key.$2, pair.value.hint!);
@@ -770,6 +798,19 @@ class LibraryWebDavSync {
               .getSingleOrNull();
       if (existing == null) {
         await db.into(db.chapters).insert(chapter.companion);
+      } else {
+        final metadata = SourceMetadata.mergeStorage(
+          existing.sourceMetadataJson,
+          chapter.sourceMetadata,
+        );
+        if (metadata != existing.sourceMetadataJson) {
+          await (db.update(db.chapters)..where(
+                (row) =>
+                    row.sourceId.equals(chapter.chapterSourceId) &
+                    row.remoteId.equals(chapter.chapterRemoteId),
+              ))
+              .write(ChaptersCompanion(sourceMetadataJson: Value(metadata)));
+        }
       }
     }
     for (final link in value.links) {
@@ -1351,6 +1392,18 @@ class _PortableItem {
   final MediaItem item;
   final SyncedSourceHint? hint;
   (String, String) get key => (item.sourceId, item.remoteId);
+  // Source state has no independent timestamp. Keep explicitly supplied local
+  // fields (including memo clears), while absent fields inherit remote state.
+  _PortableItem mergeMetadata(_PortableItem? previous) => _PortableItem(
+    MediaItem.fromJson({
+      ...item.toJson(),
+      'sourceMetadata': SourceMetadata.merge(
+        previous?.item.sourceMetadata,
+        item.sourceMetadata,
+      )?.toJson(),
+    }, sourceId: item.sourceId),
+    hint,
+  );
   factory _PortableItem.decode(Object? raw) {
     if (raw is! Map ||
         !_only(raw, {'item', 'sourceHint'}) ||
@@ -1371,6 +1424,7 @@ class _PortableItem {
       'rating',
       'status',
       'localMangaMetadata',
+      'sourceMetadata',
     })) {
       throw const FormatException('Work fields are invalid');
     }
@@ -1396,6 +1450,9 @@ class _PortableItem {
       'tags': _tags(value['tags']),
       'rating': value['rating'] is num ? value['rating'] : null,
       'status': _text(value['status'], 512),
+      if (value['sourceMetadata'] != null)
+        'sourceMetadata': SourceMetadata.fromJson(value['sourceMetadata'])!
+            .toJson(),
       if (type == MediaType.manga && value['localMangaMetadata'] is Map)
         'localMangaMetadata': value['localMangaMetadata'],
     };
@@ -1419,6 +1476,8 @@ class _PortableItem {
       'tags': _tags(item.tags),
       'rating': item.rating,
       'status': item.status,
+      if (item.sourceMetadata != null)
+        'sourceMetadata': item.sourceMetadata!.toJson(),
       if (item.localMangaMetadata != null)
         'localMangaMetadata': item.localMangaMetadata!.toJson(),
     },
@@ -1498,6 +1557,7 @@ class _PortableChapter {
     required this.volumeTitle,
     required this.releaseDate,
     required this.locked,
+    this.sourceMetadata,
   });
   final String itemSourceId,
       itemRemoteId,
@@ -1509,8 +1569,24 @@ class _PortableChapter {
   final int sortIndex;
   final DateTime? releaseDate;
   final bool locked;
+  final SourceMetadata? sourceMetadata;
   (String, String, String, String) get key =>
       (itemSourceId, itemRemoteId, chapterSourceId, chapterRemoteId);
+  _PortableChapter withSourceMetadata(SourceMetadata? metadata) =>
+      _PortableChapter(
+        itemSourceId: itemSourceId,
+        itemRemoteId: itemRemoteId,
+        chapterSourceId: chapterSourceId,
+        chapterRemoteId: chapterRemoteId,
+        title: title,
+        url: url,
+        number: number,
+        sortIndex: sortIndex,
+        volumeTitle: volumeTitle,
+        releaseDate: releaseDate,
+        locked: locked,
+        sourceMetadata: metadata,
+      );
   factory _PortableChapter.fromRow(ChapterRow row) => _PortableChapter(
     itemSourceId: row.itemSourceId,
     itemRemoteId: row.itemRemoteId,
@@ -1523,6 +1599,7 @@ class _PortableChapter {
     volumeTitle: row.volumeTitle,
     releaseDate: row.releaseDate,
     locked: row.locked,
+    sourceMetadata: SourceMetadata.fromStorage(row.sourceMetadataJson),
   );
   factory _PortableChapter.decode(Object? raw) {
     if (raw is! Map ||
@@ -1538,6 +1615,7 @@ class _PortableChapter {
           'volumeTitle',
           'releaseDate',
           'locked',
+          'sourceMetadata',
         })) {
       throw const FormatException('Chapter fields are invalid');
     }
@@ -1569,6 +1647,7 @@ class _PortableChapter {
           ? null
           : _date(raw['releaseDate'], 'chapter date'),
       locked: locked,
+      sourceMetadata: SourceMetadata.fromJson(raw['sourceMetadata']),
     );
   }
   ChaptersCompanion get companion => ChaptersCompanion.insert(
@@ -1584,6 +1663,9 @@ class _PortableChapter {
     releaseDate: Value(releaseDate),
     locked: Value(locked),
     contentJson: const Value(null),
+    sourceMetadataJson: sourceMetadata == null
+        ? const Value.absent()
+        : Value(sourceMetadata!.encoded),
   );
   Map<String, Object?> toJson() => {
     'itemSourceId': itemSourceId,
@@ -1597,6 +1679,7 @@ class _PortableChapter {
     'volumeTitle': volumeTitle,
     'releaseDate': releaseDate?.toUtc().toIso8601String(),
     'locked': locked,
+    if (sourceMetadata != null) 'sourceMetadata': sourceMetadata!.toJson(),
   };
 }
 

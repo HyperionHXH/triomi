@@ -11,6 +11,7 @@ import '../db/legacy_category_scopes.dart';
 import '../models/manga_metadata_override.dart';
 import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
+import '../models/source_metadata.dart';
 import '../platform/platform_channel.dart';
 import '../source/catalog_installer.dart';
 import '../source/http_client.dart';
@@ -600,6 +601,7 @@ class BackupService {
             'rating': row.rating,
             'status': row.status,
             'detailJson': row.detailJson,
+            'sourceMetadataJson': row.sourceMetadataJson,
             'cachedAt': row.cachedAt?.toIso8601String(),
           },
       ],
@@ -655,6 +657,7 @@ class BackupService {
             'volumeTitle': row.volumeTitle,
             'releaseDate': row.releaseDate?.toIso8601String(),
             'locked': row.locked,
+            'sourceMetadataJson': row.sourceMetadataJson,
             if (includeOfflineContent && row.contentJson != null)
               'contentJson': row.contentJson,
           },
@@ -1050,6 +1053,9 @@ class BackupService {
                 existing == null ||
                 (existing.cachedAt ?? _oldestTimestamp).isBefore(cachedAt);
             final incomingType = _typeOf(row['type']);
+            final incomingSourceMetadata = SourceMetadata.fromStorage(
+              row['sourceMetadataJson'] as String?,
+            );
             final mergeManga =
                 incomingType == MediaType.manga &&
                 (existing == null || existing.type == MediaType.manga);
@@ -1064,14 +1070,27 @@ class BackupService {
                   )
                 : row['detailJson'] as String?;
             if (!preferIncomingCache) {
-              if (mergeManga && detailJson != existing.detailJson) {
+              if ((mergeManga && detailJson != existing.detailJson) ||
+                  (existing.sourceMetadataJson == null &&
+                      incomingSourceMetadata != null)) {
                 await (database.update(database.mediaItems)..where(
                       (t) =>
                           t.sourceId.equals(sourceId) &
                           t.remoteId.equals(remoteId) &
                           t.type.equalsValue(MediaType.manga),
                     ))
-                    .write(MediaItemsCompanion(detailJson: Value(detailJson)));
+                    .write(
+                      MediaItemsCompanion(
+                        detailJson: mergeManga
+                            ? Value(detailJson)
+                            : const Value.absent(),
+                        sourceMetadataJson:
+                            existing.sourceMetadataJson == null &&
+                                incomingSourceMetadata != null
+                            ? Value(incomingSourceMetadata.encoded)
+                            : const Value.absent(),
+                      ),
+                    );
               }
               continue;
             }
@@ -1094,6 +1113,12 @@ class BackupService {
                         ? Value(detailJson)
                         : const Value.absent(),
                     cachedAt: Value(cachedAt),
+                    sourceMetadataJson: Value(
+                      SourceMetadata.mergeStorage(
+                        existing?.sourceMetadataJson,
+                        incomingSourceMetadata,
+                      ),
+                    ),
                   ),
                 );
             itemCount += 1;
@@ -1384,8 +1409,13 @@ class BackupService {
             if (existing != null) {
               // Catalogues have no per-row timestamp. Keep this device's metadata;
               // only fill missing offline text rather than erasing cached content.
-              if (existing.contentJson == null &&
-                  row['contentJson'] is String) {
+              final restoredMetadata = SourceMetadata.fromStorage(
+                row['sourceMetadataJson'] as String?,
+              );
+              if ((existing.contentJson == null &&
+                      row['contentJson'] is String) ||
+                  (existing.sourceMetadataJson == null &&
+                      restoredMetadata != null)) {
                 await (database.update(database.chapters)..where(
                       (t) =>
                           t.sourceId.equals(sourceId) &
@@ -1393,7 +1423,16 @@ class BackupService {
                     ))
                     .write(
                       ChaptersCompanion(
-                        contentJson: Value(row['contentJson'] as String),
+                        contentJson:
+                            existing.contentJson == null &&
+                                row['contentJson'] is String
+                            ? Value(row['contentJson'] as String)
+                            : const Value.absent(),
+                        sourceMetadataJson:
+                            existing.sourceMetadataJson == null &&
+                                restoredMetadata != null
+                            ? Value(restoredMetadata.encoded)
+                            : const Value.absent(),
                       ),
                     );
                 chapterCount += 1;
@@ -1416,6 +1455,11 @@ class BackupService {
                     releaseDate: Value(_dateOf(row['releaseDate'])),
                     locked: Value(row['locked'] == true),
                     contentJson: Value(row['contentJson'] as String?),
+                    sourceMetadataJson: Value(
+                      SourceMetadata.fromStorage(
+                        row['sourceMetadataJson'] as String?,
+                      )?.encoded,
+                    ),
                   ),
                 );
             chapterCount += 1;

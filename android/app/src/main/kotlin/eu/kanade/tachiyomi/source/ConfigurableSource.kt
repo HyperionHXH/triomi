@@ -12,6 +12,11 @@ interface ConfigurableSource : Source {
 
 fun ConfigurableSource.preferenceKey(): String = "source_${id}"
 
+fun ConfigurableSource.sourcePreferences(): SharedPreferences = getSourcePreferences()
+
+fun sourcePreferences(key: String): SharedPreferences =
+    MihonPreferences.application().getSharedPreferences(key, Context.MODE_PRIVATE)
+
 internal object MihonPreferences {
     @Volatile private var context: Context? = null
     fun install(context: Context) { this.context = context.applicationContext }

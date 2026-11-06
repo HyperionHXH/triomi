@@ -13,6 +13,7 @@ import 'package:triomi/features/library/data/anime_identity_repository.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 
 import 'fixtures/migration/v11_downloads_schema.dart';
+import 'fixtures/migration/v12_source_metadata_schema.dart';
 import 'fixtures/migration/v1_schema.dart';
 
 /// 真实执行 v1 → 当前结构升级，证明既有用户数据不丢。
@@ -93,6 +94,16 @@ void main() {
   sqlite3.Database openRaw() => sqlite3.sqlite3.open(dbFile.path);
 
   void restoreReleasedDownloadsSchema(sqlite3.Database raw) {
+    for (final statement in restoreV12SourceMetadataStatements()) {
+      raw.execute(statement);
+    }
+    for (final table in ['media_items', 'chapters']) {
+      expect(
+        raw.select('PRAGMA table_info($table)').map((row) => row['name']),
+        isNot(contains('source_metadata_json')),
+        reason: 'a historical fixture must not retain v13 source state columns',
+      );
+    }
     const columns =
         'id, source_id, remote_id, chapter_source_id, chapter_remote_id, '
         'status, progress, path, error_message, created_at, finished_at';
