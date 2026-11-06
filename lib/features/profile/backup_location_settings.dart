@@ -61,17 +61,13 @@ class _BackupLocationSettingsState
         contentPadding: EdgeInsets.zero,
         leading: const Icon(Icons.folder_outlined),
         title: const Text('备份保存目录（卸载后保留）'),
-        subtitle: SelectableText(
-          _location?.label ?? '尚未授权：首次导出前请选择应用私有目录以外的文件夹',
-        ),
+        subtitle: SelectableText(_location?.label ?? '请选择应用目录以外的文件夹'),
         trailing: TextButton(
           onPressed: _busy ? null : _choose,
           child: const Text('选择目录'),
         ),
       ),
-      const Text(
-        '备份文件保留在所选目录，卸载不会主动删除它们；重新安装后需重新授权目录。系统/云端提供程序可撤销权限或自行删除文件，请另存副本。下载与缓存默认在应用数据目录；曾自行导出的外部文件不会随卸载自动清理。',
-      ),
+      const Text('重新安装后需重新授权目录。系统或云服务可能清理文件，请另存副本。'),
       if (_error != null)
         Text(
           _error!,

@@ -33,44 +33,24 @@ class AppUpdateTransferView extends StatelessWidget {
         ? (bytes / total).clamp(0.0, 1.0).toDouble()
         : null;
     final (title, icon, hint) = switch (phase) {
-      'copy' => (
-        '正在暂存更新文件',
-        Icons.file_copy_outlined,
-        '正在复制到本次更新的暂存位置，随后继续核验。',
-      ),
-      'download' => ('正在下载更新', Icons.downloading_outlined, '下载完毕后还需核验，不会自动安装。'),
+      'copy' => ('正在暂存更新文件', Icons.file_copy_outlined, '复制完成后核验。'),
+      'download' => ('正在下载更新', Icons.downloading_outlined, '下载后核验文件。'),
       'metadata' => (
         '正在读取更新校验信息',
         Icons.manage_search_outlined,
-        '正在读取发布清单与文件摘要，尚未开始下载更新文件。',
+        '读取发布清单与文件摘要。',
       ),
-      'verify' => (
-        '正在核验更新文件',
-        Icons.fact_check_outlined,
-        '文件已接收，正在检查完整性与实际应用信息。',
-      ),
-      'signature' => (
-        '正在核验 APK 签名',
-        Icons.fact_check_outlined,
-        '正在核对安装包签名、包名与实际版本。',
-      ),
+      'verify' => ('正在核验更新文件', Icons.fact_check_outlined, '检查完整性与应用信息。'),
+      'signature' => ('正在核验 APK 签名', Icons.fact_check_outlined, '核对签名、包名与版本。'),
       'bundle' => (
         '正在核验 Windows 更新包',
         Icons.inventory_2_outlined,
-        '正在逐一核对 ZIP 成员与应用程序版本。',
+        '核对 ZIP 成员与程序版本。',
       ),
-      'manifest' => ('正在整理核验结果', Icons.fact_check_outlined, '正在保存完整性清单，尚未安装。'),
-      'handoff' => (
-        '正在重新核验更新文件',
-        Icons.fact_check_outlined,
-        '交接前再次检查更新文件，尚未完成安装。',
-      ),
-      'verified' => ('核验已完成', Icons.fact_check_outlined, '正在准备更新确认；仍需你选择下一步。'),
-      _ => (
-        '正在处理更新',
-        Icons.hourglass_top_outlined,
-        '$operationLabel。请稍候；不会自动安装更新。',
-      ),
+      'manifest' => ('正在整理核验结果', Icons.fact_check_outlined, '保存完整性清单。'),
+      'handoff' => ('正在重新核验更新文件', Icons.fact_check_outlined, '交接前再次检查文件。'),
+      'verified' => ('核验已完成', Icons.fact_check_outlined, '请选择下一步。'),
+      _ => ('正在处理更新', Icons.hourglass_top_outlined, '$operationLabel，请稍候。'),
     };
     return _UpdateCard(
       child: Column(
@@ -220,9 +200,9 @@ class AppUpdateHandoffView extends StatelessWidget {
             text: '关闭 Triomi，从新文件夹运行 triomi.exe，并将快捷方式指向新位置。',
           ),
           const SizedBox(height: AppSpacing.xs),
-          const Text('原有应用数据保留。Triomi 不会自动覆盖正在运行的程序。'),
+          const Text('原有应用数据保留。'),
         ] else
-          const Text('请在系统安装器中确认是否安装。若取消安装，当前应用保持不变；返回后可重新读取实际版本。'),
+          const Text('请在系统安装器中确认。返回后可重新读取当前版本。'),
         const SizedBox(height: AppSpacing.md),
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(minimumSize: _actionSize),
@@ -267,8 +247,8 @@ Future<bool?> showAppUpdateReadyDialog(
             if (actionable)
               Text(
                 windows
-                    ? '仅打开 ZIP 所在位置。请解压到新文件夹，关闭 Triomi 后运行新版本；不会自动替换或安装。'
-                    : '将再次核验并打开系统安装器，最终是否安装由你确认。不会清除应用数据。',
+                    ? '打开 ZIP 所在位置。请解压到新文件夹，关闭 Triomi 后运行新版本。'
+                    : '重新核验后打开系统安装器，由你确认安装；保留应用数据。',
               ),
             const SizedBox(height: AppSpacing.sm),
             _CandidateDetails(candidate: candidate),
@@ -343,7 +323,7 @@ Future<bool?> showStartupUpdateDialog(
             ),
             const SizedBox(height: 16),
             Text(
-              '已为 ${windows ? 'Windows' : 'Android'} 准备官方更新。你可以现在查看并下载，也可以稍后再决定；不会自动安装。',
+              '${windows ? 'Windows' : 'Android'} 更新已发布，可查看详情并下载。',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             if (release.notes.trim().isNotEmpty) ...[
@@ -406,8 +386,7 @@ Future<bool?> showAppUpdatePermissionDialog(BuildContext context) =>
         constraints: const BoxConstraints(maxWidth: 560),
         title: const Text('允许 Triomi 请求安装'),
         content: const Text(
-          'Android 需要你在系统设置中允许 Triomi 安装应用。此授权仅针对 Triomi，不会直接开始安装。'
-          '\n\n你可以选择不授权。若授权，请返回此页，再次确认更新文件并打开系统安装器。',
+          '请在 Android 系统设置中允许 Triomi 安装应用。授权后返回此页，再次确认更新文件并打开系统安装器。',
         ),
         actions: [
           TextButton(

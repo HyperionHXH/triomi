@@ -352,27 +352,10 @@ class _LkDmThreadPageState extends ConsumerState<LkDmThreadPage> {
       );
     }
 
-    return Column(
-      children: <Widget>[
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            itemCount: _items.length,
-            itemBuilder: (context, index) => _bubble(_items[index]),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg,
-            vertical: AppSpacing.sm,
-          ),
-          child: Text(
-            '本轮为只读：暂不支持发送私信。',
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: context.palette.mutedForeground),
-          ),
-        ),
-      ],
+    return ListView.builder(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      itemCount: _items.length,
+      itemBuilder: (context, index) => _bubble(_items[index]),
     );
   }
 

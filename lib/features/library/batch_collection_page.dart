@@ -44,7 +44,7 @@ class _BatchCollectionPageState extends ConsumerState<BatchCollectionPage> {
       builder: (context) => AlertDialog(
         title: Text('加入本地${widget.type.label}收藏？'),
         content: Text(
-          '只处理已选的 ${snapshot.length} 部${widget.type.label}。相同来源和作品身份去重；已有收藏、进度、分类和本机资料保持不变。不会下载正文或写入站点书架。',
+          '将 ${snapshot.length} 部${widget.type.label}加入收藏，保留已有进度；不修改来源站点书架。',
         ),
         actions: [
           TextButton(

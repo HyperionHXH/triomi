@@ -109,7 +109,7 @@ class _AnimeReviewDialogState extends ConsumerState<AnimeReviewDialog> {
                 Text(widget.item.title),
                 const SizedBox(height: 12),
                 if (changedAccount)
-                  const Text('Bangumi 账号已变化，请关闭后重新打开；旧草稿不会提交到新账号。')
+                  const Text('Bangumi 账号已变化，请关闭后重新打开。')
                 else if (_loading)
                   const Center(child: CircularProgressIndicator())
                 else ...[
@@ -191,7 +191,7 @@ class _AnimeReviewDialogState extends ConsumerState<AnimeReviewDialog> {
                           ? null
                           : (value) => setState(() => _private = value),
                     ),
-                    const Text('提交到你自己的 Bangumi 账号；不会修改已有收藏状态、标签或观看进度。'),
+                    const Text('提交至当前 Bangumi 账号，仅修改评分、吐槽与可见性。'),
                   ],
                   if (_error != null)
                     Text(

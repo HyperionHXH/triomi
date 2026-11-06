@@ -83,8 +83,8 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                     builder: (context) => AlertDialog(
                       title: const Text('下载设置'),
                       content: const Text(
-                        '仅 WiFi 下载对全部任务生效。开启后，移动网络下队列会暂停，回到 WiFi 自动继续。\n\n'
-                        '调整待下载顺序不会抢占当前任务，新顺序从下一任务开始生效。',
+                        '仅 WiFi 下载对全部任务生效，连接 WiFi 后继续。\n\n'
+                        '调整队列顺序从下一任务生效。',
                       ),
                       actions: [
                         TextButton(
@@ -390,9 +390,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清理已完成记录'),
-        content: const Text(
-          '仅清理不含离线文件路径的已完成记录，缓存正文仍保留。漫画、视频和本地导入的文件索引会保留在列表中，确保仍可离线打开；需要删除文件时请移除该作品的下载。',
-        ),
+        content: const Text('清理不含离线文件的已完成记录，保留缓存正文和文件索引。删除文件请移除对应作品的下载。'),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -883,10 +881,7 @@ class _QueueOrderDialogState extends State<_QueueOrderDialog> {
       height: 400,
       child: Column(
         children: [
-          const Text(
-            '仅调整当前媒体范围的等待、暂停与失败任务；'
-            '不会抢占正在下载的章节，新顺序从下一任务开始生效。',
-          ),
+          const Text('拖动调整当前媒体的待下载任务，从下一任务生效。'),
           Expanded(
             child: ReorderableListView.builder(
               itemCount: _entries.length,

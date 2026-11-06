@@ -78,9 +78,8 @@ class _TrackingPageState extends ConsumerState<TrackingPage> {
                 Text('进度上报', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  '${type == null ? '作品' : type.label}绑定后，进度会上报到所选服务。'
-                  '远端进度比本地新时不会回退。Bangumi / AniList 凭据由各媒体共用，'
-                  '下方只显示${type == null ? '全部' : type.label}作品的独立绑定。',
+                  '绑定后向所选服务上报进度，保留较新的远端进度。'
+                  '各媒体共用账号，下方显示${type == null ? '全部' : type.label}绑定。',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],

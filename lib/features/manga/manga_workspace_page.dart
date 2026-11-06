@@ -15,7 +15,6 @@ import '../discover/manga_feed_repository.dart';
 import '../library/library_page.dart';
 import '../library/manga_updates_page.dart';
 import '../search/search_page.dart';
-import '../sources/sources_page.dart';
 import 'manga_extension_details_page.dart';
 import 'manga_extensions_page.dart';
 import 'manga_source_actions.dart';
@@ -143,16 +142,6 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
     await ref.read(sourcesProvider.notifier).refresh();
   }
 
-  Future<void> _rules() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute<void>(
-        builder: (_) => const SourcesPage(initialType: MediaType.manga),
-      ),
-    );
-    if (mounted) await ref.read(sourcesProvider.notifier).refresh();
-  }
-
   Future<void> _sourceActions(SourceEntry entry) async {
     final source = entry.source;
     final action = await showMangaSourceActionMenu(
@@ -194,12 +183,7 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
             FilledButton.tonalIcon(
               onPressed: _extensions,
               icon: const Icon(Icons.extension_outlined),
-              label: const Text('插件 · 已安装 / 浏览 / 仓库'),
-            ),
-            TextButton.icon(
-              onPressed: _rules,
-              icon: const Icon(Icons.settings_outlined),
-              label: const Text('规则与来源设置'),
+              label: const Text('插件与来源管理'),
             ),
           ],
         ),
@@ -279,7 +263,7 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
                         leading: const Icon(Icons.error_outline),
                         title: Text(failure.name),
                         subtitle: Text('${failure.lang} · ${failure.message}'),
-                        onTap: _rules,
+                        onTap: _extensions,
                       ),
                   ],
                 );

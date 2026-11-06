@@ -18,7 +18,6 @@ import 'package:triomi/core/theme/app_tokens.dart';
 import 'package:triomi/features/anime/anime_collection_button.dart';
 import 'package:triomi/features/anime/anime_follows_page.dart';
 import 'package:triomi/features/anime/anime_workspace_page.dart';
-import 'package:triomi/features/detail/anime_filter_dialog.dart';
 import 'package:triomi/features/discover/widgets/media_item_card.dart';
 import 'package:triomi/features/library/data/library_providers.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
@@ -407,34 +406,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('上次完整放送表'), findsOneWidget);
       expect(find.textContaining('公开放送资料暂不可用'), findsOneWidget);
-      await tester.tap(find.byTooltip('筛选历史季度'));
-      await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.text('热度'),
-        250,
-        scrollable: find.descendant(
-          of: find.descendant(
-            of: find.byType(AnimeFilterDialog),
-            matching: find.byType(ListView),
-          ),
-          matching: find.byWidgetPredicate(
-            (widget) => widget is Scrollable && widget.axis == Axis.vertical,
-          ),
-        ),
-      );
-      await tester.tap(find.text('热度'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('排名').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('应用'));
-      await tester.pumpAndSettle();
-      final ranked = tester.widget<MediaItemCollection>(
-        find.byType(MediaItemCollection),
-      );
-      expect(ranked.items.map((item) => item.remoteId), ['90', '1']);
-      expect(find.text('上次完整放送表'), findsOneWidget);
-      expect(find.textContaining('公开放送资料暂不可用'), findsOneWidget);
-      expect(calls, 2, reason: '本地排序必须复用失败刷新前的完整周，不请求网络');
       final retry = tester
           .widget<RefreshIndicator>(find.byType(RefreshIndicator))
           .onRefresh();
@@ -451,33 +422,21 @@ void main() {
   );
 
   testWidgets(
-    'tag filtering retains cross-season broadcasts and cancels the superseded filter',
+    'calendar ignores obsolete filter preferences and retains cross-season broadcasts',
     (tester) async {
       final db = openTestDatabase();
       final prefs = memoryPreferences();
-      final now = DateTime.now();
       await prefs.set('anime.calendar.weekday', 1);
       await prefs.set('anime.calendar.filter', {
         'version': 1,
-        'year': now.year,
-        'quarter': (now.month - 1) ~/ 3 + 1,
+        'year': 2020,
+        'quarter': 1,
         'tags': ['日常'],
+        'minScore': 10,
+        'onlyWatching': true,
       });
-      final old = Completer<SourceResponse>();
-      final http = FakeHttpClient((request) async {
-        final filter = (jsonDecode(request.body!) as Map)['filter'] as Map;
-        expect(filter.containsKey('air_date'), isFalse);
-        if ((filter['tag'] as List).contains('日常')) return old.future;
-        final offset = Uri.parse(request.url).queryParameters['offset'];
-        return SourceResponse(
-          statusCode: 200,
-          body: jsonEncode({
-            'total': 2,
-            'data': [
-              {'id': offset == '0' ? 99 : 10, 'type': 2, 'name_cn': '服务端匹配'},
-            ],
-          }),
-        );
+      final http = FakeHttpClient((_) async {
+        throw StateError('The current calendar must not issue filter searches');
       });
       final container = ProviderContainer(
         overrides: [
@@ -518,30 +477,9 @@ void main() {
         await tester.pump(const Duration(milliseconds: 20));
       }
       expect(find.text('跨季科幻连载'), findsOneWidget);
-      expect(find.textContaining('暂显示未按题材筛选'), findsOneWidget);
-      final oldRequest = http.requests.single;
-      await tester.tap(find.byTooltip('筛选历史季度'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.ensureVisible(find.widgetWithText(FilterChip, '日常'));
-      await tester.tap(find.widgetWithText(FilterChip, '日常'));
-      await tester.ensureVisible(find.widgetWithText(FilterChip, '科幻'));
-      await tester.tap(find.widgetWithText(FilterChip, '科幻'));
-      await tester.tap(find.text('应用'));
-      await tester.pumpAndSettle();
-      expect(oldRequest.cancellation!.cancelled, isTrue);
-      expect(find.text('跨季科幻连载'), findsOneWidget);
-      expect(find.text('不匹配作品'), findsNothing);
-      expect(http.requests, hasLength(3));
-      old.complete(
-        const SourceResponse(
-          statusCode: 200,
-          body: '{"total":1,"data":[{"id":11,"type":2}]}',
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('跨季科幻连载'), findsOneWidget);
-      expect(find.text('不匹配作品'), findsNothing);
+      expect(find.text('不匹配作品'), findsOneWidget);
+      expect(http.requests, isEmpty);
+      expect(find.byIcon(Icons.tune), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
@@ -552,11 +490,7 @@ void main() {
       final db = openTestDatabase();
       final prefs = memoryPreferences();
       await prefs.set('anime.calendar.weekday', -1);
-      await prefs.set('anime.calendar.filter', {
-        'version': 1,
-        'year': 2020,
-        'quarter': 1,
-      });
+      await prefs.set('anime.calendar.season', [2020, 1]);
       final http = FakeHttpClient(
         (request) async => SourceResponse(
           statusCode: 200,
@@ -612,9 +546,7 @@ void main() {
       final today = DateTime.now().weekday;
       expect(find.text('星期作品$today'), findsOneWidget);
       expect(find.text('自动加载第二页'), findsOneWidget);
-      expect(find.text('加载更多本季作品'), findsNothing);
       expect(find.text('星期作品0'), findsNothing);
-      expect(find.text('星期未注明'), findsNothing);
       final next = today == 7 ? 1 : today + 1;
       final weekday = '周${['一', '二', '三', '四', '五', '六', '日'][next - 1]}';
       final tab = find.widgetWithText(TextButton, weekday);
@@ -625,7 +557,26 @@ void main() {
       expect(find.text('星期作品$today'), findsNothing);
       expect(prefs.get<int>('anime.calendar.weekday'), next);
       expect(find.byType(ChoiceChip), findsNothing);
-      expect(find.widgetWithText(TextButton, '今天'), findsNothing);
+      await tester.tap(find.byTooltip('下一季度'));
+      await tester.pumpAndSettle();
+      expect(prefs.get<List<Object?>>('anime.calendar.season'), [2020, 2]);
+      final filter =
+          (jsonDecode(http.requests.last.body!) as Map)['filter'] as Map;
+      expect(filter['air_date'], ['>=2020-04-01', '<2020-07-01']);
+      expect(filter.containsKey('tag'), isFalse);
+      await tester.tap(find.byTooltip('当前季度'));
+      await tester.pumpAndSettle();
+      final now = DateTime.now();
+      expect(prefs.get<List<Object?>>('anime.calendar.season'), [
+        now.year,
+        (now.month - 1) ~/ 3 + 1,
+      ]);
+      expect(
+        tester
+            .widget<MediaItemCollection>(find.byType(MediaItemCollection))
+            .items,
+        isEmpty,
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

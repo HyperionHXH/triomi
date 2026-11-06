@@ -298,7 +298,6 @@ void main() {
     'no eligible source shows actionable empty state and never creates target data',
     (tester) async {
       await launch(tester, []);
-      expect(find.textContaining('没有其他已启用'), findsOneWidget);
       expect(find.byKey(const ValueKey('commitMigration')), findsNothing);
       expect(await library.listLibrary(), hasLength(1));
       expect(tester.takeException(), null);

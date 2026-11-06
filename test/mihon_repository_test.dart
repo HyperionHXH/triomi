@@ -89,7 +89,23 @@ Future<void> _openManagement(
           ),
         ),
       ],
-      child: const MaterialApp(home: Scaffold(body: MihonExtensionsSheet())),
+      child: MaterialApp(
+        home: MihonExtensionsSheet(
+          browse:
+              (preferences
+                      .get<Map<dynamic, dynamic>>('mihon.installedPackages')
+                      ?.isEmpty ??
+                  true) &&
+              (preferences
+                      .get<Map<dynamic, dynamic>>('mihon.hostStatus')
+                      ?.isEmpty ??
+                  true) &&
+              (preferences
+                      .get<Map<dynamic, dynamic>>('mihon.pendingPackages')
+                      ?.isEmpty ??
+                  true),
+        ),
+      ),
     ),
   );
   for (var round = 0; round < 6; round++) {
@@ -100,14 +116,38 @@ Future<void> _openManagement(
   }
 }
 
+Future<void> _repositories(WidgetTester tester) async {
+  await tester.tap(find.byType(PopupMenuButton<String>).first);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 350));
+  await tester.tap(find.text('仓库'));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 350));
+}
+
+Future<void> _search(WidgetTester tester, String query) async {
+  if (find.byType(TextField).evaluate().isEmpty) {
+    await tester.tap(find.byTooltip('搜索插件'));
+    await tester.pumpAndSettle();
+  }
+  await tester.enterText(find.byType(TextField), query);
+  await tester.pump();
+}
+
+Future<void> _pluginAction(WidgetTester tester, String action) async {
+  await tester.tap(find.byTooltip('插件操作').first);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(action));
+  await tester.pumpAndSettle();
+}
+
 Future<void> _enterRepository(
   WidgetTester tester,
   String url, {
   bool edit = false,
 }) async {
   if (!edit) {
-    await tester.tap(find.text('仓库'));
-    await tester.pump();
+    await _repositories(tester);
     await tester.tap(find.text('添加扩展仓库'));
   } else {
     await tester.tap(find.byTooltip('编辑扩展仓库').last);
@@ -539,15 +579,13 @@ void main() {
       await _openManagement(tester, preferences, http);
       expect(http.requests, isEmpty);
       expect(preferences.get<Object?>('mihon.repositories'), isNull);
-      expect(find.byType(TextFormField), findsOneWidget);
       await _enterRepository(tester, 'https://manual.example/first.json');
       await tester.pumpAndSettle();
       expect(find.widgetWithText(ListTile, 'MangaDex'), findsOneWidget);
-      await tester.enterText(find.byType(TextFormField), 'MangaDex');
+      await _search(tester, 'MangaDex');
       await tester.pump();
       expect(find.widgetWithText(ListTile, 'MangaDex'), findsOneWidget);
-      await tester.tap(find.text('仓库'));
-      await tester.pump();
+      await _repositories(tester);
       await _enterRepository(
         tester,
         'https://manual.example/edited.json',
@@ -557,8 +595,7 @@ void main() {
       expect(preferences.get<List<Object?>>('mihon.repositories'), [
         'https://manual.example/edited.json',
       ]);
-      await tester.tap(find.text('仓库'));
-      await tester.pump();
+      await _repositories(tester);
       await tester.tap(find.byTooltip('移除扩展仓库'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, '移除'));
@@ -569,13 +606,6 @@ void main() {
       expect(http.requests, hasLength(requests));
       expect(preferences.get<List<Object?>>('mihon.repositories'), isEmpty);
       expect(find.widgetWithText(ListTile, 'MangaDex'), findsNothing);
-      expect(
-        tester
-            .widget<TextFormField>(find.byType(TextFormField))
-            .controller
-            ?.text,
-        'MangaDex',
-      );
     },
   );
 
@@ -671,9 +701,8 @@ void main() {
       );
       await tester.pageBack();
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('卸载扩展'));
+      await _pluginAction(tester, '卸载');
       await tester.pumpAndSettle();
-      expect(find.textContaining('保留书架'), findsOneWidget);
       await tester.tap(find.widgetWithText(FilledButton, '卸载'));
       await tester.pumpAndSettle();
       expect(nativeCalls.map((call) => call.method), ['mihonUninstall']);
@@ -707,9 +736,7 @@ void main() {
           .setMockMethodCallHandler(host, null),
     );
     await _openManagement(tester, preferences, http);
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    await _pluginAction(tester, '启用');
     expect(preferences.get<List<Object?>>('mihon.enabledPackages'), isEmpty);
     expect(find.textContaining('宿主没有接受启用状态变更'), findsOneWidget);
     expect(http.requests, isEmpty);
@@ -782,8 +809,6 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(preferences.get<Object?>('mihon.installedPackages'), isNull);
-      await tester.tap(find.text('已安装'));
-      await tester.pumpAndSettle();
       expect(find.text('MangaDex'), findsOneWidget);
       await tester.tap(find.text('MangaDex'));
       await tester.pumpAndSettle();
@@ -835,7 +860,7 @@ void main() {
             ),
           );
           await _openManagement(tester, preferences, http);
-          await tester.enterText(find.byType(TextFormField), 'Catalog');
+          await _search(tester, 'Catalog');
           await tester.pumpAndSettle();
           expect(
             find.widgetWithText(ListTile, 'Catalog Chinese'),
@@ -866,13 +891,11 @@ void main() {
             findsNothing,
           );
           expect(
-            tester
-                .widget<TextFormField>(find.byType(TextFormField))
-                .controller
-                ?.text,
+            tester.widget<TextField>(find.byType(TextField)).controller?.text,
             'Catalog',
           );
           await _openManagement(tester, preferences, http, key: 1);
+          await _search(tester, 'Catalog');
           expect(find.widgetWithText(ListTile, 'Catalog Thai'), findsOneWidget);
           expect(
             find.widgetWithText(ListTile, 'Catalog mixed'),
@@ -941,10 +964,13 @@ void main() {
         );
         await _openManagement(tester, preferences, http);
         expect(find.textContaining('当前平台不支持执行'), findsNothing);
-        expect(find.textContaining('未执行扩展代码；需确认实际发布者'), findsOneWidget);
         expect(
           tester
-              .widget<TextButton>(find.widgetWithText(TextButton, '核验并加载'))
+              .widget<IconButton>(
+                find.byWidgetPredicate(
+                  (widget) => widget is IconButton && widget.tooltip == '核验并加载',
+                ),
+              )
               .onPressed,
           isNotNull,
         );
@@ -1009,8 +1035,18 @@ void main() {
               'Stop at the production reinstall download boundary',
             );
       await _openManagement(tester, preferences, http);
-      expect(find.textContaining('需重新安装'), findsOneWidget);
-      expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
+      await tester.tap(find.byTooltip('插件操作'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<PopupMenuItem<String>>(
+              find.widgetWithText(PopupMenuItem<String>, '启用'),
+            )
+            .enabled,
+        isFalse,
+      );
+      await tester.tapAt(const Offset(1, 1));
+      await tester.pumpAndSettle();
       expect(
         await tester.runAsync(
           () => Directory('${support.path}/mihon-desktop').exists(),
@@ -1018,7 +1054,9 @@ void main() {
         isFalse,
       );
       expect(http.requests, isEmpty);
-      await tester.tap(find.text('浏览扩展'));
+      await tester.tap(find.byTooltip('添加插件'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
       for (var round = 0; round < 6; round++) {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 20)),
@@ -1026,7 +1064,13 @@ void main() {
         await tester.pump();
       }
       expect(find.byTooltip('重新安装扩展'), findsOneWidget);
-      await tester.tap(find.byTooltip('重新安装扩展'));
+      tester
+          .widget<IconButton>(
+            find.byWidgetPredicate(
+              (widget) => widget is IconButton && widget.tooltip == '重新安装扩展',
+            ),
+          )
+          .onPressed!();
       for (var round = 0; round < 6; round++) {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 20)),
@@ -1037,8 +1081,6 @@ void main() {
         http.requests.where((request) => request.url.endsWith('/mangadex.apk')),
         hasLength(1),
       );
-      await tester.tap(find.text('已安装'));
-      await tester.pump();
       await tester.tap(find.text('MangaDex'));
       await tester.pumpAndSettle();
       expect(
@@ -1257,27 +1299,21 @@ void main() {
       await tester.pump();
 
       expect(http.requests, isEmpty);
-      expect(find.byType(TextFormField), findsOneWidget);
-      expect(find.byTooltip('搜索插件名称'), findsNothing);
-      await tester.enterText(find.byType(TextFormField), '不存在的插件');
-      await tester.pump();
-      expect(find.byType(Switch), findsNothing);
-      await tester.enterText(find.byType(TextFormField), '');
-      await tester.pump();
-      expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
-      final switchNode = tester.getSemantics(
-        find.bySemanticsLabel('启用扩展 MangaDex'),
-      );
+      await _search(tester, '不存在的插件');
+      expect(find.byTooltip('插件操作'), findsNothing);
+      await _search(tester, '');
+      await tester.tap(find.byTooltip('插件操作'));
+      await tester.pumpAndSettle();
       expect(
-        switchNode,
-        isSemantics(
-          label: '启用扩展 MangaDex',
-          hasToggledState: true,
-          isToggled: false,
-          hasEnabledState: true,
-          isEnabled: false,
-        ),
+        tester
+            .widget<PopupMenuItem<String>>(
+              find.widgetWithText(PopupMenuItem<String>, '启用'),
+            )
+            .enabled,
+        isFalse,
       );
+      await tester.tapAt(const Offset(1, 1));
+      await tester.pumpAndSettle();
     } finally {
       semantics.dispose();
     }
@@ -1337,140 +1373,31 @@ void main() {
       );
       await tester.pump();
 
-      expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNotNull);
       expect(http.requests, isEmpty);
-      await tester.tap(find.byType(Switch));
+      await _pluginAction(tester, '启用');
       await tester.pumpAndSettle();
       expect(
         preferences.get<List<Object?>>('mihon.enabledPackages'),
         contains('eu.kanade.tachiyomi.extension.all.mangadex'),
       );
-      final switchNode = tester.getSemantics(
-        find.bySemanticsLabel('启用扩展 MangaDex'),
-      );
+      await tester.tap(find.byTooltip('插件操作'));
+      await tester.pumpAndSettle();
       expect(
-        switchNode,
-        isSemantics(
-          label: '启用扩展 MangaDex',
-          hasToggledState: true,
-          isToggled: true,
-          hasEnabledState: true,
-          isEnabled: true,
-        ),
+        tester
+            .widget<PopupMenuItem<String>>(
+              find.widgetWithText(PopupMenuItem<String>, '停用'),
+            )
+            .enabled,
+        isTrue,
       );
+      await tester.tapAt(const Offset(1, 1));
+      await tester.pumpAndSettle();
     } finally {
       semantics.dispose();
     }
   });
   testWidgets(
-    'plugin name query persists without changing installed or trust state',
-    (tester) async {
-      final preferences = memoryPreferences();
-      const repositoryUrl = 'https://custom.example/index.json';
-      const package = 'eu.kanade.tachiyomi.extension.all.mangadex';
-      const installed = {package: '1.6.0'};
-      const enabled = [package];
-      const hostStatus = {
-        package: {
-          'ok': true,
-          'signerSha256': 'fixture-publisher-pin',
-          'sha256': 'fixture-content-pin',
-          'sources': [
-            {'name': 'MangaDex', 'lang': 'zh', 'id': '1'},
-          ],
-        },
-      };
-      await preferences.set('mihon.installedPackages', installed);
-      await preferences.set('mihon.enabledPackages', enabled);
-      await preferences.set('mihon.hostStatus', hostStatus);
-      await preferences.set('mihon.repositories', [repositoryUrl]);
-      await preferences.set('sources.filters.mihon', {'language': null});
-      final http = FakeHttpClient(
-        (_) async => SourceResponse(
-          statusCode: 200,
-          body: jsonEncode({
-            'extensions': [
-              extensionJson(),
-              extensionJson(packageName: 'org.example.english', language: 'en')
-                ..['name'] = 'English',
-            ],
-          }),
-        ),
-      );
-      final container = ProviderContainer(
-        overrides: [
-          preferencesProvider.overrideWithValue(preferences),
-          sourceHttpClientProvider.overrideWithValue(http),
-        ],
-      );
-      addTearDown(() async {
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.runAsync(() async => container.dispose());
-      });
-      Future<void> open(int key) async {
-        await tester.pumpWidget(
-          UncontrolledProviderScope(
-            container: container,
-            child: MaterialApp(
-              home: Scaffold(body: MihonExtensionsSheet(key: ValueKey(key))),
-            ),
-          ),
-        );
-        for (var round = 0; round < 6; round++) {
-          await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 20)),
-          );
-          await tester.pump();
-        }
-      }
-
-      await open(1);
-      expect(http.requests, isEmpty);
-      await tester.tap(find.text('浏览扩展'));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(ListTile, 'MangaDex'), findsOneWidget);
-      expect(find.widgetWithText(ListTile, 'English'), findsOneWidget);
-      expect(find.byType(TextFormField), findsOneWidget);
-      await tester.enterText(find.byType(TextFormField), 'English');
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(ListTile, 'English'), findsOneWidget);
-      expect(find.widgetWithText(ListTile, 'MangaDex'), findsNothing);
-      expect(http.requests, hasLength(1));
-      await open(2);
-      expect(find.byType(TextFormField), findsOneWidget);
-      expect(
-        tester
-            .widget<TextFormField>(find.byType(TextFormField))
-            .controller
-            ?.text,
-        'English',
-      );
-      expect(find.widgetWithText(ListTile, 'MangaDex'), findsNothing);
-      await tester.tap(find.text('浏览扩展'));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(ListTile, 'English'), findsOneWidget);
-      expect(find.widgetWithText(ListTile, 'MangaDex'), findsNothing);
-      expect(preferences.get<Object?>('mihon.enabledPackages'), enabled);
-      expect(preferences.get<Object?>('mihon.installedPackages'), installed);
-      expect(preferences.get<Object?>('mihon.hostStatus'), hostStatus);
-      await tester.enterText(find.byType(TextFormField), package);
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextFormField), '');
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(ListTile, 'MangaDex'), findsOneWidget);
-      expect(find.widgetWithText(ListTile, 'English'), findsOneWidget);
-      expect(http.requests, hasLength(2));
-      expect(
-        http.requests.every((request) => request.url == repositoryUrl),
-        isTrue,
-      );
-      expect(preferences.get<Object?>('mihon.enabledPackages'), enabled);
-      expect(preferences.get<Object?>('mihon.installedPackages'), installed);
-      expect(preferences.get<Object?>('mihon.hostStatus'), hostStatus);
-    },
-  );
-  testWidgets(
-    'installed plugin row and gear both open per-source details without changing enablement',
+    'installed plugin row and menu open per-source details without changing enablement',
     (tester) async {
       const package = 'extension.installed';
       final preferences = memoryPreferences();
@@ -1525,14 +1452,12 @@ void main() {
         );
         await tester.pump();
       }
-      expect(find.byTooltip('插件详情与来源设置'), findsOneWidget);
       await tester.tap(find.text('Installed comic source'));
       await tester.pumpAndSettle();
       expect(find.byType(MangaExtensionDetailsPage), findsOneWidget);
-      expect(find.text('此来源没有提供可配置设置'), findsOneWidget);
       await tester.pageBack();
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('插件详情与来源设置'));
+      await _pluginAction(tester, '详情与来源设置');
       await tester.pumpAndSettle();
       expect(find.byType(MangaExtensionDetailsPage), findsOneWidget);
       expect(preferences.get<List<Object?>>('mihon.enabledPackages'), [

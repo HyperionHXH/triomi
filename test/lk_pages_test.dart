@@ -559,7 +559,7 @@ void main() {
       expect(source.dmConversationCalls, 2);
     });
 
-    testWidgets('私信线程：只读渲染双方消息，并说明不支持发送', (tester) async {
+    testWidgets('私信线程：只读渲染双方消息', (tester) async {
       final source = FakeAccountSource()
         ..dmMessagesResult = <LkDmMessage>[
           const LkDmMessage(
@@ -588,7 +588,6 @@ void main() {
       expect(find.text('私信书友'), findsOneWidget);
       expect(find.text('你好，有什么想聊的？'), findsOneWidget);
       expect(find.text('方便交流一下第三章吗？'), findsOneWidget);
-      expect(find.text('本轮为只读：暂不支持发送私信。'), findsOneWidget);
     });
   });
 

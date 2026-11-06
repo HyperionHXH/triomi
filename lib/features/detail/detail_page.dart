@@ -545,7 +545,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             MediaType.anime => '剧集视频会存到应用目录（只下明文线路）。',
             MediaType.manga => '漫画图片会存到应用目录。',
           }}\n'
-          '锁定章节不会入队；下载在后台进行，可在「下载管理」查看进度。',
+          '跳过锁定章节，进度可在「下载管理」查看。',
         ),
         actions: <Widget>[
           TextButton(
@@ -624,7 +624,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                 children: <Widget>[
                   CircularProgressIndicator(),
                   SizedBox(height: 12),
-                  Text('准备正文中，已下载章节无需联网，锁定章节会自动跳过…'),
+                  Text('正在准备正文，跳过锁定章节…'),
                 ],
               ),
             ),
@@ -780,7 +780,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       builder: (context) => AlertDialog(
         title: const Text('轻书架站点下载'),
         content: Text(
-          '$status\n\n整书 EPUB 请在轻书架网站确认费用并下载；应用不代扣金币、不导出整书。逐章离线缓存请使用目录旁的「缓存章节」，仍受正常正文阅读权限限制。',
+          '$status\n\n整书 EPUB 请到轻书架网站确认费用并下载；逐章离线阅读请使用「缓存章节」，需具备正文阅读权限。',
         ),
         actions: [
           TextButton(
@@ -1123,7 +1123,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               if (data.offline && !_metadataBusy)
                 const ListTile(
                   leading: Icon(Icons.offline_pin_outlined),
-                  title: Text('显示本机缓存；刷新失败不会清除已缓存资料或目录'),
+                  title: Text('正在显示本机缓存'),
                 ),
             ])
               SliverToBoxAdapter(child: section),

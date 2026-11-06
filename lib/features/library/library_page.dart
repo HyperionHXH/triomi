@@ -449,7 +449,7 @@ class LibraryPageState extends ConsumerState<LibraryPage> {
                       : all.isEmpty
                       ? '这个分类下还没有内容'
                       : '没有匹配当前查询的收藏',
-                  message: '仅显示${widget.type.label}本地收藏；来源离线不会删除作品。',
+                  message: '搜索${widget.type.label}并加入收藏，或调整筛选。',
                   action: all.isEmpty && !widget._searchMode
                       ? widget.embedded
                             ? null

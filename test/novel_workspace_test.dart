@@ -13,6 +13,7 @@ import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/core/theme/app_theme.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/novel/novel_book_card.dart';
@@ -158,6 +159,59 @@ class _Sources extends SourceRegistryController {
 }
 
 void main() {
+  for (final dark in [false, true]) {
+    for (final width in [280.0, 1000.0]) {
+      testWidgets('novel tags remain readable at $width with dark=$dark', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(width, 1000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        const longTag =
+            'A very long online genre tag that cannot fit on a narrow card';
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              theme: dark ? AppTheme.dark() : AppTheme.light(),
+              home: MediaQuery(
+                data: MediaQueryData(
+                  size: Size(width, 1000),
+                  textScaler: TextScaler.linear(2),
+                ),
+                child: const Scaffold(
+                  body: SingleChildScrollView(
+                    child: NovelBookCard(
+                      item: MediaItem(
+                        sourceId: 'novel',
+                        remoteId: 'tagged',
+                        type: MediaType.novel,
+                        title: 'Book',
+                        author: 'Author',
+                        description: 'Summary',
+                        tags: [longTag, 'Short', 'Other', 'Extra'],
+                      ),
+                      sourceLabel: 'Source',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final tag = find.widgetWithText(OutlinedButton, '#$longTag');
+        await tester.ensureVisible(tag);
+        await tester.longPress(tag);
+        await tester.pumpAndSettle();
+        expect(find.text(longTag), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
+
   late AppDatabase db;
   late LibraryRepository repository;
   ProviderContainer? shelfContainer;

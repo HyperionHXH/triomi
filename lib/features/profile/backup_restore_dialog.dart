@@ -23,7 +23,7 @@ Future<BackupRestoreOptions?> confirmBackupRestore(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '目标：$target\n备份较新/新增 ${preview.incomingWins} 条；保留本机 ${preview.localWins} 条；同时间戳冲突 ${preview.equalTimestampConflicts} 条保留本机。\n不会删除本机已有书架或下载。完整媒体 ${preview.downloadedMedia} 章校验后可离线使用；部分下载 ${preview.partialDownloads} 章保持暂停，需要明确继续并重新校验新来源；没有文件的下载只恢复暂停索引。封面仅补缺失本机缓存；不可用来源保持停用。',
+                '目标：$target\n新增或更新 ${preview.incomingWins} 条；保留本机 ${preview.localWins} 条；同时间冲突 ${preview.equalTimestampConflicts} 条保留本机。\n保留已有收藏与下载。完整媒体 ${preview.downloadedMedia} 章校验后可用；部分下载 ${preview.partialDownloads} 章暂停，继续时重新校验；缺失文件仅恢复暂停索引。封面仅补缺，不可用来源保持停用。',
               ),
               const SizedBox(height: 12),
               Text(
@@ -43,7 +43,7 @@ Future<BackupRestoreOptions?> confirmBackupRestore(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('恢复规则定义（保持停用）'),
                   subtitle: const Text(
-                    '默认不恢复代码；仅可信备份才开启。JSON/JS/Kazumi静态校验后入库，已有规则与原生内置身份不覆盖；不导入发布者信任，之后需在来源管理中手动启用。',
+                    '仅对可信备份开启。静态校验后保存并停用，已有规则与信任保持不变；请到来源管理手动启用。',
                   ),
                   value: restoreSourceRules,
                   onChanged: preview.incomingSourceRules == 0
@@ -60,7 +60,7 @@ Future<BackupRestoreOptions?> confirmBackupRestore(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('暂存APK包（不加载、不导入信任）'),
                   subtitle: const Text(
-                    '默认关闭；支持签名验证的平台重新验证实际包名、版本、签名和文件哈希，其他平台仅校验字节且不可执行。需到来源管理逐包确认身份后才可加载；降级、换签名和同版本异内容拒绝。',
+                    '重新核验包名、版本、签名与哈希；不支持验签的平台仅校验文件且不可执行。加载前需逐包确认；拒绝降级、换签名及同版本异内容。',
                   ),
                   value: restoreApkPackages,
                   onChanged: preview.incomingApkPackages == 0
@@ -78,7 +78,7 @@ Future<BackupRestoreOptions?> confirmBackupRestore(
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('追踪身份冲突保留本机'),
-                subtitle: const Text('关闭时冲突会拒绝整次导入；不会同步远端'),
+                subtitle: const Text('关闭后，身份冲突将中止导入；仅影响本机'),
                 value: keepLocalTracking,
                 onChanged: (value) => setState(() => keepLocalTracking = value),
               ),
@@ -118,7 +118,7 @@ Future<bool?> confirmDeleteRestoredBackup(
     title: const Text('恢复成功，要删除原备份吗？'),
     content: SingleChildScrollView(
       child: Text(
-        '本机数据已恢复。可选择保留备份（推荐），或仅删除下面这个原始ZIP文件；不会清理下载、其他备份或来源文件。\n\n$original\n\n删除无法撤销；目录权限不足时会保留原文件并提示。',
+        '建议保留备份。删除仅影响以下原始 ZIP，保留下载及其他文件。\n\n$original\n\n删除不可撤销；权限不足时将保留文件。',
       ),
     ),
     actions: [

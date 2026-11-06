@@ -134,9 +134,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                           children: [
                             if (_step == 0) ..._appearance(context),
                             if (_step == 1) ...[
-                              const Text(
-                                '备份用于换机或重新安装。卸载通常会删除应用私有目录中的资料，备份请选择应用目录之外的位置。',
-                              ),
+                              const Text('卸载或清除应用数据前，请将备份导出到应用目录以外的位置。'),
                               const SizedBox(height: AppSpacing.md),
                               const BackupLocationSettings(),
                               const SizedBox(height: AppSpacing.md),
@@ -144,11 +142,11 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                                 context,
                                 Icons.download_outlined,
                                 '下载与备份不同',
-                                '日常下载由应用管理；清除应用数据或卸载前，请先导出包含媒体和漫画插件的本地备份。外部目录中的文件是否保留，由系统与卸载方式决定。',
+                                '下载保存在应用内。换机或卸载前，请导出包含媒体和插件的完整备份。',
                               ),
                               const SizedBox(height: AppSpacing.sm),
                               Text(
-                                '也可以稍后在「我的 → 备份与恢复」选择目录；未选择可保留位置前，不会把私有暂存文件称为安全备份。',
+                                '稍后可在「我的 → 备份与恢复」选择目录。',
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],
@@ -157,31 +155,27 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                                 context,
                                 Icons.extension_outlined,
                                 '按内容配置来源',
-                                '漫画扩展、番剧播放规则和小说站点分别管理。只安装并启用信任的插件；新设备缺少原插件时，记录仍保留，可安装原插件或核对作品后迁移。',
+                                '漫画、番剧和小说来源分别管理。仅启用可信插件；缺少原插件时可重新安装或迁移作品。',
                               ),
                               const SizedBox(height: AppSpacing.md),
                               _note(
                                 context,
                                 Icons.cloud_sync_outlined,
                                 '账号与同步按需连接',
-                                '漫画收藏、章节与页码可通过 WebDAV 同步；番剧收藏可连接 Bangumi。小说站点书架继续由对应账号管理，不会在新手设置中自动连接或上传。',
+                                'WebDAV 同步漫画与动画收藏及阅读位置；Bangumi 管理番剧收藏。小说书架请连接对应站点账号。',
                               ),
                               const SizedBox(height: AppSpacing.md),
                               _note(
                                 context,
                                 Icons.notifications_outlined,
                                 '下载时再申请所需权限',
-                                '开始后台下载时说明并申请通知权限。不申请无关的文件访问权限，也不会自动改变系统电池优化设置。',
+                                '后台下载需要通知权限，开始下载时再授权。',
                               ),
                               const SizedBox(height: AppSpacing.md),
                               OutlinedButton.icon(
                                 onPressed: _saving ? null : _restoreBackup,
                                 icon: const Icon(Icons.restore_outlined),
                                 label: const Text('已有备份？前往恢复'),
-                              ),
-                              const SizedBox(height: AppSpacing.md),
-                              const Text(
-                                '这套设置只会在全新安装时自动出现一次。之后可从「通用设置 → 新手设置」随时重新打开。',
                               ),
                             ],
                             if (_error != null) ...[

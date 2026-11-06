@@ -260,7 +260,7 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('移出站点收藏？'),
-        content: Text('将《${item.title}》从对应站点书架移除。本机收藏、阅读进度和已下载章节不会删除。'),
+        content: Text('从站点书架移除《${item.title}》，保留本机收藏、进度与下载。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -526,7 +526,7 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
               _remoteAccountRoutes.remove(name);
             }
             _remoteSummary[name] = [
-              if (shelfCount != null) '站点收藏 $shelfCount 本（未自动加入本机收藏）',
+              if (shelfCount != null) '站点收藏 $shelfCount 本',
               if (!authoritativeUnread &&
                   !authenticationFailed &&
                   provider is DetailProvider)
@@ -608,10 +608,7 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('当前小说结果标为已读？'),
-        content: Text(
-          '仅清除当前书架内 ${keys.length} 本小说的本地未读数。'
-          '不会向站点写入阅读进度；下一次成功刷新可能恢复站点权威未读数。',
-        ),
+        content: Text('清除 ${keys.length} 本小说的本地未读数，站点进度保持不变；刷新后可能重新显示站点未读数。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),

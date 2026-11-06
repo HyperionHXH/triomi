@@ -25,9 +25,29 @@ const _mihonHostStatusKey = 'mihon.hostStatus';
 
 /// Mihon/Komikku 扩展管理。下载、启停状态与 Triomi 规则来源分开保存。
 class MihonExtensionsSheet extends ConsumerStatefulWidget {
-  const MihonExtensionsSheet({super.key, this.initialQuery});
+  const MihonExtensionsSheet({
+    super.key,
+    this.initialQuery,
+    this.browse = false,
+    this.onRules,
+  }) : _sharedErrors = null,
+       _sharedFailures = null;
+
+  const MihonExtensionsSheet._add({
+    required Map<String, String> errors,
+    required Map<String, MihonExtension> failures,
+  }) : initialQuery = null,
+       browse = true,
+       onRules = null,
+       _sharedErrors = errors,
+       _sharedFailures = failures;
+
+  final Map<String, String>? _sharedErrors;
+  final Map<String, MihonExtension>? _sharedFailures;
 
   final String? initialQuery;
+  final bool browse;
+  final Future<void> Function()? onRules;
   @override
   ConsumerState<MihonExtensionsSheet> createState() =>
       _MihonExtensionsSheetState();
@@ -38,7 +58,7 @@ enum _ExtensionSection { installed, browse, repositories }
 class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   MihonRepositoryIndex? _index;
   Object? _error;
-  final _installErrors = <String, String>{};
+  late final _installErrors = widget._sharedErrors ?? <String, String>{};
   final _installationIssues = <String, WindowsMihonInstallationIssue>{};
   int _installationGeneration = 0;
   bool _checkingInstallations =
@@ -47,6 +67,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   SourceFilters _filters = const SourceFilters(language: 'zh');
   _ExtensionSection _section = _ExtensionSection.installed;
   final _searchController = TextEditingController();
+  bool _searching = false;
   bool _savingRepositories = false;
   int _repositoryGeneration = 0;
 
@@ -66,7 +87,8 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   final Set<String> _downloading = <String>{};
   bool _toggling = false;
   final Set<String> _removing = <String>{};
-  final Map<String, MihonExtension> _failedExtensions = {};
+  late final _failedExtensions =
+      widget._sharedFailures ?? <String, MihonExtension>{};
   List<String> _repositories = <String>[];
   String? _selectedRepository;
   ApkBackupFiles? _apkFiles;
@@ -75,7 +97,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   @override
   void initState() {
     super.initState();
-    unawaited(_loadPreferences());
+    unawaited(_loadPreferences(applyInitialQuery: true));
   }
 
   @override
@@ -86,20 +108,25 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
     super.dispose();
   }
 
-  Future<void> _loadPreferences() async {
+  Future<void> _reloadManagement() async {
+    if (!mounted) return;
+    _enabled.clear();
+    _installed.clear();
+    _hostStatus.clear();
+    await _loadPreferences();
+  }
+
+  Future<void> _loadPreferences({bool applyInitialQuery = false}) async {
     final repositoryGeneration = _repositoryGeneration;
     final preferences = ref.read(preferencesProvider);
     _filters = SourceFilters.fromJson(
       preferences.get<Object?>('sources.filters.mihon'),
       defaultLanguage: 'zh',
     ).copyWith(clearType: true);
-    final initialQuery = widget.initialQuery?.trim();
-    _searchController.text = initialQuery?.isNotEmpty == true
-        ? initialQuery!
-        : _filters.query;
-    if (initialQuery?.isNotEmpty == true) {
-      _filters = _filters.copyWith(query: initialQuery);
-    }
+    final initialQuery = applyInitialQuery ? widget.initialQuery?.trim() : null;
+    _filters = _filters.copyWith(query: initialQuery ?? '');
+    _searchController.text = _filters.query;
+    _searching = _filters.query.isNotEmpty;
     final rawRepositories = preferences.get<List<Object?>>(
       _mihonRepositoriesKey,
     );
@@ -144,10 +171,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
           };
         }
       }
-      if (repositoryGeneration == _repositoryGeneration &&
-          _installed.isEmpty &&
-          _hostStatus.isEmpty &&
-          _pendingApks.isEmpty) {
+      if (widget.browse || widget.initialQuery?.trim().isNotEmpty == true) {
         _section = _ExtensionSection.browse;
       }
     });
@@ -629,10 +653,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       contentPadding: EdgeInsets.zero,
       leading: const Icon(Icons.lock_outline),
       title: Text('${row['packageName']}'),
-      subtitle: Text(
-        '恢复 APK · v${row['versionName']} (${row['versionCode']}) · ${sourceContentLabel(sourceNsfwFlag(row['nsfw']))} · 停用待确认\n'
-        '${!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.windows) ? '未执行扩展代码；需确认实际发布者' : '当前平台不支持执行；仅保存可移植 APK 字节'}',
-      ),
+      subtitle: Text('v${row['versionName']}'),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -643,7 +664,8 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           else
-            TextButton(
+            IconButton(
+              tooltip: '核验并加载',
               onPressed:
                   !kIsWeb &&
                       (defaultTargetPlatform == TargetPlatform.android ||
@@ -651,7 +673,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                       !_removing.contains('${row['packageName']}')
                   ? () => unawaited(_activatePending(row))
                   : null,
-              child: const Text('核验并加载'),
+              icon: const Icon(Icons.verified_user_outlined),
             ),
           _removePackageButton('${row['packageName']}'),
         ],
@@ -677,13 +699,13 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   Widget build(BuildContext context) {
     final index = _index;
     final query = _filters.query.trim().toLowerCase();
-    final entries =
-        index?.filter(
-          query: _filters.query,
-          language: _filters.language,
-          content: _filters.content,
-        ) ??
-        const <MihonExtension>[];
+    final entries = [
+      ...?index?.filter(
+        query: _filters.query,
+        language: _filters.language,
+        content: _filters.content,
+      ),
+    ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     final packages = <String>{
       ..._installed.keys,
       ..._hostStatus.keys,
@@ -702,225 +724,245 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
           (row) => '${row['packageName'] ?? ''}'.toLowerCase().contains(query),
         )
         .toList();
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * 0.86,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '漫画扩展',
-                      style: Theme.of(context).textTheme.titleLarge,
+    return PopScope(
+      canPop: !_searching,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _searching) {
+          _searchController.clear();
+          _setFilters(_filters.copyWith(query: ''));
+          setState(() => _searching = false);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: _searching
+              ? TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: '搜索插件',
+                    border: InputBorder.none,
+                  ),
+                  onChanged: (query) =>
+                      _setFilters(_filters.copyWith(query: query)),
+                )
+              : Text(widget.browse ? '添加插件' : '插件库'),
+          actions: [
+            IconButton(
+              tooltip: _searching ? '关闭搜索' : '搜索插件',
+              icon: Icon(_searching ? Icons.close : Icons.search),
+              onPressed: () {
+                setState(() => _searching = !_searching);
+                if (!_searching) {
+                  _searchController.clear();
+                  _setFilters(_filters.copyWith(query: ''));
+                }
+              },
+            ),
+            if (!widget.browse)
+              IconButton(
+                tooltip: '添加插件',
+                icon: const Icon(Icons.add),
+                onPressed: () async {
+                  // Close the installed search before covering this route. Refresh
+                  // after return performs file I/O and must not gate this reset.
+                  _searchController.clear();
+                  _setFilters(_filters.copyWith(query: ''));
+                  setState(() => _searching = false);
+                  await Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MihonExtensionsSheet._add(
+                        errors: _installErrors,
+                        failures: _failedExtensions,
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: '关闭扩展管理',
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
+                  );
+                  await _reloadManagement();
+                },
               ),
-              Text(
-                Platform.isWindows
-                    ? '桌面兼容运行时 · APK 核验发布者；原生 JAR 单独确认来源与指纹，安装后手动启用。'
-                    : Platform.isAndroid
-                    ? 'Mihon / Komikku APK · 安装后需手动启用，并确认发布者。'
-                    : '当前平台没有兼容的扩展运行时。',
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  labelText: '搜索插件名称或精确包名',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _filters.query.isEmpty
-                      ? null
-                      : IconButton(
-                          tooltip: '清除插件搜索',
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _searchController.clear();
-                            _setFilters(_filters.copyWith(query: ''));
-                          },
-                        ),
-                ),
-                onChanged: (query) =>
-                    _setFilters(_filters.copyWith(query: query)),
-              ),
-              const SizedBox(height: 12),
-              SegmentedButton<_ExtensionSection>(
-                showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(
-                    value: _ExtensionSection.installed,
-                    label: Text('已安装'),
+            PopupMenuButton<String>(
+              onSelected: (value) async {
+                if (value == 'rules') {
+                  await widget.onRules?.call();
+                  await _reloadManagement();
+                } else {
+                  _selectSection(
+                    _section == _ExtensionSection.repositories
+                        ? (widget.browse
+                              ? _ExtensionSection.browse
+                              : _ExtensionSection.installed)
+                        : _ExtensionSection.repositories,
+                  );
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'repositories', child: Text('仓库')),
+                if (widget.onRules != null)
+                  const PopupMenuItem(value: 'rules', child: Text('规则与来源设置')),
+              ],
+            ),
+          ],
+        ),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_section == _ExtensionSection.repositories) ...[
+                  FilledButton.icon(
+                    onPressed: _savingRepositories ? null : _editRepository,
+                    icon: const Icon(Icons.add_link),
+                    label: const Text('添加扩展仓库'),
                   ),
-                  ButtonSegment(
-                    value: _ExtensionSection.browse,
-                    label: Text('浏览扩展'),
-                  ),
-                  ButtonSegment(
-                    value: _ExtensionSection.repositories,
-                    label: Text('仓库'),
-                  ),
-                ],
-                selected: {_section},
-                onSelectionChanged: (value) => _selectSection(value.single),
-              ),
-              const SizedBox(height: 12),
-              if (_section == _ExtensionSection.repositories) ...[
-                FilledButton.icon(
-                  onPressed: _savingRepositories ? null : _editRepository,
-                  icon: const Icon(Icons.add_link),
-                  label: const Text('添加扩展仓库'),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  '应用不提供仓库。请手动输入 Mihon / Tachiyomi APK 仓库 index.json；不是 Kazumi 规则地址。移除仓库不会卸载已安装扩展。',
-                ),
-                Expanded(
-                  child: ListView(
-                    children: [
-                      for (final repository in _repositories)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.inventory_2_outlined),
-                          title: Text(
-                            Uri.tryParse(repository)?.host ?? repository,
-                          ),
-                          subtitle: Text(repository),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                tooltip: '编辑扩展仓库',
-                                onPressed: _savingRepositories
-                                    ? null
-                                    : () => _editRepository(repository),
-                                icon: const Icon(Icons.edit_outlined),
-                              ),
-                              IconButton(
-                                tooltip: '移除扩展仓库',
-                                onPressed: _savingRepositories
-                                    ? null
-                                    : () => _removeRepository(repository),
-                                icon: const Icon(Icons.delete_outline),
-                              ),
-                            ],
-                          ),
-                          onTap: _savingRepositories
-                              ? null
-                              : () {
-                                  setState(() {
-                                    _selectedRepository = repository;
-                                    _section = _ExtensionSection.browse;
-                                  });
-                                  unawaited(_refresh());
-                                },
-                        ),
-                    ],
-                  ),
-                ),
-              ] else ...[
-                if (_section == _ExtensionSection.browse)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton.icon(
-                          onPressed: () =>
-                              _selectSection(_ExtensionSection.repositories),
-                          icon: const Icon(Icons.inventory_2_outlined),
-                          label: Text(
-                            _selectedRepository == null
-                                ? '添加你自己的仓库'
-                                : Uri.tryParse(_selectedRepository!)?.host ??
-                                      _selectedRepository!,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: '刷新仓库',
-                        onPressed: _loading ? null : _refresh,
-                        icon: const Icon(Icons.refresh),
-                      ),
-                    ],
-                  ),
-                if (_section == _ExtensionSection.browse)
-                  SourceFilterControls(
-                    filters: _filters,
-                    languages: [
-                      for (final extension
-                          in index?.extensions ?? const <MihonExtension>[])
-                        if (extension.sources.isEmpty) '',
-                      for (final extension
-                          in index?.extensions ?? const <MihonExtension>[])
-                        for (final source in extension.sources) source.language,
-                    ],
-                    types: const [],
-                    showQuery: false,
-                    visibleCount: entries.length,
-                    totalCount: index?.extensions.length ?? 0,
-                    onChanged: (value) {
-                      if (_searchController.text != value.query) {
-                        _searchController.text = value.query;
-                      }
-                      _setFilters(value);
-                    },
-                  ),
-                if (_section == _ExtensionSection.installed)
+                  const SizedBox(height: 8),
+                  const Text('支持 Mihon / Tachiyomi 仓库 index.json。'),
                   Expanded(
                     child: ListView(
                       children: [
-                        if (pending.isNotEmpty)
-                          const ListTile(
+                        for (final repository in _repositories)
+                          ListTile(
                             contentPadding: EdgeInsets.zero,
-                            title: Text('恢复后待确认'),
-                          ),
-                        for (final row in pending) _pendingApkTile(row),
-                        for (final package in installed)
-                          _installedTile(package),
-                        if (installed.isEmpty && pending.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(
-                              packages.isEmpty && _pendingApks.isEmpty
-                                  ? '尚未安装扩展。到“浏览扩展”选择来源，或在“仓库”添加地址。'
-                                  : '没有匹配的已安装扩展，请清除筛选。',
+                            leading: const Icon(Icons.inventory_2_outlined),
+                            title: Text(
+                              Uri.tryParse(repository)?.host ?? repository,
                             ),
-                          ),
-                      ],
-                    ),
-                  )
-                else ...[
-                  if (_loading) const LinearProgressIndicator(minHeight: 2),
-                  if (_error != null)
-                    Text('仓库加载失败，已安装扩展不受影响。可重试或切换仓库。\n$_error'),
-                  Expanded(
-                    child: ListView(
-                      children: [
-                        for (final entry in entries)
-                          _extensionTile(entry, index!),
-                        if (entries.isEmpty && !_loading && _error == null)
-                          Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(
-                              _repositories.isEmpty
-                                  ? '尚未添加扩展仓库。请在“仓库”中手动添加地址；应用不会自动提供仓库。'
-                                  : '没有匹配的扩展，请调整语言、内容分级或插件名称。',
+                            subtitle: Text(repository),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: '编辑扩展仓库',
+                                  onPressed: _savingRepositories
+                                      ? null
+                                      : () => _editRepository(repository),
+                                  icon: const Icon(Icons.edit_outlined),
+                                ),
+                                IconButton(
+                                  tooltip: '移除扩展仓库',
+                                  onPressed: _savingRepositories
+                                      ? null
+                                      : () => _removeRepository(repository),
+                                  icon: const Icon(Icons.delete_outline),
+                                ),
+                              ],
                             ),
+                            onTap: _savingRepositories
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _selectedRepository = repository;
+                                      _section = _ExtensionSection.browse;
+                                    });
+                                    unawaited(_refresh());
+                                  },
                           ),
                       ],
                     ),
                   ),
+                ] else ...[
+                  if (_section == _ExtensionSection.browse)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton.icon(
+                            onPressed: () =>
+                                _selectSection(_ExtensionSection.repositories),
+                            icon: const Icon(Icons.inventory_2_outlined),
+                            label: Text(
+                              _selectedRepository == null
+                                  ? '添加你自己的仓库'
+                                  : Uri.tryParse(_selectedRepository!)?.host ??
+                                        _selectedRepository!,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '刷新仓库',
+                          onPressed: _loading ? null : _refresh,
+                          icon: const Icon(Icons.refresh),
+                        ),
+                      ],
+                    ),
+                  if (_section == _ExtensionSection.browse)
+                    SourceFilterControls(
+                      filters: _filters,
+                      languages: [
+                        for (final extension
+                            in index?.extensions ?? const <MihonExtension>[])
+                          if (extension.sources.isEmpty) '',
+                        for (final extension
+                            in index?.extensions ?? const <MihonExtension>[])
+                          for (final source in extension.sources)
+                            source.language,
+                      ],
+                      types: const [],
+                      showQuery: false,
+                      visibleCount: entries.length,
+                      totalCount: index?.extensions.length ?? 0,
+                      onChanged: (value) {
+                        if (_searchController.text != value.query) {
+                          _searchController.text = value.query;
+                        }
+                        _setFilters(value);
+                      },
+                    ),
+                  if (_section == _ExtensionSection.installed)
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          if (pending.isNotEmpty)
+                            const ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text('恢复后待确认'),
+                            ),
+                          for (final row in pending) _pendingApkTile(row),
+                          for (final package in installed)
+                            _installedTile(package),
+                          if (installed.isEmpty && pending.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Text(
+                                packages.isEmpty && _pendingApks.isEmpty
+                                    ? '尚未安装插件。点击右上角 + 添加。'
+                                    : '没有匹配的已安装扩展，请清除筛选。',
+                              ),
+                            ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    if (_loading) const LinearProgressIndicator(minHeight: 2),
+                    if (_error != null)
+                      Text('仓库加载失败，已安装扩展不受影响。可重试或切换仓库。\n$_error'),
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          if (query.isEmpty && entries.isNotEmpty)
+                            const ListTile(
+                              title: Text('仓库推荐'),
+                              subtitle: Text('来自当前仓库 · 按名称排序'),
+                            ),
+                          for (final entry in entries)
+                            _extensionTile(entry, index!),
+                          if (entries.isEmpty && !_loading && _error == null)
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Text(
+                                _repositories.isEmpty
+                                    ? '尚无仓库，请从右上角菜单添加。'
+                                    : '没有匹配的扩展，请调整语言、内容分级或插件名称。',
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -963,7 +1005,6 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
 
   Widget _installedTile(String package) {
     final host = _hostStatus[package];
-    final issue = _installationIssues[package];
     final ready =
         !_checkingInstallations &&
         host?['ok'] == true &&
@@ -976,41 +1017,39 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       onTap: () => unawaited(_details(package)),
       title: Text(_packageName(package)),
       subtitle: Text(
-        'v${_installed[package] ?? host?['versionName'] ?? host?['versionCode'] ?? '未知'} · ${sourceContentLabel(sourceNsfwFlag(host?['nsfw']))}\n'
-        '${issue != null
-            ? (issue.requiresReinstall ? '需重新安装 · 点击查看原因' : '本机安装暂不可读 · 点击查看原因')
-            : _installErrors.containsKey(package)
-            ? '安装失败 · 点击查看原因'
-            : ready
-            ? (enabled ? '已启用' : '已安装 · 已停用')
-            : '宿主未加载，当前不可用'}\n$package',
+        'v${_installed[package] ?? host?['versionName'] ?? host?['versionCode'] ?? '未知'}',
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            tooltip: '插件详情与来源设置',
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => unawaited(_details(package)),
+          PopupMenuButton<String>(
+            tooltip: '插件操作',
+            onSelected: (action) {
+              if (action == 'details') unawaited(_details(package));
+              if (action == 'toggle') unawaited(_toggle(package, !enabled));
+              if (action == 'disable') unawaited(_toggle(package, false));
+              if (action == 'remove') unawaited(_removePackage(package));
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'details', child: Text('详情与来源设置')),
+              PopupMenuItem(
+                value: 'toggle',
+                enabled: ready && !_toggling && !busy,
+                child: Text(enabled ? '停用' : '启用'),
+              ),
+              if (!ready && _enabled.contains(package))
+                PopupMenuItem(
+                  value: 'disable',
+                  enabled: !busy && !_toggling,
+                  child: const Text('清除启用偏好'),
+                ),
+              PopupMenuItem(
+                value: 'remove',
+                enabled: !busy,
+                child: const Text('卸载'),
+              ),
+            ],
           ),
-          Semantics(
-            label: '启用扩展 ${_packageName(package)}',
-            child: Switch(
-              value: enabled,
-              onChanged: ready && !_toggling && !busy
-                  ? (value) => _toggle(package, value)
-                  : null,
-            ),
-          ),
-          _removePackageButton(package),
-          if (!ready && _enabled.contains(package))
-            IconButton(
-              tooltip: '清除启用偏好',
-              onPressed: busy || _toggling
-                  ? null
-                  : () => _toggle(package, false),
-              icon: const Icon(Icons.power_settings_new),
-            ),
         ],
       ),
     );
@@ -1031,20 +1070,6 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
         installationIssue == null;
     final savedEnabled = _enabled.contains(extension.packageName);
     final enabled = hostReady && savedEnabled;
-    final type = extension.mediaType?.label ?? '漫画';
-    final status = downloading
-        ? '下载、核验并加载扩展中…'
-        : installationIssue != null
-        ? (installationIssue.requiresReinstall
-              ? '需重新安装 · 本机安装原件或状态缺失'
-              : '本机安装暂不可读 · 请检查文件权限后重试')
-        : !downloaded
-        ? '尚未下载 APK'
-        : hostReady
-        ? (savedEnabled ? '宿主已执行，已启用' : '宿主已执行，可启用')
-        : savedEnabled
-        ? '已保存启用偏好，但宿主未执行，当前不可用'
-        : '已下载，等待 Mihon 宿主执行，当前不可用';
     final installError = _installErrors[extension.packageName];
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -1053,20 +1078,45 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
           : null,
       leading: const Icon(Icons.extension_outlined),
       title: Text(extension.name),
-      subtitle: Text(
-        '$type · v${extension.versionName} · ${sourceContentLabel(extension.declaredNsfw)}\n'
-        '${extension.sources.map((source) => '${source.name} (${sourceLanguageLabel(sourceLanguage(source.language))})').join('、')}\n'
-        '${installError == null ? status : '安装失败 · 点击查看原因'}',
-      ),
-      isThreeLine: true,
+      subtitle: Text('v${extension.versionName}'),
       trailing: Wrap(
         crossAxisAlignment: WrapCrossAlignment.center,
         children: <Widget>[
-          if (downloaded || host != null)
-            IconButton(
-              tooltip: '插件详情与来源设置',
-              icon: const Icon(Icons.settings_outlined),
-              onPressed: () => unawaited(_details(extension.packageName)),
+          if (downloaded || host != null || installError != null)
+            PopupMenuButton<String>(
+              tooltip: '插件操作',
+              onSelected: (action) {
+                if (action == 'details') {
+                  unawaited(_details(extension.packageName));
+                }
+                if (action == 'toggle') {
+                  unawaited(_toggle(extension.packageName, !enabled));
+                }
+                if (action == 'remove') {
+                  unawaited(_removePackage(extension.packageName));
+                }
+              },
+              itemBuilder: (_) => [
+                if (downloaded || host != null || installError != null)
+                  const PopupMenuItem(value: 'details', child: Text('详情与来源设置')),
+                PopupMenuItem(
+                  value: 'toggle',
+                  enabled:
+                      hostReady &&
+                      !_toggling &&
+                      !downloading &&
+                      !_removing.contains(extension.packageName),
+                  child: Text(enabled ? '停用' : '启用'),
+                ),
+                if (downloaded || host != null)
+                  PopupMenuItem(
+                    value: 'remove',
+                    enabled:
+                        !downloading &&
+                        !_removing.contains(extension.packageName),
+                    child: const Text('卸载'),
+                  ),
+              ],
             ),
           if (downloading)
             const SizedBox(
@@ -1094,19 +1144,6 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                   : () => unawaited(_download(extension, repository)),
               icon: const Icon(Icons.download_outlined),
             ),
-          Semantics(
-            label: '启用扩展 ${extension.name}',
-            child: Switch(
-              value: enabled,
-              onChanged:
-                  hostReady &&
-                      !_toggling &&
-                      !downloading &&
-                      !_removing.contains(extension.packageName)
-                  ? (value) => _toggle(extension.packageName, value)
-                  : null,
-            ),
-          ),
         ],
       ),
     );

@@ -51,15 +51,12 @@ class MangaExtensionDetailsPage extends ConsumerWidget {
               padding: const EdgeInsets.all(16),
               child: SelectableText(
                 '${diagnostic ?? host['hostError'] ?? host['error'] ?? '当前没有可执行的插件来源。'}\n\n'
-                'Android 与 Windows 需要兼容的扩展运行时。Windows 请完整安装包含 extension-runtime 的应用包。'
-                '可返回扩展管理重试安装或卸载插件；移除仓库不会移除已安装插件，书架与历史记录不会被删除。',
+                '请到扩展管理重试安装。Windows 需完整安装含 extension-runtime 的应用包。',
               ),
             ),
           const Padding(
             padding: EdgeInsets.all(16),
-            child: Text(
-              '来源设置由插件自身提供并保存在本机，执行请求时使用同一份设置。一个插件可包含多个来源，请分别设置。外部浏览器不共享应用内会话。',
-            ),
+            child: Text('请分别配置插件内的各个来源。外部浏览器不共享应用内登录。'),
           ),
           ref
               .watch(sourcesProvider)
@@ -82,7 +79,7 @@ class MangaExtensionDetailsPage extends ConsumerWidget {
                     return Padding(
                       padding: const EdgeInsets.all(16),
                       child: Text(
-                        '${host['hostError'] ?? host['error'] ?? '当前没有可执行的插件来源。Android / Windows 需要兼容宿主；未信任、待恢复或宿主不可用时不会执行插件设置。'}',
+                        '${host['hostError'] ?? host['error'] ?? '插件来源不可用，请到扩展管理确认信任与运行时状态。'}',
                       ),
                     );
                   }

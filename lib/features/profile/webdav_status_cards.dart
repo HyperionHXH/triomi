@@ -168,9 +168,9 @@ class WebDavBackupProgress extends StatelessWidget {
             else if (itemProgress)
               Text('${state.completedItems} / ${state.totalItems} 项')
             else
-              const Text('正在准备此阶段，完成数量确定后显示进度'),
+              const Text('正在准备…'),
             const SizedBox(height: AppSpacing.xs),
-            const Text('可离开本页，任务不会丢失；收藏与观看进度由自动同步独立处理。'),
+            const Text('可离开此页，备份将在后台继续。'),
             Align(
               alignment: AlignmentDirectional.centerEnd,
               child: TextButton.icon(

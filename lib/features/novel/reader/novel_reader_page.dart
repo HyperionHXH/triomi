@@ -1372,12 +1372,6 @@ class _LockedView extends StatelessWidget {
               icon: const Icon(Icons.key_outlined, size: 18),
               label: const Text('使用轻币解锁本章'),
             ),
-            const SizedBox(height: AppSpacing.xxs),
-            Text(
-              '解锁通过站点官方接口完成，本应用不提供任何绕过方式。',
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: palette.onSurfaceVariant, fontSize: 11),
-            ),
           ],
         ),
       ),

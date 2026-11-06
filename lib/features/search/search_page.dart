@@ -19,13 +19,10 @@ import '../../core/source/source_registry.dart';
 import '../../core/source/tag_search.dart';
 import '../../core/storage/preferences.dart';
 import '../../core/widgets/page_scaffold.dart';
-import '../detail/anime_filter_dialog.dart';
-import '../detail/anime_info_repository.dart';
 import '../discover/widgets/media_item_card.dart';
-import '../library/data/library_providers.dart';
 import '../manga/manga_item_actions.dart';
 import '../manga/manga_source_page.dart';
-import '../novel/novel_list_metadata.dart';
+import '../novel/novel_book_card.dart';
 import '../sources/source_account_entries.dart';
 
 /// Each query owns a fixed media scope and independent per-source results.
@@ -86,7 +83,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   late List<String> _tags = List.of(widget.initialTags);
   bool _submitted = false;
   bool _tagBusy = false;
-  AnimeFilter _animeFilter = const AnimeFilter();
   String get _historyKey => 'search.history.${widget.type.name}';
 
   @override
@@ -96,9 +92,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     _scopeId = widget.type != MediaType.anime && widget.sourceOnly
         ? widget.initialSourceId
         : null;
-    if (widget.type == MediaType.anime) {
-      _animeFilter = _animeFilter.withTags(_tags);
-    }
     if (widget.initialQuery.trim().isNotEmpty || _tags.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _submit());
     }
@@ -121,10 +114,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   Future<void> _submit() async {
     final query = _controller.text.trim();
-    final hasCriteria =
-        query.isNotEmpty ||
-        _tags.isNotEmpty ||
-        (widget.type == MediaType.anime && _animeFilter.active);
+    final hasCriteria = query.isNotEmpty || _tags.isNotEmpty;
     final generation = ++_generation;
     _cancelRequests();
     setState(() {
@@ -233,14 +223,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               return provider.searchFiltered(
                 query,
                 page: page,
-                filter: AnimePublicFilter(
-                  tags: _animeFilter.tags,
-                  year: _animeFilter.year,
-                  quarter: _animeFilter.quarter,
-                  minScore: _animeFilter.minScore,
-                  maxScore: _animeFilter.maxScore,
-                  sort: _animeFilter.sort,
-                ),
+                filter: AnimePublicFilter(tags: List.of(_tags)),
               );
             }
             if (_tags.isNotEmpty && provider is TagSearchProvider) {
@@ -431,32 +414,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   @override
   Widget build(BuildContext context) {
     final rows = _rows.values.toList();
-    final statuses = widget.type == MediaType.anime
-        ? {
-            for (final view
-                in ref.watch(animeFollowsProvider).asData?.value ?? [])
-              (view.item.sourceId, view.item.remoteId): view.entry.status,
-          }
-        : <(String, String), String>{};
-    final visibleRows = rows
-        .map(
-          (row) => _SearchRow(
-            row.entry,
-            pending: row.pending,
-            error: row.error,
-            failure: row.failure,
-            page: row.page,
-            hasMore: row.hasMore,
-            items: row.items.where((item) {
-              if (widget.type != MediaType.anime) return true;
-              final status = statuses[(item.sourceId, item.remoteId)];
-              return (!_animeFilter.onlyWatching || status == 'doing') &&
-                  (!_animeFilter.hideCompleted || status != 'done') &&
-                  (!_animeFilter.hideDropped || status != 'dropped');
-            }).toList(),
-          ),
-        )
-        .toList();
     final searchable =
         ref
             .watch(sourcesProvider)
@@ -508,7 +465,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                       onDeleted: () {
                         setState(() {
                           _tags = _tags.where((t) => t != tag).toList();
-                          _animeFilter = _animeFilter.withTags(_tags);
                         });
                         unawaited(_submit());
                       },
@@ -551,26 +507,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                         : '范围：${searchable.where((e) => e.descriptor.id == _scopeId).firstOrNull?.descriptor.name ?? _scopeId} ▾',
                   ),
                 ),
-              ),
-            ),
-          if (widget.type == MediaType.anime)
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                icon: const Icon(Icons.tune),
-                label: Text(_animeFilter.active ? '筛选 · 已应用' : '筛选番剧'),
-                onPressed: () async {
-                  final selected = await showDialog<AnimeFilter>(
-                    context: context,
-                    builder: (_) => AnimeFilterDialog(initial: _animeFilter),
-                  );
-                  if (!mounted || selected == null) return;
-                  setState(() {
-                    _animeFilter = selected;
-                    _tags = List.of(selected.tags);
-                  });
-                  unawaited(_submit());
-                },
               ),
             ),
           if (_submitted)
@@ -635,8 +571,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 : ListView.separated(
                     itemCount: rows.length,
                     separatorBuilder: (_, _) => const Divider(height: 24),
-                    itemBuilder: (_, index) =>
-                        _resultSection(visibleRows[index]),
+                    itemBuilder: (_, index) => _resultSection(rows[index]),
                   ),
           ),
         ],
@@ -769,16 +704,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 ? ListView.builder(
                     itemCount: row.items.length,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemBuilder: (_, index) => NovelListMetadata(
+                    itemBuilder: (_, index) => NovelBookCard(
                       item: row.items[index],
-                      builder: (item) => MediaItemRow(
-                        item: item,
-                        sourceName: descriptor.name,
-                        onTap: () => context.push(
-                          AppRoutes.detailFor(item),
-                          extra: item,
-                        ),
-                      ),
+                      sourceLabel: descriptor.name,
                     ),
                   )
                 : MediaItemCollection(

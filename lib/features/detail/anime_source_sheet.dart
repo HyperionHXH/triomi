@@ -229,17 +229,21 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
     try {
       final snapshot = await ref.read(sourcesProvider.future);
       if (!mounted) return;
-      if (!snapshot.enabledEntries.any((entry) =>
-          entry.descriptor.id == candidate.sourceId &&
-          entry.descriptor.type == MediaType.anime &&
-          entry.supports(SourceCapability.content))) {
+      if (!snapshot.enabledEntries.any(
+        (entry) =>
+            entry.descriptor.id == candidate.sourceId &&
+            entry.descriptor.type == MediaType.anime &&
+            entry.supports(SourceCapability.content),
+      )) {
         throw StateError('此播放来源已停用，请选择其他来源');
       }
       final subject = _subject ?? widget.item;
       // Choosing a concrete site work is the explicit identity decision; the
       // mapping remains internal to resume, not a separate binding workflow.
       if (subject.sourceId != candidate.sourceId) {
-        await ref.read(animeIdentityRepositoryProvider).confirm(subject, candidate);
+        await ref
+            .read(animeIdentityRepositoryProvider)
+            .confirm(subject, candidate);
       }
       if (mounted) Navigator.pop(context, candidate);
     } catch (error) {
@@ -375,7 +379,7 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
                                     builder: (context) => AlertDialog(
                                       title: const Text('移除播放来源记录'),
                                       content: const Text(
-                                        '仅移除本站选择记录，收藏、观看历史和下载不会删除。',
+                                        '移除本站选择记录，保留收藏、观看历史与下载。',
                                       ),
                                       actions: [
                                         TextButton(

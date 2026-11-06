@@ -247,7 +247,7 @@ class _MangaFiltersDialogState extends State<MangaFiltersDialog> {
             if (_mismatch != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 24),
-                child: Text('$_mismatch\n点击重置后可重新选择；取消不会修改记录。'),
+                child: Text('$_mismatch\n请重置后重新选择。'),
               ),
             if (_rows.isEmpty) const Text('此来源没有提供站内筛选'),
             for (var i = 0; i < _rows.length; i++)

@@ -405,7 +405,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     final consent = await _confirm(
       '下载 ${release.versionLabel}',
       '从官方 GitHub $appUpdateRepository 匿名下载${_windows ? '完整 Windows ZIP 与成员清单' : 'Android APK'}。'
-          '下载后将核对文件大小、SHA-256 和实际版本，最多 512 MiB，不会自动安装。\n\n'
+          '核验大小、SHA-256 与版本，最多 512 MiB。安装需另行确认。\n\n'
           '${_windows ? 'Windows 包未签名：完整性校验不等同发布者签名。' : 'Android 还需通过系统验签，并匹配当前实际安装证书。'}',
       '下载并核验',
       actionKey: 'app-update-download-confirm',
@@ -445,8 +445,8 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
   Future<void> _windowsPackage() async {
     final consent = await _confirm(
       '核验本地 Windows 更新包',
-      '仅复制并核验 ZIP、外部完整性清单、所有成员和 EXE 实际版本。'
-          '请自行确认文件来源；哈希不代表发布者签名。不会运行候选文件或覆盖当前程序。',
+      '核验 ZIP、外部完整性清单、全部成员和 EXE 版本，不执行或覆盖程序。'
+          '请确认文件来源：哈希不代表发布者签名。',
       '确认来源并核验',
     );
     if (consent != true || !mounted) return;
@@ -528,7 +528,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         );
         if (mounted && !_failed) {
           setState(() {
-            _message = '返回后请再次点击安装并确认此更新包；不会自动启动安装。';
+            _message = '返回后请再次点击安装并确认更新包。';
           });
         }
       }
@@ -977,8 +977,8 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                         const SizedBox(height: AppSpacing.xs),
                         Text(
                           _unsupportedPlatform
-                              ? '请通过当前平台的发布渠道更新 Triomi。此处不提供应用内下载或安装。'
-                              : '仅在你点击时匿名检查官方 GitHub 发布（含测试版）。不发送来源账号、Cookie 或令牌，也不自动安装。',
+                              ? '请通过当前平台的发布渠道更新。'
+                              : '匿名查询官方 GitHub 发布，含测试版；不发送账号、Cookie 或令牌。',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -1198,9 +1198,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                               current.signerSha256 !=
                                   appUpdateProductionSigner) ...[
                             const SizedBox(height: AppSpacing.sm),
-                            const Text(
-                              '当前证书与正式证书不同，正式 APK 无法直接覆盖。更新仍必须匹配实际安装证书，不会跳过验签。',
-                            ),
+                            const Text('当前证书与正式证书不同。更新 APK 必须匹配当前安装证书。'),
                           ],
                           const SizedBox(height: AppSpacing.sm),
                           const Text(

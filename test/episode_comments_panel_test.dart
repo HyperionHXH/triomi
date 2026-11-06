@@ -471,7 +471,6 @@ void main() {
     );
     await mount(tester, http, item: site);
     await tester.pumpAndSettle();
-    expect(find.textContaining('尚未关联 Bangumi 动画条目'), findsOneWidget);
     expect(find.text('查找 Bangumi 动画条目'), findsOneWidget);
     expect(http.requests, isEmpty);
   });

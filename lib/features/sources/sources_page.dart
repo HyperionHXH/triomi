@@ -21,10 +21,10 @@ import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../downloads/data/download_repository.dart';
 import '../manga/manga_extension_details_page.dart';
+import '../manga/manga_extensions_page.dart';
 import '../manga/windows_mihon_settings_page.dart';
 import 'catalog_sheet.dart';
 import 'kazumi_repositories_sheet.dart';
-import 'mihon_extensions_sheet.dart';
 import 'source_filter_controls.dart';
 
 /// 来源与规则管理。
@@ -169,12 +169,6 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(switch (_type) {
-                  MediaType.anime => '规则仓库 → 安装播放源 → 选择线路观看',
-                  MediaType.manga => '扩展仓库 → 安装扩展 → 启用来源阅读',
-                  MediaType.novel => '选择小说站点 → 管理账号 → 阅读与缓存',
-                }, style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: AppSpacing.xs),
                 FilledButton.icon(
                   onPressed: _busy ? null : _showAddSources,
                   icon: const Icon(Icons.add),
@@ -266,9 +260,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                     if (scopedEntries.isEmpty && scopedFailures.isEmpty)
                       Padding(
                         padding: const EdgeInsets.all(24),
-                        child: Text(
-                          '尚未添加${_type.label}来源。点击上方添加入口，选择对应的仓库或规则。',
-                        ),
+                        child: Text('尚无${_type.label}来源，请添加仓库或规则。'),
                       ),
                     for (final entry in visible)
                       _SourceTile(
@@ -349,7 +341,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                 ListTile(
                   leading: const Icon(Icons.live_tv),
                   title: const Text('番剧规则仓库'),
-                  subtitle: const Text('Kazumi 兼容规则 · 添加仓库、检查与安装播放源'),
+                  subtitle: const Text('Kazumi 兼容规则'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.pop(context, 'kazumi'),
                 ),
@@ -357,7 +349,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                 ListTile(
                   leading: const Icon(Icons.extension_outlined),
                   title: const Text('漫画扩展与仓库'),
-                  subtitle: const Text('Mihon / Komikku · 已安装、浏览扩展与仓库管理'),
+                  subtitle: const Text('Mihon / Komikku'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.pop(context, 'mihon'),
                 ),
@@ -365,19 +357,18 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                 const ListTile(
                   leading: Icon(Icons.manage_accounts_outlined),
                   title: Text('内置小说站点'),
-                  subtitle: Text('轻之国度与轻书架在本页管理账号；站点权限和可达性独立。无需安装漫画 APK。'),
+                  subtitle: Text('轻之国度、轻书架 · 管理账号'),
                 ),
               ListTile(
                 leading: const Icon(Icons.storefront_outlined),
                 title: Text('${_type.label}规则目录'),
-                subtitle: const Text('只查看当前分类的兼容规则与版本'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.pop(context, 'catalog'),
               ),
               ListTile(
                 leading: const Icon(Icons.code),
                 title: const Text('手动导入规则'),
-                subtitle: const Text('高级 · 规则地址或 JSON 文本，不是 APK 仓库地址'),
+                subtitle: const Text('JSON 规则文本或地址，非 APK 仓库'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.pop(context, 'import'),
               ),
@@ -417,10 +408,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
         builder: (context, setSheetState) => SafeArea(
           child: SwitchListTile(
             title: const Text('MangaDex 低流量图片'),
-            subtitle: const Text(
-              '默认关闭，使用原图。开启后新加载的在线章节使用节流图片；'
-              '未提供时回退原图。已缓存/已下载章节不变。',
-            ),
+            subtitle: const Text('在线章节优先使用节流图片，无可用版本时使用原图；缓存与下载不变。'),
             value: dataSaver,
             onChanged: saving
                 ? null
@@ -482,11 +470,10 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
   }
 
   Future<void> _showMihonExtensions() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => MihonExtensionsSheet(initialQuery: widget.initialQuery),
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MangaExtensionsPage(initialQuery: widget.initialQuery),
+      ),
     );
     if (mounted) {
       // Mihon enabled state lives in Preferences, which is captured while
@@ -710,7 +697,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                '此处导入规则 JSON；番剧规则仓库、漫画 APK 扩展请使用对应入口。来源类型以规则实际声明为准。',
+                '仅支持 JSON 规则；APK 请到漫画扩展安装。',
                 style: Theme.of(context).textTheme.bodySmall
                     ?.copyWith(color: context.palette.mutedForeground),
               ),

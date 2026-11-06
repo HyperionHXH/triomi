@@ -260,7 +260,7 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
                         : error != null
                         ? '未能读取收藏，请重试或检查账号。'
                         : rows.isEmpty
-                        ? '在动画详情加入收藏夹；连接 WebDAV 后可自动跨设备同步。'
+                        ? '在动画详情中加入收藏。'
                         : '没有符合条件的追番',
                   ),
                 )
@@ -402,8 +402,8 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
         builder: (context) => AlertDialog(
           title: const Text('取消所选本机收藏'),
           content: Text(
-            '取消 ${keys.length} 部本机收藏；历史、缓存、下载与 Bangumi 收藏不会删除。'
-            '${ref.read(webDavConfigProvider).isConfigured ? '下次追番 WebDAV 同步将同步此删除；重新收藏可恢复。' : ''}',
+            '取消 ${keys.length} 部本机收藏，保留历史、缓存、下载与 Bangumi 收藏。'
+            '${ref.read(webDavConfigProvider).isConfigured ? '此变更将同步到 WebDAV。' : ''}',
           ),
           actions: [
             TextButton(
@@ -452,7 +452,7 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
           ..clear()
           ..addAll(failed);
         _message = errors.isEmpty
-            ? '已更新 $succeeded 项；已开启的自动同步会合并到云端'
+            ? '已更新 $succeeded 项'
             : '$succeeded 项已更新，${failed.length} 项失败并保留选择：${errors.toSet().join('；')}';
       });
     }

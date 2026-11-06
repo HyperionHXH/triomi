@@ -371,7 +371,6 @@ class _EpisodeCommentsPanelState extends ConsumerState<EpisodeCommentsPanel> {
               children: [
                 if (_comments.isNotEmpty)
                   Text('已显示全部 ${_comments.length} 条讨论 · 来自 Bangumi'),
-                const Text('匿名阅读分集讨论；暂不提供分集回复投稿。'),
               ],
             );
           }
@@ -384,17 +383,14 @@ class _EpisodeCommentsPanelState extends ConsumerState<EpisodeCommentsPanel> {
               if (_associationBusy)
                 const LinearProgressIndicator()
               else if (_subjectId == null) ...[
-                Text(
-                  _associationError ??
-                      '尚未关联 Bangumi 动画条目，无法确定本集讨论；不会使用播放站集数 ID 猜测。',
-                ),
+                Text(_associationError ?? '请先关联对应季度的 Bangumi 条目以查看讨论。'),
                 if (_associationError != null)
                   TextButton(
                     onPressed: () =>
                         ref.invalidate(animeSubjectProvider(widget.item)),
                     child: const Text('重试条目关联'),
                   ),
-                const Text('查找正确季度的 Bangumi 动画条目，并在其「选择来源」中选择当前播放站作品以建立关联。'),
+                const Text('在条目的「选择来源」中关联当前播放站作品。'),
                 TextButton(
                   onPressed: () => SearchPage.open(
                     context,

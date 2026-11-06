@@ -20,6 +20,7 @@ import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/tag_search.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/theme/app_theme.dart';
+import 'package:triomi/features/discover/widgets/media_item_card.dart';
 import 'package:triomi/features/search/search_page.dart';
 
 import 'fixtures/fake_http_client.dart';
@@ -34,10 +35,20 @@ void main() {
     String? sourceId,
   }) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
+    final preferences = memoryPreferences();
+    if (type == MediaType.anime) {
+      await preferences.set('anime.calendar.filter', {
+        'year': 2020,
+        'quarter': 1,
+        'tags': ['stale'],
+        'minScore': 10,
+        'onlyWatching': true,
+      });
+    }
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
-        preferencesProvider.overrideWithValue(memoryPreferences()),
+        preferencesProvider.overrideWithValue(preferences),
         sourcesProvider.overrideWith(
           () => _Sources(
             SourceRegistrySnapshot(
@@ -141,13 +152,19 @@ void main() {
     'anime search from a scoped playback source still searches metadata only',
     (tester) async {
       final http = FakeHttpClient(
-        (_) async => SourceResponse(
+        (request) async => SourceResponse(
           statusCode: 200,
           body: jsonEncode({
             'data': [
-              {'id': 42, 'type': 2, 'name': 'Metadata result'},
+              {
+                'id': Uri.parse(request.url).queryParameters['offset'] == '0'
+                    ? 42
+                    : 43,
+                'type': 2,
+                'name': 'Metadata result',
+              },
             ],
-            'total': 1,
+            'total': 100,
           }),
         ),
       );
@@ -171,6 +188,25 @@ void main() {
       expect(body['keyword'], 'keyword');
       expect(playbackCalls, 0);
       expect(find.text('Metadata result'), findsOneWidget);
+      final filter = body['filter'] as Map;
+      expect(filter.containsKey('tag'), isFalse);
+      expect(filter.containsKey('air_date'), isFalse);
+      expect(filter.containsKey('rating'), isFalse);
+      expect(find.byIcon(Icons.tune), findsNothing);
+      final nextPage = tester.widget<TextButton>(
+        find.widgetWithText(TextButton, '加载本站下一页'),
+      );
+      expect(nextPage.onPressed, isNotNull);
+      nextPage.onPressed!();
+      await advance(tester);
+      final next = http.requests.last;
+      expect(Uri.parse(next.url).queryParameters['offset'], '24');
+      expect((jsonDecode(next.body!) as Map)['filter'], filter);
+      expect((jsonDecode(next.body!) as Map)['keyword'], 'keyword');
+      final collection = tester.widget<MediaItemCollection>(
+        find.byType(MediaItemCollection),
+      );
+      expect(collection.items.map((item) => item.remoteId), ['42', '43']);
       await close();
     },
   );

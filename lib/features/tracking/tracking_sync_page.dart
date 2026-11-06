@@ -46,7 +46,7 @@ class _TrackingSyncPageState extends ConsumerState<TrackingSyncPage> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _error = '无法读取同步预览。网络或认证失败不会登出、移除绑定或覆盖进度。');
+      if (mounted) setState(() => _error = '无法读取同步预览，请检查网络或账号后重试。');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -79,7 +79,7 @@ class _TrackingSyncPageState extends ConsumerState<TrackingSyncPage> {
       builder: (context) => AlertDialog(
         title: const Text('确认远端写入'),
         content: Text(
-          '服务：${widget.kind.label}\n目标：${preview.item.title}\n远端条目：${preview.binding.remoteTrackId}\n状态：$_status\n评分：$_score / 10\n进度：${preview.forwardProgress}\n不会倒退远端进度。确认后会修改该账号的这一条收藏。',
+          '服务：${widget.kind.label}\n目标：${preview.item.title}\n远端条目：${preview.binding.remoteTrackId}\n状态：$_status\n评分：$_score / 10\n进度：${preview.forwardProgress}\n将修改当前账号的这条收藏，并保留较新的远端进度。',
         ),
         actions: [
           TextButton(

@@ -68,7 +68,7 @@ class _TrackingBindSheetState extends ConsumerState<_TrackingBindSheet> {
             Text('追踪到远端', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              '绑定后阅读/播放进度会自动上报；远端进度更新时不会回退。',
+              '绑定后自动上报阅读 / 播放进度，保留较新的远端进度。',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: AppSpacing.sm),
