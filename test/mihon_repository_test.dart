@@ -129,6 +129,13 @@ Future<void> _search(WidgetTester tester, String query) async {
   if (find.byType(TextField).evaluate().isEmpty) {
     await tester.tap(find.byTooltip('搜索插件'));
     await tester.pumpAndSettle();
+    // The destination owns its installed-package snapshot and filesystem checks.
+    for (var round = 0; round < 6; round++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
   }
   await tester.enterText(find.byType(TextField), query);
   await tester.pump();
@@ -1099,10 +1106,13 @@ void main() {
         preferences.get<Map<dynamic, dynamic>>('mihon.installedPackages'),
         installed,
       );
-      expect(
-        preferences.get<Map<dynamic, dynamic>>('mihon.hostStatus'),
-        status,
-      );
+      expect(preferences.get<Map<dynamic, dynamic>>('mihon.hostStatus'), {
+        for (final entry in status.entries)
+          entry.key: {
+            ...entry.value,
+            'iconUrl': 'https://example.com/icon.png',
+          },
+      });
       expect(
         await tester.runAsync(
           () => Directory('${support.path}/mihon-desktop').exists(),

@@ -55,6 +55,7 @@ class _NovelSource
   Object? unreadError;
   Object? writeError;
   Completer<List<MediaItem>>? shelfResponse;
+  Completer<List<MediaItem>>? discoveryResponse;
   int shelfCalls = 0;
   int remoteWrites = 0;
   final listingCalls = <String>[];
@@ -103,6 +104,7 @@ class _NovelSource
   @override
   Future<List<MediaItem>> discover(DiscoverFeed feed, {int page = 1}) async {
     listingCalls.add('${feed.id}/$page');
+    if (discoveryResponse case final response?) return response.future;
     // This fixed snapshot repeats; the UI must not append it forever.
     return [_book(id, feed.id, '$id ${feed.id} book')];
   }
@@ -634,6 +636,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('过期账号作品'), findsNothing);
     expect(await repository.isInLibrary('slow', 'late'), false);
+  });
+
+  testWidgets('slow discovery stays pending until its result arrives', (
+    tester,
+  ) async {
+    final source = _NovelSource('lk')
+      ..discoveryResponse = Completer<List<MediaItem>>();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          preferencesProvider.overrideWithValue(memoryPreferences()),
+          sourcesProvider.overrideWith(() => _Sources([source])),
+        ],
+        child: const MaterialApp(home: Scaffold(body: NovelDiscoveryView())),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(source.listingCalls, ['hot/1']);
+    await tester.pump(const Duration(seconds: 25));
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.textContaining('请求超时'), findsNothing);
+    source.discoveryResponse!.complete([_book('lk', 'late', '稍后返回的作品')]);
+    await tester.pumpAndSettle();
+    expect(find.text('稍后返回的作品'), findsOneWidget);
   });
 
   testWidgets(

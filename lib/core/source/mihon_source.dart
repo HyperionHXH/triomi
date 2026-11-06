@@ -294,11 +294,16 @@ class MihonSource
       manga: _mangaJson(item),
     );
     final raw = response['chapters'];
-    if (raw is! List) return const <Chapter>[];
+    if (raw is! List || raw.any((row) => row is! Map)) {
+      throw SourceException(
+        sourceId: descriptor.id,
+        type: SourceErrorType.parse,
+        message: '宿主没有返回有效的章节目录',
+      );
+    }
     return <Chapter>[
       for (var index = 0; index < raw.length; index++)
-        if (raw[index] is Map)
-          _toChapter(Map<Object?, Object?>.from(raw[index] as Map), index),
+        _toChapter(Map<Object?, Object?>.from(raw[index] as Map), index),
     ];
   }
 

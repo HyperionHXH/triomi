@@ -53,6 +53,93 @@ class _MangaFiltersDialogState extends State<MangaFiltersDialog> {
     return count;
   }
 
+  int _activeChildren(List<Map<String, Object?>> rows) => rows.where((row) {
+    final state = row['state'];
+    return row['type'] == 'check' ? state == true : state != 0;
+  }).length;
+
+  Widget _optionChip(Map<String, Object?> row) {
+    final name = '${row['name'] ?? ''}';
+    if (row['type'] == 'check') {
+      return FilterChip(
+        label: Text(name),
+        selected: row['state'] == true,
+        onSelected: (selected) => setState(() => row['state'] = selected),
+      );
+    }
+    final state = row['state'] as int? ?? 0;
+    return Tooltip(
+      message: '$name · ${['不限', '包含', '排除'][state]}；点按切换',
+      child: FilterChip(
+        avatar: state == 0
+            ? null
+            : Icon(state == 1 ? Icons.add : Icons.remove, size: 18),
+        showCheckmark: false,
+        label: Text(name),
+        selected: state != 0,
+        selectedColor: state == 2
+            ? Theme.of(context).colorScheme.errorContainer
+            : null,
+        onSelected: (_) => setState(() => row['state'] = (state + 1) % 3),
+      ),
+    );
+  }
+
+  Widget _groupOptions(
+    List<Map<String, Object?>> children,
+    String query,
+    String path,
+  ) {
+    final visible = [
+      for (var i = 0; i < children.length; i++)
+        if ('${children[i]['name'] ?? ''}'.toLowerCase().contains(query)) i,
+    ];
+    final compact = visible.every(
+      (i) => children[i]['type'] == 'check' || children[i]['type'] == 'tri',
+    );
+    if (!compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final i in visible)
+            Padding(
+              key: ValueKey('$path.$i'),
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _filter(children[i], path: '$path.$i'),
+            ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (children.any((row) => row['type'] == 'tri'))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              '点按标签：不限 → 包含 → 排除',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        LayoutBuilder(
+          builder: (context, constraints) => Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final i in visible)
+                ConstrainedBox(
+                  key: ValueKey('$path.$i'),
+                  constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                  child: _optionChip(children[i]),
+                ),
+            ],
+          ),
+        ),
+        if (visible.isEmpty) const Text('没有匹配的选项'),
+      ],
+    );
+  }
+
   Widget _filter(Map<String, Object?> row, {String path = ''}) {
     final name = '${row['name'] ?? ''}';
     final values = row['values'] as List? ?? const [];
@@ -68,34 +155,45 @@ class _MangaFiltersDialogState extends State<MangaFiltersDialog> {
         ];
         final query = _optionQueries[path] ?? '';
         row['state'] = children;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(name, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            if (children.length > 16)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: TextFormField(
-                  initialValue: query,
-                  decoration: InputDecoration(
-                    labelText: '查找$name选项',
-                    prefixIcon: const Icon(Icons.search),
-                  ),
-                  onChanged: (value) => setState(
-                    () => _optionQueries[path] = value.trim().toLowerCase(),
-                  ),
+        final chips = children.every(
+          (child) => child['type'] == 'check' || child['type'] == 'tri',
+        );
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  chips ? '$name · 已选 ${_activeChildren(children)}' : name,
+                  style: Theme.of(context).textTheme.titleSmall,
                 ),
-              ),
-            for (var i = 0; i < children.length; i++)
-              if ('${children[i]['name'] ?? ''}'.toLowerCase().contains(query))
-                Padding(
-                  key: ValueKey('$path.$i'),
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _filter(children[i], path: '$path.$i'),
-                ),
-            const Divider(height: 24),
-          ],
+                const SizedBox(height: 12),
+                if (children.length > 16)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: TextFormField(
+                      initialValue: query,
+                      decoration: InputDecoration(
+                        labelText: '查找$name选项',
+                        prefixIcon: const Icon(Icons.search),
+                      ),
+                      onChanged: (value) => setState(
+                        () => _optionQueries[path] = value.trim().toLowerCase(),
+                      ),
+                    ),
+                  ),
+                _groupOptions(children, query, path),
+              ],
+            ),
+          ),
         );
       case 'text':
         return TextFormField(
@@ -177,6 +275,27 @@ class _MangaFiltersDialogState extends State<MangaFiltersDialog> {
           ],
         );
       case 'select':
+        if (values.length <= 6) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name, style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (var i = 0; i < values.length; i++)
+                    ChoiceChip(
+                      label: Text('${values[i]}'),
+                      selected: row['state'] == i,
+                      onSelected: (_) => setState(() => row['state'] = i),
+                    ),
+                ],
+              ),
+            ],
+          );
+        }
         return DropdownButtonFormField<int>(
           isExpanded: true,
           initialValue: row['state'] as int?,
@@ -226,6 +345,7 @@ class _MangaFiltersDialogState extends State<MangaFiltersDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
     title: Row(
       children: [
         Expanded(child: Text('来源筛选 · ${_selected(_rows, widget.fresh)} 项')),
@@ -237,7 +357,7 @@ class _MangaFiltersDialogState extends State<MangaFiltersDialog> {
       ],
     ),
     content: SizedBox(
-      width: 520,
+      width: 720,
       child: SingleChildScrollView(
         child: Column(
           key: ValueKey(_revision),
@@ -246,7 +366,7 @@ class _MangaFiltersDialogState extends State<MangaFiltersDialog> {
           children: [
             if (_mismatch != null)
               Padding(
-                padding: const EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsets.only(bottom: 20),
                 child: Text('$_mismatch\n请重置后重新选择。'),
               ),
             if (_rows.isEmpty) const Text('此来源没有提供站内筛选'),

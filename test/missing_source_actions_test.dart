@@ -123,9 +123,6 @@ void main() {
       await _advance(tester);
       await tester.pumpAndSettle();
       expect(find.byType(TextField), findsNothing);
-      await tester.tap(find.byType(BackButton));
-      await _advance(tester);
-      await tester.pumpAndSettle();
       expect(find.byType(MissingSourceNotice), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       container.dispose();

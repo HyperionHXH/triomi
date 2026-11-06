@@ -195,6 +195,49 @@ void main() {
     },
   );
 
+  test(
+    'malformed host chapter payload cannot become a successful empty list',
+    () async {
+      Object? chapters;
+      messenger.setMockMethodCallHandler(
+        platform,
+        (call) async => {
+          'ok': true,
+          'chapters': ?chapters,
+        },
+      );
+      final source = MihonSource(
+        packageName: 'pkg',
+        hostSourceId: '1',
+        name: 'Source',
+        lang: 'zh',
+        enabled: true,
+        apkPath: '/private/apk',
+        versionCode: 106000,
+        signerSha256: null,
+      );
+      final item = MediaItem(
+        sourceId: source.descriptor.id,
+        remoteId: '/manga',
+        type: MediaType.manga,
+        title: 'Work',
+      );
+      for (final payload in [
+        null,
+        'not a directory',
+        <Object?>['not a chapter'],
+      ]) {
+        chapters = payload;
+        await expectLater(
+          source.chapters(item),
+          throwsA(isA<SourceException>()),
+        );
+      }
+      chapters = <Object?>[];
+      expect(await source.chapters(item), isEmpty);
+    },
+  );
+
   test('source browser preserves identity and distinguishes save, cancel and failure', () async {
     var calls = 0;
     var reply = <String, Object?>{'ok': true, 'saved': true};

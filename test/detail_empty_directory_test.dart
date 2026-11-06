@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +11,7 @@ import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_descriptor.dart';
 import 'package:triomi/core/models/source_exception.dart';
+import 'package:triomi/core/models/source_metadata.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_providers.dart';
@@ -219,6 +222,104 @@ void main() {
     await tester.runAsync(db.close);
   });
 
+  testWidgets('目录等待详情中的来源状态，不在请求完成前显示空目录', (tester) async {
+    final source = _DeferredDetailSource();
+    final db = await pumpDetail(tester, source);
+    try {
+      expect(source.chapterRequests, 0);
+      expect(find.text('暂无可读章节'), findsNothing);
+      expect(find.text('正在读取章节'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('detail-directory-empty')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('detail-directory-unavailable')),
+        findsNothing,
+      );
+      await tester.pump(const Duration(seconds: 30));
+      expect(source.chapterRequests, 0);
+      expect(
+        find.byKey(const ValueKey('detail-directory-empty')),
+        findsNothing,
+      );
+      source.metadata.complete(
+        MediaItem(
+          sourceId: item.sourceId,
+          remoteId: item.remoteId,
+          type: item.type,
+          title: item.title,
+          description: '来源简介',
+          tags: const ['冒险'],
+          sourceMetadata: SourceMetadata({'directoryToken': 'from-detail'}),
+        ),
+      );
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(source.chapterRequests, 1);
+      expect(source.chapterItem?.sourceMetadata?.toJson(), {
+        'directoryToken': 'from-detail',
+      });
+      expect(
+        find.byKey(const ValueKey('detail-directory-empty')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('detail-directory-unavailable')),
+        findsNothing,
+      );
+      source.directory.complete(const [
+        Chapter(sourceId: 'd94-source', remoteId: 'ready', title: '详情后取得的章节'),
+      ]);
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(find.text('资料暂不可用'), findsNothing);
+      expect(find.text('网站相关推荐'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('detail-directory-empty')),
+        findsNothing,
+      );
+      await tester.scrollUntilVisible(
+        find.text('详情后取得的章节'),
+        150,
+        scrollable: find
+            .descendant(
+              of: find.byType(DetailPage),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(find.text('详情后取得的章节'), findsOneWidget);
+    } finally {
+      if (!source.metadata.isCompleted) source.metadata.complete(item);
+      if (!source.directory.isCompleted) source.directory.complete(const []);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.runAsync(db.close);
+    }
+  });
+
+  testWidgets('漫画资料失败仍取得章节，不显示独立资料错误和相关推荐', (tester) async {
+    final source = _UnavailableMetadataSource();
+    final db = await pumpDetail(tester, source);
+    try {
+      expect(source.chapterRequests, 1);
+      expect(find.text('资料暂不可用'), findsNothing);
+      expect(find.text('重试资料'), findsNothing);
+      expect(find.text('网站相关推荐'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('detail-directory-empty')),
+        findsNothing,
+      );
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.runAsync(db.close);
+    }
+  });
+
   testWidgets(
     'resolved source name is visible when refresh fails without replacing cached chapters',
     (tester) async {
@@ -349,4 +450,33 @@ class _OfflineDetailSource extends _EmptyCatalogSource {
   @override
   Future<List<Chapter>> chapters(MediaItem item) async =>
       throw StateError('directory network unavailable');
+}
+
+class _DeferredDetailSource extends _EmptyCatalogSource {
+  final metadata = Completer<MediaItem>();
+  final directory = Completer<List<Chapter>>();
+  int chapterRequests = 0;
+  MediaItem? chapterItem;
+  @override
+  Future<MediaItem> detail(MediaItem item) => metadata.future;
+  @override
+  Future<List<Chapter>> chapters(MediaItem item) {
+    chapterRequests++;
+    chapterItem = item;
+    return directory.future;
+  }
+}
+
+class _UnavailableMetadataSource extends _EmptyCatalogSource {
+  int chapterRequests = 0;
+  @override
+  Future<MediaItem> detail(MediaItem item) =>
+      Future.error(StateError('metadata unavailable'));
+  @override
+  Future<List<Chapter>> chapters(MediaItem item) async {
+    chapterRequests++;
+    return const [
+      Chapter(sourceId: 'd94-source', remoteId: 'readable', title: '可读章节'),
+    ];
+  }
 }

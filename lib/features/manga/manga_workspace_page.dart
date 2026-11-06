@@ -19,6 +19,7 @@ import 'manga_extension_details_page.dart';
 import 'manga_extensions_page.dart';
 import 'manga_source_actions.dart';
 import 'manga_source_page.dart';
+import 'mihon_extension_icon.dart';
 
 class MangaWorkspacePage extends ConsumerStatefulWidget {
   const MangaWorkspacePage({super.key});
@@ -235,11 +236,17 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
                       ),
                     for (final entry in entries)
                       ListTile(
-                        leading: Icon(
-                          entry.enabled
-                              ? Icons.language
-                              : Icons.pause_circle_outline,
-                        ),
+                        leading: entry.source is MihonSource
+                            ? MihonExtensionIcon(
+                                packageName:
+                                    (entry.source as MihonSource).packageName,
+                                enabled: entry.enabled,
+                              )
+                            : Icon(
+                                entry.enabled
+                                    ? Icons.language
+                                    : Icons.pause_circle_outline,
+                              ),
                         title: Text(entry.descriptor.name),
                         subtitle: Text(
                           '${entry.descriptor.lang} · ${entry.enabled ? '已启用' : '已停用'} · ${entry.source is SearchProvider ? '在线搜索 / 浏览' : '在线目录'}',

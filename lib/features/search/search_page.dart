@@ -13,6 +13,7 @@ import '../../core/source/bangumi_public_client.dart';
 import '../../core/source/bangumi_source.dart';
 import '../../core/source/http_client.dart';
 import '../../core/source/kazumi_source.dart';
+import '../../core/source/mihon_source.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
@@ -239,7 +240,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             );
           })
           .timeout(
-            const Duration(seconds: 20),
+            active.source is MihonSource
+                ? const Duration(seconds: 150)
+                : const Duration(seconds: 60),
             onTimeout: () {
               owner.cancel('搜索超时');
               throw TimeoutException('搜索超时');
@@ -336,7 +339,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       if (!mounted || entry == null) return;
       final source = entry.source as TagSearchProvider;
       final taxonomy = await source.searchTags().timeout(
-        const Duration(seconds: 20),
+        source is MihonSource
+            ? const Duration(seconds: 150)
+            : const Duration(seconds: 60),
       );
       if (!mounted) return;
       if (taxonomy.isEmpty) {

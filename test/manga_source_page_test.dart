@@ -65,6 +65,7 @@ class _CatalogSource
   @override
   Future<List<MediaItem>> search(String keyword, {int page = 1}) async {
     requests.add((keyword, const [], page));
+    if (pending != null) return pending!.future;
     return const [];
   }
 
@@ -81,6 +82,116 @@ class _SnapshotController extends SourceRegistryController {
 }
 
 void main() {
+  testWidgets(
+    'source search opens a new page without submitting an empty query',
+    (tester) async {
+      final db = openTestDatabase();
+      final source = _CatalogSource();
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          preferencesProvider.overrideWithValue(memoryPreferences()),
+          sourcesProvider.overrideWith(
+            () => _SnapshotController(
+              SourceRegistrySnapshot(
+                entries: [
+                  SourceEntry(
+                    descriptor: source.descriptor,
+                    source: source,
+                    enabled: true,
+                  ),
+                ],
+                failures: const [],
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        container.dispose();
+        await db.close();
+      });
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: MangaSourcePage(sourceId: 'catalog')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(source.requests, hasLength(1));
+      expect(find.byType(TextField), findsNothing);
+      await tester.tap(find.byTooltip('搜索当前来源'));
+      await tester.pumpAndSettle();
+      expect(find.text('搜索 · Catalog'), findsOneWidget);
+      expect(
+        find.byType(MangaSourcePage, skipOffstage: false),
+        findsNWidgets(2),
+      );
+      expect(find.byType(TextField), findsOneWidget);
+      expect(source.requests, hasLength(1));
+      await tester.enterText(find.byType(TextField), 'keyword');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(source.requests.last.$1, 'keyword');
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      expect(find.text('Catalog'), findsOneWidget);
+      expect(source.requests, hasLength(2));
+    },
+  );
+
+  testWidgets(
+    'a slow catalogue remains loading beyond the old twenty-second deadline',
+    (tester) async {
+      final db = openTestDatabase();
+      final pending = Completer<List<MediaItem>>();
+      final source = _CatalogSource(pending: pending);
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          preferencesProvider.overrideWithValue(memoryPreferences()),
+          sourcesProvider.overrideWith(
+            () => _SnapshotController(
+              SourceRegistrySnapshot(
+                entries: [
+                  SourceEntry(
+                    descriptor: source.descriptor,
+                    source: source,
+                    enabled: true,
+                  ),
+                ],
+                failures: const [],
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        if (!pending.isCompleted) pending.complete(const []);
+        container.dispose();
+        await db.close();
+      });
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: MangaSourcePage(sourceId: 'catalog')),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 21));
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.textContaining('来源目录请求超时'), findsNothing);
+      expect(find.text('此来源没有返回作品'), findsNothing);
+      pending.complete(const []);
+      await tester.pumpAndSettle();
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.text('此来源没有返回作品'), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'source entry preserves online tags and query, clearing tag makes ordinary online search',
     (tester) async {

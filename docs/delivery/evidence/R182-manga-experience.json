@@ -1,0 +1,151 @@
+{
+  "version": "0.14.2+182",
+  "status": "local-validation-completed-publication-pending",
+  "scope": [
+    "Standalone search pages for manga sources, installed extensions and repository installation",
+    "Pending chapter state and detail-to-directory plugin snapshot ordering",
+    "Remove manga metadata failure panel and website recommendations",
+    "Wrapped filter chips, repository icons and duplicate menu cleanup",
+    "Longer bounded search/filter/discovery request budgets"
+  ],
+  "copyManga": {
+    "platform": "Android isolated API35 emulator",
+    "originalVersion": "1.4.85",
+    "apkSha256": "0a208f10b4f8fa3f3f0fae7704935e1a487c6ee342722c7e7818a02ad8c8dd6a",
+    "apiHost": "api.copy4000.com",
+    "platformPreference": "1",
+    "successfulBeforeRestriction": {
+      "searchHttpStatus": 200,
+      "popularItems": 21,
+      "detail": true,
+      "chapters": 6,
+      "readingPages": 16
+    },
+    "restriction": {
+      "httpStatus": 210,
+      "sameOriginalApkInKomikku": "same HTTP 210 reproduced on the same emulator/network",
+      "serverMessageMeaning": "Site anti-piracy restriction; install official application and wait one hour according to the server response",
+      "pluginMessagePreserved": true,
+      "hostCompatibilityDefectConfirmed": false,
+      "siteRestrictionFixed": false
+    },
+    "imageDecoded": false,
+    "temporaryProxyAndFixturesRestored": true
+  },
+  "visualValidation": {
+    "method": "Flutter widget screenshot harness with loaded Chinese and Material icon fonts",
+    "filterWidthsDp": [
+      320,
+      480,
+      1200
+    ],
+    "narrowTextScale": 2,
+    "overflowExceptions": 0,
+    "icons": "Controlled decoded PNG verifies shared image client and persisted/repository metadata wiring"
+  },
+  "automated": {
+    "flutterAnalyzeIssues": 0,
+    "pythonTestsPassed": 117,
+    "fullFlutter": {
+      "passed": 1706,
+      "skipped": 4
+    },
+    "focusedDownloadAndMissingSource": 23,
+    "fixtureMediaAndTextEncoding": "passed",
+    "uiDocDriftErrors": 0,
+    "deliveryConsistencyErrors": 0,
+    "historicalDeliveryTemplateWarnings": 35
+  },
+  "builds": {
+    "android": {
+      "localRelease": "passed",
+      "version": "0.14.2+182",
+      "abiDescriptorsPassed": 128,
+      "architectures": [
+        "x86_64"
+      ],
+      "signing": "local debug acceptance identity; public production signing verified separately",
+      "apkSha256": "349b7feb5b5942f9d68d4907d4b7dbdc88cabc00dc6d575108149fc560b06ef2"
+    },
+    "windows": {
+      "ordinaryRelease": "passed",
+      "acceptanceBuildSwitch": "OFF",
+      "isolatedAcceptanceEntryAbsent": true,
+      "bundledRuntime": "verified public v0.14.1 runtime; native runtime sources unchanged",
+      "packaging": {
+        "zip": true,
+        "msi": true,
+        "version": "0.14.2+182",
+        "manifestFilesVerified": 452
+      }
+    }
+  },
+  "publication": {
+    "requested": true,
+    "tag": "v0.14.2",
+    "pushed": false,
+    "published": false
+  },
+  "limits": [
+    "CopyManga HTTP 210 is reproduced in Komikku; this release does not claim to bypass or resolve the site restriction.",
+    "Repository icons are display metadata. Offline local extensions without matching icon metadata keep a fallback; APK native icon extraction is not implemented.",
+    "Widget screenshots validate layout and controlled image decoding, not every repository icon or real website.",
+    "R181 plugin loading/filter audit coverage is unchanged; no universal Komikku compatibility claim is made."
+  ],
+  "windowsLiveAcceptance": {
+    "format": 1,
+    "platform": "windows",
+    "status": "passed",
+    "stage": "completed",
+    "nativeAcceptance": {
+      "isolatedBuild": true,
+      "stateFailureStage": "",
+      "win32Error": 0
+    },
+    "isolation": {
+      "newDataRoot": true,
+      "pathProviderRedirected": true,
+      "hiveIsolated": true,
+      "database": "memory",
+      "secureStore": "memory",
+      "sourceHttp": "production",
+      "hostChannel": "production",
+      "legacyPreferenceMigration": "skipped for empty acceptance root"
+    },
+    "artifactDelivery": "fingerprinted original local files; remaining files official HTTPS",
+    "fixedFingerprintsExplicitlyAccepted": true,
+    "apkSha256": "e30a1c09951a41cd486533112fdd220187f60f0c6165599a6ac2285454e3cfd0",
+    "jarSha256": "5eebd0bae530be491fe1cae32d1940c3914b224c46e7b9d6dd596415ef2c8be7",
+    "runtimeFileSha256": "5eebd0bae530be491fe1cae32d1940c3914b224c46e7b9d6dd596415ef2c8be7",
+    "sourceCount": 1,
+    "filterProbe": "passed",
+    "searchCount": 48,
+    "chapterCount": 1,
+    "pageCount": 296,
+    "detailUiMounted": true,
+    "detailDirectorySettled": true,
+    "removedMangaSectionsAbsent": true,
+    "imageBytes": 277807,
+    "imageWidth": 1280,
+    "imageHeight": 1646,
+    "readerMounted": true,
+    "readerPage": 3,
+    "readerImagePainted": true,
+    "readerScreenshot": "reader.png"
+  },
+  "androidUiAcceptance": {
+    "versionCode": 182,
+    "upgradePreservedData": true,
+    "sameAcceptanceSigner": true,
+    "standaloneInstalledSearchAndBack": true,
+    "standaloneAddSearchAndBack": true,
+    "standaloneSourceSearchAndBack": true,
+    "simplifiedSourceMenu": true,
+    "pendingUntilNetworkResult": true,
+    "repositoryNetworkResult": "Dio connection timeout, 20 seconds; no new JM installation via Android UI",
+    "androidPluginSpecificFilterIconDetail": "not revalidated: installed Flutter list was empty and repository network timed out",
+    "accounts": "not read or changed",
+    "proxyRestored": ":0",
+    "temporaryRepositoryRestored": true
+  }
+}

@@ -6,6 +6,7 @@ import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
 import '../../core/storage/preferences.dart';
 import 'manga_source_actions.dart';
+import 'mihon_extension_icon.dart';
 
 /// An APK can contain many independently configurable sources. Package metadata
 /// is informational; every settings/browser action uses the real source host.
@@ -30,11 +31,11 @@ class MangaExtensionDetailsPage extends ConsumerWidget {
         (preferences.get<List<Object?>>('mihon.enabledPackages') ?? [])
             .contains(packageName);
     return Scaffold(
-      appBar: AppBar(title: const Text('插件详情与来源设置')),
+      appBar: AppBar(title: const Text('插件详情')),
       body: ListView(
         children: [
           ListTile(
-            leading: const Icon(Icons.extension_outlined),
+            leading: MihonExtensionIcon(packageName: packageName),
             title: SelectableText(packageName),
             subtitle: Text(
               'v${host['versionName'] ?? host['versionCode'] ?? '未知'} · ${enabled ? '已启用' : '未启用 / 宿主不可用'}',

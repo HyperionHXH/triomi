@@ -393,6 +393,29 @@ void main() {
     },
   );
 
+  testWidgets('slow source stays pending until its actual result arrives', (
+    tester,
+  ) async {
+    final pending = Completer<List<MediaItem>>();
+    final close = await render(tester, MediaType.manga, [
+      _SearchSource('slow', MediaType.manga, (_) => pending.future),
+    ]);
+    await search(tester, 'keyword');
+    await tester.pump(const Duration(seconds: 25));
+    expect(find.text('请求超时，可重试本站'), findsNothing);
+    pending.complete([
+      const MediaItem(
+        sourceId: 'slow',
+        remoteId: 'late-success',
+        type: MediaType.manga,
+        title: 'slow-but-valid-result',
+      ),
+    ]);
+    await advance(tester);
+    expect(find.text('slow-but-valid-result'), findsOneWidget);
+    await close();
+  });
+
   testWidgets('completion of an old query cannot replace a newer result', (
     tester,
   ) async {

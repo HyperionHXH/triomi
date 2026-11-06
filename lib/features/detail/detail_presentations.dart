@@ -174,10 +174,12 @@ class _MangaHeader extends StatelessWidget {
     required this.data,
     required this.historyRevision,
     required this.onReturned,
+    required this.directoryLoading,
   });
   final _DetailData data;
   final int historyRevision;
   final VoidCallback onReturned;
+  final bool directoryLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -236,6 +238,7 @@ class _MangaHeader extends StatelessWidget {
             children: [
               _ReadContinueButton(
                 data: data,
+                loading: directoryLoading,
                 historyRevision: historyRevision,
                 onReturned: onReturned,
               ),
@@ -258,10 +261,12 @@ class _NovelBookHeader extends StatelessWidget {
     required this.data,
     required this.historyRevision,
     required this.onReturned,
+    required this.directoryLoading,
   });
   final _DetailData data;
   final int historyRevision;
   final VoidCallback onReturned;
+  final bool directoryLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -323,6 +328,7 @@ class _NovelBookHeader extends StatelessWidget {
           const SizedBox(height: 16),
           _ReadContinueButton(
             data: data,
+            loading: directoryLoading,
             historyRevision: historyRevision,
             onReturned: onReturned,
           ),
@@ -356,10 +362,12 @@ class _ReadContinueButton extends ConsumerStatefulWidget {
     required this.data,
     required this.historyRevision,
     required this.onReturned,
+    this.loading = false,
   });
   final _DetailData data;
   final int historyRevision;
   final VoidCallback onReturned;
+  final bool loading;
 
   @override
   ConsumerState<_ReadContinueButton> createState() =>
@@ -416,7 +424,13 @@ class _ReadContinueButtonState extends ConsumerState<_ReadContinueButton> {
       return FilledButton.icon(
         key: const ValueKey('detail-continue-read'),
         icon: const Icon(Icons.menu_book_outlined),
-        label: Text(target < 0 ? '暂无可读章节' : '${continuing ? '继续' : '开始'}阅读'),
+        label: Text(
+          target < 0
+              ? widget.loading
+                    ? '正在读取章节'
+                    : '暂无可读章节'
+              : '${continuing ? '继续' : '开始'}阅读',
+        ),
         onPressed: target < 0 || !data.supportsContent
             ? null
             : () async {

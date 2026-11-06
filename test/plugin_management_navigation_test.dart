@@ -54,12 +54,20 @@ void main() {
   }
 
   testWidgets(
-    'search is optional and Back closes it before leaving the library',
+    'library search is a separate route and Back restores the library',
     (tester) async {
       await open(tester);
       expect(find.byType(TextField), findsNothing);
       await tester.tap(find.byTooltip('搜索插件'));
       await tester.pumpAndSettle();
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: find.text('搜索插件库')),
+        findsOneWidget,
+      );
+      expect(
+        find.byType(MihonExtensionsSheet, skipOffstage: false),
+        findsNWidgets(2),
+      );
       await tester.enterText(find.byType(TextField), 'missing');
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
@@ -70,12 +78,9 @@ void main() {
   );
 
   testWidgets(
-    'add is a separate destination and starts with no installed search',
+    'add search is its own destination and preserves the add page on return',
     (tester) async {
       await open(tester);
-      await tester.tap(find.byTooltip('搜索插件'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'installed query');
       await tester.tap(find.byTooltip('添加插件'));
       await tester.pumpAndSettle();
       expect(find.byType(TextField), findsNothing);
@@ -83,9 +88,24 @@ void main() {
         find.byType(MihonExtensionsSheet).last,
       );
       expect(page.browse, isTrue);
+      await tester.tap(find.byTooltip('搜索插件'));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('搜索可添加插件'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byType(MihonExtensionsSheet, skipOffstage: false),
+        findsNWidgets(3),
+      );
+      await tester.enterText(find.byType(TextField), 'repository query');
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(find.byType(TextField), findsNothing);
+      expect(find.text('添加插件'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
@@ -98,9 +118,6 @@ void main() {
         tester.widget<TextField>(find.byType(TextField)).controller?.text,
         'missing source',
       );
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(find.byType(TextField), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );

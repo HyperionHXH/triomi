@@ -59,6 +59,51 @@ class MihonInstaller {
   final SourceHttpClient http;
   final Preferences preferences;
 
+  /// Recovers artwork from an already fetched index without changing trust.
+  Future<Map<String, String>> cacheRepositoryIcons(
+    Iterable<MihonExtension> extensions,
+  ) => _withMetadataLock(() async {
+    final installed = preferences.get<Map<dynamic, dynamic>>(
+      'mihon.installedPackages',
+    );
+    final statuses = <String, Object?>{
+      ...?preferences
+          .get<Map<dynamic, dynamic>>('mihon.hostStatus')
+          ?.map((key, value) => MapEntry('$key', value)),
+    };
+    final recovered = <String, String>{};
+    for (final extension in extensions) {
+      final previous = statuses[extension.packageName];
+      if (previous is! Map) continue;
+      final sameVersion =
+          installed?[extension.packageName] == extension.versionName ||
+          previous['versionName'] == extension.versionName &&
+              previous['versionCode'] == extension.versionCode;
+      if (!sameVersion) continue;
+      final existing = Uri.tryParse('${previous['iconUrl'] ?? ''}'.trim());
+      if (_isIconUri(existing)) continue;
+      final icon = Uri.tryParse(extension.iconUrl.trim());
+      if (!_isIconUri(icon)) continue;
+      final url = icon!.toString();
+      statuses[extension.packageName] = <String, Object?>{
+        for (final entry in previous.entries) '${entry.key}': entry.value,
+        'iconUrl': url,
+      };
+      recovered[extension.packageName] = url;
+    }
+    if (recovered.isNotEmpty) {
+      await preferences.set('mihon.hostStatus', statuses);
+    }
+    return recovered;
+  });
+
+  static bool _isIconUri(Uri? uri) =>
+      uri != null &&
+      uri.scheme == 'https' &&
+      uri.host.isNotEmpty &&
+      uri.userInfo.isEmpty &&
+      !uri.hasFragment;
+
   Future<Map<String, Object?>> install(
     MihonExtension extension, {
     required String signerSha256,
@@ -202,6 +247,7 @@ class MihonInstaller {
       // Carry declarations only after the APK identity/hash checks above.
       // This is display metadata, never permission to execute or enable.
       status['name'] = extension.name;
+      status['iconUrl'] = extension.iconUrl;
       if (desktop) {
         status['desktopArtifactSource'] = extension.jarUrl ?? extension.apkUrl;
         if (status['filterProbe'] == 'unknown') {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -21,7 +22,6 @@ import '../discover/widgets/media_item_card.dart';
 import '../library/batch_collection_page.dart';
 import '../sources/sources_page.dart';
 import 'manga_extension_details_page.dart';
-import 'manga_extensions_page.dart';
 import 'manga_filter_snapshot.dart';
 import 'manga_filters_dialog.dart';
 import 'manga_item_actions.dart';
@@ -35,10 +35,12 @@ class MangaSourcePage extends ConsumerStatefulWidget {
     this.query = '',
     this.filtersJson,
     this.initialTags = const [],
+    this.searchPage = false,
   });
   final String sourceId, listing, query;
   final String? filtersJson;
   final List<String> initialTags;
+  final bool searchPage;
   static String location(
     String sourceId, {
     String listing = 'popular',
@@ -74,7 +76,9 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
   final _scroll = ScrollController();
   int _page = 0, _epoch = 0;
   bool _busy = false, _more = true, _list = false, _sessionBusy = false;
+  late bool _submitted = !widget.searchPage;
   late bool _showSearch =
+      widget.searchPage ||
       widget.query.isNotEmpty ||
       widget.initialTags.isNotEmpty ||
       widget.listing == 'search';
@@ -94,7 +98,14 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
     }
     if (_filters.isNotEmpty) _listing = 'search';
     _scroll.addListener(_onScroll);
-    unawaited(_load(reset: true));
+    if (!widget.searchPage ||
+        _query.isNotEmpty ||
+        _tags.isNotEmpty ||
+        _filters.isNotEmpty) {
+      unawaited(_load(reset: true));
+    } else {
+      _more = false;
+    }
   }
 
   @override
@@ -113,7 +124,8 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
     _listing = _query.isNotEmpty || _tags.isNotEmpty
         ? 'search'
         : widget.listing;
-    _showSearch = _query.isNotEmpty || _listing == 'search';
+    _showSearch =
+        widget.searchPage || _query.isNotEmpty || _listing == 'search';
     _filters = [];
     _filterError = null;
     try {
@@ -166,6 +178,7 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
     final filters = copyMangaFilters(_filters);
     final nextPage = reset ? 1 : _page + 1;
     setState(() {
+      _submitted = true;
       _busy = true;
       _error = null;
       if (reset) {
@@ -246,12 +259,10 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
             return (result: result, source: source);
           })
           .timeout(
-            const Duration(seconds: 20),
+            const Duration(seconds: 150),
             onTimeout: () {
               owner.cancel('来源目录请求超时');
-              throw TimeoutException(
-                '来源目录请求超时；Android APK 在途调用可能仍会完成，晚到结果不再接收',
-              );
+              throw TimeoutException('来源目录请求超时，请重试或检查来源设置');
             },
           );
       if (loaded == null || owner.cancelled) return;
@@ -298,12 +309,29 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
   }
 
   void _submit(String query) {
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _query = query.trim();
       _listing = 'search';
     });
     if (_scroll.hasClients) _scroll.jumpTo(0);
     unawaited(_load(reset: true));
+  }
+
+  Future<void> _openSearch() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MangaSourcePage(
+          sourceId: widget.sourceId,
+          listing: 'search',
+          query: _query,
+          initialTags: _tags,
+          filtersJson: jsonEncode(_filters),
+          searchPage: true,
+        ),
+      ),
+    );
   }
 
   void _saved(MangaFeedRow row) {
@@ -345,10 +373,10 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
       final fresh = await owner
           .run(source.searchFilters)
           .timeout(
-            const Duration(seconds: 20),
+            const Duration(seconds: 150),
             onTimeout: () {
               owner.cancel('来源筛选请求超时');
-              throw TimeoutException('来源筛选请求超时；APK 在途调用可能仍会完成');
+              throw TimeoutException('来源筛选请求超时，请重试');
             },
           );
       if (!mounted ||
@@ -567,36 +595,6 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
         } else {
           _toast('此来源当前不可用；请在扩展管理或来源管理中检查插件状态');
         }
-      case 'extensions':
-        await Navigator.push(
-          context,
-          MaterialPageRoute<void>(builder: (_) => const MangaExtensionsPage()),
-        );
-        if (mounted && widget.sourceId == sourceId) {
-          ref.invalidate(sourceRegistryProvider);
-          await ref.read(sourcesProvider.notifier).refresh();
-          await _checkSourceAfterManagement(entry, sourceId, epoch);
-        }
-      case 'info':
-        if (entry != null && mounted) {
-          await showDialog<void>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: Text(entry.descriptor.name),
-              content: SingleChildScrollView(
-                child: SelectableText(
-                  '${entry.descriptor.id}\n语言：${entry.descriptor.lang}\n类型：${entry.descriptor.kind.label}\n版本：${entry.descriptor.version ?? '未提供'}\n${entry.enabled ? '已启用' : '已停用'}\n${entry.source is MihonSource ? '插件由对应平台的兼容宿主执行；发布者与桌面代码信任由扩展管理分别维护。' : '规则执行与会话属于此来源。'}',
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('关闭'),
-                ),
-              ],
-            ),
-          );
-        }
       case 'batch':
         await Navigator.push(
           context,
@@ -635,15 +633,18 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
     final searchable = entry?.enabled == true && source is SearchProvider;
     return Scaffold(
       appBar: AppBar(
-        title: Text(entry?.descriptor.name ?? widget.sourceId),
+        title: Text(
+          widget.searchPage
+              ? '搜索 · ${entry?.descriptor.name ?? widget.sourceId}'
+              : entry?.descriptor.name ?? widget.sourceId,
+        ),
         actions: [
-          IconButton(
-            tooltip: '搜索当前来源',
-            onPressed: searchable
-                ? () => setState(() => _showSearch = !_showSearch)
-                : null,
-            icon: const Icon(Icons.search),
-          ),
+          if (!widget.searchPage)
+            IconButton(
+              tooltip: '搜索当前来源',
+              onPressed: searchable ? () => unawaited(_openSearch()) : null,
+              icon: const Icon(Icons.search),
+            ),
           if (entry != null)
             IconButton(
               tooltip: mangaSourceSettingsLabel(entry),
@@ -677,27 +678,8 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
                   _listing == 'search' &&
                   _tags.isEmpty)
                 const PopupMenuItem(value: 'save', child: Text('保存搜索')),
-              PopupMenuItem(
-                value: 'settings',
-                child: Text(
-                  entry == null ? '来源设置' : mangaSourceSettingsLabel(entry),
-                ),
-              ),
               if (source is MihonSource)
-                const PopupMenuItem(value: 'plugin', child: Text('插件详情与来源设置')),
-              const PopupMenuItem(value: 'manage', child: Text('来源启停与规则管理')),
-              if (source is MihonSource ||
-                  entry?.descriptor.baseUrl != null) ...[
-                const PopupMenuItem(value: 'browser', child: Text('在外部浏览器打开')),
-                if (entry != null && mangaSourceSupportsSession(entry))
-                  const PopupMenuItem(
-                    value: 'web',
-                    child: Text('应用内网页 / 会话验证'),
-                  ),
-              ],
-              const PopupMenuItem(value: 'extensions', child: Text('扩展管理')),
-              if (entry != null)
-                const PopupMenuItem(value: 'info', child: Text('来源与扩展信息')),
+                const PopupMenuItem(value: 'plugin', child: Text('插件详情')),
               if (_items.isNotEmpty)
                 const PopupMenuItem(value: 'batch', child: Text('批量收藏当前结果')),
             ],
@@ -725,6 +707,7 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
               padding: const EdgeInsets.all(12),
               child: TextField(
                 controller: _search,
+                autofocus: widget.searchPage && _query.isEmpty,
                 enabled: searchable,
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
@@ -876,9 +859,11 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
                       ),
                     ),
                   if (_items.isEmpty && !_busy && _error == null)
-                    const SliverFillRemaining(
+                    SliverFillRemaining(
                       hasScrollBody: false,
-                      child: Center(child: Text('此来源没有返回作品')),
+                      child: Center(
+                        child: Text(_submitted ? '此来源没有返回作品' : '输入关键词，搜索当前来源'),
+                      ),
                     ),
                   if (_list)
                     SliverList.builder(

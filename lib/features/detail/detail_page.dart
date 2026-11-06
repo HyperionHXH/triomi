@@ -48,7 +48,6 @@ import 'anime_info_repository.dart';
 import 'anime_info_sheet.dart';
 import 'anime_source_sheet.dart';
 import 'chapter_download_picker.dart';
-import 'manga_related_section.dart';
 
 part 'detail_presentations.dart';
 part 'detail_catalog.dart';
@@ -147,6 +146,10 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     final owner = _metadataOwner = SourceRequestCancellation();
     _metadataBusy = true;
     _metadataError = null;
+    if (widget.item.type != MediaType.anime) {
+      _directoryBusy = true;
+      _directoryError = null;
+    }
     final cached = await _loadFromCache(
       fallbackItem: _data.item ?? widget.item,
     );
@@ -154,7 +157,10 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     if (cached != null) _publish(cached, generation);
     final item = _data.item ?? widget.item;
     if (item.sourceId == 'local-comic') {
-      _metadataBusy = false;
+      setState(() {
+        _metadataBusy = false;
+        _directoryBusy = false;
+      });
       return _data;
     }
     if (item.type == MediaType.anime && item.sourceId != 'bangumi-anime') {
@@ -229,12 +235,13 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       var detail = item;
       final metadata = owner.run(() async {
         try {
-          detail = await provider.detail(item.sourceSnapshot);
-          if (detail.type != item.type ||
-              detail.sourceId != item.sourceId ||
-              detail.remoteId != item.remoteId) {
+          final resolved = await provider.detail(item.sourceSnapshot);
+          if (resolved.type != item.type ||
+              resolved.sourceId != item.sourceId ||
+              resolved.remoteId != item.remoteId) {
             throw StateError('来源返回的作品身份不一致');
           }
+          detail = resolved;
           if (owner.cancelled || !mounted || generation != _generation) return;
           _publish(
             _DetailData(
@@ -257,11 +264,14 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           }
         }
       });
-      // Directory reads are independent: metadata failure must not suppress
-      // an otherwise available cached/live reader directory.
+      // Plugins can return hidden directory IDs or memo state in detail. Wait
+      // for that snapshot; a metadata failure still permits the original item.
       if (item.type != MediaType.anime) {
-        final directory = _loadReaderDirectory(item, entry, generation);
-        await Future.wait([metadata, directory]);
+        await metadata;
+        if (!mounted || generation != _generation || owner.cancelled) {
+          return _data;
+        }
+        await _loadReaderDirectory(detail, entry, generation);
       } else {
         await metadata;
       }
@@ -269,7 +279,10 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       if (mounted && generation == _generation && !owner.cancelled) {
         setState(() {
           _metadataError = '$error';
-          if (item.type != MediaType.anime) _directoryError = '$error';
+          if (item.type != MediaType.anime) {
+            _directoryError = '$error';
+            _directoryBusy = false;
+          }
         });
       }
     } finally {
@@ -1004,12 +1017,14 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               else if (item.type == MediaType.manga)
                 _MangaHeader(
                   data: data,
+                  directoryLoading: _directoryBusy,
                   historyRevision: _readRevision,
                   onReturned: _refreshReadHistory,
                 )
               else
                 _NovelBookHeader(
                   data: data,
+                  directoryLoading: _directoryBusy,
                   historyRevision: _readRevision,
                   onReturned: _refreshReadHistory,
                 ),
@@ -1039,7 +1054,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                   item: playbackItem,
                   onSourceChanged: _refreshDetails,
                 ),
-              if (_metadataBusy)
+              if (_metadataBusy && item.type != MediaType.manga)
                 const ListTile(
                   leading: SizedBox(
                     width: 20,
@@ -1048,7 +1063,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                   ),
                   title: Text('补全资料'),
                 ),
-              if (_metadataError != null)
+              if (_metadataError != null && item.type != MediaType.manga)
                 _DetailLoadFailure(
                   title: '资料暂不可用',
                   error: _metadataError!,
@@ -1132,7 +1147,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                 item: playable.item,
                 chapters: playable.chapters,
                 supportsContent: playable.supportsContent,
-                loadError: _directoryBusy ? '正在获取目录' : _directoryError,
+                loading: _directoryBusy,
+                loadError: _directoryError,
                 selectedChapterId: item.type == MediaType.anime
                     ? _selectedEpisodeId
                     : null,
@@ -1164,9 +1180,6 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                   padding: const EdgeInsets.all(16),
                   child: _ExpandableSynopsis(text: item.description!),
                 ),
-              if (item.type == MediaType.manga &&
-                  item.sourceId != 'local-comic')
-                MangaRelatedSection(item: item),
               if (item.type == MediaType.novel &&
                   item.sourceId != 'local-comic')
                 BookCommentsSection(item: item),
@@ -1235,6 +1248,7 @@ class _ChapterSection extends StatelessWidget {
     required this.chapters,
     required this.supportsContent,
     this.loadError,
+    this.loading = false,
     this.selectedChapterId,
     this.onSelected,
     this.onDownload,
@@ -1249,6 +1263,7 @@ class _ChapterSection extends StatelessWidget {
   /// 详情/目录加载失败的原因（null 表示请求成功）。空目录是否可操作
   /// 取决于它：成功但空 → 引导搜索；失败 → 不把失败伪装成空目录。
   final String? loadError;
+  final bool loading;
   final String? selectedChapterId;
   final ValueChanged<String>? onSelected;
   final VoidCallback? onDownload;
@@ -1296,6 +1311,9 @@ class _ChapterSection extends StatelessWidget {
     }
 
     if (chapters.isEmpty) {
+      if (loading) {
+        return const SliverToBoxAdapter(child: SizedBox.shrink());
+      }
       // Only a successful directory request may offer an empty-state search.
       if (loadError == null) {
         return SliverToBoxAdapter(
