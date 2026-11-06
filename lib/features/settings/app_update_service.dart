@@ -592,14 +592,20 @@ class AppUpdateService {
   /// Explicit owned root for desktop staging (production defaults to support).
   final Directory? windowsUpdateRoot;
   void Function(AppUpdateProgress)? onProgress;
+  void Function()? onForegroundCancelled;
   void Function({required bool installed, required bool released})?
   onInstallerFinished;
   bool _progressAttached = false;
+  static AppUpdateService? _progressOwner;
 
   void attachProgress() {
     if (!Platform.isAndroid) return;
     _progressAttached = true;
+    _progressOwner = this;
     _native.setMethodCallHandler((call) async {
+      if (call.method == 'downloadForegroundCancelled') {
+        onForegroundCancelled?.call();
+      }
       if (call.method == 'progress' && call.arguments is Map) {
         final raw = call.arguments as Map;
         onProgress?.call(
@@ -621,11 +627,41 @@ class AppUpdateService {
   }
 
   void close() {
-    if (_progressAttached) {
+    if (_progressAttached && identical(_progressOwner, this)) {
       _progressAttached = false;
+      _progressOwner = null;
       _native.setMethodCallHandler(null);
     }
     _dio.close(force: true);
+  }
+
+  Future<void> beginDownloadForeground() async {
+    if (!Platform.isAndroid) return;
+    // Same user-visible notification permission policy as the content queue.
+    await const MethodChannel('triomi/platform')
+        .invokeMethod<bool>('requestNotificationPermission');
+    final started = await _native.invokeMethod<bool>('beginDownloadForeground');
+    if (started != true) {
+      throw PlatformException(
+        code: 'foreground_unavailable',
+        message: '无法启动更新下载前台服务，请回到应用前台重试。',
+      );
+    }
+  }
+
+  Future<void> updateDownloadForeground(AppUpdateProgress progress) async {
+    if (!Platform.isAndroid) return;
+    await _native.invokeMethod<bool>('updateDownloadForeground', {
+      'phase': progress.phase,
+      'bytes': progress.bytes,
+      'total': progress.total,
+    });
+  }
+
+  Future<void> endDownloadForeground() async {
+    if (Platform.isAndroid) {
+      await _native.invokeMethod<void>('endDownloadForeground');
+    }
   }
 
   Future<void> cancel(AppUpdateCancellation token) async {

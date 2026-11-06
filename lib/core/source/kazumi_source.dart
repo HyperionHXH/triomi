@@ -115,20 +115,28 @@ class KazumiRule {
       if (chapterApi == null) ...['chapterRoads', 'chapterResult'],
     ]) {
       final value = requiredText(key);
-      if (!value.startsWith('/') && !value.startsWith('./')) {
+      final self = value == '.' && key != 'searchList' && key != 'chapterRoads';
+      if (!self && !value.startsWith('/') && !value.startsWith('./')) {
         throw RuleFormatException('$key 必须是 XPath 选择器');
       }
       try {
-        HtmlSelector.selectAll(
-          '<html><body></body></html>',
-          value.startsWith('/') ? '.$value' : value,
-        );
+        if (self) {
+          final node = HtmlSelector.selectAll(
+            '<a href="/self">self</a>',
+            'a',
+          ).single;
+          HtmlSelector.selectWithin(node, value);
+        } else {
+          HtmlSelector.selectAll(
+            '<html><body></body></html>',
+            value.startsWith('/') ? '.$value' : value,
+          );
+        }
       } catch (_) {
         throw RuleFormatException('$key 的 XPath 无效');
       }
     }
-    final id =
-        'kazumi:${sha256.convert(utf8.encode(name.toLowerCase())).toString().substring(0, 24)}';
+    final id = idForName(name);
     return KazumiRule._(
       decoded,
       SourceDescriptor(
@@ -150,6 +158,9 @@ class KazumiRule {
   }
 
   String get text => jsonEncode(raw);
+
+  static String idForName(String name) =>
+      'kazumi:${sha256.convert(utf8.encode(name.toLowerCase())).toString().substring(0, 24)}';
 }
 
 class KazumiSource implements SearchProvider, DetailProvider, ContentProvider {

@@ -1,0 +1,71 @@
+{
+  "version": "0.15.0+185",
+  "references": {
+    "kazumi": "7265274fac136a0cfe6ee32ea37f32f06ea57672",
+    "rules": "2967d7babafffa92dbf35fbcb69d0fd964139e63",
+    "mixn": "e0ef4f43cca2fd3864fe026ff49042ea3fc1e351"
+  },
+  "actualWindows": {
+    "novel": "First volume downloaded chapter0..3 through real HTTP normal queue; collapsed independent volume action",
+    "manga": "Singlechapter1 done; unreadbatch chapter1..7 complete, read0 and locked8 absent",
+    "appUpdate": {
+      "bytes": 255470056,
+      "starts": 1,
+      "detachedAndMinimized": true,
+      "fullZipMemberVerification": true,
+      "actualCandidateDecision": "downgrade",
+      "source": "Previously public184ZIP streamed controlledHTTP into inherited production verifier; not installed"
+    },
+    "sources": "Actual canonical repository18 includingAGE1.6; installedpage allupdate verifies original18 content without formatting-only failures, no query/lang/content controls"
+  },
+  "actualAndroid": {
+    "novel": "Firstvolume4chapters complete; expandedsecondvolume directchapter4 complete in earlier run; final200percenttext volume titles/action visible",
+    "manga": "Singlechapter1done; final unreadbatch chapter1..7done, read0locked8absent",
+    "appUpdate": {
+      "bytes": 170187995,
+      "beforeHome": 44564480,
+      "starts": 1,
+      "candidateDecision": "alreadyInstalled",
+      "error": null,
+      "fgs": 7404,
+      "cpuLease": "acquired during transfer, released on finish; Wake Locks size0",
+      "readyRejoinObserved": true,
+      "installed": false
+    },
+    "nativeInstrumentation": "AppUpdateForegroundServiceTest2passed: realHome serviceCPUretention andcancelrelease, stalegeneration/contentqueue isolation",
+    "sources": "Default publicacceleration initially stale17AGE1.5 fromGitCode; fixedcanonicalrawfirst, actualAndroid18AGE1.6; updateall current rules reportsverified and preservesbytes"
+  },
+  "review": [
+    "Directpause/resume controllerstopped markers fixed including pageexitaftercommit",
+    "Sourcequalifiedunread collision andoverlappingdistinct taps fixed",
+    "Candidatehandoff retention/teardowncancel/cancellableWindowsExplorer protectionsfixed",
+    "18sourcefullbackup canonicalpublicheader exception narrowlyfullhashattested; modifiedprivate rejected",
+    "Canonicalstreamtimeouts failclosed withoutheaderproof; noTLScredentialfallback",
+    "SameversionJSONserializationequivalence preservesoldbytes and rejects realfield/type/array mutations"
+  ],
+  "limits": [
+    "ControlledHTTP content not allthirdpartysites working",
+    "OwnedreadonlyAndroidAPI35 notphysicalphone; WindowsactualproductionUI",
+    "UpdateAPKsameversion/ZIPdowngrade intentionally rejected forinstall; not fabricatedupgrade",
+    "Force-stop/processdeath continuation not promised",
+    "Initialnative metricchange neededactivityreopen; final200percenttext visual verified; narrow320dp behavior covered permanenttests",
+    "Temporaryacceptanceentry removed aftersmoke"
+  ],
+  "checks": {
+    "flutterPassed": 1775,
+    "flutterSkipped": 4,
+    "nativeForegroundTests": 2,
+    "targetedUpdaterPassed": 66,
+    "targetedUpdaterSkipped": 1,
+    "targetedDirectPassed": 49,
+    "officialLiveRules": 18,
+    "pythonPassed": 117,
+    "firstFullSuite": "1774pass4skip1failure old anime filter test; migrated behavior to noanimefilter and retained manga/novel isolation; final1775pass4skip",
+    "review": "All three implementation slices follow-up reviewed no remaining actionableP1/P2",
+    "flutterAnalyze": "No issues found",
+    "normalWindowsMainProfile": true,
+    "normalAndroidMainX64Debug": true,
+    "androidDebugAbi": 128,
+    "legacyPrivateNeedleScanner": "Unavailable hardcoded signing.properties prerequisite; no pass claim"
+  }
+}

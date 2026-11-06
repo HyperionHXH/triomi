@@ -11,6 +11,7 @@ import 'http_client.dart';
 import 'js/js_runtime.dart';
 import 'js/js_source.dart';
 import 'js/runtime/js_runtime_factory.dart';
+import 'kazumi_repository.dart';
 import 'kazumi_source.dart';
 import 'mihon_source.dart';
 import 'rule_schema.dart';
@@ -184,16 +185,34 @@ class SourceRegistry {
     return source;
   }
 
-  /// 随包分发的示例规则。用户删掉后不会自动复活（[seedBuiltins] 只补没记录过的）。
-  ///
-  /// 调试构建额外带一份**本地夹具源**：模拟器/测试环境常常没有外网，
-  /// 用它指向宿主上的 `tools/dev_fixture_server.py` 就能验证规则引擎全链路。
+  /// Packaged official Kazumi rules are pinned to KazumiRules
+  /// 2967d7babafffa92dbf35fbcb69d0fd964139e63. Stable asset markers preserve
+  /// removals; newer packaged bytes never replace an existing installation.
+  static const officialKazumiNames = [
+    '7sefun',
+    'aafun',
+    'AGE',
+    'akianime',
+    'baimao',
+    'dalvdm',
+    'DM84',
+    'ezdmw',
+    'giriGiriLove',
+    'LMM',
+    'mgnacg',
+    'moonci',
+    'mutefun',
+    'MXdm',
+    'sorani',
+    'TvTFun',
+    'xfdmneo',
+    'xfdmnext',
+  ];
+
   static List<String> get builtinRuleAssets => <String>[
     'assets/rules/bangumi-anime.json',
     'assets/rules/age-anime-js.json',
-    'assets/rules/kazumi-7sefun.json',
-    'assets/rules/kazumi-MXdm.json',
-    'assets/rules/kazumi-DM84.json',
+    for (final name in officialKazumiNames) 'assets/rules/kazumi-$name.json',
     'assets/rules/mangadex-api-js.json',
     if (developmentSourcesEnabled) ...<String>[
       'assets/rules/local-fixture.json',
@@ -363,10 +382,20 @@ class SourceRegistry {
   /// 把内置示例规则写进数据库（用户之后可以停用或删除）。
   ///
   /// [alreadySeeded] 记录的是**资产路径**（与 [builtinRuleAssets] 同一口径）：
-  /// 不在集合里的路径会被尝试播种。返回**本次实际播种成功**的路径集合——
-  /// 调用方只应记录成功的（播种失败的规则下次启动还要重试，否则会永远消失）。
+  /// 返回本次已处理的路径：成功播种、已有来源或已有配置需显式安装的路径。
+  /// 无效规则不记成功，下次启动重试。
   Future<Set<String>> seedBuiltins({required Set<String> alreadySeeded}) async {
     final seededNow = <String>{};
+    // Older profiles have no tombstones for repository-only removals. Their
+    // absence is not installation consent: new packaged sources remain fully
+    // available through explicit catalog install/all, rather than resurrecting.
+    final existingProfile =
+        alreadySeeded.isNotEmpty || (await repository.count()) > 0;
+    const originalKazumiAssets = {
+      'assets/rules/kazumi-7sefun.json',
+      'assets/rules/kazumi-MXdm.json',
+      'assets/rules/kazumi-DM84.json',
+    };
 
     // 内置适配器：只补没播种过的行（ruleText 为空，实现在代码里）。
     for (final adapter in builtinAdapters.values) {
@@ -386,9 +415,16 @@ class SourceRegistry {
 
     for (final asset in builtinRuleAssets) {
       if (alreadySeeded.contains(asset)) continue;
+      if (existingProfile &&
+          asset.startsWith('assets/rules/kazumi-') &&
+          !originalKazumiAssets.contains(asset)) {
+        seededNow.add(asset);
+        continue;
+      }
       try {
         final text = await _bundle.loadString(asset);
-        final descriptor = KazumiRule.recognizes(text)
+        final kazumi = KazumiRule.recognizes(text);
+        final descriptor = kazumi
             ? KazumiRule.parse(text).descriptor
             : SourceRule.parseJson(text).descriptor;
         // Adding a packaged source must not overwrite a previously installed,
@@ -401,10 +437,11 @@ class SourceRegistry {
           id: descriptor.id,
           name: descriptor.name,
           type: descriptor.type,
-          kind: SourceKind.builtin,
+          kind: kazumi ? SourceKind.plugin : SourceKind.builtin,
           ruleText: text,
           lang: descriptor.lang,
           version: descriptor.version,
+          repoUrl: kazumi ? KazumiRepository.defaultRepository : null,
         );
         seededNow.add(asset);
       } on RuleFormatException {

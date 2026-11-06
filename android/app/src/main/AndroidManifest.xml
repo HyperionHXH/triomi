@@ -63,6 +63,9 @@
         <service android:name=".DownloadForegroundService"
             android:exported="false" android:foregroundServiceType="dataSync"
             android:stopWithTask="true" />
+        <service android:name=".AppUpdateForegroundService"
+            android:exported="false" android:foregroundServiceType="dataSync"
+            android:stopWithTask="true" />
         <service
             android:name=".BackgroundUpdateCheckJobService"
             android:exported="false"

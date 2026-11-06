@@ -1193,6 +1193,22 @@ class LibraryRepository {
     });
   }
 
+  /// Actual visited chapter identities; catalog position never implies reading.
+  Future<Set<(String, String)>> readChapterKeysOf(
+    String sourceId,
+    String remoteId,
+  ) async {
+    final rows =
+        await (_db.select(_db.histories)..where(
+              (row) =>
+                  row.sourceId.equals(sourceId) &
+                  row.remoteId.equals(remoteId) &
+                  row.chapterSourceId.equals(sourceId),
+            ))
+            .get();
+    return {for (final row in rows) (row.chapterSourceId, row.chapterRemoteId)};
+  }
+
   /// 按来源、作品和章节恢复，不能把另一章或另一来源的页码套过来。
   Future<double?> chapterPositionOf(
     String sourceId,

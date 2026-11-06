@@ -15,6 +15,7 @@ import '../models/source_metadata.dart';
 import '../platform/platform_channel.dart';
 import '../source/catalog_installer.dart';
 import '../source/http_client.dart';
+import '../source/kazumi_repository.dart';
 import '../source/kazumi_source.dart';
 import '../source/rule_schema.dart';
 import '../storage/cover_store.dart';
@@ -1827,7 +1828,15 @@ class BackupService {
         throw const FormatException('备份来源规则不是有效JSON；未执行脚本');
       }
       if (decoded is! Map) throw const FormatException('备份来源规则必须是对象');
-      if (_hasRuleCredentials(decoded) || _hasRuleCredentials(row['repoUrl'])) {
+      final pinnedPublicProtocol = KazumiRepository.isPinnedPublicDefinition(
+        id: id,
+        text: text,
+        version: row['version'],
+        repoUrl: row['repoUrl'],
+        type: row['type'],
+      );
+      if ((!pinnedPublicProtocol && _hasRuleCredentials(decoded)) ||
+          _hasRuleCredentials(row['repoUrl'])) {
         throw const FormatException('来源规则包含凭据字段或凭据URL，不能备份/恢复；请先移除凭据');
       }
       final SourceDescriptor descriptor;

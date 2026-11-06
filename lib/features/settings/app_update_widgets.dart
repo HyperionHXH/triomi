@@ -6,7 +6,7 @@ import 'app_update_service.dart';
 
 const _actionSize = Size(0, 48);
 
-/// Presentation only: progress and cancellation remain owned by the page.
+/// Presentation only; the caller supplies operation ownership and cancellation.
 class AppUpdateTransferView extends StatelessWidget {
   const AppUpdateTransferView({
     super.key,
@@ -15,6 +15,7 @@ class AppUpdateTransferView extends StatelessWidget {
     required this.progress,
     required this.onCancel,
     this.cancelling = false,
+    this.continuesInBackground = false,
   });
 
   final String versionLabel;
@@ -22,6 +23,7 @@ class AppUpdateTransferView extends StatelessWidget {
   final AppUpdateProgress? progress;
   final VoidCallback? onCancel;
   final bool cancelling;
+  final bool continuesInBackground;
 
   @override
   Widget build(BuildContext context) {
@@ -90,6 +92,10 @@ class AppUpdateTransferView extends StatelessWidget {
             ),
           const SizedBox(height: AppSpacing.sm),
           Text(cancelling ? '正在停止操作并清理本次暂存文件，请稍候。' : hint),
+          if (continuesInBackground && !cancelling) ...[
+            const SizedBox(height: AppSpacing.sm),
+            const Text('可离开此页或切换模块，下载与核验会继续；返回查看进度。完成后仍需手动确认安装。强行停止应用会中断下载。'),
+          ],
           const SizedBox(height: AppSpacing.md),
           OutlinedButton.icon(
             key: const ValueKey('app-update-transfer-cancel'),

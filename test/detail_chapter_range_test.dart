@@ -275,10 +275,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(CustomScrollView), findsOneWidget);
       expect(find.byType(DropdownButtonFormField<int>), findsNothing);
-      await tester.ensureVisible(find.byType(DropdownButtonFormField<String>));
-      await tester.tap(find.byType(DropdownButtonFormField<String>));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Volume B · 52章').last);
+      expect(find.text('Novel chapter 0'), findsNothing);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('detail-volume:Volume B')),
+      );
+      await tester.tap(find.byKey(const ValueKey('detail-volume:Volume B')));
       await tester.pumpAndSettle();
       expect(find.text('Novel chapter 0'), findsNothing);
       await tester.scrollUntilVisible(
