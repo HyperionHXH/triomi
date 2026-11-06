@@ -1149,10 +1149,13 @@ void main() {
       );
       router.pop();
       await pumpFor();
+      await go(AppRoutes.downloadsFor(MediaType.manga));
+      expect(find.text('漫画下载'), findsOneWidget);
+      expect(mangaDownloadGroup, findsOneWidget);
       await screenshot(
         '07_downloads_settings.png',
-        AppRoutes.downloads,
-        '下载管理显示真实排队/暂停记录',
+        AppRoutes.downloadsFor(MediaType.manga),
+        '生产漫画下载范围；与全部任务展开状态独立，不启动或删除暂停任务',
       );
       await go(AppRoutes.profile);
       expect(find.text('观看与阅读历史'), findsOneWidget);
