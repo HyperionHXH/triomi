@@ -49,15 +49,21 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             home: Scaffold(
-              body: Builder(
-                builder: (context) => FilledButton(
-                  onPressed: () => showPicacomicSettingsSheet(context, source),
-                  child: const Text('Open fixture settings'),
+              body: SafeArea(
+                child: Center(
+                  child: Builder(
+                    builder: (context) => FilledButton(
+                      onPressed: () => showPicacomicSettingsSheet(context, source),
+                      child: const Text('Open fixture settings'),
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
         );
+        await tester.pumpAndSettle();
+        expect(find.text('Open fixture settings').hitTestable(), findsOneWidget);
         await tester.tap(find.text('Open fixture settings'));
         await tester.pumpAndSettle();
         expect(find.byType(AlertDialog), findsOneWidget);
