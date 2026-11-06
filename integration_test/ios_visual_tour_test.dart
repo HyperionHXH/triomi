@@ -684,7 +684,13 @@ void main() {
         AppRoutes.novelReader,
         '小说阅读菜单真实可见',
       );
-      await tapText('文字样式');
+      final novelTextAction = find.descendant(
+        of: find.byType(Dialog),
+        matching: find.widgetWithText(ListTile, '文字样式'),
+      );
+      expect(novelTextAction, findsOneWidget);
+      await tester.tap(novelTextAction);
+      await pumpFor();
       await until(
         () => find.textContaining('字号').evaluate().isNotEmpty,
         'novel text settings must display their production controls',
@@ -733,7 +739,13 @@ void main() {
       );
       await tester.tap(find.byTooltip('阅读菜单'));
       await pumpFor();
-      await tapText('阅读设置');
+      final novelSettingsAction = find.descendant(
+        of: find.byType(Dialog),
+        matching: find.widgetWithText(ListTile, '阅读设置'),
+      );
+      expect(novelSettingsAction, findsOneWidget);
+      await tester.tap(novelSettingsAction);
+      await pumpFor();
       for (final label in ['上下滚动', '夜间']) {
         final chip = find.widgetWithText(ChoiceChip, label);
         await tester.ensureVisible(chip);

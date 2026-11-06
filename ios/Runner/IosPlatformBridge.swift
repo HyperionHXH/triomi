@@ -354,12 +354,18 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
 
   func copyFile(_ source: URL, to target: URL, limit: Int64, total: inout Int64,
                         totalLimit: Int64, reserve: Int64) throws {
-    let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
-    guard values.isRegularFile == true, values.isSymbolicLink != true else { throw Self.error("Only regular documents are accepted") }
-    guard let size = values.fileSize, size > 0, Int64(size) <= limit,
-          total <= totalLimit - Int64(size) else { throw Self.error("The selected files exceed the import size limit") }
-    let input = try FileHandle(forReadingFrom: source)
+    // URL resource values may be cached across provider mutations. Validate
+    // the opened descriptor's current size before creating any snapshot.
+    let fd = open(source.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+    guard fd >= 0 else { throw Self.error("Only regular documents are accepted") }
+    let input = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
     defer { try? input.close() }
+    var metadata = stat()
+    guard fstat(fd, &metadata) == 0, (metadata.st_mode & S_IFMT) == S_IFREG,
+          metadata.st_size > 0, metadata.st_size <= limit,
+          total <= totalLimit - metadata.st_size else {
+      throw Self.error("The selected files exceed the import size limit")
+    }
     guard files.createFile(atPath: target.path, contents: nil) else { throw Self.error("Cannot create private snapshot") }
     let output = try FileHandle(forWritingTo: target)
     defer { try? output.close() }
@@ -648,13 +654,14 @@ final class IosBackupDocuments {
   }
 
   private static func validateFile(_ url: URL) throws {
-    let metadata = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
-    guard url.isFileURL, metadata.isRegularFile == true, metadata.isSymbolicLink != true,
+    var metadata = stat()
+    guard url.isFileURL, lstat(url.path, &metadata) == 0,
+          (metadata.st_mode & S_IFMT) == S_IFREG,
           url.standardizedFileURL.path == url.resolvingSymlinksInPath().path,
           url.pathExtension.lowercased() == "zip" else {
       throw IosPlatformBridge.error("Select a regular ZIP backup, not a symbolic link")
     }
-    guard let size = metadata.fileSize, size > 0, Int64(size) <= maxBackupBytes else {
+    guard metadata.st_size > 0, metadata.st_size <= maxBackupBytes else {
       throw IosPlatformBridge.error("Select a nonempty ZIP backup no larger than 16 GiB")
     }
   }
