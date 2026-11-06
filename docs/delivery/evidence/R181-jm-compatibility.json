@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "version": "0.14.1+181",
-  "status": "local-validated-remote-publication-pending-authentication",
+  "status": "published-and-public-artifacts-verified",
   "reference": {
     "project": "Komikku",
     "commit": "64aeb48f31a211e734dafe6c838ae2c712ae69e2"
@@ -424,6 +424,56 @@
     "deliveryConsistency": {
       "errors": 0,
       "historicalWarnings": 35
+    },
+    "remoteFinalBuild": {
+      "id": 42198237181,
+      "url": "https://github.com/HyperionHXH/triomi/actions/runs/42198237181",
+      "commit": "dbcc98de735a9ccd5cea4d906511bb725538a821",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "python-tools",
+          "conclusion": "success"
+        },
+        {
+          "name": "android",
+          "conclusion": "success"
+        },
+        {
+          "name": "test",
+          "conclusion": "success"
+        },
+        {
+          "name": "windows",
+          "conclusion": "success"
+        }
+      ],
+      "flutterTests": {
+        "passed": 1697,
+        "skipped": 1
+      },
+      "flutterAnalyzeIssues": 0,
+      "pythonTestsPassed": 117
+    },
+    "remoteRelease": {
+      "id": 42198294470,
+      "url": "https://github.com/HyperionHXH/triomi/actions/runs/42198294470",
+      "commit": "dbcc98de735a9ccd5cea4d906511bb725538a821",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "windows",
+          "conclusion": "success"
+        },
+        {
+          "name": "android",
+          "conclusion": "success"
+        },
+        {
+          "name": "publish",
+          "conclusion": "success"
+        }
+      ]
     }
   },
   "limits": [
@@ -432,7 +482,7 @@
     "Static audit retains 70 optional modern decoder missing references in 7 records; 4 real Android helper fallback pixel paths passed, while the R8-inlined Webtoon helper and 16KB-page Android device execution remain unverified.",
     "MangaCloud desktop ActivityThread reflection paths and Canvas perspective rendering remain unverified/unsupported; successful install/filter execution is not a blanket runtime claim.",
     "APK-only checks establish conversion/loading/filter construction for the named original samples, not inventory-wide APK-to-JVM conversion or configured site/account search.",
-    "Final local Android APK uses acceptance signing. Production signing identity, remote workflow and public assets have not been verified or published in this session."
+    "Local emulator tests used acceptance signing. Public v0.14.1 APK has the same RSA4096 signing certificate as public v0.14.0, passes v2 verification and the 128-descriptor ABI gate. Published multi-architecture APK integrity is verified; live-device reading evidence remains the separately recorded local R8/Windows acceptance, not a claim of exhaustive device testing."
   ],
   "repositoryAudit": {
     "snapshotRecords": 3070,
@@ -561,8 +611,105 @@
   "publication": {
     "requested": true,
     "tag": "v0.14.1",
-    "pushed": false,
-    "published": false,
-    "blocker": "GitHub CLI reports the active HyperionHXH token invalid; authenticated remote publishing pending."
+    "pushed": true,
+    "published": true,
+    "sourceCommit": "dbcc98de735a9ccd5cea4d906511bb725538a821",
+    "releaseWorkflow": {
+      "id": 42198294470,
+      "url": "https://github.com/HyperionHXH/triomi/actions/runs/42198294470",
+      "commit": "dbcc98de735a9ccd5cea4d906511bb725538a821",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "windows",
+          "conclusion": "success"
+        },
+        {
+          "name": "android",
+          "conclusion": "success"
+        },
+        {
+          "name": "publish",
+          "conclusion": "success"
+        }
+      ]
+    },
+    "buildWorkflow": {
+      "id": 42198237181,
+      "url": "https://github.com/HyperionHXH/triomi/actions/runs/42198237181",
+      "commit": "dbcc98de735a9ccd5cea4d906511bb725538a821",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "python-tools",
+          "conclusion": "success"
+        },
+        {
+          "name": "android",
+          "conclusion": "success"
+        },
+        {
+          "name": "test",
+          "conclusion": "success"
+        },
+        {
+          "name": "windows",
+          "conclusion": "success"
+        }
+      ],
+      "flutterTests": {
+        "passed": 1697,
+        "skipped": 1
+      },
+      "flutterAnalyzeIssues": 0,
+      "pythonTestsPassed": 117
+    },
+    "publicArtifactVerification": {
+      "status": "passed",
+      "tag": "v0.14.1",
+      "version": "0.14.1+181",
+      "url": "https://github.com/HyperionHXH/triomi/releases/tag/v0.14.1",
+      "publishedAt": "2026-11-06T10:00:37Z",
+      "assets": {
+        "SHA256SUMS.txt": {
+          "sha256": "12ef66465af9abd13a77b5922ef97e4d01b35f44e0f56d01fecd2e426be6903e",
+          "bytes": 348
+        },
+        "triomi-android.apk": {
+          "sha256": "0d0031f976ed8fa2050a9733a0c46f5b53ba90f34c2e2a4c3e2bf2e3a0e46f3f",
+          "bytes": 161925222
+        },
+        "triomi-windows.zip": {
+          "sha256": "b153014a36541a26283d8ba66508bf7bc6047647d5eece6bd86d3c69ed851eea",
+          "bytes": 255461870
+        },
+        "triomi-windows.msi": {
+          "sha256": "e7fe394d7fb2932fc60a6434b61401ee801cd2c1e8e4717e0336e08b3ff7a028",
+          "bytes": 244187332
+        },
+        "triomi-windows.update.json": {
+          "sha256": "29468aea770b1f2daf5098b073feb423ac999465d780c9a7ec42742917854ef6",
+          "bytes": 78619
+        }
+      },
+      "android": {
+        "signerSha256": "731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309",
+        "matchesPublic180Signer": true,
+        "signatureSchemeV2": true,
+        "requiredAbiDescriptors": 128,
+        "nativeArchitectures": [
+          "arm64-v8a",
+          "armeabi-v7a",
+          "x86_64"
+        ],
+        "versionVerified": true
+      },
+      "windows": {
+        "manifestFilesVerified": 451,
+        "ordinaryMain": true,
+        "sourceProvenanceVerified": true,
+        "helperJarSha256": "d293e6768c63d4302ff9b6dd354e189f12cfa66cd8ced8da6ced1faef8725bda"
+      }
+    }
   }
 }

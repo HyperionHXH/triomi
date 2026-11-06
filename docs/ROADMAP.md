@@ -1,6 +1,6 @@
 # Triomi 主线执行清单
 
-## 当前增量：0.14.1 Komikku 插件兼容（构建181，本机验收完成，发布待认证）
+## 当前增量：0.14.1 Komikku 插件兼容（构建181，已发布并核验公开产物）
 
 JM原始APK的Android ABI故障已修复，最终R8完整链路与Windows生产安装至Flutter
 阅读器均通过。冻结仓库中2224个不同原始APK加载/筛选全部通过，覆盖3056/3070条
@@ -8,8 +8,10 @@ JM原始APK的Android ABI故障已修复，最终R8完整链路与Windows生产�
 真实大型筛选树、QuickJS/Protobuf/解码依赖、持久memo、递归GraphQL、显式空排序和
 Tenkaiscan图像链均有专项证据。Flutter全量1693通过/4跳过，后续桌面增量37通过，
 原生38通过、release运行8组、DEX ABI128项通过；analyze零问题、Python117通过。
-普通WindowsRelease已构建；本机APK为验收签名，正式签名产物需远端发布流程。
-当前剩余发布事项为恢复失效GitHub认证、推送版本并核验远端产物，不宣称已公开更新。
+普通WindowsRelease已构建；正式[v0.14.1](https://github.com/HyperionHXH/triomi/releases/tag/v0.14.1)
+已发布。远端build/release全部成功，最终Flutter1697通过/1跳过；公开APK与上一版
+签名证书一致，全部下载的
+SHA-256、Android版本/DEX ABI和Windows更新清单逐文件核验通过。
 仓库覆盖不等于所有站点的账号、网络与阅读路径均已验证。
 
 具体主线、身份和覆盖限制统一记录于[当前状态](CURRENT_STATUS.md)及

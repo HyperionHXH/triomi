@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-## 当前请求：0.14.1 Komikku 插件兼容修复（构建181，本机验收完成，发布待认证）
+## 当前请求：0.14.1 Komikku 插件兼容修复（构建181，已发布并核验公开产物）
 
 原始 Jinman Tiantang 1.6.64 APK 在 Android 180 的搜索入口因缺少
 `FilterList(List)` 立即失败，尚未请求站点；另缺 `HttpException(int)` 与
@@ -32,9 +32,13 @@ Windows 原始 JM 配套 JAR 已在最终代码上通过生产安装器、原生
 
 完整Flutter回归1693通过、4项平台条件跳过；后续空排序增量37项定向回归通过，
 analyze零问题，Python工具117通过。批量通过仅证明记录中的加载/筛选层级，不能
-等同于所有站点的搜索、登录、验证码或阅读均已实测。版本已升为0.14.1+181；本地
-APK使用验收签名，正式发布仍须原发布者签名及远端流水线。当前GitHub账户token
-失效，尚未宣称远端推送、正式签名产物或公开更新完成。具体身份、哈希、阶段与限制见
+等同于所有站点的搜索、登录、验证码或阅读均已实测。版本0.14.1+181已推送并
+发布为[v0.14.1](https://github.com/HyperionHXH/triomi/releases/tag/v0.14.1)。普通远端
+build与正式release流水线均成功，最终远端Flutter全量1697通过、1项跳过，analyze
+零问题、Python117通过；公开APK与v0.14.0签名证书一致，v2签名、版本和
+128项DEX ABI通过。全部公开下载SHA-256与清单一致，Windows更新清单逐文件核验
+通过，普通Release未包含隔离验收入口。设备阅读证据仍按本地验收版本单独记录。
+具体身份、哈希、阶段与限制见
 [R181证据](delivery/evidence/R181-jm-compatibility.json)及
 [兼容决策](adr/ADR-2026-11-06-mihon-core-api-compatibility.md)。
 
