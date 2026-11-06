@@ -527,7 +527,9 @@ class MihonSource
     final text = message.toLowerCase();
     if (text.contains('cloudflare') ||
         text.contains('challenge required') ||
-        text.contains('captcha')) {
+        text.contains('captcha') ||
+        text.contains('防盗版') ||
+        text.contains('防盜版')) {
       return SourceErrorType.permission;
     }
     if (text.contains('timeout') || text.contains('超时')) {

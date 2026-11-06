@@ -1,0 +1,66 @@
+{
+  "version": "0.14.3+183",
+  "status": "local-regression-passed-publication-pending",
+  "problem": "Original CopyManga anti-piracy HTTP 210 text was classified as a transient network error, making background downloads eligible for automatic retries.",
+  "change": "Classify explicit simplified/traditional Chinese anti-piracy messages as permission failures in the shared Mihon adapter. Preserve the plugin error; do not invent HTTP status metadata.",
+  "originalPlugin": {
+    "version": "1.4.85",
+    "apkSha256": "0a208f10b4f8fa3f3f0fae7704935e1a487c6ee342722c7e7818a02ad8c8dd6a",
+    "apiHost": "api.copy4000.com",
+    "platformHeader": "1",
+    "settingsModifiedForRecovery": false,
+    "apiRequestIntervalMillis": 100
+  },
+  "liveNetwork": {
+    "desktop": {
+      "requestMethod": "Original plugin public API parameters via an independent HTTP diagnostic",
+      "chapters": 6,
+      "pages": 43,
+      "imageHttpStatus": 200,
+      "imageBytes": 521309,
+      "decodedWidth": 1426,
+      "decodedHeight": 2048
+    },
+    "android": {
+      "requestMethod": "Original APK in the v0.14.2 release acceptance host on isolated API35 emulator",
+      "directResult": "DNS resolution failed",
+      "networkRecovery": "Temporary CONNECT tunnel, end-to-end TLS preserved",
+      "popularItems": 21,
+      "chapters": 6,
+      "pages": 16,
+      "imageHttpStatus": 200,
+      "imageBytes": 402342,
+      "decodedWidth": 1114,
+      "decodedHeight": 1600,
+      "originalHostBytesPermissionsAndOther105EntriesRestored": true,
+      "sourcePreferencesProxyAndProbeRestored": true
+    },
+    "captchaEncountered": false,
+    "http210ReproducedThisRound": false,
+    "bypassProven": false
+  },
+  "regression": {
+    "red": "Simplified/traditional original plugin restriction messages were misclassified as network failures before the fix.",
+    "focusedTestsPassed": 29,
+    "backgroundQueue": "Shared adapter to real download service and test database: failed state, retryCount zero, retryAt null, original message retained, one host invocation",
+    "ordinaryTransportErrorsStillRetry": true,
+    "fullFlutter": {
+      "passed": 1710,
+      "skipped": 4
+    },
+    "analyzeIssues": 0,
+    "pythonTestsPassed": 117,
+    "textAndFixtureChecks": "passed"
+  },
+  "publication": {
+    "requested": true,
+    "tag": "v0.14.3",
+    "published": false
+  },
+  "limits": [
+    "No permanent IP-ban bypass is claimed. A shared exit can still be restricted by traffic from other users.",
+    "Current HTTP 200 success without configuration changes is not evidence of bypassing an active restriction.",
+    "The regression replays captured plugin error text; the anti-piracy restriction was not deliberately triggered with traffic.",
+    "Android live reading used the unchanged native v0.14.2 host before this shared Dart error classification patch. Final packages are verified separately."
+  ]
+}
