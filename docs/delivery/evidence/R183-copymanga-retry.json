@@ -1,6 +1,6 @@
 {
   "version": "0.14.3+183",
-  "status": "local-regression-passed-publication-pending",
+  "status": "source-fix-retained-build-and-publication-cancelled",
   "problem": "Original CopyManga anti-piracy HTTP 210 text was classified as a transient network error, making background downloads eligible for automatic retries.",
   "change": "Classify explicit simplified/traditional Chinese anti-piracy messages as permission failures in the shared Mihon adapter. Preserve the plugin error; do not invent HTTP status metadata.",
   "originalPlugin": {
@@ -53,9 +53,17 @@
     "textAndFixtureChecks": "passed"
   },
   "publication": {
-    "requested": true,
+    "requested": false,
     "tag": "v0.14.3",
-    "published": false
+    "published": false,
+    "tagAlreadyPushed": true,
+    "currentPublicRelease": "v0.14.2",
+    "reason": "User requested no compilation without an effective access recovery change; the classification fix does not bypass HTTP 210.",
+    "cancelledWorkflowIds": [
+      42227880645,
+      42227877325,
+      42227872738
+    ]
   },
   "limits": [
     "No permanent IP-ban bypass is claimed. A shared exit can still be restricted by traffic from other users.",
