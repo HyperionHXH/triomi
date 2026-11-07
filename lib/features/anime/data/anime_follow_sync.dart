@@ -9,6 +9,7 @@ import '../../../core/source/http_client.dart';
 import '../../library/data/library_providers.dart';
 import '../../library/data/library_repository.dart';
 import 'anime_collection_service.dart';
+import 'anime_follow_metadata.dart';
 
 enum AnimeSyncPriority { local, bangumi, newest }
 
@@ -171,6 +172,19 @@ class AnimeFollowSync {
                       row.item.remoteId == item.remoteId,
                 )
                 .firstOrNull;
+            // Collection summaries may gain a cover after an earlier sparse
+            // import. Never copy a Bangumi cover onto a playback-site identity.
+            if (online != null &&
+                item.sourceId == online.item.sourceId &&
+                item.remoteId == online.item.remoteId) {
+              await library.cacheItem(online.item);
+            }
+            await cacheAnimeEpisodeTotal(
+              db,
+              item,
+              online?.totalEpisodes,
+              updatedAt: snapshot.loadedAt,
+            );
             await (db.update(db.libraryEntries)..where(
                   (t) =>
                       t.sourceId.equals(item.sourceId) &

@@ -30,9 +30,11 @@ class LibrarySyncResult {
 /// Library metadata is bounded to 8 MiB and 20,000 membership records.
 /// Membership clocks are independent of entry.updatedAt/playback. Deletes win
 /// ties; only explicit later add/status decisions undo them. Exact histories
-/// use last-visit-wins, including deliberate rewinds. The protocol caps 50,000
-/// work/history/chapter/link records. Limits fail explicitly, never truncate.
-/// Only history-referenced chapters and selected anime episodes are portable;
+/// use last-visit-wins, including deliberate rewinds. Optional chapterResets
+/// retain explicit unread clocks: resets win equal or older visits, independently
+/// of chapter flags. The protocol caps 50,000 work/history/chapter/reset/link
+/// records. Limits fail explicitly, never truncate. Only history/reset-referenced
+/// chapters and selected anime episodes are portable;
 /// chapter content, download state, credentials and executable source data are
 /// deliberately not represented by the protocol.
 const _maxDocumentBytes = 8 * 1024 * 1024;
@@ -365,9 +367,25 @@ class LibraryWebDavSync {
       db.histories,
     )..where((row) => row.incognito.equals(false))).get();
     final historyClears = await _historyClearRecords();
+    final chapterResets = <_ChapterReset>[
+      for (final row in await (db.select(
+        db.mangaChapterStates,
+      )..where((row) => row.historyResetAt.isNotNull())).get())
+        _ChapterReset(
+          row.sourceId,
+          row.remoteId,
+          row.chapterSourceId,
+          row.chapterRemoteId,
+          row.historyResetAt!,
+        ),
+    ];
+    if (chapterResets.length > _maxChapters) {
+      throw StateError('Too many chapter history reset records');
+    }
     final itemKeys = <(String, String)>{
       for (final row in favorites) row.key,
       for (final row in rawHistories) (row.sourceId, row.remoteId),
+      for (final row in chapterResets) (row.sourceId, row.remoteId),
     };
     final items = <(String, String), _PortableItem>{};
     for (final key in itemKeys) {
@@ -409,6 +427,7 @@ class LibraryWebDavSync {
     final neededChapters = <(String, String, String, String)>{
       for (final row in histories)
         (row.sourceId, row.remoteId, row.chapterSourceId, row.chapterRemoteId),
+      for (final row in chapterResets) row.key,
     };
     final links = <_AnimeLink>[];
     final relevantAnime = <(String, String)>{
@@ -490,6 +509,7 @@ class LibraryWebDavSync {
       chapters,
       links,
       historyClears,
+      chapterResets,
       accountJournal,
       rawHistories,
     );
@@ -556,6 +576,15 @@ class LibraryWebDavSync {
       for (final pair in local.items.entries)
         pair.key: pair.value.mergeMetadata(remote.items[pair.key]),
     };
+    final chapterResets = <(String, String, String, String), _ChapterReset>{
+      for (final row in remote.chapterResets) row.key: row,
+    };
+    for (final row in local.chapterResets) {
+      final old = chapterResets[row.key];
+      if (old == null || row.resetAt.isAfter(old.resetAt)) {
+        chapterResets[row.key] = row;
+      }
+    }
     final histories = <(String, String, String, String), _History>{
       for (final row in remote.histories) row.key: row,
     };
@@ -575,13 +604,16 @@ class LibraryWebDavSync {
       }
     }
     histories.removeWhere(
-      (_, row) => _isHistoryCleared(
-        clearRows.values.toList(),
-        row.type,
-        row.visitedAt,
-        sourceId: row.sourceId,
-        remoteId: row.remoteId,
-      ),
+      (_, row) =>
+          chapterResets[row.key] != null &&
+              !row.visitedAt.isAfter(chapterResets[row.key]!.resetAt) ||
+          _isHistoryCleared(
+            clearRows.values.toList(),
+            row.type,
+            row.visitedAt,
+            sourceId: row.sourceId,
+            remoteId: row.remoteId,
+          ),
     );
 
     final chapters = <(String, String, String, String), _PortableChapter>{
@@ -594,6 +626,13 @@ class LibraryWebDavSync {
           ),
         ),
     };
+    // Removed directory entries keep their local reset clock, but cannot invent
+    // portable chapter metadata. A stale peer returning the snapshot above is
+    // still filtered by that clock and makes the reset portable again.
+    chapterResets.removeWhere(
+      (key, _) =>
+          !chapters.containsKey(key) || !items.containsKey((key.$1, key.$2)),
+    );
     final links = <(String, String, String), _AnimeLink>{
       for (final row in remote.links) row.key: row,
     };
@@ -606,6 +645,7 @@ class LibraryWebDavSync {
     final needed = <(String, String, String, String)>{
       for (final row in histories.values)
         (row.sourceId, row.remoteId, row.chapterSourceId, row.chapterRemoteId),
+      ...chapterResets.keys,
       for (final row in links.values)
         if (row.remoteId != null && row.lastChapterId != null)
           (row.sourceId, row.remoteId!, row.sourceId, row.lastChapterId!),
@@ -618,6 +658,7 @@ class LibraryWebDavSync {
       chapters: chapters,
       links: links.values.toList(),
       historyClears: clearRows.values.toList(),
+      chapterResets: chapterResets.values.toList(),
     );
   }
 
@@ -813,10 +854,64 @@ class LibraryWebDavSync {
         }
       }
     }
+    final resetClocks = <(String, String, String, String), DateTime>{};
+    for (final reset in value.chapterResets) {
+      final query = db.select(db.mangaChapterStates)
+        ..where(
+          (row) =>
+              row.sourceId.equals(reset.sourceId) &
+              row.remoteId.equals(reset.remoteId) &
+              row.chapterSourceId.equals(reset.chapterSourceId) &
+              row.chapterRemoteId.equals(reset.chapterRemoteId),
+        );
+      final existing = await query.getSingleOrNull();
+      final oldReset = existing?.historyResetAt;
+      final resetAt = oldReset != null && oldReset.isAfter(reset.resetAt)
+          ? oldReset
+          : reset.resetAt;
+      resetClocks[reset.key] = resetAt;
+      if (existing == null) {
+        await db
+            .into(db.mangaChapterStates)
+            .insert(
+              MangaChapterStatesCompanion.insert(
+                sourceId: reset.sourceId,
+                remoteId: reset.remoteId,
+                chapterSourceId: reset.chapterSourceId,
+                chapterRemoteId: reset.chapterRemoteId,
+                historyResetAt: Value(resetAt),
+                // Receiving a reset makes no local read/bookmark/page decision.
+                updatedAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+              ),
+            );
+      } else if (oldReset == null || resetAt.isAfter(oldReset)) {
+        // This clock is independent of local read/bookmark/page-count decisions.
+        await (db.update(db.mangaChapterStates)..where(
+              (row) =>
+                  row.sourceId.equals(reset.sourceId) &
+                  row.remoteId.equals(reset.remoteId) &
+                  row.chapterSourceId.equals(reset.chapterSourceId) &
+                  row.chapterRemoteId.equals(reset.chapterRemoteId),
+            ))
+            .write(MangaChapterStatesCompanion(historyResetAt: Value(resetAt)));
+      }
+      await (db.delete(db.histories)..where(
+            (row) =>
+                row.sourceId.equals(reset.sourceId) &
+                row.remoteId.equals(reset.remoteId) &
+                row.chapterSourceId.equals(reset.chapterSourceId) &
+                row.chapterRemoteId.equals(reset.chapterRemoteId) &
+                row.incognito.equals(false) &
+                row.visitedAt.isSmallerOrEqualValue(resetAt),
+          ))
+          .go();
+    }
     for (final link in value.links) {
       await db.into(db.animeSourceLinks).insertOnConflictUpdate(link.companion);
     }
     for (final row in value.histories) {
+      final resetAt = resetClocks[row.key];
+      if (resetAt != null && !row.visitedAt.isAfter(resetAt)) continue;
       if (_isHistoryCleared(
         value.historyClears,
         row.type,
@@ -960,6 +1055,7 @@ class _LocalSnapshot {
     this.chapters,
     this.links,
     this.historyClears,
+    this.chapterResets,
     this.accountJournal,
     this.rawHistories,
   );
@@ -969,6 +1065,7 @@ class _LocalSnapshot {
   final Map<(String, String, String, String), _PortableChapter> chapters;
   final List<_AnimeLink> links;
   final List<_HistoryClear> historyClears;
+  final List<_ChapterReset> chapterResets;
   final List<AnimeFollowSyncStateRow> accountJournal;
   final List<HistoryRow> rawHistories;
   Map<String, Object?> toJson() => {
@@ -982,6 +1079,7 @@ class _LocalSnapshot {
     'chapters': [for (final row in chapters.values) row.toJson()],
     'links': [for (final row in links) row.toJson()],
     'clears': [for (final row in historyClears) row.toJson()],
+    'chapterResets': [for (final row in chapterResets) row.toJson()],
     'accountJournal': [for (final row in accountJournal) row.toJson()],
     'rawHistories': [for (final row in rawHistories) row.toJson()],
   };
@@ -995,6 +1093,7 @@ class _SyncDocument {
     required this.chapters,
     required this.links,
     required this.historyClears,
+    required this.chapterResets,
   });
   factory _SyncDocument.empty() => _SyncDocument(
     favorites: [],
@@ -1003,6 +1102,7 @@ class _SyncDocument {
     chapters: {},
     links: [],
     historyClears: [],
+    chapterResets: [],
   );
   final List<_Favorite> favorites;
   final Map<(String, String), _PortableItem> items;
@@ -1010,6 +1110,7 @@ class _SyncDocument {
   final Map<(String, String, String, String), _PortableChapter> chapters;
   final List<_AnimeLink> links;
   final List<_HistoryClear> historyClears;
+  final List<_ChapterReset> chapterResets;
 
   factory _SyncDocument.decode(List<int> bytes) {
     final value = jsonDecode(utf8.decode(bytes));
@@ -1022,6 +1123,7 @@ class _SyncDocument {
           'chapters',
           'animeLinks',
           'historyClears',
+          'chapterResets',
         }) ||
         value['version'] != 1 ||
         value['favorites'] is! List ||
@@ -1029,7 +1131,8 @@ class _SyncDocument {
         value['histories'] is! List ||
         value['chapters'] is! List ||
         value['animeLinks'] is! List ||
-        value['historyClears'] is! List) {
+        value['historyClears'] is! List ||
+        value.containsKey('chapterResets') && value['chapterResets'] is! List) {
       throw const FormatException('Library sync document format is invalid');
     }
     final a = value['favorites'] as List,
@@ -1038,12 +1141,16 @@ class _SyncDocument {
     final d = value['chapters'] as List,
         e = value['animeLinks'] as List,
         f = value['historyClears'] as List;
+    final g = value.containsKey('chapterResets')
+        ? value['chapterResets'] as List
+        : const <Object?>[];
     if (a.length > _maxFavorites ||
         b.length > _maxItems ||
         c.length > _maxHistories ||
         d.length > _maxChapters ||
         e.length > _maxLinks ||
-        f.length > _maxHistories) {
+        f.length > _maxHistories ||
+        g.length > _maxChapters) {
       throw const FormatException(
         'Library sync document exceeds record limits',
       );
@@ -1100,6 +1207,15 @@ class _SyncDocument {
       }
       clears.add(row);
     }
+    final chapterResets = <_ChapterReset>[];
+    final resetKeys = <(String, String, String, String)>{};
+    for (final raw in g) {
+      final row = _ChapterReset.decode(raw);
+      if (!resetKeys.add(row.key)) {
+        throw const FormatException('Duplicate chapter reset identity');
+      }
+      chapterResets.add(row);
+    }
     for (final row in favorites.where((item) => !item.deleted)) {
       if (!items.containsKey(row.key)) {
         throw const FormatException('Favorite item snapshot is missing');
@@ -1117,6 +1233,7 @@ class _SyncDocument {
       chapters: chapters,
       links: links,
       historyClears: clears,
+      chapterResets: chapterResets,
     );
     result.validateGraph();
     return result;
@@ -1131,6 +1248,8 @@ class _SyncDocument {
       'chapters': [for (final row in chapters.values) row.toJson()],
       'animeLinks': [for (final row in links) row.toJson()],
       'historyClears': [for (final row in historyClears) row.toJson()],
+      if (chapterResets.isNotEmpty)
+        'chapterResets': [for (final row in chapterResets) row.toJson()],
     }),
   );
 
@@ -1140,7 +1259,8 @@ class _SyncDocument {
         histories.length > _maxHistories ||
         chapters.length > _maxChapters ||
         links.length > _maxLinks ||
-        historyClears.length > _maxHistories) {
+        historyClears.length > _maxHistories ||
+        chapterResets.length > _maxChapters) {
       throw const FormatException(
         'Merged library document exceeds record limits',
       );
@@ -1166,6 +1286,16 @@ class _SyncDocument {
         throw const FormatException('Chapter has conflicting owners');
       }
       chapterOwners[key] = owner;
+    }
+    for (final reset in chapterResets) {
+      if (items[(reset.sourceId, reset.remoteId)]?.item.type !=
+              MediaType.manga ||
+          reset.chapterSourceId != reset.sourceId ||
+          !chapters.containsKey(reset.key)) {
+        throw const FormatException(
+          'Chapter reset work or source identity is invalid',
+        );
+      }
     }
     for (final history in histories) {
       final item = items[(history.sourceId, history.remoteId)];
@@ -1482,6 +1612,46 @@ class _PortableItem {
         'localMangaMetadata': item.localMangaMetadata!.toJson(),
     },
     if (hint != null) 'sourceHint': hint!.toJson(),
+  };
+}
+
+class _ChapterReset {
+  const _ChapterReset(
+    this.sourceId,
+    this.remoteId,
+    this.chapterSourceId,
+    this.chapterRemoteId,
+    this.resetAt,
+  );
+  final String sourceId, remoteId, chapterSourceId, chapterRemoteId;
+  final DateTime resetAt;
+  (String, String, String, String) get key =>
+      (sourceId, remoteId, chapterSourceId, chapterRemoteId);
+  factory _ChapterReset.decode(Object? raw) {
+    if (raw is! Map ||
+        !_only(raw, {
+          'sourceId',
+          'remoteId',
+          'chapterSourceId',
+          'chapterRemoteId',
+          'resetAt',
+        })) {
+      throw const FormatException('Chapter reset fields are invalid');
+    }
+    return _ChapterReset(
+      _identity(raw['sourceId'], 'chapter reset source'),
+      _identity(raw['remoteId'], 'chapter reset work'),
+      _identity(raw['chapterSourceId'], 'chapter reset chapter source'),
+      _identity(raw['chapterRemoteId'], 'chapter reset chapter'),
+      _date(raw['resetAt'], 'chapter reset date'),
+    );
+  }
+  Map<String, Object?> toJson() => {
+    'sourceId': sourceId,
+    'remoteId': remoteId,
+    'chapterSourceId': chapterSourceId,
+    'chapterRemoteId': chapterRemoteId,
+    'resetAt': resetAt.toUtc().toIso8601String(),
   };
 }
 

@@ -17,6 +17,23 @@ import '../../anime/data/anime_follow_sync.dart';
 import '../../profile/data/sync_providers.dart';
 import 'library_webdav_sync.dart';
 
+enum AnimeFollowSyncStage { webDav, bangumi, upload }
+
+enum AnimeFollowSyncPhase {
+  waiting,
+  running,
+  succeeded,
+  failed,
+  skipped,
+  cancelled,
+}
+
+class AnimeFollowSyncStep {
+  const AnimeFollowSyncStep(this.phase, [this.message]);
+  final AnimeFollowSyncPhase phase;
+  final String? message;
+}
+
 /// Public status contains no endpoint, account name, token or password.
 class LibraryAutoSyncState {
   const LibraryAutoSyncState({
@@ -32,11 +49,13 @@ class LibraryAutoSyncState {
     this.error,
     this.bangumiError,
     this.bangumiLastSuccess,
+    this.stages = const {},
   });
   final bool enabled, bangumiEnabled, configured, connected;
   final bool checking, syncing, pending;
   final DateTime? checkedAt, lastSuccess, bangumiLastSuccess;
   final String? error, bangumiError;
+  final Map<AnimeFollowSyncStage, AnimeFollowSyncStep> stages;
 
   LibraryAutoSyncState copyWith({
     bool? enabled,
@@ -53,6 +72,7 @@ class LibraryAutoSyncState {
     String? bangumiError,
     bool clearError = false,
     bool clearBangumiError = false,
+    Map<AnimeFollowSyncStage, AnimeFollowSyncStep>? stages,
   }) => LibraryAutoSyncState(
     enabled: enabled ?? this.enabled,
     bangumiEnabled: bangumiEnabled ?? this.bangumiEnabled,
@@ -66,6 +86,7 @@ class LibraryAutoSyncState {
     bangumiLastSuccess: bangumiLastSuccess ?? this.bangumiLastSuccess,
     error: clearError ? null : error ?? this.error,
     bangumiError: clearBangumiError ? null : bangumiError ?? this.bangumiError,
+    stages: stages ?? this.stages,
   );
 }
 
@@ -79,12 +100,14 @@ class LibraryAutoSyncRuntime {
     required this.syncDav,
     required this.syncBangumi,
     required this.cancel,
+    this.syncBangumiPriority,
   });
   final Stream<void> changes;
   final Future<String> Function() revision;
   final Future<void> Function(WebDavConfig) check;
   final Future<String> Function() syncDav;
   final Future<void> Function() syncBangumi;
+  final Future<void> Function(AnimeSyncPriority)? syncBangumiPriority;
   final void Function() cancel;
 }
 
@@ -100,6 +123,7 @@ final libraryAutoSyncRuntimeProvider = Provider<LibraryAutoSyncRuntime>((ref) {
     for (final query in [
       "SELECT source_id,remote_id,type,status,progress,added_at FROM library_entries WHERE type IN ('manga','anime') ORDER BY source_id,remote_id",
       "SELECT h.source_id,h.remote_id,h.chapter_source_id,h.chapter_remote_id,h.position,h.visited_at FROM histories h INNER JOIN media_items m ON m.source_id=h.source_id AND m.remote_id=h.remote_id WHERE h.incognito=0 AND m.type IN ('manga','anime') ORDER BY h.source_id,h.remote_id,h.chapter_source_id,h.chapter_remote_id",
+      'SELECT source_id,remote_id,chapter_source_id,chapter_remote_id,history_reset_at FROM manga_chapter_states WHERE history_reset_at IS NOT NULL ORDER BY source_id,remote_id,chapter_source_id,chapter_remote_id',
       'SELECT account_key,source_id,remote_id,changed_at,deleted FROM anime_follow_sync_states ORDER BY account_key,source_id,remote_id',
       'SELECT * FROM anime_source_links ORDER BY subject_source_id,subject_remote_id,source_id',
       "SELECT source_id,remote_id,title,url,cover_url,author,description,tags_json,rating,status,detail_json FROM media_items WHERE type IN ('manga','anime') AND (EXISTS(SELECT 1 FROM library_entries l WHERE l.source_id=media_items.source_id AND l.remote_id=media_items.remote_id) OR EXISTS(SELECT 1 FROM histories h WHERE h.source_id=media_items.source_id AND h.remote_id=media_items.remote_id AND h.incognito=0)) ORDER BY source_id,remote_id",
@@ -120,6 +144,7 @@ final libraryAutoSyncRuntimeProvider = Provider<LibraryAutoSyncRuntime>((ref) {
             db.animeFollowSyncStates,
             db.animeSourceLinks,
             db.mediaItems,
+            db.mangaChapterStates,
           }),
         )
         .map((_) {}),
@@ -138,6 +163,10 @@ final libraryAutoSyncRuntimeProvider = Provider<LibraryAutoSyncRuntime>((ref) {
     syncBangumi: () async {
       anime = ref.read(animeFollowSyncProvider);
       await anime!.syncBangumi(priority: AnimeSyncPriority.newest);
+    },
+    syncBangumiPriority: (priority) async {
+      anime = ref.read(animeFollowSyncProvider);
+      await anime!.syncBangumi(priority: priority);
     },
     cancel: () {
       dav?.dispose();
@@ -234,14 +263,14 @@ class LibraryAutoSyncController extends Notifier<LibraryAutoSyncState> {
     return raw == null ? null : DateTime.tryParse(raw);
   }
 
-  void _start() {
+  void _start({bool syncImmediately = true}) {
     if (!_canAuto || !_foreground || _disposed) return;
     _listenChanges();
     _poll?.cancel();
     _poll = Timer.periodic(pollInterval, (_) {
       if (!_blocked) unawaited(_request(force: true));
     });
-    unawaited(_request(force: true));
+    if (syncImmediately) unawaited(_request(force: true));
   }
 
   void _listenChanges() {
@@ -416,7 +445,54 @@ class LibraryAutoSyncController extends Notifier<LibraryAutoSyncState> {
     _bangumiBlocked = false;
     _retry?.cancel();
     _retry = null;
-    return _request(force: true, manual: true);
+    return _request(force: true, manual: true, bangumi: false);
+  }
+
+  /// Uses the same single flight and real merge services as automatic sync.
+  /// Services are independently optional; one failure never hides another.
+  Future<void> syncFollows({
+    required bool webDav,
+    required bool bangumi,
+    required AnimeSyncPriority priority,
+  }) async {
+    final generation = _generation;
+    final existing = _flight;
+    if (existing != null) await existing;
+    if (!_current(generation) || !webDav && !bangumi) return;
+    _blocked = false;
+    _bangumiBlocked = false;
+    _retry?.cancel();
+    _retry = null;
+    await _request(
+      force: true,
+      manual: true,
+      dav: webDav,
+      bangumi: bangumi,
+      priority: priority,
+    );
+  }
+
+  void cancelSync() {
+    final stages = {
+      for (final entry in state.stages.entries)
+        entry.key: switch (entry.value.phase) {
+          AnimeFollowSyncPhase.waiting ||
+          AnimeFollowSyncPhase.running => const AnimeFollowSyncStep(
+            AnimeFollowSyncPhase.cancelled,
+            '已取消；已完成的更改保留',
+          ),
+          _ => entry.value,
+        },
+    };
+    _resetOperation();
+    state = state.copyWith(
+      syncing: false,
+      checking: false,
+      pending: true,
+      stages: stages,
+    );
+    // Restore future edits and polling, not the explicitly cancelled pass.
+    _start(syncImmediately: false);
   }
 
   void onResumed() {
@@ -445,12 +521,15 @@ class LibraryAutoSyncController extends Notifier<LibraryAutoSyncState> {
     bool force = false,
     bool manual = false,
     bool pauseFlush = false,
+    bool? dav,
+    bool? bangumi,
+    AnimeSyncPriority priority = AnimeSyncPriority.newest,
   }) {
     if (_disposed ||
         (!manual && (!_canAuto || _blocked || !_foreground && !pauseFlush))) {
       return Future<void>.value();
     }
-    if (!state.configured && !(state.bangumiEnabled && _hasBangumi)) {
+    if (!(dav ?? state.configured) && !(bangumi ?? state.bangumiEnabled)) {
       return Future<void>.value();
     }
     if (_flight != null) {
@@ -470,7 +549,9 @@ class LibraryAutoSyncController extends Notifier<LibraryAutoSyncState> {
       runtime,
       generation,
       force: force,
-      davEnabled: state.configured && (state.enabled || manual),
+      davEnabled: dav ?? state.configured && (state.enabled || manual),
+      bangumiEnabled: bangumi ?? state.bangumiEnabled,
+      priority: priority,
     );
     _flight = operation;
     return operation;
@@ -481,8 +562,50 @@ class LibraryAutoSyncController extends Notifier<LibraryAutoSyncState> {
     int generation, {
     required bool force,
     required bool davEnabled,
+    required bool bangumiEnabled,
+    required AnimeSyncPriority priority,
   }) async {
-    var bangumiFailed = false;
+    var failed = false;
+    var davSucceeded = false, bangumiSucceeded = false;
+    void stage(
+      AnimeFollowSyncStage key,
+      AnimeFollowSyncPhase phase, [
+      String? message,
+    ]) {
+      if (!_current(generation)) return;
+      state = state.copyWith(
+        stages: {...state.stages, key: AnimeFollowSyncStep(phase, message)},
+      );
+    }
+
+    Future<void> davSuccess(String applied) async {
+      if (!_current(generation)) return;
+      _revision = applied;
+      final success = DateTime.now();
+      state = state.copyWith(lastSuccess: success, clearError: true);
+      await _preferences.set(
+        'sync.library.success.${_endpointKey(_config)}',
+        success.toUtc().toIso8601String(),
+      );
+    }
+
+    void failure(Object error, {bool bangumi = false}) {
+      failed = true;
+      _clearDebounce();
+      if (bangumi) {
+        _bangumiBlocked = true;
+        state = state.copyWith(bangumiError: _safeError(error, bangumi: true));
+      } else {
+        _blocked = !_transient(error);
+        state = state.copyWith(
+          error: _safeError(error),
+          pending: true,
+          connected: error is StateError ? state.connected : false,
+        );
+      }
+      if (_transient(error)) _retryLater();
+    }
+
     try {
       final before = await runtime.revision();
       if (!_current(generation)) return;
@@ -490,85 +613,133 @@ class LibraryAutoSyncController extends Notifier<LibraryAutoSyncState> {
         state = state.copyWith(pending: false);
         return;
       }
-      state = state.copyWith(syncing: true, pending: false);
+      state = state.copyWith(
+        syncing: true,
+        pending: false,
+        stages: {
+          for (final key in AnimeFollowSyncStage.values)
+            key: AnimeFollowSyncStep(
+              switch (key) {
+                    AnimeFollowSyncStage.webDav => davEnabled,
+                    AnimeFollowSyncStage.bangumi => bangumiEnabled,
+                    AnimeFollowSyncStage.upload => davEnabled && bangumiEnabled,
+                  }
+                  ? AnimeFollowSyncPhase.waiting
+                  : AnimeFollowSyncPhase.skipped,
+            ),
+        },
+      );
       if (davEnabled) {
-        // A successful file stat/404 says nothing about DAV authentication.
-        if (!state.connected) {
-          await checkConnection();
-          if (!_current(generation) || !state.connected) {
+        stage(AnimeFollowSyncStage.webDav, AnimeFollowSyncPhase.running);
+        try {
+          if (!state.configured) throw const FormatException('未配置 WebDAV');
+          if (!state.connected) await checkConnection();
+          if (!_current(generation)) return;
+          if (!state.connected) {
+            failed = true;
             if (!_blocked) _retryLater();
-            return;
+            stage(
+              AnimeFollowSyncStage.webDav,
+              AnimeFollowSyncPhase.failed,
+              state.error,
+            );
+          } else {
+            await davSuccess(await runtime.syncDav());
+            if (!_current(generation)) return;
+            davSucceeded = true;
+            _blocked = false;
+            stage(AnimeFollowSyncStage.webDav, AnimeFollowSyncPhase.succeeded);
           }
+        } catch (error) {
+          if (!_current(generation)) return;
+          failure(error);
+          stage(
+            AnimeFollowSyncStage.webDav,
+            AnimeFollowSyncPhase.failed,
+            state.error,
+          );
         }
-        final applied = await runtime.syncDav();
-        if (!_current(generation)) return;
-        _revision = applied;
-        final success = DateTime.now();
-        state = state.copyWith(lastSuccess: success, clearError: true);
-        await _preferences.set(
-          'sync.library.success.${_endpointKey(_config)}',
-          success.toUtc().toIso8601String(),
+      }
+      if (!_current(generation)) return;
+      if (bangumiEnabled && !_bangumiBlocked) {
+        stage(AnimeFollowSyncStage.bangumi, AnimeFollowSyncPhase.running);
+        try {
+          if (!_hasBangumi) {
+            throw const SourceException(
+              sourceId: 'bangumi',
+              type: SourceErrorType.auth,
+              message: '请先连接 Bangumi 追踪账号',
+            );
+          }
+          final operation = runtime.syncBangumiPriority;
+          if (operation == null) {
+            await runtime.syncBangumi();
+          } else {
+            await operation(priority);
+          }
+          if (!_current(generation)) return;
+          bangumiSucceeded = true;
+          state = state.copyWith(
+            bangumiLastSuccess: DateTime.now(),
+            clearBangumiError: true,
+          );
+          stage(AnimeFollowSyncStage.bangumi, AnimeFollowSyncPhase.succeeded);
+        } catch (error) {
+          if (!_current(generation)) return;
+          failure(error, bangumi: true);
+          stage(
+            AnimeFollowSyncStage.bangumi,
+            AnimeFollowSyncPhase.failed,
+            state.bangumiError,
+          );
+        }
+      } else if (bangumiEnabled) {
+        stage(
+          AnimeFollowSyncStage.bangumi,
+          AnimeFollowSyncPhase.skipped,
+          state.bangumiError,
         );
       }
       if (!_current(generation)) return;
-      if (state.bangumiEnabled && !_bangumiBlocked) {
-        if (!_hasBangumi) {
-          state = state.copyWith(bangumiError: '请先连接 Bangumi 追踪账号');
-        } else {
+      if (davEnabled && bangumiEnabled) {
+        if (davSucceeded && bangumiSucceeded) {
+          stage(AnimeFollowSyncStage.upload, AnimeFollowSyncPhase.running);
           try {
-            await runtime.syncBangumi();
+            await davSuccess(await runtime.syncDav());
             if (!_current(generation)) return;
-            state = state.copyWith(
-              bangumiLastSuccess: DateTime.now(),
-              clearBangumiError: true,
-            );
+            stage(AnimeFollowSyncStage.upload, AnimeFollowSyncPhase.succeeded);
           } catch (error) {
             if (!_current(generation)) return;
-            // DAV success is retained even if optional collection sync fails.
-            state = state.copyWith(
-              bangumiError: _safeError(error, bangumi: true),
+            failure(error);
+            stage(
+              AnimeFollowSyncStage.upload,
+              AnimeFollowSyncPhase.failed,
+              state.error,
             );
-            bangumiFailed = true;
-            _bangumiBlocked = true;
-            _clearDebounce();
-            if (_transient(error)) _retryLater();
           }
-          if (davEnabled && state.bangumiError == null) {
-            final applied = await runtime.syncDav();
-            if (!_current(generation)) return;
-            _revision = applied;
-          } else if (!davEnabled && state.bangumiError == null) {
-            final applied = await runtime.revision();
-            if (!_current(generation)) return;
-            _revision = applied;
-          }
+        } else {
+          stage(
+            AnimeFollowSyncStage.upload,
+            AnimeFollowSyncPhase.skipped,
+            '前两步未全部完成；已完成的更改保留',
+          );
         }
+      } else if (bangumiSucceeded) {
+        _revision = await runtime.revision();
       }
       if (!_current(generation)) return;
-      // DAV captures its own revision inside the atomic apply transaction.
-      // A durable local write after commit must schedule another pass.
       final after = await runtime.revision();
       if (!_current(generation)) return;
-      final changed = _revision != null && after != _revision;
+      final changed = failed || _revision != null && after != _revision;
       state = state.copyWith(pending: changed);
-      if (changed && _foreground && _canAuto) _schedule();
-      if (!bangumiFailed) _attempt = 0;
-      _blocked = false;
+      if (!failed) {
+        _attempt = 0;
+        _blocked = false;
+        if (changed && _foreground && _canAuto) _schedule();
+      }
     } catch (error) {
       if (!_current(generation)) return;
-      _clearDebounce();
-      state = state.copyWith(
-        error: _safeError(error),
-        pending: true,
-        connected: _transient(error) && error is StateError
-            ? state.connected
-            : false,
-      );
-      if (_transient(error)) {
-        _retryLater();
-      } else {
-        _blocked = true;
-      }
+      failure(error);
     } finally {
       if (_current(generation)) {
         _flight = null;

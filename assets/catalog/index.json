@@ -1,20 +1,6 @@
 {
   "sources": [
     {
-      "id": "age-anime",
-      "name": "AGE 番剧",
-      "type": "anime",
-      "version": "1.0.1",
-      "url": "asset://assets/rules/age-anime-js.json",
-      "capabilities": [
-        "discover",
-        "search",
-        "detail",
-        "content"
-      ],
-      "license": "Triomi 规则 / 站点内容权利归各自权利人"
-    },
-    {
       "id": "archive-animation",
       "name": "Internet Archive 动画馆藏",
       "type": "anime",
@@ -43,18 +29,6 @@
       ],
       "license": "MangaDex API / 内容授权由发布者负责",
       "updatedAt": "2026-10-05T00:00:00Z"
-    },
-    {
-      "id": "bangumi-anime",
-      "name": "Bangumi 番剧资料（无播放）",
-      "type": "anime",
-      "version": "1.0.0",
-      "url": "asset://assets/rules/bangumi-anime.json",
-      "capabilities": [
-        "search",
-        "detail"
-      ],
-      "license": "Bangumi API"
     }
   ]
 }

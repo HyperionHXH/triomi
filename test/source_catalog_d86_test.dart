@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/db/app_database.dart';
@@ -43,9 +45,11 @@ SourceCatalogEntry entryOf({
   name: name,
   type: MediaType.tryParse(type)!,
   version: id == 'mangadex'
-      ? CatalogVersion.tryParse(SourceRule.parseJson(
-          File('assets/rules/mangadex-api-js.json').readAsStringSync(),
-        ).descriptor.version!)!
+      ? CatalogVersion.tryParse(
+          SourceRule.parseJson(
+            File('assets/rules/mangadex-api-js.json').readAsStringSync(),
+          ).descriptor.version!,
+        )!
       : const CatalogVersion(1, 0, 0),
   url: url ?? 'https://raw.example.com/rules/$id.json',
   hash: hash,
@@ -74,34 +78,15 @@ const String ruleJson = '''
 
 /// 建一个带完整 override 的容器；先建容器、可预置数据，再 pump 目录 UI。
 Future<ProviderContainer> makeContainer({
+  required WidgetTester tester,
   required Future<List<SourceCatalogEntry>> Function() loader,
   FakeHttpClient? http,
 }) async {
   final db = AppDatabase.forTesting(NativeDatabase.memory());
-  addTearDown(db.close);
-  // 预置「已播种」标记：跳过 SourceRegistryController.build 的内置规则播种。
-  // 播种要经 rootBundle 加载 5 个随包资产（真实文件 IO），在 FakeAsync 里
-  // 完成时机不稳定；用例结束时若 build 还在飞行，泄漏的异步错误会污染
-  // 同文件后面的用例。跳过播种后 build 只剩内存库微任务，完全确定。
-  final preferences = memoryPreferences();
-  await preferences.set('sources.seededBuiltins', const <String>[
-    'builtin:light-novel-kingdom',
-    'builtin:light-novel-shelf',
-    'assets/rules/age-anime-js.json',
-    'assets/rules/kazumi-7sefun.json',
-    'assets/rules/kazumi-MXdm.json',
-    'assets/rules/kazumi-DM84.json',
-    'assets/rules/mangadex-api-js.json',
-    'assets/rules/bangumi-anime.json',
-    'assets/rules/local-fixture.json',
-    'assets/rules/local-fixture-anime.json',
-    'assets/rules/local-fixture-novel.json',
-    'assets/rules/local-fixture-js.json',
-  ]);
   final container = ProviderContainer(
     overrides: [
       databaseProvider.overrideWithValue(db),
-      preferencesProvider.overrideWithValue(preferences),
+      preferencesProvider.overrideWithValue(memoryPreferences()),
       secureStoreProvider.overrideWithValue(MemorySecureStore()),
       sourceHttpClientProvider.overrideWithValue(
         http ??
@@ -110,18 +95,20 @@ Future<ProviderContainer> makeContainer({
             ),
       ),
       sourceCatalogLoaderProvider.overrideWithValue(loader),
+      sourcesProvider.overrideWith(_CatalogSources.new),
       sourceRegistryProvider.overrideWith((ref) {
         final registry = SourceRegistry(
           repository: ref.watch(sourceRepositoryProvider),
           http: ref.watch(sourceHttpClientProvider),
           jsRuntimeFactory: FlutterJsRuntime.new,
+          assetBundle: _CatalogAssets(),
         );
         ref.onDispose(registry.dispose);
         return registry;
       }),
     ],
   );
-  addTearDown(container.dispose);
+  await finishOwned(tester, container.read(sourcesProvider.future));
   return container;
 }
 
@@ -142,6 +129,66 @@ Future<void> settle(WidgetTester tester, {int rounds = 6}) async {
     );
     await tester.pump();
   }
+}
+
+class _CatalogSources extends SourceRegistryController {
+  @override
+  Future<SourceRegistrySnapshot> build() =>
+      ref.read(sourceRegistryProvider).load();
+}
+
+// Do not reuse RootBundle's cached future from a previous test's FakeAsync zone.
+// These are the actual packaged metadata bytes, not a substitute source snapshot.
+class _CatalogAssets extends CachingAssetBundle {
+  @override
+  Future<ByteData> load(String key) async =>
+      ByteData.sublistView(File(key).readAsBytesSync());
+
+  @override
+  Future<String> loadString(String key, {bool cache = true}) async =>
+      File(key).readAsStringSync();
+}
+
+Future<T> finishOwned<T>(WidgetTester tester, Future<T> pending) async {
+  var finished = false;
+  late T result;
+  Object? failure;
+  StackTrace? trace;
+  unawaited(
+    pending.then(
+      (value) {
+        result = value;
+        finished = true;
+      },
+      onError: (Object error, StackTrace stack) {
+        failure = error;
+        trace = stack;
+        finished = true;
+      },
+    ),
+  );
+  for (var attempt = 0; attempt < 300 && !finished; attempt++) {
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 1)),
+    );
+  }
+  expect(finished, isTrue, reason: 'Catalog operation must finish');
+  if (failure != null) Error.throwWithStackTrace(failure!, trace!);
+  return result;
+}
+
+Future<void> closeCatalog(
+  WidgetTester tester,
+  ProviderContainer container,
+) async {
+  final db = container.read(databaseProvider);
+  await finishOwned(tester, container.read(sourcesProvider.future));
+  await tester.pumpWidget(const SizedBox.shrink());
+  container.dispose();
+  await tester.pump(const Duration(milliseconds: 1));
+  await settle(tester);
+  await tester.runAsync(() => db.close().timeout(const Duration(seconds: 5)));
 }
 
 void main() {
@@ -191,6 +238,7 @@ void main() {
         (request) async => throw StateError('asset:// 安装不允许触网：${request.url}'),
       );
       final container = await makeContainer(
+        tester: tester,
         loader: () async => <SourceCatalogEntry>[
           // mangadex 是随包资产但不在内置播种清单里，安装前后可分辨。
           entryOf(
@@ -201,28 +249,27 @@ void main() {
         ],
         http: http,
       );
-      await pumpSheet(tester, container);
-      await settle(tester);
-      expect(find.text('安装'), findsOneWidget);
+      try {
+        await pumpSheet(tester, container);
+        await settle(tester);
+        expect(find.text('安装'), findsOneWidget);
 
-      await tester.runAsync(() async {
         final db = container.read(databaseProvider);
         final installed =
             (db.select(db.sources)..where((row) => row.id.equals('mangadex')))
                 .watchSingleOrNull()
                 .firstWhere((row) => row != null);
         await tester.tap(find.text('安装'));
-        await installed.timeout(const Duration(seconds: 5));
-      });
-      await tester.pump();
-      await tester.runAsync(() async {
-        await container.read(sourcesProvider.future);
-      });
-      await tester.pump();
+        await finishOwned(tester, installed);
+        await settle(tester);
+        await finishOwned(tester, container.read(sourcesProvider.future));
 
-      expect(http.requests, isEmpty, reason: 'asset:// 全程不得触网');
-      final rows = await container.read(sourceRepositoryProvider).all();
-      expect(rows.map((row) => row.id), contains('mangadex'));
+        expect(http.requests, isEmpty, reason: 'asset:// 全程不得触网');
+        final rows = await container.read(sourceRepositoryProvider).all();
+        expect(rows.map((row) => row.id), contains('mangadex'));
+      } finally {
+        await closeCatalog(tester, container);
+      }
     });
 
     testWidgets('http:// 条目在触网前被拒绝，失败原因可见且可重试', (tester) async {
@@ -230,22 +277,27 @@ void main() {
         (request) async => throw StateError('http:// 不允许触网：${request.url}'),
       );
       final container = await makeContainer(
+        tester: tester,
         loader: () async => <SourceCatalogEntry>[
           entryOf(id: 'insecure', url: 'http://example.com/rule.json'),
         ],
         http: http,
       );
-      await pumpSheet(tester, container);
-      await settle(tester);
+      try {
+        await pumpSheet(tester, container);
+        await settle(tester);
 
-      await tester.tap(find.text('安装'));
-      await settle(tester, rounds: 8);
+        await tester.tap(find.text('安装'));
+        await settle(tester, rounds: 8);
 
-      expect(http.requests, isEmpty, reason: '拒绝发生在发起请求之前');
-      expect(find.textContaining('远程来源目录只允许 HTTPS 地址'), findsOneWidget);
-      expect(find.text('安装'), findsOneWidget, reason: '失败后仍可重试');
-      final rows = await container.read(sourceRepositoryProvider).all();
-      expect(rows.map((row) => row.id), isNot(contains('insecure')));
+        expect(http.requests, isEmpty, reason: '拒绝发生在发起请求之前');
+        expect(find.textContaining('远程来源目录只允许 HTTPS 地址'), findsOneWidget);
+        expect(find.text('安装'), findsOneWidget, reason: '失败后仍可重试');
+        final rows = await container.read(sourceRepositoryProvider).all();
+        expect(rows.map((row) => row.id), isNot(contains('insecure')));
+      } finally {
+        await closeCatalog(tester, container);
+      }
     });
 
     testWidgets('https:// 成功路径（带正确 SHA-256）', (tester) async {
@@ -255,24 +307,29 @@ void main() {
             SourceResponse(statusCode: 200, url: request.url, body: ruleJson),
       );
       final container = await makeContainer(
+        tester: tester,
         loader: () async => <SourceCatalogEntry>[
           entryOf(id: 'catalog-manga', hash: digest),
         ],
         http: http,
       );
-      await pumpSheet(tester, container);
-      await settle(tester);
+      try {
+        await pumpSheet(tester, container);
+        await settle(tester);
 
-      await tester.tap(find.text('安装'));
-      await settle(tester, rounds: 10);
+        await tester.tap(find.text('安装'));
+        await settle(tester, rounds: 10);
 
-      expect(find.text('已安装'), findsOneWidget);
-      expect(
-        http.requests.single.url,
-        'https://raw.example.com/rules/catalog-manga.json',
-      );
-      final rows = await container.read(sourceRepositoryProvider).all();
-      expect(rows.map((row) => row.id), contains('catalog-manga'));
+        expect(find.text('已安装'), findsOneWidget);
+        expect(
+          http.requests.single.url,
+          'https://raw.example.com/rules/catalog-manga.json',
+        );
+        final rows = await container.read(sourceRepositoryProvider).all();
+        expect(rows.map((row) => row.id), contains('catalog-manga'));
+      } finally {
+        await closeCatalog(tester, container);
+      }
     });
 
     testWidgets('超过 2 MiB 的规则文本安装失败，不产生半安装记录', (tester) async {
@@ -282,23 +339,28 @@ void main() {
             SourceResponse(statusCode: 200, url: request.url, body: oversized),
       );
       final container = await makeContainer(
+        tester: tester,
         loader: () async => <SourceCatalogEntry>[entryOf(id: 'catalog-manga')],
         http: http,
       );
-      await pumpSheet(tester, container);
-      await settle(tester);
+      try {
+        await pumpSheet(tester, container);
+        await settle(tester);
 
-      await tester.tap(find.text('安装'));
-      await settle(tester, rounds: 8);
+        await tester.tap(find.text('安装'));
+        await settle(tester, rounds: 8);
 
-      expect(find.textContaining('规则文件超过 2 MiB 限制'), findsOneWidget);
-      expect(find.text('安装'), findsOneWidget);
-      final rows = await container.read(sourceRepositoryProvider).all();
-      expect(
-        rows.map((row) => row.id),
-        isNot(contains('catalog-manga')),
-        reason: '失败安装不得留下半条来源记录',
-      );
+        expect(find.textContaining('规则文件超过 2 MiB 限制'), findsOneWidget);
+        expect(find.text('安装'), findsOneWidget);
+        final rows = await container.read(sourceRepositoryProvider).all();
+        expect(
+          rows.map((row) => row.id),
+          isNot(contains('catalog-manga')),
+          reason: '失败安装不得留下半条来源记录',
+        );
+      } finally {
+        await closeCatalog(tester, container);
+      }
     });
 
     testWidgets('SHA-256 不匹配时拒绝入库', (tester) async {
@@ -308,20 +370,25 @@ void main() {
             SourceResponse(statusCode: 200, url: request.url, body: ruleJson),
       );
       final container = await makeContainer(
+        tester: tester,
         loader: () async => <SourceCatalogEntry>[
           entryOf(id: 'catalog-manga', hash: wrongHash),
         ],
         http: http,
       );
-      await pumpSheet(tester, container);
-      await settle(tester);
+      try {
+        await pumpSheet(tester, container);
+        await settle(tester);
 
-      await tester.tap(find.text('安装'));
-      await settle(tester, rounds: 8);
+        await tester.tap(find.text('安装'));
+        await settle(tester, rounds: 8);
 
-      expect(find.textContaining('规则文件哈希校验失败'), findsOneWidget);
-      final rows = await container.read(sourceRepositoryProvider).all();
-      expect(rows.map((row) => row.id), isNot(contains('catalog-manga')));
+        expect(find.textContaining('规则文件哈希校验失败'), findsOneWidget);
+        final rows = await container.read(sourceRepositoryProvider).all();
+        expect(rows.map((row) => row.id), isNot(contains('catalog-manga')));
+      } finally {
+        await closeCatalog(tester, container);
+      }
     });
 
     testWidgets('已安装条目只读展示，重复点击不产生新请求', (tester) async {
@@ -330,21 +397,40 @@ void main() {
             SourceResponse(statusCode: 200, url: request.url, body: ruleJson),
       );
       final container = await makeContainer(
+        tester: tester,
         loader: () async => <SourceCatalogEntry>[entryOf(id: 'catalog-manga')],
         http: http,
       );
-      // 预置：上一会话已把同 id 规则装进注册表。
-      await container.read(sourceRegistryProvider).importFromText(ruleJson);
-      await pumpSheet(tester, container);
-      await settle(tester);
+      try {
+        // 预置：上一会话已把同 id 规则装进注册表。
+        await finishOwned(
+          tester,
+          container.read(sourceRegistryProvider).importFromText(ruleJson),
+        );
+        await finishOwned(
+          tester,
+          container.read(sourcesProvider.notifier).refresh(),
+        );
+        final before = await container
+            .read(sourceRepositoryProvider)
+            .byId('catalog-manga');
+        await pumpSheet(tester, container);
+        await settle(tester);
 
-      expect(find.text('已安装'), findsOneWidget);
-      expect(find.text('安装'), findsNothing);
+        expect(find.text('已安装'), findsOneWidget);
+        expect(find.text('安装'), findsNothing);
 
-      // 「已安装」是文本不是按钮；点它不应触发任何新请求。
-      await tester.tap(find.text('已安装'), warnIfMissed: false);
-      await settle(tester);
-      expect(http.requests, isEmpty);
+        // 「已安装」是文本不是按钮；点它不应触发任何新请求。
+        await tester.tap(find.text('已安装'), warnIfMissed: false);
+        await settle(tester);
+        expect(http.requests, isEmpty);
+        expect(
+          await container.read(sourceRepositoryProvider).byId('catalog-manga'),
+          before,
+        );
+      } finally {
+        await closeCatalog(tester, container);
+      }
     });
 
     testWidgets('安装失败后重试可成功', (tester) async {
@@ -365,21 +451,26 @@ void main() {
         );
       });
       final container = await makeContainer(
+        tester: tester,
         loader: () async => <SourceCatalogEntry>[entryOf(id: 'catalog-manga')],
         http: http,
       );
-      await pumpSheet(tester, container);
-      await settle(tester);
+      try {
+        await pumpSheet(tester, container);
+        await settle(tester);
 
-      await tester.tap(find.text('安装'));
-      await settle(tester, rounds: 8);
-      expect(find.textContaining('HTTP 503'), findsOneWidget);
+        await tester.tap(find.text('安装'));
+        await settle(tester, rounds: 8);
+        expect(find.textContaining('HTTP 503'), findsOneWidget);
 
-      await tester.tap(find.text('安装'));
-      await settle(tester, rounds: 10);
-      expect(find.text('已安装'), findsOneWidget);
-      final rows = await container.read(sourceRepositoryProvider).all();
-      expect(rows.map((row) => row.id), contains('catalog-manga'));
+        await tester.tap(find.text('安装'));
+        await settle(tester, rounds: 10);
+        expect(find.text('已安装'), findsOneWidget);
+        final rows = await container.read(sourceRepositoryProvider).all();
+        expect(rows.map((row) => row.id), contains('catalog-manga'));
+      } finally {
+        await closeCatalog(tester, container);
+      }
     });
   });
 }

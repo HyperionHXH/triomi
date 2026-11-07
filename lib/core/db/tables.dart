@@ -217,6 +217,30 @@ class Histories extends Table {
   BoolColumn get incognito => boolean().withDefault(const Constant(false))();
 }
 
+/// Explicit per-chapter reader state. Histories remain visit/resume records.
+@DataClassName('MangaChapterStateRow')
+class MangaChapterStates extends Table {
+  TextColumn get sourceId => text()();
+  TextColumn get remoteId => text()();
+  TextColumn get chapterSourceId => text()();
+  TextColumn get chapterRemoteId => text()();
+  BoolColumn get isRead => boolean().withDefault(const Constant(false))();
+  BoolColumn get bookmarked => boolean().withDefault(const Constant(false))();
+  IntColumn get totalPages => integer().nullable()();
+
+  /// Explicit unread reset; older synchronized positions must not revive.
+  DateTimeColumn get historyResetAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {
+    sourceId,
+    remoteId,
+    chapterSourceId,
+    chapterRemoteId,
+  };
+}
+
 /// 下载任务与已下载内容。
 @DataClassName('DownloadRow')
 class Downloads extends Table {

@@ -32,6 +32,7 @@ class MediaItemCollection extends StatelessWidget {
     this.footer,
     this.controller,
     this.preferGrid = false,
+    this.showMetadata = true,
   });
 
   final List<MediaItem> items;
@@ -46,6 +47,7 @@ class MediaItemCollection extends StatelessWidget {
   final Widget? footer;
   final ScrollController? controller;
   final bool preferGrid;
+  final bool showMetadata;
 
   /// 自定义点击行为；不传时默认进入详情页。
   final void Function(MediaItem item)? onTapItem;
@@ -109,6 +111,7 @@ class MediaItemCollection extends StatelessWidget {
             key: ValueKey((item.sourceId, item.remoteId, item.type)),
             item: item,
             sourceName: sourceNameOf?.call(item) ?? sourceName,
+            showMetadata: showMetadata,
             badge: badgeOf?.call(item),
             onTap: () => open(item),
             onLongPress: onLongPressItem == null
@@ -157,7 +160,7 @@ class MediaItemCollection extends StatelessWidget {
                   mainAxisExtent:
                       coverWidth / ratio +
                       scaler.scale(13) * 2.8 +
-                      scaler.scale(11) * 1.4 +
+                      (showMetadata ? scaler.scale(11) * 1.4 : 0) +
                       appearance.gap +
                       4,
                 ),
@@ -168,6 +171,7 @@ class MediaItemCollection extends StatelessWidget {
                       item: item,
                       key: ValueKey((item.sourceId, item.remoteId, item.type)),
                       sourceName: sourceNameOf?.call(item) ?? sourceName,
+                      showMetadata: showMetadata,
                       badge: badgeOf?.call(item),
                       onTap: () => open(item),
                       onLongPress: onLongPressItem == null
@@ -199,10 +203,12 @@ class MediaItemCard extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.badge,
+    this.showMetadata = true,
   });
 
   final MediaItem item;
   final String sourceName;
+  final bool showMetadata;
   final VoidCallback? onTap;
 
   /// 长按行为（书架用它做「移出书架」）。
@@ -269,24 +275,26 @@ class MediaItemCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 2),
-          SizedBox(
-            height: MediaQuery.textScalerOf(context).scale(11) * 1.4 + 2,
-            child: Text(
-              <String>[
-                if (sourceName.isNotEmpty) sourceName,
-                if (item.status != null && item.status!.isNotEmpty)
-                  item.status!,
-              ].join(' · '),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: palette.mutedForeground,
-                fontSize: 11,
-                height: 1.4,
+          if (showMetadata) ...[
+            const SizedBox(height: 2),
+            SizedBox(
+              height: MediaQuery.textScalerOf(context).scale(11) * 1.4 + 2,
+              child: Text(
+                <String>[
+                  if (sourceName.isNotEmpty) sourceName,
+                  if (item.status != null && item.status!.isNotEmpty)
+                    item.status!,
+                ].join(' · '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: palette.mutedForeground,
+                  fontSize: 11,
+                  height: 1.4,
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -302,10 +310,12 @@ class MediaItemRow extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.badge,
+    this.showMetadata = true,
   });
 
   final MediaItem item;
   final String sourceName;
+  final bool showMetadata;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final String? badge;
@@ -351,6 +361,7 @@ class MediaItemRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium,
                   ),
+                  if (showMetadata)
                   Text(
                     <String>[
                       if (sourceName.isNotEmpty) sourceName,
@@ -400,10 +411,11 @@ class _MediaBadge extends StatelessWidget {
 
 /// 封面图：地址缺失或加载失败时落回占位底色，不允许破图撑坏布局。
 class MediaCover extends ConsumerStatefulWidget {
-  const MediaCover({super.key, required this.url, this.sourceId = 'images'});
+  const MediaCover({super.key, required this.url, this.sourceId = 'images', this.fit = BoxFit.cover});
 
   final String? url;
   final String sourceId;
+  final BoxFit fit;
   @override
   ConsumerState<MediaCover> createState() => _MediaCoverState();
 }
@@ -468,7 +480,7 @@ class _MediaCoverState extends ConsumerState<MediaCover> {
     if (local != null) {
       return Image.memory(
         local,
-        fit: BoxFit.cover,
+        fit: widget.fit,
         errorBuilder: (_, error, stack) => _networkCover(placeholder, http),
       );
     }
@@ -481,7 +493,7 @@ class _MediaCoverState extends ConsumerState<MediaCover> {
 
     return Image(
       image: SourceNetworkImage(value, http: http, sourceId: widget.sourceId),
-      fit: BoxFit.cover,
+      fit: widget.fit,
       frameBuilder: (_, child, frame, synchronous) =>
           frame != null || synchronous ? child : placeholder,
       errorBuilder: (_, error, stack) => placeholder,

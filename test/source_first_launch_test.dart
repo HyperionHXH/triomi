@@ -139,7 +139,11 @@ void main() {
     final newlyConsidered = await registry.seedBuiltins(
       alreadySeeded: oldMarkers,
     );
-    expect(await repository.all(), before);
+    expect(
+      (await repository.all()).where((row) => row.id != 'bangumi-anime'),
+      before,
+    );
+    expect((await repository.byId('bangumi-anime'))!.enabled, isTrue);
     expect(await repository.byId(KazumiRule.idForName('AGE')), isNull);
     expect(await repository.byId(KazumiRule.idForName('7sefun')), isNull);
     expect(await repository.byId(KazumiRule.idForName('aafun')), isNull);

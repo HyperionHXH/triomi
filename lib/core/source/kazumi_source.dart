@@ -22,6 +22,7 @@ class KazumiRule {
   final Map<String, dynamic> raw;
   final SourceDescriptor descriptor;
   final KazumiApiRule? searchApi, chapterApi;
+  bool get deprecated => raw['deprecated'] == true;
 
   static bool recognizes(String text) {
     try {
@@ -34,7 +35,7 @@ class KazumiRule {
     }
   }
 
-  static KazumiRule parse(String text) {
+  static KazumiRule parse(String text, {bool allowDeprecated = false}) {
     final Object? decoded;
     try {
       decoded = jsonDecode(text);
@@ -52,7 +53,7 @@ class KazumiRule {
       return value.trim();
     }
 
-    if (decoded['deprecated'] == true) {
+    if (decoded['deprecated'] == true && !allowDeprecated) {
       throw const RuleFormatException('上游已弃用此规则，不能安装');
     }
     final api = int.tryParse('${decoded['api'] ?? '1'}');

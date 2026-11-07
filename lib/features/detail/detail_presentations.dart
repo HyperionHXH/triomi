@@ -414,11 +414,20 @@ class _ReadContinueButtonState extends ConsumerState<_ReadContinueButton> {
       );
       final continuing = index >= 0;
       if (index < 0) {
-        index = data.chapters.indexWhere(
-          (chapter) =>
-              chapter.sourceId == item.sourceId &&
-              (!chapter.locked || item.type == MediaType.novel),
-        );
+        final first =
+            (item.type == MediaType.manga
+                    ? canonicalMangaReadingOrder(
+                        data.chapters,
+                        mangaTitle: item.sourceTitle,
+                      )
+                    : data.chapters)
+                .where(
+                  (chapter) =>
+                      chapter.sourceId == item.sourceId &&
+                      (!chapter.locked || item.type == MediaType.novel),
+                )
+                .firstOrNull;
+        index = first == null ? -1 : data.chapters.indexOf(first);
       }
       final target = index;
       return FilledButton.icon(

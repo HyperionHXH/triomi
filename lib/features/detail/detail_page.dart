@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/db/app_database.dart';
 import '../../core/models/chapter.dart';
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
@@ -40,6 +41,7 @@ import '../novel/reader/novel_reader_page.dart';
 import '../player/episode_selector.dart';
 import '../player/player_page.dart';
 import '../reader/manga_reader_page.dart';
+import '../reader/manga_reading_order.dart';
 import '../search/search_page.dart';
 import '../tracking/bind_sheet.dart';
 import '../tracking/data/tracking_models.dart';
@@ -51,6 +53,7 @@ import 'chapter_download_picker.dart';
 
 part 'detail_presentations.dart';
 part 'detail_catalog.dart';
+part 'detail_chapter_actions.dart';
 
 /// 详情页：作品信息 + 章节目录。
 ///

@@ -7,6 +7,7 @@ import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
+import 'package:triomi/features/anime/data/anime_follow_sync.dart';
 import 'package:triomi/features/library/data/library_auto_sync.dart';
 import 'package:triomi/features/profile/data/sync_providers.dart';
 
@@ -43,6 +44,7 @@ class _Harness {
             },
             syncDav: () async {
               dav++;
+              events.add('dav');
               final held = nextDav;
               nextDav = null;
               final captured = '$revision';
@@ -58,10 +60,17 @@ class _Harness {
             },
             syncBangumi: () async {
               bangumiCalls++;
+              events.add('bangumi');
               if (bangumiError != null) throw bangumiError!;
             },
             cancel: () {
               cancellations++;
+            },
+            syncBangumiPriority: (priority) async {
+              priorities.add(priority);
+              events.add('bangumi');
+              bangumiCalls++;
+              if (bangumiError != null) throw bangumiError!;
             },
           ),
         ),
@@ -80,6 +89,8 @@ class _Harness {
   Completer<String>? nextDav;
   bool ownChange = false;
   void Function()? onDavApplied;
+  final events = <String>[];
+  final priorities = <AnimeSyncPriority>[];
   LibraryAutoSyncController get controller =>
       container.read(libraryAutoSyncProvider.notifier);
   LibraryAutoSyncState get state => container.read(libraryAutoSyncProvider);
@@ -95,6 +106,271 @@ class _Harness {
 }
 
 void main() {
+  testWidgets('cancel stops follows queued behind an automatic flight', (
+    tester,
+  ) async {
+    final h = _Harness();
+    final held = h.nextDav = Completer<String>();
+    h.controller;
+    await tester.pump();
+    expect(h.events, ['dav']);
+    final queued = h.controller.syncFollows(
+      webDav: true,
+      bangumi: true,
+      priority: AnimeSyncPriority.local,
+    );
+    h.controller.cancelSync();
+    held.complete('late');
+    await queued;
+    await tester.pump();
+    expect(h.events, ['dav']);
+    expect(h.state.syncing, isFalse);
+    expect(h.state.lastSuccess, isNull);
+    h.dispose();
+  });
+
+  testWidgets(
+    'cancel keeps automatic edit listeners without an immediate new pass',
+    (tester) async {
+      final h = _Harness();
+      final held = h.nextDav = Completer<String>();
+      h.controller;
+      await tester.pump();
+      h.controller.cancelSync();
+      held.complete('late');
+      await tester.pump();
+      await tester.pump(LibraryAutoSyncController.debounce);
+      expect(h.dav, 1);
+      h.edit();
+      await tester.pump(LibraryAutoSyncController.debounce);
+      expect(h.dav, 2);
+      expect(h.state.lastSuccess, isNotNull);
+      h.dispose();
+    },
+  );
+
+  testWidgets(
+    'cancel restores foreground remote polling without replaying immediately',
+    (tester) async {
+      final h = _Harness();
+      final held = h.nextDav = Completer<String>();
+      h.controller;
+      await tester.pump();
+      h.controller.cancelSync();
+      held.complete('late');
+      await tester.pump();
+      expect(h.dav, 1);
+      await tester.pump(LibraryAutoSyncController.pollInterval);
+      expect(h.dav, 2);
+      h.dispose();
+    },
+  );
+
+  for (final type in [SourceErrorType.auth, SourceErrorType.network]) {
+    testWidgets('DAV $type failure invalidates an established connection', (
+      tester,
+    ) async {
+      final h = _Harness(enabled: false);
+      h.controller;
+      await tester.pump();
+      await h.controller.syncNow();
+      expect(h.state.connected, isTrue);
+      h.syncError = SourceException(
+        sourceId: 'webdav',
+        type: type,
+        message: 'fixture',
+      );
+      await h.controller.syncNow();
+      expect(h.state.connected, isFalse);
+      expect(h.state.error, isNotNull);
+      h.syncError = null;
+      await h.controller.syncNow();
+      expect(h.probes, 2);
+      expect(h.state.connected, isTrue);
+      h.dispose();
+    });
+  }
+
+  testWidgets('authentication failure replaces a prior conflict and blocks until recovery', (
+    tester,
+  ) async {
+    final h = _Harness();
+    h.controller;
+    await tester.pump();
+    expect(h.state.connected, isTrue);
+    h.syncError = StateError('local edit during merge');
+    await h.controller.syncNow();
+    final conflictError = h.state.error;
+    expect(conflictError, contains('合并期间'));
+    expect(h.state.connected, isTrue);
+    h.syncError = const SourceException(
+      sourceId: 'webdav',
+      type: SourceErrorType.auth,
+      message: 'revoked fixture credentials',
+    );
+    await h.controller.syncNow();
+    expect(h.state.connected, isFalse);
+    expect(h.state.error, contains('认证失败或权限不足'));
+    expect(h.state.error, isNot(conflictError));
+    expect(h.state.stages[AnimeFollowSyncStage.webDav]!.message, h.state.error);
+    final callsAfterAuthFailure = h.dav;
+    h.edit();
+    await tester.pump(const Duration(minutes: 10));
+    expect(h.dav, callsAfterAuthFailure,
+        reason: 'authentication failure must stop conflict retries and auto polling');
+    expect(h.probes, 1);
+    h.syncError = null;
+    await h.controller.syncNow();
+    expect(h.probes, 2);
+    expect(h.dav, callsAfterAuthFailure + 1);
+    expect(h.state.connected, isTrue);
+    expect(h.state.error, isNull);
+    expect(h.state.stages[AnimeFollowSyncStage.webDav]!.phase,
+        AnimeFollowSyncPhase.succeeded);
+    h.dispose();
+  });
+
+  testWidgets('DAV merge conflicts retain authenticated connection status', (
+    tester,
+  ) async {
+    final h = _Harness(enabled: false);
+    h.controller;
+    await tester.pump();
+    await h.controller.syncNow();
+    h.syncError = StateError('local edit during merge');
+    await h.controller.syncNow();
+    expect(h.state.connected, isTrue);
+    expect(h.state.error, isNotNull);
+    expect(h.probes, 1);
+    h.dispose();
+  });
+
+  testWidgets(
+    'follows stages order DAV, Bangumi, upload and pass explicit priority',
+    (tester) async {
+      final h = _Harness(enabled: false);
+      h.controller;
+      await tester.pump();
+      await h.controller.syncFollows(
+        webDav: true,
+        bangumi: true,
+        priority: AnimeSyncPriority.local,
+      );
+      expect(h.events, ['dav', 'bangumi', 'dav']);
+      expect(h.priorities, [AnimeSyncPriority.local]);
+      expect(
+        h.state.stages.values.map((step) => step.phase),
+        everyElement(AnimeFollowSyncPhase.succeeded),
+      );
+      h.dispose();
+    },
+  );
+
+  testWidgets(
+    'DAV failure does not block optional Bangumi; upload remains skipped',
+    (tester) async {
+      final h = _Harness(enabled: false)
+        ..syncError = const FormatException('bad fixture document');
+      h.controller;
+      await tester.pump();
+      await h.controller.syncFollows(
+        webDav: true,
+        bangumi: true,
+        priority: AnimeSyncPriority.bangumi,
+      );
+      expect(h.events, ['dav', 'bangumi']);
+      expect(
+        h.state.stages[AnimeFollowSyncStage.webDav]!.phase,
+        AnimeFollowSyncPhase.failed,
+      );
+      expect(
+        h.state.stages[AnimeFollowSyncStage.bangumi]!.phase,
+        AnimeFollowSyncPhase.succeeded,
+      );
+      expect(
+        h.state.stages[AnimeFollowSyncStage.upload]!.phase,
+        AnimeFollowSyncPhase.skipped,
+      );
+      expect(h.state.error, isNotNull);
+      expect(h.state.bangumiLastSuccess, isNotNull);
+      h.dispose();
+    },
+  );
+
+  testWidgets(
+    'Bangumi failure preserves DAV result and reports independent stage error',
+    (tester) async {
+      final h = _Harness(enabled: false)
+        ..bangumiError = const FormatException('bad fixture account');
+      h.controller;
+      await tester.pump();
+      await h.controller.syncFollows(
+        webDav: true,
+        bangumi: true,
+        priority: AnimeSyncPriority.newest,
+      );
+      expect(h.events, ['dav', 'bangumi']);
+      expect(h.state.lastSuccess, isNotNull);
+      expect(h.state.error, isNull);
+      expect(h.state.bangumiError, isNotNull);
+      expect(
+        h.state.stages[AnimeFollowSyncStage.upload]!.phase,
+        AnimeFollowSyncPhase.skipped,
+      );
+      h.dispose();
+    },
+  );
+
+  testWidgets(
+    'follows Bangumi-only works without DAV; generic manual sync stays DAV-only',
+    (tester) async {
+      final h = _Harness(configured: false, enabled: false);
+      h.controller;
+      await tester.pump();
+      await h.controller.syncFollows(
+        webDav: false,
+        bangumi: true,
+        priority: AnimeSyncPriority.bangumi,
+      );
+      expect(h.events, ['bangumi']);
+      expect(
+        h.state.stages[AnimeFollowSyncStage.webDav]!.phase,
+        AnimeFollowSyncPhase.skipped,
+      );
+      await h.controller.syncNow();
+      expect(h.events, ['bangumi']);
+      h.dispose();
+    },
+  );
+
+  testWidgets(
+    'cancel discards late stage results and skips all later remote writes',
+    (tester) async {
+      final h = _Harness(enabled: false);
+      h.controller;
+      await tester.pump();
+      final held = h.nextDav = Completer<String>();
+      final operation = h.controller.syncFollows(
+        webDav: true,
+        bangumi: true,
+        priority: AnimeSyncPriority.local,
+      );
+      await tester.pump();
+      expect(h.events, ['dav']);
+      h.controller.cancelSync();
+      held.complete('late');
+      await operation;
+      expect(h.events, ['dav']);
+      expect(h.state.syncing, isFalse);
+      expect(h.state.lastSuccess, isNull);
+      expect(
+        h.state.stages.values.map((step) => step.phase),
+        everyElement(AnimeFollowSyncPhase.cancelled),
+      );
+      h.dispose();
+    },
+  );
+
   testWidgets('configured startup probes DAV and shares manual collision', (
     tester,
   ) async {

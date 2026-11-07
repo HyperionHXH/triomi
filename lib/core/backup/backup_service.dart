@@ -381,14 +381,14 @@ class BackupService {
         BackupProgress(
           BackupStage.collecting,
           completedItems: ++collectedTables,
-          totalItems: 13,
+          totalItems: 14,
         ),
       );
     }
 
     checkBackupCancellation();
     onStageProgress?.call(
-      const BackupProgress(BackupStage.collecting, totalItems: 13),
+      const BackupProgress(BackupStage.collecting, totalItems: 14),
     );
     final items = await database.select(database.mediaItems).get();
     collected();
@@ -398,6 +398,21 @@ class BackupService {
     collected();
     final chapters = await database.select(database.chapters).get();
     collected();
+    final mangaChapterStates = await database
+        .select(database.mangaChapterStates)
+        .get();
+    collected();
+    final mangaItems = {
+      for (final item in items)
+        if (item.type == MediaType.manga) (item.sourceId, item.remoteId),
+    };
+    final chapterOwners = {
+      for (final chapter in chapters)
+        (chapter.sourceId, chapter.remoteId): (
+          chapter.itemSourceId,
+          chapter.itemRemoteId,
+        ),
+    };
     final animeLinks = await database.select(database.animeSourceLinks).get();
     collected();
     final animeSyncStates = await database
@@ -663,6 +678,23 @@ class BackupService {
               'contentJson': row.contentJson,
           },
       ],
+      'mangaChapterStates': [
+        for (final row in mangaChapterStates)
+          if (mangaItems.contains((row.sourceId, row.remoteId)) &&
+              chapterOwners[(row.chapterSourceId, row.chapterRemoteId)] ==
+                  (row.sourceId, row.remoteId))
+            {
+              'sourceId': row.sourceId,
+              'remoteId': row.remoteId,
+              'chapterSourceId': row.chapterSourceId,
+              'chapterRemoteId': row.chapterRemoteId,
+              'isRead': row.isRead,
+              'bookmarked': row.bookmarked,
+              'totalPages': row.totalPages,
+              'historyResetAt': row.historyResetAt?.toUtc().toIso8601String(),
+              'updatedAt': row.updatedAt.toUtc().toIso8601String(),
+            },
+      ],
       'mangaFeeds': [
         for (final row in mangaFeeds)
           {
@@ -873,6 +905,57 @@ class BackupService {
     return rows;
   }
 
+  static List<MangaChapterStateRow> _mangaChapterStatesOf(
+    Map<String, Object?> payload,
+  ) {
+    final raw = payload['mangaChapterStates'];
+    if (raw == null) return const [];
+    if (raw is! List) throw const FormatException('漫画章节状态格式无效');
+    final rows = <MangaChapterStateRow>[];
+    final seen = <(String, String, String, String)>{};
+    for (final node in raw) {
+      if (node is! Map) throw const FormatException('漫画章节状态格式无效');
+      final source = node['sourceId'],
+          item = node['remoteId'],
+          chapterSource = node['chapterSourceId'],
+          chapter = node['chapterRemoteId'],
+          read = node['isRead'],
+          bookmark = node['bookmarked'],
+          pages = node['totalPages'];
+      final at = _dateOf(node['updatedAt']);
+      final resetAt = _dateOf(node['historyResetAt']);
+      if (source is! String ||
+          source.isEmpty ||
+          item is! String ||
+          item.isEmpty ||
+          chapterSource != source ||
+          chapter is! String ||
+          chapter.isEmpty ||
+          read is! bool ||
+          bookmark is! bool ||
+          at == null ||
+          pages != null && (pages is! int || pages <= 0) ||
+          node['historyResetAt'] != null && resetAt == null ||
+          !seen.add((source, item, source, chapter))) {
+        throw const FormatException('漫画章节状态身份、页数或时间无效');
+      }
+      rows.add(
+        MangaChapterStateRow(
+          sourceId: source,
+          remoteId: item,
+          chapterSourceId: source,
+          chapterRemoteId: chapter,
+          isRead: read,
+          bookmarked: bookmark,
+          totalPages: pages as int?,
+          historyResetAt: resetAt,
+          updatedAt: at,
+        ),
+      );
+    }
+    return rows;
+  }
+
   /// Validate only the stored envelope, never source capabilities or execution.
   /// Keep original JSON bytes; legacy FilterLists and v1 envelopes round-trip.
   static void validateSavedSearchFilters(Map<String, Object?> payload) {
@@ -913,6 +996,12 @@ class BackupService {
     }
     validateSavedSearchFilters(payload);
     final animeSyncStates = _animeSyncStatesOf(payload);
+    final mangaChapterStates = _mangaChapterStatesOf(payload);
+    final incomingChapterStatesByKey = {
+      for (final row in mangaChapterStates)
+        (row.sourceId, row.remoteId, row.chapterSourceId, row.chapterRemoteId):
+            row,
+    };
     final rules = sourceRulesOf(payload);
     ApkBackupFiles.validatePayload(payload['apkPackages']);
     ApkRestoreTransaction? apkTransaction;
@@ -1204,6 +1293,28 @@ class BackupService {
             final chapterSourceId =
                 row['chapterSourceId']?.toString() ?? sourceId;
             final visitedAt = _dateOf(row['visitedAt']) ?? _oldestTimestamp;
+            final localState =
+                await (database.select(database.mangaChapterStates)..where(
+                      (t) =>
+                          t.sourceId.equals(sourceId) &
+                          t.remoteId.equals(remoteId) &
+                          t.chapterSourceId.equals(chapterSourceId) &
+                          t.chapterRemoteId.equals(chapterRemoteId),
+                    ))
+                    .getSingleOrNull();
+            final incomingState =
+                incomingChapterStatesByKey[(
+                  sourceId,
+                  remoteId,
+                  chapterSourceId,
+                  chapterRemoteId,
+                )];
+            if ([
+              ?localState?.historyResetAt,
+              ?incomingState?.historyResetAt,
+            ].any((reset) => !visitedAt.isAfter(reset))) {
+              continue;
+            }
             final existing =
                 await (database.select(database.histories)..where(
                       (table) =>
@@ -1464,6 +1575,77 @@ class BackupService {
                   ),
                 );
             chapterCount += 1;
+          }
+          for (final row in mangaChapterStates) {
+            final item =
+                await (database.select(database.mediaItems)..where(
+                      (t) =>
+                          t.sourceId.equals(row.sourceId) &
+                          t.remoteId.equals(row.remoteId),
+                    ))
+                    .getSingleOrNull();
+            final chapter =
+                await (database.select(database.chapters)..where(
+                      (t) =>
+                          t.sourceId.equals(row.chapterSourceId) &
+                          t.remoteId.equals(row.chapterRemoteId),
+                    ))
+                    .getSingleOrNull();
+            if (item?.type != MediaType.manga ||
+                chapter == null ||
+                chapter.itemSourceId != row.sourceId ||
+                chapter.itemRemoteId != row.remoteId) {
+              throw const FormatException('漫画章节状态不属于备份中的作品目录');
+            }
+            final old =
+                await (database.select(database.mangaChapterStates)..where(
+                      (t) =>
+                          t.sourceId.equals(row.sourceId) &
+                          t.remoteId.equals(row.remoteId) &
+                          t.chapterSourceId.equals(row.chapterSourceId) &
+                          t.chapterRemoteId.equals(row.chapterRemoteId),
+                    ))
+                    .getSingleOrNull();
+            final oldReset = old?.historyResetAt,
+                incomingReset = row.historyResetAt;
+            final reset = oldReset == null
+                ? incomingReset
+                : incomingReset == null || oldReset.isAfter(incomingReset)
+                ? oldReset
+                : incomingReset;
+            if (old != null && !old.updatedAt.isBefore(row.updatedAt)) {
+              if (reset != oldReset) {
+                await (database.update(database.mangaChapterStates)..where(
+                      (t) =>
+                          t.sourceId.equals(row.sourceId) &
+                          t.remoteId.equals(row.remoteId) &
+                          t.chapterSourceId.equals(row.chapterSourceId) &
+                          t.chapterRemoteId.equals(row.chapterRemoteId),
+                    ))
+                    .write(
+                      MangaChapterStatesCompanion(historyResetAt: Value(reset)),
+                    );
+              }
+            } else {
+              await database
+                  .into(database.mangaChapterStates)
+                  .insertOnConflictUpdate(
+                    row
+                        .toCompanion(false)
+                        .copyWith(historyResetAt: Value(reset)),
+                  );
+            }
+            if (reset != null) {
+              await (database.delete(database.histories)..where(
+                    (t) =>
+                        t.sourceId.equals(row.sourceId) &
+                        t.remoteId.equals(row.remoteId) &
+                        t.chapterSourceId.equals(row.chapterSourceId) &
+                        t.chapterRemoteId.equals(row.chapterRemoteId) &
+                        t.visitedAt.isSmallerOrEqualValue(reset),
+                  ))
+                  .go();
+            }
           }
           final categoryRows = _listOf(payload['categories'])
             ..sort(
@@ -1842,7 +2024,7 @@ class BackupService {
       final SourceDescriptor descriptor;
       try {
         descriptor = KazumiRule.recognizes(text)
-            ? KazumiRule.parse(text).descriptor
+            ? KazumiRule.parse(text, allowDeprecated: true).descriptor
             : SourceRule.parseMap(decoded).descriptor;
       } catch (_) {
         throw const FormatException('备份来源规则格式无效；未执行脚本');

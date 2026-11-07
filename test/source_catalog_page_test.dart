@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/db/app_database.dart';
@@ -12,6 +15,7 @@ import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_catalog.dart';
 import 'package:triomi/core/source/source_providers.dart';
+import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/source_repository.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
@@ -58,7 +62,8 @@ const String ruleJson = '''
  "detail": {"url": "{urlRaw}", "fields": {"title": "h1"}},
  "content": {"url": "{urlRaw}", "images": ["#reader img"]}}''';
 
-Future<Widget> harness({
+Future<ProviderContainer> harness(
+  WidgetTester tester, {
   required Future<List<SourceCatalogEntry>> Function() loader,
   FakeHttpClient? http,
   String? installedVersion,
@@ -79,22 +84,7 @@ Future<Widget> harness({
       enabled: false,
     );
   }
-  await prefs.set('sources.seededBuiltins', [
-    'builtin:light-novel-kingdom',
-    'builtin:light-novel-shelf',
-    'assets/rules/bangumi-anime.json',
-    'assets/rules/age-anime-js.json',
-    'assets/rules/kazumi-7sefun.json',
-    'assets/rules/kazumi-MXdm.json',
-    'assets/rules/kazumi-DM84.json',
-    'assets/rules/mangadex-api-js.json',
-    'assets/rules/local-fixture.json',
-    'assets/rules/local-fixture-anime.json',
-    'assets/rules/local-fixture-novel.json',
-    'assets/rules/local-fixture-js.json',
-  ]);
-  addTearDown(db.close);
-  return ProviderScope(
+  final container = ProviderContainer(
     overrides: [
       databaseProvider.overrideWithValue(db),
       preferencesProvider.overrideWithValue(prefs),
@@ -106,9 +96,26 @@ Future<Widget> harness({
             ),
       ),
       sourceCatalogLoaderProvider.overrideWithValue(loader),
+      sourcesProvider.overrideWith(_CatalogSources.new),
+      sourceRegistryProvider.overrideWith((ref) {
+        final registry = SourceRegistry(
+          repository: ref.watch(sourceRepositoryProvider),
+          http: ref.watch(sourceHttpClientProvider),
+          assetBundle: _CatalogAssets(),
+        );
+        ref.onDispose(registry.dispose);
+        return registry;
+      }),
     ],
-    child: const MaterialApp(home: Scaffold(body: CatalogSheet())),
   );
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: Scaffold(body: CatalogSheet())),
+    ),
+  );
+  await finishOwned(tester, container.read(sourcesProvider.future));
+  return container;
 }
 
 Future<void> settle(WidgetTester tester, {int rounds = 6}) async {
@@ -120,35 +127,107 @@ Future<void> settle(WidgetTester tester, {int rounds = 6}) async {
   }
 }
 
+class _CatalogSources extends SourceRegistryController {
+  @override
+  Future<SourceRegistrySnapshot> build() =>
+      ref.read(sourceRegistryProvider).load();
+}
+
+// RootBundle caches a metadata future across widget tests. Keep the real
+// packaged bytes, but create their future in this test's owning FakeAsync zone.
+class _CatalogAssets extends CachingAssetBundle {
+  @override
+  Future<ByteData> load(String key) async =>
+      ByteData.sublistView(File(key).readAsBytesSync());
+
+  @override
+  Future<String> loadString(String key, {bool cache = true}) async =>
+      File(key).readAsStringSync();
+}
+
+Future<T> finishOwned<T>(WidgetTester tester, Future<T> pending) async {
+  var finished = false;
+  late T result;
+  Object? failure;
+  StackTrace? trace;
+  unawaited(
+    pending.then(
+      (value) {
+        result = value;
+        finished = true;
+      },
+      onError: (Object error, StackTrace stack) {
+        failure = error;
+        trace = stack;
+        finished = true;
+      },
+    ),
+  );
+  for (var attempt = 0; attempt < 300 && !finished; attempt++) {
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 1)),
+    );
+  }
+  expect(finished, isTrue, reason: 'Catalog operation must finish');
+  if (failure != null) Error.throwWithStackTrace(failure!, trace!);
+  return result;
+}
+
+Future<void> closeCatalog(
+  WidgetTester tester,
+  ProviderContainer container,
+) async {
+  final db = container.read(databaseProvider);
+  await finishOwned(tester, container.read(sourcesProvider.future));
+  await tester.pumpWidget(const SizedBox.shrink());
+  container.dispose();
+  await tester.pump(const Duration(milliseconds: 1));
+  await settle(tester);
+  await tester.runAsync(() => db.close().timeout(const Duration(seconds: 5)));
+}
+
 void main() {
   for (final succeed in [true, false]) {
     testWidgets('升级 UI ${succeed ? "成功" : "失败保留旧版"}', (tester) async {
-      await tester.pumpWidget(
-        await harness(
-          installedVersion: '0.9.0',
-          loader: () async => [entryOf(id: 'catalog-manga')],
-          http: FakeHttpClient(
-            (request) async => SourceResponse(
-              statusCode: 200,
-              url: request.url,
-              body: succeed ? ruleJson : '{invalid',
-            ),
+      final container = await harness(
+        tester,
+        installedVersion: '0.9.0',
+        loader: () async => [entryOf(id: 'catalog-manga')],
+        http: FakeHttpClient(
+          (request) async => SourceResponse(
+            statusCode: 200,
+            url: request.url,
+            body: succeed ? ruleJson : '{invalid',
           ),
         ),
       );
-      await settle(tester, rounds: 10);
-      expect(find.text('更新'), findsOneWidget);
-      await tester.tap(find.text('更新'));
-      await settle(tester, rounds: 10);
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(CatalogSheet)),
-      );
-      final row = await SourceRepository(container.read(databaseProvider))
-          .byId('catalog-manga');
-      expect(row!.version, succeed ? '1.0.0' : '0.9.0');
-      expect(row.enabled, isFalse);
-      expect(find.text(succeed ? '已安装' : '更新'), findsOneWidget);
-      if (!succeed) expect(find.textContaining('更新失败，已保留原版本'), findsOneWidget);
+      try {
+        await settle(tester, rounds: 10);
+        expect(find.text('更新'), findsOneWidget);
+        await tester.tap(find.text('更新'));
+        await settle(tester, rounds: 10);
+        final row = await finishOwned(
+          tester,
+          SourceRepository(container.read(databaseProvider))
+              .byId('catalog-manga'),
+        );
+        expect(row!.version, succeed ? '1.0.0' : '0.9.0');
+        expect(row.enabled, isFalse);
+        expect(
+          row.ruleText,
+          succeed
+              ? ruleJson
+              : ruleJson.replaceAll('"version": "1.0.0"', '"version": "0.9.0"'),
+          reason: 'A failed upgrade must preserve the complete installed rule',
+        );
+        expect(find.text(succeed ? '已安装' : '更新'), findsOneWidget);
+        if (!succeed) {
+          expect(find.textContaining('更新失败，已保留原版本'), findsOneWidget);
+        }
+      } finally {
+        await closeCatalog(tester, container);
+      }
     });
   }
 
@@ -157,24 +236,27 @@ void main() {
       (request) async =>
           SourceResponse(statusCode: 200, url: request.url, body: ruleJson),
     );
-    await tester.pumpWidget(
-      await harness(
-        loader: () async => <SourceCatalogEntry>[entryOf(id: 'catalog-manga')],
-        http: http,
-      ),
+    final container = await harness(
+      tester,
+      loader: () async => <SourceCatalogEntry>[entryOf(id: 'catalog-manga')],
+      http: http,
     );
-    await settle(tester);
+    try {
+      await settle(tester);
 
-    await tester.tap(find.text('安装'));
-    await settle(tester, rounds: 8);
+      await tester.tap(find.text('安装'));
+      await settle(tester, rounds: 8);
 
-    expect(find.text('已安装'), findsOneWidget);
-    expect(find.text('安装'), findsNothing);
-    expect(find.textContaining('已安装「目录漫画源」'), findsOneWidget);
-    expect(
-      http.requests.single.url,
-      'https://raw.example.com/rules/catalog-manga.json',
-    );
+      expect(find.text('已安装'), findsOneWidget);
+      expect(find.text('安装'), findsNothing);
+      expect(find.textContaining('已安装「目录漫画源」'), findsOneWidget);
+      expect(
+        http.requests.single.url,
+        'https://raw.example.com/rules/catalog-manga.json',
+      );
+    } finally {
+      await closeCatalog(tester, container);
+    }
   });
 
   testWidgets('安装失败：具体原因可见，可重试', (tester) async {
@@ -185,49 +267,55 @@ void main() {
         message: 'HTTP 404',
       ),
     );
-    await tester.pumpWidget(
-      await harness(
-        loader: () async => <SourceCatalogEntry>[entryOf(id: 'gone')],
-        http: http,
-      ),
+    final container = await harness(
+      tester,
+      loader: () async => <SourceCatalogEntry>[entryOf(id: 'gone')],
+      http: http,
     );
-    await settle(tester);
+    try {
+      await settle(tester);
 
-    await tester.tap(find.text('安装'));
-    await settle(tester, rounds: 8);
+      await tester.tap(find.text('安装'));
+      await settle(tester, rounds: 8);
 
-    expect(find.textContaining('安装失败'), findsOneWidget);
-    expect(find.textContaining('HTTP 404'), findsOneWidget);
-    expect(find.text('安装'), findsOneWidget, reason: '失败后仍可重试');
+      expect(find.textContaining('安装失败'), findsOneWidget);
+      expect(find.textContaining('HTTP 404'), findsOneWidget);
+      expect(find.text('安装'), findsOneWidget, reason: '失败后仍可重试');
+    } finally {
+      await closeCatalog(tester, container);
+    }
   });
 
   testWidgets('目录加载失败可重试；空目录有明确提示', (tester) async {
     var fail = true;
     var count = 0;
-    await tester.pumpWidget(
-      await harness(
-        loader: () async {
-          count += 1;
-          if (fail) {
-            throw const SourceException(
-              sourceId: 'catalog',
-              type: SourceErrorType.network,
-              message: '仓库不可达',
-            );
-          }
-          return const <SourceCatalogEntry>[];
-        },
-      ),
+    final container = await harness(
+      tester,
+      loader: () async {
+        count += 1;
+        if (fail) {
+          throw const SourceException(
+            sourceId: 'catalog',
+            type: SourceErrorType.network,
+            message: '仓库不可达',
+          );
+        }
+        return const <SourceCatalogEntry>[];
+      },
     );
-    await settle(tester);
-    expect(find.textContaining('目录加载失败'), findsOneWidget);
-    expect(find.textContaining('仓库不可达'), findsOneWidget);
+    try {
+      await settle(tester);
+      expect(find.textContaining('目录加载失败'), findsOneWidget);
+      expect(find.textContaining('仓库不可达'), findsOneWidget);
 
-    fail = false;
-    await tester.tap(find.text('重试'));
-    await settle(tester);
-    expect(find.text('目录是空的：仓库还没有登记任何来源'), findsOneWidget);
-    expect(count, 2, reason: '重试确实重新加载了目录');
+      fail = false;
+      await tester.tap(find.text('重试'));
+      await settle(tester);
+      expect(find.text('目录是空的：仓库还没有登记任何来源'), findsOneWidget);
+      expect(count, 2, reason: '重试确实重新加载了目录');
+    } finally {
+      await closeCatalog(tester, container);
+    }
   });
 
   test('协议解析保持单一入口（loader 与 D76 共用 parse）', () {

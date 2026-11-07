@@ -431,7 +431,7 @@ void main() {
     const entry = KazumiCatalogEntry(name: '测试番剧源', version: '1.1');
     final descriptor = await repo.install('https://repo.test/main/', entry);
     await registry.setEnabled(descriptor.id, enabled: false);
-    expect((await registry.load()).entries.single.source, isA<KazumiSource>());
+    expect((await registry.load()).manageableEntries.single.source, isA<KazumiSource>());
     text = jsonEncode({...rule(), 'userAgent': 'changed'});
     await expectLater(
       repo.install('https://repo.test/main/', entry),
@@ -446,7 +446,7 @@ void main() {
       'https://repo.test/main/',
       const KazumiCatalogEntry(name: '测试番剧源', version: '1.2'),
     );
-    expect((await registry.load()).entries.single.enabled, false);
+    expect((await registry.load()).manageableEntries.single.enabled, false);
     text = jsonEncode(rule());
     await expectLater(
       repo.install('https://repo.test/main/', entry),

@@ -8651,6 +8651,604 @@ class AnimeFollowSyncStatesCompanion
   }
 }
 
+class $MangaChapterStatesTable extends MangaChapterStates
+    with TableInfo<$MangaChapterStatesTable, MangaChapterStateRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MangaChapterStatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _sourceIdMeta = const VerificationMeta(
+    'sourceId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceId = GeneratedColumn<String>(
+    'source_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _remoteIdMeta = const VerificationMeta(
+    'remoteId',
+  );
+  @override
+  late final GeneratedColumn<String> remoteId = GeneratedColumn<String>(
+    'remote_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _chapterSourceIdMeta = const VerificationMeta(
+    'chapterSourceId',
+  );
+  @override
+  late final GeneratedColumn<String> chapterSourceId = GeneratedColumn<String>(
+    'chapter_source_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _chapterRemoteIdMeta = const VerificationMeta(
+    'chapterRemoteId',
+  );
+  @override
+  late final GeneratedColumn<String> chapterRemoteId = GeneratedColumn<String>(
+    'chapter_remote_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isReadMeta = const VerificationMeta('isRead');
+  @override
+  late final GeneratedColumn<bool> isRead = GeneratedColumn<bool>(
+    'is_read',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_read" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _bookmarkedMeta = const VerificationMeta(
+    'bookmarked',
+  );
+  @override
+  late final GeneratedColumn<bool> bookmarked = GeneratedColumn<bool>(
+    'bookmarked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("bookmarked" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _totalPagesMeta = const VerificationMeta(
+    'totalPages',
+  );
+  @override
+  late final GeneratedColumn<int> totalPages = GeneratedColumn<int>(
+    'total_pages',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _historyResetAtMeta = const VerificationMeta(
+    'historyResetAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> historyResetAt =
+      GeneratedColumn<DateTime>(
+        'history_reset_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    sourceId,
+    remoteId,
+    chapterSourceId,
+    chapterRemoteId,
+    isRead,
+    bookmarked,
+    totalPages,
+    historyResetAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'manga_chapter_states';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MangaChapterStateRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('source_id')) {
+      context.handle(
+        _sourceIdMeta,
+        sourceId.isAcceptableOrUnknown(data['source_id']!, _sourceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceIdMeta);
+    }
+    if (data.containsKey('remote_id')) {
+      context.handle(
+        _remoteIdMeta,
+        remoteId.isAcceptableOrUnknown(data['remote_id']!, _remoteIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_remoteIdMeta);
+    }
+    if (data.containsKey('chapter_source_id')) {
+      context.handle(
+        _chapterSourceIdMeta,
+        chapterSourceId.isAcceptableOrUnknown(
+          data['chapter_source_id']!,
+          _chapterSourceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_chapterSourceIdMeta);
+    }
+    if (data.containsKey('chapter_remote_id')) {
+      context.handle(
+        _chapterRemoteIdMeta,
+        chapterRemoteId.isAcceptableOrUnknown(
+          data['chapter_remote_id']!,
+          _chapterRemoteIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_chapterRemoteIdMeta);
+    }
+    if (data.containsKey('is_read')) {
+      context.handle(
+        _isReadMeta,
+        isRead.isAcceptableOrUnknown(data['is_read']!, _isReadMeta),
+      );
+    }
+    if (data.containsKey('bookmarked')) {
+      context.handle(
+        _bookmarkedMeta,
+        bookmarked.isAcceptableOrUnknown(data['bookmarked']!, _bookmarkedMeta),
+      );
+    }
+    if (data.containsKey('total_pages')) {
+      context.handle(
+        _totalPagesMeta,
+        totalPages.isAcceptableOrUnknown(data['total_pages']!, _totalPagesMeta),
+      );
+    }
+    if (data.containsKey('history_reset_at')) {
+      context.handle(
+        _historyResetAtMeta,
+        historyResetAt.isAcceptableOrUnknown(
+          data['history_reset_at']!,
+          _historyResetAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {
+    sourceId,
+    remoteId,
+    chapterSourceId,
+    chapterRemoteId,
+  };
+  @override
+  MangaChapterStateRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MangaChapterStateRow(
+      sourceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_id'],
+      )!,
+      remoteId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_id'],
+      )!,
+      chapterSourceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}chapter_source_id'],
+      )!,
+      chapterRemoteId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}chapter_remote_id'],
+      )!,
+      isRead: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_read'],
+      )!,
+      bookmarked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}bookmarked'],
+      )!,
+      totalPages: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}total_pages'],
+      ),
+      historyResetAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}history_reset_at'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MangaChapterStatesTable createAlias(String alias) {
+    return $MangaChapterStatesTable(attachedDatabase, alias);
+  }
+}
+
+class MangaChapterStateRow extends DataClass
+    implements Insertable<MangaChapterStateRow> {
+  final String sourceId;
+  final String remoteId;
+  final String chapterSourceId;
+  final String chapterRemoteId;
+  final bool isRead;
+  final bool bookmarked;
+  final int? totalPages;
+
+  /// Explicit unread reset; older synchronized positions must not revive.
+  final DateTime? historyResetAt;
+  final DateTime updatedAt;
+  const MangaChapterStateRow({
+    required this.sourceId,
+    required this.remoteId,
+    required this.chapterSourceId,
+    required this.chapterRemoteId,
+    required this.isRead,
+    required this.bookmarked,
+    this.totalPages,
+    this.historyResetAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['source_id'] = Variable<String>(sourceId);
+    map['remote_id'] = Variable<String>(remoteId);
+    map['chapter_source_id'] = Variable<String>(chapterSourceId);
+    map['chapter_remote_id'] = Variable<String>(chapterRemoteId);
+    map['is_read'] = Variable<bool>(isRead);
+    map['bookmarked'] = Variable<bool>(bookmarked);
+    if (!nullToAbsent || totalPages != null) {
+      map['total_pages'] = Variable<int>(totalPages);
+    }
+    if (!nullToAbsent || historyResetAt != null) {
+      map['history_reset_at'] = Variable<DateTime>(historyResetAt);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  MangaChapterStatesCompanion toCompanion(bool nullToAbsent) {
+    return MangaChapterStatesCompanion(
+      sourceId: Value(sourceId),
+      remoteId: Value(remoteId),
+      chapterSourceId: Value(chapterSourceId),
+      chapterRemoteId: Value(chapterRemoteId),
+      isRead: Value(isRead),
+      bookmarked: Value(bookmarked),
+      totalPages: totalPages == null && nullToAbsent
+          ? const Value.absent()
+          : Value(totalPages),
+      historyResetAt: historyResetAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(historyResetAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory MangaChapterStateRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MangaChapterStateRow(
+      sourceId: serializer.fromJson<String>(json['sourceId']),
+      remoteId: serializer.fromJson<String>(json['remoteId']),
+      chapterSourceId: serializer.fromJson<String>(json['chapterSourceId']),
+      chapterRemoteId: serializer.fromJson<String>(json['chapterRemoteId']),
+      isRead: serializer.fromJson<bool>(json['isRead']),
+      bookmarked: serializer.fromJson<bool>(json['bookmarked']),
+      totalPages: serializer.fromJson<int?>(json['totalPages']),
+      historyResetAt: serializer.fromJson<DateTime?>(json['historyResetAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'sourceId': serializer.toJson<String>(sourceId),
+      'remoteId': serializer.toJson<String>(remoteId),
+      'chapterSourceId': serializer.toJson<String>(chapterSourceId),
+      'chapterRemoteId': serializer.toJson<String>(chapterRemoteId),
+      'isRead': serializer.toJson<bool>(isRead),
+      'bookmarked': serializer.toJson<bool>(bookmarked),
+      'totalPages': serializer.toJson<int?>(totalPages),
+      'historyResetAt': serializer.toJson<DateTime?>(historyResetAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  MangaChapterStateRow copyWith({
+    String? sourceId,
+    String? remoteId,
+    String? chapterSourceId,
+    String? chapterRemoteId,
+    bool? isRead,
+    bool? bookmarked,
+    Value<int?> totalPages = const Value.absent(),
+    Value<DateTime?> historyResetAt = const Value.absent(),
+    DateTime? updatedAt,
+  }) => MangaChapterStateRow(
+    sourceId: sourceId ?? this.sourceId,
+    remoteId: remoteId ?? this.remoteId,
+    chapterSourceId: chapterSourceId ?? this.chapterSourceId,
+    chapterRemoteId: chapterRemoteId ?? this.chapterRemoteId,
+    isRead: isRead ?? this.isRead,
+    bookmarked: bookmarked ?? this.bookmarked,
+    totalPages: totalPages.present ? totalPages.value : this.totalPages,
+    historyResetAt: historyResetAt.present
+        ? historyResetAt.value
+        : this.historyResetAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  MangaChapterStateRow copyWithCompanion(MangaChapterStatesCompanion data) {
+    return MangaChapterStateRow(
+      sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
+      remoteId: data.remoteId.present ? data.remoteId.value : this.remoteId,
+      chapterSourceId: data.chapterSourceId.present
+          ? data.chapterSourceId.value
+          : this.chapterSourceId,
+      chapterRemoteId: data.chapterRemoteId.present
+          ? data.chapterRemoteId.value
+          : this.chapterRemoteId,
+      isRead: data.isRead.present ? data.isRead.value : this.isRead,
+      bookmarked: data.bookmarked.present
+          ? data.bookmarked.value
+          : this.bookmarked,
+      totalPages: data.totalPages.present
+          ? data.totalPages.value
+          : this.totalPages,
+      historyResetAt: data.historyResetAt.present
+          ? data.historyResetAt.value
+          : this.historyResetAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MangaChapterStateRow(')
+          ..write('sourceId: $sourceId, ')
+          ..write('remoteId: $remoteId, ')
+          ..write('chapterSourceId: $chapterSourceId, ')
+          ..write('chapterRemoteId: $chapterRemoteId, ')
+          ..write('isRead: $isRead, ')
+          ..write('bookmarked: $bookmarked, ')
+          ..write('totalPages: $totalPages, ')
+          ..write('historyResetAt: $historyResetAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    sourceId,
+    remoteId,
+    chapterSourceId,
+    chapterRemoteId,
+    isRead,
+    bookmarked,
+    totalPages,
+    historyResetAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MangaChapterStateRow &&
+          other.sourceId == this.sourceId &&
+          other.remoteId == this.remoteId &&
+          other.chapterSourceId == this.chapterSourceId &&
+          other.chapterRemoteId == this.chapterRemoteId &&
+          other.isRead == this.isRead &&
+          other.bookmarked == this.bookmarked &&
+          other.totalPages == this.totalPages &&
+          other.historyResetAt == this.historyResetAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class MangaChapterStatesCompanion
+    extends UpdateCompanion<MangaChapterStateRow> {
+  final Value<String> sourceId;
+  final Value<String> remoteId;
+  final Value<String> chapterSourceId;
+  final Value<String> chapterRemoteId;
+  final Value<bool> isRead;
+  final Value<bool> bookmarked;
+  final Value<int?> totalPages;
+  final Value<DateTime?> historyResetAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const MangaChapterStatesCompanion({
+    this.sourceId = const Value.absent(),
+    this.remoteId = const Value.absent(),
+    this.chapterSourceId = const Value.absent(),
+    this.chapterRemoteId = const Value.absent(),
+    this.isRead = const Value.absent(),
+    this.bookmarked = const Value.absent(),
+    this.totalPages = const Value.absent(),
+    this.historyResetAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MangaChapterStatesCompanion.insert({
+    required String sourceId,
+    required String remoteId,
+    required String chapterSourceId,
+    required String chapterRemoteId,
+    this.isRead = const Value.absent(),
+    this.bookmarked = const Value.absent(),
+    this.totalPages = const Value.absent(),
+    this.historyResetAt = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : sourceId = Value(sourceId),
+       remoteId = Value(remoteId),
+       chapterSourceId = Value(chapterSourceId),
+       chapterRemoteId = Value(chapterRemoteId),
+       updatedAt = Value(updatedAt);
+  static Insertable<MangaChapterStateRow> custom({
+    Expression<String>? sourceId,
+    Expression<String>? remoteId,
+    Expression<String>? chapterSourceId,
+    Expression<String>? chapterRemoteId,
+    Expression<bool>? isRead,
+    Expression<bool>? bookmarked,
+    Expression<int>? totalPages,
+    Expression<DateTime>? historyResetAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (sourceId != null) 'source_id': sourceId,
+      if (remoteId != null) 'remote_id': remoteId,
+      if (chapterSourceId != null) 'chapter_source_id': chapterSourceId,
+      if (chapterRemoteId != null) 'chapter_remote_id': chapterRemoteId,
+      if (isRead != null) 'is_read': isRead,
+      if (bookmarked != null) 'bookmarked': bookmarked,
+      if (totalPages != null) 'total_pages': totalPages,
+      if (historyResetAt != null) 'history_reset_at': historyResetAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MangaChapterStatesCompanion copyWith({
+    Value<String>? sourceId,
+    Value<String>? remoteId,
+    Value<String>? chapterSourceId,
+    Value<String>? chapterRemoteId,
+    Value<bool>? isRead,
+    Value<bool>? bookmarked,
+    Value<int?>? totalPages,
+    Value<DateTime?>? historyResetAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return MangaChapterStatesCompanion(
+      sourceId: sourceId ?? this.sourceId,
+      remoteId: remoteId ?? this.remoteId,
+      chapterSourceId: chapterSourceId ?? this.chapterSourceId,
+      chapterRemoteId: chapterRemoteId ?? this.chapterRemoteId,
+      isRead: isRead ?? this.isRead,
+      bookmarked: bookmarked ?? this.bookmarked,
+      totalPages: totalPages ?? this.totalPages,
+      historyResetAt: historyResetAt ?? this.historyResetAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (sourceId.present) {
+      map['source_id'] = Variable<String>(sourceId.value);
+    }
+    if (remoteId.present) {
+      map['remote_id'] = Variable<String>(remoteId.value);
+    }
+    if (chapterSourceId.present) {
+      map['chapter_source_id'] = Variable<String>(chapterSourceId.value);
+    }
+    if (chapterRemoteId.present) {
+      map['chapter_remote_id'] = Variable<String>(chapterRemoteId.value);
+    }
+    if (isRead.present) {
+      map['is_read'] = Variable<bool>(isRead.value);
+    }
+    if (bookmarked.present) {
+      map['bookmarked'] = Variable<bool>(bookmarked.value);
+    }
+    if (totalPages.present) {
+      map['total_pages'] = Variable<int>(totalPages.value);
+    }
+    if (historyResetAt.present) {
+      map['history_reset_at'] = Variable<DateTime>(historyResetAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MangaChapterStatesCompanion(')
+          ..write('sourceId: $sourceId, ')
+          ..write('remoteId: $remoteId, ')
+          ..write('chapterSourceId: $chapterSourceId, ')
+          ..write('chapterRemoteId: $chapterRemoteId, ')
+          ..write('isRead: $isRead, ')
+          ..write('bookmarked: $bookmarked, ')
+          ..write('totalPages: $totalPages, ')
+          ..write('historyResetAt: $historyResetAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -8676,6 +9274,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $MergedMangaReferencesTable(this);
   late final $AnimeFollowSyncStatesTable animeFollowSyncStates =
       $AnimeFollowSyncStatesTable(this);
+  late final $MangaChapterStatesTable mangaChapterStates =
+      $MangaChapterStatesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8697,6 +9297,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     migrationPlans,
     mergedMangaReferences,
     animeFollowSyncStates,
+    mangaChapterStates,
   ];
 }
 
@@ -13203,6 +13804,316 @@ typedef $$AnimeFollowSyncStatesTableProcessedTableManager =
       AnimeFollowSyncStateRow,
       PrefetchHooks Function()
     >;
+typedef $$MangaChapterStatesTableCreateCompanionBuilder =
+    MangaChapterStatesCompanion Function({
+      required String sourceId,
+      required String remoteId,
+      required String chapterSourceId,
+      required String chapterRemoteId,
+      Value<bool> isRead,
+      Value<bool> bookmarked,
+      Value<int?> totalPages,
+      Value<DateTime?> historyResetAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$MangaChapterStatesTableUpdateCompanionBuilder =
+    MangaChapterStatesCompanion Function({
+      Value<String> sourceId,
+      Value<String> remoteId,
+      Value<String> chapterSourceId,
+      Value<String> chapterRemoteId,
+      Value<bool> isRead,
+      Value<bool> bookmarked,
+      Value<int?> totalPages,
+      Value<DateTime?> historyResetAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$MangaChapterStatesTableFilterComposer
+    extends Composer<_$AppDatabase, $MangaChapterStatesTable> {
+  $$MangaChapterStatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remoteId => $composableBuilder(
+    column: $table.remoteId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get chapterSourceId => $composableBuilder(
+    column: $table.chapterSourceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get chapterRemoteId => $composableBuilder(
+    column: $table.chapterRemoteId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isRead => $composableBuilder(
+    column: $table.isRead,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get bookmarked => $composableBuilder(
+    column: $table.bookmarked,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get totalPages => $composableBuilder(
+    column: $table.totalPages,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get historyResetAt => $composableBuilder(
+    column: $table.historyResetAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MangaChapterStatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $MangaChapterStatesTable> {
+  $$MangaChapterStatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get remoteId => $composableBuilder(
+    column: $table.remoteId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get chapterSourceId => $composableBuilder(
+    column: $table.chapterSourceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get chapterRemoteId => $composableBuilder(
+    column: $table.chapterRemoteId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isRead => $composableBuilder(
+    column: $table.isRead,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get bookmarked => $composableBuilder(
+    column: $table.bookmarked,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get totalPages => $composableBuilder(
+    column: $table.totalPages,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get historyResetAt => $composableBuilder(
+    column: $table.historyResetAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MangaChapterStatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MangaChapterStatesTable> {
+  $$MangaChapterStatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get sourceId =>
+      $composableBuilder(column: $table.sourceId, builder: (column) => column);
+
+  GeneratedColumn<String> get remoteId =>
+      $composableBuilder(column: $table.remoteId, builder: (column) => column);
+
+  GeneratedColumn<String> get chapterSourceId => $composableBuilder(
+    column: $table.chapterSourceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get chapterRemoteId => $composableBuilder(
+    column: $table.chapterRemoteId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isRead =>
+      $composableBuilder(column: $table.isRead, builder: (column) => column);
+
+  GeneratedColumn<bool> get bookmarked => $composableBuilder(
+    column: $table.bookmarked,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get totalPages => $composableBuilder(
+    column: $table.totalPages,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get historyResetAt => $composableBuilder(
+    column: $table.historyResetAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$MangaChapterStatesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MangaChapterStatesTable,
+          MangaChapterStateRow,
+          $$MangaChapterStatesTableFilterComposer,
+          $$MangaChapterStatesTableOrderingComposer,
+          $$MangaChapterStatesTableAnnotationComposer,
+          $$MangaChapterStatesTableCreateCompanionBuilder,
+          $$MangaChapterStatesTableUpdateCompanionBuilder,
+          (
+            MangaChapterStateRow,
+            BaseReferences<
+              _$AppDatabase,
+              $MangaChapterStatesTable,
+              MangaChapterStateRow
+            >,
+          ),
+          MangaChapterStateRow,
+          PrefetchHooks Function()
+        > {
+  $$MangaChapterStatesTableTableManager(
+    _$AppDatabase db,
+    $MangaChapterStatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MangaChapterStatesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MangaChapterStatesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MangaChapterStatesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> sourceId = const Value.absent(),
+                Value<String> remoteId = const Value.absent(),
+                Value<String> chapterSourceId = const Value.absent(),
+                Value<String> chapterRemoteId = const Value.absent(),
+                Value<bool> isRead = const Value.absent(),
+                Value<bool> bookmarked = const Value.absent(),
+                Value<int?> totalPages = const Value.absent(),
+                Value<DateTime?> historyResetAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MangaChapterStatesCompanion(
+                sourceId: sourceId,
+                remoteId: remoteId,
+                chapterSourceId: chapterSourceId,
+                chapterRemoteId: chapterRemoteId,
+                isRead: isRead,
+                bookmarked: bookmarked,
+                totalPages: totalPages,
+                historyResetAt: historyResetAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String sourceId,
+                required String remoteId,
+                required String chapterSourceId,
+                required String chapterRemoteId,
+                Value<bool> isRead = const Value.absent(),
+                Value<bool> bookmarked = const Value.absent(),
+                Value<int?> totalPages = const Value.absent(),
+                Value<DateTime?> historyResetAt = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => MangaChapterStatesCompanion.insert(
+                sourceId: sourceId,
+                remoteId: remoteId,
+                chapterSourceId: chapterSourceId,
+                chapterRemoteId: chapterRemoteId,
+                isRead: isRead,
+                bookmarked: bookmarked,
+                totalPages: totalPages,
+                historyResetAt: historyResetAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$MangaChapterStatesTable, MangaChapterStateRow>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $MangaChapterStatesTable,
+                    MangaChapterStateRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MangaChapterStatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MangaChapterStatesTable,
+      MangaChapterStateRow,
+      $$MangaChapterStatesTableFilterComposer,
+      $$MangaChapterStatesTableOrderingComposer,
+      $$MangaChapterStatesTableAnnotationComposer,
+      $$MangaChapterStatesTableCreateCompanionBuilder,
+      $$MangaChapterStatesTableUpdateCompanionBuilder,
+      (
+        MangaChapterStateRow,
+        BaseReferences<
+          _$AppDatabase,
+          $MangaChapterStatesTable,
+          MangaChapterStateRow
+        >,
+      ),
+      MangaChapterStateRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -13239,4 +14150,6 @@ class $AppDatabaseManager {
       $$MergedMangaReferencesTableTableManager(_db, _db.mergedMangaReferences);
   $$AnimeFollowSyncStatesTableTableManager get animeFollowSyncStates =>
       $$AnimeFollowSyncStatesTableTableManager(_db, _db.animeFollowSyncStates);
+  $$MangaChapterStatesTableTableManager get mangaChapterStates =>
+      $$MangaChapterStatesTableTableManager(_db, _db.mangaChapterStates);
 }

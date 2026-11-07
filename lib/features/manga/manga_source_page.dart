@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/db/app_database.dart';
+import '../../core/db/app_database.dart' hide MediaItemRow;
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/router/app_router.dart';
@@ -26,6 +26,7 @@ import 'manga_filter_snapshot.dart';
 import 'manga_filters_dialog.dart';
 import 'manga_item_actions.dart';
 import 'manga_source_actions.dart';
+import 'manga_source_layout.dart';
 
 class MangaSourcePage extends ConsumerStatefulWidget {
   const MangaSourcePage({
@@ -83,7 +84,8 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
   final _items = <MediaItem>[];
   final _scroll = ScrollController();
   int _page = 0, _epoch = 0;
-  bool _busy = false, _more = true, _list = false, _sessionBusy = false;
+  bool _busy = false, _more = true, _sessionBusy = false;
+  MangaSourceLayout _layout = MangaSourceLayout.comfortable;
   late bool _submitted = !_searchOnly;
   late bool _showSearch =
       widget.searchPage ||
@@ -123,9 +125,17 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
   @override
   void initState() {
     super.initState();
-    _list =
-        ref.read(preferencesProvider).get<bool>('manga.source.layout.list') ??
-        false;
+    final savedLayout = ref
+        .read(preferencesProvider)
+        .get<String>('manga.source.layout');
+    _layout =
+        MangaSourceLayout.values
+            .where((value) => value.name == savedLayout)
+            .firstOrNull ??
+        (ref.read(preferencesProvider).get<bool>('manga.source.layout.list') ==
+                true
+            ? MangaSourceLayout.list
+            : MangaSourceLayout.comfortable);
     _restoreFilters(snapshot: widget.filtersJson);
     if (widget.filtersJson != null && _filters.isNotEmpty) _listing = 'search';
     _scroll.addListener(_onScroll);
@@ -863,17 +873,24 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
                           : '筛选',
                     ),
                   ),
-                IconButton(
-                  tooltip: _list ? '网格显示' : '列表显示',
-                  icon: Icon(_list ? Icons.grid_view : Icons.view_list),
-                  onPressed: () {
-                    setState(() => _list = !_list);
-                    unawaited(
-                      ref
-                          .read(preferencesProvider)
-                          .set('manga.source.layout.list', _list),
-                    );
+                PopupMenuButton<MangaSourceLayout>(
+                  tooltip: '显示布局',
+                  icon: Icon(_layout.icon),
+                  initialValue: _layout,
+                  onSelected: (value) async {
+                    setState(() => _layout = value);
+                    await ref
+                        .read(preferencesProvider)
+                        .set('manga.source.layout', value.name);
                   },
+                  itemBuilder: (_) => [
+                    for (final value in MangaSourceLayout.values)
+                      CheckedPopupMenuItem(
+                        value: value,
+                        checked: _layout == value,
+                        child: Text(value.label),
+                      ),
+                  ],
                 ),
               ],
             ),
@@ -947,7 +964,7 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
                         child: Text(_submitted ? '此来源没有返回作品' : '输入关键词，搜索当前来源'),
                       ),
                     ),
-                  if (_list)
+                  if (_layout == MangaSourceLayout.list)
                     SliverList.builder(
                       itemCount: _items.length,
                       itemBuilder: (context, index) {
@@ -964,12 +981,9 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
                                   ?.value ??
                               raw.localMangaMetadata,
                         );
-                        return ListTile(
-                          minTileHeight: 88,
-                          title: Text(item.title),
-                          subtitle: Text(
-                            item.author ?? entry?.descriptor.name ?? '',
-                          ),
+                        return MediaItemRow(
+                          item: item,
+                          sourceName: entry?.descriptor.name ?? '',
                           onLongPress: () => unawaited(
                             showMangaItemActions(context, ref, item),
                           ),
@@ -987,11 +1001,15 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
                         builder: (context, constraints) {
                           final scale =
                               MediaQuery.textScalerOf(context).scale(14) / 14;
-                          final columns =
-                              (constraints.crossAxisExtent /
-                                      (scale > 1.4 ? 180 : 130))
-                                  .floor()
-                                  .clamp(2, 8);
+                          final width = constraints.crossAxisExtent;
+                          final columns = width < 600
+                              ? (width < 280 || scale > 1.8 ? 1 : 2)
+                              : ((width + 12) /
+                                        (160 * scale.clamp(1.0, 1.6) + 12))
+                                    .floor()
+                                    .clamp(2, 8);
+                          final cardWidth =
+                              (width - 12 * (columns - 1)) / columns;
                           return SliverGrid(
                             delegate: SliverChildBuilderDelegate((
                               context,
@@ -1010,9 +1028,10 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
                                         ?.value ??
                                     raw.localMangaMetadata,
                               );
-                              return MediaItemCard(
+                              return MangaSourceCard(
+                                key: ValueKey((item.sourceId, item.remoteId)),
                                 item: item,
-                                sourceName: entry?.descriptor.name ?? '',
+                                layout: _layout,
                                 onTap: () => context.push(
                                   AppRoutes.detailFor(item),
                                   extra: item,
@@ -1028,7 +1047,13 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
                                   crossAxisSpacing: 12,
                                   mainAxisSpacing: 12,
                                   mainAxisExtent:
-                                      270 + (scale - 1).clamp(0, 2) * 80,
+                                      cardWidth * 1.5 +
+                                      (_layout == MangaSourceLayout.compact
+                                          ? 0
+                                          : MediaQuery.textScalerOf(context)
+                                                        .scale(13) *
+                                                    2.8 +
+                                                8),
                                 ),
                           );
                         },

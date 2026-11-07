@@ -28,7 +28,10 @@ class _KazumiRepositoriesSheetState
   final _messages = <String, String>{};
   Map<String, SourceRow> _installed = {};
   bool _loading = false, _saving = false;
+  bool _archived = false;
+  List<String> _archiveFailures = [];
   int _generation = 0;
+  int _archiveCompleted = 0, _archiveTotal = 0;
 
   KazumiRepository get _client => KazumiRepository(
     ref.read(sourceRegistryProvider),
@@ -72,6 +75,7 @@ class _KazumiRepositoriesSheetState
         if (_repositories[_selected] != true) {
           _selected = value.keys.where((url) => value[url] == true).firstOrNull;
         }
+        if (_selected != KazumiRepository.defaultRepository) _archived = false;
       });
       unawaited(_load());
     } catch (error) {
@@ -90,21 +94,47 @@ class _KazumiRepositoriesSheetState
       _rules.clear();
       _messages.clear();
       _error = null;
+      _archiveCompleted = 0;
+      _archiveTotal = 0;
       _loading = repository != null;
     });
+    setState(() => _archiveFailures = []);
     await _readInstalled();
     if (!mounted || generation != _generation || repository == null) return;
     try {
-      final entries = await client.load(repository);
+      final archive = _archived
+          ? await client.loadArchived(
+              repository,
+              isCancelled: () => !mounted || generation != _generation,
+              onProgress: (entry, failure, completed, total) {
+                if (!mounted || generation != _generation) return;
+                setState(() {
+                  _archiveCompleted = completed;
+                  _archiveTotal = total;
+                  if (entry != null) {
+                    _entries.add(entry);
+                    _rules[entry.name] = entry.inspectedRule!;
+                  }
+                  if (failure != null) _archiveFailures.add(failure);
+                });
+              },
+            )
+          : null;
+      final entries = archive?.entries ?? await client.load(repository);
       if (!mounted || generation != _generation) return;
       setState(() {
         _entries = entries;
         _loading = false;
+        _archiveFailures = archive?.failures ?? [];
       });
       // Catalogs omit websites. Read actual rule metadata, never invent a URL
       // from a display name; stale repository responses cannot paint this page.
       for (final entry in entries) {
         if (!mounted || generation != _generation) return;
+        if (entry.inspectedRule case final rule?) {
+          setState(() => _rules[entry.name] = rule);
+          continue;
+        }
         try {
           final rule = await client.inspect(repository, entry);
           if (!mounted || generation != _generation) return;
@@ -133,18 +163,48 @@ class _KazumiRepositoriesSheetState
   Future<void> _install(KazumiCatalogEntry entry) async {
     final repository = _selected;
     if (repository == null || _operation != null) return;
+    if (entry.archived) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('导入已归档规则 ${entry.name}？'),
+          content: const Text(
+            '上游已停用此规则并从当前目录移除。归档不代表网站仍可用；可能停站、改版或需要手动验证，不能保证搜索或播放。新安装保持停用，核对后请在插件列表显式启用；已有收藏、历史和下载不改写。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('仍要导入'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted || repository != _selected) return;
+    }
     setState(() {
       _operation = entry.name;
       _generation++;
       _loading = false;
     });
     try {
-      final source = await _client.installLatest(repository, entry.name);
+      final source = await _client.installLatest(
+        repository,
+        entry.name,
+        archived: entry.archived,
+      );
       await ref.read(sourcesProvider.notifier).refresh();
       await _readInstalled();
       if (mounted && repository == _selected) {
         setState(() => _messages[entry.name] = '已安装并核验 v${source.version}');
-        _toast('「${source.name}」已安装或更新；原启停状态保留');
+        _toast(
+          entry.archived
+              ? '「${source.name}」归档规则已导入；新安装保持停用，请核对后启用'
+              : '「${source.name}」已安装或更新；原启停状态保留',
+        );
       }
     } catch (error) {
       if (mounted && repository == _selected) {
@@ -332,6 +392,7 @@ class _KazumiRepositoriesSheetState
               ),
             const SizedBox(height: 6),
             Text(status),
+            if (entry.archived) const Text('已归档 · 上游已停用 · 不保证可用；新安装默认停用'),
             if (entry.updatedLabel.isNotEmpty)
               Text(
                 '上游更新 ${entry.updatedLabel}',
@@ -355,7 +416,11 @@ class _KazumiRepositoriesSheetState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Icon(installed == null ? Icons.add : Icons.update),
-                label: Text(installed == null ? '安装插件' : '检查并更新'),
+                label: Text(
+                  entry.archived
+                      ? (installed == null ? '导入归档规则' : '核对归档版本')
+                      : (installed == null ? '安装插件' : '检查并更新'),
+                ),
               ),
             ),
           ],
@@ -373,7 +438,8 @@ class _KazumiRepositoriesSheetState
         .where((url) => _repositories[url] == true)
         .toList();
     final busy = _operation != null || _saving;
-    final missingOfficial = _selected == KazumiRepository.defaultRepository
+    final missingOfficial =
+        !_archived && _selected == KazumiRepository.defaultRepository
         ? _entries
               .where(
                 (entry) =>
@@ -413,7 +479,8 @@ class _KazumiRepositoriesSheetState
                 spacing: 8,
                 children: [
                   TextButton.icon(
-                    onPressed: busy || _selected == null || _loading
+                    onPressed:
+                        busy || _archived || _selected == null || _loading
                         ? null
                         : _installMissing,
                     icon: const Icon(Icons.add_box_outlined),
@@ -426,6 +493,20 @@ class _KazumiRepositoriesSheetState
                     ),
                 ],
               ),
+              if (_selected == KazumiRepository.defaultRepository)
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('当前规则')),
+                    ButtonSegment(value: true, label: Text('已归档规则')),
+                  ],
+                  selected: {_archived},
+                  onSelectionChanged: busy
+                      ? null
+                      : (values) {
+                          setState(() => _archived = values.single);
+                          unawaited(_load());
+                        },
+                ),
               if (_operation != null) ...[
                 const LinearProgressIndicator(),
                 const SizedBox(height: 4),
@@ -443,6 +524,10 @@ class _KazumiRepositoriesSheetState
                       'Kazumi api 1–9 · 网站验证需手动完成',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    if (_archived)
+                      const Text(
+                        '归档来自官方仓库真实文件，不计入当前可维护规则数。Kazumi 本机安装会保留旧规则，因此本机数量可能多于当前目录；归档原因以具体上游记录为准。',
+                      ),
                     if (!_loading && missingOfficial > 0)
                       Text(
                         '还有 $missingOfficial 个官方插件未安装，可一键添加。',
@@ -503,7 +588,10 @@ class _KazumiRepositoriesSheetState
                         onChanged: busy
                             ? null
                             : (value) {
-                                setState(() => _selected = value);
+                                setState(() {
+                                  _selected = value;
+                                  _archived = false;
+                                });
                                 unawaited(_load());
                               },
                       ),
@@ -513,9 +601,17 @@ class _KazumiRepositoriesSheetState
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     if (_loading)
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.all(24),
-                        child: Center(child: CircularProgressIndicator()),
+                        child: Column(
+                          children: [
+                            const CircularProgressIndicator(),
+                            if (_archived)
+                              Text(
+                                '归档逐项核对 $_archiveCompleted / $_archiveTotal · 已显示 ${_entries.length} 条',
+                              ),
+                          ],
+                        ),
                       ),
                     if (_error != null)
                       TextButton(
@@ -524,8 +620,20 @@ class _KazumiRepositoriesSheetState
                       ),
                     if (!_loading && _error == null)
                       Text(
-                        '本仓库 ${_entries.length} 个插件',
+                        _archived
+                            ? '官方归档 ${_entries.length} 条规则'
+                            : '本仓库 ${_entries.length} 个插件',
                         style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    if (_archiveFailures.isNotEmpty)
+                      ExpansionTile(
+                        title: Text(
+                          '归档读取失败 ${_archiveFailures.length} 项 · 未隐藏失败',
+                        ),
+                        children: [
+                          for (final failure in _archiveFailures)
+                            ListTile(title: Text(failure)),
+                        ],
                       ),
                     if (enabled.isEmpty)
                       const Padding(

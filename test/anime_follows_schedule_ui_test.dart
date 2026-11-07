@@ -177,6 +177,9 @@ void main() {
         overrides: [
           databaseProvider.overrideWithValue(db),
           preferencesProvider.overrideWithValue(memoryPreferences()),
+          sourceHttpClientProvider.overrideWithValue(FakeHttpClient((_) async =>
+              const SourceResponse(statusCode: 200,
+                  body: '{"id":12,"type":2,"name_cn":"相同标题"}'))),
         ],
       );
       addTearDown(() async {
@@ -217,6 +220,8 @@ void main() {
       );
       expect(allStatus.side, isNotNull);
       expect(allStatus.side!.style, BorderStyle.solid);
+      expect(find.textContaining('已看 0 集 · 总集数未知'), findsOneWidget);
+      expect(animeFollowStatuses.values.toList(), ['全部', '在看', '想看', '看过', '搁置', '抛弃']);
       expect(tester.takeException(), isNull);
       expect(
         (await LibraryRepository(db).listLibrary(type: MediaType.anime))
@@ -304,6 +309,7 @@ void main() {
             find.byType(MediaItemCollection),
           );
           expect(collection.items, hasLength(45));
+          expect(collection.showMetadata, isFalse);
           final scrolling = find.descendant(
             of: find.byType(MediaItemCollection),
             matching: find.byWidgetPredicate(

@@ -372,6 +372,8 @@ void main() {
       await waitForMangaReady(tester);
       expect(find.text('3/12'), findsOneWidget);
       await tester.tap(find.byTooltip('下一章'));
+      await tester.pump();
+      await tester.tap(find.text('继续阅读'));
       await waitForMangaReady(tester);
       expect(find.text('8/12'), findsOneWidget);
       tester.widget<Slider>(find.byType(Slider)).onChanged!(10);

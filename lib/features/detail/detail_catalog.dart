@@ -45,9 +45,30 @@ class _ChapterCatalog extends ConsumerStatefulWidget {
 class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
   final _volumes = <String, List<int>>{};
   Set<String> _eligible = {};
+  Set<String> _selectable = {};
   String? _volume;
   bool _reverse = false;
   late Future<HistoryView?> _history;
+  late Stream<List<MangaChapterStateRow>> _chapterStates;
+  late Stream<List<HistoryRow>> _chapterHistories;
+  final Set<String> _selected = {};
+  PersistentBottomSheetController? _selectionSheet;
+  StateSetter? _refreshSelectionSheet;
+  final _selectionSheetKey = GlobalKey();
+  double _selectionInset = 0;
+  bool _chapterActionBusy = false;
+  void _refreshCatalog(VoidCallback change) => setState(change);
+  void _measureSelectionInset() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _selectionSheet == null) return;
+      final render = _selectionSheetKey.currentContext?.findRenderObject();
+      if (render is RenderBox &&
+          render.hasSize &&
+          render.size.height != _selectionInset) {
+        setState(() => _selectionInset = render.size.height);
+      }
+    });
+  }
 
   bool get _novel => widget.item.type == MediaType.novel;
 
@@ -55,10 +76,33 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
     _history = ref
         .read(libraryRepositoryProvider)
         .lastReadOf(widget.item.sourceId, widget.item.remoteId);
+    final library = ref.read(libraryRepositoryProvider);
+    _chapterStates = _novel
+        ? const Stream.empty()
+        : library.watchMangaChapterStates(
+            widget.item.sourceId,
+            widget.item.remoteId,
+          );
+    _chapterHistories = _novel
+        ? const Stream.empty()
+        : library.watchChapterHistories(
+            widget.item.sourceId,
+            widget.item.remoteId,
+          );
   }
 
   void _groupVolumes() {
     _eligible = _downloadableChapterIds(widget.item, widget.chapters);
+    final unique = <String>{};
+    final ambiguous = <String>{};
+    for (final chapter in widget.chapters) {
+      if (chapter.sourceId == widget.item.sourceId &&
+          !unique.add(chapter.remoteId)) {
+        ambiguous.add(chapter.remoteId);
+      }
+    }
+    _selectable = unique.difference(ambiguous)..remove('');
+    _selected.retainAll(_selectable);
     _volumes.clear();
     if (!_novel) return;
     for (var index = 0; index < widget.chapters.length; index++) {
@@ -82,13 +126,30 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
         oldWidget.item.sourceId != widget.item.sourceId ||
         oldWidget.item.remoteId != widget.item.remoteId ||
         oldWidget.item.type != widget.item.type;
-    if (changedItem) _volume = null;
+    if (changedItem) {
+      _volume = null;
+      _selected.clear();
+    }
     if (!identical(oldWidget.chapters, widget.chapters) || changedItem) {
       _groupVolumes();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_selected.isEmpty) {
+          _selectionSheet?.close();
+        } else {
+          _refreshSelectionSheet?.call(() {});
+        }
+      });
     }
     if (changedItem || oldWidget.historyRevision != widget.historyRevision) {
       _loadHistory();
     }
+  }
+
+  @override
+  void dispose() {
+    _selectionSheet?.close();
+    super.dispose();
   }
 
   VoidCallback? _downloadAction(int index, DownloadEntry? entry) {
@@ -125,11 +186,22 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
       ? widget.chapters.length - 1 - offset
       : offset;
 
-  Widget _rows(List<int>? indices, Map<String, DownloadEntry> entries) =>
-      FutureBuilder<HistoryView?>(
+  Widget _rows(
+    List<int>? indices,
+    Map<String, DownloadEntry> entries,
+  ) => StreamBuilder<List<MangaChapterStateRow>>(
+    stream: _chapterStates,
+    builder: (context, states) => StreamBuilder<List<HistoryRow>>(
+      stream: _chapterHistories,
+      builder: (context, histories) => FutureBuilder<HistoryView?>(
         future: _history,
         builder: (context, snapshot) => SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            0,
+            16,
+            _selectionSheet == null ? 16 : _selectionInset + 40,
+          ),
           sliver: SliverList.builder(
             key: ValueKey('detail-chapter-list:${widget.item.type.name}'),
             itemCount: (indices?.length ?? widget.chapters.length) * 2 - 1,
@@ -143,6 +215,25 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
               final current =
                   snapshot.data?.chapterRemoteId == chapter.remoteId &&
                   chapter.sourceId == widget.item.sourceId;
+              final chapterState = states.data
+                  ?.where(
+                    (row) =>
+                        row.chapterSourceId == chapter.sourceId &&
+                        row.chapterRemoteId == chapter.remoteId,
+                  )
+                  .firstOrNull;
+              final history = histories.data
+                  ?.where(
+                    (row) =>
+                        row.chapterSourceId == chapter.sourceId &&
+                        row.chapterRemoteId == chapter.remoteId,
+                  )
+                  .firstOrNull;
+              final selected =
+                  chapter.sourceId == widget.item.sourceId &&
+                  _selectable.contains(chapter.remoteId) &&
+                  _selected.contains(chapter.remoteId);
+              final read = !_novel && chapterState?.isRead == true;
               final enabled =
                   widget.canOpen &&
                   (!chapter.locked || _novel) &&
@@ -150,7 +241,12 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
               final entry = chapter.sourceId == widget.item.sourceId
                   ? entries[chapter.remoteId]
                   : null;
-              final onTap = enabled
+              final onTap = _selected.isNotEmpty
+                  ? (_selectable.contains(chapter.remoteId) &&
+                            chapter.sourceId == widget.item.sourceId
+                        ? () => _toggleChapterSelection(chapter.remoteId)
+                        : null)
+                  : enabled
                   ? () => unawaited(widget.onSelected(index))
                   : null;
               final download = _ChapterDownloadStatus(
@@ -164,6 +260,10 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
                 if (!_novel && date != null) date,
                 if (current) '上次读到',
                 if (chapter.locked) '锁定章节',
+                if (!_novel && chapterState?.bookmarked == true) '书签',
+                if (!_novel && !read && history != null)
+                  '第 ${history.position.toInt() + 1} 页${chapterState?.totalPages == null ? '' : ' / ${chapterState!.totalPages} 页'}',
+                if (read) '已读完',
               ];
               final volume = chapter.volumeTitle?.trim();
               final previousVolume = offset == 0
@@ -172,54 +272,84 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
                         ?.trim();
               return KeyedSubtree(
                 key: ValueKey('detail-chapter-index:$index'),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (!_novel &&
-                        volume?.isNotEmpty == true &&
-                        volume != previousVolume)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Text(
-                          volume!,
-                          style: Theme.of(context).textTheme.titleSmall,
+                child: GestureDetector(
+                  onSecondaryTap:
+                      !_novel &&
+                          chapter.sourceId == widget.item.sourceId &&
+                          _selectable.contains(chapter.remoteId)
+                      ? () => _toggleChapterSelection(chapter.remoteId)
+                      : null,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (!_novel &&
+                          volume?.isNotEmpty == true &&
+                          volume != previousVolume)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                            volume!,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
                         ),
-                      ),
-                    ListTile(
-                      dense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 4,
-                      ),
-                      leading: _novel
-                          ? Icon(
-                              current ? Icons.bookmark : Icons.article_outlined,
-                              size: 18,
-                            )
-                          : null,
-                      title: Text(
-                        chapter.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: current
-                            ? TextStyle(
-                                color: Theme.of(context).colorScheme.primary,
+                      ListTile(
+                        selected: selected,
+                        onLongPress:
+                            !_novel &&
+                                chapter.sourceId == widget.item.sourceId &&
+                                _selectable.contains(chapter.remoteId)
+                            ? () => _toggleChapterSelection(chapter.remoteId)
+                            : null,
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 4,
+                        ),
+                        leading: _novel
+                            ? Icon(
+                                current
+                                    ? Icons.bookmark
+                                    : Icons.article_outlined,
+                                size: 18,
                               )
                             : null,
+                        title: Text(
+                          chapter.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: read
+                              ? TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.45),
+                                )
+                              : current
+                              ? TextStyle(
+                                  color: Theme.of(context).colorScheme.primary,
+                                )
+                              : null,
+                        ),
+                        subtitle: details.isEmpty
+                            ? null
+                            : Text(details.join(' · ')),
+                        trailing: _selected.isNotEmpty && !_novel
+                            ? Icon(
+                                selected
+                                    ? Icons.check_circle
+                                    : Icons.radio_button_unchecked,
+                              )
+                            : download,
+                        onTap: onTap,
                       ),
-                      subtitle: details.isEmpty
-                          ? null
-                          : Text(details.join(' · ')),
-                      trailing: download,
-                      onTap: onTap,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             },
           ),
         ),
-      );
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {

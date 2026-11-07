@@ -11,6 +11,8 @@ class SourceRepository {
 
   final AppDatabase _db;
 
+  static const internalMetadataId = 'bangumi-anime';
+
   Future<List<SourceRow>> all() async {
     final query = _db.select(_db.sources)
       ..orderBy([
@@ -37,6 +39,10 @@ class SourceRepository {
     String? repoUrl,
     bool? enabled,
   }) {
+    if (id == internalMetadataId &&
+        (kind != SourceKind.builtin || enabled == false)) {
+      throw StateError('Bangumi 资料是应用基础能力，不能停用或替换为插件');
+    }
     return _db
         .into(_db.sources)
         .insertOnConflictUpdate(
@@ -55,10 +61,13 @@ class SourceRepository {
         );
   }
 
-  Future<void> setEnabled(String id, {required bool enabled}) {
+  Future<void> setEnabled(String id, {required bool enabled}) async {
+    if (id == internalMetadataId && !enabled) {
+      throw StateError('Bangumi 资料是应用基础能力，不能停用');
+    }
     final statement = _db.update(_db.sources)
       ..where((table) => table.id.equals(id));
-    return statement.write(
+    await statement.write(
       SourcesCompanion(
         enabled: Value(enabled),
         updatedAt: Value(DateTime.now()),
@@ -76,7 +85,11 @@ class SourceRepository {
     required String version,
     required String ruleText,
     required String repoUrl,
+    bool enabledWhenNew = true,
   }) => _db.transaction(() async {
+    if (id == internalMetadataId) {
+      throw StateError('Bangumi 资料由应用维护，不能导入替换');
+    }
     final current = await byId(id);
     if (current != expected) {
       throw StateError('来源在更新期间发生了变更，请刷新后重试');
@@ -93,19 +106,60 @@ class SourceRepository {
       version: version,
       ruleText: ruleText,
       repoUrl: repoUrl,
-      enabled: current?.enabled ?? true,
+      enabled: current?.enabled ?? enabledWhenNew,
     );
   });
 
-  Future<void> remove(String id) {
+  Future<void> remove(String id) async {
+    if (id == internalMetadataId) {
+      throw StateError('Bangumi 资料是应用基础能力，不能删除');
+    }
     final statement = _db.delete(_db.sources)
       ..where((table) => table.id.equals(id));
-    return statement.go();
+    await statement.go();
   }
 
-  Future<int> count() async {
+  /// Retire only the exact default observed by the caller, and only when no
+  /// stored identity refers to it. Do not translate incompatible remote IDs or
+  /// touch files: cached media, sync clocks and pending plans retain ownership.
+  Future<bool> removeUnreferencedDefault(
+    SourceRow expected, {
+    required String replacementId,
+  }) => _db.transaction(() async {
+    if (await byId(expected.id) != expected) return false;
+    if (await byId(replacementId) == null) return false;
+    for (final table in _db.allTables) {
+      if (table.actualTableName == _db.sources.actualTableName) continue;
+      final identityColumns = table.$columns.where(
+        (column) => column.$name.endsWith('source_id'),
+      );
+      final documentColumns = table.$columns.where(
+        (column) => column.$name.endsWith('_json') || column.$name == 'payload',
+      );
+      final clauses = [
+        for (final column in identityColumns) '"${column.$name}" = ?',
+        for (final column in documentColumns) 'instr("${column.$name}", ?) > 0',
+      ];
+      if (clauses.isEmpty) continue;
+      final reference = await _db
+          .customSelect(
+            'SELECT 1 FROM "${table.actualTableName}" WHERE ${clauses.join(' OR ')} LIMIT 1',
+            variables: [for (final _ in clauses) Variable<String>(expected.id)],
+            readsFrom: {table},
+          )
+          .getSingleOrNull();
+      if (reference != null) return false;
+    }
+    await remove(expected.id);
+    return true;
+  });
+
+  Future<int> count({bool excludeInternal = false}) async {
     final query = _db.selectOnly(_db.sources)
       ..addColumns([_db.sources.id.count()]);
+    if (excludeInternal) {
+      query.where(_db.sources.id.equals(internalMetadataId).not());
+    }
     final row = await query.getSingle();
     return row.read(_db.sources.id.count()) ?? 0;
   }

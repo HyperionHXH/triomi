@@ -265,6 +265,7 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
           items: visible,
           sourceName: '',
           preferGrid: true,
+          showMetadata: false,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           badgeOf: (item) => item.rating == null || item.rating == 0
               ? null

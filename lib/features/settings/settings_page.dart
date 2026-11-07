@@ -365,11 +365,6 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                   const LibraryCategoriesPage(type: MediaType.manga),
                 ),
                 page(Icons.swap_horiz, '迁移管理', const MigrationPlansPage()),
-                const ListTile(
-                  leading: Icon(Icons.chrome_reader_mode_outlined),
-                  title: Text('阅读器选项'),
-                  subtitle: Text('打开漫画阅读器，在设置中调整翻页、方向与显示；支持按作品保存'),
-                ),
               ],
             ),
           ],

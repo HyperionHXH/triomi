@@ -330,7 +330,7 @@ void main() {
       expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
       expect((await repository.byId('offline'))!.enabled, isFalse);
       expect((await repository.byId('unavailable'))!.enabled, isFalse);
-      expect(snapshot.entries.single.descriptor.nsfw, isTrue);
+      expect(snapshot.manageableEntries.single.descriptor.nsfw, isTrue);
       expect(runtimes, 0);
     },
   );

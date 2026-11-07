@@ -344,6 +344,7 @@ class _SeasonScheduleState extends ConsumerState<SeasonSchedule> {
               items: [for (final row in visible) bangumiItem(row)],
               sourceName: 'Bangumi · 公开兼容季度资料',
               preferGrid: true,
+              showMetadata: false,
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               badgeOf: (item) {
                 final row = visible.firstWhere(

@@ -240,11 +240,8 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
   Future<void> _syncLibrary() async {
     if (_busy) return;
     _retry = _syncLibrary;
-    final automatic = ref.read(libraryAutoSyncProvider);
-    if (automatic.configured || !automatic.bangumiEnabled) {
-      final config = await _prepareConfig();
-      if (config == null || !mounted) return;
-    }
+    final config = await _prepareConfig();
+    if (config == null || !mounted) return;
     setState(() {
       _localBusy = true;
       _status = null;
@@ -444,14 +441,9 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
     }
   }
 
-  Future<void> _setAutomaticSync(bool value, {bool bangumi = false}) async {
+  Future<void> _setAutomaticSync(bool value) async {
     try {
-      final controller = ref.read(libraryAutoSyncProvider.notifier);
-      if (bangumi) {
-        await controller.setBangumiEnabled(value);
-      } else {
-        await controller.setEnabled(value);
-      }
+      await ref.read(libraryAutoSyncProvider.notifier).setEnabled(value);
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -633,26 +625,12 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
                     value: automatic.enabled,
                     onChanged: automatic.configured ? _setAutomaticSync : null,
                   ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('同时自动同步 Bangumi 收藏'),
-                    subtitle: const Text('需配置 Bangumi 账号；仅同步收藏状态。'),
-                    value: automatic.bangumiEnabled,
-                    onChanged: (value) =>
-                        _setAutomaticSync(value, bangumi: true),
-                  ),
-                  TextButton.icon(
-                    onPressed: () =>
-                        context.push('${AppRoutes.tracking}?type=anime'),
-                    icon: const Icon(Icons.manage_accounts_outlined),
-                    label: const Text('管理 Bangumi 账号'),
-                  ),
                   const SizedBox(height: AppSpacing.xs),
                   OutlinedButton.icon(
                     onPressed:
                         _busy ||
                             automatic.syncing ||
-                            (!automatic.configured && !automatic.bangumiEnabled)
+                            !automatic.configured
                         ? null
                         : _syncLibrary,
                     icon: const Icon(Icons.sync),

@@ -70,6 +70,7 @@ void main() {
   late KazumiRepository client;
   final versions = <String, String>{};
   final failures = <String>{};
+  final catalogAdditions = <String>[];
   var changedSameVersion = false;
   Future<void> Function(SourceRequest)? beforeResponse;
   late _SecureHttp http;
@@ -79,6 +80,7 @@ void main() {
   setUp(() {
     versions.clear();
     failures.clear();
+    catalogAdditions.clear();
     changedSameVersion = false;
     beforeResponse = null;
     db = openTestDatabase();
@@ -91,7 +93,7 @@ void main() {
       final body = name == 'index'
           ? [
               for (final name
-                  in isA ? ['alpha', 'broken', 'removed'] : ['beta'])
+                  in isA ? ['alpha', 'broken', 'removed', ...catalogAdditions] : ['beta'])
                 {'name': name, 'version': versions[name] ?? '1.0'},
             ]
           : {
@@ -566,6 +568,36 @@ void main() {
       expect(await registry.repository.byId(id), existing);
     },
   );
+
+  test('new upstream additions are discoverable without replacing custom rules or reinstalling removals', () async {
+    final alpha = await install('alpha', repoA);
+    final old = (await registry.repository.byId(alpha))!;
+    await registry.repository.upsert(
+      id: alpha,
+      name: old.name,
+      type: old.type,
+      kind: old.kind,
+      ruleText: jsonEncode({..._rule('alpha', '1.0'), 'userAgent': 'my custom rule'}),
+      version: old.version,
+      repoUrl: 'manual',
+      enabled: false,
+    );
+    final custom = await registry.repository.byId(alpha);
+    final removed = await install('removed', repoA);
+    await registry.remove(removed);
+    catalogAdditions.add('newcomer');
+    final catalog = await client.load(repoA);
+    expect(catalog.map((entry) => entry.name), contains('newcomer'));
+    await client.refreshInstalled(repositories: {repoA: true}, update: true);
+    expect(await registry.repository.byId(KazumiRule.idForName('newcomer')), isNull);
+    expect(await registry.repository.byId(removed), isNull);
+    expect(await registry.repository.byId(alpha), custom);
+    final added = await client.installMissing(repoA);
+    expect(added.map((result) => result.name).toSet(), {'broken', 'removed', 'newcomer'});
+    expect(added.every((result) => result.updated), isTrue);
+    expect(await registry.repository.byId(alpha), custom);
+    expect(await client.installMissing(repoA), isEmpty);
+  });
 
   test('actual mutefun self anchor resolves href and keeps independent episode roads', () async {
     final parsed = KazumiRule.parse(

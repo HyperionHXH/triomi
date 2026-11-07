@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -36,6 +39,7 @@ class SourceEntry {
     required this.enabled,
     this.ruleText,
     this.repoUrl,
+    this.isRetiredDefault = false,
     // Keep the public descriptor: argument while exposing live JS capabilities.
     // ignore: prefer_initializing_formals
   }) : _descriptor = descriptor;
@@ -50,6 +54,17 @@ class SourceEntry {
   final String? repoUrl;
 
   bool get isBuiltin => descriptor.kind == SourceKind.builtin;
+
+  /// Application-owned metadata remains resolvable, but is not a plugin.
+  bool get isInternal => descriptor.id == SourceRepository.internalMetadataId;
+
+  /// A pristine old AGE engine retained solely for its stored numeric IDs.
+  /// It is not a second candidate when the canonical same-site plugin exists.
+  final bool isRetiredDefault;
+  bool get isManageable => !isInternal && !isRetiredDefault;
+  bool get isCustomLegacyAge =>
+      descriptor.id == 'age-anime' &&
+      !SourceRegistry._isPristineLegacyAge(ruleText);
 
   bool supports(SourceCapability capability) => descriptor.supports(capability);
 }
@@ -82,6 +97,11 @@ class SourceRegistrySnapshot {
 
   final List<SourceEntry> entries;
   final List<SourceFailure> failures;
+
+  List<SourceEntry> get manageableEntries => [
+    for (final entry in entries)
+      if (entry.isManageable) entry,
+  ];
 
   List<SourceEntry> get enabledEntries => <SourceEntry>[
     for (final entry in entries)
@@ -156,6 +176,78 @@ class SourceRegistry {
 
   final AssetBundle _bundle;
   final Map<String, ({String text, JsSource instance})> _scripts = {};
+  Future<String>? _metadataText;
+
+  // Before build 186 Windows checkouts could package CRLF bytes. Normalize only
+  // that transport difference; script bytes, JSON spacing and key order stay pinned.
+  static bool _isPristineLegacyAge(String? text) =>
+      text != null &&
+      sha256.convert(utf8.encode(text.replaceAll('\r\n', '\n'))).toString() ==
+          'c0adc77c4118399cd9077790840e2133e74517b992e84220c700d931279f0063';
+
+  Future<void> _ensureInternalMetadata() async {
+    final text = await (_metadataText ??= _bundle.loadString(
+      'assets/rules/bangumi-anime.json',
+    ));
+    final rule = SourceRule.parseJson(text);
+    final descriptor = rule.descriptor;
+    final saved = await repository.byId(SourceRepository.internalMetadataId);
+    if (saved != null &&
+        saved.ruleText == text &&
+        saved.enabled &&
+        saved.kind == SourceKind.builtin &&
+        saved.name == descriptor.name &&
+        saved.type == descriptor.type &&
+        saved.lang == descriptor.lang &&
+        saved.version == descriptor.version &&
+        saved.repoUrl == null) {
+      return;
+    }
+    await repository.upsert(
+      id: descriptor.id,
+      name: descriptor.name,
+      type: descriptor.type,
+      kind: SourceKind.builtin,
+      ruleText: text,
+      lang: descriptor.lang,
+      version: descriptor.version,
+      enabled: true,
+    );
+  }
+
+  Future<bool> _hasCanonicalAge() async {
+    final row = await repository.byId(KazumiRule.idForName('AGE'));
+    if (row?.ruleText == null) return false;
+    try {
+      final rule = KazumiRule.parse(row!.ruleText!, allowDeprecated: true);
+      // An edited rule with the same name but another host is not a duplicate.
+      return rule.descriptor.id == row.id &&
+          rule.descriptor.baseUrl == 'https://www.agedm.io/';
+    } on RuleFormatException {
+      return false;
+    }
+  }
+
+  Future<bool> _retireLegacyAge() async {
+    if (!await _hasCanonicalAge()) return false;
+    final legacy = await repository.byId('age-anime');
+    if (legacy == null ||
+        legacy.kind != SourceKind.builtin ||
+        legacy.name != 'AGE 番剧' ||
+        legacy.version != '1.0.1' ||
+        legacy.lang != 'zh' ||
+        legacy.type != MediaType.anime ||
+        legacy.repoUrl != null ||
+        !_isPristineLegacyAge(legacy.ruleText)) {
+      return false;
+    }
+    await repository.removeUnreferencedDefault(
+      legacy,
+      replacementId: KazumiRule.idForName('AGE'),
+    );
+    return true;
+  }
+
   bool _disposed = false;
 
   /// Own JS engines for the lifetime of this registry. Refreshes reuse an
@@ -211,7 +303,6 @@ class SourceRegistry {
 
   static List<String> get builtinRuleAssets => <String>[
     'assets/rules/bangumi-anime.json',
-    'assets/rules/age-anime-js.json',
     for (final name in officialKazumiNames) 'assets/rules/kazumi-$name.json',
     'assets/rules/mangadex-api-js.json',
     if (developmentSourcesEnabled) ...<String>[
@@ -224,6 +315,9 @@ class SourceRegistry {
   ];
 
   Future<SourceRegistrySnapshot> load() async {
+    if (_disposed) throw StateError('来源注册表已关闭');
+    await _ensureInternalMetadata();
+    final canonicalAgeInstalled = await _retireLegacyAge();
     final rows = await repository.all();
     if (_disposed) throw StateError('来源注册表已关闭');
     final ids = <String>{};
@@ -276,7 +370,7 @@ class SourceRegistry {
       SourceDescriptor? metadata;
       try {
         if (KazumiRule.recognizes(text)) {
-          final rule = KazumiRule.parse(text);
+          final rule = KazumiRule.parse(text, allowDeprecated: true);
           metadata = rule.descriptor;
           if (rule.descriptor.id != row.id) {
             throw const RuleFormatException('Kazumi 规则标识与保存的来源不一致');
@@ -308,6 +402,10 @@ class SourceRegistry {
               source: source,
               enabled: row.enabled,
               ruleText: text,
+              isRetiredDefault:
+                  canonicalAgeInstalled &&
+                  row.id == 'age-anime' &&
+                  _isPristineLegacyAge(text),
               repoUrl: row.repoUrl,
             ),
           );
@@ -390,7 +488,11 @@ class SourceRegistry {
     // absence is not installation consent: new packaged sources remain fully
     // available through explicit catalog install/all, rather than resurrecting.
     final existingProfile =
-        alreadySeeded.isNotEmpty || (await repository.count()) > 0;
+        alreadySeeded.isNotEmpty ||
+        (await repository.count(excludeInternal: true)) > 0;
+    // Unlike removable playback rules, metadata is a required internal service.
+    // Prior seeded markers (including deletions in older builds) cannot disable it.
+    await _ensureInternalMetadata();
     const originalKazumiAssets = {
       'assets/rules/kazumi-7sefun.json',
       'assets/rules/kazumi-MXdm.json',
@@ -450,6 +552,7 @@ class SourceRegistry {
         continue;
       }
     }
+    await _retireLegacyAge();
     return seededNow;
   }
 
@@ -458,12 +561,13 @@ class SourceRegistry {
     String text, {
     String? repoUrl,
     bool enabled = true,
+    bool allowDeprecated = false,
   }) async {
     if (text.trim().isEmpty) {
       throw const RuleFormatException('规则内容为空');
     }
     if (KazumiRule.recognizes(text)) {
-      final rule = KazumiRule.parse(text);
+      final rule = KazumiRule.parse(text, allowDeprecated: allowDeprecated);
       final old = await repository.byId(rule.descriptor.id);
       if (old != null && old.ruleText != text) {
         throw const RuleFormatException('已有同名 Kazumi 来源，请从番剧规则仓库安全更新');
@@ -477,13 +581,14 @@ class SourceRegistry {
         version: rule.descriptor.version!,
         ruleText: text,
         repoUrl: repoUrl ?? 'manual',
+        enabledWhenNew: enabled && !rule.deprecated,
       );
-      if (old == null && !enabled) {
-        await repository.setEnabled(rule.descriptor.id, enabled: false);
-      }
       return rule.descriptor;
     }
     final rule = SourceRule.parseJson(text);
+    if (rule.descriptor.id == SourceRepository.internalMetadataId) {
+      throw const RuleFormatException('Bangumi 资料由应用维护，不能导入替换');
+    }
     await repository.upsert(
       id: rule.descriptor.id,
       name: rule.descriptor.name,

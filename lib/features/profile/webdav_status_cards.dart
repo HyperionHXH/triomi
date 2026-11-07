@@ -16,7 +16,6 @@ String webDavSyncLabel(LibraryAutoSyncState state) {
   if (state.syncing) return '正在同步收藏与进度';
   if (state.error != null) return '同步需要处理';
   if (state.pending) return '本机有待同步的更改';
-  if (!state.configured && state.bangumiEnabled) return 'Bangumi 自动同步已开启';
   return state.enabled && state.configured ? '自动同步已开启' : '自动同步已暂停';
 }
 
@@ -93,20 +92,6 @@ class WebDavConnectionStatus extends StatelessWidget {
           if (state.error != null) ...[
             const SizedBox(height: AppSpacing.sm),
             Text(state.error!, style: TextStyle(color: colors.error)),
-          ],
-          if (state.bangumiEnabled) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              state.bangumiError ??
-                  (state.bangumiLastSuccess == null
-                      ? 'Bangumi 收藏等待同步'
-                      : 'Bangumi 最近同步 · ${_time(state.bangumiLastSuccess!)}'),
-              style: TextStyle(
-                color: state.bangumiError == null
-                    ? colors.onSurfaceVariant
-                    : colors.error,
-              ),
-            ),
           ],
         ],
       ),

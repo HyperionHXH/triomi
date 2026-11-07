@@ -44,6 +44,7 @@ class AnimeSourceSheet extends ConsumerStatefulWidget {
 class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
   late final _query = TextEditingController(text: widget.item.title);
   List<SourceEntry> _sources = [];
+  Set<String> _availableSourceIds = {};
   final _results = <String, List<MediaItem>>{};
   final _errors = <String, String>{};
   final _verification = <String, KazumiVerificationRequired>{};
@@ -99,9 +100,17 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
       if (!mounted || generation != _generation) return;
       final snapshot = await ref.read(sourcesProvider.future);
       if (!mounted || generation != _generation) return;
+      _availableSourceIds = {
+        for (final entry in snapshot.enabledEntries)
+          if (entry.descriptor.type == MediaType.anime &&
+              entry.supports(SourceCapability.detail) &&
+              entry.supports(SourceCapability.content))
+            entry.descriptor.id,
+      };
       _sources = snapshot.enabledEntries
           .where(
             (entry) =>
+                entry.isManageable &&
                 entry.descriptor.type == MediaType.anime &&
                 entry.source is SearchProvider &&
                 entry.supports(SourceCapability.detail) &&
@@ -357,16 +366,14 @@ class _AnimeSourceSheetState extends ConsumerState<AnimeSourceSheet> {
                                 '最近使用 · ${snapshot.data?.title ?? link.sourceId}',
                               ),
                               subtitle: Text(
-                                _sources.any(
-                                      (s) => s.descriptor.id == link.sourceId,
-                                    )
+                                _availableSourceIds.contains(link.sourceId)
                                     ? '选择作品后查看本站播放列表和剧集'
                                     : '来源已停用或移除，可选择其他来源',
                               ),
                               onTap:
                                   snapshot.data != null &&
-                                      _sources.any(
-                                        (s) => s.descriptor.id == link.sourceId,
+                                      _availableSourceIds.contains(
+                                        link.sourceId,
                                       )
                                   ? () => Navigator.pop(context, snapshot.data)
                                   : null,

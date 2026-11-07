@@ -41,7 +41,7 @@ void main() {
     title: '夹具漫画',
   );
 
-  Future<({GoRouter router, AppDatabase db})> pumpDetail(
+  Future<({AppDatabase db, Future<void> Function() close})> pumpDetail(
     WidgetTester tester,
     MediaItem item,
   ) async {
@@ -72,6 +72,30 @@ void main() {
         ),
       ],
     );
+    var closed = false;
+    Future<void> close() async {
+      if (closed) return;
+      closed = true;
+      // Cancel widget and provider queries before Drift waits for their done
+      // callbacks, which still belong to the test's FakeAsync zone.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      router.dispose();
+      container.dispose();
+      await tester.pump(const Duration(milliseconds: 1));
+      for (var index = 0; index < 12; index++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)),
+        );
+        await tester.pump(const Duration(milliseconds: 30));
+      }
+      await tester.runAsync(
+        () => db.close().timeout(const Duration(seconds: 5)),
+      );
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+
+    addTearDown(close);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -81,15 +105,7 @@ void main() {
     for (var index = 0; index < 10; index++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
-    addTearDown(() async {
-      await tester.pumpWidget(const SizedBox.shrink());
-      router.dispose();
-      await tester.runAsync(() async {
-        container.dispose();
-        await db.close();
-      });
-    });
-    return (router: router, db: db);
+    return (db: db, close: close);
   }
 
   testWidgets('收藏夹在未连接账号时可用，取消收藏保留作品数据', (tester) async {
@@ -117,13 +133,15 @@ void main() {
       await repository.itemByKey(animeItem.sourceId, animeItem.remoteId),
       isNotNull,
     );
+    await harness.close();
   });
 
   testWidgets('漫画详情：保留「加入书架」动作', (tester) async {
-    await pumpDetail(tester, mangaItem);
+    final harness = await pumpDetail(tester, mangaItem);
 
     expect(find.text('加入书架'), findsOneWidget);
     expect(find.text('去追番'), findsNothing);
+    await harness.close();
   });
 }
 

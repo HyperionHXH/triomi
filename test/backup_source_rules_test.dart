@@ -99,7 +99,7 @@ void main() {
     addTearDown(registry.dispose);
     final snapshot = await registry.load();
     expect(snapshot.failures, isEmpty);
-    expect(snapshot.enabledEntries, isEmpty);
+    expect(snapshot.enabledEntries.where((entry) => !entry.isInternal), isEmpty);
     expect(
       snapshot.entries
           .singleWhere((entry) => entry.descriptor.id == 'js-source')

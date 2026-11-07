@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/chapter.dart';
+import '../models/manga_chapter_number.dart';
 import '../models/media_item.dart';
 import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
@@ -303,7 +304,11 @@ class MihonSource
     }
     return <Chapter>[
       for (var index = 0; index < raw.length; index++)
-        _toChapter(Map<Object?, Object?>.from(raw[index] as Map), index),
+        _toChapter(
+          Map<Object?, Object?>.from(raw[index] as Map),
+          index,
+          item.sourceTitle,
+        ),
     ];
   }
 
@@ -320,7 +325,7 @@ class MihonSource
         ..._nativeMetadata(chapter.sourceMetadata),
         'url': chapter.url ?? chapter.remoteId,
         'name': chapter.title,
-        'chapterNumber': chapter.number,
+        'chapterNumber': _rawChapterNumber(chapter),
       },
     );
     final rawPages = response['pages'];
@@ -449,18 +454,43 @@ class MihonSource
         sourceMetadata: _captureNativeMetadata(value, previous?.sourceMetadata),
       );
 
-  Chapter _toChapter(Map<Object?, Object?> value, int index) {
+  Chapter _toChapter(
+    Map<Object?, Object?> value,
+    int index,
+    String mangaTitle,
+  ) {
     final title = '${value['name'] ?? ''}';
     return Chapter(
       sourceId: descriptor.id,
       remoteId: '${value['url'] ?? ''}',
       title: title,
       url: value['url']?.toString(),
-      number: double.tryParse('${value['chapterNumber']}'),
+      number: recognizeMangaChapterNumber(
+        mangaTitle: mangaTitle,
+        chapterTitle: title,
+        providedNumber: double.tryParse('${value['chapterNumber']}'),
+      ),
       sortIndex: index,
       releaseDate: _date(value['dateUpload']),
-      sourceMetadata: _captureNativeMetadata(value),
+      sourceMetadata: SourceMetadata({
+        ...?_captureNativeMetadata(value)?.toJson(),
+        // Shared Android/Windows mapping keeps the original SChapter number
+        // separate from local recognition, including an explicit null/-1.
+        'mihonChapterNumber': value['chapterNumber'],
+      }),
     );
+  }
+
+  static Object? _rawChapterNumber(Chapter chapter) {
+    final metadata = chapter.sourceMetadata?.toJson();
+    if (metadata != null && metadata.containsKey('mihonChapterNumber')) {
+      return metadata['mihonChapterNumber'];
+    }
+    // Previously cached Android chapters already carry the native field.
+    final native = _nativeMetadata(chapter.sourceMetadata);
+    return native.containsKey('chapterNumber')
+        ? native['chapterNumber']
+        : chapter.number;
   }
 
   // Plugins receive source-owned metadata only. Local presentation overrides

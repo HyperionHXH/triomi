@@ -1,0 +1,689 @@
+{
+  "targetVersion": "0.15.2+187",
+  "status": "local-acceptance-complete-awaiting-signed-release",
+  "referenceResearch": {
+    "versionTarget": "0.15.2",
+    "references": {
+      "screenshots": [
+        "Screenshot_2026-11-07-09-41-52-35_878090dfe8f27a0.jpg",
+        "Screenshot_2026-11-07-09-43-38-99_50cd7b731b60700.jpg",
+        "Screenshot_2026-11-07-09-48-53-48_50cd7b731b60700.jpg",
+        "Screenshot_2026-11-07-09-51-05-34_50cd7b731b60700.jpg",
+        "Screenshot_2026-11-07-09-53-11-89_50cd7b731b60700.jpg",
+        "abbffc12-a49c-40f9-a39a-0120c589cdba.png"
+      ],
+      "komikkuInstalledPackage": "app.komikku",
+      "kazumiInstalledPackage": "com.predidit.kazumi",
+      "kazumiWindows": {
+        "localWindowsRuleCount": 37,
+        "officialCurrentCount": 18,
+        "shared": [
+          "7sefun",
+          "aafun",
+          "AGE",
+          "akianime",
+          "baimao",
+          "dalvdm",
+          "DM84",
+          "ezdmw",
+          "giriGiriLove",
+          "LMM",
+          "mgnacg",
+          "moonci",
+          "mutefun",
+          "MXdm",
+          "sorani",
+          "TvTFun",
+          "xfdmneo"
+        ],
+        "localOnly": [
+          "xfdm",
+          "anime7",
+          "skr",
+          "NT",
+          "WYDM",
+          "libvio",
+          "yishijie",
+          "tt776b",
+          "295yhw",
+          "ylsp",
+          "omofun03",
+          "aowu",
+          "hfkzm",
+          "gugu3",
+          "enlie",
+          "gpjda",
+          "mwcy",
+          "qifun",
+          "ciyuancheng",
+          "fcdm"
+        ],
+        "officialOnly": [
+          "xfdmnext"
+        ],
+        "localPublicRuleMetadata": [
+          {
+            "name": "7sefun",
+            "version": "1.3",
+            "baseURL": "https://www.7sefun.top/"
+          },
+          {
+            "name": "DM84",
+            "version": "1.4",
+            "baseURL": "https://dmbus.cc/"
+          },
+          {
+            "name": "xfdm",
+            "version": "2.1",
+            "baseURL": "https://anime.xifanacg.com/"
+          },
+          {
+            "name": "AGE",
+            "version": "1.6",
+            "baseURL": "https://www.agedm.io/"
+          },
+          {
+            "name": "giriGiriLove",
+            "version": "2.6",
+            "baseURL": "https://ani.girigirilove.com"
+          },
+          {
+            "name": "anime7",
+            "version": "1.0",
+            "baseURL": "https://anime7.top/"
+          },
+          {
+            "name": "skr",
+            "version": "0.5",
+            "baseURL": "https://skr.skr1.cc:666/"
+          },
+          {
+            "name": "NT",
+            "version": "1.2",
+            "baseURL": "https://www.ntdm8.com/"
+          },
+          {
+            "name": "aafun",
+            "version": "1.2",
+            "baseURL": "https://www.moonci.com/"
+          },
+          {
+            "name": "MXdm",
+            "version": "2.4",
+            "baseURL": "https://www.dcc3.com"
+          },
+          {
+            "name": "WYDM",
+            "version": "1.2",
+            "baseURL": "https://www.vdm5.com/"
+          },
+          {
+            "name": "libvio",
+            "version": "0.4",
+            "baseURL": "https://www.libvio.cc/"
+          },
+          {
+            "name": "yishijie",
+            "version": "1.1",
+            "baseURL": "https://www.dmmiku.com/"
+          },
+          {
+            "name": "tt776b",
+            "version": "1.0",
+            "baseURL": "https://www.tt776b.com/"
+          },
+          {
+            "name": "295yhw",
+            "version": "1.0",
+            "baseURL": "https://www.295yhw.com/"
+          },
+          {
+            "name": "ylsp",
+            "version": "1.1",
+            "baseURL": "https://www.ylys.cc/"
+          },
+          {
+            "name": "omofun03",
+            "version": "1.1",
+            "baseURL": "https://omofun03.top/"
+          },
+          {
+            "name": "aowu",
+            "version": "1.0",
+            "baseURL": "https://www.aowu.tv/"
+          },
+          {
+            "name": "hfkzm",
+            "version": "1.1",
+            "baseURL": "https://hfkzm.com/"
+          },
+          {
+            "name": "gugu3",
+            "version": "1.3",
+            "baseURL": "https://www.gugu3.com/"
+          },
+          {
+            "name": "enlie",
+            "version": "1.0",
+            "baseURL": "https://enlienli.link/"
+          },
+          {
+            "name": "xfdmneo",
+            "version": "1.1",
+            "baseURL": "https://dm1.xfdm.pro/"
+          },
+          {
+            "name": "LMM",
+            "version": "2.3",
+            "baseURL": "https://www.lmm85.com/"
+          },
+          {
+            "name": "gpjda",
+            "version": "1.0",
+            "baseURL": "https://www.gpjda.com/"
+          },
+          {
+            "name": "mwcy",
+            "version": "1.2",
+            "baseURL": "https://www.mwcy.net/"
+          },
+          {
+            "name": "baimao",
+            "version": "1.0",
+            "baseURL": "https://www.baimaodm.com/"
+          },
+          {
+            "name": "qifun",
+            "version": "2.1",
+            "baseURL": "https://www.qifun.cc/"
+          },
+          {
+            "name": "ciyuancheng",
+            "version": "2.0",
+            "baseURL": "https://www.cycani.org/"
+          },
+          {
+            "name": "fcdm",
+            "version": "1.0",
+            "baseURL": "https://fcdm.org.cn/"
+          },
+          {
+            "name": "mgnacg",
+            "version": "1.2",
+            "baseURL": "https://www.mgnacg.com/media/"
+          },
+          {
+            "name": "mutefun",
+            "version": "1.6",
+            "baseURL": "https://www.mutedm.com"
+          },
+          {
+            "name": "moonci",
+            "version": "1.1",
+            "baseURL": "https://www.moonci.com/"
+          },
+          {
+            "name": "akianime",
+            "version": "1.4",
+            "baseURL": "https://www.akianime.cc/"
+          },
+          {
+            "name": "ezdmw",
+            "version": "1.2",
+            "baseURL": "https://m.ezdmw.org/"
+          },
+          {
+            "name": "sorani",
+            "version": "1.0",
+            "baseURL": "https://www.sorani.net/"
+          },
+          {
+            "name": "dalvdm",
+            "version": "1.2",
+            "baseURL": "https://www.sbdl.cc/"
+          },
+          {
+            "name": "TvTFun",
+            "version": "1.3",
+            "baseURL": "https://www.tvtfun.net"
+          }
+        ]
+      }
+    },
+    "actualReferenceObservations": {
+      "androidKazumi": "Installed emulator has2 current rules (7sefun1.3,DM841.4), active home/recommendations/rule management observed; Windows user data37 separately inspected without modification.",
+      "komikku": "Actual MangaDex public catalog and Miss Kobayashi detail observed; descending chapter195..185, per-row unread marker/download, longpress selected bar Bookmark chapter,Mark as read,Mark previous as read,Download; Select all/inverse. No reference favorites/download/read state changed.",
+      "screenshots": "User four source layouts, chapter transition, downloaded check/partial page/completed muted, bookmark/read/unread/delete toolbar and Kazumi sync dialog inspected."
+    },
+    "ruleResearchLimits": [
+      "Local installed37 vs live official18;20local-only deprecated; official-only xfdmnext.",
+      "Archived HTTP/search observations do not prove playback; DNS failures are resolver-local, not global site death.",
+      "No cookies/account credentials/challenge bypass/remote account writes."
+    ]
+  },
+  "kazumiArchivedRules": [
+    {
+      "name": "xfdm",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/xfdm.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "搜索重定向到next.xifanacg.com首页，旧路径/查询丢失；不是旧规则可播放证明"
+    },
+    {
+      "name": "anime7",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/anime7.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "匿名搜索及目录XPath匹配真实DOM，未测播放"
+    },
+    {
+      "name": "skr",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/skr.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "匿名搜索及目录DOM匹配，端口666；未测播放"
+    },
+    {
+      "name": "NT",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/NT.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "本次解析ENOTFOUND，不据此宣称全球停站"
+    },
+    {
+      "name": "WYDM",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/WYDM.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "搜索返回真实作品；目录选择器未验证"
+    },
+    {
+      "name": "libvio",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/libvio.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "域名停用通知；旧搜索路径404"
+    },
+    {
+      "name": "yishijie",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/yishijie.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "匿名搜索及目录DOM匹配；未测播放"
+    },
+    {
+      "name": "tt776b",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/tt776b.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "域名出售页面，无原动漫内容"
+    },
+    {
+      "name": "295yhw",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/295yhw.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "本次TCP连接重置，无HTTP业务结果"
+    },
+    {
+      "name": "ylsp",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/ylsp.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "本次HTTP523源站不可达"
+    },
+    {
+      "name": "omofun03",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/omofun03.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "本次DNS失败"
+    },
+    {
+      "name": "aowu",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/aowu.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "本次DNS失败"
+    },
+    {
+      "name": "hfkzm",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/hfkzm.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "首页变为短剧；搜索出现浏览器验证，未绕过"
+    },
+    {
+      "name": "gugu3",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/gugu3.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "迁站引导，新地址未公布"
+    },
+    {
+      "name": "enlie",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/enlie.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "本次DNS失败"
+    },
+    {
+      "name": "gpjda",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/gpjda.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "站名/模板变更且有浏览器验证；规则要求POST，本次GET不证明接口失败"
+    },
+    {
+      "name": "mwcy",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/mwcy.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "已变为OXFUN客户端宣传页"
+    },
+    {
+      "name": "qifun",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/qifun.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "本次DNS失败"
+    },
+    {
+      "name": "ciyuancheng",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/ciyuancheng.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "SPA页面，未取得原XPath要求的服务端结果"
+    },
+    {
+      "name": "fcdm",
+      "upstreamDefinition": "https://github.com/Predidit/KazumiRules/blob/main/fcdm.json",
+      "upstreamState": "deprecated:true,excluded-from-active-index,file-retained",
+      "technicalDisableReason": "Not documented in observed upstream disable commits",
+      "boundedAnonymousObservation": "本次DNS失败"
+    }
+  ],
+  "androidRuntime": {
+    "scope": "Real Android preserved emulator5554; disposable separate DB/preferences, actual widgets and HTTP loopback content, not thirdparty manga playback claim",
+    "build": "debug0.15.1+186 temporaryr187_acceptance.dart using reviewed0.15.2 source in progress",
+    "grid": {
+      "normalPhoneColumns": 2,
+      "symmetricFullWidth": true,
+      "compactOverlay": true,
+      "listCoverAndTitles": true,
+      "fourModesMenuObserved": true,
+      "layoutRestart": "list retained"
+    },
+    "reading": {
+      "sourceCatalogOrder": [
+        3,
+        2,
+        1
+      ],
+      "selectedChapter": 1,
+      "transitionNextTitle": "第2话",
+      "continuedReader": "第2话1/3",
+      "partialCatalogProgress": "第1页/3页",
+      "bookmark": "persisted after independent force-stop/restart",
+      "markRead": "muted title+已读完 persisted",
+      "markUnread": "resume removed,bookmark retained",
+      "download": "actual chapter1images completed,download_done indicator",
+      "delete": "confirmed selected download removed,chapter+bookmark retained"
+    },
+    "anime": {
+      "publicRecommendations": "actual titles/rating without useless source/status subtitles",
+      "follows": "stored cover displayed and explicit已看0集·总集数未知",
+      "syncDialog": "opened actual3stages,unconfigured services disabled,no remote writes",
+      "sources": "Bangumi hidden,normalplayable rules listed,active/archive official selector opened"
+    },
+    "screenshots": [
+      "R187-android-anime-home.png",
+      "R187-android-anime-sources.png",
+      "R187-android-bookmarked.png",
+      "R187-android-catalog-progress.png",
+      "R187-android-catalog.png",
+      "R187-android-chapter-actions.png",
+      "R187-android-compact.png",
+      "R187-android-delete-confirm.png",
+      "R187-android-deleted.png",
+      "R187-android-download-finished.png",
+      "R187-android-follows-sync.png",
+      "R187-android-follows.png",
+      "R187-android-grid.png",
+      "R187-android-layout-menu.png",
+      "R187-android-list.png",
+      "R187-android-read-mark.png",
+      "R187-android-reader1.png",
+      "R187-android-reader2.png",
+      "R187-android-restart-catalog.png",
+      "R187-android-restart-ready.png",
+      "R187-android-source-repository.png",
+      "R187-android-transition.png",
+      "R187-android-unread-reset.png"
+    ]
+  },
+  "windowsRuntime": {
+    "scope": "Actual Windows Profile native Flutter surfaces, real HTTP loopback pictures and independent acceptance DB, not thirdparty manga-site coverage",
+    "window": {
+      "width": 1120,
+      "height": 850
+    },
+    "layout": {
+      "gridEqualColumns": 3,
+      "fullWidthSymmetric": true,
+      "panoramaMenuSelected": true,
+      "compactOverlaySelected": true,
+      "listCoverVisible": true
+    },
+    "reader": {
+      "sourceOrder": [
+        3,
+        2,
+        1
+      ],
+      "actualSelected": 1,
+      "nextTransition": "第2话",
+      "continueOpened": "第2话1/3",
+      "escapeReturnedCatalog": true
+    },
+    "chapterActions": {
+      "rightClickRealRow": true,
+      "persistentBottomBarVisible": true,
+      "bookmarkSaved": "第3话书签",
+      "partialPageShown": true
+    },
+    "follows": {
+      "coverVisible": true,
+      "explicitProgressLabel": true,
+      "categories": true,
+      "relocatedSyncDialog": true,
+      "unconfiguredStartDisabled": true,
+      "remoteWrites": false,
+      "all3stagesAccessible": "Present in actual scrollable desktop dialog accessibility tree; screenshot shows viewport subset"
+    },
+    "screenshots": [
+      "R187-windows-catalog.png",
+      "R187-windows-chapter-actions.png",
+      "R187-windows-compact.png",
+      "R187-windows-follows.png",
+      "R187-windows-grid.png",
+      "R187-windows-list.png",
+      "R187-windows-panorama.png",
+      "R187-windows-sync.png",
+      "R187-windows-transition.png"
+    ]
+  },
+  "review": {
+    "firstPass": [
+      "queued cancellation resurrected remote sync",
+      "cancel stopped automatic scheduling",
+      "retained cover repair could not retry",
+      "stale cached total masked fresh synced total",
+      "stale connection/error status",
+      "archived rule full backup rejected",
+      "saved legacy AGE choice hidden",
+      "archived same-site AGE duplicate",
+      "orphan chapter states made unrestorable full backup",
+      "old synced history revived explicit unread",
+      "same-source multi-work merged ordering",
+      "manual next chapter disabled on partial cache",
+      "explicit read flags absent from unread-download filter",
+      "fixed selection panel covered tail rows",
+      "shared bounded-card ratios"
+    ],
+    "fixes": "All reported findings corrected; final focused anime/source and manga reviews report no remaining actionable in scope. Full suite rerun1913passed/4skipped after last correction.",
+    "finalAnimeSourceReview": {
+      "remainingActionable": 0,
+      "scope": "All prior cancellation/source/archive/cover findings verified in staticconsumertrace",
+      "reference": "agent://FinalAnimeSourceReview"
+    },
+    "finalMangaReview": {
+      "remainingActionable": 0,
+      "lastFinding": "Numeric work title86 could corrupt decimalChapter86.5; redactual85.5,5 thenfixed protects decimal integer/fraction;13targetedpassed",
+      "scope": "Focused static fix review and consumer regressions",
+      "reference": "agent://FinalMangaReview"
+    }
+  },
+  "verificationLimits": [
+    "No paid operations,remote account writes,TLS/captcha/CF bypass.",
+    "Real UI controlledHTTP and actual publicmetadata/source catalog; not all site playback compatibility.",
+    "Live source fetching failures disclosed; archived != playable."
+  ],
+  "normalAndroidOriginalDataUpgrade": {
+    "version": "0.15.2+187",
+    "normalMain": true,
+    "fromSchema": 11,
+    "toSchema": 14,
+    "before": {
+      "media_items": 23,
+      "chapters": 4081,
+      "library_entries": 6,
+      "histories": 19,
+      "downloads": 6
+    },
+    "after": {
+      "media_items": 23,
+      "chapters": 4081,
+      "library_entries": 6,
+      "histories": 19,
+      "downloads": 6
+    },
+    "retainedAllFiveDataCounts": true,
+    "bangumiEnabledBuiltin": true,
+    "actualAnonymousSearch": "Conan,1/1 metadata source,20results",
+    "fixtureEntryRemoved": true,
+    "rowLevelPreservation": {
+      "library_entries": {
+        "rows": 6,
+        "criticalFieldsUnchanged": true,
+        "sha256": "dbd3e4eeb19280d56b9a9270d273e38e9e32992480b9537dcc579c328fe4172d"
+      },
+      "histories": {
+        "rows": 19,
+        "criticalFieldsUnchanged": true,
+        "sha256": "02443642474cef86faadd47f314766150708779834d10deea14fa24fffd7546c"
+      },
+      "downloads": {
+        "rows": 6,
+        "criticalFieldsUnchanged": true,
+        "sha256": "e9fc7f0c35c2bc03b6fea6842d1bd41bef2dea29c88792bd2be041c3b08d3bad"
+      },
+      "chapters": {
+        "rows": 4081,
+        "identitiesTitlesUrlsOrderAndOfflineContentUnchanged": true,
+        "numberRecognitionUpdates": 2,
+        "numberUpdateScope": "original MangaDex -1 becomes76.2/76.1 through new recognition, no identity or content rewrite"
+      }
+    },
+    "actualFollowsAfterRepair": {
+      "titles": [
+        "小林家的龙女仆",
+        "东京复仇者 三天战争篇"
+      ],
+      "bothActualCoverImagesVisible": true,
+      "progressLabels": [
+        "已看1集·总集数未知",
+        "已看0集/共13集"
+      ],
+      "noDetailPageRequiredForRepair": true,
+      "screenshot": "_tools/R187-android-final-normal-follows.png"
+    }
+  },
+  "normalWindowsOriginalDataUpgrade": {
+    "normalMainRelease": "0.15.2+187",
+    "fromSchema": 11,
+    "toSchema": 14,
+    "before": {
+      "media_items": 29,
+      "chapters": 4293,
+      "library_entries": 0,
+      "histories": 8,
+      "downloads": 10
+    },
+    "after": {
+      "media_items": 29,
+      "chapters": 4293,
+      "library_entries": 0,
+      "histories": 8,
+      "downloads": 10
+    },
+    "allCountsRetained": true,
+    "actualPublicRecommendations": "titles and rating no redundant subtitle",
+    "hiddenBangumiInPluginUi": true,
+    "followsSyncDialog": "actual3stage scrollable dialog, remote writes not invoked",
+    "legacyAgeObservation": "Final normal Windows UI no longer labels pristine CRLF AGE as custom; original legacy kept when no canonical present, canonicaldedup and savedlinks passingconsumerregressions.",
+    "temporaryEntryRemoved": true
+  },
+  "chapterRecognitionProbe": {
+    "numericWork186": 186,
+    "wrappedExtrasRemainUnknown": true,
+    "suppliedNegativePreserved": true,
+    "interior12000SpacesFunctional": true,
+    "measuredMilliseconds": 1,
+    "scope": "direct Dart function run, not total UI performance guarantee"
+  },
+  "originalAGEAttestation": {
+    "rawWindowsBytes": 2831,
+    "rawCrLfCount": 18,
+    "rawSha256": "2b42264ba299454b78285362ef99d196ab7dd12b37da7a2f8b0262f684810df1",
+    "normalizedLFBytes": 2813,
+    "normalizedLFSha256": "c0adc77c4118399cd9077790840e2133e74517b992e84220c700d931279f0063",
+    "actualOriginalWindowsMatchesShippedAfterOnlyCrLfNormalization": true,
+    "customByteEditsNotNormalized": true
+  },
+  "checksSoFar": {
+    "pythonTools": 117,
+    "pythonToolsPassed": true,
+    "encodingErrors": 0,
+    "uiDocDriftErrors": 0,
+    "deliveryConsistencyErrors": 0,
+    "historicalDeliveryWarnings": 35,
+    "androidNormalAbiDescriptors": 128,
+    "flutterFullSuite": "Incomplete first full run1855passes/4platform skips with consumer harness failures; corrections and final full run still required",
+    "targetedIdentityArchiveRecognitionReaderAndMetadataPassed": 62,
+    "targetedChapterStateBackupSyncAndStressPassed": 149,
+    "targetedFailures": 0,
+    "currentFlutterAnalyze": "Last clean before final scoped cancellation/number/test cleanup; finalrerun pending",
+    "flutterFullSuitePassed": 1913,
+    "flutterPlatformSkipped": 4,
+    "flutterFullSuiteFailed": 0,
+    "flutterFullSuiteArtifact": "artifact://8211",
+    "targetedCatalogSecurityPassed": 15,
+    "oldHarnessFailuresCorrectedWithoutProductionSuppression": true,
+    "finalFlutterAnalyze": "No issues found",
+    "finalFlutterAnalyzeRun": "bg_57"
+  },
+  "accountLeakScan": {
+    "scope": "Exact existing account values and encoded representations, current source/tests/assets/docs/tools; no secret values emitted",
+    "filesScanned": 1189,
+    "filesWithPrivateAccountBytes": 0,
+    "signingSecretScan": "Unavailable local signing prerequisite; no claim",
+    "passedAccountScan": true
+  },
+  "liveRepositoryLimits": {
+    "defaultProductionTransport": "ObservedindexTCPtimeout",
+    "existingExplicitProxy": "ObservedTLSHandshakeException; noverificationweakening",
+    "androidDisposableTransport": "16archived parsed/52perfilefailures shown; laterprogressivecallbacks removeall-at-oncewait",
+    "result": "No all-archive live success or playback claim; currentpublicindex18 + installed37 comparison and isolated archived install/backup/update/cancellation consumer regressions passed"
+  }
+}

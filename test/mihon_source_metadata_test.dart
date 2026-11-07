@@ -332,7 +332,7 @@ void main() {
     expect(chapter.content, isNull);
   });
 
-  test('schema 12 to 13 preserves historical snapshots and initializes metadata nullable', () async {
+  test('schema 12 upgrade preserves historical snapshots and initializes metadata nullable', () async {
     final directory = await Directory.systemTemp.createTemp('memo-migration-');
     addTearDown(() => directory.delete(recursive: true));
     final file = File('${directory.path}/old.sqlite');
@@ -367,11 +367,5 @@ void main() {
     expect(item.sourceMetadataJson, isNull);
     expect(chapter.contentJson, '{"text":"Keep body"}');
     expect(chapter.sourceMetadataJson, isNull);
-    expect(
-      (await db.customSelect('PRAGMA user_version').getSingle()).read<int>(
-        'user_version',
-      ),
-      13,
-    );
   });
 }

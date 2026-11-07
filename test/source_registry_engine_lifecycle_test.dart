@@ -53,7 +53,7 @@ void main() {
       );
       addTearDown(container.dispose);
       final registry = container.read(sourceRegistryProvider);
-      final source = (await registry.load()).entries.single.source as JsSource;
+      final source = (await registry.load()).manageableEntries.single.source as JsSource;
       await source.initialize();
       expect(registry.bangumiPublicClient!.routes.mirrorEnabled, isTrue);
       await container
@@ -64,7 +64,7 @@ void main() {
         isTrue,
       );
       expect(
-        identical((await registry.load()).entries.single.source, source),
+        identical((await registry.load()).manageableEntries.single.source, source),
         isTrue,
       );
       expect(engine.disposed, isFalse);
@@ -95,12 +95,12 @@ void main() {
     );
     final snapshot = await registry.load();
     expect(snapshot.failures, isEmpty);
-    final entry = snapshot.entries.single;
+    final entry = snapshot.manageableEntries.single;
     expect(entry.descriptor.id, 'js-source');
     expect(entry.enabled, false);
     expect(entry.source.isReady, false);
     expect(entry.descriptor.capabilities, isEmpty);
-    expect(snapshot.enabledEntries, isEmpty);
+    expect(snapshot.enabledEntries.where((entry) => !entry.isInternal), isEmpty);
   });
   test(
     'disabling releases the source; enabling loads a fresh script',
@@ -129,17 +129,17 @@ void main() {
         ruleText: jsRuleText(),
         enabled: true,
       );
-      final active = (await registry.load()).entries.single;
+      final active = (await registry.load()).manageableEntries.single;
       await (active.source as JsSource).initialize();
       expect(active.source.isReady, true);
       await registry.setEnabled('js-source', enabled: false);
       final stopped = await registry.load();
-      expect(stopped.entries.single.enabled, false);
-      expect(stopped.enabledEntries, isEmpty);
+      expect(stopped.manageableEntries.single.enabled, false);
+      expect(stopped.enabledEntries.where((entry) => !entry.isInternal), isEmpty);
       expect(engines.single.disposed, true);
       expect(active.source.isReady, false);
       await registry.setEnabled('js-source', enabled: true);
-      final restarted = (await registry.load()).entries.single;
+      final restarted = (await registry.load()).manageableEntries.single;
       await (restarted.source as JsSource).initialize();
       expect(restarted.source.isReady, true);
       expect(restarted.supports(SourceCapability.search), true);
@@ -172,7 +172,7 @@ void main() {
         ruleText: jsRuleText(),
         enabled: true,
       );
-      final active = (await registry.load()).entries.single;
+      final active = (await registry.load()).manageableEntries.single;
       final loading = (active.source as JsSource).initialize();
       final rejected = expectLater(loading, throwsStateError);
       await started.future;
@@ -182,7 +182,7 @@ void main() {
       await rejected;
       final stopped = await registry.load();
       expect(stopped.failures, isEmpty);
-      expect(stopped.entries.single.source.isReady, false);
+      expect(stopped.manageableEntries.single.source.isReady, false);
     },
   );
   test(
@@ -213,16 +213,16 @@ void main() {
       );
       await put('function search() { return []; }');
       final first = await registry.load();
-      await (first.entries.single.source as JsSource).initialize();
+      await (first.manageableEntries.single.source as JsSource).initialize();
       final second = await registry.load();
       expect(engines, hasLength(1));
       expect(
-        identical(first.entries.single.source, second.entries.single.source),
+        identical(first.manageableEntries.single.source, second.manageableEntries.single.source),
         true,
       );
       await put('function search() { return [1]; }');
       final replacement = await registry.load();
-      await (replacement.entries.single.source as JsSource).initialize();
+      await (replacement.manageableEntries.single.source as JsSource).initialize();
       expect(engines, hasLength(2));
       expect(engines.first.disposed, true);
       expect(engines.last.disposed, false);
@@ -232,7 +232,7 @@ void main() {
       expect(engines.last.disposed, true);
       await put('function search() { return [2]; }');
       await registry.load();
-      await ((await registry.load()).entries.single.source as JsSource)
+      await ((await registry.load()).manageableEntries.single.source as JsSource)
           .initialize();
       registry.dispose();
       await Future<void>.delayed(Duration.zero);
@@ -262,7 +262,7 @@ void main() {
         ruleText: jsRuleText(),
         enabled: true,
       );
-      final active = (await registry.load()).entries.single;
+      final active = (await registry.load()).manageableEntries.single;
       await expectLater(
         (active.source as SearchProvider).search('probe'),
         throwsA(isA<SourceException>()),
@@ -302,14 +302,14 @@ void main() {
         enabled: true,
       );
       await put(jsRuleText());
-      await ((await registry.load()).entries.single.source as JsSource)
+      await ((await registry.load()).manageableEntries.single.source as JsSource)
           .initialize();
       await put('{broken');
       expect((await registry.load()).failures, hasLength(1));
       await Future<void>.delayed(Duration.zero);
       expect(engines.single.disposed, true);
       await put(jsRuleText());
-      await ((await registry.load()).entries.single.source as JsSource)
+      await ((await registry.load()).manageableEntries.single.source as JsSource)
           .initialize();
       await put(
         '{"id":"js-source","name":"Plain","type":"manga","version":"1","baseUrl":"https://example.com","search":{"url":"/search?q={keyword}","list":".item","fields":{"title":".title","remoteId":"a@href"}}}',

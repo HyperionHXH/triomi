@@ -105,6 +105,7 @@ String jsRuleText({
 });
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('JS 规则格式', () {
     test('engine=js + script 解析为脚本规则，feeds 取自顶层', () {
       final rule = SourceRule.parseJson(jsRuleText());
@@ -630,7 +631,7 @@ void main() {
       final snapshot = await registry.load();
 
       expect(snapshot.failures, isEmpty);
-      final entry = snapshot.entries.single;
+      final entry = snapshot.manageableEntries.single;
       await (entry.source as JsSource).initialize();
       expect(entry.descriptor.id, 'js-source');
       expect(entry.supports(SourceCapability.search), isTrue);
@@ -657,7 +658,7 @@ void main() {
       );
       final snapshot = await registry.load();
 
-      final source = snapshot.entries.single.source as SearchProvider;
+      final source = snapshot.manageableEntries.single.source as SearchProvider;
       await expectLater(
         source.search('probe'),
         throwsA(
@@ -731,7 +732,7 @@ void main() {
 
       expect(snapshot.failures, isEmpty);
       expect(
-        snapshot.entries.map((entry) => entry.descriptor.id).toSet(),
+        snapshot.manageableEntries.map((entry) => entry.descriptor.id).toSet(),
         <String>{'js-source', 'plain-source'},
       );
     });

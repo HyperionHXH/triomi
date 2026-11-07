@@ -19,6 +19,7 @@ import '../../core/source/source_api.dart';
 import '../../core/source/source_filters.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
+import '../../core/source/source_repository.dart';
 import '../../core/storage/preferences.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
@@ -162,9 +163,41 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
   Future<void> _importFromText(String text, {String? repoUrl}) async {
     setState(() => _busy = true);
     try {
+      var allowDeprecated = false;
+      if (KazumiRule.recognizes(text)) {
+        final rule = KazumiRule.parse(text, allowDeprecated: true);
+        if (rule.deprecated) {
+          allowDeprecated =
+              await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: Text('导入已归档规则 ${rule.descriptor.name}？'),
+                  content: const Text(
+                    '上游已停用此规则，不保证网站、搜索或播放仍可用。新安装保持停用；请核对规则和网站后显式启用。不修改现有收藏、历史或下载。',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('取消'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('仍要导入'),
+                    ),
+                  ],
+                ),
+              ) ==
+              true;
+          if (!allowDeprecated) return;
+        }
+      }
       final descriptor = await ref
           .read(sourceRegistryProvider)
-          .importFromText(text, repoUrl: repoUrl);
+          .importFromText(
+            text,
+            repoUrl: repoUrl,
+            allowDeprecated: allowDeprecated,
+          );
       await ref.read(sourcesProvider.notifier).refresh();
       if (!mounted) return;
       _selectType(descriptor.type);
@@ -291,7 +324,10 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                 message: '$error',
               ),
               data: (snapshot) {
-                final scopedEntries = snapshot.entries
+                final retiredAge = snapshot.entries
+                    .where((entry) => entry.isRetiredDefault)
+                    .firstOrNull;
+                final scopedEntries = snapshot.manageableEntries
                     .where(
                       (entry) =>
                           entry.descriptor.type == _type &&
@@ -305,6 +341,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                     .where(
                       (failure) =>
                           failure.type == _type &&
+                          failure.id != SourceRepository.internalMetadataId &&
                           (developmentSourcesEnabled ||
                               !developmentSourceIds.contains(failure.id)),
                     )
@@ -378,6 +415,12 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                       _SourceTile(
                         entry: entry,
                         updateStatus: _updates[entry.descriptor.id]?.message,
+                        onLegacy:
+                            retiredAge != null &&
+                                entry.descriptor.id ==
+                                    KazumiRule.idForName('AGE')
+                            ? () => _manageLegacyAge(retiredAge)
+                            : null,
                         updating: _updating,
                         onUpdate: entry.source is KazumiSource
                             ? () => _refreshAnimeUpdates(
@@ -517,6 +560,58 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
       case 'import':
         await _showImportSheet();
     }
+  }
+
+  Future<void> _manageLegacyAge(SourceEntry entry) async {
+    var enabled = entry.enabled;
+    var saving = false;
+    final remove = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, update) => AlertDialog(
+          title: const Text('旧版 AGE 记录来源'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '与当前 AGE 为同一网站，但作品和剧集标识不同。旧收藏、历史、下载及已选播放来源继续使用 age-anime，不按标题合并；更新 Kazumi AGE 不会改写旧记录或旧规则。',
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('启用旧记录来源'),
+                value: enabled,
+                onChanged: saving
+                    ? null
+                    : (value) async {
+                        update(() => saving = true);
+                        try {
+                          await ref
+                              .read(sourcesProvider.notifier)
+                              .setEnabled(entry.descriptor.id, enabled: value);
+                          if (context.mounted) update(() => enabled = value);
+                        } catch (error) {
+                          if (mounted) _toast('旧来源启停失败：$error');
+                        } finally {
+                          if (context.mounted) update(() => saving = false);
+                        }
+                      },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(context, true),
+              child: const Text('移除旧来源'),
+            ),
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(context, false),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (remove == true && mounted) await _confirmDelete(entry);
   }
 
   Future<void> _showMangaDexSettings() async {
@@ -903,6 +998,7 @@ class _SourceTile extends StatelessWidget {
     this.onWebSession,
     this.onSettings,
     this.onUpdate,
+    this.onLegacy,
     this.updateStatus,
     this.updating = false,
   });
@@ -916,6 +1012,7 @@ class _SourceTile extends StatelessWidget {
   final VoidCallback? onWebSession;
   final VoidCallback? onSettings;
   final VoidCallback? onUpdate;
+  final VoidCallback? onLegacy;
   final String? updateStatus;
   final bool updating;
 
@@ -960,6 +1057,10 @@ class _SourceTile extends StatelessWidget {
                           <String>[
                             entry.enabled ? '已启用' : '已停用',
                             descriptor.kind.label,
+                            if (entry.isCustomLegacyAge) '自定义 AGE 规则 · 独立身份',
+                            if (entry.source case final KazumiSource source)
+                              if (source.rule.deprecated)
+                                '已归档 · 上游已停用 · 可用性未保证',
                             if (descriptor.type != MediaType.anime) ...[
                               sourceLanguageLabel(
                                 sourceLanguage(descriptor.lang),
@@ -1034,6 +1135,8 @@ class _SourceTile extends StatelessWidget {
                           onWebSession?.call();
                         case 'settings':
                           onSettings?.call();
+                        case 'legacy':
+                          onLegacy?.call();
                         case 'remove':
                           onDelete();
                       }
@@ -1048,6 +1151,11 @@ class _SourceTile extends StatelessWidget {
                         const PopupMenuItem(
                           value: 'session',
                           child: Text('打开站点与验证'),
+                        ),
+                      if (onLegacy != null)
+                        const PopupMenuItem(
+                          value: 'legacy',
+                          child: Text('旧版 AGE 记录来源'),
                         ),
                       const PopupMenuItem(value: 'remove', child: Text('移除来源')),
                     ],

@@ -9,10 +9,11 @@ import '../../../core/storage/preferences.dart';
 import '../../tracking/data/bangumi_client.dart';
 import '../../tracking/data/tracking_models.dart';
 import '../../tracking/data/tracking_providers.dart';
+import 'anime_follow_metadata.dart';
 
 const animeCollectionStatuses = <String, String>{
-  'want': '想看',
   'doing': '在看',
+  'want': '想看',
   'done': '看过',
   'paused': '搁置',
   'dropped': '抛弃',
@@ -24,11 +25,13 @@ class AnimeCollectionEntry {
     required this.status,
     this.progress = 0,
     required this.updatedAt,
+    this.totalEpisodes,
   });
   final MediaItem item;
   final String status;
   final int progress;
   final DateTime updatedAt;
+  final int? totalEpisodes;
 }
 
 class AnimeCollectionSnapshot {
@@ -140,6 +143,16 @@ class AnimeCollectionService {
         final images = subject['images'];
         final rating = subject['rating'];
         final translated = '${subject['name_cn'] ?? ''}'.trim();
+        String? cover;
+        if (images is Map) {
+          for (final size in ['large', 'common', 'medium', 'small', 'grid']) {
+            final value = images[size];
+            if (value is String && value.trim().isNotEmpty) {
+              cover = value.startsWith('//') ? 'https:$value' : value;
+              break;
+            }
+          }
+        }
         entries.add(
           AnimeCollectionEntry(
             item: MediaItem(
@@ -150,15 +163,16 @@ class AnimeCollectionService {
                   ? '${subject['name'] ?? id}'
                   : translated,
               url: 'https://bgm.tv/subject/$id',
-              coverUrl: images is Map
-                  ? '${images['common'] ?? images['large'] ?? ''}'
-                  : null,
+              coverUrl: cover,
               rating: rating is Map && rating['score'] is num
                   ? (rating['score'] as num).toDouble()
                   : null,
             ),
             status: state,
             progress: (row['ep_status'] as num?)?.toInt() ?? 0,
+            totalEpisodes:
+                positiveAnimeEpisodeTotal(subject['total_episodes']) ??
+                positiveAnimeEpisodeTotal(subject['eps']),
             updatedAt:
                 DateTime.tryParse('${row['updated_at']}') ??
                 DateTime.fromMillisecondsSinceEpoch(0),
