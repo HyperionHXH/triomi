@@ -1,3 +1,5 @@
+import 'source_metadata.dart';
+
 /// 播放线路（番剧多线路，对齐 Kazumi 的多视频源）。
 class PlaySource {
   const PlaySource({
@@ -234,6 +236,7 @@ class Chapter {
     this.releaseDate,
     this.locked = false,
     this.content,
+    this.sourceMetadata,
   });
 
   final String sourceId;
@@ -257,6 +260,7 @@ class Chapter {
 
   /// 内容解析结果（未解析时为 null）。
   final ChapterContent? content;
+  final SourceMetadata? sourceMetadata;
 
   Chapter copyWith({ChapterContent? content}) => Chapter(
     sourceId: sourceId,
@@ -269,6 +273,7 @@ class Chapter {
     releaseDate: releaseDate,
     locked: locked,
     content: content ?? this.content,
+    sourceMetadata: sourceMetadata,
   );
 
   /// 从章节标题里尽力解析章节号（对齐 Mihon 的章节号识别的简化版）。

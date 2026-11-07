@@ -2,6 +2,13 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven("https://www.jitpack.io") {
+            content {
+                includeGroup("com.github.zhanghai.quickjs-java")
+                includeGroup("com.github.tachiyomiorg")
+                includeGroup("com.github.mihonapp")
+            }
+        }
     }
 }
 

@@ -18,6 +18,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -43,6 +46,8 @@ jobs:
           printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$RUNNER_TEMP/triomi-release.p12" "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > "$RUNNER_TEMP/triomi-signing.properties"
           printf 'TRIOMI_SIGNING_PROPERTIES=%s\n' "$RUNNER_TEMP/triomi-signing.properties" >> "$GITHUB_ENV"
       - run: flutter build apk --release
+      - name: Verify retained Mihon source API in release DEX
+        run: python tools/check_mihon_abi.py --apk build/app/outputs/flutter-apk/app-release.apk
       - name: Remove temporary signing files
         if: always()
         shell: bash

@@ -11,6 +11,7 @@ import 'js/runtime/js_runtime_factory.dart';
 import 'rule_schema.dart';
 import 'source_catalog.dart';
 import 'source_registry.dart';
+import 'source_repository.dart';
 
 /// All validation happens before the sole transactional write. A failed update
 /// leaves the installed version, its enablement, library and history intact.
@@ -34,6 +35,9 @@ class CatalogInstaller {
       entry.requiresHost,
       available: hostFeatures,
     );
+    if (entry.id == SourceRepository.internalMetadataId) {
+      throw StateError('Bangumi 资料由应用维护，不是可安装插件');
+    }
     final old = await registry.repository.byId(entry.id);
     if (registry.builtinAdapters.containsKey(entry.id)) {
       throw StateError('不能替换应用内置适配器');

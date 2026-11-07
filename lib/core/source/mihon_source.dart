@@ -6,10 +6,12 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/chapter.dart';
+import '../models/manga_chapter_number.dart';
 import '../models/media_item.dart';
 import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
 import '../models/source_exception.dart';
+import '../models/source_metadata.dart';
 import '../platform/platform_channel.dart';
 import 'http_client.dart';
 import 'mihon_image_bridge.dart';
@@ -283,7 +285,7 @@ class MihonSource
     if (rawManga is! Map) {
       throw _error('宿主没有返回作品详情');
     }
-    return _toMediaItem(Map<Object?, Object?>.from(rawManga));
+    return _toMediaItem(Map<Object?, Object?>.from(rawManga), previous: item);
   }
 
   @override
@@ -293,11 +295,20 @@ class MihonSource
       manga: _mangaJson(item),
     );
     final raw = response['chapters'];
-    if (raw is! List) return const <Chapter>[];
+    if (raw is! List || raw.any((row) => row is! Map)) {
+      throw SourceException(
+        sourceId: descriptor.id,
+        type: SourceErrorType.parse,
+        message: '宿主没有返回有效的章节目录',
+      );
+    }
     return <Chapter>[
       for (var index = 0; index < raw.length; index++)
-        if (raw[index] is Map)
-          _toChapter(Map<Object?, Object?>.from(raw[index] as Map), index),
+        _toChapter(
+          Map<Object?, Object?>.from(raw[index] as Map),
+          index,
+          item.sourceTitle,
+        ),
     ];
   }
 
@@ -311,9 +322,10 @@ class MihonSource
       operation: 'pages',
       manga: desktop ? _mangaJson(item!) : null,
       chapter: <String, Object?>{
+        ..._nativeMetadata(chapter.sourceMetadata),
         'url': chapter.url ?? chapter.remoteId,
         'name': chapter.title,
-        'chapterNumber': chapter.number,
+        'chapterNumber': _rawChapterNumber(chapter),
       },
     );
     final rawPages = response['pages'];
@@ -424,33 +436,61 @@ class MihonSource
     ];
   }
 
-  MediaItem _toMediaItem(Map<Object?, Object?> value) => MediaItem(
-    sourceId: descriptor.id,
-    remoteId: '${value['url'] ?? ''}',
-    type: MediaType.manga,
-    title: '${value['title'] ?? ''}',
-    url: value['url']?.toString(),
-    coverUrl: value['thumbnailUrl']?.toString(),
-    author: value['author']?.toString() ?? value['artist']?.toString(),
-    description: value['description']?.toString(),
-    tags: '${value['genre'] ?? ''}'
-        .split(', ')
-        .where((tag) => tag.isNotEmpty)
-        .toList(),
-    status: value['status']?.toString(),
-  );
+  MediaItem _toMediaItem(Map<Object?, Object?> value, {MediaItem? previous}) =>
+      MediaItem(
+        sourceId: descriptor.id,
+        remoteId: '${value['url'] ?? ''}',
+        type: MediaType.manga,
+        title: '${value['title'] ?? ''}',
+        url: value['url']?.toString(),
+        coverUrl: value['thumbnailUrl']?.toString(),
+        author: value['author']?.toString() ?? value['artist']?.toString(),
+        description: value['description']?.toString(),
+        tags: '${value['genre'] ?? ''}'
+            .split(', ')
+            .where((tag) => tag.isNotEmpty)
+            .toList(),
+        status: value['status']?.toString(),
+        sourceMetadata: _captureNativeMetadata(value, previous?.sourceMetadata),
+      );
 
-  Chapter _toChapter(Map<Object?, Object?> value, int index) {
+  Chapter _toChapter(
+    Map<Object?, Object?> value,
+    int index,
+    String mangaTitle,
+  ) {
     final title = '${value['name'] ?? ''}';
     return Chapter(
       sourceId: descriptor.id,
       remoteId: '${value['url'] ?? ''}',
       title: title,
       url: value['url']?.toString(),
-      number: double.tryParse('${value['chapterNumber']}'),
+      number: recognizeMangaChapterNumber(
+        mangaTitle: mangaTitle,
+        chapterTitle: title,
+        providedNumber: double.tryParse('${value['chapterNumber']}'),
+      ),
       sortIndex: index,
       releaseDate: _date(value['dateUpload']),
+      sourceMetadata: SourceMetadata({
+        ...?_captureNativeMetadata(value)?.toJson(),
+        // Shared Android/Windows mapping keeps the original SChapter number
+        // separate from local recognition, including an explicit null/-1.
+        'mihonChapterNumber': value['chapterNumber'],
+      }),
     );
+  }
+
+  static Object? _rawChapterNumber(Chapter chapter) {
+    final metadata = chapter.sourceMetadata?.toJson();
+    if (metadata != null && metadata.containsKey('mihonChapterNumber')) {
+      return metadata['mihonChapterNumber'];
+    }
+    // Previously cached Android chapters already carry the native field.
+    final native = _nativeMetadata(chapter.sourceMetadata);
+    return native.containsKey('chapterNumber')
+        ? native['chapterNumber']
+        : chapter.number;
   }
 
   // Plugins receive source-owned metadata only. Local presentation overrides
@@ -462,7 +502,50 @@ class MihonSource
     'author': item.sourceAuthor,
     'description': item.sourceDescription,
     'genre': item.tags.join(', '),
+    ..._nativeMetadata(item.sourceMetadata),
   };
+
+  static bool get _usesAndroidMetadata =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  static Map<String, Object?> _nativeMetadata(SourceMetadata? metadata) {
+    if (!_usesAndroidMetadata) return const {};
+    final raw = metadata?.toJson()['mihonAndroid'];
+    return raw is Map ? Map<String, Object?>.from(raw) : const {};
+  }
+
+  static SourceMetadata? _captureNativeMetadata(
+    Map<Object?, Object?> value, [
+    SourceMetadata? previous,
+  ]) {
+    if (!_usesAndroidMetadata) return null;
+    final snapshot = <String, Object?>{
+      ..._nativeMetadata(previous),
+      for (final field in const [
+        'url',
+        'title',
+        'thumbnailUrl',
+        'artist',
+        'author',
+        'status',
+        'description',
+        'genre',
+        'initialized',
+        'updateStrategy',
+        'extensionMemo',
+        'name',
+        'chapterNumber',
+        'scanlator',
+        'dateUpload',
+      ])
+        if (value.containsKey(field)) field: value[field],
+    };
+    final memo = snapshot['extensionMemo'];
+    if (memo != null && (memo is! String || jsonDecode(memo) is! Map)) {
+      throw const FormatException('扩展 memo 必须是 JSON 对象文本');
+    }
+    return SourceMetadata({'mihonAndroid': snapshot});
+  }
 
   SourceException _error(String message) => SourceException(
     sourceId: descriptor.id,
@@ -474,7 +557,9 @@ class MihonSource
     final text = message.toLowerCase();
     if (text.contains('cloudflare') ||
         text.contains('challenge required') ||
-        text.contains('captcha')) {
+        text.contains('captcha') ||
+        text.contains('防盗版') ||
+        text.contains('防盜版')) {
       return SourceErrorType.permission;
     }
     if (text.contains('timeout') || text.contains('超时')) {

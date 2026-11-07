@@ -85,6 +85,63 @@ class WindowsMihonHost {
     }
   }
 
+  /// A local HTTP 500 cannot distinguish bytecode errors from site/auth errors.
+  /// Only valid source identities are required here; filters may need settings.
+  static Future<Map<String, Object?>> probeSourceFilters(
+    SuwayomiClient client,
+    List<Map<String, Object?>> sources, {
+    Duration budget = const Duration(seconds: 15),
+  }) async {
+    final identities = <String>{};
+    for (final source in sources) {
+      final id = source['id'];
+      if (id is! String ||
+          !RegExp(r'^-?\d+$').hasMatch(id) ||
+          !identities.add(id) ||
+          source['name'] is! String ||
+          (source['name'] as String).isEmpty ||
+          source['lang'] is! String) {
+        throw StateError('桌面兼容运行时返回无效的来源结构，拒绝加载');
+      }
+    }
+    if (sources.isEmpty) throw StateError('桌面兼容运行时未能加载此扩展的来源');
+    final deadline = DateTime.now().add(budget);
+    final probes = <Map<String, Object?>>[];
+    for (final source in sources) {
+      final remaining = deadline.difference(DateTime.now());
+      var passed = false;
+      if (remaining > Duration.zero) {
+        final owner = SourceRequestCancellation();
+        try {
+          final result = await owner
+              .run(
+                () => client.request(
+                  sourceId: source['id'] as String,
+                  operation: 'filters',
+                ),
+              )
+              .timeout(remaining);
+          passed = result['ok'] == true;
+        } on Object {
+          // Network-dependent filters can throw before settings are supplied.
+          // Do not infer a verifier error from the local API's generic failure.
+        } finally {
+          owner.cancel();
+        }
+      }
+      probes.add({
+        'sourceId': source['id'],
+        'status': passed ? 'passed' : 'unknown',
+      });
+    }
+    return {
+      'filterProbe': probes.every((probe) => probe['status'] == 'passed')
+          ? 'passed'
+          : 'unknown',
+      'filterProbeSources': probes,
+    };
+  }
+
   Future<void> configureProxy(String value) => _mutate(() async {
     final uri = value.isEmpty ? null : Uri.tryParse(value);
     if (value.isNotEmpty &&
@@ -148,6 +205,12 @@ class WindowsMihonHost {
     final metadata = jsonDecode(await provenanceFile.readAsString()) as Map;
     final server = metadata['suwayomi'] as Map;
     if (server['sha256'] != _serverHash) throw StateError('桌面扩展运行时版本不匹配');
+    final launcher = File(p.join(_payload.path, 'triomi-apk-inspector.jar'));
+    if (metadata['launcherSourceSha256'] is! String ||
+        !await launcher.exists() ||
+        await _hash(launcher) != metadata['inspectorJarSha256']) {
+      throw StateError('桌面扩展启动器缺失或损坏，请完整安装新版 Windows 包');
+    }
     final output = File(p.join(_root.path, 'runtime', 'suwayomi.jar'));
     if (await output.exists() && await _hash(output) == _serverHash) return;
     await output.parent.create(recursive: true);
@@ -574,10 +637,24 @@ class WindowsMihonHost {
     final jar = jarPath == null
         ? null
         : await _stage(File(jarPath), package, jarHash!, 'jar');
+    final provenance = <String, Object?>{
+      'desktopCodeKind': jar == null ? 'apkConversion' : 'nativeJar',
+      if (jar == null) ...{
+        'derivedFromApkSha256': hash,
+        'converterVersion': 'Suwayomi-Server v2.4.2366',
+        'converterSha256': _serverHash,
+      },
+    };
     final client = await _client();
     if (old != null &&
         old['sha256'] == hash &&
         old['desktopJarSha256'] == jarHash) {
+      final sources = await client.extensionSources(package);
+      final probe = await probeSourceFilters(client, sources);
+      old.addAll({...provenance, ...probe});
+      old['sources'] = sources;
+      if (probe['filterProbe'] == 'unknown') old['enabled'] = false;
+      await _save();
       return old;
     }
     try {
@@ -587,12 +664,14 @@ class WindowsMihonHost {
         'stagedPath': apk.path,
         'desktopJarPath': jar?.path,
         'desktopJarSha256': jarHash,
+        ...provenance,
       };
       await _installRecord(client, package, record);
       final sources = await client.extensionSources(package);
-      if (sources.isEmpty) throw StateError('桌面兼容运行时未能加载此扩展的来源');
+      final probe = await probeSourceFilters(client, sources);
       record.addAll({
-        'enabled': old?['enabled'] == true,
+        ...probe,
+        'enabled': probe['filterProbe'] == 'passed' && old?['enabled'] == true,
         'sources': sources,
         'sourceCount': sources.length,
         'executable': true,

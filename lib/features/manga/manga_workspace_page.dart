@@ -16,11 +16,11 @@ import '../discover/manga_feed_repository.dart';
 import '../library/library_page.dart';
 import '../library/manga_updates_page.dart';
 import '../search/search_page.dart';
-import '../sources/sources_page.dart';
 import 'manga_extension_details_page.dart';
 import 'manga_extensions_page.dart';
 import 'manga_source_actions.dart';
 import 'manga_source_page.dart';
+import 'mihon_extension_icon.dart';
 
 class MangaWorkspacePage extends ConsumerStatefulWidget {
   const MangaWorkspacePage({super.key});
@@ -144,16 +144,6 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
     await ref.read(sourcesProvider.notifier).refresh();
   }
 
-  Future<void> _rules() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute<void>(
-        builder: (_) => const SourcesPage(initialType: MediaType.manga),
-      ),
-    );
-    if (mounted) await ref.read(sourcesProvider.notifier).refresh();
-  }
-
   Future<void> _sourceActions(SourceEntry entry) async {
     final source = entry.source;
     final action = await showMangaSourceActionMenu(
@@ -196,17 +186,14 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
               FilledButton.tonalIcon(
                 onPressed: _extensions,
                 icon: const Icon(Icons.extension_outlined),
-                label: const Text('插件 · 已安装 / 浏览 / 仓库'),
+                label: const Text('插件与来源管理'),
+              )
+            else
+              TextButton.icon(
+                onPressed: _extensions,
+                icon: const Icon(Icons.settings_outlined),
+                label: const Text('JS / API 漫画来源目录'),
               ),
-            TextButton.icon(
-              onPressed: _rules,
-              icon: const Icon(Icons.settings_outlined),
-              label: Text(
-                !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
-                    ? 'JS / API 漫画来源目录'
-                    : '规则与来源设置',
-              ),
-            ),
           ],
         ),
       ),
@@ -257,11 +244,17 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
                       ),
                     for (final entry in entries)
                       ListTile(
-                        leading: Icon(
-                          entry.enabled
-                              ? Icons.language
-                              : Icons.pause_circle_outline,
-                        ),
+                        leading: entry.source is MihonSource
+                            ? MihonExtensionIcon(
+                                packageName:
+                                    (entry.source as MihonSource).packageName,
+                                enabled: entry.enabled,
+                              )
+                            : Icon(
+                                entry.enabled
+                                    ? Icons.language
+                                    : Icons.pause_circle_outline,
+                              ),
                         title: Text(entry.descriptor.name),
                         subtitle: Text(
                           '${entry.descriptor.lang} · ${entry.enabled ? '已启用' : '已停用'} · ${entry.source is SearchProvider ? '在线搜索 / 浏览' : '在线目录'}',
@@ -285,7 +278,7 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
                         leading: const Icon(Icons.error_outline),
                         title: Text(failure.name),
                         subtitle: Text('${failure.lang} · ${failure.message}'),
-                        onTap: _rules,
+                        onTap: _extensions,
                       ),
                   ],
                 );

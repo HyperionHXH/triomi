@@ -9,6 +9,7 @@ import '../../../core/db/app_database.dart';
 import '../../../core/models/chapter.dart';
 import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
+import '../../../core/models/source_metadata.dart';
 import '../../downloads/data/download_repository.dart';
 import 'library_repository.dart';
 

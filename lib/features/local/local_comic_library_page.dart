@@ -72,7 +72,7 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                '支持ZIP/CBZ、图片目录和PNG/JPEG/WebP/GIF/AVIF（不支持CBR）。按自然文件名排序；子目录作为章节，上层目录作为卷。只复制到应用存储，原件不会改动。',
+                '支持 ZIP/CBZ、图片目录及 PNG/JPEG/WebP/GIF/AVIF。按文件名自然排序，子目录作为章节；原件保留。',
               ),
               const SizedBox(height: 12),
               TextField(
@@ -92,7 +92,7 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
               ],
               const SizedBox(height: 12),
               const Text(
-                '限制：ZIP≤1GiB、图片总量≤2GiB、5000页；单图≤64MiB / 4000万像素。符号链接、路径穿越、重复压缩条目和过高压缩比会拒绝。系统选择后将显示最终导入确认。',
+                'ZIP ≤1 GiB；图片共 ≤2 GiB / 5000 页；单图 ≤64 MiB / 4000 万像素。',
               ),
             ],
           ),
@@ -156,7 +156,7 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
         builder: (dialog) => AlertDialog(
           title: const Text('确认复制导入'),
           content: Text(
-            '作品：${options.$1}\n范围：${paths.length == 1 ? paths.single : '${paths.length}个所选图片文件'}\n\n仅写入应用私有离线存储并加入书架；不访问任何网络来源、不覆盖相同内容已导入作品。原始文件不会改动。',
+            '作品：${options.$1}\n范围：${paths.length == 1 ? paths.single : '${paths.length}个所选图片文件'}\n\n复制到应用存储并加入书架，保留原件与已导入作品。',
           ),
           actions: [
             TextButton(
@@ -212,7 +212,7 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
       builder: (dialog) => AlertDialog(
         title: const Text('移除此本地导入？'),
         content: Text(
-          '仅移除「${item.title}」的本地导入图片、目录、收藏及阅读历史。\n身份：${item.remoteId}\n\n不会删除原始ZIP/CBZ/图片文件，不会删除其他来源或其他作品的下载。此操作不可撤销。',
+          '删除「${item.title}」的导入图片、目录、收藏及历史。\n身份：${item.remoteId}\n\n原始文件与其他作品保留。此操作不可撤销。',
         ),
         actions: [
           TextButton(

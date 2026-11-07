@@ -39,6 +39,11 @@ class Win32Window {
   // Show the current window. Returns true if the window was successfully shown.
   bool Show();
 
+  // Borderless fullscreen on this window's current monitor. Preserves the exact
+  // windowed styles and placement (including maximized state) until exit.
+  // Repeated requests are idempotent. Failures retain a retryable restore state.
+  bool SetFullscreen(bool enabled, std::string* failure_stage, DWORD* error);
+
   // Release OS resources associated with window.
   void Destroy();
 
@@ -89,6 +94,15 @@ class Win32Window {
 
   // Update the window frame's theme to match the system theme.
   static void UpdateTheme(HWND const window);
+
+  bool RestoreWindowedState(std::string* failure_stage, DWORD* error);
+
+  bool fullscreen_ = false;
+  bool fullscreen_transition_ = false;
+  bool windowed_state_saved_ = false;
+  LONG_PTR windowed_style_ = 0;
+  LONG_PTR windowed_ex_style_ = 0;
+  WINDOWPLACEMENT windowed_placement_ = {};
 
   bool quit_on_close_ = false;
 

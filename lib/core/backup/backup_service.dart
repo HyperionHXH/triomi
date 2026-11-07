@@ -13,10 +13,12 @@ import '../db/legacy_category_scopes.dart';
 import '../models/manga_metadata_override.dart';
 import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
+import '../models/source_metadata.dart';
 import '../platform/platform_channel.dart';
 import '../source/catalog_installer.dart';
 import '../source/host_features.dart';
 import '../source/http_client.dart';
+import '../source/kazumi_repository.dart';
 import '../source/kazumi_source.dart';
 import '../source/rule_schema.dart';
 import '../storage/cover_store.dart';
@@ -398,14 +400,14 @@ class BackupService {
         BackupProgress(
           BackupStage.collecting,
           completedItems: ++collectedTables,
-          totalItems: 13,
+          totalItems: 14,
         ),
       );
     }
 
     checkBackupCancellation();
     onStageProgress?.call(
-      const BackupProgress(BackupStage.collecting, totalItems: 13),
+      const BackupProgress(BackupStage.collecting, totalItems: 14),
     );
     final items = await database.select(database.mediaItems).get();
     collected();
@@ -415,6 +417,21 @@ class BackupService {
     collected();
     final chapters = await database.select(database.chapters).get();
     collected();
+    final mangaChapterStates = await database
+        .select(database.mangaChapterStates)
+        .get();
+    collected();
+    final mangaItems = {
+      for (final item in items)
+        if (item.type == MediaType.manga) (item.sourceId, item.remoteId),
+    };
+    final chapterOwners = {
+      for (final chapter in chapters)
+        (chapter.sourceId, chapter.remoteId): (
+          chapter.itemSourceId,
+          chapter.itemRemoteId,
+        ),
+    };
     final animeLinks = await database.select(database.animeSourceLinks).get();
     collected();
     final animeSyncStates = await database
@@ -619,6 +636,7 @@ class BackupService {
             'rating': row.rating,
             'status': row.status,
             'detailJson': row.detailJson,
+            'sourceMetadataJson': row.sourceMetadataJson,
             'cachedAt': row.cachedAt?.toIso8601String(),
           },
       ],
@@ -674,9 +692,27 @@ class BackupService {
             'volumeTitle': row.volumeTitle,
             'releaseDate': row.releaseDate?.toIso8601String(),
             'locked': row.locked,
+            'sourceMetadataJson': row.sourceMetadataJson,
             if (includeOfflineContent && row.contentJson != null)
               'contentJson': row.contentJson,
           },
+      ],
+      'mangaChapterStates': [
+        for (final row in mangaChapterStates)
+          if (mangaItems.contains((row.sourceId, row.remoteId)) &&
+              chapterOwners[(row.chapterSourceId, row.chapterRemoteId)] ==
+                  (row.sourceId, row.remoteId))
+            {
+              'sourceId': row.sourceId,
+              'remoteId': row.remoteId,
+              'chapterSourceId': row.chapterSourceId,
+              'chapterRemoteId': row.chapterRemoteId,
+              'isRead': row.isRead,
+              'bookmarked': row.bookmarked,
+              'totalPages': row.totalPages,
+              'historyResetAt': row.historyResetAt?.toUtc().toIso8601String(),
+              'updatedAt': row.updatedAt.toUtc().toIso8601String(),
+            },
       ],
       'mangaFeeds': [
         for (final row in mangaFeeds)
@@ -891,6 +927,57 @@ class BackupService {
     return rows;
   }
 
+  static List<MangaChapterStateRow> _mangaChapterStatesOf(
+    Map<String, Object?> payload,
+  ) {
+    final raw = payload['mangaChapterStates'];
+    if (raw == null) return const [];
+    if (raw is! List) throw const FormatException('漫画章节状态格式无效');
+    final rows = <MangaChapterStateRow>[];
+    final seen = <(String, String, String, String)>{};
+    for (final node in raw) {
+      if (node is! Map) throw const FormatException('漫画章节状态格式无效');
+      final source = node['sourceId'],
+          item = node['remoteId'],
+          chapterSource = node['chapterSourceId'],
+          chapter = node['chapterRemoteId'],
+          read = node['isRead'],
+          bookmark = node['bookmarked'],
+          pages = node['totalPages'];
+      final at = _dateOf(node['updatedAt']);
+      final resetAt = _dateOf(node['historyResetAt']);
+      if (source is! String ||
+          source.isEmpty ||
+          item is! String ||
+          item.isEmpty ||
+          chapterSource != source ||
+          chapter is! String ||
+          chapter.isEmpty ||
+          read is! bool ||
+          bookmark is! bool ||
+          at == null ||
+          pages != null && (pages is! int || pages <= 0) ||
+          node['historyResetAt'] != null && resetAt == null ||
+          !seen.add((source, item, source, chapter))) {
+        throw const FormatException('漫画章节状态身份、页数或时间无效');
+      }
+      rows.add(
+        MangaChapterStateRow(
+          sourceId: source,
+          remoteId: item,
+          chapterSourceId: source,
+          chapterRemoteId: chapter,
+          isRead: read,
+          bookmarked: bookmark,
+          totalPages: pages as int?,
+          historyResetAt: resetAt,
+          updatedAt: at,
+        ),
+      );
+    }
+    return rows;
+  }
+
   /// Validate only the stored envelope, never source capabilities or execution.
   /// Keep original JSON bytes; legacy FilterLists and v1 envelopes round-trip.
   static void validateSavedSearchFilters(Map<String, Object?> payload) {
@@ -931,6 +1018,12 @@ class BackupService {
     }
     validateSavedSearchFilters(payload);
     final animeSyncStates = _animeSyncStatesOf(payload);
+    final mangaChapterStates = _mangaChapterStatesOf(payload);
+    final incomingChapterStatesByKey = {
+      for (final row in mangaChapterStates)
+        (row.sourceId, row.remoteId, row.chapterSourceId, row.chapterRemoteId):
+            row,
+    };
     final rules = sourceRulesOf(payload);
     ApkBackupFiles.validatePayload(payload['apkPackages']);
     ApkRestoreTransaction? apkTransaction;
@@ -1071,6 +1164,9 @@ class BackupService {
                 existing == null ||
                 (existing.cachedAt ?? _oldestTimestamp).isBefore(cachedAt);
             final incomingType = _typeOf(row['type']);
+            final incomingSourceMetadata = SourceMetadata.fromStorage(
+              row['sourceMetadataJson'] as String?,
+            );
             final mergeManga =
                 incomingType == MediaType.manga &&
                 (existing == null || existing.type == MediaType.manga);
@@ -1085,14 +1181,27 @@ class BackupService {
                   )
                 : row['detailJson'] as String?;
             if (!preferIncomingCache) {
-              if (mergeManga && detailJson != existing.detailJson) {
+              if ((mergeManga && detailJson != existing.detailJson) ||
+                  (existing.sourceMetadataJson == null &&
+                      incomingSourceMetadata != null)) {
                 await (database.update(database.mediaItems)..where(
                       (t) =>
                           t.sourceId.equals(sourceId) &
                           t.remoteId.equals(remoteId) &
                           t.type.equalsValue(MediaType.manga),
                     ))
-                    .write(MediaItemsCompanion(detailJson: Value(detailJson)));
+                    .write(
+                      MediaItemsCompanion(
+                        detailJson: mergeManga
+                            ? Value(detailJson)
+                            : const Value.absent(),
+                        sourceMetadataJson:
+                            existing.sourceMetadataJson == null &&
+                                incomingSourceMetadata != null
+                            ? Value(incomingSourceMetadata.encoded)
+                            : const Value.absent(),
+                      ),
+                    );
               }
               continue;
             }
@@ -1115,6 +1224,12 @@ class BackupService {
                         ? Value(detailJson)
                         : const Value.absent(),
                     cachedAt: Value(cachedAt),
+                    sourceMetadataJson: Value(
+                      SourceMetadata.mergeStorage(
+                        existing?.sourceMetadataJson,
+                        incomingSourceMetadata,
+                      ),
+                    ),
                   ),
                 );
             itemCount += 1;
@@ -1199,6 +1314,28 @@ class BackupService {
             final chapterSourceId =
                 row['chapterSourceId']?.toString() ?? sourceId;
             final visitedAt = _dateOf(row['visitedAt']) ?? _oldestTimestamp;
+            final localState =
+                await (database.select(database.mangaChapterStates)..where(
+                      (t) =>
+                          t.sourceId.equals(sourceId) &
+                          t.remoteId.equals(remoteId) &
+                          t.chapterSourceId.equals(chapterSourceId) &
+                          t.chapterRemoteId.equals(chapterRemoteId),
+                    ))
+                    .getSingleOrNull();
+            final incomingState =
+                incomingChapterStatesByKey[(
+                  sourceId,
+                  remoteId,
+                  chapterSourceId,
+                  chapterRemoteId,
+                )];
+            if ([
+              ?localState?.historyResetAt,
+              ?incomingState?.historyResetAt,
+            ].any((reset) => !visitedAt.isAfter(reset))) {
+              continue;
+            }
             final existing =
                 await (database.select(database.histories)..where(
                       (table) =>
@@ -1405,8 +1542,13 @@ class BackupService {
             if (existing != null) {
               // Catalogues have no per-row timestamp. Keep this device's metadata;
               // only fill missing offline text rather than erasing cached content.
-              if (existing.contentJson == null &&
-                  row['contentJson'] is String) {
+              final restoredMetadata = SourceMetadata.fromStorage(
+                row['sourceMetadataJson'] as String?,
+              );
+              if ((existing.contentJson == null &&
+                      row['contentJson'] is String) ||
+                  (existing.sourceMetadataJson == null &&
+                      restoredMetadata != null)) {
                 await (database.update(database.chapters)..where(
                       (t) =>
                           t.sourceId.equals(sourceId) &
@@ -1414,7 +1556,16 @@ class BackupService {
                     ))
                     .write(
                       ChaptersCompanion(
-                        contentJson: Value(row['contentJson'] as String),
+                        contentJson:
+                            existing.contentJson == null &&
+                                row['contentJson'] is String
+                            ? Value(row['contentJson'] as String)
+                            : const Value.absent(),
+                        sourceMetadataJson:
+                            existing.sourceMetadataJson == null &&
+                                restoredMetadata != null
+                            ? Value(restoredMetadata.encoded)
+                            : const Value.absent(),
                       ),
                     );
                 chapterCount += 1;
@@ -1437,9 +1588,85 @@ class BackupService {
                     releaseDate: Value(_dateOf(row['releaseDate'])),
                     locked: Value(row['locked'] == true),
                     contentJson: Value(row['contentJson'] as String?),
+                    sourceMetadataJson: Value(
+                      SourceMetadata.fromStorage(
+                        row['sourceMetadataJson'] as String?,
+                      )?.encoded,
+                    ),
                   ),
                 );
             chapterCount += 1;
+          }
+          for (final row in mangaChapterStates) {
+            final item =
+                await (database.select(database.mediaItems)..where(
+                      (t) =>
+                          t.sourceId.equals(row.sourceId) &
+                          t.remoteId.equals(row.remoteId),
+                    ))
+                    .getSingleOrNull();
+            final chapter =
+                await (database.select(database.chapters)..where(
+                      (t) =>
+                          t.sourceId.equals(row.chapterSourceId) &
+                          t.remoteId.equals(row.chapterRemoteId),
+                    ))
+                    .getSingleOrNull();
+            if (item?.type != MediaType.manga ||
+                chapter == null ||
+                chapter.itemSourceId != row.sourceId ||
+                chapter.itemRemoteId != row.remoteId) {
+              throw const FormatException('漫画章节状态不属于备份中的作品目录');
+            }
+            final old =
+                await (database.select(database.mangaChapterStates)..where(
+                      (t) =>
+                          t.sourceId.equals(row.sourceId) &
+                          t.remoteId.equals(row.remoteId) &
+                          t.chapterSourceId.equals(row.chapterSourceId) &
+                          t.chapterRemoteId.equals(row.chapterRemoteId),
+                    ))
+                    .getSingleOrNull();
+            final oldReset = old?.historyResetAt,
+                incomingReset = row.historyResetAt;
+            final reset = oldReset == null
+                ? incomingReset
+                : incomingReset == null || oldReset.isAfter(incomingReset)
+                ? oldReset
+                : incomingReset;
+            if (old != null && !old.updatedAt.isBefore(row.updatedAt)) {
+              if (reset != oldReset) {
+                await (database.update(database.mangaChapterStates)..where(
+                      (t) =>
+                          t.sourceId.equals(row.sourceId) &
+                          t.remoteId.equals(row.remoteId) &
+                          t.chapterSourceId.equals(row.chapterSourceId) &
+                          t.chapterRemoteId.equals(row.chapterRemoteId),
+                    ))
+                    .write(
+                      MangaChapterStatesCompanion(historyResetAt: Value(reset)),
+                    );
+              }
+            } else {
+              await database
+                  .into(database.mangaChapterStates)
+                  .insertOnConflictUpdate(
+                    row
+                        .toCompanion(false)
+                        .copyWith(historyResetAt: Value(reset)),
+                  );
+            }
+            if (reset != null) {
+              await (database.delete(database.histories)..where(
+                    (t) =>
+                        t.sourceId.equals(row.sourceId) &
+                        t.remoteId.equals(row.remoteId) &
+                        t.chapterSourceId.equals(row.chapterSourceId) &
+                        t.chapterRemoteId.equals(row.chapterRemoteId) &
+                        t.visitedAt.isSmallerOrEqualValue(reset),
+                  ))
+                  .go();
+            }
           }
           final categoryRows = _listOf(payload['categories'])
             ..sort(
@@ -1824,14 +2051,22 @@ class BackupService {
         throw const FormatException('备份来源规则不是有效JSON；未执行脚本');
       }
       if (decoded is! Map) throw const FormatException('备份来源规则必须是对象');
-      if (_hasRuleCredentials(decoded) || _hasRuleCredentials(row['repoUrl'])) {
+      final pinnedPublicProtocol = KazumiRepository.isPinnedPublicDefinition(
+        id: id,
+        text: text,
+        version: row['version'],
+        repoUrl: row['repoUrl'],
+        type: row['type'],
+      );
+      if ((!pinnedPublicProtocol && _hasRuleCredentials(decoded)) ||
+          _hasRuleCredentials(row['repoUrl'])) {
         throw const FormatException('来源规则包含凭据字段或凭据URL，不能备份/恢复；请先移除凭据');
       }
       final SourceDescriptor descriptor;
       final List<String> requiresHost;
       try {
         if (KazumiRule.recognizes(text)) {
-          descriptor = KazumiRule.parse(text).descriptor;
+          descriptor = KazumiRule.parse(text, allowDeprecated: true).descriptor;
           requiresHost = const [];
         } else {
           final rule = SourceRule.parseMap(decoded);

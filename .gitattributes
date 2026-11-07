@@ -1,0 +1,3 @@
+# Public rule attestations and source provenance depend on packaged bytes.
+assets/rules/*.json text eol=lf
+assets/catalog/kazumi-official-index.json text eol=lf

@@ -1,7 +1,25 @@
 part of 'detail_page.dart';
 
-/// A single detail scroll owns every chapter. Manga is continuous; novels
-/// restrict the lazy list to the explicitly chosen source volume.
+// Reject every occurrence of an ambiguous identity, not just the second one.
+Set<String> _downloadableChapterIds(MediaItem item, List<Chapter> chapters) {
+  final seen = <(String, String)>{};
+  final ambiguous = <(String, String)>{};
+  for (final chapter in chapters) {
+    final key = (chapter.sourceId, chapter.remoteId);
+    if (!seen.add(key)) ambiguous.add(key);
+  }
+  return {
+    for (final chapter in chapters)
+      if (!chapter.locked &&
+          chapter.sourceId == item.sourceId &&
+          chapter.remoteId.trim().isNotEmpty &&
+          !ambiguous.contains((chapter.sourceId, chapter.remoteId)))
+        chapter.remoteId,
+  };
+}
+
+/// One lazy scroll; novels expose independent whole-volume actions before any
+/// expansion. At most one volume is expanded, keeping the original reader index.
 class _ChapterCatalog extends ConsumerStatefulWidget {
   const _ChapterCatalog({
     required this.item,
@@ -9,6 +27,7 @@ class _ChapterCatalog extends ConsumerStatefulWidget {
     required this.canOpen,
     required this.onSelected,
     this.onDownload,
+    this.onDownloadSelection,
     required this.historyRevision,
   });
   final MediaItem item;
@@ -16,6 +35,7 @@ class _ChapterCatalog extends ConsumerStatefulWidget {
   final bool canOpen;
   final Future<void> Function(int) onSelected;
   final VoidCallback? onDownload;
+  final ValueChanged<Set<String>>? onDownloadSelection;
   final int historyRevision;
 
   @override
@@ -24,9 +44,31 @@ class _ChapterCatalog extends ConsumerStatefulWidget {
 
 class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
   final _volumes = <String, List<int>>{};
+  Set<String> _eligible = {};
+  Set<String> _selectable = {};
   String? _volume;
   bool _reverse = false;
   late Future<HistoryView?> _history;
+  late Stream<List<MangaChapterStateRow>> _chapterStates;
+  late Stream<List<HistoryRow>> _chapterHistories;
+  final Set<String> _selected = {};
+  PersistentBottomSheetController? _selectionSheet;
+  StateSetter? _refreshSelectionSheet;
+  final _selectionSheetKey = GlobalKey();
+  double _selectionInset = 0;
+  bool _chapterActionBusy = false;
+  void _refreshCatalog(VoidCallback change) => setState(change);
+  void _measureSelectionInset() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _selectionSheet == null) return;
+      final render = _selectionSheetKey.currentContext?.findRenderObject();
+      if (render is RenderBox &&
+          render.hasSize &&
+          render.size.height != _selectionInset) {
+        setState(() => _selectionInset = render.size.height);
+      }
+    });
+  }
 
   bool get _novel => widget.item.type == MediaType.novel;
 
@@ -34,22 +76,40 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
     _history = ref
         .read(libraryRepositoryProvider)
         .lastReadOf(widget.item.sourceId, widget.item.remoteId);
+    final library = ref.read(libraryRepositoryProvider);
+    _chapterStates = _novel
+        ? const Stream.empty()
+        : library.watchMangaChapterStates(
+            widget.item.sourceId,
+            widget.item.remoteId,
+          );
+    _chapterHistories = _novel
+        ? const Stream.empty()
+        : library.watchChapterHistories(
+            widget.item.sourceId,
+            widget.item.remoteId,
+          );
   }
 
   void _groupVolumes() {
+    _eligible = _downloadableChapterIds(widget.item, widget.chapters);
+    final unique = <String>{};
+    final ambiguous = <String>{};
+    for (final chapter in widget.chapters) {
+      if (chapter.sourceId == widget.item.sourceId &&
+          !unique.add(chapter.remoteId)) {
+        ambiguous.add(chapter.remoteId);
+      }
+    }
+    _selectable = unique.difference(ambiguous)..remove('');
+    _selected.retainAll(_selectable);
     _volumes.clear();
     if (!_novel) return;
     for (var index = 0; index < widget.chapters.length; index++) {
-      _volumes
-          .putIfAbsent(widget.chapters[index].volumeTitle ?? '', () => [])
-          .add(index);
+      final title = widget.chapters[index].volumeTitle?.trim() ?? '';
+      _volumes.putIfAbsent(title, () => []).add(index);
     }
-    if (!_volumes.containsKey(_volume)) _volume = _volumes.keys.first;
-  }
-
-  int _indexAt(int offset) {
-    if (_novel) return _volumes[_volume]![offset];
-    return _reverse ? widget.chapters.length - 1 - offset : offset;
+    if (!_volumes.containsKey(_volume)) _volume = null;
   }
 
   @override
@@ -62,29 +122,246 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
   @override
   void didUpdateWidget(covariant _ChapterCatalog oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.chapters, widget.chapters) ||
-        oldWidget.item.type != widget.item.type) {
-      _groupVolumes();
-    }
-    if (oldWidget.item.sourceId != widget.item.sourceId ||
+    final changedItem =
+        oldWidget.item.sourceId != widget.item.sourceId ||
         oldWidget.item.remoteId != widget.item.remoteId ||
-        oldWidget.historyRevision != widget.historyRevision) {
+        oldWidget.item.type != widget.item.type;
+    if (changedItem) {
+      _volume = null;
+      _selected.clear();
+    }
+    if (!identical(oldWidget.chapters, widget.chapters) || changedItem) {
+      _groupVolumes();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_selected.isEmpty) {
+          _selectionSheet?.close();
+        } else {
+          _refreshSelectionSheet?.call(() {});
+        }
+      });
+    }
+    if (changedItem || oldWidget.historyRevision != widget.historyRevision) {
       _loadHistory();
     }
   }
 
   @override
+  void dispose() {
+    _selectionSheet?.close();
+    super.dispose();
+  }
+
+  VoidCallback? _downloadAction(int index, DownloadEntry? entry) {
+    final chapter = widget.chapters[index];
+    if (widget.onDownloadSelection == null ||
+        !_eligible.contains(chapter.remoteId) ||
+        chapter.sourceId != widget.item.sourceId) {
+      return null;
+    }
+    if (entry?.status == DownloadStatus.done) {
+      return () => unawaited(widget.onSelected(index));
+    }
+    if (entry?.status == DownloadStatus.queued ||
+        entry?.status == DownloadStatus.running) {
+      return () => unawaited(_pauseDownload(entry!));
+    }
+    // Failed and paused entries use the same source/catalog guards as new work.
+    return () => widget.onDownloadSelection!({chapter.remoteId});
+  }
+
+  Future<void> _pauseDownload(DownloadEntry entry) async {
+    try {
+      await ref.read(downloadsProvider.notifier).pauseEntry(entry.row.id);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('暂停失败，请到下载管理重试')));
+    }
+  }
+
+  int _indexAt(int offset, List<int>? indices) => indices != null
+      ? indices[offset]
+      : _reverse
+      ? widget.chapters.length - 1 - offset
+      : offset;
+
+  Widget _rows(
+    List<int>? indices,
+    Map<String, DownloadEntry> entries,
+  ) => StreamBuilder<List<MangaChapterStateRow>>(
+    stream: _chapterStates,
+    builder: (context, states) => StreamBuilder<List<HistoryRow>>(
+      stream: _chapterHistories,
+      builder: (context, histories) => FutureBuilder<HistoryView?>(
+        future: _history,
+        builder: (context, snapshot) => SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            0,
+            16,
+            _selectionSheet == null ? 16 : _selectionInset + 40,
+          ),
+          sliver: SliverList.builder(
+            key: ValueKey('detail-chapter-list:${widget.item.type.name}'),
+            itemCount: (indices?.length ?? widget.chapters.length) * 2 - 1,
+            itemBuilder: (context, slot) {
+              if (slot.isOdd) {
+                return const Divider(height: 1, indent: 16, endIndent: 16);
+              }
+              final offset = slot ~/ 2;
+              final index = _indexAt(offset, indices);
+              final chapter = widget.chapters[index];
+              final current =
+                  snapshot.data?.chapterRemoteId == chapter.remoteId &&
+                  chapter.sourceId == widget.item.sourceId;
+              final chapterState = states.data
+                  ?.where(
+                    (row) =>
+                        row.chapterSourceId == chapter.sourceId &&
+                        row.chapterRemoteId == chapter.remoteId,
+                  )
+                  .firstOrNull;
+              final history = histories.data
+                  ?.where(
+                    (row) =>
+                        row.chapterSourceId == chapter.sourceId &&
+                        row.chapterRemoteId == chapter.remoteId,
+                  )
+                  .firstOrNull;
+              final selected =
+                  chapter.sourceId == widget.item.sourceId &&
+                  _selectable.contains(chapter.remoteId) &&
+                  _selected.contains(chapter.remoteId);
+              final read = !_novel && chapterState?.isRead == true;
+              final enabled =
+                  widget.canOpen &&
+                  (!chapter.locked || _novel) &&
+                  chapter.sourceId == widget.item.sourceId;
+              final entry = chapter.sourceId == widget.item.sourceId
+                  ? entries[chapter.remoteId]
+                  : null;
+              final onTap = _selected.isNotEmpty
+                  ? (_selectable.contains(chapter.remoteId) &&
+                            chapter.sourceId == widget.item.sourceId
+                        ? () => _toggleChapterSelection(chapter.remoteId)
+                        : null)
+                  : enabled
+                  ? () => unawaited(widget.onSelected(index))
+                  : null;
+              final download = _ChapterDownloadStatus(
+                chapter: chapter,
+                index: index,
+                status: entry?.status,
+                onPressed: _downloadAction(index, entry),
+              );
+              final date = _chapterDate(chapter);
+              final details = [
+                if (!_novel && date != null) date,
+                if (current) '上次读到',
+                if (chapter.locked) '锁定章节',
+                if (!_novel && chapterState?.bookmarked == true) '书签',
+                if (!_novel && !read && history != null)
+                  '第 ${history.position.toInt() + 1} 页${chapterState?.totalPages == null ? '' : ' / ${chapterState!.totalPages} 页'}',
+                if (read) '已读完',
+              ];
+              final volume = chapter.volumeTitle?.trim();
+              final previousVolume = offset == 0
+                  ? null
+                  : widget.chapters[_indexAt(offset - 1, indices)].volumeTitle
+                        ?.trim();
+              return KeyedSubtree(
+                key: ValueKey('detail-chapter-index:$index'),
+                child: GestureDetector(
+                  onSecondaryTap:
+                      !_novel &&
+                          chapter.sourceId == widget.item.sourceId &&
+                          _selectable.contains(chapter.remoteId)
+                      ? () => _toggleChapterSelection(chapter.remoteId)
+                      : null,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (!_novel &&
+                          volume?.isNotEmpty == true &&
+                          volume != previousVolume)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                            volume!,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        ),
+                      ListTile(
+                        selected: selected,
+                        onLongPress:
+                            !_novel &&
+                                chapter.sourceId == widget.item.sourceId &&
+                                _selectable.contains(chapter.remoteId)
+                            ? () => _toggleChapterSelection(chapter.remoteId)
+                            : null,
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 4,
+                        ),
+                        leading: _novel
+                            ? Icon(
+                                current
+                                    ? Icons.bookmark
+                                    : Icons.article_outlined,
+                                size: 18,
+                              )
+                            : null,
+                        title: Text(
+                          chapter.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: read
+                              ? TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.45),
+                                )
+                              : current
+                              ? TextStyle(
+                                  color: Theme.of(context).colorScheme.primary,
+                                )
+                              : null,
+                        ),
+                        subtitle: details.isEmpty
+                            ? null
+                            : Text(details.join(' · ')),
+                        trailing: _selected.isNotEmpty && !_novel
+                            ? Icon(
+                                selected
+                                    ? Icons.check_circle
+                                    : Icons.radio_button_unchecked,
+                              )
+                            : download,
+                        onTap: onTap,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    ),
+  );
+
+  @override
   Widget build(BuildContext context) {
-    final count = _novel ? _volumes[_volume]!.length : widget.chapters.length;
     final theme = Theme.of(context);
     final downloads = ref.watch(downloadGroupsProvider).asData?.value;
-    final statuses = <String, DownloadStatus>{
+    final entries = <String, DownloadEntry>{
       for (final group in downloads ?? const <DownloadGroup>[])
         if (group.sourceId == widget.item.sourceId &&
             group.remoteId == widget.item.remoteId)
           for (final entry in group.entries)
             if (entry.row.chapterSourceId == widget.item.sourceId)
-              entry.row.chapterRemoteId: entry.status,
+              entry.row.chapterRemoteId: entry,
     };
     return SliverMainAxisGroup(
       slivers: [
@@ -101,7 +378,7 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
                   children: [
                     Text(
                       _novel
-                          ? '分卷与章节 · ${widget.chapters.length} 章'
+                          ? '分卷与章节 · ${_volumes.length} 卷'
                           : '章节 · ${widget.chapters.length}',
                       style: theme.textTheme.titleMedium,
                     ),
@@ -110,7 +387,7 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
                         key: const ValueKey('detail-chapter-download'),
                         onPressed: widget.onDownload,
                         icon: const Icon(Icons.download_outlined),
-                        label: Text(_novel ? '缓存章节' : '选择章节下载'),
+                        label: const Text('批量下载'),
                       ),
                     if (!_novel)
                       IconButton(
@@ -121,115 +398,105 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
                   ],
                 ),
                 if (!widget.canOpen) const Text('此来源没有正文能力，目录仅供查看。'),
-                if (_novel && _volumes.length > 1) ...[
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    key: ValueKey('volume:$_volume'),
-                    initialValue: _volume,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: '分卷'),
-                    items: [
-                      for (final entry in _volumes.entries)
-                        DropdownMenuItem(
-                          value: entry.key,
-                          child: Text(
-                            '${entry.key.isEmpty ? '未分卷' : entry.key} · ${entry.value.length}章',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) setState(() => _volume = value);
-                    },
-                  ),
-                ],
-                if (_novel) ...[
-                  const SizedBox(height: 12),
-                  AppCard(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.menu_book_outlined),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            '${_volume!.isEmpty ? '正文目录' : _volume} · $count 章',
-                            style: theme.textTheme.titleSmall,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
         ),
-        FutureBuilder<HistoryView?>(
-          future: _history,
-          builder: (context, snapshot) => SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            sliver: SliverList.builder(
-              key: ValueKey('detail-chapter-list:${widget.item.type.name}'),
-              itemCount: count * 2 - 1,
-              itemBuilder: (context, slot) {
-                if (slot.isOdd) {
-                  return const Divider(height: 1, indent: 16, endIndent: 16);
-                }
-                final offset = slot ~/ 2;
-                final index = _indexAt(offset);
-                final chapter = widget.chapters[index];
-                final current =
-                    snapshot.data?.chapterRemoteId == chapter.remoteId;
-                final enabled =
-                    widget.canOpen &&
-                    (!chapter.locked || _novel) &&
-                    chapter.sourceId == widget.item.sourceId;
-                final VoidCallback? onTap = !enabled
-                    ? null
-                    : () async => widget.onSelected(index);
-                final row = _novel
-                    ? _NovelChapterRow(
-                        chapter: chapter,
-                        current: current,
-                        status: statuses[chapter.remoteId],
-                        onTap: onTap,
-                      )
-                    : _MangaChapterRow(
-                        chapter: chapter,
-                        current: current,
-                        status: statuses[chapter.remoteId],
-                        onTap: onTap,
-                      );
-                final volume = chapter.volumeTitle?.trim();
-                final previousVolume = offset == 0
-                    ? null
-                    : widget.chapters[_indexAt(offset - 1)].volumeTitle?.trim();
-                return KeyedSubtree(
-                  key: ValueKey('detail-chapter-index:$index'),
+        if (_novel)
+          for (final volume in _volumes.entries) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: AppCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (!_novel &&
-                          volume?.isNotEmpty == true &&
-                          volume != previousVolume)
+                      ListTile(
+                        key: ValueKey('detail-volume:${volume.key}'),
+                        title: Text(volume.key.isEmpty ? '未分卷' : volume.key),
+                        subtitle: Text('${volume.value.length} 章'),
+                        leading: Icon(
+                          _volume == volume.key
+                              ? Icons.expand_less
+                              : Icons.expand_more,
+                        ),
+                        onTap: () => setState(
+                          () => _volume = _volume == volume.key
+                              ? null
+                              : volume.key,
+                        ),
+                      ),
+                      if (widget.onDownloadSelection != null)
                         Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Text(
-                            volume!,
-                            style: theme.textTheme.titleSmall,
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: _volumeDownload(volume, entries),
                           ),
                         ),
-                      row,
                     ],
                   ),
-                );
-              },
+                ),
+              ),
             ),
-          ),
-        ),
+            if (_volume == volume.key) _rows(volume.value, entries),
+          ]
+        else
+          _rows(null, entries),
       ],
+    );
+  }
+
+  Widget? _volumeDownload(
+    MapEntry<String, List<int>> volume,
+    Map<String, DownloadEntry> entries,
+  ) {
+    if (widget.onDownloadSelection == null) return null;
+    final ids = {
+      for (final index in volume.value)
+        if (_eligible.contains(widget.chapters[index].remoteId) &&
+            widget.chapters[index].sourceId == widget.item.sourceId)
+          widget.chapters[index].remoteId,
+    };
+    final done = ids
+        .where((id) => entries[id]?.status == DownloadStatus.done)
+        .length;
+    final pending = ids
+        .where(
+          (id) =>
+              entries[id]?.status == DownloadStatus.queued ||
+              entries[id]?.status == DownloadStatus.running,
+        )
+        .length;
+    final targets = ids
+        .where(
+          (id) =>
+              entries[id]?.status != DownloadStatus.done &&
+              entries[id]?.status != DownloadStatus.queued &&
+              entries[id]?.status != DownloadStatus.running,
+        )
+        .toSet();
+    return TextButton.icon(
+      key: ValueKey('detail-volume-download:${volume.key}'),
+      onPressed: targets.isEmpty
+          ? null
+          : () => widget.onDownloadSelection!(targets),
+      icon: Icon(
+        ids.isNotEmpty && done == ids.length
+            ? Icons.download_done
+            : pending > 0
+            ? Icons.downloading
+            : Icons.download_outlined,
+      ),
+      label: Text(
+        ids.isNotEmpty && done == ids.length
+            ? '本卷已下载'
+            : targets.isEmpty && pending > 0
+            ? '本卷下载中'
+            : done + pending > 0
+            ? '继续下载本卷'
+            : '下载本卷',
+      ),
     );
   }
 }
@@ -240,88 +507,47 @@ String? _chapterDate(Chapter chapter) {
   return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 }
 
-class _MangaChapterRow extends StatelessWidget {
-  const _MangaChapterRow({
-    required this.chapter,
-    required this.current,
-    this.status,
-    this.onTap,
-  });
-  final Chapter chapter;
-  final bool current;
-  final DownloadStatus? status;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final date = _chapterDate(chapter);
-    final details = [?date, if (current) '上次读到', if (chapter.locked) '锁定'];
-    return ListTile(
-      dense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      title: Text(
-        chapter.title,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: current
-            ? TextStyle(color: Theme.of(context).colorScheme.primary)
-            : null,
-      ),
-      subtitle: details.isEmpty ? null : Text(details.join(' · ')),
-      trailing: _ChapterDownloadStatus(chapter: chapter, status: status),
-      onTap: onTap,
-    );
-  }
-}
-
-class _NovelChapterRow extends StatelessWidget {
-  const _NovelChapterRow({
-    required this.chapter,
-    required this.current,
-    this.status,
-    this.onTap,
-  });
-  final Chapter chapter;
-  final bool current;
-  final DownloadStatus? status;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) => ListTile(
-    dense: true,
-    leading: Icon(current ? Icons.bookmark : Icons.article_outlined, size: 18),
-    title: Text(chapter.title),
-    subtitle: current
-        ? const Text('上次读到')
-        : (chapter.locked ? const Text('锁定章节') : null),
-    trailing: _ChapterDownloadStatus(chapter: chapter, status: status),
-    onTap: onTap,
-  );
-}
-
 class _ChapterDownloadStatus extends StatelessWidget {
-  const _ChapterDownloadStatus({required this.chapter, this.status});
+  const _ChapterDownloadStatus({
+    required this.chapter,
+    required this.index,
+    this.status,
+    this.onPressed,
+  });
   final Chapter chapter;
+  final int index;
   final DownloadStatus? status;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    if (chapter.locked) {
-      return const Tooltip(
-        message: '锁定，不可下载',
-        child: Icon(Icons.lock_outline, size: 18),
-      );
-    }
-    if (status == null) return const SizedBox.shrink();
-    return Tooltip(
-      message: status!.label,
-      child: Icon(switch (status!) {
-        DownloadStatus.done => Icons.download_done,
-        DownloadStatus.running => Icons.downloading,
-        DownloadStatus.queued => Icons.schedule,
-        DownloadStatus.failed => Icons.error_outline,
-        DownloadStatus.paused => Icons.pause_circle_outline,
-      }, size: 20),
+    final label = chapter.locked
+        ? '锁定，不可下载'
+        : switch (status) {
+            DownloadStatus.done => '已下载，打开阅读',
+            DownloadStatus.running => '下载中，点击暂停',
+            DownloadStatus.queued => '等待下载，点击暂停',
+            DownloadStatus.failed => '下载失败，点击重试',
+            DownloadStatus.paused => '已暂停，点击继续',
+            null => onPressed == null ? '当前章节不可下载' : '下载此章',
+          };
+    return IconButton(
+      key: ValueKey('detail-chapter-download:$index'),
+      tooltip: label,
+      onPressed: onPressed,
+      icon: Icon(
+        chapter.locked
+            ? Icons.lock_outline
+            : switch (status) {
+                DownloadStatus.done => Icons.download_done,
+                DownloadStatus.running => Icons.downloading,
+                DownloadStatus.queued => Icons.schedule,
+                DownloadStatus.failed => Icons.error_outline,
+                DownloadStatus.paused => Icons.pause_circle_outline,
+                null => Icons.download_outlined,
+              },
+        size: 20,
+      ),
     );
   }
 }

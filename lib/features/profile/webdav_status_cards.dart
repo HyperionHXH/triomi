@@ -16,7 +16,6 @@ String webDavSyncLabel(LibraryAutoSyncState state) {
   if (state.syncing) return '正在同步收藏与进度';
   if (state.error != null) return '同步需要处理';
   if (state.pending) return '本机有待同步的更改';
-  if (!state.configured && state.bangumiEnabled) return 'Bangumi 自动同步已开启';
   return state.enabled && state.configured ? '自动同步已开启' : '自动同步已暂停';
 }
 
@@ -94,20 +93,6 @@ class WebDavConnectionStatus extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             Text(state.error!, style: TextStyle(color: colors.error)),
           ],
-          if (state.bangumiEnabled) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              state.bangumiError ??
-                  (state.bangumiLastSuccess == null
-                      ? 'Bangumi 收藏等待同步'
-                      : 'Bangumi 最近同步 · ${_time(state.bangumiLastSuccess!)}'),
-              style: TextStyle(
-                color: state.bangumiError == null
-                    ? colors.onSurfaceVariant
-                    : colors.error,
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -168,9 +153,9 @@ class WebDavBackupProgress extends StatelessWidget {
             else if (itemProgress)
               Text('${state.completedItems} / ${state.totalItems} 项')
             else
-              const Text('正在准备此阶段，完成数量确定后显示进度'),
+              const Text('正在准备…'),
             const SizedBox(height: AppSpacing.xs),
-            const Text('可离开本页，任务不会丢失；收藏与观看进度由自动同步独立处理。'),
+            const Text('可离开此页，备份将在后台继续。'),
             Align(
               alignment: AlignmentDirectional.centerEnd,
               child: TextButton.icon(

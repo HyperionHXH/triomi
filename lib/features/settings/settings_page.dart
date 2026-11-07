@@ -17,6 +17,7 @@ import '../library/migration_plans_page.dart';
 import '../local/local_comic_library_page.dart';
 import '../manga/manga_extensions_page.dart';
 import '../novel/novel_workspace_page.dart';
+import '../player/data/danmaku_settings.dart';
 import 'app_update_page.dart';
 import 'cache_management_page.dart';
 import 'cover_appearance_settings_page.dart';
@@ -72,7 +73,7 @@ class SettingsPage extends ConsumerWidget {
                 secondary: const Icon(Icons.public_rounded),
                 title: const Text('公共网络加速'),
                 subtitle: const Text(
-                  '公开番剧资料、封面与官方规则库使用镜像；评论使用官方 ECH 连接。关闭后访问官方地址。账号和原始视频不改道，已配置的代理优先。',
+                  '公开资料、封面和规则库使用镜像；评论使用 ECH。账号与视频不使用镜像，已配置的代理优先。',
                 ),
                 value: ref.watch(bangumiMirrorEnabledProvider),
                 onChanged: (enabled) async {
@@ -102,14 +103,13 @@ class SettingsPage extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.download_outlined),
                 title: const Text('下载管理'),
-                subtitle: const Text('全部下载队列、暂停与恢复'),
                 trailing: const Icon(Icons.chevron_right, size: 20),
                 onTap: () => context.push(AppRoutes.downloads),
               ),
               ListTile(
                 leading: const Icon(Icons.cleaning_services_outlined),
                 title: const Text('缓存与存储'),
-                subtitle: const Text('预览缓存占用；清理前确认，保留下载和进度'),
+                subtitle: const Text('清理缓存，保留下载和进度'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(
                   context,
@@ -126,14 +126,14 @@ class SettingsPage extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.cloud_sync_outlined),
                 title: const Text('WebDAV 收藏与历史同步'),
-                subtitle: const Text('自动合并漫画、动画收藏及阅读 / 观看位置'),
+                subtitle: const Text('同步收藏与阅读 / 观看位置'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push(AppRoutes.webdav),
               ),
               ListTile(
                 leading: const Icon(Icons.archive_outlined),
                 title: const Text('WebDAV 完整应用备份'),
-                subtitle: const Text('上传或合并完整数据备份；使用相同 WebDAV 连接'),
+                subtitle: const Text('使用相同 WebDAV 连接'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push(AppRoutes.webdavBackup),
               ),
@@ -302,13 +302,12 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                   Icons.sync_outlined,
                   '追番追踪账号',
                   '${AppRoutes.tracking}?type=anime',
-                  subtitle: 'Bangumi / AniList · 仅显示番剧绑定，服务凭据共用',
+                  subtitle: 'Bangumi / AniList',
                 ),
                 route(
                   Icons.cloud_sync_outlined,
                   'WebDAV 收藏与历史同步',
                   AppRoutes.webdav,
-                  subtitle: '自动合并收藏与章节 / 页码 / 秒数；可查看连接与同步状态',
                 ),
               ],
             ),
@@ -320,12 +319,13 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                   '番剧规则与来源',
                   '${AppRoutes.sources}?type=anime',
                 ),
-                route(
-                  Icons.speaker_notes_outlined,
-                  '弹幕设置',
-                  AppRoutes.danmakuSettings,
-                  subtitle: 'B站、Animeko、Gamer 独立只读弹幕池；匹配与偏移在播放器中设置，不提供发送',
-                ),
+                if (danmakuFeatureEnabled)
+                  route(
+                    Icons.speaker_notes_outlined,
+                    '弹幕设置',
+                    AppRoutes.danmakuSettings,
+                    subtitle: 'B站、Animeko、Gamer 独立只读弹幕池；匹配与偏移在播放器中设置，不提供发送',
+                  ),
               ],
             ),
           ],
@@ -359,13 +359,12 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                   Icons.sync_outlined,
                   '漫画追踪账号',
                   '${AppRoutes.tracking}?type=manga',
-                  subtitle: 'Bangumi / AniList · 仅显示漫画绑定，服务凭据共用',
+                  subtitle: 'Bangumi / AniList',
                 ),
                 route(
                   Icons.cloud_sync_outlined,
                   'WebDAV 收藏与历史同步',
                   AppRoutes.webdav,
-                  subtitle: '自动合并收藏与章节 / 页码 / 秒数；可查看连接与同步状态',
                 ),
               ],
             ),
@@ -383,11 +382,6 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                   const LibraryCategoriesPage(type: MediaType.manga),
                 ),
                 page(Icons.swap_horiz, '迁移管理', const MigrationPlansPage()),
-                const ListTile(
-                  leading: Icon(Icons.chrome_reader_mode_outlined),
-                  title: Text('阅读器选项'),
-                  subtitle: Text('打开漫画阅读器，在设置中调整翻页、方向与显示；支持按作品保存'),
-                ),
               ],
             ),
           ],

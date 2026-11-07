@@ -94,16 +94,14 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                 Text('导出备份', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  '默认完整备份：书架、进度、历史、小说正文缓存、漫画/动画完整及已校验的部分下载、封面和插件。'
-                  '需要额外临时磁盘空间。账号密码、token 和插件信任不会写入备份。',
+                  '包含收藏、进度、历史、正文、下载、封面和插件；需额外临时空间。'
+                  '不含账号凭据和插件信任。',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('同时备份规则定义'),
-                  subtitle: const Text(
-                    '完整备份默认包含JSON/JS/Kazumi原文；恢复后停用。规则代码可能含私人信息，导出前需确认。',
-                  ),
+                  subtitle: const Text('包含 JSON/JS/Kazumi 原文，恢复后停用。代码可能含私人信息。'),
                   value: _includeSourceRules,
                   onChanged: _busy
                       ? null
@@ -126,12 +124,12 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                 FilledButton.icon(
                   onPressed: _busy ? null : _export,
                   icon: const Icon(Icons.archive_outlined, size: 18),
-                  label: const Text('导出完整备份（下载、正文、插件）'),
+                  label: const Text('导出完整备份'),
                 ),
                 OutlinedButton.icon(
                   onPressed: _busy ? null : () => _export(metadataOnly: true),
                   icon: const Icon(Icons.archive_outlined, size: 18),
-                  label: const Text('仅导出元数据（不含下载、正文、封面、插件）'),
+                  label: const Text('仅导出元数据'),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -183,7 +181,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                 Text('恢复备份', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  '选择已有备份，先预览内容，再确认合并到本机；不会自动恢复账号凭据。',
+                  '预览后合并到本机，不含账号凭据。',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: AppSpacing.sm),
@@ -274,7 +272,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
             title: const Text('确认备份规则原文'),
             content: Text(
               '保存到：${destination.label}\n'
-              '规则将原样携带代码，恢复后保持停用，已有规则不覆盖。不读取账号安全存储；显式凭据字段和凭据URL会拒绝导出，但无法证明任意代码中没有隐藏凭据。请自行核对并私下保管，不要分享含私人信息的备份。此选择不用于WebDAV或每日自动备份。',
+              '备份包含规则原始代码，可能隐藏私人信息或凭据；请核对后私下保管。显式凭据字段和凭据 URL 将拒绝导出。恢复后规则停用，已有规则保留。此选项仅用于本地手动备份。',
             ),
             actions: [
               TextButton(

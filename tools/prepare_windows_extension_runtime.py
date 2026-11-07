@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import urllib.request
 import zipfile
@@ -148,10 +149,26 @@ def prepare(args: argparse.Namespace) -> None:
         classes.mkdir()
         subprocess.run([str(java_home / 'bin/javac.exe'), '--release', '21', '-encoding', 'UTF-8',
                         '-cp', os.pathsep.join((str(server), str(apksig))), '-d', str(classes),
-                        str(ROOT / 'tools/desktop/ApkInspector.java')], check=True)
+                        *[str(path) for path in sorted((ROOT / 'tools/desktop').rglob('*.java'))]], check=True)
         inspector = stage / 'triomi-apk-inspector.jar'
         subprocess.run([str(java_home / 'bin/jar.exe'), '--create', '--file', str(inspector),
                         '-C', str(classes), '.'], check=True)
+        subprocess.run([
+            sys.executable, str(ROOT / 'tools/test_desktop_graphics.py'),
+            '--java-home', str(java_home), '--java', str(stage / 'java/bin/java.exe'),
+            '--server-jar', str(server), '--work-root', str(work / 'graphics-check'),
+        ], check=True)
+        subprocess.run([
+            sys.executable, str(ROOT / 'tools/test_nullable_filter_search.py'),
+            '--java-home', str(java_home), '--java', str(stage / 'java/bin/java.exe'),
+            '--server-jar', str(server), '--work-root', str(work / 'nullable-filter-check'),
+        ], check=True)
+        subprocess.run([
+            sys.executable, str(ROOT / 'tools/test_desktop_launcher.py'),
+            '--java', str(stage / 'java/bin/java.exe'), '--server-jar', str(server),
+            '--launcher-jar', str(inspector), '--work-root', str(work / 'startup-check'),
+            '--attempts', '1',
+        ], check=True)
         parts = split_server(server, stage)
         shutil.copyfile(apksig, stage / 'apksig.jar')
         legal = stage / 'legal'
@@ -167,7 +184,11 @@ def prepare(args: argparse.Namespace) -> None:
             'Source: https://android.googlesource.com/platform/tools/apksig/\n'
             'JRE module licenses/notices: ../java/legal; vendor/version: ../java/release.\n'
             'OpenJDK corresponding sources: https://github.com/adoptium/temurin21-binaries/releases\n'
-            'Triomi inspector source: tools/desktop/ApkInspector.java in the matching Triomi release.\n',
+            'Triomi inspector and launcher sources: tools/desktop/ApkInspector.java and '
+            'tools/desktop/DesktopLauncher.java in the matching Triomi release.\n'
+            'Nullable sort search schema adapter: tools/desktop/NullableFilterSearch.java.\n'
+            'Desktop Android graphics compatibility sources: tools/desktop/android/graphics/.\n'
+            'Canvas.java is adapted from Suwayomi AndroidCompat, MPL-2.0.\n',
             encoding='utf-8')
         provenance = {
             'format': 1,
@@ -178,6 +199,12 @@ def prepare(args: argparse.Namespace) -> None:
             'javaRelease': release,
             'javaModules': MODULES.split(','),
             'inspectorSourceSha256': sha256(ROOT / 'tools/desktop/ApkInspector.java'),
+            'launcherSourceSha256': sha256(ROOT / 'tools/desktop/DesktopLauncher.java'),
+            'nullableFilterSearchSourceSha256': sha256(ROOT / 'tools/desktop/NullableFilterSearch.java'),
+            'graphicsSourcesSha256': {
+                path.relative_to(ROOT).as_posix(): sha256(path)
+                for path in sorted((ROOT / 'tools/desktop/android/graphics').glob('*.java'))
+            },
             'inspectorJarSha256': sha256(inspector),
             'diskOverhead': {
                 'serverInstallChunksBytes': server.stat().st_size,

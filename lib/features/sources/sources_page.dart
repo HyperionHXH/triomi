@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,9 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/db/database_provider.dart';
 import '../../core/models/media_type.dart';
-import '../../core/source/copymanga/copymanga_js_source.dart';
+import '../../core/source/bangumi_route_policy.dart';
 import '../../core/source/http_client.dart';
 import '../../core/source/js/js_source.dart';
+import '../../core/source/kazumi_repository.dart';
 import '../../core/source/kazumi_source.dart';
 import '../../core/source/mangadex_preferences.dart';
 import '../../core/source/mihon_source.dart';
@@ -17,17 +20,18 @@ import '../../core/source/source_api.dart';
 import '../../core/source/source_filters.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
+import '../../core/source/source_repository.dart';
 import '../../core/storage/preferences.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../downloads/data/download_repository.dart';
 import '../manga/manga_extension_details_page.dart';
+import '../manga/manga_extensions_page.dart';
 import '../manga/windows_mihon_settings_page.dart';
 import 'catalog_sheet.dart';
 import 'copymanga_settings_sheet.dart';
 import 'kazumi_repositories_sheet.dart';
-import 'mihon_extensions_sheet.dart';
 import 'picacomic_settings_sheet.dart';
 import 'source_filter_controls.dart';
 
@@ -49,6 +53,8 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
   bool _busy = false;
   late SourceFilters _filters;
   late MediaType _type;
+  bool _updating = false;
+  final _updates = <String, KazumiUpdateResult>{};
 
   @override
   void initState() {
@@ -66,6 +72,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
       preferences.get<Object?>('sources.filters.installed.${_type.name}') ??
           preferences.get<Object?>('sources.filters.installed'),
     ).copyWith(clearType: true, query: widget.initialQuery);
+    if (_type == MediaType.anime) unawaited(_refreshAnimeUpdates());
   }
 
   void _setFilters(SourceFilters value) {
@@ -87,14 +94,113 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
       ).copyWith(clearType: true);
     });
     preferences.set('sources.selectedType', value.name);
+    if (value == MediaType.anime) unawaited(_refreshAnimeUpdates());
+  }
+
+  Future<void> _refreshAnimeUpdates({bool update = false, String? id}) async {
+    if (_updating) return;
+    setState(() => _updating = true);
+    try {
+      await ref.read(sourcesProvider.future);
+      final saved = ref
+          .read(preferencesProvider)
+          .get<Map<dynamic, dynamic>>('kazumi.repositories');
+      final repositories = saved == null
+          ? {KazumiRepository.defaultRepository: true}
+          : {
+              for (final entry in saved.entries)
+                '${entry.key}': entry.value == true,
+            };
+      final results =
+          await KazumiRepository(
+            ref.read(sourceRegistryProvider),
+            allowPublicFallback: ref.read(bangumiMirrorEnabledProvider),
+          ).refreshInstalled(
+            repositories: repositories,
+            update: update,
+            sourceIds: id == null ? null : {id},
+          );
+      if (update) await ref.read(sourcesProvider.notifier).refresh();
+      if (!mounted) return;
+      setState(() {
+        for (final result in results) {
+          _updates[result.id] = result;
+        }
+      });
+      if (update) {
+        final failed = results.where((result) => result.failed).toList();
+        final changed = results.where((result) => result.updated).length;
+        if (failed.isEmpty) {
+          _toast(results.isEmpty ? '没有已安装的 Kazumi 插件' : '已更新 $changed 个；其余已核验');
+        } else {
+          await showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text('更新完成 · 成功 $changed · 未更新 ${failed.length}'),
+              content: SingleChildScrollView(
+                child: Text(
+                  [
+                    '每个失败插件的原规则和启停状态均保留。',
+                    for (final result in failed)
+                      '${result.name}\n${result.message}',
+                  ].join('\n\n'),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('知道了'),
+                ),
+              ],
+            ),
+          );
+        }
+      }
+    } catch (error) {
+      if (mounted) _toast('检查插件更新失败：$error');
+    } finally {
+      if (mounted) setState(() => _updating = false);
+    }
   }
 
   Future<void> _importFromText(String text, {String? repoUrl}) async {
     setState(() => _busy = true);
     try {
+      var allowDeprecated = false;
+      if (KazumiRule.recognizes(text)) {
+        final rule = KazumiRule.parse(text, allowDeprecated: true);
+        if (rule.deprecated) {
+          allowDeprecated =
+              await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: Text('导入已归档规则 ${rule.descriptor.name}？'),
+                  content: const Text(
+                    '上游已停用此规则，不保证网站、搜索或播放仍可用。新安装保持停用；请核对规则和网站后显式启用。不修改现有收藏、历史或下载。',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('取消'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('仍要导入'),
+                    ),
+                  ],
+                ),
+              ) ==
+              true;
+          if (!allowDeprecated) return;
+        }
+      }
       final descriptor = await ref
           .read(sourceRegistryProvider)
-          .importFromText(text, repoUrl: repoUrl);
+          .importFromText(
+            text,
+            repoUrl: repoUrl,
+            allowDeprecated: allowDeprecated,
+          );
       await ref.read(sourcesProvider.notifier).refresh();
       if (!mounted) return;
       _selectType(descriptor.type);
@@ -138,7 +244,11 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
   Widget build(BuildContext context) {
     final sources = ref.watch(sourcesProvider);
     return PageScaffold(
-      title: widget.initialType == null ? '来源管理' : '${_type.label}来源',
+      title: _type == MediaType.anime
+          ? '番剧插件'
+          : widget.initialType == null
+          ? '来源管理'
+          : '${_type.label}来源',
       actions: <Widget>[
         if (_busy)
           const Padding(
@@ -190,8 +300,35 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                 FilledButton.icon(
                   onPressed: _busy ? null : _showAddSources,
                   icon: const Icon(Icons.add),
-                  label: Text('添加${_type.label}来源'),
+                  label: Text(
+                    _type == MediaType.anime ? '添加插件来源' : '添加${_type.label}来源',
+                  ),
                 ),
+                if (_type == MediaType.anime)
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      TextButton.icon(
+                        onPressed: _updating
+                            ? null
+                            : () => _refreshAnimeUpdates(update: true),
+                        icon: _updating
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.update),
+                        label: const Text('全部更新'),
+                      ),
+                      TextButton(
+                        onPressed: _updating ? null : _refreshAnimeUpdates,
+                        child: const Text('检查更新'),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -204,7 +341,10 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                 message: '$error',
               ),
               data: (snapshot) {
-                final scopedEntries = snapshot.entries
+                final retiredAge = snapshot.entries
+                    .where((entry) => entry.isRetiredDefault)
+                    .firstOrNull;
+                final scopedEntries = snapshot.manageableEntries
                     .where(
                       (entry) =>
                           entry.descriptor.type == _type &&
@@ -218,6 +358,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                     .where(
                       (failure) =>
                           failure.type == _type &&
+                          failure.id != SourceRepository.internalMetadataId &&
                           (developmentSourcesEnabled ||
                               !developmentSourceIds.contains(failure.id)),
                     )
@@ -225,50 +366,57 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
 
                 final visible = scopedEntries
                     .where(
-                      (entry) => _filters.matches(
-                        languages: [entry.descriptor.lang],
-                        nsfw: entry.descriptor.nsfw,
-                        mediaType: entry.descriptor.type,
-                        searchText: [
-                          entry.descriptor.id,
-                          entry.descriptor.name,
-                        ],
-                      ),
+                      (entry) =>
+                          _type == MediaType.anime ||
+                          _filters.matches(
+                            languages: [entry.descriptor.lang],
+                            nsfw: entry.descriptor.nsfw,
+                            mediaType: entry.descriptor.type,
+                            searchText: [
+                              entry.descriptor.id,
+                              entry.descriptor.name,
+                            ],
+                          ),
                     )
                     .toList();
                 final failures = scopedFailures
                     .where(
-                      (failure) => _filters.matches(
-                        languages: [failure.lang],
-                        nsfw: failure.nsfw,
-                        mediaType: failure.type,
-                        searchText: [failure.id, failure.name],
-                      ),
+                      (failure) =>
+                          _type == MediaType.anime ||
+                          _filters.matches(
+                            languages: [failure.lang],
+                            nsfw: failure.nsfw,
+                            mediaType: failure.type,
+                            searchText: [failure.id, failure.name],
+                          ),
                     )
                     .toList();
                 return ListView(
                   padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                   children: <Widget>[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.lg,
+                    if (_type != MediaType.anime)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.lg,
+                        ),
+                        child: SourceFilterControls(
+                          filters: _filters,
+                          types: const [],
+                          languages: [
+                            ...scopedEntries.map(
+                              (entry) => entry.descriptor.lang,
+                            ),
+                            ...scopedFailures.map((failure) => failure.lang),
+                          ],
+                          onChanged: _setFilters,
+                          visibleCount: visible.length + failures.length,
+                          totalCount:
+                              scopedEntries.length + scopedFailures.length,
+                        ),
                       ),
-                      child: SourceFilterControls(
-                        filters: _filters,
-                        types: const [],
-                        languages: [
-                          ...scopedEntries.map(
-                            (entry) => entry.descriptor.lang,
-                          ),
-                          ...scopedFailures.map((failure) => failure.lang),
-                        ],
-                        onChanged: _setFilters,
-                        visibleCount: visible.length + failures.length,
-                        totalCount:
-                            scopedEntries.length + scopedFailures.length,
-                      ),
-                    ),
-                    if (visible.isEmpty && failures.isEmpty)
+                    if (_type != MediaType.anime &&
+                        visible.isEmpty &&
+                        failures.isEmpty)
                       Center(
                         child: TextButton(
                           onPressed: () => _setFilters(const SourceFilters()),
@@ -278,13 +426,25 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                     if (scopedEntries.isEmpty && scopedFailures.isEmpty)
                       Padding(
                         padding: const EdgeInsets.all(24),
-                        child: Text(
-                          '尚未添加${_type.label}来源。点击上方添加入口，选择对应的仓库或规则。',
-                        ),
+                        child: Text('尚无${_type.label}来源，请添加仓库或规则。'),
                       ),
                     for (final entry in visible)
                       _SourceTile(
                         entry: entry,
+                        updateStatus: _updates[entry.descriptor.id]?.message,
+                        onLegacy:
+                            retiredAge != null &&
+                                entry.descriptor.id ==
+                                    KazumiRule.idForName('AGE')
+                            ? () => _manageLegacyAge(retiredAge)
+                            : null,
+                        updating: _updating,
+                        onUpdate: entry.source is KazumiSource
+                            ? () => _refreshAnimeUpdates(
+                                update: true,
+                                id: entry.descriptor.id,
+                              )
+                            : null,
                         onToggle: (value) => ref
                             .read(sourcesProvider.notifier)
                             .setEnabled(entry.descriptor.id, enabled: value),
@@ -363,6 +523,25 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
   }
 
   Future<void> _showAddSources() async {
+    if (_type == MediaType.anime) {
+      var import = false;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (context) => KazumiRepositoriesSheet(
+          onImport: () {
+            import = true;
+            Navigator.pop(context);
+          },
+        ),
+      );
+      if (!mounted) return;
+      if (import) await _showImportSheet();
+      await ref.read(sourcesProvider.notifier).refresh();
+      if (mounted) await _refreshAnimeUpdates();
+      return;
+    }
     final choice = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -399,7 +578,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                 ListTile(
                   leading: const Icon(Icons.extension_outlined),
                   title: const Text('漫画扩展与仓库'),
-                  subtitle: const Text('Mihon / Komikku · 已安装、浏览扩展与仓库管理'),
+                  subtitle: const Text('Mihon / Komikku'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.pop(context, 'mihon'),
                 ),
@@ -407,7 +586,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                 const ListTile(
                   leading: Icon(Icons.manage_accounts_outlined),
                   title: Text('内置小说站点'),
-                  subtitle: Text('轻之国度与轻书架在本页管理账号；站点权限和可达性独立。无需安装漫画 APK。'),
+                  subtitle: Text('轻之国度、轻书架 · 管理账号'),
                 ),
               if (_type != MediaType.manga ||
                   kIsWeb ||
@@ -422,7 +601,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
               ListTile(
                 leading: const Icon(Icons.code),
                 title: const Text('手动导入规则'),
-                subtitle: const Text('高级 · 规则地址或 JSON 文本，不是 APK 仓库地址'),
+                subtitle: const Text('JSON 规则文本或地址，非 APK 仓库'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.pop(context, 'import'),
               ),
@@ -433,15 +612,6 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
     );
     if (!mounted) return;
     switch (choice) {
-      case 'kazumi':
-        await showModalBottomSheet<void>(
-          context: context,
-          isScrollControlled: true,
-          showDragHandle: true,
-          builder: (_) =>
-              KazumiRepositoriesSheet(initialQuery: widget.initialQuery),
-        );
-        if (mounted) await ref.read(sourcesProvider.notifier).refresh();
       case 'mihon':
         await _showMihonExtensions();
       case 'catalog':
@@ -449,6 +619,58 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
       case 'import':
         await _showImportSheet();
     }
+  }
+
+  Future<void> _manageLegacyAge(SourceEntry entry) async {
+    var enabled = entry.enabled;
+    var saving = false;
+    final remove = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, update) => AlertDialog(
+          title: const Text('旧版 AGE 记录来源'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '与当前 AGE 为同一网站，但作品和剧集标识不同。旧收藏、历史、下载及已选播放来源继续使用 age-anime，不按标题合并；更新 Kazumi AGE 不会改写旧记录或旧规则。',
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('启用旧记录来源'),
+                value: enabled,
+                onChanged: saving
+                    ? null
+                    : (value) async {
+                        update(() => saving = true);
+                        try {
+                          await ref
+                              .read(sourcesProvider.notifier)
+                              .setEnabled(entry.descriptor.id, enabled: value);
+                          if (context.mounted) update(() => enabled = value);
+                        } catch (error) {
+                          if (mounted) _toast('旧来源启停失败：$error');
+                        } finally {
+                          if (context.mounted) update(() => saving = false);
+                        }
+                      },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(context, true),
+              child: const Text('移除旧来源'),
+            ),
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(context, false),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (remove == true && mounted) await _confirmDelete(entry);
   }
 
   Future<void> _showMangaDexSettings() async {
@@ -462,10 +684,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
         builder: (context, setSheetState) => SafeArea(
           child: SwitchListTile(
             title: const Text('MangaDex 低流量图片'),
-            subtitle: const Text(
-              '默认关闭，使用原图。开启后新加载的在线章节使用节流图片；'
-              '未提供时回退原图。已缓存/已下载章节不变。',
-            ),
+            subtitle: const Text('在线章节优先使用节流图片，无可用版本时使用原图；缓存与下载不变。'),
             value: dataSaver,
             onChanged: saving
                 ? null
@@ -527,11 +746,10 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
   }
 
   Future<void> _showMihonExtensions() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => MihonExtensionsSheet(initialQuery: widget.initialQuery),
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MangaExtensionsPage(initialQuery: widget.initialQuery),
+      ),
     );
     if (mounted) {
       // Mihon enabled state lives in Preferences, which is captured while
@@ -878,6 +1096,10 @@ class _SourceTile extends StatelessWidget {
     this.onAccount,
     this.onWebSession,
     this.onSettings,
+    this.onUpdate,
+    this.onLegacy,
+    this.updateStatus,
+    this.updating = false,
   });
 
   final SourceEntry entry;
@@ -888,6 +1110,10 @@ class _SourceTile extends StatelessWidget {
   final VoidCallback? onAccount;
   final VoidCallback? onWebSession;
   final VoidCallback? onSettings;
+  final VoidCallback? onUpdate;
+  final VoidCallback? onLegacy;
+  final String? updateStatus;
+  final bool updating;
 
   @override
   Widget build(BuildContext context) {
@@ -930,10 +1156,16 @@ class _SourceTile extends StatelessWidget {
                           <String>[
                             entry.enabled ? '已启用' : '已停用',
                             descriptor.kind.label,
-                            sourceLanguageLabel(
-                              sourceLanguage(descriptor.lang),
-                            ),
-                            sourceContentLabel(descriptor.nsfw),
+                            if (entry.isCustomLegacyAge) '自定义 AGE 规则 · 独立身份',
+                            if (entry.source case final KazumiSource source)
+                              if (source.rule.deprecated)
+                                '已归档 · 上游已停用 · 可用性未保证',
+                            if (descriptor.type != MediaType.anime) ...[
+                              sourceLanguageLabel(
+                                sourceLanguage(descriptor.lang),
+                              ),
+                              sourceContentLabel(descriptor.nsfw),
+                            ],
                             if (descriptor.version != null)
                               'v${descriptor.version}',
                             if (entry.source case final AccountProvider account)
@@ -944,6 +1176,20 @@ class _SourceTile extends StatelessWidget {
                             color: palette.mutedForeground,
                           ),
                         ),
+                        if (descriptor.baseUrl case final website?)
+                          SelectableText(
+                            website,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        if (updateStatus case final status?)
+                          Text(
+                            status,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -968,6 +1214,12 @@ class _SourceTile extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (onUpdate != null)
+                    TextButton.icon(
+                      onPressed: updating ? null : onUpdate,
+                      icon: const Icon(Icons.update, size: 20),
+                      label: const Text('检查并更新'),
+                    ),
                   if (onAccount != null)
                     TextButton.icon(
                       onPressed: onAccount,
@@ -976,7 +1228,8 @@ class _SourceTile extends StatelessWidget {
                     ),
                   if (onDelete != null ||
                       onSettings != null ||
-                      onWebSession != null)
+                      onWebSession != null ||
+                      onLegacy != null)
                     PopupMenuButton<String>(
                       tooltip: '${descriptor.name}更多操作',
                       onSelected: (value) {
@@ -985,6 +1238,8 @@ class _SourceTile extends StatelessWidget {
                             onWebSession?.call();
                           case 'settings':
                             onSettings?.call();
+                          case 'legacy':
+                            onLegacy?.call();
                           case 'remove':
                             onDelete?.call();
                         }
@@ -999,6 +1254,11 @@ class _SourceTile extends StatelessWidget {
                           const PopupMenuItem(
                             value: 'session',
                             child: Text('打开站点与验证'),
+                          ),
+                        if (onLegacy != null)
+                          const PopupMenuItem(
+                            value: 'legacy',
+                            child: Text('旧版 AGE 记录来源'),
                           ),
                         if (onDelete != null)
                           const PopupMenuItem(

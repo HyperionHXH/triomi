@@ -171,9 +171,7 @@ class _DanmakuSourcesPanelState extends State<DanmakuSourcesPanel> {
               children: [
                 Text('弹幕来源 / 匹配', style: theme.textTheme.titleLarge),
                 const SizedBox(height: 6),
-                const Text(
-                  'B站、Gamer 动画疯与 Animeko 独立池，可分别开关。匿名只读，不提供发送，不会影响视频播放；各源仍受内容覆盖与网络条件限制。',
-                ),
+                const Text('B站、动画疯与 Animeko 弹幕池可分别开关。'),
                 const SizedBox(height: 14),
                 Wrap(
                   spacing: 8,
@@ -222,13 +220,8 @@ class _DanmakuSourcesPanelState extends State<DanmakuSourcesPanel> {
                 ),
                 if (session.subjectId == null) ...[
                   const SizedBox(height: 12),
-                  Text(
-                    session.associationError ??
-                        '尚未关联正确季度的 Bangumi 条目。不会拿播放站数字 ID 猜测弹幕。',
-                  ),
-                  const Text(
-                    '查找条目后，在其「选择来源」中选择当前播放站作品建立关联；也可用 B站或动画疯官方 URL 手动纠正。',
-                  ),
+                  Text(session.associationError ?? '请先关联对应季度的 Bangumi 条目。'),
+                  const Text('在条目「选择来源」中关联当前作品，或用 B站 / 动画疯 URL 手动匹配。'),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(

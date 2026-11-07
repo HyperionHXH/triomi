@@ -156,6 +156,35 @@ bool FlutterWindow::OnCreate() {
         &flutter::StandardMethodCodec::GetInstance());
     platform_channel_->SetMethodCallHandler(
         [this](const auto& call, auto result) {
+          if (call.method_name() == "setWindowFullscreen") {
+            if (worker_ || backup_worker_) {
+              result->Error("window_unavailable", "Fullscreen requires the main window");
+              return;
+            }
+            const auto* args = call.arguments() == nullptr ? nullptr :
+                std::get_if<flutter::EncodableMap>(call.arguments());
+            const bool* enabled = nullptr;
+            if (args) {
+              const auto entry = args->find(flutter::EncodableValue("enabled"));
+              if (entry != args->end()) enabled = std::get_if<bool>(&entry->second);
+            }
+            if (!enabled) {
+              result->Error("invalid_arguments", "Fullscreen requires a boolean enabled value");
+              return;
+            }
+            std::string failure_stage;
+            DWORD error = ERROR_SUCCESS;
+            if (!SetFullscreen(*enabled, &failure_stage, &error)) {
+              result->Error("window_fullscreen_failed", "Windows fullscreen transition failed",
+                  flutter::EncodableValue(flutter::EncodableMap{
+                      {flutter::EncodableValue("stage"), flutter::EncodableValue(failure_stage)},
+                      {flutter::EncodableValue("win32Error"),
+                       flutter::EncodableValue(static_cast<int64_t>(error))}}));
+              return;
+            }
+            result->Success(flutter::EncodableValue(*enabled));
+            return;
+          }
           if (call.method_name() == "resolveSystemProxy") {
             const auto* args = call.arguments() == nullptr ? nullptr :
                 std::get_if<flutter::EncodableMap>(call.arguments());
@@ -185,6 +214,7 @@ bool FlutterWindow::OnCreate() {
               call.method_name() == "desktopMihonAlive" ||
               call.method_name() == "desktopMihonTrackVerifier" ||
               call.method_name() == "desktopMihonUntrackVerifier" ||
+              call.method_name() == "desktopMihonAcceptanceDiagnostics" ||
               call.method_name() == "desktopMihonReplaceFile") {
             if (worker_ || backup_worker_) {
               result->Error("runtime_unavailable", "extension runtime is unavailable in workers");
@@ -197,6 +227,16 @@ bool FlutterWindow::OnCreate() {
             }
             if (call.method_name() == "desktopMihonAlive") {
               result->Success(flutter::EncodableValue(mihon_runtime_.Alive()));
+              return;
+            }
+            if (call.method_name() == "desktopMihonAcceptanceDiagnostics") {
+              result->Success(flutter::EncodableValue(flutter::EncodableMap{
+                  {flutter::EncodableValue("isolatedBuild"),
+                   flutter::EncodableValue(DesktopMihonRuntime::AcceptanceBuild())},
+                  {flutter::EncodableValue("stateFailureStage"),
+                   flutter::EncodableValue(mihon_runtime_.StateFailureStage())},
+                  {flutter::EncodableValue("win32Error"),
+                   flutter::EncodableValue(static_cast<int64_t>(mihon_runtime_.StateFailureError()))}}));
               return;
             }
             const auto* args = call.arguments() == nullptr ? nullptr :
@@ -240,7 +280,7 @@ bool FlutterWindow::OnCreate() {
               }
               std::string failure_stage;
               DWORD error = ERROR_SUCCESS;
-              if (!DesktopMihonRuntime::ReplaceStateFile(
+              if (!mihon_runtime_.ReplaceStateFile(
                   *source, *destination, &failure_stage, &error)) {
                 result->Error("state_replace_failed",
                     "could not atomically publish application runtime state: " +

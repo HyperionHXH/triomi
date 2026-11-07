@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -129,6 +130,8 @@ class SourceRequest {
     this.checkStatus = true,
     this.cancellation,
     this.omitUserAgent = false,
+    this.responseBytes = false,
+    this.maxResponseBytes,
   });
 
   final String url;
@@ -143,6 +146,8 @@ class SourceRequest {
   final bool checkStatus;
   final SourceRequestCancellation? cancellation;
   final bool omitUserAgent;
+  final bool responseBytes;
+  final int? maxResponseBytes;
 }
 
 /// 来源响应。
@@ -152,14 +157,22 @@ class SourceResponse {
     required this.body,
     this.url = '',
     this.headers = const <String, String>{},
+    this.bodyBytes,
   });
 
   final int statusCode;
   final String body;
   final String url;
   final Map<String, String> headers;
+  final List<int>? bodyBytes;
 
   bool get isSuccess => statusCode >= 200 && statusCode < 400;
+}
+
+class _RuleDownloadNotFound extends StateError {
+  _RuleDownloadNotFound(this.uri, this.canRecover) : super('规则下载失败：HTTP 404');
+  final Uri uri;
+  final bool canRecover;
 }
 
 /// 流式二进制响应（大文件下载用）：逐块读、边下边写，不整块进内存。
@@ -325,6 +338,23 @@ class DioSourceHttpClient
     }
     try {
       return await _downloadRuleUri(uri, cancellation: cancellation);
+    } on _RuleDownloadNotFound catch (error) {
+      if (!sourceId.startsWith('mihon:') ||
+          !error.canRecover ||
+          error.uri != uri ||
+          cancellation?.cancelled == true) {
+        rethrow;
+      }
+      final alternate = await _githubDelivery.releaseAssetUri(
+        uri,
+        cancelToken: cancellation?.token,
+      );
+      if (alternate == null) rethrow;
+      return _downloadRuleUri(
+        alternate,
+        cancellation: cancellation,
+        accept: 'application/octet-stream',
+      );
     } on DioException catch (error) {
       return _recoverRuleDownload(uri, sourceId, cancellation, error);
     }
@@ -395,6 +425,12 @@ class DioSourceHttpClient
       }
       if (status < 200 || status >= 300 || body == null) {
         await body?.stream.listen(null).cancel();
+        if (status == 404) {
+          throw _RuleDownloadNotFound(
+            response.requestOptions.uri,
+            GithubPublicDelivery.canRecoverNotFound(response),
+          );
+        }
         throw StateError('规则下载失败：HTTP $status');
       }
       return SourceByteStream(
@@ -413,45 +449,97 @@ class DioSourceHttpClient
     SourceRequest request, {
     required String sourceId,
   }) async {
+    final cancellation =
+        request.cancellation ?? SourceRequestCancellation.current;
+    final bytesToken = request.responseBytes ? CancelToken() : null;
+    final parentCancellation = bytesToken == null
+        ? null
+        : cancellation?.token.whenCancel.asStream().listen(bytesToken.cancel);
+    if (cancellation?.cancelled == true) bytesToken?.cancel('请求已取消');
+    var bytesLimitExceeded = false;
     try {
       // Some signed APIs require an exact media type, including its charset.
       // Dio rejects a different contentType option alongside an explicit header.
       final hasContentType = request.headers.keys.any(
         (key) => key.toLowerCase() == Headers.contentTypeHeader,
       );
-      Future<Response<String>> sendTo(
-        String url, {
-        String? accept,
-      }) => _dio.request<String>(
-        url,
-        data: request.bodyType == RequestBodyType.none ? null : request.body,
-        options: Options(
-          method: request.method.toUpperCase(),
-          followRedirects: accept == null && sourceId != 'ehentai' ? request.followRedirects : false,
-          headers: {
-            ..._requestHeaders(request.headers, omitUserAgent: request.omitUserAgent),
-            'Accept': ?accept,
-          },
-          contentType: hasContentType
-              ? null
-              : switch (request.bodyType) {
-                  RequestBodyType.json => Headers.jsonContentType,
-                  RequestBodyType.form => Headers.formUrlEncodedContentType,
-                  RequestBodyType.none => null,
-                },
-          connectTimeout: timeout,
-          sendTimeout: timeout,
-          receiveTimeout: timeout,
-          responseType: ResponseType.plain,
-        ),
-        cancelToken:
-            (request.cancellation ?? SourceRequestCancellation.current)?.token,
-        onReceiveProgress: _receiveProgress(),
-      );
-      late Response<String> response;
+      Future<Response<dynamic>> sendTo(String url, {String? accept}) async {
+        final progress = _receiveProgress();
+        final result = await _dio.request<dynamic>(
+          url,
+          data: request.bodyType == RequestBodyType.none ? null : request.body,
+          options: Options(
+            method: request.method.toUpperCase(),
+            followRedirects:
+                accept == null && sourceId != 'ehentai'
+                ? request.followRedirects
+                : false,
+            validateStatus: request.checkStatus ? null : (_) => true,
+            headers: <String, String>{
+              ..._requestHeaders(
+                request.headers,
+                omitUserAgent: request.omitUserAgent,
+              ),
+              'Accept': ?accept,
+            },
+            contentType: hasContentType
+                ? null
+                : switch (request.bodyType) {
+                    RequestBodyType.json => Headers.jsonContentType,
+                    RequestBodyType.form => Headers.formUrlEncodedContentType,
+                    RequestBodyType.none => null,
+                  },
+            connectTimeout: timeout,
+            sendTimeout: timeout,
+            receiveTimeout: timeout,
+            responseType: request.responseBytes
+                ? ResponseType.stream
+                : ResponseType.plain,
+          ),
+          cancelToken: bytesToken ?? cancellation?.token,
+          onReceiveProgress: request.responseBytes
+              ? (received, total) {
+                  final limit = request.maxResponseBytes;
+                  if (limit != null && received > limit) {
+                    bytesLimitExceeded = true;
+                    bytesToken!.cancel('响应超过字节限制');
+                  } else {
+                    progress?.call(received, total);
+                  }
+                }
+              : progress,
+        );
+        if (request.responseBytes) {
+          final body = result.data;
+          if (body is! ResponseBody) throw const FormatException('二进制响应没有内容');
+          final bytes = BytesBuilder(copy: false);
+          final limit = request.maxResponseBytes;
+          await for (final chunk in body.stream) {
+            if (limit != null && bytes.length + chunk.length > limit) {
+              throw SourceException(
+                sourceId: sourceId,
+                type: SourceErrorType.parse,
+                message: '响应超过 $limit 字节限制',
+              );
+            }
+            bytes.add(chunk);
+          }
+          result.data = bytes.takeBytes();
+        }
+        return result;
+      }
+
+      late Response<dynamic> response;
       try {
         response = await sendTo(request.url);
       } on DioException catch (error) {
+        if (bytesLimitExceeded) {
+          throw SourceException(
+            sourceId: sourceId,
+            type: SourceErrorType.parse,
+            message: '响应超过 ${request.maxResponseBytes} 字节限制',
+          );
+        }
         if (sourceId != 'mihon-repository' ||
             request.method.toUpperCase() != 'GET' ||
             request.bodyType != RequestBodyType.none ||
@@ -472,7 +560,8 @@ class DioSourceHttpClient
 
       final result = SourceResponse(
         statusCode: response.statusCode ?? 0,
-        body: response.data ?? '',
+        body: request.responseBytes ? '' : response.data as String? ?? '',
+        bodyBytes: request.responseBytes ? response.data as Uint8List : null,
         url: response.realUri.toString(),
         headers: <String, String>{
           for (final entry in response.headers.map.entries)
@@ -496,6 +585,9 @@ class DioSourceHttpClient
       rethrow;
     } catch (error) {
       throw SourceException.wrap(error, sourceId: sourceId, url: request.url);
+    } finally {
+      await parentCancellation?.cancel();
+      bytesToken?.cancel('响应已释放');
     }
   }
 

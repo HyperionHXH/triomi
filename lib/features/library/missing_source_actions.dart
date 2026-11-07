@@ -210,9 +210,10 @@ class _MissingSourceNoticeState extends ConsumerState<MissingSourceNotice> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                 child: OutlinedButton.icon(
+                  key: const ValueKey('missing-source-actions'),
                   onPressed: _open,
                   icon: const Icon(Icons.build_outlined),
-                  label: const Text('安装 / 管理来源或搜索迁移'),
+                  label: const Text('管理来源 / 迁移作品'),
                 ),
               ),
             ],
@@ -244,7 +245,7 @@ Future<bool> showMissingSourceAction(
             const SizedBox(height: 8),
             Text(info.message),
             const SizedBox(height: 12),
-            const Text('精确来源 ID'),
+            const Text('来源 ID'),
             SelectableText(info.sourceId),
             if (info.packageName case final package?) ...[
               const SizedBox(height: 8),
@@ -257,9 +258,7 @@ Future<bool> showMissingSourceAction(
               SelectableText(repository),
             ],
             const SizedBox(height: 12),
-            const Text(
-              '同步记录不会自动添加仓库、安装或信任插件，也不会自动启用来源。选择其他来源时请核对作品；原站页码和播放秒数不能直接沿用。',
-            ),
+            const Text('请安装或启用可信来源。换源前核对作品，原站页码与播放位置需重新选择。'),
           ],
         ),
       ),
@@ -269,6 +268,7 @@ Future<bool> showMissingSourceAction(
           child: const Text('关闭'),
         ),
         TextButton(
+          key: const ValueKey('missing-source-manage'),
           onPressed: () => Navigator.pop(dialogContext, 'manage'),
           child: Text(
             info.sourceId.startsWith('mihon:') &&
@@ -281,8 +281,9 @@ Future<bool> showMissingSourceAction(
           ),
         ),
         FilledButton(
+          key: const ValueKey('missing-source-migrate'),
           onPressed: () => Navigator.pop(dialogContext, 'migrate'),
-          child: Text(item.type == MediaType.anime ? '搜索其他播放站' : '搜索其他来源并迁移'),
+          child: Text(item.type == MediaType.anime ? '搜索其他播放站' : '搜索并迁移'),
         ),
       ],
     ),

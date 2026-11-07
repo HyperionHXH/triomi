@@ -60,6 +60,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -74,6 +77,8 @@ jobs:
         env:
           ORG_GRADLE_PROJECT_triomiAcceptanceSigning: 'true'
         run: flutter build apk --release
+      - name: Verify retained Mihon source API in release DEX
+        run: python tools/check_mihon_abi.py --apk build/app/outputs/flutter-apk/app-release.apk
       - uses: actions/upload-artifact@v4
         with:
           name: triomi-android-apk

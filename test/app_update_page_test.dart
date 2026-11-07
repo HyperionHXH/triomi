@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/theme/app_theme.dart';
 import 'package:triomi/features/settings/app_update_page.dart';
 import 'package:triomi/features/settings/app_update_service.dart';
+import 'package:triomi/features/settings/app_update_task.dart';
 import 'package:triomi/features/settings/app_update_widgets.dart';
 
 const _hash =
@@ -70,6 +71,10 @@ class _UpdateService extends AppUpdateService {
   Future<AppUpdateInfo>? currentResult;
   Future<bool>? permissionResult;
   Future<void>? launchResult;
+  Future<void>? foregroundResult;
+  Future<void>? foregroundEndResult;
+  void Function()? onForegroundEnd;
+  int foregroundBegins = 0, foregroundEnds = 0;
   Future<AppUpdateCandidate> Function(AppUpdateRelease, AppUpdateCancellation)?
   download;
   final downloaded = <int>[];
@@ -83,10 +88,10 @@ class _UpdateService extends AppUpdateService {
       settingsOpened = 0;
   bool allowed = true, failNextCheck = false, unsupportedCurrent = false;
 
-  AppUpdateCandidate candidate(int code) => AppUpdateCandidate(
+  AppUpdateCandidate candidate(int code, {String? path}) => AppUpdateCandidate(
     current: _info(162, platform: platform),
     offered: _info(code, platform: platform),
-    path: '/owned/stage/update',
+    path: path ?? '/owned/stage/update',
     bytes: 1024,
     source: 'Official release',
     decision: 'upgrade',
@@ -96,6 +101,19 @@ class _UpdateService extends AppUpdateService {
 
   @override
   void attachProgress() {}
+  @override
+  Future<void> beginDownloadForeground() async {
+    foregroundBegins++;
+    if (foregroundResult != null) await foregroundResult;
+  }
+
+  @override
+  Future<void> endDownloadForeground() async {
+    foregroundEnds++;
+    onForegroundEnd?.call();
+    if (foregroundEndResult != null) await foregroundEndResult;
+  }
+
   @override
   Future<AppUpdateCandidate?> pendingCandidate() async => null;
   @override
@@ -244,6 +262,148 @@ Future<void> _download(WidgetTester tester) async {
 }
 
 void main() {
+  test('cancel during foreground acquisition never starts a transfer and releases the lease', () async {
+    final foreground = Completer<void>();
+    final service = _UpdateService()..foregroundResult = foreground.future;
+    final task = AppUpdateTask.forService(service);
+    final running = task.start(service.available.first);
+    expect(task.active, isTrue);
+    expect(task.start(service.available.last), same(running));
+    await task.cancel();
+    foreground.complete();
+    await running;
+    expect(task.active, isFalse);
+    expect(task.cancelled, isTrue);
+    expect(service.downloaded, isEmpty);
+    expect(service.foregroundBegins, 1);
+    expect(service.foregroundEnds, 1);
+    expect(task.candidate, isNull);
+  });
+
+  test('foreground rejection is retained and releases ownership without downloading', () async {
+    final foreground = Completer<void>();
+    final service = _UpdateService()..foregroundResult = foreground.future;
+    final task = AppUpdateTask.forService(service);
+    final running = task.start(service.available.first);
+    foreground.completeError(StateError('Foreground service unavailable'));
+    await running;
+    expect(task.active, isFalse);
+    expect(task.error, isNotNull);
+    expect(task.cancelled, isFalse);
+    expect(service.downloaded, isEmpty);
+    expect(service.foregroundEnds, 1);
+  });
+
+  test('a native handoff verification lease prevents replacement and delayed release uses path identity', () async {
+    final service = _UpdateService();
+    final task = AppUpdateTask.forService(service);
+    final candidate = service.candidate(163);
+    task.retain(candidate);
+    task.handoffInFlight = candidate;
+    await expectLater(task.start(service.available.first), throwsStateError);
+    expect(service.downloaded, isEmpty);
+    expect(service.discarded, isEmpty);
+    task.retain(service.candidate(163));
+    expect(task.owns(candidate), isTrue);
+    task.releaseCandidate(candidate);
+    expect(task.candidate, isNull);
+    task.handoffInFlight = null;
+  });
+
+  test('cancelling during foreground teardown discards the provisional candidate and never publishes ready', () async {
+    final ending = Completer<void>();
+    final ended = Completer<void>();
+    final service = _UpdateService()
+      ..foregroundEndResult = ending.future
+      ..onForegroundEnd = ended.complete;
+    final downloaded = service.candidate(163);
+    service.download = (_, _) async => downloaded;
+    final task = AppUpdateTask.forService(service);
+    final running = task.start(service.available.first);
+    await ended.future;
+    expect(task.active, isTrue);
+    expect(task.candidate, isNull);
+    await task.cancel();
+    ending.complete();
+    await running;
+    expect(task.cancelled, isTrue);
+    expect(task.candidate, isNull);
+    expect(service.discarded, [downloaded]);
+    expect(service.handedOff, isEmpty);
+  });
+
+  test('installer cancellation keeps task ownership so replacement releases the previous protected APK', () async {
+    final service = _UpdateService();
+    final task = AppUpdateTask.forService(service);
+    final old = service.candidate(163, path: '/owned/stage/previous.apk');
+    final replacement = service.candidate(
+      164,
+      path: '/owned/stage/replacement.apk',
+    );
+    task.markHandedOff(old);
+    service.onInstallerFinished?.call(installed: false, released: true);
+    expect(task.owns(old), isTrue);
+    expect(task.handedOff, isFalse);
+    service.download = (_, _) async => replacement;
+    await task.start(service.available.first);
+    expect(service.discarded, [old]);
+    expect(task.candidate, same(replacement));
+    expect(service.handedOff, isEmpty);
+  });
+
+  test('replacement preserves Windows bundles already revealed for manual extraction', () async {
+    final service = _UpdateService(platform: 'windows');
+    final task = AppUpdateTask.forService(service);
+    final old = service.candidate(163, path: '/owned/stage/previous.zip');
+    final replacement = service.candidate(
+      164,
+      path: '/owned/stage/replacement.zip',
+    );
+    task.markHandedOff(old);
+    task.retain(service.candidate(163, path: old.path));
+    expect(task.handedOff, isTrue);
+    service.download = (_, _) async => replacement;
+    await task.start(service.available.first);
+    expect(service.discarded, isEmpty);
+    expect(task.candidate, same(replacement));
+    expect(task.handedOff, isFalse);
+  });
+
+  testWidgets(
+    'a download after Windows Explorer handoff remains explicitly cancellable',
+    (tester) async {
+      final service = _UpdateService(
+        platform: 'windows',
+        available: _releases([163], platform: 'windows'),
+      );
+      await _open(tester, service);
+      await _tap(tester, 'app-update-check');
+      await _download(tester);
+      await _tap(tester, 'app-update-ready-confirm');
+      expect(service.handedOff, hasLength(1));
+      final complete = Completer<AppUpdateCandidate>();
+      service.download = (_, _) => complete.future;
+      await _tap(tester, 'app-update-download');
+      await tester.tap(
+        find.byKey(const ValueKey('app-update-download-confirm')),
+      );
+      await tester.pump();
+      final transfer = tester.widget<AppUpdateTransferView>(
+        find.byType(AppUpdateTransferView),
+      );
+      expect(transfer.onCancel, isNotNull);
+      transfer.onCancel!();
+      await tester.pump();
+      final late = service.candidate(164, path: '/owned/stage/cancelled.zip');
+      complete.complete(late);
+      await tester.pumpAndSettle();
+      expect(service.tokens.last.cancelled, isTrue);
+      expect(service.discarded, [late]);
+      expect(service.handedOff, hasLength(1));
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('startup update choice fits phone and desktop dialogs', (
     tester,
   ) async {
@@ -485,7 +645,7 @@ void main() {
   );
 
   testWidgets(
-    'dispose cancels owned transfer and ignores late progress while discarding late result',
+    'leaving and reopening joins streaming progress and retains the ready candidate',
     (tester) async {
       final complete = Completer<AppUpdateCandidate>();
       final service = _UpdateService()..download = (_, _) => complete.future;
@@ -496,16 +656,41 @@ void main() {
         find.byKey(const ValueKey('app-update-download-confirm')),
       );
       await tester.pump();
-      final lateProgress = service.onProgress!;
       await tester.pumpWidget(const SizedBox.shrink());
-      expect(service.tokens.single.cancelled, isTrue);
-      lateProgress(const AppUpdateProgress('verified', 1024, 1024));
+      expect(service.tokens.single.cancelled, isFalse);
+      service.onProgress?.call(const AppUpdateProgress('download', 512, 1024));
+      await tester.pumpWidget(
+        MaterialApp(home: AppUpdatePage(service: service)),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      final transfer = tester.widget<AppUpdateTransferView>(
+        find.byType(AppUpdateTransferView),
+      );
+      expect(transfer.progress?.bytes, 512);
+      expect(service.downloaded, [163]);
+      final task = AppUpdateTask.forService(service);
+      final joined = task.start(service.available.last);
+      expect(service.downloaded, [163]);
       final candidate = service.candidate(163);
       complete.complete(candidate);
+      await joined;
       await tester.pumpAndSettle();
-      expect(service.discarded, [candidate]);
+      expect(find.byType(AppUpdateReadyView), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
       expect(service.handedOff, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(service.discarded, isEmpty);
+      await _open(tester, service);
+      expect(find.byType(AppUpdateReadyView), findsOneWidget);
+      expect(service.downloaded, [163]);
+      expect(service.handedOff, isEmpty);
+      expect(task.candidate?.path, candidate.path);
+      expect(
+        task.candidate?.offered.versionCode,
+        candidate.offered.versionCode,
+      );
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 
@@ -547,7 +732,7 @@ void main() {
       expect(find.byType(AppUpdateReadyView), findsOneWidget);
       expect(service.settingsOpened, 0);
       await tester.pumpWidget(const SizedBox.shrink());
-      expect(service.discarded, hasLength(1));
+      expect(service.discarded, isEmpty);
     },
   );
 
@@ -737,7 +922,7 @@ void main() {
   }
 
   testWidgets(
-    'back during transfer keeps route owned and offers explicit cancellation',
+    'back leaves a transfer running and explicit cancellation after rejoin cleans a late candidate',
     (tester) async {
       final complete = Completer<AppUpdateCandidate>();
       final service = _UpdateService()..download = (_, _) => complete.future;
@@ -745,11 +930,15 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(navigatorKey: navigator, home: const Scaffold()),
       );
-      navigator.currentState!.push(
-        MaterialPageRoute<void>(
-          builder: (_) => AppUpdatePage(service: service),
-        ),
-      );
+      void open() {
+        navigator.currentState!.push(
+          MaterialPageRoute<void>(
+            builder: (_) => AppUpdatePage(service: service),
+          ),
+        );
+      }
+
+      open();
       await tester.pumpAndSettle();
       await _tap(tester, 'app-update-check');
       await _tap(tester, 'app-update-download');
@@ -758,24 +947,35 @@ void main() {
       );
       await tester.pump();
       await navigator.currentState!.maybePop();
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.byType(AppUpdatePage), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('app-update-back-cancel')),
-        findsOneWidget,
+      await tester.pumpAndSettle();
+      expect(find.byType(AppUpdatePage), findsNothing);
+      expect(service.tokens.single.cancelled, isFalse);
+      expect(service.cancellations, 0);
+      open();
+      // The first frame installs the pushed route; advance its transition only
+      // after that frame, without settling an indeterminate transfer indicator.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(AppUpdateTransferView), findsOneWidget);
+      final cancel = await _reveal(
+        tester,
+        find.byKey(const ValueKey('app-update-transfer-cancel')),
       );
-      await tester.tap(find.byKey(const ValueKey('app-update-back-cancel')));
+      await tester.tap(cancel);
       await tester.pump();
       complete.complete(service.candidate(163));
       await tester.pumpAndSettle();
       expect(service.tokens.single.cancelled, isTrue);
+      expect(service.cancellations, 1);
       expect(service.handedOff, isEmpty);
       expect(service.discarded, hasLength(1));
-      expect(find.byType(AlertDialog), findsNothing);
-      expect(find.byType(AppUpdatePage), findsOneWidget);
-      await navigator.currentState!.maybePop();
-      await tester.pumpAndSettle();
-      expect(find.byType(AppUpdatePage), findsNothing);
+      expect(find.byType(AppUpdateReadyView), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _open(tester, service);
+      expect(find.byType(AppUpdateReadyView), findsNothing);
+      expect(find.byType(AppUpdateTransferView), findsNothing);
+      expect(AppUpdateTask.forService(service).cancelled, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 
@@ -803,6 +1003,33 @@ void main() {
       await _tap(tester, 'app-update-ready-later');
       expect(find.byType(AppUpdateReadyView), findsOneWidget);
       expect(service.handedOff, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'a failure while detached is retained on rejoin and retry needs fresh consent',
+    (tester) async {
+      final complete = Completer<AppUpdateCandidate>();
+      final service = _UpdateService()..download = (_, _) => complete.future;
+      await _open(tester, service);
+      await _tap(tester, 'app-update-check');
+      await _tap(tester, 'app-update-download');
+      await tester.tap(
+        find.byKey(const ValueKey('app-update-download-confirm')),
+      );
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox.shrink());
+      complete.completeError(const HttpException('Network interrupted'));
+      await tester.pump();
+      await _open(tester, service);
+      expect(AppUpdateTask.forService(service).error, isNotNull);
+      expect(find.byKey(const ValueKey('app-update-retry')), findsOneWidget);
+      expect(find.byType(AppUpdateReadyView), findsNothing);
+      expect(service.handedOff, isEmpty);
+      await _tap(tester, 'app-update-retry');
+      expect(service.downloaded, [163]);
+      await _tap(tester, 'app-update-confirm-cancel');
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
@@ -916,7 +1143,11 @@ void main() {
       service.onInstallerFinished?.call(installed: false, released: true);
       await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox.shrink());
-      expect(service.discarded, hasLength(1));
+      expect(service.discarded, isEmpty);
+      expect(AppUpdateTask.forService(service).candidate, isNotNull);
+      await _open(tester, service);
+      expect(find.byType(AppUpdateReadyView), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 

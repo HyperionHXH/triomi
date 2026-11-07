@@ -236,12 +236,25 @@ class AnimeInfoRepository {
       );
     }
 
+    Future<void> enrich(AnimeInfoPage page) async {
+      final subject = page.rows.single;
+      if ('${subject['id']}' != id ||
+          subject['type'] != null && subject['type'] != 2) {
+        throw const FormatException('公开资料的番剧身份不一致');
+      }
+      await LibraryRepository(db).cacheItem(bangumiItem(subject));
+    }
+
     final saved = cache[key];
     if (!refresh && saved is Map && saved['format'] == 'bangumi-public-v1') {
       final updatedAt = DateTime.tryParse('${saved['updatedAt']}');
       final age = updatedAt == null ? null : DateTime.now().difference(updatedAt);
       if (age != null && !age.isNegative && age < const Duration(minutes: 5)) {
-        return parse(saved, cached: true);
+        final result = parse(saved, cached: true);
+        if (section == 'info') {
+          await enrich(result);
+        }
+        return result;
       }
     }
 
@@ -258,8 +271,8 @@ class AnimeInfoRepository {
       if (SourceRequestCancellation.current?.cancelled == true) {
         throw StateError('公开资料请求已取消');
       }
-      if (section == 'info' && item == null) {
-        await LibraryRepository(db).cacheItem(bangumiItem(result.rows.single));
+      if (section == 'info') {
+        await enrich(result);
       }
       if (item != null || section == 'info') {
         await db.transaction(() async {

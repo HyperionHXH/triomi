@@ -186,7 +186,7 @@ class _MergedMangaPageState extends ConsumerState<MergedMangaPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('核对章节号、标题、译组和内容后确认。锁章不会被解锁；阅读位置仍按原版本独立恢复。'),
+                const Text('请核对章节号、标题、译组和内容。各版本保留独立阅读位置与锁定状态。'),
                 for (final first in [true, false])
                   DropdownButtonFormField<String>(
                     isExpanded: true,

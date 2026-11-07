@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import '../../core/models/chapter.dart';
+import '../../core/models/manga_chapter_number.dart';
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/models/source_exception.dart';
@@ -28,6 +29,7 @@ import '../novel/reader/novel_reader_settings.dart';
 import '../tracking/data/tracking_providers.dart';
 import 'manga_chapter_comments.dart';
 import 'manga_page_image.dart';
+import 'manga_reading_order.dart';
 import 'reader_settings.dart';
 import 'reader_work_settings.dart';
 import 'reader_work_settings_sheet.dart';
@@ -44,6 +46,8 @@ class MangaReaderArgs {
   final MediaItem item;
   final List<Chapter> chapters;
   final int initialIndex;
+
+  /// Nonempty for confirmed merged directories; [chapters] is already ordered.
   final Map<String, MediaItem> chapterOwners;
 }
 
@@ -63,9 +67,12 @@ class MangaReaderPage extends ConsumerStatefulWidget {
 
 class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     with WidgetsBindingObserver {
-  late int _chapterIndex = _chapters.isEmpty
-      ? 0
-      : widget.args.initialIndex.clamp(0, _chapters.length - 1);
+  late final List<Chapter> _chapters = canonicalMangaReadingOrder(
+    widget.args.chapters,
+    preserveOrder: widget.args.chapterOwners.isNotEmpty,
+    mangaTitle: widget.args.item.sourceTitle,
+  );
+  late int _chapterIndex = _initialChapterIndex();
   PageController _pageController = PageController();
   final ItemScrollController _itemScroll = ItemScrollController();
   final ItemPositionsListener _positions = ItemPositionsListener.create();
@@ -82,6 +89,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       MediaQuery.sizeOf(context).width >= 600 &&
       _mode != ReadingMode.webtoon;
   int get _spreadSize => _doublePage ? 2 : 1;
+  // Last rendered spread also remains safe to use while persisting in dispose.
   int _layoutSpreadSize = 1;
   ReadingMode? _layoutMode;
   int _layoutRevision = 0;
@@ -105,9 +113,25 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   bool _chromeVisible = true;
   int _page = 0;
   int _requestSeq = 0;
-  bool _chaptersCached = false;
+  Future<void>? _chapterCacheFuture;
+  int? _transitionOrigin;
+  bool _openingNextChapter = false;
+  final Set<String> _knownPageCounts = {};
+  final Set<String> _completedChapters = {};
 
-  List<Chapter> get _chapters => widget.args.chapters;
+  int _initialChapterIndex() {
+    if (_chapters.isEmpty) return 0;
+    final original =
+        widget.args.chapters[widget.args.initialIndex.clamp(
+          0,
+          widget.args.chapters.length - 1,
+        )];
+    return mangaReadingIndexOf(
+      _chapters,
+      original,
+    ).clamp(0, _chapters.length - 1);
+  }
+
   Chapter get _chapter => _chapters[_chapterIndex];
   MediaItem get _item => widget.args.item;
   MediaItem _owner(Chapter chapter) =>
@@ -146,7 +170,8 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           _loading ||
           _restoring ||
           _chromeVisible ||
-          !_itemScroll.isAttached) {
+          !_itemScroll.isAttached ||
+          _transitionOrigin != null) {
         return;
       }
       final settings = _viewSettings;
@@ -238,6 +263,9 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       if (chapter.locked) {
         throw StateError('章节已锁定，不能打开或缓存');
       }
+      await _saveQueue;
+      await _cacheChapters();
+      if (!mounted || seq != _requestSeq) return;
       final saved = await _libraryRepository.chapterPositionOf(
         _owner(chapter).sourceId,
         _owner(chapter).remoteId,
@@ -267,6 +295,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           _page = _images.isEmpty ? 0 : savedPage.clamp(0, _images.length - 1);
           _loading = false;
         });
+        _finishChapterLoad();
         unawaited(_cacheChapters());
         if (_images.isNotEmpty) {
           _restorePage(seq);
@@ -348,6 +377,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
             : (saved?.floor() ?? 0).clamp(0, _images.length - 1);
         _loading = false;
       });
+      _finishChapterLoad();
 
       unawaited(_cacheChapters());
       if (_images.isNotEmpty) {
@@ -362,6 +392,16 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       setState(() {
         _loading = false;
         _error = message;
+      });
+    }
+  }
+
+  void _finishChapterLoad() {
+    if (_openingNextChapter) {
+      setState(() {
+        _transitionOrigin = null;
+        _openingNextChapter = false;
+        _chromeVisible = true;
       });
     }
   }
@@ -439,6 +479,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     });
     if (restorePending) _restorePage(seq);
     if (complete) {
+      if (!_restoring) unawaited(_persistProgress());
       final subscription = _localImagesSubscription;
       _localImagesSubscription = null;
       unawaited(subscription?.cancel());
@@ -457,16 +498,25 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   }
 
   /// 缓存目录：历史记录要显示章节标题，没缓存就只能显示"目录未缓存"。
-  Future<void> _cacheChapters() async {
-    if (_chaptersCached || widget.args.chapterOwners.isNotEmpty) return;
-    _chaptersCached = true;
-    await ref
-        .read(libraryRepositoryProvider)
-        .saveChapters(
-          itemSourceId: _item.sourceId,
-          itemRemoteId: _item.remoteId,
-          chapters: _chapters,
-        );
+  Future<void> _cacheChapters() {
+    // Merged chapters are already cached under their real owners. Never write
+    // them into the anchor work's directory or change their source identities.
+    if (widget.args.chapterOwners.isNotEmpty) return Future<void>.value();
+    return _chapterCacheFuture ??= _cacheSingleWork();
+  }
+
+  Future<void> _cacheSingleWork() async {
+    try {
+      await _libraryRepository.cacheItem(_item);
+      await _libraryRepository.saveChapters(
+        itemSourceId: _item.sourceId,
+        itemRemoteId: _item.remoteId,
+        chapters: widget.args.chapters,
+      );
+    } catch (_) {
+      _chapterCacheFuture = null;
+      rethrow;
+    }
   }
 
   Future<void> _persistProgress() {
@@ -479,16 +529,24 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     }
     final repository = _libraryRepository;
     final chapter = _chapter;
+    _queueChapterState(chapter);
     final page = _page.toDouble();
     final progress = (chapter: mangaChapterKey(chapter), page: page);
     if (_lastQueuedProgress == progress) return _saveQueue;
     _lastQueuedProgress = progress;
+    final chapterNumber =
+        recognizeMangaChapterNumber(
+          mangaTitle: _owner(chapter).sourceTitle,
+          chapterTitle: chapter.title,
+          providedNumber: chapter.number,
+        ) ??
+        (chapter.sortIndex + 1).toDouble();
     return _saveQueue = _saveQueue.then((_) async {
       try {
         await repository.updateProgress(
           sourceId: _owner(chapter).sourceId,
           remoteId: _owner(chapter).remoteId,
-          chapterNumber: chapter.number ?? (chapter.sortIndex + 1).toDouble(),
+          chapterNumber: chapterNumber,
         );
         await repository.recordHistory(
           sourceId: _owner(chapter).sourceId,
@@ -501,8 +559,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           _trackingReporter?.report(
                 sourceId: _owner(chapter).sourceId,
                 remoteId: _owner(chapter).remoteId,
-                chapterNumber:
-                    chapter.number ?? (chapter.sortIndex + 1).toDouble(),
+                chapterNumber: chapterNumber,
                 type: MediaType.manga,
               ) ??
               Future<void>.value(),
@@ -516,6 +573,41 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       } catch (_) {
         if (_lastQueuedProgress == progress) _lastQueuedProgress = null;
         // 进度写失败不应该打断阅读
+      }
+    });
+  }
+
+  void _queueChapterState(Chapter chapter) {
+    if (!_localComplete) return;
+    final owner = _owner(chapter);
+    final key = mangaChapterKey(chapter);
+    final count = _images.length;
+    final countKey = '$key:$count';
+    final recordCount = _knownPageCounts.add(countKey);
+    final markRead =
+        _page + _layoutSpreadSize >= count && _completedChapters.add(key);
+    if (!recordCount && !markRead) return;
+    _saveQueue = _saveQueue.then((_) async {
+      try {
+        if (recordCount) {
+          await _libraryRepository.recordMangaChapterPageCount(
+            sourceId: owner.sourceId,
+            itemRemoteId: owner.remoteId,
+            chapter: chapter,
+            totalPages: count,
+          );
+        }
+        if (markRead) {
+          await _libraryRepository.setChapterRead(
+            sourceId: owner.sourceId,
+            itemRemoteId: owner.remoteId,
+            chapters: [chapter],
+            read: true,
+          );
+        }
+      } catch (_) {
+        if (recordCount) _knownPageCounts.remove(countKey);
+        if (markRead) _completedChapters.remove(key);
       }
     });
   }
@@ -595,7 +687,11 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   // ------------------------------------------------------------------ 翻页
 
   void _onScroll() {
-    if (!mounted || _isPaged || _restoring || _loading) {
+    if (!mounted ||
+        _isPaged ||
+        _restoring ||
+        _loading ||
+        _transitionOrigin != null) {
       return;
     }
     final visible =
@@ -605,6 +701,11 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           ..sort((a, b) => a.index.compareTo(b.index));
     if (visible.isEmpty) return;
     final index = visible.first.index;
+    if (index == _images.length && _localComplete) {
+      _page = (_images.length - 1) ~/ _spreadSize * _spreadSize;
+      _showChapterTransition();
+      return;
+    }
     if (index < 0 || index >= _images.length) return;
     if (index != _page) {
       setState(() => _page = index);
@@ -614,6 +715,11 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
   void _onPageChanged(int index) {
     if (!mounted || _restoring || _loading || _images.isEmpty) return;
+    if (index * _spreadSize >= _images.length && _localComplete) {
+      _page = (_images.length - 1) ~/ _spreadSize * _spreadSize;
+      _showChapterTransition();
+      return;
+    }
     final page = (index * _spreadSize).clamp(0, _images.length - 1);
     if (_page == page) return;
     _pendingLocalPage = null;
@@ -647,6 +753,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       !_loading && !_restoring && _error == null && _images.isNotEmpty;
 
   void _nextPage() {
+    if (_transitionOrigin != null) {
+      _continueChapter();
+      return;
+    }
     if (!_canTurnPage) return;
     if (_page + _spreadSize < _images.length) {
       _goToPage(_page + _spreadSize);
@@ -657,11 +767,15 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
         !_commentsVisited) {
       unawaited(_showComments());
     } else {
-      _switchChapter(1);
+      _showChapterTransition();
     }
   }
 
   void _previousPage() {
+    if (_transitionOrigin != null) {
+      _cancelChapterTransition();
+      return;
+    }
     if (!_canTurnPage) return;
     if (_page > 0) {
       _goToPage((_page - _spreadSize).clamp(0, _images.length - 1));
@@ -672,18 +786,66 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
   void _switchChapter(int delta) {
     if (_chapters.isEmpty) return;
+    // Manual chapter navigation may leave a partial download without claiming
+    // it is finished. Page-forward EOF still waits for the remaining pages.
+    if (delta > 0 && _canTurnPage && _localComplete) {
+      _showChapterTransition();
+      return;
+    }
     final target = _chapterIndex + delta;
     if (target < 0 || target >= _chapters.length) {
       _toast(delta > 0 ? '已经是最后一章' : '已经是第一章');
       return;
     }
     unawaited(_persistProgress());
+    _transitionOrigin = null;
+    _openingNextChapter = false;
     setState(() {
       _chapterIndex = target;
       _page = 0;
     });
     _resetPageController();
     unawaited(_load());
+  }
+
+  void _showChapterTransition() {
+    if (!_canTurnPage || !_localComplete || _transitionOrigin != null) return;
+    unawaited(_persistProgress());
+    setState(() {
+      _transitionOrigin = _chapterIndex;
+      _chromeVisible = false;
+    });
+  }
+
+  void _continueChapter() {
+    final origin = _transitionOrigin;
+    if (origin == null || _loading && _openingNextChapter) return;
+    final target = origin + 1;
+    if (target >= _chapters.length || _chapters[target].locked) return;
+    setState(() {
+      _chapterIndex = target;
+      _openingNextChapter = true;
+    });
+    _resetPageController();
+    unawaited(_load());
+  }
+
+  void _cancelChapterTransition() {
+    final origin = _transitionOrigin;
+    if (origin == null) return;
+    final reload = _openingNextChapter;
+    ++_requestSeq; // A cancelled target may still finish its local/network read.
+    setState(() {
+      _chapterIndex = origin;
+      _transitionOrigin = null;
+      _openingNextChapter = false;
+      _chromeVisible = true;
+    });
+    if (reload) {
+      unawaited(_load());
+    } else {
+      _restorePage(_requestSeq);
+    }
   }
 
   /// 换章 / 切模式后重建 PageController。
@@ -746,6 +908,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     }
     final key = event.logicalKey;
     final rtl = _mode == ReadingMode.rtl;
+    if (_transitionOrigin != null && key == LogicalKeyboardKey.enter) {
+      _continueChapter();
+      return KeyEventResult.handled;
+    }
 
     // 音量键翻页（默认关，防误触；设置与小说阅读器共用）。
     if (_volumeKeyTurn) {
@@ -786,7 +952,11 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.escape) {
-      Navigator.of(context).maybePop();
+      if (_transitionOrigin != null) {
+        _cancelChapterTransition();
+      } else {
+        Navigator.of(context).maybePop();
+      }
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -821,39 +991,46 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
         body: const Center(child: Text('没有可阅读的章节')),
       );
     }
-    return Scaffold(
-      backgroundColor: settings.background.color,
-      body: Focus(
-        focusNode: _focusNode,
-        autofocus: true,
-        onKeyEvent: (node, event) => _handleKey(event),
-        child: Stack(
-          children: <Widget>[
-            Positioned.fill(
-              child: Listener(
-                onPointerSignal: (event) {
-                  if (event is! PointerScrollEvent) return;
-                  if (!_isPaged) {
-                    _pendingLocalPage = null;
-                    return;
-                  }
-                  event.scrollDelta.dy > 0 ? _nextPage() : _previousPage();
-                },
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapUp: _handleTap,
-                  child: _buildBody(settings),
+    return PopScope(
+      canPop: _transitionOrigin == null,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _transitionOrigin != null) _cancelChapterTransition();
+      },
+      child: Scaffold(
+        backgroundColor: settings.background.color,
+        body: Focus(
+          focusNode: _focusNode,
+          autofocus: true,
+          onKeyEvent: (node, event) => _handleKey(event),
+          child: Stack(
+            children: <Widget>[
+              Positioned.fill(
+                child: Listener(
+                  onPointerSignal: (event) {
+                    if (event is! PointerScrollEvent) return;
+                    if (!_isPaged) {
+                      _pendingLocalPage = null;
+                      return;
+                    }
+                    event.scrollDelta.dy > 0 ? _nextPage() : _previousPage();
+                  },
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapUp: _handleTap,
+                    child: _buildBody(settings),
+                  ),
                 ),
               ),
-            ),
-            _buildChrome(settings),
-          ],
+              if (_transitionOrigin == null) _buildChrome(settings),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildBody(ReaderSettings settings) {
+    if (_transitionOrigin != null) return _buildChapterTransition(settings);
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -912,9 +1089,14 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           itemScrollController: _itemScroll,
           itemPositionsListener: _positions,
           initialScrollIndex: _page,
-          itemCount: _images.length,
+          itemCount: _images.length + (_localComplete ? 1 : 0),
           scrollOffsetController: _scrollOffset,
-          itemBuilder: (context, index) => _imagePage(index, BoxFit.fitWidth),
+          itemBuilder: (context, index) => index == _images.length
+              ? SizedBox(
+                  height: MediaQuery.sizeOf(context).height,
+                  child: const Center(child: Icon(Icons.arrow_downward)),
+                )
+              : _imagePage(index, BoxFit.fitWidth),
         ),
       );
     }
@@ -927,9 +1109,13 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           ? Axis.vertical
           : Axis.horizontal,
       onPageChanged: _onPageChanged,
-      itemCount: (_images.length / _spreadSize).ceil(),
+      itemCount:
+          (_images.length / _spreadSize).ceil() + (_localComplete ? 1 : 0),
       itemBuilder: (context, index) {
         final first = index * _spreadSize;
+        if (first >= _images.length) {
+          return const Center(child: Icon(Icons.navigate_next));
+        }
         if (!_doublePage) return _imagePage(first, settings.fit.boxFit);
         final pages = [
           Expanded(child: _imagePage(first, BoxFit.contain)),
@@ -945,6 +1131,108 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
               : pages,
         );
       },
+    );
+  }
+
+  Widget _buildChapterTransition(ReaderSettings settings) {
+    final origin = _transitionOrigin!;
+    final current = _chapters[origin];
+    final next = origin + 1 < _chapters.length ? _chapters[origin + 1] : null;
+    final completed = _completedChapters.contains(mangaChapterKey(current));
+    final loading = _openingNextChapter && _loading;
+    final error = _openingNextChapter ? _error : null;
+    final foreground = settings.background.color.computeLuminance() > .5
+        ? Colors.black87
+        : Colors.white;
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 32),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: DefaultTextStyle(
+              style: theme.textTheme.titleLarge!.copyWith(color: foreground),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(completed ? '已读完：' : '当前章节：'),
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        completed ? Icons.check_circle : Icons.menu_book,
+                        color: foreground,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(current.title)),
+                    ],
+                  ),
+                  const SizedBox(height: 56),
+                  if (next != null) ...[
+                    const Text('下一章：'),
+                    const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          next.locked
+                              ? Icons.lock_outline
+                              : Icons.arrow_forward,
+                          color: foreground,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text(next.title)),
+                      ],
+                    ),
+                    if (next.locked) ...[
+                      const SizedBox(height: 16),
+                      const Text('下一章已锁定'),
+                    ],
+                  ] else
+                    const Text('已经是最后一章'),
+                  if (loading) ...[
+                    const SizedBox(height: 24),
+                    const LinearProgressIndicator(),
+                    const SizedBox(height: 12),
+                    const Text('正在加载下一章…'),
+                  ],
+                  if (error != null) ...[
+                    const SizedBox(height: 24),
+                    Text(
+                      error,
+                      style: TextStyle(color: foreground, fontSize: 16),
+                    ),
+                  ],
+                  const SizedBox(height: 32),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 12,
+                    children: [
+                      if (next != null)
+                        FilledButton(
+                          onPressed: loading || next.locked
+                              ? null
+                              : _continueChapter,
+                          child: Text(error == null ? '继续阅读' : '重试下一章'),
+                        ),
+                      OutlinedButton(
+                        onPressed: _cancelChapterTransition,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: foreground,
+                        ),
+                        child: const Text('返回本章'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1167,6 +1455,8 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                 Navigator.of(sheetContext).pop();
                 if (index == _chapterIndex) return;
                 unawaited(_persistProgress());
+                _transitionOrigin = null;
+                _openingNextChapter = false;
                 setState(() {
                   _chapterIndex = index;
                   _page = 0;

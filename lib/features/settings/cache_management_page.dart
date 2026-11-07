@@ -339,7 +339,7 @@ class _CacheManagementPageState extends ConsumerState<CacheManagementPage> {
       if (mounted) {
         setState(() {
           _updateStorage = null;
-          _updateStorageError = '更新清理或复核未完成，请重新扫描；未声称已清空。';
+          _updateStorageError = '清理或统计未完成，请重新扫描。';
         });
       }
     } finally {
@@ -355,9 +355,8 @@ class _CacheManagementPageState extends ConsumerState<CacheManagementPage> {
         title: const Text('清理图片内存缓存？'),
         content: Text(
           '当前可复用缓存 ${cache.currentSize} 项 / ${_bytes(cache.currentSizeBytes)}，'
-          '等待解码 ${cache.pendingImageCount} 项；这是内存而非磁盘用量。\n\n'
-          '只释放非活跃图片的缓存引用；保留正在显示的图片，不删除文件、Cookie 或账号。'
-          '正在进行的请求不会被强制取消，图片仍可能重新进入缓存。此操作立即完成，不支持中途取消。',
+          '等待解码 ${cache.pendingImageCount} 项。\n\n'
+          '释放非活跃图片内存，保留显示中的图片、磁盘文件与账号；后续请求可能重新缓存。',
         ),
         actions: [
           TextButton(
@@ -519,8 +518,8 @@ class _CacheManagementPageState extends ConsumerState<CacheManagementPage> {
                               ? '尚未完成统计'
                               : '共 ${_bytes(_updateStorage!.totalBytes)} · 可安全回收 ${_bytes(_updateStorage!.reclaimableBytes)} · 正在使用 ${_bytes(_updateStorage!.protectedBytes)}\n'
                                     '缓存目录：下载中间文件 ${_bytes(_updateStorage!.incomingBytes)}、安装副本 ${_bytes(_updateStorage!.installBytes)}；'
-                                    '旧版支持目录 ${_bytes(_updateStorage!.legacyBytes)}（已包含在支持目录总量内）。\n'
-                                    '冷启动自动回收已完成或中断的更新；正在下载、核验或交给系统安装器的包会保留。'),
+                                    '旧版支持目录 ${_bytes(_updateStorage!.legacyBytes)}（已计入总量）。\n'
+                                    '启动时回收闲置更新，保留正在使用的包。'),
                     ),
                   ),
                   TextButton(
@@ -547,8 +546,7 @@ class _CacheManagementPageState extends ConsumerState<CacheManagementPage> {
                         : '${_bytes(_storage!.supportBytes)}（文件字节，含上方浏览器缓存）\n'
                               '更新暂存 ${_bytes(_storage!.updateBytes)}：下载中间文件 ${_bytes(_storage!.updateIncomingBytes)}、安装副本 ${_bytes(_storage!.updateInstallBytes)}（均已包含在更新暂存内）。\n'
                               '漫画扩展 ${_bytes(_storage!.extensionBytes)}、已重建漫画运行时 ${_bytes(_storage!.managedRuntimeBytes)}、其余支持文件 ${_bytes(_storage!.otherSupportBytes)}。\n'
-                              '账号、数据库、已安装扩展与离线内容需要保留，不能整目录清理。'
-                              '随安装包提供的解码器和 Java 资产属于固定安装体积，不等同持续缓存增长。'),
+                              '此目录含账号、数据库、扩展及离线内容，仅统计，不整体清理。'),
               ),
             ),
           ),
@@ -557,18 +555,14 @@ class _CacheManagementPageState extends ConsumerState<CacheManagementPage> {
               title: const Text('离线章节内容（保留）'),
               subtitle: Text(
                 '${content == null ? '尚未统计' : '${content.chapters} 章 · ${_bytes(content.bytes)}（JSON UTF-8 载荷）'}\n'
-                '其中嵌入字体 ${content == null ? '尚未统计' : _bytes(content.fontBytes)}（已包含在上方载荷内）。'
-                '正文与字体属于显式下载或备份保留内容；普通在线阅读不自动写正文入库。'
-                '不因时间或缓存预算删除。此值不是数据库文件大小，也不代表可回收空间。',
+                '嵌入字体 ${content == null ? '尚未统计' : _bytes(content.fontBytes)}（已计入）。'
+                '离线内容保留，不纳入缓存清理；载荷统计不等于数据库文件大小。',
               ),
             ),
           ),
           const Padding(
             padding: EdgeInsets.only(top: 12),
-            child: Text(
-              '保护范围：所有下载媒体和断点、章节ID与正文、阅读进度、历史、收藏、追踪、登录凭据、来源定义、备份、待安装APK和本地导入。'
-              '不会递归清空临时目录或应用数据目录。恢复进行中或残留恢复日志时拒绝清理封面。',
-            ),
+            child: Text('清理保留下载、正文、进度、收藏、账号、来源、备份及本地导入。恢复未完成时暂停封面清理。'),
           ),
         ],
       ),

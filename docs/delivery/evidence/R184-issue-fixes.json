@@ -1,0 +1,202 @@
+{
+  "version": "0.14.4+184",
+  "issues": {
+    "2": {
+      "url": "https://github.com/HyperionHXH/triomi/issues/2",
+      "cause": "Only mobile SystemChrome calls, no Windows window transition",
+      "finalNative": {
+        "windowed": {
+          "rect": [
+            80,
+            60,
+            1360,
+            860
+          ],
+          "monitor": [
+            0,
+            0,
+            2560,
+            1600
+          ],
+          "work": [
+            0,
+            0,
+            2560,
+            1528
+          ],
+          "style": 349110272,
+          "exstyle": 256,
+          "showCmd": 1,
+          "normal": [
+            80,
+            60,
+            1360,
+            860
+          ]
+        },
+        "fullscreen": {
+          "rect": [
+            0,
+            0,
+            2560,
+            1600
+          ],
+          "monitor": [
+            0,
+            0,
+            2560,
+            1600
+          ],
+          "work": [
+            0,
+            0,
+            2560,
+            1528
+          ],
+          "style": 2483027968,
+          "exstyle": 0,
+          "showCmd": 1,
+          "normal": [
+            0,
+            0,
+            2560,
+            1600
+          ]
+        },
+        "restored": {
+          "rect": [
+            80,
+            60,
+            1360,
+            860
+          ],
+          "monitor": [
+            0,
+            0,
+            2560,
+            1600
+          ],
+          "work": [
+            0,
+            0,
+            2560,
+            1528
+          ],
+          "style": 349110272,
+          "exstyle": 256,
+          "showCmd": 1,
+          "normal": [
+            80,
+            60,
+            1360,
+            860
+          ]
+        },
+        "maximized": {
+          "rect": [
+            -11,
+            -11,
+            2571,
+            1539
+          ],
+          "monitor": [
+            0,
+            0,
+            2560,
+            1600
+          ],
+          "work": [
+            0,
+            0,
+            2560,
+            1528
+          ],
+          "style": 365887488,
+          "exstyle": 256,
+          "showCmd": 3,
+          "normal": [
+            80,
+            60,
+            1360,
+            860
+          ]
+        },
+        "afterFullscreenDisposal": {
+          "rect": [
+            -11,
+            -11,
+            2571,
+            1539
+          ],
+          "monitor": [
+            0,
+            0,
+            2560,
+            1600
+          ],
+          "work": [
+            0,
+            0,
+            2560,
+            1528
+          ],
+          "style": 365887488,
+          "exstyle": 256,
+          "showCmd": 3,
+          "normal": [
+            80,
+            60,
+            1360,
+            860
+          ]
+        }
+      },
+      "observed": "Actual production PlayerPage fullscreen mouse controls; normal/maximized entry; rcMonitor vs rcWork; exact placement/style restoration; page disposal while fullscreen restores maximized state"
+    },
+    "3": {
+      "url": "https://github.com/HyperionHXH/triomi/issues/3",
+      "failingBefore": {
+        "pageHeight": 1000,
+        "resultViewportBottom": 608
+      },
+      "passingAfter": "Single lazy viewport fills available body; actual Bangumi境界 returned20 results, full current monitor-width search screenshot shows complete rows to window bottom; wheel reaches later results. Permanent behavior coverage includes real scroll/tap pagination/retry, list/grid narrow200percent text."
+    },
+    "4": {
+      "url": "https://github.com/HyperionHXH/triomi/issues/4",
+      "failingBefore": "Completed120s episode history remains120seconds",
+      "passingAfter": "Completed anchor0 retained during timer/disposal; normal precise mid-episode resume unchanged; in-app previous episode actual Android native position132ms, later18721ms remains Episode1; final build legacy29/30seconds anchor actual decoder replays Episode1 and reports17756/30000 rather than immediate next",
+      "regressions": [
+        "autoNext and playlist boundary",
+        "timer/dispose after completion",
+        "autoNext disabled",
+        "native notification/Bluetooth replay saves12seconds after restart",
+        "legacy last-second resume seeks0"
+      ]
+    }
+  },
+  "codexWork": "User uncommitted manga library/filter/source changes retained and integrated; invalid saved-search snapshot cannot overwrite source preferences before structural validation",
+  "reviews": [
+    "Codex filter persistence P2 fixed",
+    "Win32 show-state ordering and failed-entry disposal P2 fixed",
+    "MediaSession native replay latch P2 fixed; follow-up read-only reviews no remaining actionableP1/P2"
+  ],
+  "limits": [
+    "Only one physical Windows monitor; secondary/mixedDPI transitions not exercised",
+    "Android owned read-only API35 emulator, no physical phone",
+    "Controlled30second local video not all public sites",
+    "No user library/account/data mutation; disposable Hive/SQLite roots",
+    "Early tests had2test compile errors corrected using existing save API and import hide; no product fallback added"
+  ],
+  "localChecks": {
+    "flutterPassed": 1731,
+    "flutterSkipped": 4,
+    "pythonPassed": 117,
+    "uiDocDriftErrors": 0,
+    "encodingErrors": 0,
+    "nativeTemporaryEntryRemoved": true,
+    "flutterAnalyze": "No issues found",
+    "normalWindowsProfile": true,
+    "normalAndroidX64Debug": true,
+    "androidDebugRetainedAbi": 128
+  }
+}

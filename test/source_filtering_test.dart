@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/source/mihon_repository.dart';
 import 'package:triomi/core/source/rule_schema.dart';
@@ -45,38 +46,55 @@ Map<String, Object?> _extension(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('failed Mihon source opens plugin diagnostics instead of a dead row', (tester) async {
-    final preferences = memoryPreferences();
-    const package = 'org.example.failed';
-    await preferences.set('sources.filters.manga', const SourceFilters().toJson());
-    await preferences.set('mihon.hostStatus', {
-      package: {'ok': false, 'name': 'Failed plugin', 'hostError': 'Runtime missing'},
-    });
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          preferencesProvider.overrideWithValue(preferences),
-          sourcesProvider.overrideWith(() => _SnapshotSources(
-            const SourceRegistrySnapshot(entries: [], failures: [
-              SourceFailure(
-                id: 'mihon:$package',
-                name: 'Failed plugin',
-                type: MediaType.manga,
-                message: 'Runtime missing',
+  testWidgets(
+    'failed Mihon source opens plugin diagnostics instead of a dead row',
+    (tester) async {
+      final preferences = memoryPreferences();
+      const package = 'org.example.failed';
+      await preferences.set(
+        'sources.filters.manga',
+        const SourceFilters().toJson(),
+      );
+      await preferences.set('mihon.hostStatus', {
+        package: {
+          'ok': false,
+          'name': 'Failed plugin',
+          'hostError': 'Runtime missing',
+        },
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            preferencesProvider.overrideWithValue(preferences),
+            sourcesProvider.overrideWith(
+              () => _SnapshotSources(
+                const SourceRegistrySnapshot(
+                  entries: [],
+                  failures: [
+                    SourceFailure(
+                      id: 'mihon:$package',
+                      name: 'Failed plugin',
+                      type: MediaType.manga,
+                      message: 'Runtime missing',
+                    ),
+                  ],
+                ),
               ),
-            ]),
-          )),
-        ],
-        child: const MaterialApp(home: SourcesPage(initialType: MediaType.manga)),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Failed plugin'));
-    await tester.pumpAndSettle();
-    expect(find.byType(MangaExtensionDetailsPage), findsOneWidget);
-    expect(find.text(package), findsOneWidget);
-    expect(find.textContaining('Runtime missing'), findsWidgets);
-  });
+            ),
+          ],
+          child: const MaterialApp(
+            home: SourcesPage(initialType: MediaType.manga),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Failed plugin'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MangaExtensionDetailsPage), findsOneWidget);
+      expect(find.text(package), findsOneWidget);
+      expect(find.textContaining('Runtime missing'), findsWidgets);
+    },
+  );
 
   test('Mihon language/content/query/type intersect without classifying unknown declarations as safe', () {
     final index = MihonRepositoryParser.parse(
@@ -312,7 +330,7 @@ void main() {
       expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
       expect((await repository.byId('offline'))!.enabled, isFalse);
       expect((await repository.byId('unavailable'))!.enabled, isFalse);
-      expect(snapshot.entries.single.descriptor.nsfw, isTrue);
+      expect(snapshot.manageableEntries.single.descriptor.nsfw, isTrue);
       expect(runtimes, 0);
     },
   );
@@ -321,6 +339,15 @@ void main() {
     'category switching isolates rows and queries and catalog clear keeps category',
     (tester) async {
       final preferences = memoryPreferences();
+      final db = openTestDatabase();
+      addTearDown(db.close);
+      final registry = SourceRegistry(
+        repository: SourceRepository(db),
+        http: FakeHttpClient(
+          (_) async => throw StateError('No installed update sources'),
+        ),
+      );
+      addTearDown(registry.dispose);
       final snapshot = const SourceRegistrySnapshot(
         entries: [],
         failures: [
@@ -361,6 +388,8 @@ void main() {
       );
       final container = ProviderContainer(
         overrides: [
+          databaseProvider.overrideWithValue(db),
+          sourceRegistryProvider.overrideWithValue(registry),
           preferencesProvider.overrideWithValue(preferences),
           sourcesProvider.overrideWith(() => _SnapshotSources(snapshot)),
           sourceCatalogLoaderProvider.overrideWithValue(() async => entries),
@@ -380,14 +409,21 @@ void main() {
       await open();
       expect(find.text('Anime Offline'), findsOneWidget);
       expect(find.text('Manga Offline'), findsNothing);
-      await tester.enterText(find.byType(TextFormField), 'not found');
+      expect(find.byType(TextFormField), findsNothing);
       await tester.tap(find.text('漫画'));
       await tester.pumpAndSettle();
       expect(find.text('Manga Offline'), findsOneWidget);
       expect(find.text('Anime Offline'), findsNothing);
+      await tester.enterText(find.byType(TextFormField), 'not found');
+      await tester.pumpAndSettle();
+      expect(find.text('Manga Offline'), findsNothing);
       await tester.tap(find.text('番剧'));
       await tester.pumpAndSettle();
-      expect(find.text('Anime Offline'), findsNothing);
+      expect(find.text('Anime Offline'), findsOneWidget);
+      expect(find.byType(TextFormField), findsNothing);
+      await tester.tap(find.text('漫画'));
+      await tester.pumpAndSettle();
+      expect(find.text('Manga Offline'), findsNothing);
       expect(
         tester
             .widget<TextFormField>(find.byType(TextFormField))

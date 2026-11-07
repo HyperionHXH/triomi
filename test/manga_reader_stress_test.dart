@@ -247,7 +247,10 @@ void main() {
 
     await tester.tap(find.byTooltip('下一章'));
     await tester.pump();
-    expect(find.text('正在加载章节…'), findsOneWidget);
+    expect(find.text('当前章节：'), findsOneWidget);
+    await tester.tap(find.text('继续阅读'));
+    await tester.pump();
+    expect(find.text('正在加载下一章…'), findsOneWidget);
     expect(find.byType(Slider), findsNothing, reason: '加载期不显示页码滑杆');
     expect(find.text('0/0'), findsNothing);
 
@@ -275,7 +278,10 @@ void main() {
     final c3Images = fileImages(dir, 'c3', 2);
 
     final source = _ScriptedSource();
-    source.behaviors[c1.remoteId] = [() => instant(c1Images)];
+    source.behaviors[c1.remoteId] = [
+      () => instant(c1Images),
+      () => instant(c1Images),
+    ];
     // c2 两次消费：预取（慢）、正式加载（慢）。两者都晚到。
     final (preloadGate, preloadLoader) = deferred();
     final (loadGate, loadLoader) = deferred();
@@ -290,19 +296,33 @@ void main() {
     await settle(tester);
     expect(indicator(tester), '1/5');
 
-    // 切到 c2（慢），不等它完成就继续切到 c3（即时）。
+    // Start c2 (slow), cancel, then select c3 while c2 is still in flight.
     await tester.tap(find.byTooltip('下一章'));
     await tester.pump();
-    await tester.tap(find.byTooltip('下一章'));
+    await tester.tap(find.text('继续阅读'));
+    await tester.pump();
+    await tester.tap(find.text('返回本章'));
     await settle(tester);
-    expect(find.text('第三话'), findsOneWidget);
+    await tester.tap(find.byTooltip('目录'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    final thirdChapter = find.widgetWithText(ListTile, '第三话');
+    expect(thirdChapter.hitTestable(), findsOneWidget);
+    await tester.tap(thirdChapter);
+    await tester.pump(const Duration(milliseconds: 400));
+    await settle(tester);
+    await waitUntil(
+      tester,
+      () => source.requests.contains(c3.remoteId) && find.text('1/2').evaluate().isNotEmpty,
+      'selecting the actual third chapter completes its load',
+    );
     expect(indicator(tester), '1/2');
 
-    // 旧章（c2）的正式加载响应这才到：必须被序列号丢弃。
+    // Both old c2 responses arrive after c3: neither may replace its pages.
+    preloadGate.complete(ChapterContent(images: c2Images));
     loadGate.complete(ChapterContent(images: c2Images));
     await settle(tester);
     expect(indicator(tester), '1/2', reason: '旧响应不覆盖当前章');
-    expect(find.text('第三话'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     // c2 从未完成加载：不产生任何进度记录（保存队列的 loading 守卫）。
@@ -386,8 +406,11 @@ void main() {
     expect(slider.value, 1);
     expect(indicator(tester), '1/1');
 
-    // 末页再翻（键盘右键）→ 进入下一章而不是越界。
+    // Final-page forward first shows the boundary; continue opens c2.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(find.text('已读完：'), findsOneWidget);
+    await tester.tap(find.text('继续阅读'));
     await settle(tester);
     expect(find.text('第二话'), findsOneWidget);
     expect(indicator(tester), '1/2');
@@ -462,6 +485,9 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     expect(tester.takeException(), isNull);
+    expect(find.text('已经是最后一章'), findsOneWidget);
+    await tester.tap(find.text('返回本章'));
+    await tester.pump();
     expect(indicator(tester), '2/2');
 
     await tester.pumpWidget(const SizedBox());
@@ -548,6 +574,11 @@ void main() {
       }
       await settle(tester);
       expect(tester.takeException(), isNull);
+      expect(find.text('已读完：'), findsOneWidget);
+      expect(find.text('已经是最后一章'), findsOneWidget);
+      await tester.tap(find.text('返回本章'));
+      await tester.pump();
+      await settle(tester);
       expect(indicator(tester), '3/3');
       final saved = await tester.runAsync(
         () => repository.chapterPositionOf('stress-src', 'book', 'c1'),
@@ -587,6 +618,11 @@ void main() {
       expect(indicator(tester), '1/1');
       await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
       await tester.pump();
+      expect(find.text('已读完：'), findsOneWidget);
+      expect(find.text('已经是最后一章'), findsOneWidget);
+      await tester.tap(find.text('返回本章'));
+      await tester.pump();
+      await settle(tester);
       expect(indicator(tester), '1/1');
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
@@ -672,6 +708,74 @@ void main() {
     container.dispose();
   });
   for (final mode in ReadingMode.values) {
+    testWidgets(
+      '${mode.name}: partial EOF waits but explicit next chapter skips unread',
+      (tester) async {
+        final dir = Directory.systemTemp.createTempSync('triomi_partial_skip_');
+        addTearDown(() => dir.deleteSync(recursive: true));
+        await realIo(tester, () async {
+          final checkpoint = await ImageDownloadCheckpoint.load(dir);
+          for (final name in ['0001.png', '0002.png']) {
+            await File('${dir.path}/$name').writeAsBytes(base64Decode(_pngBase64));
+            await checkpoint.record(name, 'https://example.test/$name');
+          }
+          await DownloadManifest.write(
+            directory: dir.path,
+            files: ['0001.png', '0002.png'],
+            title: c1.title,
+            totalPages: 3,
+            complete: false,
+          );
+        });
+        final nextImages = fileImages(dir, 'next', 2);
+        final source = _ScriptedSource()
+          ..behaviors['c2'] = [() => instant(nextImages)];
+        late _LiveDownloads downloads;
+        final (container, repository) = await pumpReader(
+          tester,
+          source: source,
+          chapters: [c1, c2],
+          mode: mode,
+          downloads: (db) => downloads = _LiveDownloads(db, dir.path),
+        );
+        await waitUntil(
+          tester,
+          () => find.text('1/2').evaluate().isNotEmpty,
+          'verified partial chapter opens',
+        );
+        tester.widget<Slider>(find.byType(Slider)).onChanged!(2);
+        await tester.pump(const Duration(milliseconds: 250));
+        await settle(tester);
+        await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+        await tester.pump();
+        expect(indicator(tester), '2/2');
+        expect(find.text('已到已下载页面，等待后续下载'), findsOneWidget);
+        expect(find.text('已读完：'), findsNothing);
+        expect(source.requests, isEmpty, reason: 'Partial EOF must not open the next chapter');
+        await tester.tap(find.byTooltip('下一章'));
+        await waitUntil(
+          tester,
+          () => source.requests.contains('c2') && find.text('1/2').evaluate().isNotEmpty,
+          'explicit chapter skip opens the next chapter',
+        );
+        await settle(tester);
+        expect(source.requests, ['c2']);
+        expect(find.text('已读完：'), findsNothing);
+        expect(await tester.runAsync(
+          () => repository.chapterPositionOf('stress-src', 'book', 'c1'),
+        ), 1, reason: 'Skipping retains the last downloaded page as resume position');
+        final states = await tester.runAsync(
+          () => repository.watchMangaChapterStates('stress-src', 'book').first,
+        );
+        expect(states!.where((state) => state.chapterRemoteId == 'c1'), isEmpty,
+            reason: 'An incomplete chapter must gain neither completion nor a false page count');
+        await tester.pumpWidget(const SizedBox());
+        await settle(tester);
+        await realIo(tester, () async => downloads.changes.close());
+        container.dispose();
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
+    );
     testWidgets(
       '${mode.name}: verified partial pages append without online load or reset',
       (tester) async {
@@ -826,10 +930,16 @@ void main() {
           () => instant([Uri.file('${dir.path}/${names.first}').toString()]),
         ];
         await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+        await tester.pump();
+        expect(find.text('已读完：'), findsOneWidget);
+        expect(find.text('第二话'), findsOneWidget);
+        expect(source.requests, isEmpty,
+            reason: 'A complete EOF first presents the actual next chapter');
+        await tester.tap(find.text('继续阅读'));
         await waitUntil(
           tester,
           () => find.text('1/1').evaluate().isNotEmpty,
-          'completed chapter boundary enters the next chapter',
+          'explicit continue opens the completed boundary’s next chapter',
         );
         expect(find.text('第二话'), findsOneWidget);
         expect(indicator(tester), '1/1');

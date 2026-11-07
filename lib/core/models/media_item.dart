@@ -1,5 +1,6 @@
 import 'manga_metadata_override.dart';
 import 'media_type.dart';
+import 'source_metadata.dart';
 
 /// 作品（一部番剧 / 漫画 / 小说）在应用内的统一表示。
 ///
@@ -18,6 +19,7 @@ class MediaItem {
     this.rating,
     this.status,
     this.localMangaMetadata,
+    this.sourceMetadata,
   });
 
   /// 来源标识。与 [remoteId] 一起构成业务键。
@@ -29,6 +31,7 @@ class MediaItem {
   final MediaType type;
   final String _title;
   final MangaMetadataOverride? localMangaMetadata;
+  final SourceMetadata? sourceMetadata;
   String get title =>
       type == MediaType.manga ? localMangaMetadata?.title ?? _title : _title;
   String get sourceTitle => _title;
@@ -63,6 +66,7 @@ class MediaItem {
     'tags': tags,
     'rating': rating,
     'status': status,
+    if (sourceMetadata != null) 'sourceMetadata': sourceMetadata!.toJson(),
     if (type == MediaType.manga && localMangaMetadata != null)
       'localMangaMetadata': localMangaMetadata!.toJson(),
   };
@@ -91,6 +95,7 @@ class MediaItem {
       ],
       rating: double.tryParse(json['rating']?.toString() ?? ''),
       status: json['status']?.toString(),
+      sourceMetadata: SourceMetadata.fromJson(json['sourceMetadata']),
       localMangaMetadata: type == MediaType.manga
           ? MangaMetadataOverride.readOptional(json['localMangaMetadata'])
           : null,
@@ -110,6 +115,7 @@ class MediaItem {
     rating: rating,
     status: status,
     localMangaMetadata: localMangaMetadata,
+    sourceMetadata: sourceMetadata,
   );
 
   /// Source providers must never receive local display overrides.
@@ -129,5 +135,6 @@ class MediaItem {
     rating: rating,
     status: status,
     localMangaMetadata: type == MediaType.manga ? metadata : null,
+    sourceMetadata: sourceMetadata,
   );
 }

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import 'app_update_service.dart';
+import 'app_update_task.dart';
 import 'app_update_widgets.dart';
 
 /// Network checks and installation always require an explicit user action.
@@ -19,7 +20,12 @@ class AppUpdatePage extends StatefulWidget {
 }
 
 class _AppUpdatePageState extends State<AppUpdatePage> {
-  late final AppUpdateService _service = widget.service ?? AppUpdateService();
+  late final AppUpdateTask _task = widget.service == null
+      ? AppUpdateTask.instance
+      : AppUpdateTask.forService(widget.service!);
+  late final AppUpdateService _service = _task.service;
+  bool _observingDownload = false;
+  bool _offerDownloadedWhenReady = false;
   final _zipPath = TextEditingController();
   final _manifestPath = TextEditingController();
   AppUpdateInfo? _current;
@@ -44,7 +50,8 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
   bool _unsupportedPlatform = false;
 
   bool get _busy => _operation != null;
-  bool get _locked => _busy || _prompting || _backPrompting;
+  bool get _locked =>
+      _busy || _prompting || _backPrompting || _task.handoffInFlight != null;
   bool get _android => _current?.platform == 'android';
   bool get _windows => _current?.platform == 'windows';
   bool get _supported => !_unsupportedPlatform && (_android || _windows);
@@ -70,7 +77,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
   @override
   void initState() {
     super.initState();
-    _service.onProgress = (progress) {
+    _task.onLocalProgress = (progress) {
       final now = _progressClock.elapsedMilliseconds;
       if (mounted &&
           _busy &&
@@ -82,7 +89,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         setState(() => _progress = progress);
       }
     };
-    _service.onInstallerFinished =
+    _task.onInstallerFinished =
         ({required bool installed, required bool released}) {
           if (!mounted) return;
           setState(() {
@@ -92,18 +99,22 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                 : '系统安装已取消或未完成；已核验的更新包保留，可明确重试或移除。';
           });
         };
-    _service.attachProgress();
+    _task.addListener(_syncDownload);
+    _syncDownload();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _loadCurrent();
+      if (mounted && !_task.active && _task.error == null && !_task.cancelled) {
+        _loadCurrent();
+      }
     });
   }
 
   @override
   void dispose() {
-    _service.onProgress = null;
-    _service.onInstallerFinished = null;
+    _task.removeListener(_syncDownload);
+    _task.onLocalProgress = null;
+    _task.onInstallerFinished = null;
     final token = _token;
-    if (token != null && _cancellable) {
+    if (token != null && _cancellable && !_observingDownload) {
       token.cancel();
       _service.cancel(token).catchError((Object _) {});
     }
@@ -111,14 +122,78 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     // Release page ownership even after handoff. Native installer leases keep
     // pending reads alive and reap the file when the installer returns.
     if (candidate != null &&
+        (!_task.owns(candidate) ||
+            !candidate.canInstall ||
+            (_handedOff && _android)) &&
         (!_handedOff || _android) &&
+        _task.handoffInFlight?.path != candidate.path &&
         !identical(candidate, _handoffInFlight)) {
+      _task.releaseCandidate(candidate);
       _service.abandon(candidate).catchError((Object _) {});
     }
     _zipPath.dispose();
     _manifestPath.dispose();
-    _service.close();
+    // The application owns the service and any live transfer, not this route.
     super.dispose();
+  }
+
+  void _syncDownload() {
+    if (!mounted) return;
+    setState(() {
+      _current ??= _task.current;
+      final candidate = _task.candidate;
+      if (candidate != null) {
+        _candidate = candidate;
+        _current = candidate.current;
+        _handedOff = _task.handedOff;
+        _handoffWindows =
+            _task.handedOff && candidate.offered.platform == 'windows';
+      }
+      final release = _task.release;
+      if (release != null) {
+        _selected ??= release;
+        _releases ??= [release];
+      }
+      if (_task.active) {
+        _observingDownload = true;
+        _cancellable = true;
+        _operation = '正在下载更新';
+        _operationTarget = release!.versionLabel;
+        _token = _task.token;
+        _progress = _task.progress;
+        _message = null;
+        _failed = false;
+        _retry = null;
+      } else if (_observingDownload || _task.error != null || _task.cancelled) {
+        _candidate = candidate;
+        if (_task.error == null && !_task.cancelled && candidate != null) {
+          _handedOff = false;
+          _handoffWindows = false;
+        }
+        _observingDownload = false;
+        _operation = null;
+        _token = null;
+        _progress = null;
+        _failed = _task.error != null;
+        _message =
+            _task.error ??
+            (_task.cancelled ? '已取消本次操作，未启动安装器。应用和个人数据保持不变。' : null);
+        _retry = _failed ? _downloadRelease : null;
+      }
+    });
+    if (!_task.active && _offerDownloadedWhenReady) {
+      _offerDownloadedWhenReady = false;
+      if (_task.error == null &&
+          !_task.cancelled &&
+          _task.candidate != null &&
+          ModalRoute.of(context)?.isCurrent == true) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+            _offerReady(downloaded: true);
+          }
+        });
+      }
+    }
   }
 
   Future<void> _run(
@@ -128,7 +203,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     Future<void> Function()? retry,
     bool cancellable = true,
   }) async {
-    if (!mounted || _busy) return;
+    if (!mounted || _busy || _task.handoffInFlight != null) return;
     final token = AppUpdateCancellation();
     setState(() {
       _operation = operation;
@@ -212,6 +287,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
             final pending = await _service.pendingCandidate();
             token.check();
             if (mounted && pending != null) {
+              _task.markHandedOff(pending);
               setState(() {
                 _candidate = pending;
                 _handedOff = true;
@@ -250,8 +326,12 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
           );
     setState(() {
       _current = current;
+      _task.current = current;
       _unsupportedPlatform =
           current.platform != 'android' && current.platform != 'windows';
+      if (candidate != null && refreshed != null && _task.owns(candidate)) {
+        _task.retain(refreshed);
+      }
       _candidate = refreshed;
     });
   }
@@ -289,6 +369,16 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
   }
 
   Future<void> _cancelActive() async {
+    if (_task.active) {
+      try {
+        await _task.cancel();
+      } catch (_) {
+        if (mounted) {
+          setState(() => _message = '已请求停止，正在等待当前系统操作清理完成。');
+        }
+      }
+      return;
+    }
     final token = _token;
     if (token == null || token.cancelled || !_cancellable) return;
     token.cancel();
@@ -382,7 +472,10 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         return;
       }
       final old = _candidate;
-      if (old != null && (!_handedOff || _android)) await _service.discard(old);
+      if (old != null && (!_handedOff || _android)) {
+        await _service.discard(old);
+        _task.releaseCandidate(old);
+      }
       token.check();
       if (!mounted) {
         await _service.discard(candidate);
@@ -392,6 +485,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         _candidate = candidate;
         _current = candidate.current;
         _handedOff = false;
+        _task.retain(candidate);
       });
     } catch (_) {
       await _service.discard(candidate);
@@ -405,25 +499,15 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     final consent = await _confirm(
       '下载 ${release.versionLabel}',
       '从官方 GitHub $appUpdateRepository 匿名下载${_windows ? '完整 Windows ZIP 与成员清单' : 'Android APK'}。'
-          '下载后将核对文件大小、SHA-256 和实际版本，最多 512 MiB，不会自动安装。\n\n'
+          '核验大小、SHA-256 与版本，最多 512 MiB。安装需另行确认。\n\n'
           '${_windows ? 'Windows 包未签名：完整性校验不等同发布者签名。' : 'Android 还需通过系统验签，并匹配当前实际安装证书。'}',
       '下载并核验',
       actionKey: 'app-update-download-confirm',
     );
     if (consent != true || !mounted) return;
-    AppUpdateCandidate? downloaded;
-    await _run(
-      '正在下载更新',
-      (token) async {
-        downloaded = await _service.downloadRelease(release, token);
-        await _acceptCandidate(downloaded, token);
-      },
-      targetLabel: release.versionLabel,
-      retry: _downloadRelease,
-    );
-    if (mounted && identical(downloaded, _candidate)) {
-      await _offerReady(downloaded: true);
-    }
+    _task.current = _current;
+    _offerDownloadedWhenReady = true;
+    _task.start(release).ignore();
   }
 
   Future<void> _pickApk() async {
@@ -445,8 +529,8 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
   Future<void> _windowsPackage() async {
     final consent = await _confirm(
       '核验本地 Windows 更新包',
-      '仅复制并核验 ZIP、外部完整性清单、所有成员和 EXE 实际版本。'
-          '请自行确认文件来源；哈希不代表发布者签名。不会运行候选文件或覆盖当前程序。',
+      '核验 ZIP、外部完整性清单、全部成员和 EXE 版本，不执行或覆盖程序。'
+          '请确认文件来源：哈希不代表发布者签名。',
       '确认来源并核验',
     );
     if (consent != true || !mounted) return;
@@ -528,7 +612,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         );
         if (mounted && !_failed) {
           setState(() {
-            _message = '返回后请再次点击安装并确认此更新包；不会自动启动安装。';
+            _message = '返回后请再次点击安装并确认更新包。';
           });
         }
       }
@@ -546,14 +630,17 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
       windows ? '正在打开更新包位置' : '正在打开系统安装器',
       (token) async {
         _handoffInFlight = candidate;
+        _task.handoffInFlight = candidate;
         try {
           if (windows) {
             await _service.revealWindowsBundle(candidate, token);
           } else {
             await _service.launchInstaller(candidate);
           }
-          if (!mounted && !windows) {
+          _task.markHandedOff(candidate);
+          if (!mounted && !windows && !_task.hasConsumers) {
             await _service.abandon(candidate).catchError((Object _) {});
+            _task.releaseCandidate(candidate);
           }
           if (mounted) {
             setState(() {
@@ -562,10 +649,14 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
             });
           }
         } catch (_) {
-          if (!mounted && !alreadyHandedOff) await _service.abandon(candidate);
+          if (!mounted && !_task.hasConsumers) {
+            if (!alreadyHandedOff) await _service.abandon(candidate);
+            _task.releaseCandidate(candidate);
+          }
           rethrow;
         } finally {
           _handoffInFlight = null;
+          _task.handoffInFlight = null;
         }
       },
       targetLabel:
@@ -582,6 +673,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
       '正在移除更新暂存',
       (_) async {
         await _service.discard(candidate);
+        _task.releaseCandidate(candidate);
         if (mounted) {
           setState(() {
             _candidate = null;
@@ -786,7 +878,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         : '当前已是最新构建';
     final issue = selected == null ? null : _releaseIssue(selected);
     return PopScope(
-      canPop: !_busy,
+      canPop: !_busy || _observingDownload,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _explainBusyBack();
       },
@@ -821,6 +913,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                       progress: _progress,
                       onCancel: _cancellable ? _cancelActive : null,
                       cancelling: _token?.cancelled == true,
+                      continuesInBackground: _observingDownload,
                     ),
                   ],
                   if (_message != null) ...[
@@ -977,8 +1070,8 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                         const SizedBox(height: AppSpacing.xs),
                         Text(
                           _unsupportedPlatform
-                              ? '请通过当前平台的发布渠道更新 Triomi。此处不提供应用内下载或安装。'
-                              : '仅在你点击时匿名检查官方 GitHub 发布（含测试版）。不发送来源账号、Cookie 或令牌，也不自动安装。',
+                              ? '请通过当前平台的发布渠道更新。'
+                              : '匿名查询官方 GitHub 发布，含测试版；不发送账号、Cookie 或令牌。',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
@@ -1198,9 +1291,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                               current.signerSha256 !=
                                   appUpdateProductionSigner) ...[
                             const SizedBox(height: AppSpacing.sm),
-                            const Text(
-                              '当前证书与正式证书不同，正式 APK 无法直接覆盖。更新仍必须匹配实际安装证书，不会跳过验签。',
-                            ),
+                            const Text('当前证书与正式证书不同。更新 APK 必须匹配当前安装证书。'),
                           ],
                           const SizedBox(height: AppSpacing.sm),
                           const Text(

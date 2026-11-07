@@ -16,7 +16,10 @@ import '../discover/widgets/media_item_card.dart';
 import '../library/data/library_providers.dart';
 import '../library/data/library_repository.dart';
 import '../profile/data/sync_providers.dart';
+import 'anime_follow_sync_dialog.dart';
 import 'data/anime_collection_service.dart';
+import 'data/anime_follow_cover_repair.dart';
+import 'data/anime_follow_metadata.dart';
 
 const animeFollowStatuses = <String, String>{
   '': '全部',
@@ -110,7 +113,11 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(animeFollowCoverRepairProvider);
     final local = ref.watch(animeFollowsProvider);
+    final totals =
+        ref.watch(animeFollowTotalsProvider).asData?.value ??
+        const <(String, String), int>{};
     final rows = [
       for (final view in local.asData?.value ?? const <LibraryItemView>[])
         AnimeCollectionEntry(
@@ -118,6 +125,7 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
           status: view.entry.status,
           progress: view.entry.progress.floor(),
           updatedAt: view.entry.updatedAt,
+          totalEpisodes: totals[(view.item.sourceId, view.item.remoteId)],
         ),
     ];
     final filtered = rows
@@ -140,8 +148,21 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
+              Text('${filtered.length} 部'),
+              if (rows.any(
+                (row) =>
+                    row.item.sourceId == 'bangumi-anime' &&
+                    (row.item.coverUrl?.trim().isEmpty ?? true),
+              ))
+                IconButton(
+                  tooltip: '重试缺失封面',
+                  onPressed: _busy
+                      ? null
+                      : () => ref.invalidate(animeFollowCoverRepairProvider),
+                  icon: const Icon(Icons.image_search_outlined),
+                ),
               IconButton(
-                tooltip: '云同步',
+                tooltip: '同步收藏',
                 onPressed: _busy ? null : _syncCloud,
                 icon: const Icon(Icons.cloud_sync_outlined),
               ),
@@ -260,7 +281,7 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
                         : error != null
                         ? '未能读取收藏，请重试或检查账号。'
                         : rows.isEmpty
-                        ? '在动画详情加入收藏夹；连接 WebDAV 后可自动跨设备同步。'
+                        ? '在动画详情中加入收藏。'
                         : '没有符合条件的追番',
                   ),
                 )
@@ -309,7 +330,7 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
               semanticsLabel: item.title,
             ),
             subtitle: Text(
-              '$sourceName · ${animeFollowStatuses[row.status] ?? row.status} · ${row.progress} 集',
+              '${animeFollowStatuses[row.status] ?? row.status} · ${animeWatchProgressLabel(row.progress, row.totalEpisodes)}',
             ),
             onLongPress: _busy ? null : () => toggle(item),
             onTap: _busy ? null : () => open(item),
@@ -341,14 +362,14 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
             mainAxisExtent:
                 width / ratio +
                 scale.scale(13) * 1.5 +
-                scale.scale(11) * 1.5 +
+                scale.scale(11) * 3 +
                 12,
           ),
           itemBuilder: (context, index) {
             final row = entries[index], item = row.item;
             return Semantics(
               label:
-                  '${item.title}，${animeFollowStatuses[row.status]}，${row.progress} 集',
+                  '${item.title}，${animeFollowStatuses[row.status]}，${animeWatchProgressLabel(row.progress, row.totalEpisodes)}',
               child: InkWell(
                 onTap: () => open(item),
                 onLongPress: () => toggle(item),
@@ -374,8 +395,8 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
                       style: const TextStyle(fontSize: 13),
                     ),
                     Text(
-                      '${animeFollowStatuses[row.status] ?? row.status} · ${row.progress} 集',
-                      maxLines: 1,
+                      '${animeFollowStatuses[row.status] ?? row.status} · ${animeWatchProgressLabel(row.progress, row.totalEpisodes)}',
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 11),
                     ),
@@ -390,7 +411,7 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
   }
 
   Future<void> _syncCloud() async {
-    await context.push(AppRoutes.webdav);
+    await showAnimeFollowSyncDialog(context);
   }
 
   Future<void> _setStatus(String status) async {
@@ -402,8 +423,8 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
         builder: (context) => AlertDialog(
           title: const Text('取消所选本机收藏'),
           content: Text(
-            '取消 ${keys.length} 部本机收藏；历史、缓存、下载与 Bangumi 收藏不会删除。'
-            '${ref.read(webDavConfigProvider).isConfigured ? '下次追番 WebDAV 同步将同步此删除；重新收藏可恢复。' : ''}',
+            '取消 ${keys.length} 部本机收藏，保留历史、缓存、下载与 Bangumi 收藏。'
+            '${ref.read(webDavConfigProvider).isConfigured ? '此变更将同步到 WebDAV。' : ''}',
           ),
           actions: [
             TextButton(
@@ -452,7 +473,7 @@ class _AnimeFollowsPageState extends ConsumerState<AnimeFollowsPage> {
           ..clear()
           ..addAll(failed);
         _message = errors.isEmpty
-            ? '已更新 $succeeded 项；已开启的自动同步会合并到云端'
+            ? '已更新 $succeeded 项'
             : '$succeeded 项已更新，${failed.length} 项失败并保留选择：${errors.toSet().join('；')}';
       });
     }

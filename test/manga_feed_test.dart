@@ -183,11 +183,14 @@ void main() {
         home: Builder(
           builder: (context) => Scaffold(
             body: TextButton(
-              onPressed: () async {
-                result = await showDialog<List<Map<String, Object?>>>(
+              onPressed: () {
+                showDialog<void>(
                   context: context,
-                  builder: (_) =>
-                      MangaFiltersDialog(fresh: fresh, saved: saved),
+                  builder: (_) => MangaFiltersDialog(
+                    fresh: fresh,
+                    saved: saved,
+                    onChanged: (rows) => result = rows,
+                  ),
                 );
               },
               child: const Text('open'),
@@ -199,21 +202,26 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     expect(
-      tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
+      tester.widget<FilterChip>(find.widgetWithText(FilterChip, '章节')).selected,
       true,
     );
     await tester.tap(find.widgetWithText(TextButton, '重置'));
     await tester.pumpAndSettle();
     expect(
-      tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
+      tester.widget<FilterChip>(find.widgetWithText(FilterChip, '章节')).selected,
       false,
     );
-    expect(find.text('中文'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, '应用'));
-    await tester.pumpAndSettle();
+    expect(
+      tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '中文')).selected,
+      true,
+    );
     expect(result![0]['state'], 0);
     expect(result![1]['state'], false);
     expect(saved[1]['state'], true);
+    expect(fresh[1]['state'], false);
+    await tester.tap(find.widgetWithText(FilledButton, '完成'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MangaFiltersDialog), findsNothing);
   });
 
   test('同条件显式添加复用身份、名称和顺序；删除后只有显式添加恢复', () async {

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/db/app_database.dart';
 import '../../core/models/chapter.dart';
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
@@ -40,6 +41,7 @@ import '../novel/reader/novel_reader_page.dart';
 import '../player/episode_selector.dart';
 import '../player/player_page.dart';
 import '../reader/manga_reader_page.dart';
+import '../reader/manga_reading_order.dart';
 import '../search/search_page.dart';
 import '../tracking/bind_sheet.dart';
 import '../tracking/data/tracking_models.dart';
@@ -48,10 +50,10 @@ import 'anime_info_repository.dart';
 import 'anime_info_sheet.dart';
 import 'anime_source_sheet.dart';
 import 'chapter_download_picker.dart';
-import 'manga_related_section.dart';
 
 part 'detail_presentations.dart';
 part 'detail_catalog.dart';
+part 'detail_chapter_actions.dart';
 
 /// 详情页：作品信息 + 章节目录。
 ///
@@ -82,6 +84,9 @@ class _DetailPageState extends ConsumerState<DetailPage> {
   Map<String, Object?>? _animeOverview;
   String _animeSection = 'info';
   final _scrollController = ScrollController();
+  bool _downloadBusy = false;
+  ContentSource? _readerCatalogSource;
+  Future<void> _offlineRequests = Future<void>.value();
 
   void _selectAnimeSection(String section) {
     setState(() => _animeSection = section);
@@ -143,10 +148,15 @@ class _DetailPageState extends ConsumerState<DetailPage> {
 
   Future<_DetailData> _load({bool refresh = false}) async {
     final generation = ++_generation;
+    if (widget.item.type != MediaType.anime) _readerCatalogSource = null;
     _metadataOwner?.cancel();
     final owner = _metadataOwner = SourceRequestCancellation();
     _metadataBusy = true;
     _metadataError = null;
+    if (widget.item.type != MediaType.anime) {
+      _directoryBusy = true;
+      _directoryError = null;
+    }
     final cached = await _loadFromCache(
       fallbackItem: _data.item ?? widget.item,
     );
@@ -154,7 +164,10 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     if (cached != null) _publish(cached, generation);
     final item = _data.item ?? widget.item;
     if (item.sourceId == 'local-comic') {
-      _metadataBusy = false;
+      setState(() {
+        _metadataBusy = false;
+        _directoryBusy = false;
+      });
       return _data;
     }
     if (item.type == MediaType.anime && item.sourceId != 'bangumi-anime') {
@@ -229,12 +242,13 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       var detail = item;
       final metadata = owner.run(() async {
         try {
-          detail = await provider.detail(item.sourceSnapshot);
-          if (detail.type != item.type ||
-              detail.sourceId != item.sourceId ||
-              detail.remoteId != item.remoteId) {
+          final resolved = await provider.detail(item.sourceSnapshot);
+          if (resolved.type != item.type ||
+              resolved.sourceId != item.sourceId ||
+              resolved.remoteId != item.remoteId) {
             throw StateError('来源返回的作品身份不一致');
           }
+          detail = resolved;
           if (owner.cancelled || !mounted || generation != _generation) return;
           _publish(
             _DetailData(
@@ -257,11 +271,14 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           }
         }
       });
-      // Directory reads are independent: metadata failure must not suppress
-      // an otherwise available cached/live reader directory.
+      // Plugins can return hidden directory IDs or memo state in detail. Wait
+      // for that snapshot; a metadata failure still permits the original item.
       if (item.type != MediaType.anime) {
-        final directory = _loadReaderDirectory(item, entry, generation);
-        await Future.wait([metadata, directory]);
+        await metadata;
+        if (!mounted || generation != _generation || owner.cancelled) {
+          return _data;
+        }
+        await _loadReaderDirectory(detail, entry, generation);
       } else {
         await metadata;
       }
@@ -269,7 +286,10 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       if (mounted && generation == _generation && !owner.cancelled) {
         setState(() {
           _metadataError = '$error';
-          if (item.type != MediaType.anime) _directoryError = '$error';
+          if (item.type != MediaType.anime) {
+            _directoryError = '$error';
+            _directoryBusy = false;
+          }
         });
       }
     } finally {
@@ -292,6 +312,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         () => (entry.source as DetailProvider).chapters(item.sourceSnapshot),
       );
       if (!mounted || generation != _generation) return;
+      _readerCatalogSource = entry.source;
       _publish(
         _DetailData(
           item: _data.item,
@@ -488,7 +509,56 @@ class _DetailPageState extends ConsumerState<DetailPage> {
 
   // Download selected readable chapters; whole-book file downloads remain a
   // separate, source-owned permission flow (notably for LNS).
-  Future<void> _downloadOffline() async {
+  Future<void> _downloadOffline({
+    Set<String>? selectedChapterIds,
+    List<Chapter>? expectedChapters,
+    int? expectedGeneration,
+  }) {
+    if (widget.item.type == MediaType.anime) {
+      return _performDownloadOffline(selectedChapterIds: selectedChapterIds);
+    }
+    final ids = selectedChapterIds == null
+        ? null
+        : Set<String>.of(selectedChapterIds);
+    final chapters = expectedChapters ?? _data.chapters;
+    final generation = expectedGeneration ?? _generation;
+    final request = _offlineRequests.then(
+      (_) => _performDownloadOffline(
+        selectedChapterIds: ids,
+        expectedChapters: chapters,
+        expectedGeneration: generation,
+      ),
+    );
+    _offlineRequests = request;
+    return request;
+  }
+
+  Future<void> _performDownloadOffline({
+    Set<String>? selectedChapterIds,
+    List<Chapter>? expectedChapters,
+    int? expectedGeneration,
+  }) async {
+    if (!mounted) return;
+    if (_downloadBusy) return;
+    _downloadBusy = true;
+    try {
+      await _enqueueOffline(
+        selectedChapterIds: selectedChapterIds,
+        expectedChapters: expectedChapters,
+        expectedGeneration: expectedGeneration,
+      );
+    } catch (error) {
+      _toast('无法加入下载队列：${SourceException.sanitizeMessage('$error')}');
+    } finally {
+      _downloadBusy = false;
+    }
+  }
+
+  Future<void> _enqueueOffline({
+    Set<String>? selectedChapterIds,
+    List<Chapter>? expectedChapters,
+    int? expectedGeneration,
+  }) async {
     if (widget.item.sourceId == 'local-comic') {
       _toast('本地漫画无需网络下载；图片缺失时请恢复包含媒体的备份或重新导入原始文件');
       return;
@@ -497,6 +567,12 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         ? _playback ?? _data
         : await (_future ?? _load());
     if (!mounted) return;
+    if (expectedChapters != null &&
+        (!identical(expectedChapters, data.chapters) ||
+            expectedGeneration != _generation)) {
+      _toast('来源或目录已改变，请重新选择下载章节');
+      return;
+    }
     final item = data.item;
     if (item == null || data.chapters.isEmpty) {
       _toast('还没有拿到章节目录，无法下载');
@@ -517,50 +593,152 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               entry.supports(SourceCapability.content),
         )
         .firstOrNull;
-    if (origin == null || !data.supportsContent) {
+    if (origin == null ||
+        !data.supportsContent ||
+        item.type != MediaType.anime &&
+            !identical(origin.source, _readerCatalogSource)) {
       _toast('当前来源不可下载，请启用来源并刷新目录后再试');
       return;
     }
     final unit = item.type == MediaType.anime ? '集' : '章';
-    final downloadable = await showChapterDownloadPicker(
-      context,
-      item: item,
-      chapters: data.chapters,
-      supportsContent: data.supportsContent,
-    );
-    if (!mounted || downloadable == null || downloadable.isEmpty) return;
+    final eligible = _downloadableChapterIds(item, data.chapters);
+    final Set<String>? selection;
+    if (item.type == MediaType.anime) {
+      selection = await showChapterDownloadPicker(
+        context,
+        item: item,
+        chapters: data.chapters,
+        supportsContent: data.supportsContent,
+      );
+    } else if (selectedChapterIds != null) {
+      selection = selectedChapterIds;
+    } else {
+      final action = await showModalBottomSheet<String>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                key: const ValueKey('detail-download-all'),
+                leading: const Icon(Icons.download_outlined),
+                title: Text(item.type == MediaType.novel ? '下载全部分卷' : '下载全部章节'),
+                onTap: () => Navigator.pop(context, 'all'),
+              ),
+              ListTile(
+                key: const ValueKey('detail-download-unread'),
+                leading: const Icon(Icons.markunread_outlined),
+                title: Text(
+                  item.type == MediaType.novel ? '按卷下载未读章节' : '下载未读章节',
+                ),
+                subtitle: item.type == MediaType.novel
+                    ? const Text('按分卷归组，跳过每一章的已读记录')
+                    : null,
+                onTap: () => Navigator.pop(context, 'unread'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (!mounted || action == null) return;
+      final read = action == 'unread'
+          ? await ref
+                .read(libraryRepositoryProvider)
+                .readChapterKeysOf(item.sourceId, item.remoteId)
+          : const <(String, String)>{};
+      selection = {
+        for (final chapter in data.chapters)
+          if (chapter.sourceId == item.sourceId &&
+              eligible.contains(chapter.remoteId) &&
+              !read.contains((chapter.sourceId, chapter.remoteId)))
+            chapter.remoteId,
+      };
+    }
+    if (!mounted || selection == null) return;
+    if (selection.isEmpty) {
+      _toast('没有未读章节需要下载');
+      return;
+    }
+    final downloadable = selection.intersection(eligible);
+    if (downloadable.isEmpty) {
+      _toast('没有可下载的未锁定章节');
+      return;
+    }
+    final volumeCount = item.type == MediaType.novel
+        ? data.chapters
+              .where(
+                (chapter) =>
+                    downloadable.contains(chapter.remoteId) &&
+                    chapter.sourceId == item.sourceId,
+              )
+              .map((chapter) => chapter.volumeTitle?.trim() ?? '')
+              .toSet()
+              .length
+        : 0;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          item.type == MediaType.novel
-              ? '缓存所选章节'
-              : '下载所选${item.type == MediaType.anime ? '剧集' : '章节'}',
-        ),
-        content: Text(
-          '将下载 ${downloadable.length} $unit。\n'
-          '${switch (item.type) {
-            MediaType.novel => '小说正文（含来源要求的字体）会存进本地数据库。',
-            MediaType.anime => '剧集视频会存到应用目录（只下明文线路）。',
-            MediaType.manga => '漫画图片会存到应用目录。',
-          }}\n'
-          '锁定章节不会入队；下载在后台进行，可在「下载管理」查看进度。',
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            key: const ValueKey('detail-download-start'),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('开始下载'),
-          ),
-        ],
-      ),
-    );
+    final confirmed = item.type != MediaType.anime && selectedChapterIds != null
+        ? true
+        : await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text(
+                item.type == MediaType.novel
+                    ? '按卷缓存正文'
+                    : '下载所选${item.type == MediaType.anime ? '剧集' : '章节'}',
+              ),
+              content: Text(
+                '${item.type == MediaType.novel ? '将按 $volumeCount 卷缓存 ${downloadable.length} 章。' : '将下载 ${downloadable.length} $unit。'}\n'
+                '${switch (item.type) {
+                  MediaType.novel => '正文与来源要求的字体会保存在本机，仍需正常阅读权限。',
+                  MediaType.anime => '剧集视频会存到应用目录（只下明文线路）。',
+                  MediaType.manga => '漫画图片会存到应用目录。',
+                }}\n'
+                '跳过锁定章节，进度可在「下载管理」查看。',
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  key: const ValueKey('detail-download-start'),
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('开始下载'),
+                ),
+              ],
+            ),
+          );
     if (confirmed != true || !mounted) return;
+    // Keep active and completed queue entries untouched on repeated requests.
+    final resumable = <int>[];
+    if (item.type != MediaType.anime) {
+      final existing = await ref
+          .read(downloadRepositoryProvider)
+          .listForItem(item.sourceId, item.remoteId);
+      downloadable.removeAll({
+        for (final row in existing)
+          if (row.status == 'done' ||
+              row.status == 'queued' ||
+              row.status == 'running')
+            row.chapterRemoteId,
+      });
+      resumable.addAll([
+        for (final row in existing)
+          if (row.chapterSourceId == item.sourceId &&
+              downloadable.contains(row.chapterRemoteId) &&
+              (row.status == 'paused' || row.status == 'failed'))
+            row.id,
+      ]);
+      if (downloadable.isEmpty) {
+        _toast('所选章节已下载或已在队列中');
+        return;
+      }
+    }
     final snapshot = await ref.read(sourcesProvider.future);
     if (!mounted) return;
     final current = item.type == MediaType.anime ? _playback : _data;
@@ -581,13 +759,18 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       _toast('来源或目录已改变，请重新选择下载章节');
       return;
     }
-    final queued = await ref
-        .read(downloadsProvider.notifier)
-        .enqueue(
-          item: item,
-          chapters: data.chapters,
-          selectedChapterIds: downloadable,
-        );
+    final controller = ref.read(downloadsProvider.notifier);
+    final queued = await controller.enqueue(
+      item: item,
+      chapters: data.chapters,
+      selectedChapterIds: downloadable,
+    );
+    // Enqueue is committed after the guards above. Finish with this captured
+    // controller even if the page leaves or refreshes while it awaits storage:
+    // only resumeEntry clears a user pause's in-memory stop marker.
+    for (final id in resumable) {
+      await controller.resumeEntry(id);
+    }
     _toast('已加入下载队列：$queued $unit');
   }
 
@@ -624,7 +807,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                 children: <Widget>[
                   CircularProgressIndicator(),
                   SizedBox(height: 12),
-                  Text('准备正文中，已下载章节无需联网，锁定章节会自动跳过…'),
+                  Text('正在准备正文，跳过锁定章节…'),
                 ],
               ),
             ),
@@ -780,7 +963,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
       builder: (context) => AlertDialog(
         title: const Text('轻书架站点下载'),
         content: Text(
-          '$status\n\n整书 EPUB 请在轻书架网站确认费用并下载；应用不代扣金币、不导出整书。逐章离线缓存请使用目录旁的「缓存章节」，仍受正常正文阅读权限限制。',
+          '$status\n\n整书 EPUB 请到轻书架网站确认费用并下载；离线阅读可用「下载本卷」或章节下载按钮，仍需具备正文阅读权限。',
         ),
         actions: [
           TextButton(
@@ -810,6 +993,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final readerCatalogGeneration = _generation;
     final rawItem = _data.item ?? widget.item;
     final metadata = rawItem.type == MediaType.manga
         ? ref.watch(
@@ -1004,12 +1188,14 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               else if (item.type == MediaType.manga)
                 _MangaHeader(
                   data: data,
+                  directoryLoading: _directoryBusy,
                   historyRevision: _readRevision,
                   onReturned: _refreshReadHistory,
                 )
               else
                 _NovelBookHeader(
                   data: data,
+                  directoryLoading: _directoryBusy,
                   historyRevision: _readRevision,
                   onReturned: _refreshReadHistory,
                 ),
@@ -1039,7 +1225,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                   item: playbackItem,
                   onSourceChanged: _refreshDetails,
                 ),
-              if (_metadataBusy)
+              if (_metadataBusy && item.type != MediaType.manga)
                 const ListTile(
                   leading: SizedBox(
                     width: 20,
@@ -1048,7 +1234,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                   ),
                   title: Text('补全资料'),
                 ),
-              if (_metadataError != null)
+              if (_metadataError != null && item.type != MediaType.manga)
                 _DetailLoadFailure(
                   title: '资料暂不可用',
                   error: _metadataError!,
@@ -1123,7 +1309,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               if (data.offline && !_metadataBusy)
                 const ListTile(
                   leading: Icon(Icons.offline_pin_outlined),
-                  title: Text('显示本机缓存；刷新失败不会清除已缓存资料或目录'),
+                  title: Text('正在显示本机缓存'),
                 ),
             ])
               SliverToBoxAdapter(child: section),
@@ -1132,7 +1318,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                 item: playable.item,
                 chapters: playable.chapters,
                 supportsContent: playable.supportsContent,
-                loadError: _directoryBusy ? '正在获取目录' : _directoryError,
+                loading: _directoryBusy,
+                loadError: _directoryError,
                 selectedChapterId: item.type == MediaType.anime
                     ? _selectedEpisodeId
                     : null,
@@ -1144,6 +1331,16 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                         playable.chapters.isNotEmpty &&
                         item.sourceId != 'local-comic'
                     ? _downloadOffline
+                    : null,
+                onDownloadSelection:
+                    playable.supportsContent &&
+                        playable.chapters.isNotEmpty &&
+                        item.sourceId != 'local-comic'
+                    ? (ids) => _downloadOffline(
+                        selectedChapterIds: ids,
+                        expectedChapters: playable.chapters,
+                        expectedGeneration: readerCatalogGeneration,
+                      )
                     : null,
                 historyRevision: _readRevision,
                 onReturned: _refreshReadHistory,
@@ -1164,9 +1361,6 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                   padding: const EdgeInsets.all(16),
                   child: _ExpandableSynopsis(text: item.description!),
                 ),
-              if (item.type == MediaType.manga &&
-                  item.sourceId != 'local-comic')
-                MangaRelatedSection(item: item),
               if (item.type == MediaType.novel &&
                   item.sourceId != 'local-comic')
                 BookCommentsSection(item: item),
@@ -1235,9 +1429,11 @@ class _ChapterSection extends StatelessWidget {
     required this.chapters,
     required this.supportsContent,
     this.loadError,
+    this.loading = false,
     this.selectedChapterId,
     this.onSelected,
     this.onDownload,
+    this.onDownloadSelection,
     this.onReturned,
     this.historyRevision = 0,
   });
@@ -1249,9 +1445,11 @@ class _ChapterSection extends StatelessWidget {
   /// 详情/目录加载失败的原因（null 表示请求成功）。空目录是否可操作
   /// 取决于它：成功但空 → 引导搜索；失败 → 不把失败伪装成空目录。
   final String? loadError;
+  final bool loading;
   final String? selectedChapterId;
   final ValueChanged<String>? onSelected;
   final VoidCallback? onDownload;
+  final ValueChanged<Set<String>>? onDownloadSelection;
   final VoidCallback? onReturned;
   final int historyRevision;
 
@@ -1296,6 +1494,9 @@ class _ChapterSection extends StatelessWidget {
     }
 
     if (chapters.isEmpty) {
+      if (loading) {
+        return const SliverToBoxAdapter(child: SizedBox.shrink());
+      }
       // Only a successful directory request may offer an empty-state search.
       if (loadError == null) {
         return SliverToBoxAdapter(
@@ -1377,6 +1578,7 @@ class _ChapterSection extends StatelessWidget {
         onReturned?.call();
       },
       onDownload: onDownload,
+      onDownloadSelection: onDownloadSelection,
       historyRevision: historyRevision,
     );
   }

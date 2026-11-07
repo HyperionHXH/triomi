@@ -22,6 +22,7 @@ class KazumiRule {
   final Map<String, dynamic> raw;
   final SourceDescriptor descriptor;
   final KazumiApiRule? searchApi, chapterApi;
+  bool get deprecated => raw['deprecated'] == true;
 
   static bool recognizes(String text) {
     try {
@@ -34,7 +35,7 @@ class KazumiRule {
     }
   }
 
-  static KazumiRule parse(String text) {
+  static KazumiRule parse(String text, {bool allowDeprecated = false}) {
     final Object? decoded;
     try {
       decoded = jsonDecode(text);
@@ -52,7 +53,7 @@ class KazumiRule {
       return value.trim();
     }
 
-    if (decoded['deprecated'] == true) {
+    if (decoded['deprecated'] == true && !allowDeprecated) {
       throw const RuleFormatException('上游已弃用此规则，不能安装');
     }
     final api = int.tryParse('${decoded['api'] ?? '1'}');
@@ -115,20 +116,28 @@ class KazumiRule {
       if (chapterApi == null) ...['chapterRoads', 'chapterResult'],
     ]) {
       final value = requiredText(key);
-      if (!value.startsWith('/') && !value.startsWith('./')) {
+      final self = value == '.' && key != 'searchList' && key != 'chapterRoads';
+      if (!self && !value.startsWith('/') && !value.startsWith('./')) {
         throw RuleFormatException('$key 必须是 XPath 选择器');
       }
       try {
-        HtmlSelector.selectAll(
-          '<html><body></body></html>',
-          value.startsWith('/') ? '.$value' : value,
-        );
+        if (self) {
+          final node = HtmlSelector.selectAll(
+            '<a href="/self">self</a>',
+            'a',
+          ).single;
+          HtmlSelector.selectWithin(node, value);
+        } else {
+          HtmlSelector.selectAll(
+            '<html><body></body></html>',
+            value.startsWith('/') ? '.$value' : value,
+          );
+        }
       } catch (_) {
         throw RuleFormatException('$key 的 XPath 无效');
       }
     }
-    final id =
-        'kazumi:${sha256.convert(utf8.encode(name.toLowerCase())).toString().substring(0, 24)}';
+    final id = idForName(name);
     return KazumiRule._(
       decoded,
       SourceDescriptor(
@@ -150,6 +159,9 @@ class KazumiRule {
   }
 
   String get text => jsonEncode(raw);
+
+  static String idForName(String name) =>
+      'kazumi:${sha256.convert(utf8.encode(name.toLowerCase())).toString().substring(0, 24)}';
 }
 
 class KazumiSource implements SearchProvider, DetailProvider, ContentProvider {

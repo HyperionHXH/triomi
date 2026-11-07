@@ -20,11 +20,15 @@ class MangaExtensionsPage extends StatelessWidget {
         initialQuery: initialQuery,
       );
     }
-    return Scaffold(
-      appBar: Navigator.of(context).canPop()
-          ? AppBar(title: const Text('插件库'))
-          : null,
-      body: MihonExtensionsSheet(initialQuery: initialQuery),
+    return MihonExtensionsSheet(
+      initialQuery: initialQuery,
+      onRules: () async {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => const SourcesPage(initialType: MediaType.manga),
+          ),
+        );
+      },
     );
   }
 }

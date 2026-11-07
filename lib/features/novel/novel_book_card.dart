@@ -128,44 +128,84 @@ class NovelBookCard extends StatelessWidget {
               ],
               if (item.tags.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.xxs),
-                Wrap(
-                  spacing: AppSpacing.xxs,
-                  runSpacing: AppSpacing.xxs,
-                  children: [
-                    for (final tag in item.tags.take(3))
-                      TextButton(
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(48, 48),
-                          textStyle: theme.textTheme.bodySmall,
-                        ),
-                        onPressed: () => searchTag(tag),
-                        child: Text('#$tag'),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final shape = RoundedRectangleBorder(
+                      borderRadius: AppRadius.controlRadius,
+                      side: BorderSide(color: theme.colorScheme.outline),
+                    );
+                    final tagStyle = OutlinedButton.styleFrom(
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.xs,
+                        vertical: AppSpacing.xxs,
                       ),
-                    if (item.tags.length > 3)
-                      PopupMenuButton<String>(
-                        tooltip: '更多在线标签',
-                        onSelected: searchTag,
-                        itemBuilder: (_) => [
-                          for (final tag in item.tags.skip(3))
-                            PopupMenuItem(value: tag, child: Text(tag)),
-                        ],
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            minWidth: 48,
-                            minHeight: 48,
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(AppSpacing.sm),
-                            child: Text(
-                              '更多标签 (${item.tags.length - 3})',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.primary,
+                      textStyle: theme.textTheme.bodySmall,
+                      shape: shape,
+                      side: shape.side,
+                    );
+                    return Wrap(
+                      spacing: AppSpacing.xxs,
+                      runSpacing: 0,
+                      children: [
+                        for (final tag in item.tags.take(3))
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: constraints.maxWidth,
+                            ),
+                            child: Tooltip(
+                              message: tag,
+                              child: OutlinedButton(
+                                style: tagStyle,
+                                onPressed: () => searchTag(tag),
+                                child: Text(
+                                  '#$tag',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                  ],
+                        if (item.tags.length > 3)
+                          PopupMenuButton<String>(
+                            tooltip: '更多在线标签',
+                            onSelected: searchTag,
+                            itemBuilder: (_) => [
+                              for (final tag in item.tags.skip(3))
+                                PopupMenuItem(value: tag, child: Text(tag)),
+                            ],
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: constraints.maxWidth,
+                                minHeight: 48,
+                              ),
+                              child: Center(
+                                widthFactor: 1,
+                                heightFactor: 1,
+                                child: DecoratedBox(
+                                  decoration: ShapeDecoration(shape: shape),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: AppSpacing.xs,
+                                      vertical: AppSpacing.xxs,
+                                    ),
+                                    child: Text(
+                                      '更多标签 (${item.tags.length - 3})',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: theme.colorScheme.primary,
+                                          ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
               ],
               if (status != null) ...[

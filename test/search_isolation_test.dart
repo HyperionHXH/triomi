@@ -6,7 +6,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:triomi/core/db/app_database.dart';
+import 'package:triomi/core/db/app_database.dart' hide MediaItemRow;
 import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
@@ -20,6 +20,8 @@ import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/tag_search.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/theme/app_theme.dart';
+import 'package:triomi/core/theme/app_tokens.dart';
+import 'package:triomi/features/discover/widgets/media_item_card.dart';
 import 'package:triomi/features/search/search_page.dart';
 
 import 'fixtures/fake_http_client.dart';
@@ -33,12 +35,24 @@ void main() {
     List<String> tags = const [],
     String? sourceId,
     SourceHttpClient? metadataHttp,
+    CoverLayout layout = CoverLayout.adaptive,
+    double textScale = 1,
   }) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
+    final preferences = memoryPreferences();
+    if (type == MediaType.anime) {
+      await preferences.set('anime.calendar.filter', {
+        'year': 2020,
+        'quarter': 1,
+        'tags': ['stale'],
+        'minScore': 10,
+        'onlyWatching': true,
+      });
+    }
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
-        preferencesProvider.overrideWithValue(memoryPreferences()),
+        preferencesProvider.overrideWithValue(preferences),
         if (metadataHttp != null)
           sourceHttpClientProvider.overrideWithValue(metadataHttp),
         sourcesProvider.overrideWith(
@@ -74,7 +88,12 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
-          theme: AppTheme.light(),
+          theme: AppTheme.light(covers: CoverAppearance(layout: layout)),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
           home: SearchPage(
             type: type,
             initialTags: tags,
@@ -140,17 +159,162 @@ void main() {
     );
   }
 
+  testWidgets('anime results fill the available search viewport', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final close = await render(tester, MediaType.anime, [
+      _SearchSource(
+        'bangumi-anime',
+        MediaType.anime,
+        (_) async => [
+          for (var index = 0; index < 60; index++)
+            MediaItem(
+              sourceId: 'bangumi-anime',
+              remoteId: '$index',
+              type: MediaType.anime,
+              title: 'Anime result $index',
+            ),
+        ],
+      ),
+    ]);
+    await search(tester, 'keyword');
+    final collection = find.byType(MediaItemCollection);
+    final page = find.byType(SearchPage);
+    expect(
+      tester.getBottomRight(collection).dy,
+      closeTo(tester.getBottomRight(page).dy, 1),
+      reason: 'The result viewport must not stop above a blank lower page.',
+    );
+    expect(
+      find.text('Anime result 59'),
+      findsNothing,
+      reason: 'Offscreen results must remain lazy.',
+    );
+    await close();
+  });
+
+  for (final scenario in [
+    (layout: CoverLayout.adaptive, width: 1200.0, scale: 1.0),
+    (layout: CoverLayout.grid, width: 320.0, scale: 2.0),
+    (layout: CoverLayout.list, width: 320.0, scale: 2.0),
+  ]) {
+    testWidgets(
+      'anime ${scenario.layout.name} at ${scenario.width} scrolls every result and pagination',
+      (tester) async {
+        tester.view.physicalSize = Size(scenario.width, 1000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final pages = <int>[];
+        var failNextPage = true;
+        final source = _PagedSearchSource((query, page) async {
+          pages.add(page);
+          if (page == 2 && failNextPage) {
+            failNextPage = false;
+            throw StateError('temporary failure');
+          }
+          if (page > 2) return [];
+          return [
+            for (
+              var index = page == 1 ? 0 : 60;
+              index < (page == 1 ? 60 : 65);
+              index++
+            )
+              MediaItem(
+                sourceId: 'bangumi-anime',
+                remoteId: '$index',
+                type: MediaType.anime,
+                title: 'Anime result $index',
+              ),
+          ];
+        });
+        final close = await render(
+          tester,
+          MediaType.anime,
+          [source],
+          layout: scenario.layout,
+          textScale: scenario.scale,
+        );
+        await search(tester, 'keyword');
+        final collection = find.byType(MediaItemCollection);
+        final scrollable = find.descendant(
+          of: collection,
+          matching: find.byType(Scrollable),
+        );
+        Finder result(int index) => find.byWidgetPredicate(
+          (widget) =>
+              widget is MediaItemCard && widget.item.remoteId == '$index' ||
+              widget is MediaItemRow && widget.item.remoteId == '$index',
+        );
+        Future<void> reach(Finder target) async {
+          await tester.scrollUntilVisible(
+            target,
+            240,
+            scrollable: scrollable,
+            maxScrolls: 100,
+          );
+          await advance(tester);
+          expect(target.hitTestable(), findsOneWidget);
+        }
+
+        expect(result(59), findsNothing);
+        for (var index = 0; index < 60; index++) {
+          await reach(result(index));
+        }
+        expect(
+          tester.getBottomRight(result(59)).dy,
+          lessThanOrEqualTo(tester.getBottomRight(collection).dy),
+          reason: 'The final row must fit inside the visible result viewport.',
+        );
+        final nextPage = find.widgetWithText(TextButton, '加载本站下一页');
+        await reach(nextPage);
+        await tester.tap(nextPage);
+        await advance(tester);
+        expect(pages, [1, 2]);
+        final retry = find.widgetWithText(TextButton, '重试本站');
+        await reach(retry);
+        expect(
+          result(59),
+          findsOneWidget,
+          reason: 'Append failure must preserve the already loaded results.',
+        );
+        await tester.tap(retry);
+        await advance(tester);
+        expect(pages, [1, 2, 2]);
+        for (var index = 60; index < 65; index++) {
+          await reach(result(index));
+        }
+        await reach(nextPage);
+        await tester.tap(nextPage);
+        await advance(tester);
+        expect(pages, [1, 2, 2, 3]);
+        expect(nextPage, findsNothing);
+        expect(result(64).hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await close();
+      },
+    );
+  }
+
   testWidgets(
     'anime search from a scoped playback source still searches metadata only',
     (tester) async {
       final http = FakeHttpClient(
-        (_) async => SourceResponse(
+        (request) async => SourceResponse(
           statusCode: 200,
           body: jsonEncode({
             'data': [
-              {'id': 42, 'type': 2, 'name': 'Metadata result'},
+              {
+                'id': Uri.parse(request.url).queryParameters['offset'] == '0'
+                    ? 42
+                    : 43,
+                'type': 2,
+                'name': 'Metadata result',
+              },
             ],
-            'total': 1,
+            'total': 100,
           }),
         ),
       );
@@ -180,6 +344,30 @@ void main() {
       expect(body['keyword'], 'keyword');
       expect(playbackCalls, 0);
       expect(find.text('Metadata result'), findsOneWidget);
+      final filter = body['filter'] as Map;
+      expect(filter.containsKey('tag'), isFalse);
+      expect(filter.containsKey('air_date'), isFalse);
+      expect(filter.containsKey('rating'), isFalse);
+      expect(find.byIcon(Icons.tune), findsNothing);
+      final nextPage = find.widgetWithText(TextButton, '加载本站下一页');
+      await tester.scrollUntilVisible(
+        nextPage,
+        200,
+        scrollable: find.descendant(
+          of: find.byType(MediaItemCollection),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.tap(nextPage);
+      await advance(tester);
+      final next = http.requests.last;
+      expect(Uri.parse(next.url).queryParameters['offset'], '24');
+      expect((jsonDecode(next.body!) as Map)['filter'], filter);
+      expect((jsonDecode(next.body!) as Map)['keyword'], 'keyword');
+      final collection = tester.widget<MediaItemCollection>(
+        find.byType(MediaItemCollection),
+      );
+      expect(collection.items.map((item) => item.remoteId), ['42', '43']);
       await close();
     },
   );
@@ -367,6 +555,29 @@ void main() {
     },
   );
 
+  testWidgets('slow source stays pending until its actual result arrives', (
+    tester,
+  ) async {
+    final pending = Completer<List<MediaItem>>();
+    final close = await render(tester, MediaType.manga, [
+      _SearchSource('slow', MediaType.manga, (_) => pending.future),
+    ]);
+    await search(tester, 'keyword');
+    await tester.pump(const Duration(seconds: 25));
+    expect(find.text('请求超时，可重试本站'), findsNothing);
+    pending.complete([
+      const MediaItem(
+        sourceId: 'slow',
+        remoteId: 'late-success',
+        type: MediaType.manga,
+        title: 'slow-but-valid-result',
+      ),
+    ]);
+    await advance(tester);
+    expect(find.text('slow-but-valid-result'), findsOneWidget);
+    await close();
+  });
+
   testWidgets('completion of an old query cannot replace a newer result', (
     tester,
   ) async {
@@ -442,6 +653,17 @@ class _SearchSource implements SearchProvider {
   @override
   Future<List<MediaItem>> search(String keyword, {int page = 1}) =>
       call(keyword);
+}
+
+class _PagedSearchSource extends _SearchSource {
+  _PagedSearchSource(this.searchPage)
+    : super('bangumi-anime', MediaType.anime, (_) async => []);
+
+  final Future<List<MediaItem>> Function(String, int) searchPage;
+
+  @override
+  Future<List<MediaItem>> search(String keyword, {int page = 1}) =>
+      searchPage(keyword, page);
 }
 
 class _TaggedSource extends _SearchSource implements TagSearchProvider {

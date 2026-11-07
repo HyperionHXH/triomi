@@ -33,6 +33,10 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
     @Volatile private var installerPrepared: File? = null
     @Volatile private var activeIncomingPath: String? = null
     private var lastProgress = 0L
+    private val foregroundHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var transfer: AppUpdateTransferSession? = null
+    private var transferReply: MethodChannel.Result? = null
+    private val transferDeadline = Runnable { endTransfer(); cancelTransfer() }
     private val retention = AppUpdateRetention(activity.cacheDir, activity.filesDir,
         installed = { installedIdentity() }, inspect = { file -> archiveIdentity(file) })
 
@@ -43,6 +47,12 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
 
     private fun handle(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "beginDownloadForeground" -> beginTransfer(result)
+            "endDownloadForeground" -> { endTransfer(); result.success(null) }
+            "updateDownloadForeground" -> result.success(transfer?.service?.update(
+                call.argument<String>("phase").orEmpty(),
+                call.argument<Number>("bytes")?.toLong() ?: 0,
+                call.argument<Number>("total")?.toLong()) ?: false)
             "cancel" -> {
                 cancelled.set(true)
                 runCatching { input?.close() }
@@ -338,8 +348,55 @@ class AppUpdateHost(private val activity: MainActivity, messenger: BinaryMesseng
         lastProgress = now
         activity.runOnUiThread { channel.invokeMethod("progress", mapOf("phase" to phase, "bytes" to bytes, "total" to total)) }
     }
+
+    private fun beginTransfer(result: MethodChannel.Result) {
+        if (closed || transfer != null || transferReply != null) { result.success(false); return }
+        transferReply = result
+        foregroundHandler.postDelayed(transferDeadline, 10_000)
+        // Permission dialogs may deliver their result just before window focus
+        // returns. Start only in the foreground, using the same gate as consent.
+        fun startWhenForeground() {
+            if (closed || transferReply == null) return
+            if (!activity.updateConsentCurrent(activity.updateConsentGeneration())) {
+                foregroundHandler.postDelayed({ startWhenForeground() }, 100)
+                return
+            }
+            val lease = AppUpdateTransferRuntime.reserve(ready = { ready ->
+                foregroundHandler.removeCallbacks(transferDeadline)
+                val reply = transferReply
+                transferReply = null
+                reply?.success(ready)
+            }, cancelled = { cancelTransfer() })
+            if (lease == null) { endTransfer(); return }
+            transfer = lease
+            try {
+                val intent = AppUpdateForegroundService.startIntent(activity, lease.token)
+                if (Build.VERSION.SDK_INT >= 26) activity.startForegroundService(intent)
+                else activity.startService(intent)
+            } catch (_: RuntimeException) { endTransfer() }
+        }
+        startWhenForeground()
+    }
+
+    private fun cancelTransfer() {
+        cancelled.set(true)
+        runCatching { input?.close() }
+        transfer = null
+        if (!closed) channel.invokeMethod("downloadForegroundCancelled", null)
+    }
+
+    private fun endTransfer() {
+        foregroundHandler.removeCallbacksAndMessages(null)
+        val lease = transfer
+        transfer = null
+        if (lease != null) AppUpdateTransferRuntime.end(lease)
+        val reply = transferReply
+        transferReply = null
+        reply?.success(false)
+    }
     fun close() {
         closed = true
+        endTransfer()
         cancelled.set(true)
         runCatching { input?.close() }
         picker?.error("cancelled", "APK 选择已取消", null)

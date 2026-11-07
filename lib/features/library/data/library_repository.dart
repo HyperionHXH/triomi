@@ -8,6 +8,7 @@ import '../../../core/models/chapter.dart';
 import '../../../core/models/manga_metadata_override.dart';
 import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
+import '../../../core/models/source_metadata.dart';
 import 'library_category.dart';
 
 String _libraryJournalNamespace(MediaType type) =>
@@ -71,8 +72,9 @@ class LibraryRepository {
 
   // ------------------------------------------------------------ 作品与书架
 
-  /// 写入 / 更新作品快照。
-  Future<void> cacheItem(MediaItem item) async {
+  /// Sparse anime snapshots enrich an existing source-qualified snapshot;
+  /// absence from a list/status response is not a metadata deletion.
+  Future<void> cacheItem(MediaItem item) => _db.transaction(() async {
     final previous =
         await (_db.select(_db.mediaItems)..where(
               (row) =>
@@ -80,6 +82,14 @@ class LibraryRepository {
                   row.remoteId.equals(item.remoteId),
             ))
             .getSingleOrNull();
+    if (previous != null &&
+        previous.type != item.type &&
+        (previous.type == MediaType.anime || item.type == MediaType.anime)) {
+      throw StateError('番剧缓存身份与其他媒体冲突');
+    }
+    final mergeAnime = item.type == MediaType.anime;
+    String? text(String? value, String? saved) =>
+        mergeAnime && (value == null || value.trim().isEmpty) ? saved : value;
     await _db
         .into(_db.mediaItems)
         .insertOnConflictUpdate(
@@ -87,19 +97,33 @@ class LibraryRepository {
             sourceId: item.sourceId,
             remoteId: item.remoteId,
             type: item.type,
-            title: item.sourceTitle,
-            url: Value(item.url),
-            coverUrl: Value(item.coverUrl),
-            author: Value(item.sourceAuthor),
-            description: Value(item.sourceDescription),
-            tagsJson: Value(item.tags.isEmpty ? null : jsonEncode(item.tags)),
-            rating: Value(item.rating),
-            status: Value(item.status),
+            title: text(item.sourceTitle, previous?.title) ?? item.sourceTitle,
+            url: Value(text(item.url, previous?.url)),
+            coverUrl: Value(text(item.coverUrl, previous?.coverUrl)),
+            author: Value(text(item.sourceAuthor, previous?.author)),
+            description: Value(
+              text(item.sourceDescription, previous?.description),
+            ),
+            tagsJson: Value(
+              item.tags.isEmpty
+                  ? (mergeAnime ? previous?.tagsJson : null)
+                  : jsonEncode(item.tags),
+            ),
+            rating: Value(
+              item.rating ?? (mergeAnime ? previous?.rating : null),
+            ),
+            status: Value(text(item.status, previous?.status)),
             detailJson: Value(previous?.detailJson),
+            sourceMetadataJson: Value(
+              SourceMetadata.mergeStorage(
+                previous?.sourceMetadataJson,
+                item.sourceMetadata,
+              ),
+            ),
             cachedAt: Value(DateTime.now()),
           ),
         );
-  }
+  });
 
   Future<MediaItem?> itemByKey(String sourceId, String remoteId) async {
     final query = _db.select(_db.mediaItems)
@@ -865,6 +889,9 @@ class LibraryRepository {
       final offlineContent = <String, String?>{
         for (final row in existing) row.remoteId: row.contentJson,
       };
+      final metadata = <String, String?>{
+        for (final row in existing) row.remoteId: row.sourceMetadataJson,
+      };
       final existingChapterIds = <String>{
         for (final row in existing) row.remoteId,
       };
@@ -901,6 +928,12 @@ class LibraryRepository {
                 releaseDate: Value(chapter.releaseDate),
                 locked: Value(chapter.locked),
                 contentJson: Value(offlineContent[chapter.remoteId]),
+                sourceMetadataJson: Value(
+                  SourceMetadata.mergeStorage(
+                    metadata[chapter.remoteId],
+                    chapter.sourceMetadata,
+                  ),
+                ),
               ),
             );
       }
@@ -1093,12 +1126,22 @@ class LibraryRepository {
                 ..limit(1))
               .getSingleOrNull();
       final item = await itemByKey(sourceId, remoteId);
+      final chapterState =
+          await (_db.select(_db.mangaChapterStates)..where(
+                (row) =>
+                    row.sourceId.equals(sourceId) &
+                    row.remoteId.equals(remoteId) &
+                    row.chapterSourceId.equals(chapter.sourceId) &
+                    row.chapterRemoteId.equals(chapter.remoteId),
+              ))
+              .getSingleOrNull();
       final clearRows = <AnimeFollowSyncStateRow>[
         ...await historyClearJournal(null),
         if (item != null) ...await historyClearJournal(item.type),
       ];
       for (final at in [
         if (old != null) old.visitedAt,
+        if (chapterState?.historyResetAt != null) chapterState!.historyResetAt!,
         for (final row in clearRows)
           if (row.sourceId == 'clear' ||
               row.sourceId == sourceId && row.remoteId == remoteId)
@@ -1129,11 +1172,28 @@ class LibraryRepository {
                 number: Value(chapter.number),
                 sortIndex: Value(chapter.sortIndex),
                 locked: Value(chapter.locked),
+                sourceMetadataJson: Value(chapter.sourceMetadata?.encoded),
               ),
             );
       } else if (cached.itemSourceId != sourceId ||
           cached.itemRemoteId != remoteId) {
         throw StateError('History chapter belongs to another work');
+      } else if (chapter.sourceMetadata != null) {
+        await (_db.update(_db.chapters)..where(
+              (row) =>
+                  row.sourceId.equals(chapter.sourceId) &
+                  row.remoteId.equals(chapter.remoteId),
+            ))
+            .write(
+              ChaptersCompanion(
+                sourceMetadataJson: Value(
+                  SourceMetadata.mergeStorage(
+                    cached.sourceMetadataJson,
+                    chapter.sourceMetadata,
+                  ),
+                ),
+              ),
+            );
       }
       final deleteStatement = _db.delete(_db.histories)
         ..where(
@@ -1158,6 +1218,210 @@ class LibraryRepository {
             ),
           );
     });
+  }
+
+  Stream<List<MangaChapterStateRow>> watchMangaChapterStates(
+    String sourceId,
+    String itemRemoteId,
+  ) =>
+      (_db.select(_db.mangaChapterStates)..where(
+            (row) =>
+                row.sourceId.equals(sourceId) &
+                row.remoteId.equals(itemRemoteId),
+          ))
+          .watch();
+
+  Stream<List<HistoryRow>> watchChapterHistories(
+    String sourceId,
+    String itemRemoteId,
+  ) =>
+      (_db.select(_db.histories)..where(
+            (row) =>
+                row.sourceId.equals(sourceId) &
+                row.remoteId.equals(itemRemoteId) &
+                row.chapterSourceId.equals(sourceId),
+          ))
+          .watch();
+
+  Future<void> _checkMangaChapterOwner(
+    String sourceId,
+    String itemRemoteId,
+    Chapter chapter,
+  ) async {
+    if (chapter.sourceId != sourceId || chapter.remoteId.isEmpty) {
+      throw ArgumentError('章节不属于当前来源');
+    }
+    final item = await itemByKey(sourceId, itemRemoteId);
+    if (item?.type != MediaType.manga) throw StateError('漫画作品未缓存');
+    final stored =
+        await (_db.select(_db.chapters)..where(
+              (row) =>
+                  row.sourceId.equals(chapter.sourceId) &
+                  row.remoteId.equals(chapter.remoteId),
+            ))
+            .getSingleOrNull();
+    if (stored == null ||
+        stored.itemSourceId != sourceId ||
+        stored.itemRemoteId != itemRemoteId) {
+      throw StateError('章节不属于当前漫画目录');
+    }
+  }
+
+  Future<void> setChapterRead({
+    required String sourceId,
+    required String itemRemoteId,
+    required Iterable<Chapter> chapters,
+    required bool read,
+  }) => _writeMangaChapterFlags(sourceId, itemRemoteId, chapters, read: read);
+
+  Future<void> setChapterBookmarked({
+    required String sourceId,
+    required String itemRemoteId,
+    required Iterable<Chapter> chapters,
+    required bool bookmarked,
+  }) => _writeMangaChapterFlags(
+    sourceId,
+    itemRemoteId,
+    chapters,
+    bookmarked: bookmarked,
+  );
+
+  Future<void> _writeMangaChapterFlags(
+    String sourceId,
+    String itemRemoteId,
+    Iterable<Chapter> chapters, {
+    bool? read,
+    bool? bookmarked,
+  }) => _db.transaction(() async {
+    for (final chapter in chapters) {
+      await _checkMangaChapterOwner(sourceId, itemRemoteId, chapter);
+      final old =
+          await (_db.select(_db.mangaChapterStates)..where(
+                (row) =>
+                    row.sourceId.equals(sourceId) &
+                    row.remoteId.equals(itemRemoteId) &
+                    row.chapterSourceId.equals(chapter.sourceId) &
+                    row.chapterRemoteId.equals(chapter.remoteId),
+              ))
+              .getSingleOrNull();
+      final now = DateTime.fromMillisecondsSinceEpoch(
+        DateTime.now().millisecondsSinceEpoch ~/ 1000 * 1000,
+      );
+      var updated = old != null && !now.isAfter(old.updatedAt)
+          ? old.updatedAt.add(const Duration(seconds: 1))
+          : now;
+      if (read == false) {
+        final history =
+            await (_db.select(_db.histories)..where(
+                  (row) =>
+                      row.sourceId.equals(sourceId) &
+                      row.remoteId.equals(itemRemoteId) &
+                      row.chapterSourceId.equals(chapter.sourceId) &
+                      row.chapterRemoteId.equals(chapter.remoteId),
+                ))
+                .getSingleOrNull();
+        for (final at in [?history?.visitedAt, ?old?.historyResetAt]) {
+          if (!updated.isAfter(at)) {
+            updated = at.add(const Duration(seconds: 1));
+          }
+        }
+      }
+      await _db
+          .into(_db.mangaChapterStates)
+          .insertOnConflictUpdate(
+            MangaChapterStatesCompanion.insert(
+              sourceId: sourceId,
+              remoteId: itemRemoteId,
+              chapterSourceId: chapter.sourceId,
+              chapterRemoteId: chapter.remoteId,
+              isRead: Value(read ?? old?.isRead ?? false),
+              bookmarked: Value(bookmarked ?? old?.bookmarked ?? false),
+              historyResetAt: Value(
+                read == false ? updated : old?.historyResetAt,
+              ),
+              totalPages: Value(old?.totalPages),
+              updatedAt: updated,
+            ),
+          );
+      if (read == false) {
+        await (_db.delete(_db.histories)..where(
+              (row) =>
+                  row.sourceId.equals(sourceId) &
+                  row.remoteId.equals(itemRemoteId) &
+                  row.chapterSourceId.equals(chapter.sourceId) &
+                  row.chapterRemoteId.equals(chapter.remoteId),
+            ))
+            .go();
+      }
+    }
+  });
+
+  Future<void> recordMangaChapterPageCount({
+    required String sourceId,
+    required String itemRemoteId,
+    required Chapter chapter,
+    required int totalPages,
+  }) => _db.transaction(() async {
+    if (totalPages <= 0) throw ArgumentError.value(totalPages, 'totalPages');
+    await _checkMangaChapterOwner(sourceId, itemRemoteId, chapter);
+    final old =
+        await (_db.select(_db.mangaChapterStates)..where(
+              (row) =>
+                  row.sourceId.equals(sourceId) &
+                  row.remoteId.equals(itemRemoteId) &
+                  row.chapterSourceId.equals(chapter.sourceId) &
+                  row.chapterRemoteId.equals(chapter.remoteId),
+            ))
+            .getSingleOrNull();
+    if (old?.totalPages == totalPages) return;
+    final now = DateTime.fromMillisecondsSinceEpoch(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000 * 1000,
+    );
+    await _db
+        .into(_db.mangaChapterStates)
+        .insertOnConflictUpdate(
+          MangaChapterStatesCompanion.insert(
+            sourceId: sourceId,
+            remoteId: itemRemoteId,
+            chapterSourceId: chapter.sourceId,
+            chapterRemoteId: chapter.remoteId,
+            isRead: Value(old?.isRead ?? false),
+            bookmarked: Value(old?.bookmarked ?? false),
+            historyResetAt: Value(old?.historyResetAt),
+            totalPages: Value(totalPages),
+            updatedAt: old != null && !now.isAfter(old.updatedAt)
+                ? old.updatedAt.add(const Duration(seconds: 1))
+                : now,
+          ),
+        );
+  });
+
+  /// Visited or explicitly completed chapters; catalog position implies neither.
+  Future<Set<(String, String)>> readChapterKeysOf(
+    String sourceId,
+    String remoteId,
+  ) async {
+    final rows =
+        await (_db.select(_db.histories)..where(
+              (row) =>
+                  row.sourceId.equals(sourceId) &
+                  row.remoteId.equals(remoteId) &
+                  row.chapterSourceId.equals(sourceId),
+            ))
+            .get();
+    final completed =
+        await (_db.select(_db.mangaChapterStates)..where(
+              (row) =>
+                  row.sourceId.equals(sourceId) &
+                  row.remoteId.equals(remoteId) &
+                  row.chapterSourceId.equals(sourceId) &
+                  row.isRead.equals(true),
+            ))
+            .get();
+    return {
+      for (final row in rows) (row.chapterSourceId, row.chapterRemoteId),
+      for (final row in completed) (row.chapterSourceId, row.chapterRemoteId),
+    };
   }
 
   /// 按来源、作品和章节恢复，不能把另一章或另一来源的页码套过来。
@@ -1285,6 +1549,7 @@ class LibraryRepository {
     localMangaMetadata: row.type == MediaType.manga
         ? MangaMetadataOverride.readOptionalDetailJson(row.detailJson)
         : null,
+    sourceMetadata: SourceMetadata.fromStorage(row.sourceMetadataJson),
   );
 
   Chapter _toChapter(ChapterRow row) => Chapter(
@@ -1298,6 +1563,7 @@ class LibraryRepository {
     releaseDate: row.releaseDate,
     locked: row.locked,
     content: _decodeContent(row.contentJson),
+    sourceMetadata: SourceMetadata.fromStorage(row.sourceMetadataJson),
   );
 
   /// 离线缓存的正文（下载后写入，未下载为 null）。

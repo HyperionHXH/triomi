@@ -7,6 +7,7 @@ import '../../../core/db/app_database.dart';
 import '../../../core/models/chapter.dart';
 import '../../../core/models/media_item.dart';
 import '../../../core/models/media_type.dart';
+import '../../../core/models/source_metadata.dart';
 import '../../../core/storage/storage_paths.dart';
 import '../../library/data/library_repository.dart';
 import 'image_download_checkpoint.dart';
@@ -461,7 +462,17 @@ class DownloadRepository {
                 table.sourceId.equals(chapter.sourceId) &
                 table.remoteId.equals(chapter.remoteId),
           ))
-          .write(ChaptersCompanion(contentJson: Value(contentJson)));
+          .write(
+            ChaptersCompanion(
+              contentJson: Value(contentJson),
+              sourceMetadataJson: Value(
+                SourceMetadata.mergeStorage(
+                  existing.sourceMetadataJson,
+                  chapter.sourceMetadata,
+                ),
+              ),
+            ),
+          );
       return;
     }
     if (itemSourceId == null || itemRemoteId == null) {
@@ -483,6 +494,7 @@ class DownloadRepository {
             releaseDate: Value(chapter.releaseDate),
             locked: Value(chapter.locked),
             contentJson: Value(contentJson),
+            sourceMetadataJson: Value(chapter.sourceMetadata?.encoded),
           ),
         );
   }
@@ -506,6 +518,7 @@ class DownloadRepository {
       sortIndex: row.sortIndex,
       volumeTitle: row.volumeTitle,
       locked: row.locked,
+      sourceMetadata: SourceMetadata.fromStorage(row.sourceMetadataJson),
     );
   }
 

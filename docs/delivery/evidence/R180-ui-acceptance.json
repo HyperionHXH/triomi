@@ -1,0 +1,50 @@
+{
+  "version": "0.14.0+180",
+  "scope": "Actual Windows Profile engine and isolated read-only Android emulator, production screens with disposable data root; real public repository and Bangumi HTTP; inert test plugin metadata not executable plugin installation.",
+  "komikkuRevision": "64aeb48f31a211e734dafe6c838ae2c712ae69e2",
+  "windows": {
+    "errors": [],
+    "observed": [
+      "Single manga management entry opens full-width plugin library with16px gutters",
+      "Rows show name+version; details/enable/uninstall in menu",
+      "Installed appbar search -> + opens separate add without inherited query; return has no visible search field",
+      "Rules settings opened from overflow and returned to plugin library",
+      "Real configured repository1601 entries;18Manhua search=>version1.6.4",
+      "Novel outlined tags visually observed light/dark"
+    ]
+  },
+  "android": {
+    "errors": [],
+    "observed": [
+      "Final library gutters, + and search icons, compact row observed",
+      "Installed search -> + separate add; Back returns to library; source settings roundtrip works",
+      "Real18Manhua repository result/version1.6.4",
+      "Actual public Bangumi keywordFrieren returns2 metadata results without extra filters",
+      "Timetable weekday selection updates, only season/day navigation visible",
+      "Final dark novel tags outlined at320dp,200percent font; long label ellipsis and more-tags menu visible"
+    ]
+  },
+  "review": {
+    "plugins": "P2 stale enablement after settings return fixed by awaited callback and shared actual preference reload; dedicated regression",
+    "copy": "P2 inaccurate local-only collection assurance changed to not modifying source website bookshelf"
+  },
+  "limits": [
+    "No physical phone or iOS verification",
+    "No assertion that every third-party extension/source works",
+    "UI evidence includes inert plugin metadata and local novel fixtures, no user account or live library changes"
+  ],
+  "firstRound": {
+    "tests": "Initial integration failed obsolete selectors and new search reset/pagination test taps; corrected and rerun",
+    "fullSuite": "Initial full suite1648pass4skip4fail:3obsolete wording assertions removed,1AppBar popup scope corrected; affected32tests then passed",
+    "build": "Windows final smoke collided with simultaneous test native_assets sqlite3.dll lock; serialized and rebuilt successfully"
+  },
+  "finalLocalChecks": {
+    "flutterTestsPassed": 1652,
+    "flutterTestsSkipped": 4,
+    "pythonTestsPassed": 87,
+    "flutterAnalyze": "No issues found",
+    "windowsNormalMainProfileBuild": true,
+    "androidNormalMainX64DebugBuild": true,
+    "normalAndroidStartup": "Actual onboarding visible; skip setup enters normal home; temporary entry removed before normal build"
+  }
+}

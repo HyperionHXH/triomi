@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import eu.kanade.tachiyomi.network.awaitSuccess
+import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
@@ -276,7 +277,7 @@ class MihonRequestCancellationTest {
                         try {
                             network.client.newCall(Request.Builder().url("$baseUrl/denied").build())
                                 .execute().awaitSuccess().close()
-                        } catch (_: IOException) { }
+                        } catch (_: HttpException) { }
                         error("unrelated source failure")
                     }
                     network.client.newBuilder().build().newCall(pageListRequest(chapter)).execute().use(::pageListParse)

@@ -63,6 +63,45 @@
 - [x] 全量本地回归、原平台构建、应用与匹配规则提交推送。
 - [x] 确切提交macOS编译/原生桥/实际iOS契约/截图录屏验收，下载相同提交IPA并记录证据（2a25ab0/41761181957，Actions未签名IPA；不新发Release）。
 
+## 当前增量：0.15.2 资料来源保护、收藏同步与漫画章节体验（构建187，已发布并完成核验）
+
+本轮覆盖隐藏内置Bangumi及旧删除恢复、AGE默认身份迁移、官方活动/归档规则动态获取、收藏夹同步和封面修复、进度语义、漫画四种对称布局、正向章节过渡、逐章状态/书签/批量操作。具体真实证据和未通过门槛以[当前状态](CURRENT_STATUS.md)为准；番剧下载不改，旧设备/旧来源数据不清，归档可达性与播放成功分开。
+
+## 当前增量：0.14.3 拷贝访问限制与重试分类（构建183，仅保留源码修正，编译发布已取消）
+
+默认原插件本轮Android和电脑均已恢复访问，不能计为绕过站点IP限制。修复可验证的
+客户端错误：明确防盗版提示归为访问限制，后台下载不再自动重试，普通断线仍有限
+重试。没有修改插件参数、域名或签名，不扩大Komikku兼容结论。按用户要求取消
+183编译发布，仅保留源码修正；正式版本仍为v0.14.2。验证与停止状态见
+[当前状态](CURRENT_STATUS.md)及[R183证据](delivery/evidence/R183-copymanga-retry.json)。
+
+## 当前增量：0.14.2 漫画搜索与加载体验（构建182，已发布并核验公开产物）
+
+三个漫画搜索入口改为独立页面；章节加载等待真实结果，使用详情返回的插件状态；
+移除漫画无用资料提示和网站相关推荐，合并重复菜单，筛选改为横向换行选项。
+接入仓库图标并补齐同版本旧安装的显示资料，保留执行信任与启用状态。
+拷贝1.4.85的HTTP210已在相同APK与网络下通过Komikku对照复现，属于站点限制，
+不计为宿主兼容修复。双端本机验证、全量1706项Flutter回归及公开产物核验完成，
+正式[v0.14.2](https://github.com/HyperionHXH/triomi/releases/tag/v0.14.2)已发布，实际结果记录于
+[当前状态](CURRENT_STATUS.md)及[R182证据](delivery/evidence/R182-manga-experience.json)。
+
+## 当前增量：0.14.1 Komikku 插件兼容（构建181，已发布并核验公开产物）
+
+JM原始APK的Android ABI故障已修复，最终R8完整链路与Windows生产安装至Flutter
+阅读器均通过。冻结仓库中2224个不同原始APK加载/筛选全部通过，覆盖3056/3070条
+记录；Windows原生JAR的3014/3065个URL通过，51个精确旧版404保留未验证。
+真实大型筛选树、QuickJS/Protobuf/解码依赖、持久memo、递归GraphQL、显式空排序和
+Tenkaiscan图像链均有专项证据。Flutter全量1693通过/4跳过，后续桌面增量37通过，
+原生38通过、release运行8组、DEX ABI128项通过；analyze零问题、Python117通过。
+普通WindowsRelease已构建；正式[v0.14.1](https://github.com/HyperionHXH/triomi/releases/tag/v0.14.1)
+已发布。远端build/release全部成功，最终Flutter1697通过/1跳过；公开APK与上一版
+签名证书一致，全部下载的
+SHA-256、Android版本/DEX ABI和Windows更新清单逐文件核验通过。
+仓库覆盖不等于所有站点的账号、网络与阅读路径均已验证。
+
+具体主线、身份和覆盖限制统一记录于[当前状态](CURRENT_STATUS.md)及
+[R181证据](delivery/evidence/R181-jm-compatibility.json)。
+
 当前执行入口只有本文件和 `docs/CURRENT_STATUS.md`。历史交付、审计和设备日志保留在 `docs/delivery/`，通过 `docs/archive/README.md` 查阅，不再作为待办清单重复阅读。
 
 ## 当前交付方式：四源已发布原仓库，应用内自主安装

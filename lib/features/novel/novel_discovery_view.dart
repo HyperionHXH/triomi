@@ -110,7 +110,7 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
             ),
           )
           .timeout(
-            const Duration(seconds: 20),
+            const Duration(seconds: 60),
             onTimeout: () {
               owner.cancel('小说频道请求超时');
               throw TimeoutException('小说频道请求超时');

@@ -14,6 +14,7 @@ import '../../core/source/source_catalog.dart';
 import '../../core/source/source_filters.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
+import '../../core/source/source_repository.dart';
 import '../../core/storage/preferences.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
@@ -132,7 +133,11 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
     try {
       final entries = await ref.read(sourceCatalogLoaderProvider)();
       if (!mounted || generation != _loadGeneration) return;
-      setState(() => _entries = entries);
+      setState(
+        () => _entries = entries
+            .where((entry) => entry.id != SourceRepository.internalMetadataId)
+            .toList(),
+      );
     } catch (error) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {

@@ -240,11 +240,8 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
   Future<void> _syncLibrary() async {
     if (_busy) return;
     _retry = _syncLibrary;
-    final automatic = ref.read(libraryAutoSyncProvider);
-    if (automatic.configured || !automatic.bangumiEnabled) {
-      final config = await _prepareConfig();
-      if (config == null || !mounted) return;
-    }
+    final config = await _prepareConfig();
+    if (config == null || !mounted) return;
     setState(() {
       _localBusy = true;
       _status = null;
@@ -444,14 +441,9 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
     }
   }
 
-  Future<void> _setAutomaticSync(bool value, {bool bangumi = false}) async {
+  Future<void> _setAutomaticSync(bool value) async {
     try {
-      final controller = ref.read(libraryAutoSyncProvider.notifier);
-      if (bangumi) {
-        await controller.setBangumiEnabled(value);
-      } else {
-        await controller.setEnabled(value);
-      }
+      await ref.read(libraryAutoSyncProvider.notifier).setEnabled(value);
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -492,10 +484,10 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   widget.fullBackup
-                      ? '独立保存完整应用快照，供换机恢复或故障回滚。日常收藏和阅读进度无需上传完整备份。'
+                      ? '保存完整快照，用于换机或恢复。日常进度请使用收藏与历史同步。'
                       : widget.animeCollectionOnly
-                      ? '仅导入旧版 anime-follows.v1.json 收藏，不上传、不覆盖完整备份；后续请使用统一收藏与历史同步。'
-                      : '连接一次即可自动合并收藏、章节与页码 / 秒数，不需要反复上传或拉取备份。',
+                      ? '导入 anime-follows.v1.json 收藏，后续使用统一同步。'
+                      : '同步收藏、章节与页码 / 秒数。',
                 ),
                 if (!widget.fullBackup && !widget.animeCollectionOnly) ...[
                   ExpansionTile(
@@ -506,10 +498,9 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
                     title: const Text('同步范围与缺失来源处理'),
                     children: [
                       Text(
-                        '同步漫画与动画收藏（含取消收藏）、阅读与观看历史，以及准确的插件包名和来源身份。'
-                        '不上传媒体文件、下载、APK / JAR / 规则代码、账号密码、Cookie 或播放链接。'
-                        '同一来源按最近访问保存位置，可回退；换来源须核对作品和章节，不能直接沿用页码或秒数。'
-                        '缺少插件时可到插件库安装，或搜索其他已启用来源并确认迁移。',
+                        '同步漫画与动画收藏、取消收藏、历史和来源身份。'
+                        '不上传媒体、下载、插件代码、账号凭据或播放链接。'
+                        '同源采用最近访问位置；缺少插件请手动安装，换源需核对作品及章节。',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -630,32 +621,16 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('自动同步收藏与历史'),
-                    subtitle: const Text('启动、返回应用及本机记录变化时自动合并；失败保留本机数据。'),
+                    subtitle: const Text('启动、返回应用或记录变化时合并'),
                     value: automatic.enabled,
                     onChanged: automatic.configured ? _setAutomaticSync : null,
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('同时自动同步 Bangumi 收藏'),
-                    subtitle: const Text(
-                      '需另行配置 Bangumi 账号；只同步收藏状态，WebDAV 保留页码和播放秒数。',
-                    ),
-                    value: automatic.bangumiEnabled,
-                    onChanged: (value) =>
-                        _setAutomaticSync(value, bangumi: true),
-                  ),
-                  TextButton.icon(
-                    onPressed: () =>
-                        context.push('${AppRoutes.tracking}?type=anime'),
-                    icon: const Icon(Icons.manage_accounts_outlined),
-                    label: const Text('管理 Bangumi 账号'),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   OutlinedButton.icon(
                     onPressed:
                         _busy ||
                             automatic.syncing ||
-                            (!automatic.configured && !automatic.bangumiEnabled)
+                            !automatic.configured
                         ? null
                         : _syncLibrary,
                     icon: const Icon(Icons.sync),

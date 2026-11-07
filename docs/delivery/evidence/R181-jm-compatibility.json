@@ -1,0 +1,715 @@
+{
+  "schemaVersion": 1,
+  "version": "0.14.1+181",
+  "status": "published-and-public-artifacts-verified",
+  "reference": {
+    "project": "Komikku",
+    "commit": "64aeb48f31a211e734dafe6c838ae2c712ae69e2"
+  },
+  "plugin": {
+    "package": "eu.kanade.tachiyomi.extension.zh.jinmantiantang",
+    "version": "1.6.64",
+    "versionCode": 106064,
+    "apkSha256": "e30a1c09951a41cd486533112fdd220187f60f0c6165599a6ac2285454e3cfd0",
+    "signerSha256": "9add655a78e96c4ec7a53ef89dccb557cb5d767489fac5e785d671a5a75d4da2"
+  },
+  "android": {
+    "device": "disposable API35 x86_64, explicit transport 127.0.0.1:5683",
+    "build": "Final ordinary main x86_64 R8 release; acceptance debug signing, not production signing identity",
+    "testedApkSha256": "19702326588e4be52fcc81d3c2c4b59c85bd971feb08d52238baa9a7a35da089",
+    "before180": {
+      "enableMillis": 0,
+      "enableOk": true,
+      "error": "source_request_failed: No direct method <init>(Ljava/util/List;)V in class Leu/kanade/tachiyomi/source/model/FilterList; or its super classes (declaration of 'eu.kanade.tachiyomi.source.model.FilterList' appears in /data/app/~~LDZzKihHCVwnLmnygVFMFw==/io.github.hyperionhxh.triomi-YU0pbX7tSwDxhHwxnVC...",
+      "filterError": "java.lang.NoSuchMethodError: No direct method <init>(Ljava/util/List;)V in class Leu/kanade/tachiyomi/source/model/FilterList; or its super classes (declaration of 'eu.kanade.tachiyomi.source.model.FilterList' appears in /data/app/~~LDZzKihHCVwnLmnygVFMFw==/io.github.hyperionhxh.triomi-YU0pbX7tSwDxh...",
+      "filterListListConstructor": false,
+      "filterMillis": 72,
+      "filterOk": false,
+      "httpExceptionGetCode": false,
+      "httpExceptionIntConstructor": false,
+      "inspectMillis": 786,
+      "inspectOk": true,
+      "searchMillis": 18,
+      "searchOk": false,
+      "settingsSourceMillis": 1,
+      "settingsSourceOk": true,
+      "sourceCount": 1,
+      "stage": "search",
+      "status": "failed"
+    },
+    "after181": {
+      "apkBytes": 152063,
+      "chapterCount": 1,
+      "chaptersMillis": 578,
+      "chaptersOk": true,
+      "copySha256": "e30a1c09951a41cd486533112fdd220187f60f0c6165599a6ac2285454e3cfd0",
+      "decodeImageMillis": 27,
+      "decodeImageOk": true,
+      "detailMillis": 822,
+      "detailOk": true,
+      "enableMillis": 0,
+      "enableOk": true,
+      "enabledViaTestPreference": true,
+      "filterCount": 12,
+      "filterMillis": 21,
+      "filterOk": true,
+      "hasNextPage": false,
+      "imageBytes": 85325,
+      "imageFileMillis": 934,
+      "imageFileOk": true,
+      "imageHeight": 876,
+      "imageWidth": 1280,
+      "inspectMillis": 50,
+      "inspectOk": true,
+      "mangaCount": 48,
+      "packageVersionCode": 106064,
+      "pageCount": 296,
+      "pagesMillis": 803,
+      "pagesOk": true,
+      "searchMillis": 3325,
+      "searchOk": true,
+      "settingsSourceMillis": 0,
+      "settingsSourceOk": true,
+      "sourceCopyIdentityMatch": true,
+      "sourceCopyShaMatch": true,
+      "sourceCount": 1,
+      "sourceSha256": "e30a1c09951a41cd486533112fdd220187f60f0c6165599a6ac2285454e3cfd0",
+      "status": "completed"
+    },
+    "nativeRegression": {
+      "passed": 38,
+      "classes": [
+        "SourceApiCompatibilityTest",
+        "MihonHttpCompatibilityTest",
+        "MihonRequestCancellationTest",
+        "MihonUtilityCompatibilityTest",
+        "MihonMemoCompatibilityTest",
+        "MihonDependencyCompatibilityTest",
+        "MihonFiltersCompatibilityTest"
+      ]
+    },
+    "dexContractCount": 128,
+    "network": "Temporary CONNECT tunnel used host DNS with end-to-end TLS. Reset after probe; default emulator DNS reachability not established.",
+    "releaseFullChain": {
+      "hostApkSha256": "19702326588e4be52fcc81d3c2c4b59c85bd971feb08d52238baa9a7a35da089",
+      "extensionApkSha256": "e30a1c09951a41cd486533112fdd220187f60f0c6165599a6ac2285454e3cfd0",
+      "filterCount": 12,
+      "searchCount": 48,
+      "chapterCount": 1,
+      "pageCount": 296,
+      "imageBytes": 85325,
+      "imageWidth": 1280,
+      "imageHeight": 876,
+      "result": "completed",
+      "scope": "Acceptance-signed R8 release on disposable emulator; instrumentation permission fixture explicitly enables extension; executes production prepared request operations. No production keep-rule changes for probe.",
+      "finalRebuiltArtifactVerified": true,
+      "evidenceSha256": "6065f8c2631fb31ee6a41f7aee2859a8c90c18aed56d36bcac47f782a35e41c3"
+    },
+    "proxyRestored": true
+  },
+  "windows": {
+    "productionUiValidation": {
+      "status": "passed",
+      "target": "tools/windows_mihon_acceptance.dart",
+      "mode": "Final Profile with isolated compile-time acceptance root; production source/channel/installer/reader. Ordinary Release independently built and packaged with acceptance mode OFF.",
+      "result": {
+        "format": 1,
+        "platform": "windows",
+        "status": "passed",
+        "stage": "completed",
+        "nativeAcceptance": {
+          "isolatedBuild": true,
+          "stateFailureStage": "",
+          "win32Error": 0
+        },
+        "isolation": {
+          "newDataRoot": true,
+          "pathProviderRedirected": true,
+          "hiveIsolated": true,
+          "database": "memory",
+          "secureStore": "memory",
+          "sourceHttp": "production",
+          "hostChannel": "production",
+          "legacyPreferenceMigration": "skipped for empty acceptance root"
+        },
+        "artifactDelivery": "fingerprinted original local files; remaining files official HTTPS",
+        "fixedFingerprintsExplicitlyAccepted": true,
+        "apkSha256": "e30a1c09951a41cd486533112fdd220187f60f0c6165599a6ac2285454e3cfd0",
+        "jarSha256": "5eebd0bae530be491fe1cae32d1940c3914b224c46e7b9d6dd596415ef2c8be7",
+        "runtimeFileSha256": "5eebd0bae530be491fe1cae32d1940c3914b224c46e7b9d6dd596415ef2c8be7",
+        "sourceCount": 1,
+        "filterProbe": "passed",
+        "searchCount": 48,
+        "chapterCount": 1,
+        "pageCount": 296,
+        "imageBytes": 277807,
+        "imageWidth": 1280,
+        "imageHeight": 1646,
+        "readerMounted": true,
+        "readerPage": 3,
+        "readerImagePainted": true
+      },
+      "acceptanceBuildCacheReset": "OFF after run; Release compile rejects ON",
+      "evidenceSha256": "723502566af31ec762c1e4ae85c7f7b46b09933d92f4f1b1936bda97e54078fe"
+    },
+    "isolatedPackagedRuntime": {
+      "runtime": "Suwayomi-Server v2.4.2366 unmodified",
+      "artifact": "JM native JAR v1.6.64",
+      "searchCount": 48,
+      "mangaInitialized": true,
+      "chapterCount": 1,
+      "pageCount": 296,
+      "firstPageContentType": "image/jpg",
+      "firstPageBytes": 88434,
+      "firstPageSha256": "732563c110db1a73f108258aa12c8003dfb3b1831ad03115d29d1bfa901e07ef"
+    },
+    "apkOnlyLoadAndFilters": [
+      {
+        "package": "eu.kanade.tachiyomi.extension.zh.baozimanhuaplus",
+        "version": "1.4.4",
+        "sourceUrl": "https://raw.githubusercontent.com/LittleSurvival/copymanga-copy20/repo/apk/tachiyomi-zh.baozimanhuaplus-v1.4.4.apk",
+        "inspection": {
+          "ok": true,
+          "signatureVerified": true,
+          "packageName": "eu.kanade.tachiyomi.extension.zh.baozimanhuaplus",
+          "versionCode": 4,
+          "versionName": "1.4.4",
+          "signerSha256": "896d1ca35175c42baf61b1a157e4354df9568beed4ccc82a03762d1167005e79",
+          "sha256": "0bad2816b22bf7fce3384f1c530a5dcb6f2e5c79a521edf483d0aa94159bcfce",
+          "nsfw": false
+        },
+        "nativeLibraries": [],
+        "installStatus": 200,
+        "installBody": "",
+        "sources": [
+          {
+            "id": "4654438345013653772",
+            "filtersStatus": 200,
+            "filterBytes": 1337,
+            "filterBody": null
+          }
+        ]
+      },
+      {
+        "package": "eu.kanade.tachiyomi.extension.zh.copymanga",
+        "version": "1.4.85",
+        "sourceUrl": "https://raw.githubusercontent.com/LittleSurvival/copymanga-copy20/repo/apk/tachiyomi-zh.copymanga-v1.4.85.apk",
+        "inspection": {
+          "ok": true,
+          "signatureVerified": true,
+          "packageName": "eu.kanade.tachiyomi.extension.zh.copymanga",
+          "versionCode": 85,
+          "versionName": "1.4.85",
+          "signerSha256": "896d1ca35175c42baf61b1a157e4354df9568beed4ccc82a03762d1167005e79",
+          "sha256": "0a208f10b4f8fa3f3f0fae7704935e1a487c6ee342722c7e7818a02ad8c8dd6a",
+          "nsfw": true
+        },
+        "nativeLibraries": [],
+        "installStatus": 200,
+        "installBody": "",
+        "sources": [
+          {
+            "id": "6696312508930833206",
+            "filtersStatus": 200,
+            "filterBytes": 2034,
+            "filterBody": null
+          }
+        ]
+      },
+      {
+        "package": "eu.kanade.tachiyomi.extension.all.tachidesk",
+        "version": "1.4.29",
+        "sourceUrl": "https://raw.githubusercontent.com/Suwayomi/tachiyomi-extension/repo/apk/tachiyomi-all.tachidesk-v1.4.29.apk",
+        "inspection": {
+          "ok": true,
+          "signatureVerified": true,
+          "packageName": "eu.kanade.tachiyomi.extension.all.tachidesk",
+          "versionCode": 29,
+          "versionName": "1.4.29",
+          "signerSha256": "263228f0827ca0b66e8aad8eba50d71c0f13927fe6912520f8a05f19667283bc",
+          "sha256": "2214e48213d5001fd7ebdf9008b6d165af564fd8481352efbe535f30953b1db6",
+          "nsfw": false
+        },
+        "nativeLibraries": [],
+        "installStatus": 200,
+        "installBody": "",
+        "sources": [
+          {
+            "id": "3100117499901280806",
+            "filtersStatus": 200,
+            "filterBytes": 1169,
+            "filterBody": null
+          }
+        ]
+      },
+      {
+        "package": "eu.kanade.tachiyomi.extension.zh.manwayuplus",
+        "version": "1.4.8",
+        "sourceUrl": "https://raw.githubusercontent.com/LittleSurvival/copymanga-copy20/repo/apk/tachiyomi-zh.manwayuplus-v1.4.8.apk",
+        "inspection": {
+          "ok": true,
+          "signatureVerified": true,
+          "packageName": "eu.kanade.tachiyomi.extension.zh.manwayuplus",
+          "versionCode": 8,
+          "versionName": "1.4.8",
+          "signerSha256": "896d1ca35175c42baf61b1a157e4354df9568beed4ccc82a03762d1167005e79",
+          "sha256": "256045efedcf619e312fcd823d46add54c0df7ebb15a6c3642164f1f4bc02cdd",
+          "nsfw": true
+        },
+        "nativeLibraries": [],
+        "installStatus": 200,
+        "installBody": "",
+        "sources": [
+          {
+            "id": "1506592945012434101",
+            "filtersStatus": 200,
+            "filterBytes": 1440,
+            "filterBody": null
+          }
+        ]
+      },
+      {
+        "package": "eu.kanade.tachiyomi.extension.all.kavita",
+        "version": "1.4.28",
+        "sourceUrl": "https://raw.githubusercontent.com/Kareadita/tach-extension/repo/apk/tachiyomi-all.kavita-v1.4.28.apk",
+        "inspection": {
+          "ok": true,
+          "signatureVerified": true,
+          "packageName": "eu.kanade.tachiyomi.extension.all.kavita",
+          "versionCode": 28,
+          "versionName": "1.4.28",
+          "signerSha256": "5887aee6597996821a1f05ec0d88cac45ec2847143278ac6b1efc657bfad6be0",
+          "sha256": "6b25b3334d43dfd61f909c2ccab1fa6bd20155b7ca3b8f5a3f3a3cc0d8a3405b",
+          "nsfw": false
+        },
+        "nativeLibraries": [],
+        "installStatus": 200,
+        "installBody": "",
+        "sources": [
+          {
+            "id": "7266875667263635239",
+            "filtersStatus": 200,
+            "filterBytes": 1635,
+            "filterBody": null
+          },
+          {
+            "id": "3764816291200082561",
+            "filtersStatus": 200,
+            "filterBytes": 1635,
+            "filterBody": null
+          },
+          {
+            "id": "778637366235559582",
+            "filtersStatus": 200,
+            "filterBytes": 1635,
+            "filterBody": null
+          }
+        ],
+        "retrievedFrom": "https://api.github.com/repos/Kareadita/tach-extension/contents/apk/tachiyomi-all.kavita-v1.4.28.apk?ref=94cbcd6dcada220cb19ba386deffd30f980e2b52",
+        "auditOnlyHistoricalArtifact": true
+      }
+    ],
+    "ordinaryReleasePackage": {
+      "status": "passed",
+      "version": "0.14.1+181",
+      "filesVerified": 452,
+      "ordinaryMain": true,
+      "acceptanceSwitch": "OFF",
+      "artifacts": {
+        "triomi-windows.zip": {
+          "sha256": "ffe088fa16348734f6e38883285150de9c21a4fdae46d824b11f2f0d25abf7b0",
+          "bytes": 255286884
+        },
+        "triomi-windows.msi": {
+          "sha256": "478311f2cfc8ab546b456f795c79c5530109676679eae5b8281f738f0617d2de",
+          "bytes": 244048233
+        },
+        "triomi-windows.update.json": {
+          "sha256": "3b2675c91bcb646a54a1745e03fecdf17c1486c0a7308b9906e05f5a79c33055",
+          "bytes": 78760
+        }
+      }
+    },
+    "finalRuntime": {
+      "serverVersion": "v2.4.2366",
+      "serverSha256": "af9feb20af9d7ebe9e30769e6c6ebc7fc7ab1c447388d42e0280b1da5fe07bfd",
+      "helperJarSha256": "a09c78d6d49ec49606e37d3412f150c64257efa0f996576c95aabe9a1f409a11",
+      "nullableFilterSearchSourceSha256": "c12d9cffe6acd27da47b5d14a13f4b4b5af39e4dea5facf62278f7a961b50d06",
+      "graphicsSourcesSha256": {
+        "tools/desktop/android/graphics/Canvas.java": "a6584120cfd325fa2fe44f2893834d37a598834396594ab40d798286981ddb68",
+        "tools/desktop/android/graphics/ColorFilter.java": "91ad33de263fa393e0693f9b0dba89cb248c1aa90a1b8677bbd4ef77899f0f72",
+        "tools/desktop/android/graphics/ColorMatrix.java": "2b1ece0d04a3a36036b178eaea57a46e90a8ee393b7b56891b50717e103d36cb",
+        "tools/desktop/android/graphics/ColorMatrixColorFilter.java": "93d3c67f416fbce7986fdac4d5e7a824c54c453ec8002ea6023e9f2316ba18b6",
+        "tools/desktop/android/graphics/Matrix.java": "689c4880c3665dbe3c11d547c3e2c523cd4ef56312096de3a26cfbbc378fc8fc"
+      },
+      "provenanceSha256": "c630bf01fb6ef335848204838dee954a70bc7c467caac32e8b47e59679278e5f",
+      "startup": "passed",
+      "privateJreGraphicsPixels": "passed",
+      "privateJreNullableFilters": "24 assertions passed including real original MangaDex sort URL construction"
+    }
+  },
+  "automated": {
+    "githubPublicDeliveryTests": 14,
+    "flutterFirstFullRun": {
+      "passed": 1661,
+      "skipped": 4,
+      "scope": "Historical first regression before modern repository/metadata and final desktop changes; superseded below."
+    },
+    "pythonTools": {
+      "passed": 117,
+      "scope": "Full tool suite after audit identity and real snapshot apkUrl regression fixes."
+    },
+    "flutterFinalDartRun": {
+      "passed": 1693,
+      "skipped": 4,
+      "scope": "Full suite after recursive GraphQL search and metadata persistence fixes, before last nullable-sort branch; final incremental client tests and analyze separately passed.",
+      "evidenceSha256": "eefd011da76aa34f9d02806fd1fa84e8f4371421d78a3cdba0f09a0ff68e16f7"
+    },
+    "flutterAnalyze": {
+      "issues": 0,
+      "scope": "Final Dart source including nullable-sort branch",
+      "evidenceSha256": "289d7f42f25dc2085e69a2958089ca2c71e93e8bdaf759ef1bb6636969f4a1e1"
+    },
+    "nativeBaseline": {
+      "passed": 28,
+      "scope": "Before full repository dependency updates and large filter-tree repair; not final native validation."
+    },
+    "nativeAlignedDebug": {
+      "passed": 38,
+      "scope": "Source API 7, network 9, cancellation 7, utility/coroutines 7, memo 1, real dependency runtime 3, filter tree 4; original dependencies, real JS/PB/PNG and socket cancellation."
+    },
+    "alignedDebugAbi": {
+      "requiredDescriptors": 128,
+      "missing": 0,
+      "scope": "Actual updated debug APK; final release/R8 separately passed."
+    },
+    "windowsOrdinaryMain": {
+      "configuration": "Release",
+      "acceptanceMode": false,
+      "result": "build, ZIP, MSI and 452-file integrity verification passed",
+      "scope": "Ordinary main target; CMake acceptance OFF; no isolated acceptance target markers in EXE/AOT."
+    },
+    "releaseNativeAbi": {
+      "groupsPassed": 8,
+      "releaseApkSha256": "19702326588e4be52fcc81d3c2c4b59c85bd971feb08d52238baa9a7a35da089",
+      "requiredDescriptors": 128,
+      "scope": "Final rebuilt installed acceptance-signed R8 APK, target classloader, real QuickJS bytecode/PNG pixels and 128 actual DEX descriptors."
+    },
+    "desktopRecursiveGraphqlTests": {
+      "passed": 37,
+      "scope": "Final client tests including null-sort complete snapshot, recursive typed groups, source identity and physical socket cancellation.",
+      "evidenceSha256": "7f64517247fb6eac0880208e48243a124dcb6103df88237c53c145599d60c2ea"
+    },
+    "desktopNullableFilters": {
+      "assertionsPassed": 24,
+      "scope": "Final private JRE; real schema/async source/standard DTO/order/paging/auth/original branch/atomic validation; real original MangaDex URL loses order parameter only when explicit null applied.",
+      "originalMangaDexJarSha256": "373716df38db24700403f889ed233dee5aa44e2ff1a73e96ce2cc99ce60caa05",
+      "evidenceSha256": "a116233648acbd81e377a1a10bd76f94da0d0cc62dae07070cd83c2fe59dc4c3"
+    },
+    "desktopGraphics": {
+      "privateJrePixelChecks": "passed",
+      "matrixAssertions": 988,
+      "realTenkaiscanInterceptor": "32x8 JPEG, XY pivot flip, translation and inversion passed against controlled JSON/PNG chain",
+      "scope": "Actual original plugin interceptor against fixture inputs; no live-site or complete Android graphics API claim."
+    },
+    "textEncoding": {
+      "errors": 0,
+      "scope": "tracked and new files"
+    },
+    "uiDocDrift": {
+      "errors": 0,
+      "warnings": 0,
+      "infos": 1
+    },
+    "deliveryConsistency": {
+      "errors": 0,
+      "historicalWarnings": 35
+    },
+    "remoteFinalBuild": {
+      "id": 42198237181,
+      "url": "https://github.com/HyperionHXH/triomi/actions/runs/42198237181",
+      "commit": "dbcc98de735a9ccd5cea4d906511bb725538a821",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "python-tools",
+          "conclusion": "success"
+        },
+        {
+          "name": "android",
+          "conclusion": "success"
+        },
+        {
+          "name": "test",
+          "conclusion": "success"
+        },
+        {
+          "name": "windows",
+          "conclusion": "success"
+        }
+      ],
+      "flutterTests": {
+        "passed": 1697,
+        "skipped": 1
+      },
+      "flutterAnalyzeIssues": 0,
+      "pythonTestsPassed": 117
+    },
+    "remoteRelease": {
+      "id": 42198294470,
+      "url": "https://github.com/HyperionHXH/triomi/actions/runs/42198294470",
+      "commit": "dbcc98de735a9ccd5cea4d906511bb725538a821",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "windows",
+          "conclusion": "success"
+        },
+        {
+          "name": "android",
+          "conclusion": "success"
+        },
+        {
+          "name": "publish",
+          "conclusion": "success"
+        }
+      ]
+    }
+  },
+  "limits": [
+    "Compatibility target is the frozen Komikku/source-api and acquired original repository artifacts, not all future plugins or every website/account/region/lazy execution path.",
+    "Android 14 exact inventory versions were unavailable; Windows 51 exact original native-JAR URLs returned HTTP 404. They remain unverified and no newer version substitutes for them.",
+    "Static audit retains 70 optional modern decoder missing references in 7 records; 4 real Android helper fallback pixel paths passed, while the R8-inlined Webtoon helper and 16KB-page Android device execution remain unverified.",
+    "MangaCloud desktop ActivityThread reflection paths and Canvas perspective rendering remain unverified/unsupported; successful install/filter execution is not a blanket runtime claim.",
+    "APK-only checks establish conversion/loading/filter construction for the named original samples, not inventory-wide APK-to-JVM conversion or configured site/account search.",
+    "Local emulator tests used acceptance signing. Public v0.14.1 APK has the same RSA4096 signing certificate as public v0.14.0, passes v2 verification and the 128-descriptor ABI gate. Published multi-architecture APK integrity is verified; live-device reading evidence remains the separately recorded local R8/Windows acceptance, not a claim of exhaustive device testing."
+  ],
+  "repositoryAudit": {
+    "snapshotRecords": 3070,
+    "downloadedAndValidatedRecords": 3056,
+    "uniqueApkSha256": 2224,
+    "historicalOverlayRecords": 1,
+    "unavailableExactOldVersions": 13,
+    "baselineStatic": {
+      "pluginsWithMissingReferences": 152,
+      "missingReferenceOccurrences": 655,
+      "uniqueMissingDescriptors": 69,
+      "totalReferences": 1720922,
+      "scope": "Before full runtime dependency alignment; dynamic compatibility is separately tested."
+    },
+    "runtimeBatch": "in progress; per-artifact SHA and host SHA bound; loading/filters do not prove site reading",
+    "androidBaseline": {
+      "uniqueApks": 2224,
+      "passedLoadAndFilters": 2210,
+      "filterFailures": 8,
+      "processCrashesObserved": 6,
+      "scope": "Old dependency baseline; crashes observed during artifact, asynchronous producer not attributed; full aligned-host batch pending."
+    },
+    "realLargeFilterRegression": {
+      "artifacts": 8,
+      "passed": 8,
+      "maximumObservedNodes": 6763,
+      "scope": "Original APK trees on aligned debug; nodes not truncated, host total budget 65536."
+    },
+    "androidAligned": {
+      "scope": "Android disposable API35 x86_64 actual APK signature+metadata+load+all-source filters only; no search/detail/pages/network-health guarantee",
+      "hostApkSha256": "cc3336c8ebcec87bf280b6af1a12a1a726e67a339798a627082cf40a1a609640",
+      "expectedInventoryRecords": 3070,
+      "availableUniqueArtifacts": 2224,
+      "observedUniqueArtifacts": 2224,
+      "artifactStatusCounts": {
+        "passed-load-and-filters": 2224
+      },
+      "sourceStatusCounts": {
+        "passed": 4081
+      },
+      "inventoryStatusCounts": {
+        "passed-load-and-filters": 3056,
+        "not-available": 14
+      },
+      "originalSummarySha256": "6cfdc49a61b25cb462c0892ac061b2541d5374db0335acd63d7e4e93c24b65db",
+      "inventoryEvidence": "R181-android-plugin-inventory.json"
+    },
+    "androidHistorical": {
+      "package": "eu.kanade.tachiyomi.extension.all.kavita",
+      "version": "1.4.28",
+      "passedLoadAndFilters": true,
+      "auditOnlyHistorical": true,
+      "includedInDirectInventory": false
+    },
+    "alignedStatic": {
+      "expectedPluginEntries": 3070,
+      "pluginsAudited": 3056,
+      "pluginsWithMissingReferences": 7,
+      "pluginsIndeterminate": 0,
+      "notAudited": 14,
+      "pluginAuditRatio": 0.99544,
+      "referenceCoverage": {
+        "total": 1720922,
+        "resolved": 1720852,
+        "missing": 70,
+        "indeterminate": 0,
+        "ratio": 0.999959
+      },
+      "missingByKind": {
+        "classes": 21,
+        "methods": 42,
+        "fields": 7
+      },
+      "scope": "All 3056 acquired original APK records; remaining 70 references in 7 records are optional modern decoder API; 4 unique helpers have actual Android fallback pixel checks, one Webtoon helper was R8-inlined and remains a direct-probe limitation. Static audit deliberately stays non-green for those references and the 14 unavailable versions.",
+      "evidenceSha256": "963919f69d029109f6189553e23766ac78b00b33d08ef92a82b410efa3200750"
+    },
+    "windowsAligned": {
+      "scope": "Windows native-JAR install, source identity and normalized filter execution only",
+      "expectedUniqueNativeJarUrls": 3065,
+      "statuses": {
+        "passed": 3014,
+        "jar-unavailable-not-audited": 51
+      },
+      "testedUniqueJarSha256": 2221,
+      "filterSourceResultsByUrl": 4895,
+      "freshJvmShards": 74,
+      "nonfatalClassLookupLogUrls": 2,
+      "unavailableDownloadStatuses": {
+        "http-404": 51
+      },
+      "inventoryEvidence": "R181-windows-plugin-inventory.json",
+      "inventorySha256": "eb512cdf7195a63eef38cc15e9a1d18233802478afd20f003e400a34bafc54f5",
+      "unavailableReason": "51 exact original URLs actually returned HTTP 404 after bounded final retry; none unattempted or transport-unknown."
+    }
+  },
+  "localArtifacts": {
+    "android": {
+      "path": "build/app/outputs/flutter-apk/app-release.apk",
+      "sha256": "19702326588e4be52fcc81d3c2c4b59c85bd971feb08d52238baa9a7a35da089",
+      "bytes": 102847068,
+      "signing": "acceptance debug identity; not production release"
+    },
+    "windows": {
+      "directory": "_tools/jm-apk-debug/release181",
+      "status": "passed",
+      "version": "0.14.1+181",
+      "filesVerified": 452,
+      "ordinaryMain": true,
+      "acceptanceSwitch": "OFF",
+      "artifacts": {
+        "triomi-windows.zip": {
+          "sha256": "ffe088fa16348734f6e38883285150de9c21a4fdae46d824b11f2f0d25abf7b0",
+          "bytes": 255286884
+        },
+        "triomi-windows.msi": {
+          "sha256": "478311f2cfc8ab546b456f795c79c5530109676679eae5b8281f738f0617d2de",
+          "bytes": 244048233
+        },
+        "triomi-windows.update.json": {
+          "sha256": "3b2675c91bcb646a54a1745e03fecdf17c1486c0a7308b9906e05f5a79c33055",
+          "bytes": 78760
+        }
+      }
+    }
+  },
+  "publication": {
+    "requested": true,
+    "tag": "v0.14.1",
+    "pushed": true,
+    "published": true,
+    "sourceCommit": "dbcc98de735a9ccd5cea4d906511bb725538a821",
+    "releaseWorkflow": {
+      "id": 42198294470,
+      "url": "https://github.com/HyperionHXH/triomi/actions/runs/42198294470",
+      "commit": "dbcc98de735a9ccd5cea4d906511bb725538a821",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "windows",
+          "conclusion": "success"
+        },
+        {
+          "name": "android",
+          "conclusion": "success"
+        },
+        {
+          "name": "publish",
+          "conclusion": "success"
+        }
+      ]
+    },
+    "buildWorkflow": {
+      "id": 42198237181,
+      "url": "https://github.com/HyperionHXH/triomi/actions/runs/42198237181",
+      "commit": "dbcc98de735a9ccd5cea4d906511bb725538a821",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "python-tools",
+          "conclusion": "success"
+        },
+        {
+          "name": "android",
+          "conclusion": "success"
+        },
+        {
+          "name": "test",
+          "conclusion": "success"
+        },
+        {
+          "name": "windows",
+          "conclusion": "success"
+        }
+      ],
+      "flutterTests": {
+        "passed": 1697,
+        "skipped": 1
+      },
+      "flutterAnalyzeIssues": 0,
+      "pythonTestsPassed": 117
+    },
+    "publicArtifactVerification": {
+      "status": "passed",
+      "tag": "v0.14.1",
+      "version": "0.14.1+181",
+      "url": "https://github.com/HyperionHXH/triomi/releases/tag/v0.14.1",
+      "publishedAt": "2026-11-06T10:00:37Z",
+      "assets": {
+        "SHA256SUMS.txt": {
+          "sha256": "12ef66465af9abd13a77b5922ef97e4d01b35f44e0f56d01fecd2e426be6903e",
+          "bytes": 348
+        },
+        "triomi-android.apk": {
+          "sha256": "0d0031f976ed8fa2050a9733a0c46f5b53ba90f34c2e2a4c3e2bf2e3a0e46f3f",
+          "bytes": 161925222
+        },
+        "triomi-windows.zip": {
+          "sha256": "b153014a36541a26283d8ba66508bf7bc6047647d5eece6bd86d3c69ed851eea",
+          "bytes": 255461870
+        },
+        "triomi-windows.msi": {
+          "sha256": "e7fe394d7fb2932fc60a6434b61401ee801cd2c1e8e4717e0336e08b3ff7a028",
+          "bytes": 244187332
+        },
+        "triomi-windows.update.json": {
+          "sha256": "29468aea770b1f2daf5098b073feb423ac999465d780c9a7ec42742917854ef6",
+          "bytes": 78619
+        }
+      },
+      "android": {
+        "signerSha256": "731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309",
+        "matchesPublic180Signer": true,
+        "signatureSchemeV2": true,
+        "requiredAbiDescriptors": 128,
+        "nativeArchitectures": [
+          "arm64-v8a",
+          "armeabi-v7a",
+          "x86_64"
+        ],
+        "versionVerified": true
+      },
+      "windows": {
+        "manifestFilesVerified": 451,
+        "ordinaryMain": true,
+        "sourceProvenanceVerified": true,
+        "helperJarSha256": "d293e6768c63d4302ff9b6dd354e189f12cfa66cd8ced8da6ced1faef8725bda"
+      }
+    }
+  }
+}

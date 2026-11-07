@@ -325,7 +325,7 @@ class _SourceMigrationPageState extends ConsumerState<SourceMigrationPage> {
       title: '复制到其他来源',
       actions: [
         IconButton(
-          tooltip: '持久迁移计划',
+          tooltip: '迁移计划',
           onPressed: () => Navigator.push(
             context,
             MaterialPageRoute<void>(builder: (_) => const MigrationPlansPage()),
@@ -344,17 +344,14 @@ class _SourceMigrationPageState extends ConsumerState<SourceMigrationPage> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  '确认同一作品的目标版本及迁移范围。原收藏、历史、文件和追踪全部保留；目标已有数据只能显式合并，不倒退目标进度。',
-                ),
+                const Text('核对目标作品后选择迁移范围。原数据保留，目标已有数据需确认合并。'),
                 const SizedBox(height: 16),
                 if (_origin != null && _sources.isEmpty && !_loading)
-                  const Text('没有其他已启用且可搜索、阅读的同类来源。请先在来源管理中启用其他来源。'),
+                  const Text('没有可用的同类来源，请先启用其他来源。'),
                 if (_sources.isNotEmpty) ...[
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('搜索所有已启用来源'),
-                    subtitle: const Text('分来源返回结果，单站失败不影响其他结果；不会自动安装或启用插件。'),
                     value: _allSources,
                     onChanged: _loading || _committing
                         ? null
@@ -485,7 +482,7 @@ class _SourceMigrationPageState extends ConsumerState<SourceMigrationPage> {
                   ),
                   CheckboxListTile(
                     title: const Text('所选章节的阅读历史'),
-                    subtitle: const Text('跨源页码重置；只有校验复制的完全相同文件才保留页码'),
+                    subtitle: const Text('跨源页码重置；相同文件经校验后保留页码'),
                     value: _history,
                     onChanged: (v) => setState(() => _history = v == true),
                   ),
@@ -498,9 +495,7 @@ class _SourceMigrationPageState extends ConsumerState<SourceMigrationPage> {
                   if (widget.item.type == MediaType.manga)
                     CheckboxListTile(
                       title: const Text('复制所选旧版离线文件'),
-                      subtitle: const Text(
-                        '人工接受旧版内容；逐文件SHA256验证后才发布目标引用，旧文件保留',
-                      ),
+                      subtitle: const Text('接受旧版内容；SHA-256 校验后复制，保留原文件'),
                       value: _downloads,
                       onChanged: (v) => setState(() => _downloads = v == true),
                     ),
@@ -511,7 +506,7 @@ class _SourceMigrationPageState extends ConsumerState<SourceMigrationPage> {
                         setState(() => _mergeExisting = v == true),
                   ),
                   if (_history || _downloads) ...[
-                    const Text('逐章确认映射；未选章节不迁移，重复章号/标题/译组不自动猜配'),
+                    const Text('请逐章核对；未选章节不迁移'),
                     for (final old in _oldChapters.where((c) => !c.locked))
                       DropdownButtonFormField<String>(
                         key: ValueKey(

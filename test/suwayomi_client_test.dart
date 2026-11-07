@@ -241,7 +241,11 @@ void main() {
           await releaseIndependent.future;
           json(request, {'mangaList': <Object?>[], 'hasNextPage': false});
         } else {
-          json(request, <Object?>[]);
+          json(request, {
+            'data': {
+              'source': {'filters': <Object?>[]},
+            },
+          });
         }
       };
       final parent = SourceRequestCancellation();
@@ -511,6 +515,92 @@ void main() {
       );
       expect(issue?.requiresReinstall, isTrue);
       expect(await root.exists(), isFalse);
+    },
+  );
+
+  test('desktop installation probes real filter endpoints without assuming site health', () async {
+    final paths = <String>[];
+    handle = (request) async {
+      paths.add(request.uri.toString());
+      json(request, {
+        'data': {
+          'source': {'filters': <Object?>[]},
+        },
+      });
+    };
+    final result = await WindowsMihonHost.probeSourceFilters(client, [
+      {'id': '123', 'name': 'Example', 'lang': 'en'},
+    ]);
+    expect(result['filterProbe'], 'passed');
+    expect(paths, ['/api/graphql']);
+  });
+
+  test('dynamic filters requiring login remain unknown instead of rejecting a loaded plugin', () async {
+    handle = (request) async {
+      expect(request.uri.path, '/api/graphql');
+      final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+      if ((body['variables'] as Map)['source'] == '123') {
+        json(request, {
+          'data': {
+            'source': {'filters': <Object?>[]},
+          },
+        });
+      } else {
+        // The pinned runtime uses this same response for auth/site and JVM errors.
+        request.response.statusCode = 500;
+        request.response.write('Server Error');
+      }
+    };
+    final result = await WindowsMihonHost.probeSourceFilters(client, [
+      {'id': '123', 'name': 'Ready', 'lang': 'en'},
+      {'id': '456', 'name': 'Needs login', 'lang': 'en'},
+    ]);
+    expect(result['filterProbe'], 'unknown');
+    expect(result['filterProbeSources'], [
+      {'sourceId': '123', 'status': 'passed'},
+      {'sourceId': '456', 'status': 'unknown'},
+    ]);
+  });
+
+  test(
+    'dynamic filters cannot block installation beyond the probe budget',
+    () async {
+      final release = Completer<void>();
+      handle = (request) async {
+        await release.future;
+        json(request, {
+          'data': {
+            'source': {'filters': <Object?>[]},
+          },
+        });
+      };
+      try {
+        final result = await WindowsMihonHost.probeSourceFilters(client, [
+          {'id': '123', 'name': 'Dynamic', 'lang': 'en'},
+        ], budget: const Duration(milliseconds: 30));
+        expect(result['filterProbe'], 'unknown');
+      } finally {
+        release.complete();
+      }
+    },
+  );
+
+  test(
+    'malformed source factories fail before any filter request can execute',
+    () async {
+      var requests = 0;
+      handle = (request) async {
+        requests++;
+        json(request, []);
+      };
+      await expectLater(
+        WindowsMihonHost.probeSourceFilters(client, [
+          {'id': '123', 'name': 'One', 'lang': 'en'},
+          {'id': '123', 'name': 'Duplicate', 'lang': 'en'},
+        ]),
+        throwsStateError,
+      );
+      expect(requests, 0);
     },
   );
 
@@ -825,25 +915,35 @@ void main() {
 
   test('nested source filter selections drive a stateless search', () async {
     handle = (request) async {
+      expect(request.uri.path, '/api/graphql');
       final data = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
-      final changes = data['filter'] as List;
+      final input = (data['variables'] as Map)['input'] as Map;
+      expect(input['source'], '123');
+      expect(input['page'], 1);
+      expect(input['query'], 'book');
+      final changes = input['filters'] as List;
       final group = changes
-          .map((change) => jsonDecode('${(change as Map)['state']}') as Map)
+          .cast<Map<String, Object?>>()
+          .map((change) => change['groupChange'] as Map)
           .singleWhere((change) => change['position'] == 1);
-      final included = group['state'] == 'true';
+      final included = group['checkBoxState'] == true;
       json(request, {
-        'mangaList': included
-            ? [
-                {
-                  'id': 7,
-                  'sourceId': '123',
-                  'url': '/chosen',
-                  'title': 'Chosen genre',
-                  'genre': <String>[],
-                },
-              ]
-            : <Object?>[],
-        'hasNextPage': false,
+        'data': {
+          'fetchSourceManga': {
+            'mangas': included
+                ? [
+                    {
+                      'id': 7,
+                      'sourceId': '123',
+                      'url': '/chosen',
+                      'title': 'Chosen genre',
+                      'genre': <String>[],
+                    },
+                  ]
+                : <Object?>[],
+            'hasNextPage': false,
+          },
+        },
       });
     };
     final result = await client.request(
@@ -1078,68 +1178,429 @@ void main() {
   );
 
   test(
-    'Android saved filter snapshots restore and drive a desktop search',
+    'normalized GraphQL filters preserve labels and every typed state',
     () async {
       handle = (request) async {
-        if (request.uri.path.endsWith('/filters')) {
-          json(request, [
-            {
-              'type': 'Header',
-              'filter': {'name': 'Options', 'state': 'ignored'},
+        expect(request.uri.path, '/api/graphql');
+        final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+        expect(body['variables'], {'source': '514187608699312366'});
+        expect(body['query'], contains('selectState: default'));
+        json(request, {
+          'data': {
+            'source': {
+              'filters': [
+                {
+                  '__typename': 'SelectFilter',
+                  'name': 'Category',
+                  'values': ['', 'Ao-yem', 'Cosplay'],
+                  'selectState': 2,
+                },
+                {
+                  '__typename': 'GroupFilter',
+                  'name': 'Options',
+                  'filters': [
+                    {
+                      '__typename': 'TextFilter',
+                      'name': 'Tag',
+                      'textState': 'test',
+                    },
+                    {
+                      '__typename': 'CheckBoxFilter',
+                      'name': 'Active',
+                      'checkState': true,
+                    },
+                    {
+                      '__typename': 'TriStateFilter',
+                      'name': 'Ignored',
+                      'triState': 'IGNORE',
+                    },
+                    {
+                      '__typename': 'TriStateFilter',
+                      'name': 'Included',
+                      'triState': 'INCLUDE',
+                    },
+                    {
+                      '__typename': 'TriStateFilter',
+                      'name': 'Excluded',
+                      'triState': 'EXCLUDE',
+                    },
+                  ],
+                },
+                {
+                  '__typename': 'SortFilter',
+                  'name': 'Order',
+                  'values': ['Title', 'Date'],
+                  'sortState': {'index': 1, 'ascending': false},
+                },
+                {
+                  '__typename': 'SortFilter',
+                  'name': 'Unset',
+                  'values': ['Default'],
+                  'sortState': null,
+                },
+              ],
             },
-            {
-              'type': 'Group',
-              'filter': {
-                'name': 'Genres',
-                'state': [
+          },
+        });
+      };
+      final result = await client.request(
+        sourceId: '514187608699312366',
+        operation: 'filters',
+      );
+      final filters = (result['filters'] as List).cast<Map<String, Object?>>();
+      expect(filters[0], {
+        'index': 0,
+        'type': 'select',
+        'name': 'Category',
+        'values': ['', 'Ao-yem', 'Cosplay'],
+        'state': 2,
+      });
+      final grouped = (filters[1]['state'] as List)
+          .cast<Map<String, Object?>>();
+      expect(grouped.map((row) => row['state']), ['test', true, 0, 1, 2]);
+      expect(grouped.map((row) => row['index']), [0, 1, 2, 3, 4]);
+      expect(filters[2]['state'], {'index': 1, 'ascending': false});
+      expect(filters[3]['state'], isNull);
+    },
+  );
+
+  test(
+    'GraphQL partial errors never publish a successful filter snapshot',
+    () async {
+      handle = (request) async {
+        json(request, {
+          'data': {
+            'source': {'filters': <Object?>[]},
+          },
+          'errors': [
+            {'message': 'login required'},
+          ],
+        });
+      };
+      await expectLater(
+        client.request(sourceId: '1', operation: 'filters'),
+        throwsFormatException,
+      );
+    },
+  );
+
+  test(
+    'cancelling normalized filters closes only the owned GraphQL socket',
+    () async {
+      final started = Completer<void>();
+      final disconnected = Completer<void>();
+      handle = (request) async {
+        expect(request.uri.path, '/api/graphql');
+        await request.drain<void>();
+        await streamUntilDisconnected(request, started, disconnected);
+      };
+      final pending = client.request(
+        requestId: 'filters',
+        sourceId: '1',
+        operation: 'filters',
+      );
+      final result = expectLater(pending, cancelled);
+      await started.future;
+      await client.cancelRequest('filters');
+      await result;
+      await disconnected.future.timeout(const Duration(seconds: 3));
+      expect(client.activeRequestCount, 0);
+    },
+  );
+
+  test(
+    'grouped informational filters keep source positions when searching',
+    () async {
+      handle = (request) async {
+        final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+        if (!(body['variables'] as Map).containsKey('input')) {
+          json(request, {
+            'data': {
+              'source': {
+                'filters': [
                   {
-                    'type': 'CheckBox',
-                    'filter': {'name': 'Science', 'state': false},
+                    '__typename': 'SelectFilter',
+                    'name': 'Search Mode',
+                    'values': ['Pools', 'Tags'],
+                    'selectState': 0,
                   },
                   {
-                    'type': 'Select',
-                    'filter': {
-                      'name': 'Year',
-                      'state': 0,
-                      'values': [2025, 2026],
-                    },
+                    '__typename': 'GroupFilter',
+                    'name': 'Pool Search Options',
+                    'filters': [
+                      {
+                        '__typename': 'HeaderFilter',
+                        'name': '(Pools Search Mode only)',
+                      },
+                      {
+                        '__typename': 'SelectFilter',
+                        'name': 'Category',
+                        'values': ['Any', 'Series'],
+                        'selectState': 1,
+                      },
+                      {'__typename': 'SeparatorFilter', 'name': ''},
+                      {
+                        '__typename': 'CheckBoxFilter',
+                        'name': 'Active',
+                        'checkState': true,
+                      },
+                      {'__typename': 'HeaderFilter', 'name': 'End'},
+                    ],
                   },
                 ],
               },
             },
-            {
-              'type': 'Separator',
-              'filter': {'name': '', 'state': 'ignored'},
-            },
-          ]);
+          });
         } else {
-          final body =
-              jsonDecode(await utf8.decoder.bind(request).join()) as Map;
-          final changes = (body['filter'] as List).cast<Map<String, Object?>>();
+          expect(request.uri.path, '/api/graphql');
+          final input = (body['variables'] as Map)['input'] as Map;
+          final changes = (input['filters'] as List)
+              .cast<Map<String, Object?>>();
+          expect(changes.map((row) => row['position']), [0, 1, 1]);
+          expect(changes.first['selectState'], 0);
+          expect(changes.skip(1).map((row) => row['groupChange']), [
+            {'position': 1, 'selectState': 1},
+            {'position': 3, 'checkBoxState': true},
+          ]);
+          json(request, {
+            'data': {
+              'fetchSourceManga': {'mangas': <Object?>[], 'hasNextPage': false},
+            },
+          });
+        }
+      };
+      final fresh = await client.request(sourceId: '1', operation: 'filters');
+      final result = await client.request(
+        sourceId: '1',
+        operation: 'search',
+        filters: (fresh['filters'] as List).cast<Map<String, Object?>>(),
+      );
+      expect(result['ok'], isTrue);
+    },
+  );
+
+  test(
+    'nested groups and grouped sort submit recursive typed changes',
+    () async {
+      handle = (request) async {
+        final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+        final input = (body['variables'] as Map)['input'] as Map;
+        expect(input['page'], 2);
+        expect(input['filters'], [
+          {
+            'position': 0,
+            'groupChange': {
+              'position': 1,
+              'groupChange': {'position': 0, 'triState': 'EXCLUDE'},
+            },
+          },
+          {
+            'position': 0,
+            'groupChange': {
+              'position': 2,
+              'sortState': {'index': 1, 'ascending': false},
+            },
+          },
+        ]);
+        json(request, {
+          'data': {
+            'fetchSourceManga': {'mangas': <Object?>[], 'hasNextPage': true},
+          },
+        });
+      };
+      final result = await client.request(
+        sourceId: '1',
+        operation: 'search',
+        page: 2,
+        filters: [
+          {
+            'type': 'group',
+            'state': [
+              {'type': 'header'},
+              {
+                'type': 'group',
+                'state': [
+                  {'type': 'tri', 'state': 2},
+                ],
+              },
+              {
+                'type': 'sort',
+                'state': {'index': 1, 'ascending': false},
+              },
+            ],
+          },
+        ],
+      );
+      expect(result['hasNextPage'], isTrue);
+    },
+  );
+
+  test('explicit null sort preserves root and nested plugin state', () async {
+    final filters = <Map<String, Object?>>[
+      {
+        'type': 'sort',
+        'name': 'MangaDex order',
+        'values': ['Title', 'Relevance'],
+        'state': null,
+      },
+      {
+        'type': 'group',
+        'state': [
+          {'type': 'header', 'state': null},
+          {
+            'type': 'group',
+            'state': [
+              {'type': 'sort', 'state': null},
+              {'type': 'check', 'state': true},
+            ],
+          },
+          {
+            'type': 'sort',
+            'state': {'index': 1, 'ascending': false},
+          },
+        ],
+      },
+    ];
+    late Map<String, Object?> body;
+    late String path;
+    handle = (request) async {
+      path = request.uri.path;
+      body = jsonDecode(
+        await utf8.decoder.bind(request).join(),
+      ) as Map<String, Object?>;
+      json(request, {
+        'data': {
+          'fetchSourceManga': {'mangas': <Object?>[], 'hasNextPage': false},
+        },
+      });
+    };
+    final result = await client.request(
+      sourceId: '1',
+      operation: 'search',
+      query: 'test',
+      filters: filters,
+    );
+    expect(result['ok'], isTrue);
+    expect(path, '/api/graphql');
+    expect(body['query'], contains(r'triomiFilters: $triomiFilters'));
+    final variables = body['variables'] as Map;
+    final input = variables['input'] as Map;
+    expect(input['source'], '1');
+    expect(input['query'], 'test');
+    expect(input['filters'], isNull);
+    expect(jsonDecode(variables['triomiFilters'] as String), filters);
+  });
+
+  test(
+    'GraphQL search preserves source identity and cancellation ownership',
+    () async {
+      final started = Completer<void>();
+      final disconnected = Completer<void>();
+      handle = (request) async {
+        expect(request.uri.path, '/api/graphql');
+        await request.drain<void>();
+        await streamUntilDisconnected(request, started, disconnected);
+      };
+      final pending = client.request(
+        requestId: 'search',
+        sourceId: '123',
+        operation: 'search',
+      );
+      final cancelledResult = expectLater(pending, cancelled);
+      await started.future;
+      await client.cancelRequest('search');
+      await cancelledResult;
+      await disconnected.future.timeout(const Duration(seconds: 3));
+      expect(client.activeRequestCount, 0);
+      handle = (request) async {
+        json(request, {
+          'data': {
+            'fetchSourceManga': {
+              'mangas': [
+                {
+                  'id': 9,
+                  'sourceId': '456',
+                  'url': '/foreign',
+                  'title': 'Foreign',
+                },
+              ],
+              'hasNextPage': false,
+            },
+          },
+        });
+      };
+      await expectLater(
+        client.request(sourceId: '123', operation: 'search'),
+        throwsFormatException,
+      );
+    },
+  );
+
+  test(
+    'Android saved filter snapshots restore and drive a desktop search',
+    () async {
+      handle = (request) async {
+        final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+        if (!(body['variables'] as Map).containsKey('input')) {
+          expect((body['variables'] as Map)['source'], '123');
+          json(request, {
+            'data': {
+              'source': {
+                'filters': [
+                  {'__typename': 'HeaderFilter', 'name': 'Options'},
+                  {
+                    '__typename': 'GroupFilter',
+                    'name': 'Genres',
+                    'filters': [
+                      {
+                        '__typename': 'CheckBoxFilter',
+                        'name': 'Science',
+                        'checkState': false,
+                      },
+                      {
+                        '__typename': 'SelectFilter',
+                        'name': 'Year',
+                        'selectState': 0,
+                        'values': ['2025', '2026'],
+                      },
+                    ],
+                  },
+                  {'__typename': 'SeparatorFilter', 'name': ''},
+                ],
+              },
+            },
+          });
+        } else {
+          final input = (body['variables'] as Map)['input'] as Map;
+          final changes = (input['filters'] as List)
+              .cast<Map<String, Object?>>();
           final selections = changes
               .map(
-                (row) =>
-                    jsonDecode(row['state'] as String) as Map<String, Object?>,
+                (row) => Map<String, Object?>.from(row['groupChange'] as Map),
               )
               .toList();
           final matches =
               selections.any(
-                (row) => row['position'] == 0 && row['state'] == 'true',
+                (row) => row['position'] == 0 && row['checkBoxState'] == true,
               ) &&
               selections.any(
-                (row) => row['position'] == 1 && row['state'] == '1',
+                (row) => row['position'] == 1 && row['selectState'] == 1,
               );
           json(request, {
-            'mangaList': [
-              if (matches)
-                {
-                  'id': 1,
-                  'sourceId': '123',
-                  'url': '/chosen',
-                  'title': 'Chosen',
-                },
-            ],
-            'hasNextPage': false,
+            'data': {
+              'fetchSourceManga': {
+                'mangas': [
+                  if (matches)
+                    {
+                      'id': 1,
+                      'sourceId': '123',
+                      'url': '/chosen',
+                      'title': 'Chosen',
+                    },
+                ],
+                'hasNextPage': false,
+              },
+            },
           });
         }
       };

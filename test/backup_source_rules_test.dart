@@ -9,6 +9,8 @@ import 'package:triomi/core/backup/backup_restore_preview.dart';
 import 'package:triomi/core/backup/backup_service.dart';
 import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/models/media_type.dart';
+import 'package:triomi/core/source/kazumi_repository.dart';
+import 'package:triomi/core/source/kazumi_source.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/source_repository.dart';
 
@@ -99,7 +101,7 @@ void main() {
     addTearDown(registry.dispose);
     final snapshot = await registry.load();
     expect(snapshot.failures, isEmpty);
-    expect(snapshot.enabledEntries, isEmpty);
+    expect(snapshot.enabledEntries.where((entry) => !entry.isInternal), isEmpty);
     expect(
       snapshot.entries
           .singleWhere((entry) => entry.descriptor.id == 'js-source')
@@ -251,6 +253,111 @@ void main() {
     expect(http.requests, isEmpty);
   });
 
+  test('all 18 official sources export and restore disabled without weakening private credential rejection', () async {
+    final source = openTestDatabase(), target = openTestDatabase();
+    addTearDown(source.close);
+    addTearDown(target.close);
+    final http = FakeHttpClient(
+      (_) async => throw StateError('No network expected'),
+    );
+    final registry = SourceRegistry(
+      repository: SourceRepository(source),
+      http: http,
+    );
+    addTearDown(registry.dispose);
+    await registry.seedBuiltins(alreadySeeded: {});
+    final official = (await registry.repository.all())
+        .where((row) => row.id.startsWith('kazumi:'))
+        .toList();
+    expect(official, hasLength(18));
+    final exporter = BackupService(
+      database: source,
+      preferences: memoryPreferences(),
+      http: http,
+    );
+    final backup = await exporter.exportToFile(
+      includeCovers: false,
+      includeSourceRules: true,
+    );
+    final importer = BackupService(
+      database: target,
+      preferences: memoryPreferences(),
+      http: http,
+    );
+    await importer.importFromFile(
+      backup.path,
+      options: const BackupRestoreOptions(restoreSourceRules: true),
+    );
+    final restoredRegistry = SourceRegistry(
+      repository: SourceRepository(target),
+      http: http,
+      jsRuntimeFactory: () =>
+          throw StateError('Restored scripts must not execute'),
+    );
+    addTearDown(restoredRegistry.dispose);
+    final restored = (await restoredRegistry.load()).entries
+        .where((entry) => entry.source is KazumiSource)
+        .toList();
+    expect(restored, hasLength(18));
+    expect(
+      restored.every((entry) => !entry.enabled && entry.source.isReady),
+      isTrue,
+    );
+    final publicId = KazumiRule.idForName('xfdmnext');
+    final canonical = official.singleWhere((row) => row.id == publicId);
+    expect(
+      (await restoredRegistry.repository.byId(publicId))!.ruleText,
+      canonical.ruleText,
+    );
+    expect(
+      (await restoredRegistry.repository.byId(publicId))!.repoUrl,
+      KazumiRepository.defaultRepository,
+    );
+
+    final payload = BackupService.validatedPayload(
+      await File(backup.path).readAsBytes(),
+    );
+    for (final changed in ['privateHeader', 'origin', 'version']) {
+      final forged = jsonDecode(jsonEncode(payload)) as Map<String, dynamic>;
+      final row = (forged['sourceRows'] as List)
+          .cast<Map<String, dynamic>>()
+          .singleWhere((row) => row['id'] == publicId);
+      final definition = (forged['sourceRuleDefinitions'] as List)
+          .cast<Map<String, dynamic>>()
+          .singleWhere((row) => row['id'] == publicId);
+      if (changed == 'privateHeader') {
+        final rule = jsonDecode(
+          definition['ruleText'] as String,
+        ) as Map<String, dynamic>;
+        rule['searchApiConfig']['request']['headers']['Authorization'] =
+            'Bearer private-user-token';
+        definition['ruleText'] = jsonEncode(rule);
+      } else if (changed == 'origin') {
+        row['repoUrl'] = 'https://custom.test/index.json';
+      } else {
+        row['version'] = '9.0';
+      }
+      expect(() => BackupService.sourceRulesOf(forged), throwsFormatException);
+    }
+    final privateRule = jsonDecode(canonical.ruleText!) as Map<String, dynamic>;
+    privateRule['chapterApiConfig']['request']['headers']['apikey'] =
+        'private-user-key';
+    await registry.repository.upsert(
+      id: canonical.id,
+      name: canonical.name,
+      type: canonical.type,
+      kind: canonical.kind,
+      ruleText: jsonEncode(privateRule),
+      version: canonical.version,
+      repoUrl: canonical.repoUrl,
+      enabled: canonical.enabled,
+    );
+    await expectLater(
+      exporter.exportToFile(includeCovers: false, includeSourceRules: true),
+      throwsFormatException,
+    );
+  });
+
   for (final invalid in [
     'identity',
     'duplicate',
@@ -258,6 +365,7 @@ void main() {
     'url',
     'requiresHost',
   ]) {
+
     test(
       'rejects $invalid rules before settings or database mutation',
       () async {

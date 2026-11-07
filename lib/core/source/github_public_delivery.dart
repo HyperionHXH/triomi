@@ -37,6 +37,10 @@ class GithubPublicDelivery {
     }.contains(name.toLowerCase()),
   );
 
+  static bool canRecoverNotFound(Response<dynamic> response) =>
+      response.statusCode == 404 &&
+      !_hasCredentials(response.requestOptions.headers);
+
   bool get _available => enabled && !_hasCredentials(dio.options.headers);
 
   static bool _isPublicRoute(Uri uri, String host) =>
@@ -87,22 +91,10 @@ class GithubPublicDelivery {
       host: 'api.github.com',
       pathSegments: ['repos', parts[0], parts[1], 'releases', 'tags', parts[4]],
     );
-    final response = await dio.get<String>(
-      tagUri.toString(),
-      cancelToken: cancelToken,
-      options: Options(
-        followRedirects: false,
-        validateStatus: (_) => true,
-        responseType: ResponseType.plain,
-        headers: {
-          'User-Agent': userAgent,
-          'Accept': 'application/vnd.github+json',
-        },
-        connectTimeout: timeout,
-        sendTimeout: timeout,
-        receiveTimeout: timeout,
-      ),
-    );
+    final response = await _releaseDocument(tagUri, cancelToken);
+    if (response.statusCode == 404) {
+      return _recentReleaseAsset(parts, cancelToken);
+    }
     if (response.statusCode != 200) {
       throw StateError('GitHub 发布资源查询失败：HTTP ${response.statusCode}');
     }
@@ -118,21 +110,87 @@ class GithubPublicDelivery {
           Uri.tryParse('${asset['browser_download_url']}') != original) {
         continue;
       }
-      final id = asset['id'];
-      if (id is! int || id <= 0) throw StateError('GitHub 发布资源身份无效');
-      return Uri(
-        scheme: 'https',
-        host: 'api.github.com',
-        pathSegments: [
-          'repos',
-          parts[0],
-          parts[1],
-          'releases',
-          'assets',
-          '$id',
-        ],
-      );
+      return _assetUri(parts, asset);
     }
     throw StateError('GitHub 发布中没有声明的同版本资源');
   }
+
+  Future<Uri> _recentReleaseAsset(
+    List<String> parts,
+    CancelToken? cancelToken,
+  ) async {
+    // Rolling extension repositories remove old tags while retaining the same
+    // versioned asset in newer releases. The installer still verifies its bytes.
+    final releasesUri = Uri(
+      scheme: 'https',
+      host: 'api.github.com',
+      pathSegments: ['repos', parts[0], parts[1], 'releases'],
+      queryParameters: {'per_page': '10'},
+    );
+    final response = await _releaseDocument(releasesUri, cancelToken);
+    if (response.statusCode != 200) {
+      throw StateError('GitHub 发布资源查询失败：HTTP ${response.statusCode}');
+    }
+    final decoded = jsonDecode(response.data ?? '');
+    if (decoded is! List) throw StateError('GitHub 发布资源响应无效');
+    for (final release in decoded.whereType<Map<String, Object?>>()) {
+      final tag = release['tag_name'];
+      final assets = release['assets'];
+      if (release['draft'] != false ||
+          tag is! String ||
+          tag.isEmpty ||
+          assets is! List) {
+        continue;
+      }
+      final expected = Uri(
+        scheme: 'https',
+        host: 'github.com',
+        pathSegments: [
+          parts[0],
+          parts[1],
+          'releases',
+          'download',
+          tag,
+          parts[5],
+        ],
+      );
+      for (final asset in assets.whereType<Map<String, Object?>>()) {
+        if (asset['name'] == parts[5] &&
+            Uri.tryParse('${asset['browser_download_url']}') == expected) {
+          return _assetUri(parts, asset);
+        }
+      }
+    }
+    throw StateError('GitHub 最近发布中没有声明的同版本资源');
+  }
+
+  Uri _assetUri(List<String> parts, Map<String, Object?> asset) {
+    final id = asset['id'];
+    if (id is! int || id <= 0) throw StateError('GitHub 发布资源身份无效');
+    return Uri(
+      scheme: 'https',
+      host: 'api.github.com',
+      pathSegments: ['repos', parts[0], parts[1], 'releases', 'assets', '$id'],
+    );
+  }
+
+  Future<Response<String>> _releaseDocument(
+    Uri uri,
+    CancelToken? cancelToken,
+  ) => dio.get<String>(
+    uri.toString(),
+    cancelToken: cancelToken,
+    options: Options(
+      followRedirects: false,
+      validateStatus: (_) => true,
+      responseType: ResponseType.plain,
+      headers: {
+        'User-Agent': userAgent,
+        'Accept': 'application/vnd.github+json',
+      },
+      connectTimeout: timeout,
+      sendTimeout: timeout,
+      receiveTimeout: timeout,
+    ),
+  );
 }

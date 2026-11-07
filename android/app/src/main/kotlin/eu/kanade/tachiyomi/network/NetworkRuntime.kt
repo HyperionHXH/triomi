@@ -130,10 +130,10 @@ class AndroidCookieJar(context: Context) : CookieJar {
     }
 }
 
-class NetworkHelper(context: Context) {
+open class NetworkHelper(context: Context) {
     private val cookies = AndroidCookieJar(context)
     private val userAgent = WebSettings.getDefaultUserAgent(context)
-    val client: OkHttpClient = OkHttpClient.Builder()
+    open val client: OkHttpClient = OkHttpClient.Builder()
         .eventListenerFactory(MihonRequestScope.eventListenerFactory)
         .cookieJar(cookies)
         .addInterceptor(UncaughtExceptionInterceptor())
@@ -142,11 +142,11 @@ class NetworkHelper(context: Context) {
         .cache(Cache(File(context.cacheDir, "mihon-http"), 8L * 1024L * 1024L))
         .connectTimeout(30, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS)
         .callTimeout(120, TimeUnit.SECONDS).build()
-    val cookieJar: AndroidCookieJar get() = cookies
+    open val cookieJar: AndroidCookieJar get() = cookies
 
     // Legacy 1.4 ABI entry. Challenge solving still requires a browser session;
     // sharing this client preserves headers, HTTP cache and persisted cookies.
-    fun getCloudflareClient(): OkHttpClient = client
+    open val cloudflareClient: OkHttpClient get() = client
 
     fun defaultUserAgentProvider(): String = userAgent
 }

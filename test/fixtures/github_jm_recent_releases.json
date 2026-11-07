@@ -1,0 +1,31 @@
+[
+  {
+    "tag_name": "16cde44",
+    "draft": false,
+    "prerelease": false,
+    "published_at": "2026-11-06T05:09:22Z",
+    "assets": []
+  },
+  {
+    "tag_name": "4591fbc-2",
+    "draft": false,
+    "prerelease": false,
+    "published_at": "2026-11-05T15:10:07Z",
+    "assets": [
+      {
+        "id": 713805874,
+        "name": "tachiyomi-zh.jinmantiantang-v1.6.64.apk",
+        "browser_download_url": "https://github.com/keiyoushi/extensions/releases/download/4591fbc-2/tachiyomi-zh.jinmantiantang-v1.6.64.apk",
+        "size": 152067,
+        "digest": "sha256:de5629a6a14e7b9124cd08da338ef01b07237c62e50121fb2c30fd481cac73cb"
+      },
+      {
+        "id": 713805893,
+        "name": "tachiyomi-zh.jinmantiantang-v1.6.64.jar",
+        "browser_download_url": "https://github.com/keiyoushi/extensions/releases/download/4591fbc-2/tachiyomi-zh.jinmantiantang-v1.6.64.jar",
+        "size": 263387,
+        "digest": "sha256:5eebd0bae530be491fe1cae32d1940c3914b224c46e7b9d6dd596415ef2c8be7"
+      }
+    ]
+  }
+]

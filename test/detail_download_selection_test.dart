@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -30,6 +31,7 @@ import 'package:triomi/features/novel/data/lns/lns_gateway.dart';
 import 'package:triomi/features/novel/data/lns/lns_hub_connection.dart';
 import 'package:triomi/features/novel/data/lns/lns_source.dart';
 import 'package:triomi/features/novel/reader/novel_reader_page.dart';
+import 'package:triomi/features/reader/manga_reader_page.dart';
 
 import 'fixtures/fake_http_client.dart';
 import 'fixtures/fake_preferences.dart';
@@ -82,6 +84,68 @@ class _Site implements DetailProvider, ContentProvider {
   }
 }
 
+class _VolumeSite extends _Site {
+  _VolumeSite(super.type);
+  @override
+  Future<List<Chapter>> chapters(MediaItem item) async => const [
+    Chapter(
+      sourceId: 'site',
+      remoteId: 'one',
+      title: 'Read early',
+      volumeTitle: 'A',
+    ),
+    Chapter(
+      sourceId: 'site',
+      remoteId: 'duplicate',
+      title: 'Ambiguous first',
+      volumeTitle: 'A',
+    ),
+    Chapter(
+      sourceId: 'site',
+      remoteId: 'duplicate',
+      title: 'Ambiguous second',
+      volumeTitle: 'A',
+    ),
+    Chapter(
+      sourceId: 'site',
+      remoteId: 'gap',
+      title: 'Unread gap',
+      volumeTitle: 'A',
+    ),
+    Chapter(
+      sourceId: 'site',
+      remoteId: 'last',
+      title: 'Read later',
+      volumeTitle: 'B',
+    ),
+    Chapter(
+      sourceId: 'site',
+      remoteId: 'locked',
+      title: 'Locked',
+      volumeTitle: 'B',
+      locked: true,
+    ),
+    Chapter(
+      sourceId: 'foreign',
+      remoteId: 'gap',
+      title: 'Foreign gap',
+      volumeTitle: 'B',
+    ),
+    Chapter(
+      sourceId: 'site',
+      remoteId: '',
+      title: 'Invalid identity',
+      volumeTitle: 'B',
+    ),
+    Chapter(
+      sourceId: 'site',
+      remoteId: 'end',
+      title: 'Unread end',
+      volumeTitle: 'B',
+    ),
+  ];
+}
+
 class _Sources extends SourceRegistryController {
   _Sources(this.source, {this.additionalSources = const []});
   ContentSource source;
@@ -109,6 +173,19 @@ class _Sources extends SourceRegistryController {
 class _Queue extends DownloadController {
   final submissions =
       <({MediaItem item, List<Chapter> chapters, Set<String>? ids})>[];
+  final paused = <int>[];
+  final resumed = <int>[];
+  Completer<void>? submissionGate;
+  @override
+  Future<void> resumeEntry(int id) async {
+    resumed.add(id);
+  }
+
+  @override
+  Future<void> pauseEntry(int id) async {
+    paused.add(id);
+  }
+
   @override
   Future<List<DownloadGroup>> build() async => const [];
   @override
@@ -118,7 +195,31 @@ class _Queue extends DownloadController {
     Set<String>? selectedChapterIds,
   }) async {
     submissions.add((item: item, chapters: chapters, ids: selectedChapterIds));
+    await submissionGate?.future;
     return selectedChapterIds?.length ?? chapters.length;
+  }
+}
+
+class _DelayedCommitQueue extends DownloadController {
+  Completer<void>? gate;
+  final entered = Completer<void>();
+  @override
+  Future<int> enqueue({
+    required MediaItem item,
+    required List<Chapter> chapters,
+    Set<String>? selectedChapterIds,
+  }) async {
+    final added = await super.enqueue(
+      item: item,
+      chapters: chapters,
+      selectedChapterIds: selectedChapterIds,
+    );
+    final pending = gate;
+    if (pending != null) {
+      entered.complete();
+      await pending.future;
+    }
+    return added;
   }
 }
 
@@ -128,10 +229,11 @@ class _OfflineWifiService extends DownloadService {
     required super.http,
     required super.preferences,
   });
+  bool onWifi = false;
   @override
   bool get wifiOnly => true;
   @override
-  Future<bool> isOnWifi() async => false;
+  Future<bool> isOnWifi() async => onWifi;
 }
 
 class _CollisionSite extends _Site {
@@ -141,6 +243,26 @@ class _CollisionSite extends _Site {
     Chapter(sourceId: 'other', remoteId: 'x', title: 'Foreign chapter'),
     Chapter(sourceId: 'site', remoteId: 'x', title: 'Own chapter'),
   ];
+}
+
+class _ReadCollisionSite extends _Site {
+  _ReadCollisionSite(super.type);
+  @override
+  Future<List<Chapter>> chapters(MediaItem item) async => const [
+    Chapter(sourceId: 'other', remoteId: 'x', title: 'Foreign unread'),
+    Chapter(sourceId: 'site', remoteId: 'x', title: 'Own read'),
+    Chapter(sourceId: 'site', remoteId: 'fresh', title: 'Own unread'),
+  ];
+}
+
+class _ReadableSite extends _Site {
+  _ReadableSite() : super(MediaType.novel);
+  final downloaded = <String>[];
+  @override
+  Future<ChapterContent> content(Chapter chapter) async {
+    downloaded.add(chapter.remoteId);
+    return ChapterContent(text: 'Offline ${chapter.remoteId}');
+  }
 }
 
 class _ProtectedNovelSite extends _Site implements ChapterUnlockProvider {
@@ -206,15 +328,24 @@ class _MigrationDestination
 }
 
 void main() {
-  Future<({ProviderContainer container, _Sources sources, _Queue queue})>
+  Future<
+    ({
+      ProviderContainer container,
+      _Sources sources,
+      _Queue queue,
+      Future<void> Function() close,
+    })
+  >
   pumpDetail(
     WidgetTester tester,
     ContentSource source,
     MediaItem item, {
     bool realQueue = false,
+    DownloadController? realController,
     GoRouter? router,
     Chapter? resumeChapter,
     List<ContentSource> additionalSources = const [],
+    TextScaler? textScaler,
   }) async {
     final db = openTestDatabase();
     if (resumeChapter != null) {
@@ -240,6 +371,8 @@ void main() {
         ),
         sourcesProvider.overrideWith(() => sources),
         if (!realQueue) downloadsProvider.overrideWith(() => queue),
+        if (realQueue && realController != null)
+          downloadsProvider.overrideWith(() => realController),
         if (realQueue)
           downloadServiceProvider.overrideWith(
             (ref) => _OfflineWifiService(
@@ -250,23 +383,58 @@ void main() {
           ),
       ],
     );
-    addTearDown(() async {
+    var closed = false;
+    Future<void> close() async {
+      if (closed) return;
+      closed = true;
+      if (queue.submissionGate?.isCompleted == false) {
+        queue.submissionGate!.complete();
+      }
+      if (realController is _DelayedCommitQueue &&
+          realController.gate?.isCompleted == false) {
+        realController.gate!.complete();
+      }
+      // Cancel direct widget queries before the binding's automatic unmount.
       await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
       router?.dispose();
+      // Provider queries also own FakeAsync callbacks: cancel them and drain
+      // Drift's Timer.run removals before awaiting close in the real zone.
       container.dispose();
-      await tester.runAsync(db.close);
-    });
+      await tester.pump(const Duration(milliseconds: 1));
+      for (var index = 0; index < 12; index++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)),
+        );
+        await tester.pump(const Duration(milliseconds: 30));
+      }
+      await tester.runAsync(
+        () => db.close().timeout(const Duration(seconds: 5)),
+      );
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+
+    addTearDown(close);
     if (realQueue) await container.read(downloadsProvider.future);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
         child: router == null
-            ? MaterialApp(home: DetailPage(item: item))
+            ? MaterialApp(
+                home: DetailPage(item: item),
+                builder: textScaler == null
+                    ? null
+                    : (context, child) => MediaQuery(
+                        data: MediaQuery.of(context)
+                            .copyWith(textScaler: textScaler),
+                        child: child!,
+                      ),
+              )
             : MaterialApp.router(routerConfig: router),
       ),
     );
     await tester.pumpAndSettle();
-    return (container: container, sources: sources, queue: queue);
+    return (container: container, sources: sources, queue: queue, close: close);
   }
 
   Future<void> openDownloads(WidgetTester tester) async {
@@ -292,7 +460,571 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  for (final type in MediaType.values) {
+  Future<void> openBatch(WidgetTester tester) async {
+    final button = find.byKey(const ValueKey('detail-chapter-download'));
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(find.byType(ChapterDownloadPicker), findsNothing);
+  }
+
+  Future<void> revealCatalog(WidgetTester tester, Finder target) async {
+    await tester.scrollUntilVisible(
+      target,
+      160,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 60,
+    );
+    await Scrollable.ensureVisible(tester.element(target), alignment: 0.5);
+    await tester.pumpAndSettle();
+    expect(target.hitTestable(), findsOneWidget);
+  }
+
+  Future<void> tapCatalog(WidgetTester tester, Finder target) async {
+    await revealCatalog(tester, target);
+    await tester.tap(target);
+  }
+
+  Future<T> finishOwned<T>(WidgetTester tester, Future<T> pending) async {
+    var finished = false;
+    late T result;
+    Object? failure;
+    StackTrace? trace;
+    unawaited(
+      pending.then(
+        (value) {
+          result = value;
+          finished = true;
+        },
+        onError: (Object error, StackTrace stack) {
+          failure = error;
+          trace = stack;
+          finished = true;
+        },
+      ),
+    );
+    for (var attempt = 0; attempt < 300 && !finished; attempt++) {
+      await tester.pump(const Duration(milliseconds: 10));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 1)),
+      );
+    }
+    expect(
+      finished,
+      isTrue,
+      reason: 'owned queue operation must finish within bounded pumps',
+    );
+    if (failure != null) Error.throwWithStackTrace(failure!, trace!);
+    return result;
+  }
+
+  for (final type in [MediaType.manga, MediaType.novel]) {
+    testWidgets(
+      '$type row icon downloads exactly that chapter with full catalog',
+      (tester) async {
+        final source = _Site(type);
+        final harness = await pumpDetail(tester, source, source.item);
+        if (type == MediaType.novel) {
+          expect(
+            find.byKey(const ValueKey('detail-chapter-download:1')),
+            findsNothing,
+          );
+          await tapCatalog(
+            tester,
+            find.byKey(const ValueKey('detail-volume:Main')),
+          );
+          await tester.pumpAndSettle();
+        }
+        await tapCatalog(
+          tester,
+          find.byKey(const ValueKey('detail-chapter-download:1')),
+        );
+        await tester.pumpAndSettle();
+        expect(harness.queue.submissions.single.ids, {'two'});
+        expect(
+          harness.queue.submissions.single.chapters.map((c) => c.remoteId),
+          ['one', 'two', 'locked'],
+        );
+        expect(find.byType(ChapterDownloadPicker), findsNothing);
+        expect(source.contentCalls, 0);
+        await harness.close();
+      },
+    );
+
+    testWidgets(
+      '$type unread uses non-contiguous chapter history and rejects unsafe identities',
+      (tester) async {
+        final source = _VolumeSite(type);
+        final harness = await pumpDetail(tester, source, source.item);
+        final library = LibraryRepository(
+          harness.container.read(databaseProvider),
+        );
+        final chapters = await source.chapters(source.item);
+        for (final chapter in [chapters[0], chapters[4]]) {
+          await library.recordHistory(
+            sourceId: 'site',
+            remoteId: 'book',
+            chapter: chapter,
+          );
+        }
+        await openBatch(tester);
+        await tester.tap(find.byKey(const ValueKey('detail-download-unread')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('detail-download-start')));
+        await tester.pumpAndSettle();
+        expect(harness.queue.submissions.single.ids, {'gap', 'end'});
+        expect(harness.queue.submissions.single.chapters, hasLength(9));
+        expect(source.contentCalls, 0);
+        await harness.close();
+      },
+    );
+
+    testWidgets(
+      '$type unread does not resurrect read own-source identity through a foreign collision',
+      (tester) async {
+        final source = _ReadCollisionSite(type);
+        final harness = await pumpDetail(tester, source, source.item);
+        final library = LibraryRepository(
+          harness.container.read(databaseProvider),
+        );
+        final chapters = await source.chapters(source.item);
+        await library.recordHistory(
+          sourceId: 'site',
+          remoteId: 'book',
+          chapter: chapters[1],
+        );
+        await openBatch(tester);
+        await tester.tap(find.byKey(const ValueKey('detail-download-unread')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('detail-download-start')));
+        await tester.pumpAndSettle();
+        expect(harness.queue.submissions.single.ids, {'fresh'});
+        expect(harness.queue.submissions.single.chapters, hasLength(3));
+        await harness.close();
+      },
+    );
+
+    testWidgets(
+      '$type overlapping distinct chapter taps preserve both captured selections',
+      (tester) async {
+        final source = _Site(type);
+        final harness = await pumpDetail(tester, source, source.item);
+        if (type == MediaType.novel) {
+          await tapCatalog(
+            tester,
+            find.byKey(const ValueKey('detail-volume:Main')),
+          );
+          await tester.pumpAndSettle();
+        }
+        final gate = harness.queue.submissionGate = Completer<void>();
+        final first = find.byKey(const ValueKey('detail-chapter-download:0'));
+        final second = find.byKey(const ValueKey('detail-chapter-download:1'));
+        await tapCatalog(tester, first);
+        await tester.pumpAndSettle();
+        expect(harness.queue.submissions.single.ids, {'one'});
+        await tapCatalog(tester, second);
+        await tester.pumpAndSettle();
+        expect(harness.queue.submissions, hasLength(1));
+        gate.complete();
+        await tester.pumpAndSettle();
+        expect(harness.queue.submissions.map((submission) => submission.ids), [
+          {'one'},
+          {'two'},
+        ]);
+        expect(source.contentCalls, 0);
+        await harness.close();
+      },
+    );
+
+    testWidgets('$type batch cancel, back and stale source never enqueue', (
+      tester,
+    ) async {
+      final source = _Site(type);
+      final harness = await pumpDetail(tester, source, source.item);
+      await openBatch(tester);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      await openBatch(tester);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await openBatch(tester);
+      await tester.tap(find.byKey(const ValueKey('detail-download-all')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(harness.queue.submissions, isEmpty);
+      await openBatch(tester);
+      await tester.tap(find.byKey(const ValueKey('detail-download-all')));
+      await tester.pumpAndSettle();
+      harness.sources.source = _Site(type);
+      await harness.sources.refresh();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('detail-download-start')));
+      await tester.pumpAndSettle();
+      expect(harness.queue.submissions, isEmpty);
+      await harness.close();
+    });
+
+    testWidgets(
+      '$type batch all skips pending and completed without restarting them',
+      (tester) async {
+        final source = _VolumeSite(type);
+        final harness = await pumpDetail(tester, source, source.item);
+        final repository = harness.container.read(downloadRepositoryProvider);
+        final chapters = await source.chapters(source.item);
+        await repository.enqueue(
+          sourceId: 'site',
+          remoteId: 'book',
+          chapter: chapters[0],
+        );
+        final completed = await repository.enqueue(
+          sourceId: 'site',
+          remoteId: 'book',
+          chapter: chapters[4],
+        );
+        await repository.markDone(completed);
+        await openBatch(tester);
+        await tester.tap(find.byKey(const ValueKey('detail-download-all')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('detail-download-start')));
+        await tester.pumpAndSettle();
+        expect(harness.queue.submissions.single.ids, {'gap', 'end'});
+        final rows = await repository.listForItem('site', 'book');
+        expect(rows.map((row) => row.status), ['queued', 'done']);
+        await harness.close();
+      },
+    );
+
+    testWidgets(
+      '$type row pauses pending work and resumes paused or failed work',
+      (tester) async {
+        final source = _Site(type);
+        final harness = await pumpDetail(tester, source, source.item);
+        if (type == MediaType.novel) {
+          await tapCatalog(
+            tester,
+            find.byKey(const ValueKey('detail-volume:Main')),
+          );
+          await tester.pumpAndSettle();
+        }
+        final repository = harness.container.read(downloadRepositoryProvider);
+        final chapter = (await source.chapters(source.item))[1];
+        final id = await repository.enqueue(
+          sourceId: 'site',
+          remoteId: 'book',
+          chapter: chapter,
+        );
+        await tester.pumpAndSettle();
+        final button = find.byKey(const ValueKey('detail-chapter-download:1'));
+        await tapCatalog(tester, button);
+        await tester.pumpAndSettle();
+        expect(harness.queue.paused, [id]);
+        expect(harness.queue.submissions, isEmpty);
+        await repository.markRunning(id);
+        await tester.pumpAndSettle();
+        await tapCatalog(tester, button);
+        await tester.pumpAndSettle();
+        expect(harness.queue.paused, [id, id]);
+        await repository.markPaused(id);
+        await tester.pumpAndSettle();
+        await tapCatalog(tester, button);
+        await tester.pumpAndSettle();
+        expect(harness.queue.submissions.single.ids, {'two'});
+        await repository.markFailed(id, 'interrupted');
+        await tester.pumpAndSettle();
+        await tapCatalog(tester, button);
+        await tester.pumpAndSettle();
+        expect(harness.queue.submissions, hasLength(2));
+        expect(harness.queue.submissions.last.ids, {'two'});
+        expect(harness.queue.resumed, [id, id]);
+        await harness.close();
+      },
+    );
+
+    testWidgets(
+      '$type downloaded icon opens the exact reader chapter without enqueueing',
+      (tester) async {
+        final source = _Site(type);
+        int? openedIndex;
+        final router = GoRouter(
+          routes: [
+            GoRoute(
+              path: '/',
+              builder: (_, _) => DetailPage(item: source.item),
+            ),
+            GoRoute(
+              path: type == MediaType.novel
+                  ? AppRoutes.novelReader
+                  : AppRoutes.reader,
+              builder: (_, state) {
+                openedIndex = type == MediaType.novel
+                    ? (state.extra! as NovelReaderArgs).initialIndex
+                    : (state.extra! as MangaReaderArgs).initialIndex;
+                return const Scaffold(body: Text('Offline reader'));
+              },
+            ),
+          ],
+        );
+        final harness = await pumpDetail(
+          tester,
+          source,
+          source.item,
+          router: router,
+        );
+        if (type == MediaType.novel) {
+          await tapCatalog(
+            tester,
+            find.byKey(const ValueKey('detail-volume:Main')),
+          );
+          await tester.pumpAndSettle();
+        }
+        final repository = harness.container.read(downloadRepositoryProvider);
+        final chapter = (await source.chapters(source.item))[1];
+        final id = await repository.enqueue(
+          sourceId: 'site',
+          remoteId: 'book',
+          chapter: chapter,
+        );
+        await repository.markDone(id);
+        await tester.pumpAndSettle();
+        final button = find.byKey(const ValueKey('detail-chapter-download:1'));
+        await tapCatalog(tester, button);
+        await tester.pumpAndSettle();
+        expect(openedIndex, 1);
+        expect(harness.queue.submissions, isEmpty);
+        await harness.close();
+      },
+    );
+  }
+
+  for (final action in ['chapter', 'volume', 'batch', 'leave after commit']) {
+    testWidgets(
+      'paused real queue resumes and downloads through $action action',
+      (tester) async {
+        final documents = (await tester.runAsync(
+          () => Directory.systemTemp.createTemp('triomi-detail-resume-'),
+        ))!;
+        const paths = MethodChannel('plugins.flutter.io/path_provider');
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        messenger.setMockMethodCallHandler(paths, (_) async => documents.path);
+        addTearDown(() async {
+          messenger.setMockMethodCallHandler(paths, null);
+          await tester.runAsync(
+            () =>
+                Directory(storageFilePath(documents.path))
+                    .delete(recursive: true),
+          );
+        });
+        final source = _ReadableSite();
+        final delayed = action == 'leave after commit'
+            ? _DelayedCommitQueue()
+            : null;
+        final harness = await pumpDetail(
+          tester,
+          source,
+          source.item,
+          realQueue: true,
+          realController: delayed,
+        );
+        final controller = harness.container.read(downloadsProvider.notifier);
+        final repository = harness.container.read(downloadRepositoryProvider);
+        final chapters = await source.chapters(source.item);
+        await finishOwned(
+          tester,
+          controller.enqueue(
+            item: source.item,
+            chapters: chapters,
+            selectedChapterIds: {'one'},
+          ),
+        );
+        final row = (await finishOwned(
+          tester,
+          repository.listForItem('site', 'book'),
+        )).single;
+        await finishOwned(tester, controller.pauseEntry(row.id));
+        expect(
+          (await finishOwned(tester, repository.rowById(row.id)))!.status,
+          'paused',
+        );
+        if (delayed != null) delayed.gate = Completer<void>();
+        (harness.container.read(
+          downloadServiceProvider,
+        ) as _OfflineWifiService).onWifi = true;
+        if (action == 'chapter' || delayed != null) {
+          await tapCatalog(
+            tester,
+            find.byKey(const ValueKey('detail-volume:Main')),
+          );
+          await tester.pumpAndSettle();
+          final button = find.byKey(
+            const ValueKey('detail-chapter-download:0'),
+          );
+          await tapCatalog(tester, button);
+        } else if (action == 'volume') {
+          final button = find.byKey(
+            const ValueKey('detail-volume-download:Main'),
+          );
+          await tapCatalog(tester, button);
+        } else {
+          await openBatch(tester);
+          await tester.tap(find.byKey(const ValueKey('detail-download-all')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('detail-download-start')));
+        }
+        await tester.pumpAndSettle();
+        if (delayed != null) {
+          expect(delayed.entered.isCompleted, isTrue);
+          expect(
+            (await finishOwned(tester, repository.rowById(row.id)))!.status,
+            'queued',
+          );
+          await tester.pumpWidget(
+            UncontrolledProviderScope(
+              container: harness.container,
+              child: const MaterialApp(
+                home: Scaffold(body: Text('Returned to library')),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          delayed.gate!.complete();
+          await tester.pumpAndSettle();
+        }
+        for (var attempt = 0; attempt < 100; attempt++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump();
+          if ((await finishOwned(tester, repository.rowById(row.id)))?.status ==
+              'done') {
+            break;
+          }
+        }
+        expect(
+          (await finishOwned(tester, repository.rowById(row.id)))!.status,
+          'done',
+        );
+        expect(source.downloaded, contains('one'));
+        expect(
+          (await finishOwned(
+            tester,
+            repository.localChapterContent('site', 'one'),
+          ))?.text,
+          'Offline one',
+        );
+        await finishOwned(tester, controller.pauseAll());
+        await tester.pumpAndSettle();
+        await harness.close();
+      },
+      timeout: const Timeout(Duration(seconds: 45)),
+    );
+  }
+
+  testWidgets(
+    'volume cards retain title and download action at 320dp and 200 percent text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 760);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final source = _VolumeSite(MediaType.novel);
+      final harness = await pumpDetail(
+        tester,
+        source,
+        source.item,
+        textScaler: const TextScaler.linear(2),
+      );
+      final volume = find.byKey(const ValueKey('detail-volume:A'));
+      await tester.scrollUntilVisible(
+        volume,
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        find.descendant(of: volume, matching: find.text('A')),
+        findsOneWidget,
+      );
+      final download = find.byKey(const ValueKey('detail-volume-download:A'));
+      await tapCatalog(tester, download);
+      await tester.pumpAndSettle();
+      expect(harness.queue.submissions.single.ids, {'one', 'gap'});
+      expect(tester.takeException(), isNull);
+      await harness.close();
+    },
+  );
+
+  testWidgets(
+    'overlapping whole-volume actions retain distinct volume selections',
+    (tester) async {
+      final source = _VolumeSite(MediaType.novel);
+      final harness = await pumpDetail(tester, source, source.item);
+      final gate = harness.queue.submissionGate = Completer<void>();
+      final first = find.byKey(const ValueKey('detail-volume-download:A'));
+      await tapCatalog(tester, first);
+      await tester.pumpAndSettle();
+      final second = find.byKey(const ValueKey('detail-volume-download:B'));
+      await tapCatalog(tester, second);
+      await tester.pumpAndSettle();
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(harness.queue.submissions.map((submission) => submission.ids), [
+        {'one', 'gap'},
+        {'last', 'end'},
+      ]);
+      await harness.close();
+    },
+  );
+
+  testWidgets(
+    'volume actions include full safe volume without expanding and exclude other volumes',
+    (tester) async {
+      final source = _VolumeSite(MediaType.novel);
+      final harness = await pumpDetail(tester, source, source.item);
+      final a = find.byKey(const ValueKey('detail-volume-download:A'));
+      await tapCatalog(tester, a);
+      await tester.pumpAndSettle();
+      expect(harness.queue.submissions.single.ids, {'one', 'gap'});
+      expect(harness.queue.submissions.single.chapters, hasLength(9));
+      expect(find.text('Unread gap'), findsNothing);
+      await tapCatalog(tester, find.byKey(const ValueKey('detail-volume:A')));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('detail-chapter-download:2')),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const ValueKey('detail-chapter-download:1')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const ValueKey('detail-chapter-download:2')),
+            )
+            .onPressed,
+        isNull,
+      );
+      final b = find.byKey(const ValueKey('detail-volume:B'));
+      await tapCatalog(tester, b);
+      await tester.pumpAndSettle();
+      expect(find.text('Unread gap'), findsNothing);
+      await tapCatalog(
+        tester,
+        find.byKey(const ValueKey('detail-volume-download:B')),
+      );
+      await tester.pumpAndSettle();
+      expect(harness.queue.submissions.last.ids, {'last', 'end'});
+      await harness.close();
+    },
+  );
+
+  for (final type in [MediaType.anime]) {
     testWidgets(
       '$type detail queues only chosen chapters; either cancellation queues zero',
       (tester) async {
@@ -330,6 +1062,7 @@ void main() {
           'locked',
         ]);
         expect(source.contentCalls, 0);
+        await harness.close();
       },
     );
 
@@ -347,6 +1080,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(harness.queue.submissions, isEmpty);
       expect(source.contentCalls, 0);
+      await harness.close();
     });
 
     testWidgets(
@@ -363,6 +1097,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(harness.queue.submissions, isEmpty);
         expect(source.contentCalls, 0);
+        await harness.close();
       },
     );
   }
@@ -378,9 +1113,17 @@ void main() {
         title: 'LNS Book',
       );
       final harness = await pumpDetail(tester, source, item);
-      await openDownloads(tester);
-      await chooseSecond(tester);
-      await tester.tap(find.byKey(const ValueKey('detail-download-start')));
+      await tapCatalog(
+        tester,
+        find.byKey(
+          const ValueKey('detail-volume:${LnsSource.defaultVolumeTitle}'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapCatalog(
+        tester,
+        find.byKey(const ValueKey('detail-chapter-download:1')),
+      );
       await tester.pumpAndSettle();
       expect(harness.queue.submissions.single.ids, {'7:2'});
       expect(harness.queue.submissions.single.item.sourceId, LnsSource.id);
@@ -389,6 +1132,7 @@ void main() {
         source.hub.calls.where((call) => call.target != 'GetBookInfo'),
         isEmpty,
       );
+      await harness.close();
     },
   );
 
@@ -515,7 +1259,7 @@ void main() {
     'media-specific overflow keeps genuine novel tracking without manga-only tools',
     (tester) async {
       final source = _Site(MediaType.novel);
-      await pumpDetail(tester, source, source.item);
+      final harness = await pumpDetail(tester, source, source.item);
       await tester.tap(find.byTooltip('更多'));
       await tester.pumpAndSettle();
       final values = tester
@@ -529,6 +1273,7 @@ void main() {
         isEmpty,
       );
       expect(source.contentCalls, 0);
+      await harness.close();
     },
   );
 
@@ -542,25 +1287,28 @@ void main() {
         source.item,
         realQueue: true,
       );
-      await openDownloads(tester);
+      await tapCatalog(tester, find.byKey(const ValueKey('detail-volume:')));
+      await tester.pumpAndSettle();
       expect(
         tester
-            .widget<CheckboxListTile>(
-              find.byKey(const ValueKey('download-chapter:0')),
+            .widget<IconButton>(
+              find.byKey(const ValueKey('detail-chapter-download:0')),
             )
-            .onChanged,
+            .onPressed,
         isNull,
       );
       expect(
         tester
-            .widget<CheckboxListTile>(
-              find.byKey(const ValueKey('download-chapter:1')),
+            .widget<IconButton>(
+              find.byKey(const ValueKey('detail-chapter-download:1')),
             )
-            .onChanged,
+            .onPressed,
         isNotNull,
       );
-      await chooseSecond(tester);
-      await tester.tap(find.byKey(const ValueKey('detail-download-start')));
+      await tapCatalog(
+        tester,
+        find.byKey(const ValueKey('detail-chapter-download:1')),
+      );
       await tester.pumpAndSettle();
       final db = harness.container.read(databaseProvider);
       final queued = await db.select(db.downloads).get();
@@ -601,6 +1349,7 @@ void main() {
       expect(pauseError, isNull);
       await stopping;
       expect((await db.select(db.downloads).get()).single.status, 'paused');
+      await harness.close();
     },
   );
 
@@ -644,53 +1393,56 @@ void main() {
             ),
           ],
         );
-        await pumpDetail(
+        final harness = await pumpDetail(
           tester,
           source,
           source.item,
           router: router,
           resumeChapter: scenario.resume ? chapters[1] : null,
         );
-        await openDownloads(tester);
+        await tapCatalog(tester, find.byKey(const ValueKey('detail-volume:')));
+        await tester.pumpAndSettle();
         expect(
           tester
-              .widget<CheckboxListTile>(
-                find.byKey(const ValueKey('download-chapter:0')),
+              .widget<IconButton>(
+                find.byKey(const ValueKey('detail-chapter-download:0')),
               )
-              .onChanged,
+              .onPressed,
           isNull,
         );
         if (scenario.allLocked) {
-          expect(
-            tester
-                .widget<CheckboxListTile>(
-                  find.byKey(const ValueKey('download-chapter:1')),
-                )
-                .onChanged,
-            isNull,
+          await revealCatalog(
+            tester,
+            find.byKey(const ValueKey('detail-chapter-download:1')),
           );
           expect(
             tester
-                .widget<FilledButton>(
-                  find.descendant(
-                    of: find.byType(ChapterDownloadPicker),
-                    matching: find.byType(FilledButton),
-                  ),
+                .widget<IconButton>(
+                  find.byKey(const ValueKey('detail-chapter-download:1')),
+                )
+                .onPressed,
+            isNull,
+          );
+          await revealCatalog(
+            tester,
+            find.byKey(const ValueKey('detail-volume-download:')),
+          );
+          expect(
+            tester
+                .widget<TextButton>(
+                  find.byKey(const ValueKey('detail-volume-download:')),
                 )
                 .onPressed,
             isNull,
           );
         }
-        await tester.tap(find.text('取消'));
-        await tester.pumpAndSettle();
         if (scenario.fromRow) {
-          await tester.ensureVisible(find.text('Protected one'));
-          await tester.tap(find.text('Protected one'));
+          await tapCatalog(tester, find.text('Protected one'));
         } else {
-          await tester.ensureVisible(
+          await tapCatalog(
+            tester,
             find.byKey(const ValueKey('detail-continue-read')),
           );
-          await tester.tap(find.byKey(const ValueKey('detail-continue-read')));
         }
         await tester.pumpAndSettle();
         await tester.runAsync(
@@ -703,6 +1455,7 @@ void main() {
         expect(find.byIcon(Icons.key_outlined), findsOneWidget);
         expect(source.unlockCalls, 0);
         expect(source.contentCalls, 0);
+        await harness.close();
       },
     );
   }
@@ -742,6 +1495,7 @@ void main() {
         'novel-target',
       });
       expect(source.contentCalls, 0);
+      await harness.close();
     },
   );
 }

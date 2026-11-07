@@ -708,7 +708,6 @@ void main() {
             ),
           ),
         );
-        expect(find.textContaining('只读'), findsOneWidget);
         expect(find.text('发送弹幕'), findsNothing);
         await tester.ensureVisible(
           find.byKey(const ValueKey('danmaku-bilibili-url')),

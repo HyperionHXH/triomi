@@ -91,7 +91,7 @@ void main() {
       );
       await _advance(tester);
       expect(find.text('此设备缺少原来源'), findsOneWidget);
-      await tester.tap(find.text('安装 / 管理来源或搜索迁移'));
+      await tester.tap(find.byKey(const ValueKey('missing-source-actions')));
       await _advance(tester);
       expect(find.text('mihon:org.example.reader:123'), findsOneWidget);
       expect(find.text('org.example.reader'), findsOneWidget);
@@ -99,13 +99,21 @@ void main() {
         find.text('https://plugins.example.org/index.json'),
         findsOneWidget,
       );
-      expect(find.text('打开插件库 / 管理'), findsOneWidget);
-      expect(find.text('搜索其他来源并迁移'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('missing-source-manage')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('missing-source-migrate')),
+        findsOneWidget,
+      );
       expect(preferences.get<Object?>('mihon.repositories'), isNull);
       expect(preferences.get<Object?>('mihon.enabledPackages'), isNull);
-      await tester.ensureVisible(find.text('打开插件库 / 管理'));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('missing-source-manage')),
+      );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('打开插件库 / 管理'));
+      await tester.tap(find.byKey(const ValueKey('missing-source-manage')));
       await _advance(tester);
       await tester.pumpAndSettle();
       expect(
@@ -115,6 +123,7 @@ void main() {
       await tester.tap(find.byType(BackButton));
       await _advance(tester);
       await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
       expect(find.byType(MissingSourceNotice), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       container.dispose();
@@ -236,7 +245,7 @@ void main() {
     );
     expect(find.byType(CircularProgressIndicator), findsNothing);
     await _advance(tester);
-    expect(find.text('安装 / 管理来源或搜索迁移'), findsNothing);
+    expect(find.byKey(const ValueKey('missing-source-actions')), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     container.dispose();
     await tester.runAsync(db.close);
@@ -305,7 +314,7 @@ void main() {
         ),
       );
       await _advance(tester);
-      final recovery = find.text('安装 / 管理来源或搜索迁移');
+      final recovery = find.byKey(const ValueKey('missing-source-actions'));
       await tester.scrollUntilVisible(
         recovery,
         200,
@@ -321,8 +330,14 @@ void main() {
       await tester.tap(recovery);
       await _advance(tester);
       expect(find.text('kazumi:missing-station'), findsOneWidget);
-      expect(find.text('搜索其他播放站'), findsOneWidget);
-      expect(find.text('打开来源管理 / 插件库'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('missing-source-migrate')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('missing-source-manage')),
+        findsOneWidget,
+      );
       final restoredSubject = await tester.runAsync(
         () => identity.subjectFor(playback),
       );

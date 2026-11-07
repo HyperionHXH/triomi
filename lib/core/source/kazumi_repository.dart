@@ -1,8 +1,12 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart';
 
+import '../db/app_database.dart';
+import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
+import 'github_public_delivery.dart';
 import 'http_client.dart';
 import 'kazumi_source.dart';
 import 'source_registry.dart';
@@ -13,8 +17,12 @@ class KazumiCatalogEntry {
     required this.version,
     this.author = '',
     this.updated = '',
+    this.archived = false,
+    this.inspectedRule,
   });
   final String name, version, author, updated;
+  final bool archived;
+  final KazumiRule? inspectedRule;
   String get updatedLabel {
     final milliseconds = int.tryParse(updated);
     if (milliseconds == null || milliseconds <= 0) return updated;
@@ -27,12 +35,72 @@ class KazumiCatalogEntry {
   }
 }
 
+class KazumiUpdateResult {
+  const KazumiUpdateResult({
+    required this.id,
+    required this.name,
+    required this.message,
+    this.availableVersion,
+    this.updated = false,
+    this.failed = false,
+  });
+  final String id, name, message;
+  final String? availableVersion;
+  final bool updated, failed;
+}
+
 class KazumiRepository {
-  KazumiRepository(this.registry, {this.useMirror = false});
+  KazumiRepository(this.registry, {this.allowPublicFallback = false});
   final SourceRegistry registry;
-  final bool useMirror;
+  final bool allowPublicFallback;
   static const defaultRepository =
       'https://raw.githubusercontent.com/Predidit/KazumiRules/main/index.json';
+
+  // Only byte-identical shipped rules may recover their historical origin.
+  // A manually imported/edited rule never acquires repository trust by name.
+  static const _legacyOfficialHashes = {
+    '7sefun':
+        'e4c2237dbbf4fd92d4fa5d62563e3bd1f255d2b00f2c0c32b195584dca1403dd',
+    'MXdm': 'c961b8aaeb42856f8b996a8bba98ca969034146b5a581b23e3b0c94b9a787508',
+    'DM84': '40f61d345d38ab6b45e12d568bfe82ede6486fc215ec04d28557329971563e9b',
+  };
+
+  static String? originFor(SourceRow row) {
+    final url = row.repoUrl;
+    if (url != null && url != 'manual') {
+      try {
+        return normalize(url);
+      } on FormatException {
+        return null;
+      }
+    }
+    if (url == null &&
+        row.kind == SourceKind.builtin &&
+        row.id == KazumiRule.idForName(row.name) &&
+        _legacyOfficialHashes[row.name] ==
+            sha256.convert(utf8.encode(row.ruleText ?? '')).toString()) {
+      return defaultRepository;
+    }
+    return null;
+  }
+
+  /// KazumiRules 2967d7babafffa92dbf35fbcb69d0fd964139e63/xfdmnext.json.
+  /// Its public Supabase publishable key is protocol data, not a user credential.
+  /// Attest the complete pinned definition, not a host or a
+  /// header name: any changed bytes/origin/version still fail backup policy.
+  static bool isPinnedPublicDefinition({
+    required String id,
+    required String text,
+    required Object? version,
+    required Object? repoUrl,
+    required Object? type,
+  }) =>
+      id == KazumiRule.idForName('xfdmnext') &&
+      version == '1.1' &&
+      type == 'anime' &&
+      repoUrl == defaultRepository &&
+      sha256.convert(utf8.encode(text)).toString() ==
+          '44aedb07ba77c822835f2f3e09fe18eeda82ee46cb3c69624fe39cca0db5c176';
   static String normalize(String value) {
     var uri = Uri.tryParse(value.trim());
     if (uri == null ||
@@ -51,11 +119,12 @@ class KazumiRepository {
     return uri.toString();
   }
 
-  /// Only the public upstream catalog is mirrored. Custom repositories and
-  /// installed rules retain their declared origin and trust/version checks.
-  Uri _deliveryUri(Uri original) {
+  /// Mutable third-party mirrors can lag without any network error. Always
+  /// request canonical raw content first, regardless of public acceleration.
+  /// Only transport deadlines may recover through GitHub's own contents API.
+  Uri? _officialApiUri(Uri original) {
     final parts = original.pathSegments;
-    if (!useMirror ||
+    if (!allowPublicFallback ||
         original.scheme != 'https' ||
         original.host != 'raw.githubusercontent.com' ||
         original.port != 443 ||
@@ -69,27 +138,50 @@ class KazumiRepository {
         !parts[3].endsWith('.json') ||
         parts[3].contains('/') ||
         parts[3].contains(r'\')) {
-      return original;
+      return null;
     }
     return Uri(
       scheme: 'https',
-      host: 'raw.gitcode.com',
-      pathSegments: [
-        'gh_mirrors',
-        'ka',
-        'KazumiRules',
-        'raw',
-        'main',
-        parts[3],
-      ],
+      host: 'api.github.com',
+      pathSegments: ['repos', 'Predidit', 'KazumiRules', 'contents', parts[3]],
+      queryParameters: {'ref': 'main'},
     );
   }
 
   Future<String> _download(String url) async {
+    try {
+      return await _downloadText(url);
+    } on DioException catch (error) {
+      if (!GithubPublicDelivery.canRecover(error)) rethrow;
+      return _recoverCanonical(url, error);
+    }
+  }
+
+  Future<String> _recoverCanonical(String url, Object error) async {
+    final original = Uri.parse(url);
+    final api = _officialApiUri(original);
+    if (api == null) throw error;
+    final response = jsonDecode(await _downloadText(api.toString()));
+    if (response is! Map ||
+        response['type'] != 'file' ||
+        response['name'] != original.pathSegments.last ||
+        response['path'] != original.pathSegments.last ||
+        response['encoding'] != 'base64' ||
+        response['content'] is! String) {
+      throw const FormatException('GitHub 官方规则响应身份或编码无效');
+    }
+    final bytes = base64.decode(
+      (response['content'] as String).replaceAll(RegExp(r'\s'), ''),
+    );
+    if (bytes.length > 2 * 1024 * 1024) throw StateError('仓库文件超过 2 MiB');
+    return utf8.decode(bytes);
+  }
+
+  Future<String> _downloadText(String url) async {
     final http = registry.http;
     if (http is! SecureRuleDownloadClient) throw StateError('当前网络层不支持安全规则下载');
     final response = await (http as SecureRuleDownloadClient).downloadRuleBytes(
-      _deliveryUri(Uri.parse(url)).toString(),
+      url,
       sourceId: 'kazumi-repository',
     );
     const max = 2 * 1024 * 1024;
@@ -128,6 +220,135 @@ class KazumiRepository {
     ];
   }
 
+  /// The official active index intentionally excludes deprecated definitions.
+  /// Discover the real upstream archive only after an explicit archive action;
+  /// never mix it into healthy defaults or guess a catalog from local history.
+  Future<({List<KazumiCatalogEntry> entries, List<String> failures})>
+  loadArchived(
+    String repository, {
+    void Function(
+      KazumiCatalogEntry? entry,
+      String? failure,
+      int completed,
+      int total,
+    )?
+    onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    final origin = normalize(repository);
+    if (origin != defaultRepository) {
+      throw StateError('此仓库没有已知的归档目录；可手动导入经过核对的规则');
+    }
+    if (isCancelled?.call() == true) {
+      return (entries: <KazumiCatalogEntry>[], failures: <String>[]);
+    }
+    final active = (await load(origin))
+        .map((entry) => entry.name.toLowerCase())
+        .toSet();
+    if (isCancelled?.call() == true) {
+      return (entries: <KazumiCatalogEntry>[], failures: <String>[]);
+    }
+    final files = jsonDecode(
+      await _downloadText(
+        'https://api.github.com/repos/Predidit/KazumiRules/contents/',
+      ),
+    );
+    if (isCancelled?.call() == true) {
+      return (entries: <KazumiCatalogEntry>[], failures: <String>[]);
+    }
+    if (files is! List) throw const FormatException('官方归档文件目录应为数组');
+    final names = <String>{};
+    for (final file in files) {
+      if (file is! Map || file['type'] != 'file' || file['name'] is! String) {
+        continue;
+      }
+      final name = file['name'] as String;
+      if (!name.endsWith('.json') ||
+          name == 'index.json' ||
+          name.contains('/') ||
+          name.contains(r'\')) {
+        continue;
+      }
+      final stem = name.substring(0, name.length - 5);
+      if (!active.contains(stem.toLowerCase())) names.add(stem);
+    }
+    final candidates = names.toList()..sort();
+    final entries = <KazumiCatalogEntry>[];
+    final failures = <String>[];
+    var next = 0, completed = 0;
+    Future<void> inspectFiles() async {
+      while (next < candidates.length && isCancelled?.call() != true) {
+        final name = candidates[next++];
+        KazumiCatalogEntry? discovered;
+        String? failure;
+        try {
+          final text = await _download(
+            Uri.parse(origin)
+                .resolve('./${Uri.encodeComponent(name)}.json')
+                .toString(),
+          );
+          final raw = jsonDecode(text);
+          if (raw is! Map || raw['name'] != name || raw['version'] is! String) {
+            throw const FormatException('规则名称或版本与文件目录不一致');
+          }
+          if (raw['deprecated'] == true) {
+            final rule = KazumiRule.parse(text, allowDeprecated: true);
+            discovered = KazumiCatalogEntry(
+              name: name,
+              version: raw['version'] as String,
+              author: '${raw['author'] ?? ''}',
+              archived: true,
+              inspectedRule: rule,
+            );
+            entries.add(discovered);
+          }
+        } catch (error) {
+          failure = '$name：${error.toString().replaceFirst('Bad state: ', '')}';
+          failures.add(failure);
+        }
+        completed++;
+        if (isCancelled?.call() != true) {
+          onProgress?.call(discovered, failure, completed, candidates.length);
+        }
+      }
+    }
+
+    await Future.wait([
+      for (var worker = 0; worker < 4; worker++) inspectFiles(),
+    ]);
+    entries.sort(
+      (left, right) =>
+          left.name.toLowerCase().compareTo(right.name.toLowerCase()),
+    );
+    failures.sort();
+    return (entries: entries, failures: failures);
+  }
+
+  Future<KazumiCatalogEntry> _archivedEntry(
+    String repository,
+    String name,
+  ) async {
+    if (repository != defaultRepository ||
+        name.contains('/') ||
+        name.contains(r'\')) {
+      throw StateError('归档规则必须来自官方原仓库');
+    }
+    final text = await _download(
+      Uri.parse(repository)
+          .resolve('./${Uri.encodeComponent(name)}.json')
+          .toString(),
+    );
+    final rule = KazumiRule.parse(text, allowDeprecated: true);
+    if (rule.descriptor.name != name || !rule.deprecated) {
+      throw StateError('规则不再属于此归档目录，请刷新当前目录');
+    }
+    return KazumiCatalogEntry(
+      name: name,
+      version: rule.descriptor.version!,
+      archived: true,
+    );
+  }
+
   static int compareVersions(String a, String b) {
     List<int> parts(String value) {
       if (!RegExp(r'^\d+(?:\.\d+){0,3}$').hasMatch(value)) {
@@ -160,9 +381,10 @@ class KazumiRepository {
         .resolve('./${Uri.encodeComponent(entry.name)}.json')
         .toString();
     final text = await _download(url);
-    final rule = KazumiRule.parse(text);
+    final rule = KazumiRule.parse(text, allowDeprecated: entry.archived);
     if (rule.descriptor.name != entry.name ||
-        rule.descriptor.version != entry.version) {
+        rule.descriptor.version != entry.version ||
+        rule.deprecated != entry.archived) {
       throw StateError('索引与规则的名称或版本不一致');
     }
     return (rule: rule, text: text);
@@ -172,10 +394,98 @@ class KazumiRepository {
     String repository,
     KazumiCatalogEntry entry,
   ) async {
+    final old = await registry.repository.byId(
+      KazumiRule.idForName(entry.name),
+    );
+    return _install(normalize(repository), entry, old);
+  }
+
+  Future<SourceDescriptor> installLatest(
+    String repository,
+    String name, {
+    bool archived = false,
+  }) async {
+    final origin = normalize(repository);
+    final old = await registry.repository.byId(KazumiRule.idForName(name));
+    final entries = archived
+        ? [await _archivedEntry(origin, name)]
+        : await load(origin);
+    final entry = entries.where((entry) => entry.name == name).firstOrNull;
+    if (entry == null) throw StateError('刷新后的仓库已无此规则');
+    return _install(origin, entry, old);
+  }
+
+  /// Explicit add-all only installs entries absent at the beginning of this
+  /// action. It never upgrades existing sources or treats a removal as consent.
+  Future<List<KazumiUpdateResult>> installMissing(String repository) async {
+    final origin = normalize(repository);
+    final existing = (await registry.repository.all())
+        .map((row) => row.id)
+        .toSet();
+    final entries = await load(origin);
+    final results = <KazumiUpdateResult>[];
+    for (final entry in entries) {
+      final id = KazumiRule.idForName(entry.name);
+      if (existing.contains(id)) continue;
+      try {
+        await _install(origin, entry, null);
+        results.add(
+          KazumiUpdateResult(
+            id: id,
+            name: entry.name,
+            message: '已安装',
+            updated: true,
+          ),
+        );
+      } catch (error) {
+        results.add(
+          KazumiUpdateResult(
+            id: id,
+            name: entry.name,
+            message: '$error',
+            failed: true,
+          ),
+        );
+      }
+    }
+    return results;
+  }
+
+  /// Object key order and whitespace are serialization details. Compare every
+  /// decoded field, preserving array order, value types and literal contents.
+  /// This never rewrites installed bytes or broadens public backup attestation.
+  static bool _sameJson(Object? left, Object? right) {
+    if (identical(left, right)) return true;
+    if (left is Map && right is Map) {
+      if (left.length != right.length) return false;
+      for (final key in left.keys) {
+        if (!right.containsKey(key) || !_sameJson(left[key], right[key])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (left is List && right is List) {
+      if (left.length != right.length) return false;
+      for (var index = 0; index < left.length; index++) {
+        if (!_sameJson(left[index], right[index])) return false;
+      }
+      return true;
+    }
+    return left.runtimeType == right.runtimeType && left == right;
+  }
+
+  Future<SourceDescriptor> _install(
+    String repository,
+    KazumiCatalogEntry entry,
+    SourceRow? old,
+  ) async {
+    if (old != null && originFor(old) != repository) {
+      throw StateError('同名来源属于其他仓库或手动规则，拒绝覆盖；请先明确移除旧来源');
+    }
     final inspected = await _inspect(repository, entry);
     final text = inspected.text;
     final descriptor = inspected.rule.descriptor;
-    final old = await registry.repository.byId(descriptor.id);
     if (old != null) {
       final comparison = compareVersions(
         descriptor.version!,
@@ -183,9 +493,12 @@ class KazumiRepository {
       );
       if (comparison < 0) throw StateError('拒绝降级，保留已安装来源');
       if (comparison == 0) {
-        if (sha256.convert(utf8.encode(text)) !=
-            sha256.convert(utf8.encode(old.ruleText ?? ''))) {
-          throw StateError('同版本内容发生变化，拒绝覆盖已安装来源');
+        if (text != old.ruleText &&
+            !_sameJson(inspected.rule.raw, jsonDecode(old.ruleText ?? ''))) {
+          throw StateError('同版本内容发生变化，拒绝覆盖；保留旧规则，请核对上游版本');
+        }
+        if (await registry.repository.byId(descriptor.id) != old) {
+          throw StateError('来源在更新期间发生了变更，请刷新后重试');
         }
         return descriptor;
       }
@@ -198,8 +511,91 @@ class KazumiRepository {
       lang: descriptor.lang,
       version: descriptor.version!,
       ruleText: text,
-      repoUrl: normalize(repository),
+      repoUrl: repository,
+      enabledWhenNew: !entry.archived,
     );
     return descriptor;
+  }
+
+  /// Snapshot before any network work: removing or editing a source while its
+  /// catalog/rule is in flight must not reinstall or overwrite it.
+  Future<List<KazumiUpdateResult>> refreshInstalled({
+    required Map<String, bool> repositories,
+    bool update = false,
+    Set<String>? sourceIds,
+  }) async {
+    final installed = (await registry.repository.all())
+        .where(
+          (row) =>
+              row.id.startsWith('kazumi:') &&
+              (sourceIds == null || sourceIds.contains(row.id)),
+        )
+        .toList();
+    final catalogs = <String, List<KazumiCatalogEntry>>{};
+    final errors = <String, Object>{};
+    final results = <KazumiUpdateResult>[];
+    for (final old in installed) {
+      final origin = originFor(old);
+      try {
+        if (origin == null) throw StateError('手动或已编辑规则：未绑定可信仓库');
+        if (repositories[origin] != true) {
+          throw StateError('原仓库未启用；请在添加插件来源中明确启用该仓库');
+        }
+        if (!catalogs.containsKey(origin) && !errors.containsKey(origin)) {
+          try {
+            catalogs[origin] = await load(origin);
+          } catch (error) {
+            errors[origin] = error;
+          }
+        }
+        if (errors[origin] case final error?) throw error;
+        var entry = catalogs[origin]!
+            .where((entry) => KazumiRule.idForName(entry.name) == old.id)
+            .firstOrNull;
+        if (entry == null &&
+            origin == defaultRepository &&
+            old.ruleText != null) {
+          final previous = KazumiRule.parse(
+            old.ruleText!,
+            allowDeprecated: true,
+          );
+          if (previous.deprecated) {
+            entry = await _archivedEntry(origin, previous.descriptor.name);
+          }
+        }
+        if (entry == null) throw StateError('原仓库已无此规则，保留已安装来源');
+        final comparison = compareVersions(entry.version, old.version ?? '');
+        final newer = comparison > 0;
+        if (update) await _install(origin, entry, old);
+        results.add(
+          KazumiUpdateResult(
+            id: old.id,
+            name: old.name,
+            availableVersion: entry.version,
+            updated: update && newer,
+            message: entry.archived
+                ? '已归档 · 上游已停用，不保证可用；${update ? '已核对归档版本' : '保留原规则和启停状态'}'
+                : update
+                ? (newer ? '已更新至 v${entry.version}' : '已核验，规则未变化')
+                : (newer
+                      ? '可更新至 v${entry.version}'
+                      : comparison < 0
+                      ? '本机版本高于目录，不降级'
+                      : '目录版本相同 · 可检查内容完整性'),
+          ),
+        );
+      } catch (error) {
+        results.add(
+          KazumiUpdateResult(
+            id: old.id,
+            name: old.name,
+            failed: true,
+            message:
+                '保留原规则：${error.toString().replaceFirst('Bad state: ', '')}',
+          ),
+        );
+      }
+    }
+    return results;
   }
 }

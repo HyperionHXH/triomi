@@ -51,7 +51,7 @@ void main() {
     expect(snapshot.failures, isEmpty);
     expect(
       snapshot.enabledEntries.where((entry) => entry.source is KazumiSource),
-      hasLength(3),
+      hasLength(SourceRegistry.officialKazumiNames.length),
     );
   });
   test('新增随包播种路径保留已经安装和禁用的同id规则', () async {
@@ -72,6 +72,91 @@ void main() {
     expect(saved.enabled, isFalse);
     expect(saved.kind, SourceKind.plugin);
     expect(saved.ruleText, text);
+  });
+
+  test('official seed adds new plugins once without resurrecting removals or replacing custom rules', () async {
+    final seeded = await registry.seedBuiltins(alreadySeeded: {});
+    final removed = KazumiRule.idForName('7sefun');
+    final disabled = KazumiRule.idForName('MXdm');
+    await repository.remove(removed);
+    await repository.setEnabled(disabled, enabled: false);
+    final original = (await repository.byId(disabled))!;
+    await repository.upsert(
+      id: KazumiRule.idForName('DM84'),
+      name: 'DM84',
+      type: MediaType.anime,
+      kind: SourceKind.plugin,
+      ruleText: '{"my":"custom rule"}',
+      version: '99.0',
+      repoUrl: 'manual',
+      enabled: false,
+    );
+    final custom = (await repository.byId(KazumiRule.idForName('DM84')))!;
+    expect(await registry.seedBuiltins(alreadySeeded: seeded), isEmpty);
+    expect(await repository.byId(removed), isNull);
+    expect(await repository.byId(disabled), original);
+    expect(await repository.byId(custom.id), custom);
+    final official = (await repository.all()).where(
+      (row) => row.id.startsWith('kazumi:'),
+    );
+    expect(official, hasLength(SourceRegistry.officialKazumiNames.length - 1));
+    expect(
+      official
+          .where((row) => row.id != custom.id)
+          .every(
+            (row) => row.repoUrl == 'https://raw.githubusercontent.com/Predidit/KazumiRules/main/index.json',
+          ),
+      isTrue,
+    );
+  });
+
+  test('upgrading an existing profile does not resurrect previously repository-only removals', () async {
+    final oldMarkers = {
+      'assets/rules/bangumi-anime.json',
+      'assets/rules/age-anime-js.json',
+      'assets/rules/kazumi-7sefun.json',
+      'assets/rules/kazumi-MXdm.json',
+      'assets/rules/kazumi-DM84.json',
+      'assets/rules/mangadex-api-js.json',
+    };
+    for (final name in ['MXdm', 'DM84', 'AGE']) {
+      final text = File('assets/rules/kazumi-$name.json').readAsStringSync();
+      final parsed = KazumiRule.parse(text).descriptor;
+      await repository.upsert(
+        id: parsed.id,
+        name: parsed.name,
+        type: parsed.type,
+        kind: SourceKind.plugin,
+        ruleText: text,
+        version: parsed.version,
+        enabled: false,
+        repoUrl: 'manual',
+      );
+    }
+    // AGE previously came from the live repo; old builds retained no marker.
+    await repository.remove(KazumiRule.idForName('AGE'));
+    final before = await repository.all();
+    final newlyConsidered = await registry.seedBuiltins(
+      alreadySeeded: oldMarkers,
+    );
+    expect(
+      (await repository.all()).where((row) => row.id != 'bangumi-anime'),
+      before,
+    );
+    expect((await repository.byId('bangumi-anime'))!.enabled, isTrue);
+    expect(await repository.byId(KazumiRule.idForName('AGE')), isNull);
+    expect(await repository.byId(KazumiRule.idForName('7sefun')), isNull);
+    expect(await repository.byId(KazumiRule.idForName('aafun')), isNull);
+    expect(
+      newlyConsidered.where((path) => path.startsWith('assets/rules/kazumi-')),
+      hasLength(15),
+    );
+    expect(
+      await registry.seedBuiltins(
+        alreadySeeded: {...oldMarkers, ...newlyConsidered},
+      ),
+      isEmpty,
+    );
   });
   test('旧数据库残留夹具可在管理页保留但不参加日常浏览搜索', () async {
     await repository.upsert(
