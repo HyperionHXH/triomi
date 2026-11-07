@@ -1,6 +1,6 @@
 {
   "targetVersion": "0.15.2+187",
-  "status": "public-artifacts-verified-ci-fixture-integration-correction",
+  "status": "complete-public-release-and-full-ci-verified",
   "referenceResearch": {
     "versionTarget": "0.15.2",
     "references": {
@@ -801,6 +801,37 @@
     ],
     "appNativeAssetsDependenciesVersionUnchanged": true,
     "publishedTagAndAssetsKeptImmutable": true,
-    "correctedFullRemoteGate": "pending test-only commit"
+    "correctedFullRemoteGate": {
+      "id": 42340371571,
+      "commit": "1315492bf925a212442eb56bc0a706d74744f6dc",
+      "conclusion": "success",
+      "jobs": {
+        "python-tools": "success",
+        "test": "success",
+        "windows": "success",
+        "android": "success"
+      },
+      "flutterPassed": 1916,
+      "flutterSkipped": 1,
+      "analyze": "No issues found",
+      "testLogArtifact": "artifact://8269",
+      "applicationHashesEqualToPublishedTag": 619
+    }
+  },
+  "finalRemoteVerification": {
+    "id": 42340371571,
+    "commit": "1315492bf925a212442eb56bc0a706d74744f6dc",
+    "conclusion": "success",
+    "jobs": {
+      "python-tools": "success",
+      "test": "success",
+      "windows": "success",
+      "android": "success"
+    },
+    "flutterPassed": 1916,
+    "flutterSkipped": 1,
+    "analyze": "No issues found",
+    "testLogArtifact": "artifact://8269",
+    "applicationHashesEqualToPublishedTag": 619
   }
 }
