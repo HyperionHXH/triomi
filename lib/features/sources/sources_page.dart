@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/db/database_provider.dart';
 import '../../core/models/media_type.dart';
 import '../../core/source/bangumi_route_policy.dart';
+import '../../core/source/copymanga/copymanga_js_source.dart';
 import '../../core/source/http_client.dart';
 import '../../core/source/js/js_source.dart';
 import '../../core/source/kazumi_repository.dart';
@@ -670,7 +671,9 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
         ),
       ),
     );
-    if (remove == true && mounted) await _confirmDelete(entry);
+    if (remove == true && mounted) {
+      await _confirmDelete(entry.descriptor.id, entry.descriptor.name);
+    }
   }
 
   Future<void> _showMangaDexSettings() async {

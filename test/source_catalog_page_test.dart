@@ -195,13 +195,12 @@ Future<void> closeCatalog(
 void main() {
   testWidgets('未知原生网关明确提示升级且不允许安装', (tester) async {
     final http = FakeHttpClient((_) async => throw StateError('No downloads'));
-    await tester.pumpWidget(
-      await harness(
-        loader: () async => [
-          entryOf(id: 'future-gateway', requiresHost: ['future.gateway.v2']),
-        ],
-        http: http,
-      ),
+    await harness(
+      tester,
+      loader: () async => [
+        entryOf(id: 'future-gateway', requiresHost: ['future.gateway.v2']),
+      ],
+      http: http,
     );
     await settle(tester);
     expect(find.textContaining('需要更新应用，缺少网关'), findsOneWidget);
@@ -259,15 +258,14 @@ void main() {
   testWidgets('restored metadata can reinstall the same catalog version', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      await harness(
-        installedVersion: '1.0.0',
-        metadataOnly: true,
-        loader: () async => [entryOf(id: 'catalog-manga')],
-        http: FakeHttpClient(
-          (request) async =>
-              SourceResponse(statusCode: 200, url: request.url, body: ruleJson),
-        ),
+    final container = await harness(
+      tester,
+      installedVersion: '1.0.0',
+      metadataOnly: true,
+      loader: () async => [entryOf(id: 'catalog-manga')],
+      http: FakeHttpClient(
+        (request) async =>
+            SourceResponse(statusCode: 200, url: request.url, body: ruleJson),
       ),
     );
     await settle(tester, rounds: 10);
@@ -276,9 +274,6 @@ void main() {
     await tester.ensureVisible(find.text('安装'));
     await tester.tap(find.text('安装'));
     await settle(tester, rounds: 10);
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(CatalogSheet)),
-    );
     final row = await SourceRepository(container.read(databaseProvider))
         .byId('catalog-manga');
     expect(row!.ruleText, ruleJson);
