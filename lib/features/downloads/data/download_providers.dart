@@ -396,13 +396,6 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>>
       );
       if (id > 0) {
         added += 1;
-        _explicitlyPaused.remove(id);
-        _lifecycleInterrupted.remove(id);
-        if (_activeId == id && _stopped.contains(id)) {
-          _resumeAfterStop.add(id);
-        } else {
-          _stopped.remove(id);
-        }
       }
     }
     _queueGeneration++;

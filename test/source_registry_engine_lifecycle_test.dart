@@ -291,7 +291,8 @@ void main() {
       );
       addTearDown(registry.dispose);
       await registry.importFromText(jsRuleText());
-      final active = (await registry.load()).entries.single.source as JsSource;
+      final active =
+          (await registry.load()).manageableEntries.single.source as JsSource;
       await active.initialize();
       final now = DateTime.now();
       await db
@@ -365,7 +366,8 @@ void main() {
       );
       addTearDown(registry.dispose);
       await registry.importFromText(jsRuleText());
-      final source = (await registry.load()).entries.single.source as JsSource;
+      final source =
+          (await registry.load()).manageableEntries.single.source as JsSource;
       await source.initialize();
       await expectLater(registry.remove('js-source'), throwsStateError);
       expect(engine.disposed, false);
@@ -392,7 +394,7 @@ void main() {
       type: MediaType.novel,
       kind: SourceKind.builtin,
     );
-    expect((await registry.load()).entries.single.canRemove, false);
+    expect((await registry.load()).manageableEntries.single.canRemove, false);
     await expectLater(registry.remove('native'), throwsStateError);
     expect(await repository.byId('native'), isNotNull);
   });

@@ -155,12 +155,12 @@ void main() {
       ),
     );
     await _advance(tester);
-    await tester.tap(find.text('安装 / 管理来源或搜索迁移'));
+    await tester.tap(find.text('管理来源 / 迁移作品'));
     await _advance(tester);
     expect(find.textContaining('iOS 不执行 Mihon APK/DEX'), findsNWidgets(2));
     expect(find.text('打开 JS / API 来源目录'), findsOneWidget);
     expect(find.text('打开插件库 / 管理'), findsNothing);
-    expect(find.text('搜索其他来源并迁移'), findsOneWidget);
+    expect(find.text('搜索并迁移'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     debugDefaultTargetPlatformOverride = null;
     container.dispose();

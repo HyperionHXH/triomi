@@ -6,6 +6,7 @@ import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/sources/sources_page.dart';
 
 import 'fixtures/fake_preferences.dart';
@@ -24,6 +25,7 @@ void main() {
     final container = ProviderContainer(overrides: [
       databaseProvider.overrideWithValue(database),
       preferencesProvider.overrideWithValue(memoryPreferences()),
+      secureStoreProvider.overrideWithValue(MemorySecureStore()),
       sourcesProvider.overrideWith(_EmptySources.new),
     ]);
     addTearDown(() async {
@@ -37,9 +39,14 @@ void main() {
     ));
     await tester.pumpAndSettle();
     Future<void> open() async {
-      await tester.tap(find.text('添加番剧来源'));
+      await tester.tap(find.text('添加插件来源'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('手动导入规则'));
+      // The anime branch opens the Kazumi repositories sheet; its import
+      // action forwards to the same import sheet.
+      final import = find.text('手动导入规则');
+      await tester.ensureVisible(import);
+      await tester.pumpAndSettle();
+      await tester.tap(import);
       await tester.pumpAndSettle();
     }
     Finder inputs() => find.descendant(

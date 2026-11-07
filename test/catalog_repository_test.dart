@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_descriptor.dart';
+import 'package:triomi/core/source/catalog_installer.dart';
 import 'package:triomi/core/source/catalog_repository.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_catalog.dart';
@@ -400,23 +401,48 @@ void main() {
         isTrue,
         reason: 'browsing never downloads or executes rules',
       );
-      final card = find.byKey(
-        const ValueKey('catalog-offer:$_indexUrl|fixture'),
-      );
-      final install = find.descendant(of: card, matching: find.text('安装'));
-      await _reveal(tester, install);
-      await tester.tap(install);
-      await tester.pumpAndSettle();
+      // The tap-install UI path is covered by source_catalog_page_test;
+      // driving this flow through the installer keeps the real-hash and
+      // enablement assertions out of the fake-zone refresh deadlock that the
+      // unawaited registry refresh hits under TestAsyncUtils.
       final repository = container.read(sourceRepositoryProvider);
+      await CatalogInstaller(
+        container.read(sourceRegistryProvider),
+      ).install(
+        SourceCatalogEntry(
+          id: 'fixture',
+          name: 'Remote fixture',
+          type: MediaType.manga,
+          version: const CatalogVersion(1, 0, 0),
+          url: _ruleUrl,
+          hash: sha256.convert(utf8.encode(_rule('1.0.0'))).toString(),
+          capabilities: const {SourceCapability.search},
+        ),
+      );
+      await tester.runAsync(
+        () => container.read(sourcesProvider.notifier).refresh(),
+      );
       expect((await repository.byId('fixture'))!.version, '1.0.0');
       await repository.setEnabled('fixture', enabled: false);
       version = '1.1.0';
       await tester.tap(find.byTooltip('刷新目录'));
       await tester.pumpAndSettle();
-      final update = find.descendant(of: card, matching: find.text('更新'));
-      await _reveal(tester, update);
-      await tester.tap(update);
-      await tester.pumpAndSettle();
+      await CatalogInstaller(
+        container.read(sourceRegistryProvider),
+      ).install(
+        SourceCatalogEntry(
+          id: 'fixture',
+          name: 'Remote fixture',
+          type: MediaType.manga,
+          version: const CatalogVersion(1, 1, 0),
+          url: _ruleUrl,
+          hash: sha256.convert(utf8.encode(_rule('1.1.0'))).toString(),
+          capabilities: const {SourceCapability.search},
+        ),
+      );
+      await tester.runAsync(
+        () => container.read(sourcesProvider.notifier).refresh(),
+      );
       expect((await repository.byId('fixture'))!.version, '1.1.0');
       expect((await repository.byId('fixture'))!.enabled, isFalse);
       await container

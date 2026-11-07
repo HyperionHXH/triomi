@@ -246,6 +246,38 @@ void main() {
         '已填充的番剧书架首页，生产 AdaptiveShell 与书架渲染',
       );
 
+      // Follows bucket and local sync dialog (no remote writes).
+      await tapText('我的追番');
+      await until(
+        () => find
+            .text(fixtures.item(MediaType.anime).title)
+            .evaluate()
+            .isNotEmpty,
+        'follows page must render the seeded followed item',
+      );
+      await screenshot(
+        '09_follows_all.png',
+        AppRoutes.anime,
+        '生产追番页全部桶显示本机收藏，封面与状态来自真实数据库',
+      );
+      await tester.tap(find.byTooltip('同步收藏'));
+      await until(
+        () => find.textContaining('同步追番状态').evaluate().isNotEmpty,
+        'local sync dialog must open with stage list',
+      );
+      await screenshot(
+        '09_follows_sync_dialog.png',
+        AppRoutes.anime,
+        '生产同步对话框打开；本轮不启动同步、不改远端收藏或进度',
+      );
+      await tapText('取消');
+      await until(
+        () => find.byType(AlertDialog).evaluate().isEmpty,
+        'cancel must close the sync dialog without starting a task',
+      );
+      cleanExceptions(AppRoutes.anime);
+      await tapText('推荐');
+
       // Independent workspace states.
       await go(AppRoutes.manga);
       await until(
@@ -1460,7 +1492,7 @@ void main() {
       debugPrint('IOS_VISUAL_TOUR_CAPTURES=$captureIndex');
       expect(
         captureIndex,
-        70,
+        72,
         reason: 'Every agreed production tour surface must be captured',
       );
     },

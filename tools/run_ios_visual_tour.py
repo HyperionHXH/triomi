@@ -63,6 +63,7 @@ EXTRA_CAPTURES = (
     '07_cache_http_confirmation.png',
     '07_cache_retained_content.png', '07_danmaku_shield_rules.png',
     '07_settings_large_text.png',
+    '09_follows_all.png', '09_follows_sync_dialog.png',
     '07_downloads_collapsed.png', '07_downloads_expanded.png', '07_downloads_menu.png',
     '08_portable_backup_empty.png', '08_backup_location_choice_boundary.png',
     '08_backup_restore_preview.png', '08_onboarding_appearance.png',

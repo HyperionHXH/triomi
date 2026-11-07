@@ -270,7 +270,7 @@ void main() {
   });
 
   test(
-    'explicitly re-enqueuing a paused waiting chapter makes it runnable again',
+    'explicitly re-enqueuing a paused chapter stays queued until resumeEntry',
     () async {
       final source = QueueSource('requeued');
       await setup([source.entry()]);
@@ -290,6 +290,11 @@ void main() {
           Chapter(sourceId: source.id, remoteId: 'chapter', title: 'chapter'),
         ],
       );
+      // Re-enqueue alone must not override a user pause; the detail page's
+      // explicit resumeEntry is the only path that clears the stop marker.
+      expect(source.requested, isEmpty);
+      expect((await repository.rowById(row.id))!.status, 'queued');
+      await controller.resumeEntry(row.id);
       await waitIdle();
       expect(source.requested, ['chapter']);
       expect((await repository.rowById(row.id))!.status, 'done');

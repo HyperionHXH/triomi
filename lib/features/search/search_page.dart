@@ -86,6 +86,18 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   bool _tagBusy = false;
   String get _historyKey => 'search.history.${widget.type.name}';
 
+  SourceEntry _publicMetadataEntry() {
+    final source = BangumiSource.publicMetadata(
+      ref.read(bangumiPublicClientProvider),
+    );
+    return SourceEntry(
+      descriptor: source.descriptor,
+      source: source,
+      enabled: true,
+      canRemove: false,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -141,11 +153,22 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         );
       }
       if (!mounted || generation != _generation) return;
-      final snapshot = await ref.read(sourcesProvider.future);
-      if (!mounted || generation != _generation) return;
-      final sources = snapshot.enabledWith(SourceCapability.search).where((
-        entry,
-      ) {
+      var candidates = <SourceEntry>[];
+      try {
+        final snapshot = await ref.read(sourcesProvider.future);
+        if (!mounted || generation != _generation) return;
+        candidates = snapshot.enabledWith(SourceCapability.search);
+      } catch (_) {
+        // A broken plugin registry must not hide the public metadata search.
+        if (!mounted || generation != _generation) return;
+      }
+      if (widget.type == MediaType.anime &&
+          !candidates.any((entry) => entry.descriptor.id == 'bangumi-anime')) {
+        // Public subject metadata shares the recommendation/detail client.
+        // A missing, disabled or broken plugin record must not hide search.
+        candidates = [...candidates, _publicMetadataEntry()];
+      }
+      final sources = candidates.where((entry) {
         if (entry.descriptor.type != widget.type) return false;
         if (widget.type == MediaType.anime) {
           return entry.descriptor.id == 'bangumi-anime';
@@ -186,12 +209,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 
   Future<void> _searchOne(
-    SourceEntry entry,
+    SourceEntry queueEntry,
     String query,
     int generation, {
     bool append = false,
   }) async {
-    final id = entry.descriptor.id;
+    final id = queueEntry.descriptor.id;
     final previous = append ? _rows[id] : null;
     final page = previous == null ? 1 : previous.page + 1;
     final session = (_sourceGeneration[id] ?? 0) + 1;
@@ -199,7 +222,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     if (mounted) {
       setState(
         () => _rows[id] = _SearchRow(
-          entry,
+          queueEntry,
           items: previous?.items ?? const [],
           page: previous?.page ?? 0,
         ),
@@ -208,16 +231,26 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     _requests.remove(id)?.cancel();
     final owner = SourceRequestCancellation();
     _requests[id] = owner;
+    SourceEntry? entry;
     try {
-      final snapshot = await ref.read(sourcesProvider.future);
-      final active = snapshot.enabledEntries
-          .where((e) => e.descriptor.id == id)
-          .firstOrNull;
+      try {
+        final snapshot = await ref.read(sourcesProvider.future);
+        entry = snapshot.enabledEntries
+            .where((e) => e.descriptor.id == id)
+            .firstOrNull;
+      } catch (_) {
+        // A broken plugin registry must not hide the public metadata search.
+      }
+      if (entry == null &&
+          widget.type == MediaType.anime &&
+          id == BangumiPublicClient.sourceId) {
+        entry = _publicMetadataEntry();
+      }
       if (!mounted || generation != _generation || owner.cancelled) return;
-      if (active == null || active.source is! SearchProvider) {
+      if (entry == null || entry.source is! SearchProvider) {
         throw StateError('来源已停用或不支持搜索');
       }
-      final provider = active.source as SearchProvider;
+      final provider = entry.source as SearchProvider;
       final items = await owner
           .run(() {
             if (provider is BangumiSource) {
@@ -240,7 +273,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             );
           })
           .timeout(
-            active.source is MihonSource
+            provider is MihonSource
                 ? const Duration(seconds: 150)
                 : const Duration(seconds: 60),
             onTimeout: () {
@@ -265,7 +298,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       }
       setState(
         () => _rows[id] = _SearchRow(
-          active,
+          entry!,
           pending: false,
           items: unique.values.toList(),
           page: page,
@@ -280,13 +313,16 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       }
       setState(
         () => _rows[id] = _SearchRow(
-          entry,
+          entry ?? queueEntry,
           pending: false,
           failure: error,
           items: previous?.items ?? const [],
           page: previous?.page ?? 0,
           error: error is SourceException
-              ? SourceRegistry.describeError(error, entry.descriptor.name)
+              ? SourceRegistry.describeError(
+                  error,
+                  (entry ?? queueEntry).descriptor.name,
+                )
               : error is TimeoutException
               ? '请求超时，可重试本站'
               : '本站搜索失败：$error',
