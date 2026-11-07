@@ -249,6 +249,10 @@ void main() {
       // Follows bucket and local sync dialog (no remote writes).
       await tapText('我的追番');
       await until(
+        () => find.byTooltip('同步收藏').evaluate().isNotEmpty,
+        'tapping the follows segment must leave the recommendation shelf',
+      );
+      await until(
         () => find
             .text(fixtures.item(MediaType.anime).title)
             .evaluate()

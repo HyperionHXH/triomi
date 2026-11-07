@@ -97,7 +97,14 @@ Future<ProviderContainer> _render(
     ],
   );
   addTearDown(() async {
+    // A deliberately failing registry must not replay its error into a later
+    // test's zone after this container is disposed.
     await tester.pumpWidget(const SizedBox.shrink());
+    try {
+      await container.read(sourcesProvider.future);
+    } catch (_) {
+      // Expected for the load-error scenario.
+    }
     router?.dispose();
     container.dispose();
     await tester.runAsync(db.close);

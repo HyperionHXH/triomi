@@ -209,7 +209,8 @@ void main() {
               final registry = scope.read(sourceRegistryProvider);
               final snapshot = await registry.load();
               expect(snapshot.failures, isEmpty);
-              final entry = snapshot.enabledEntries.single;
+              final entry =
+                  snapshot.enabledEntries.where((entry) => !entry.isInternal).single;
               expect(entry.source, isA<JsSource>());
               final source = entry.source as JsSource;
               expect(source.runtime, isA<IosJsRuntime>());
