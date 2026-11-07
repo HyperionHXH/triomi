@@ -154,6 +154,9 @@ void main() {
             : const [],
       );
       await _search(tester, '公开资料');
+      debugPrint(
+        'DBG state=$state errorView=${find.text('无法准备搜索来源，请重试').evaluate().length} retry=${find.text('重试').evaluate().length}',
+      );
       expect(http.requests, hasLength(1));
       expect(http.requests.single.method, 'POST');
       expect(

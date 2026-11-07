@@ -262,8 +262,8 @@ void main() {
       );
       await tester.tap(find.byTooltip('同步收藏'));
       await until(
-        () => find.textContaining('同步追番状态').evaluate().isNotEmpty,
-        'local sync dialog must open with stage list',
+        () => find.textContaining('· 第 1 步').evaluate().isNotEmpty,
+        'local sync dialog must open with its stage list',
       );
       await screenshot(
         '09_follows_sync_dialog.png',

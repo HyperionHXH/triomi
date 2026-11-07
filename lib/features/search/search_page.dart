@@ -209,12 +209,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 
   Future<void> _searchOne(
-    SourceEntry queueEntry,
+    SourceEntry entry,
     String query,
     int generation, {
     bool append = false,
   }) async {
-    final id = queueEntry.descriptor.id;
+    final id = entry.descriptor.id;
     final previous = append ? _rows[id] : null;
     final page = previous == null ? 1 : previous.page + 1;
     final session = (_sourceGeneration[id] ?? 0) + 1;
@@ -222,7 +222,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     if (mounted) {
       setState(
         () => _rows[id] = _SearchRow(
-          queueEntry,
+          entry,
           items: previous?.items ?? const [],
           page: previous?.page ?? 0,
         ),
@@ -231,25 +231,26 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     _requests.remove(id)?.cancel();
     final owner = SourceRequestCancellation();
     _requests[id] = owner;
-    SourceEntry? entry;
+    SourceEntry? resolved;
     try {
       try {
         final snapshot = await ref.read(sourcesProvider.future);
-        entry = snapshot.enabledEntries
+        resolved = snapshot.enabledEntries
             .where((e) => e.descriptor.id == id)
             .firstOrNull;
       } catch (_) {
         // A broken plugin registry must not hide the public metadata search.
       }
-      if (entry == null &&
+      if (resolved == null &&
           widget.type == MediaType.anime &&
           id == BangumiPublicClient.sourceId) {
-        entry = _publicMetadataEntry();
+        resolved = _publicMetadataEntry();
       }
       if (!mounted || generation != _generation || owner.cancelled) return;
-      if (entry == null || entry.source is! SearchProvider) {
+      if (resolved == null || resolved.source is! SearchProvider) {
         throw StateError('来源已停用或不支持搜索');
       }
+      final entry = resolved;
       final provider = entry.source as SearchProvider;
       final items = await owner
           .run(() {
@@ -298,7 +299,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       }
       setState(
         () => _rows[id] = _SearchRow(
-          entry!,
+          entry,
           pending: false,
           items: unique.values.toList(),
           page: page,
@@ -313,16 +314,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       }
       setState(
         () => _rows[id] = _SearchRow(
-          entry ?? queueEntry,
+          entry,
           pending: false,
           failure: error,
           items: previous?.items ?? const [],
           page: previous?.page ?? 0,
           error: error is SourceException
-              ? SourceRegistry.describeError(
-                  error,
-                  (entry ?? queueEntry).descriptor.name,
-                )
+              ? SourceRegistry.describeError(error, entry.descriptor.name)
               : error is TimeoutException
               ? '请求超时，可重试本站'
               : '本站搜索失败：$error',
