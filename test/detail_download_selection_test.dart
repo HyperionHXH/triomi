@@ -328,7 +328,14 @@ class _MigrationDestination
 }
 
 void main() {
-  Future<({ProviderContainer container, _Sources sources, _Queue queue})>
+  Future<
+    ({
+      ProviderContainer container,
+      _Sources sources,
+      _Queue queue,
+      Future<void> Function() close,
+    })
+  >
   pumpDetail(
     WidgetTester tester,
     ContentSource source,
@@ -376,12 +383,38 @@ void main() {
           ),
       ],
     );
-    addTearDown(() async {
+    var closed = false;
+    Future<void> close() async {
+      if (closed) return;
+      closed = true;
+      if (queue.submissionGate?.isCompleted == false) {
+        queue.submissionGate!.complete();
+      }
+      if (realController is _DelayedCommitQueue &&
+          realController.gate?.isCompleted == false) {
+        realController.gate!.complete();
+      }
+      // Cancel direct widget queries before the binding's automatic unmount.
       await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
       router?.dispose();
+      // Provider queries also own FakeAsync callbacks: cancel them and drain
+      // Drift's Timer.run removals before awaiting close in the real zone.
       container.dispose();
-      await tester.runAsync(db.close);
-    });
+      await tester.pump(const Duration(milliseconds: 1));
+      for (var index = 0; index < 12; index++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)),
+        );
+        await tester.pump(const Duration(milliseconds: 30));
+      }
+      await tester.runAsync(
+        () => db.close().timeout(const Duration(seconds: 5)),
+      );
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+
+    addTearDown(close);
     if (realQueue) await container.read(downloadsProvider.future);
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -401,7 +434,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    return (container: container, sources: sources, queue: queue);
+    return (container: container, sources: sources, queue: queue, close: close);
   }
 
   Future<void> openDownloads(WidgetTester tester) async {
@@ -514,6 +547,7 @@ void main() {
         );
         expect(find.byType(ChapterDownloadPicker), findsNothing);
         expect(source.contentCalls, 0);
+        await harness.close();
       },
     );
 
@@ -541,6 +575,7 @@ void main() {
         expect(harness.queue.submissions.single.ids, {'gap', 'end'});
         expect(harness.queue.submissions.single.chapters, hasLength(9));
         expect(source.contentCalls, 0);
+        await harness.close();
       },
     );
 
@@ -565,6 +600,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(harness.queue.submissions.single.ids, {'fresh'});
         expect(harness.queue.submissions.single.chapters, hasLength(3));
+        await harness.close();
       },
     );
 
@@ -596,6 +632,7 @@ void main() {
           {'two'},
         ]);
         expect(source.contentCalls, 0);
+        await harness.close();
       },
     );
 
@@ -625,6 +662,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('detail-download-start')));
       await tester.pumpAndSettle();
       expect(harness.queue.submissions, isEmpty);
+      await harness.close();
     });
 
     testWidgets(
@@ -653,6 +691,7 @@ void main() {
         expect(harness.queue.submissions.single.ids, {'gap', 'end'});
         final rows = await repository.listForItem('site', 'book');
         expect(rows.map((row) => row.status), ['queued', 'done']);
+        await harness.close();
       },
     );
 
@@ -698,6 +737,7 @@ void main() {
         expect(harness.queue.submissions, hasLength(2));
         expect(harness.queue.submissions.last.ids, {'two'});
         expect(harness.queue.resumed, [id, id]);
+        await harness.close();
       },
     );
 
@@ -752,6 +792,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(openedIndex, 1);
         expect(harness.queue.submissions, isEmpty);
+        await harness.close();
       },
     );
   }
@@ -874,6 +915,7 @@ void main() {
         );
         await finishOwned(tester, controller.pauseAll());
         await tester.pumpAndSettle();
+        await harness.close();
       },
       timeout: const Timeout(Duration(seconds: 45)),
     );
@@ -908,6 +950,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(harness.queue.submissions.single.ids, {'one', 'gap'});
       expect(tester.takeException(), isNull);
+      await harness.close();
     },
   );
 
@@ -929,6 +972,7 @@ void main() {
         {'one', 'gap'},
         {'last', 'end'},
       ]);
+      await harness.close();
     },
   );
 
@@ -976,6 +1020,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(harness.queue.submissions.last.ids, {'last', 'end'});
+      await harness.close();
     },
   );
 
@@ -1017,6 +1062,7 @@ void main() {
           'locked',
         ]);
         expect(source.contentCalls, 0);
+        await harness.close();
       },
     );
 
@@ -1034,6 +1080,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(harness.queue.submissions, isEmpty);
       expect(source.contentCalls, 0);
+      await harness.close();
     });
 
     testWidgets(
@@ -1050,6 +1097,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(harness.queue.submissions, isEmpty);
         expect(source.contentCalls, 0);
+        await harness.close();
       },
     );
   }
@@ -1084,6 +1132,7 @@ void main() {
         source.hub.calls.where((call) => call.target != 'GetBookInfo'),
         isEmpty,
       );
+      await harness.close();
     },
   );
 
@@ -1210,7 +1259,7 @@ void main() {
     'media-specific overflow keeps genuine novel tracking without manga-only tools',
     (tester) async {
       final source = _Site(MediaType.novel);
-      await pumpDetail(tester, source, source.item);
+      final harness = await pumpDetail(tester, source, source.item);
       await tester.tap(find.byTooltip('更多'));
       await tester.pumpAndSettle();
       final values = tester
@@ -1224,6 +1273,7 @@ void main() {
         isEmpty,
       );
       expect(source.contentCalls, 0);
+      await harness.close();
     },
   );
 
@@ -1299,6 +1349,7 @@ void main() {
       expect(pauseError, isNull);
       await stopping;
       expect((await db.select(db.downloads).get()).single.status, 'paused');
+      await harness.close();
     },
   );
 
@@ -1342,7 +1393,7 @@ void main() {
             ),
           ],
         );
-        await pumpDetail(
+        final harness = await pumpDetail(
           tester,
           source,
           source.item,
@@ -1404,6 +1455,7 @@ void main() {
         expect(find.byIcon(Icons.key_outlined), findsOneWidget);
         expect(source.unlockCalls, 0);
         expect(source.contentCalls, 0);
+        await harness.close();
       },
     );
   }
@@ -1443,6 +1495,7 @@ void main() {
         'novel-target',
       });
       expect(source.contentCalls, 0);
+      await harness.close();
     },
   );
 }

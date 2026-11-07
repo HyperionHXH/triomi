@@ -1,6 +1,6 @@
 {
   "targetVersion": "0.15.2+187",
-  "status": "local-acceptance-complete-awaiting-signed-release",
+  "status": "public-artifacts-verified-ci-fixture-integration-correction",
   "referenceResearch": {
     "versionTarget": "0.15.2",
     "references": {
@@ -685,5 +685,122 @@
     "existingExplicitProxy": "ObservedTLSHandshakeException; noverificationweakening",
     "androidDisposableTransport": "16archived parsed/52perfilefailures shown; laterprogressivecallbacks removeall-at-oncewait",
     "result": "No all-archive live success or playback claim; currentpublicindex18 + installed37 comparison and isolated archived install/backup/update/cancellation consumer regressions passed"
+  },
+  "publishedRelease": {
+    "tag": "v0.15.2",
+    "commit": "259be590ef25565442350174d229e3e4224bd273",
+    "signedWorkflow": 42337843245,
+    "url": "https://github.com/HyperionHXH/triomi/releases/tag/v0.15.2",
+    "assets": [
+      {
+        "name": "SHA256SUMS.txt",
+        "bytes": 348,
+        "sha256": "7cf5ba95ab5b2cdb94b388143ef44fa07ec2b8c6c764e2a35aaf10bddad79e23"
+      },
+      {
+        "name": "triomi-android.apk",
+        "bytes": 162754436,
+        "sha256": "cb9ccc76f2b2a004b640c3226c34736281478f9db6c653ea2308114a66251e2e"
+      },
+      {
+        "name": "triomi-windows.msi",
+        "bytes": 244267808,
+        "sha256": "4c5bcbf970deee74e277dce419d751e38d3ac809ea9c12c3cda8c7fda68fd570"
+      },
+      {
+        "name": "triomi-windows.update.json",
+        "bytes": 81425,
+        "sha256": "e102115304428108c92f9ec2de213662191dab5bbfbac5701549f16c50ae7558"
+      },
+      {
+        "name": "triomi-windows.zip",
+        "bytes": 255592812,
+        "sha256": "01d50640c274474948762412b5a6f5c79fed0a4d5e0d86ac4b1d1c12b4227ca1"
+      }
+    ],
+    "windows": {
+      "version": "0.15.2",
+      "build": 187,
+      "membersVerified": 467,
+      "msi": {
+        "readOnlyProductProperties": {
+          "Manufacturer": "HyperionHXH",
+          "ProductName": "Triomi",
+          "ProductVersion": "0.15.187"
+        },
+        "installed": false
+      },
+      "rules": {
+        "activeOfficialRules": 18,
+        "pinnedPublicRuleSha256": "44aedb07ba77c822835f2f3e09fe18eeda82ee46cb3c69624fe39cca0db5c176",
+        "pinnedRuleCrLfCount": 0
+      }
+    },
+    "android": {
+      "identity": "package: name='io.github.hyperionhxh.triomi' versionCode='187' versionName='0.15.2' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+      "productionSignatureVerified": true,
+      "retainedProductionCertificate": "731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309",
+      "mihonAbi": "Mihon ABI OK: 128 descriptors across 1 DEX files (5671 public/protected classes, 47138 visible members).",
+      "packagedRules": {
+        "activeOfficialRules": 18,
+        "pinnedPublicRuleSha256": "44aedb07ba77c822835f2f3e09fe18eeda82ee46cb3c69624fe39cca0db5c176",
+        "pinnedRuleCrLfCount": 0
+      }
+    },
+    "anonymousUpdater": {
+      "tag": "v0.15.2",
+      "anonymous": true,
+      "passed": true,
+      "assetDigestCount": 5,
+      "installation": false
+    },
+    "secrecy": {
+      "scope": "Exact private account values+encodings and packaged key/debugfilenames; no private values emitted",
+      "artifacts": [
+        {
+          "name": "triomi-android.apk",
+          "membersScanned": 626,
+          "membersWithPrivateAccountBytes": 0,
+          "privateMaterialNames": 0,
+          "debugFiles": 0
+        },
+        {
+          "name": "triomi-windows.zip",
+          "membersScanned": 467,
+          "membersWithPrivateAccountBytes": 0,
+          "privateMaterialNames": 0,
+          "debugFiles": 0
+        },
+        {
+          "name": "triomi-windows.msi",
+          "rawPrivateAccountBytes": false
+        },
+        {
+          "name": "triomi-windows.update.json",
+          "rawPrivateAccountBytes": false
+        },
+        {
+          "name": "SHA256SUMS.txt",
+          "rawPrivateAccountBytes": false
+        }
+      ],
+      "passed": true,
+      "signingSecretValueScan": "Unavailable local signing secret prerequisite; no claim"
+    },
+    "publicPackagesInstalledThisRound": false
+  },
+  "ciFixtureIntegrationCorrection": {
+    "rootCause": "Two locally verified widget fixture teardown files were omitted from259be590 commit; remote kept old pending-Drift-stream shutdown and hung. Not an application-code or asset difference.",
+    "files": [
+      "test/detail_chapter_range_test.dart",
+      "test/detail_download_selection_test.dart"
+    ],
+    "oldRunsCancelled": [
+      42337839899,
+      42337841940
+    ],
+    "appNativeAssetsDependenciesVersionUnchanged": true,
+    "publishedTagAndAssetsKeptImmutable": true,
+    "correctedFullRemoteGate": "pending test-only commit"
   }
 }

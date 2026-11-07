@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/media_item.dart';
@@ -21,6 +22,39 @@ import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
 
 void main() {
+  Future<void> Function() detailCleanup(
+    WidgetTester tester,
+    AppDatabase db,
+    ProviderContainer container,
+    GoRouter router,
+  ) {
+    var closed = false;
+    Future<void> close() async {
+      if (closed) return;
+      closed = true;
+      // Unmount before the binding checks timers, then cancel provider-owned
+      // queries and drain their FakeAsync callbacks before closing Drift.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      router.dispose();
+      container.dispose();
+      await tester.pump(const Duration(milliseconds: 1));
+      for (var index = 0; index < 12; index++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)),
+        );
+        await tester.pump(const Duration(milliseconds: 30));
+      }
+      await tester.runAsync(
+        () => db.close().timeout(const Duration(seconds: 5)),
+      );
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+
+    addTearDown(close);
+    return close;
+  }
+
   testWidgets(
     'continuous manga catalog builds lazily and preserves reader indices across volumes and sorting',
     (tester) async {
@@ -75,14 +109,7 @@ void main() {
           ),
         ],
       );
-      addTearDown(() async {
-        await tester.pumpWidget(const SizedBox.shrink());
-        router.dispose();
-        await tester.runAsync(() async {
-          container.dispose();
-          await db.close();
-        });
-      });
+      final close = detailCleanup(tester, db, container, router);
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
@@ -134,6 +161,7 @@ void main() {
       expect(opened!.initialIndex, 4999);
       expect(opened!.chapters[opened!.initialIndex].remoteId, 'chapter-4999');
       expect(tester.takeException(), isNull);
+      await close();
     },
   );
 
@@ -202,12 +230,7 @@ void main() {
           ),
         ],
       );
-      addTearDown(() async {
-        await tester.pumpWidget(const SizedBox.shrink());
-        router.dispose();
-        container.dispose();
-        await tester.runAsync(db.close);
-      });
+      final close = detailCleanup(tester, db, container, router);
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
@@ -229,6 +252,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(opened.last.initialIndex, 2);
       expect(opened.last.chapters[opened.last.initialIndex].remoteId, 'two');
+      await close();
     },
   );
 
@@ -260,12 +284,7 @@ void main() {
           ),
         ],
       );
-      addTearDown(() async {
-        await tester.pumpWidget(const SizedBox.shrink());
-        router.dispose();
-        container.dispose();
-        await tester.runAsync(db.close);
-      });
+      final close = detailCleanup(tester, db, container, router);
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
@@ -294,6 +313,7 @@ void main() {
       expect(opened!.chapters, hasLength(112));
       expect(opened!.chapters[opened!.initialIndex].remoteId, 'chapter-111');
       expect(tester.takeException(), isNull);
+      await close();
     },
   );
 }
