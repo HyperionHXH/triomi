@@ -34,6 +34,7 @@ import 'danmaku_sources_panel.dart';
 import 'data/danmaku_overlay.dart';
 import 'data/danmaku_session.dart';
 import 'data/danmaku_settings.dart';
+import 'data/desktop_playback_errors.dart';
 import 'data/hybrid_danmaku_client.dart';
 import 'data/playback_buffer_policy.dart';
 import 'data/player_settings.dart';
@@ -100,7 +101,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   StreamSubscription<Duration>? _bufferSub;
   StreamSubscription<bool>? _playingSub;
   Timer? _progressTimer;
-  StreamSubscription<String>? _playerErrorSub;
+  DesktopPlaybackErrors? _desktopErrors;
+  Future<void>? _desktopErrorReady;
   Timer? _prepareTimer;
   StreamSubscription<bool>? _completedSub;
   late PlayerSettings _settings;
@@ -269,7 +271,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       _completedSub = _player.stream.completed.listen((completed) {
         if (completed) unawaited(_onCompleted());
       });
-      _playerErrorSub = _player.stream.error.listen(_onNativeVideoError);
+      _desktopErrors = DesktopPlaybackErrors(
+        _player,
+        onFailure: _onNativeVideoError,
+      );
+      _desktopErrorReady = _desktopErrors!.initialize();
     }
 
     _progressTimer = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -371,6 +377,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     }
     final seq = ++_loadSeq;
     ++_resolveSeq;
+    _desktopErrors?.reset();
     final chapter = _chapter;
     _awaitingPlaybackStart = true;
     setState(() {
@@ -656,6 +663,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     _windowsSystemMedia?.replace();
     _windowsMediaStopped = false;
     _prepareTimer?.cancel();
+    _desktopErrors?.reset();
     _awaitingPlaybackStart = true;
     final seq = ++_resolveSeq;
     _desktopResolve?.cancel('已切换播放线路');
@@ -748,8 +756,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         title: '${_item.title} · ${_chapter.title}',
       );
     } else {
+      await _desktopErrorReady;
       await applyDesktopPlaybackBufferPolicy(_player.platform as NativePlayer);
       if (!mounted || seq != _resolveSeq) return;
+      _desktopErrors!.opening();
       await _player.open(
         Media(url, httpHeaders: headers, start: startPosition),
       );
@@ -2209,7 +2219,6 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     unawaited(_setWindowsKeepAwake(false));
     _chromeTimer?.cancel();
     _prepareTimer?.cancel();
-    _playerErrorSub?.cancel();
     _completedSub?.cancel();
     if (_useNativeAndroidVideo) {
       unawaited(
@@ -2239,7 +2248,16 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       );
     }
     _nativeVideoController.dispose();
-    if (!_useNativeAndroidVideo) _player.dispose();
+    if (!_useNativeAndroidVideo) {
+      unawaited(() async {
+        try {
+          await _desktopErrorReady;
+          await _desktopErrors?.dispose();
+        } finally {
+          await _player.dispose();
+        }
+      }());
+    }
     _danmaku.dispose();
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
       unawaited(

@@ -1,5 +1,16 @@
 # Triomi 当前状态
 
+## 当前请求：R190 动漫双模式搜索与桌面播放误报修复（0.15.4+190，双端实跑完成，发布前验证中）
+
+保留Bangumi资料搜索，恢复并列“播放源检索”，按名称查询已启用动画来源并分别展示结果、进度、错误、单站重试和分页。来源专属入口默认本站；可切回资料模式。切模式取消旧请求，晚到结果不覆盖当前查询，资料标签不泄漏到播放站。作品直接以原(sourceId,remoteId)进入本站详情、列表和选集，不依赖Bangumi收录、不按标题自动关联。
+
+[#7](https://github.com/HyperionHXH/triomi/issues/7)：media_kit把FFmpeg网络诊断日志送入error流，旧页面立即显示致命失败，即使视频仍推进。已用实际Windows解码器回放截图同一`tcp: ffurl_read returned 0xffffff76`事件失败前复现；修后以当前媒体引擎idle+错误诊断为终止失败，活动/暂停/正常EOF不误报，真正404仍显示错误，重试可恢复。Android保留Media3原生错误语义。永久原生回归覆盖播放、暂停、缺失媒体、重开和正常EOF。
+
+受控双端实跑使用生产SearchPage→DeclarativeSource/真实loopback HTTP→DetailPage→PlayerPage，不打开用户配置。Bangumi返回空结果，来源返回独有作品，两端均选第1集原生播放；Android实际时间`0:02 / 0:45`，Windows1125→3625ms，诊断不遮挡、真实404报错、重试恢复及暂停诊断通过。原API35只install-r保留数据，回环验收暂取消旧代理后已恢复`10.0.2.2:7890`。受控夹具不冒称外部所有站点播放通过；临时入口与视频资源已移除，最终正常入口构建/全量回归/签名和公开产物另记。按用户要求，issue修复及双端验证完成后才进入提交发布阶段；iOS独立工作区不变。
+
+最终本机Flutter **1978通过/5平台条件跳过**，analyze零问题，Python **118项通过**，UTF-8与UI/文档漂移零错误；1481个源码/证据文件现有账号值/编码扫描零命中，本机无正式签名私钥，不冒称已扫描私钥。保留永久原生错误回归，双端loopback临时入口和视频已删除。正常WindowsRelease、Android正常入口Release验收包均已编译，Mihon ABI **128项通过**，原API35 install-r保数据恢复到正常入口。Android首次遭本地生成插件注册文件夹带integration_test，刷新生产入口/插件生成后已重建通过，未修改生产插件列表或跳过编译。最终签名与公开发布证据继续更新于[R190记录](delivery/evidence/R190-anime-source-search-acceptance.json)。
+
+
 ## 当前请求：W189 Windows/Android功能对齐（版本保持0.15.3+188，Windows修订1，已发布并核验）
 
 实际差距以[平台能力盘点](PLATFORM_DEPENDENCY_AUDIT.md)当前W189段为准，不沿用旧“没有Windows构建工具/不支持文件选择”的历史结论。Windows原有启动检查不是缺失，但下载后只打开ZIP而无安装交接；本轮补齐独立修订发现、完整核验后安装/回滚/重启、待安装恢复与空间维护，版本和Android构建号不变。

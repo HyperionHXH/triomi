@@ -79,9 +79,17 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      - run: flutter pub get
+      - name: Prepare original pinned Windows dependencies
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./tools/prepare_windows_build_dependencies.ps1
       - name: Build and package Windows ZIP + MSI
         shell: pwsh
         run: ./tools/package_windows.ps1
+      - name: Verify real desktop playback error semantics
+        run: flutter test --no-pub integration_test/windows_playback_error_live_test.dart -d windows
       - uses: actions/upload-artifact@v4
         with:
           name: triomi-windows-release

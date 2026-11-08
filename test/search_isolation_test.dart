@@ -296,7 +296,150 @@ void main() {
   }
 
   testWidgets(
-    'anime search from a scoped playback source still searches metadata only',
+    'anime site pagination retries only the failed page and preserves earlier results',
+    (tester) async {
+      final pages = <int>[];
+      var fail = true;
+      final close = await render(tester, MediaType.anime, [
+        _PagedSearchSource((query, page) async {
+          pages.add(page);
+          if (page == 2 && fail) {
+            fail = false;
+            throw StateError('offline');
+          }
+          return [
+            MediaItem(
+              sourceId: 'paged-site',
+              remoteId: '$page',
+              type: MediaType.anime,
+              title: 'page $page',
+            ),
+          ];
+        }, id: 'paged-site'),
+      ], sourceId: 'paged-site');
+      await search(tester, 'name');
+      final next = find.widgetWithText(TextButton, '加载本站下一页');
+      await tester.ensureVisible(next);
+      await advance(tester);
+      await tester.tap(next);
+      await advance(tester);
+      expect(pages, [1, 2]);
+      expect(find.text('page 1'), findsOneWidget);
+      final retry = find.widgetWithText(TextButton, '重试本站');
+      await tester.ensureVisible(retry);
+      await advance(tester);
+      await tester.tap(retry);
+      await advance(tester);
+      expect(pages, [1, 2, 2]);
+      expect(find.text('page 1'), findsOneWidget);
+      expect(find.text('page 2'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await close();
+    },
+  );
+
+  testWidgets(
+    'anime playback-source entry searches only that site without Bangumi',
+    (tester) async {
+      final calls = <String>[];
+      final close = await render(tester, MediaType.anime, [
+        for (final id in ['bangumi-anime', 'chosen-site', 'other-site'])
+          _SearchSource(id, MediaType.anime, (query) async {
+            calls.add(id);
+            return [
+              MediaItem(
+                sourceId: id,
+                remoteId: 'same-id',
+                type: MediaType.anime,
+                title: '$id result',
+              ),
+            ];
+          }),
+      ], sourceId: 'chosen-site');
+      await search(tester, 'unlisted');
+      expect(calls, ['chosen-site']);
+      expect(find.text('chosen-site result'), findsOneWidget);
+      expect(find.text('other-site result'), findsNothing);
+      await tester.tap(find.text('Bangumi资料'));
+      await advance(tester);
+      expect(calls, ['chosen-site', 'bangumi-anime']);
+      await close();
+    },
+  );
+
+  testWidgets(
+    'anime source mode finds unlisted titles independently and cancels late results on mode switch',
+    (tester) async {
+      final late = Completer<List<MediaItem>>();
+      SourceRequestCancellation? owner;
+      var metadataCalls = 0;
+      final close = await render(tester, MediaType.anime, [
+        _SearchSource('bangumi-anime', MediaType.anime, (_) async {
+          metadataCalls++;
+          return [];
+        }),
+        _SearchSource(
+          'custom-site',
+          MediaType.anime,
+          (query) async => [
+            MediaItem(
+              sourceId: 'custom-site',
+              remoteId: 'site-only',
+              type: MediaType.anime,
+              title: query,
+            ),
+          ],
+        ),
+        _SearchSource('slow-site', MediaType.anime, (_) {
+          owner = SourceRequestCancellation.current;
+          return late.future;
+        }),
+        _SearchSource(
+          'broken-site',
+          MediaType.anime,
+          (_) async => throw StateError('offline'),
+        ),
+        _SearchSource(
+          'novel-site',
+          MediaType.novel,
+          (_) async => throw StateError('must not search novels'),
+        ),
+      ]);
+      await search(tester, '未被Bangumi收录的作品');
+      expect(metadataCalls, 1);
+      expect(find.byType(MediaItemCard), findsNothing);
+      await tester.tap(find.text('播放源检索'));
+      await advance(tester);
+      expect(metadataCalls, 1);
+      final card = find.byWidgetPredicate(
+        (widget) =>
+            widget is MediaItemCard && widget.item.remoteId == 'site-only',
+      );
+      expect(card, findsOneWidget);
+      expect(tester.widget<MediaItemCard>(card).item.sourceId, 'custom-site');
+      expect(find.text('novel-site'), findsNothing);
+      expect(owner?.cancelled, isFalse);
+      await tester.tap(find.text('Bangumi资料'));
+      await advance(tester);
+      expect(owner?.cancelled, isTrue);
+      late.complete([
+        const MediaItem(
+          sourceId: 'slow-site',
+          remoteId: 'late',
+          type: MediaType.anime,
+          title: 'late-result',
+        ),
+      ]);
+      await advance(tester);
+      expect(find.text('late-result'), findsNothing);
+      expect(card, findsNothing);
+      expect(metadataCalls, 2);
+      await close();
+    },
+  );
+
+  testWidgets(
+    'anime metadata mode keeps keyword and pagination independent of calendar filters',
     (tester) async {
       final http = FakeHttpClient(
         (request) async => SourceResponse(
@@ -328,7 +471,7 @@ void main() {
           playbackCalls++;
           return [];
         }),
-      ], sourceId: 'playback-site');
+      ]);
       await search(tester, 'keyword');
       expect(http.requests, hasLength(1));
       final body = jsonDecode(http.requests.single.body!) as Map;
@@ -349,6 +492,8 @@ void main() {
           matching: find.byType(Scrollable),
         ),
       );
+      await tester.ensureVisible(nextPage);
+      await advance(tester);
       await tester.tap(nextPage);
       await advance(tester);
       final next = http.requests.last;
@@ -646,8 +791,8 @@ class _SearchSource implements SearchProvider {
 }
 
 class _PagedSearchSource extends _SearchSource {
-  _PagedSearchSource(this.searchPage)
-    : super('bangumi-anime', MediaType.anime, (_) async => []);
+  _PagedSearchSource(this.searchPage, {String id = 'bangumi-anime'})
+    : super(id, MediaType.anime, (_) async => []);
 
   final Future<List<MediaItem>> Function(String, int) searchPage;
 

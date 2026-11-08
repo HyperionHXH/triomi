@@ -1,0 +1,50 @@
+{
+  "version": "0.15.4+190",
+  "status": "native-dual-platform-and-local-release-gates-passed-ready-for-submission",
+  "requirements": {
+    "bangumiSearchRetained": true,
+    "independentPlaybackSourceNameSearchRestored": true,
+    "groupedPerSourceResultsAndRetry": true,
+    "sourceIdentityPreservedWithoutBangumiRequirement": true,
+    "fixReportedDesktopIssueBeforeCommitting": "https://github.com/HyperionHXH/triomi/issues/7",
+    "androidAndWindowsBeforeRelease": true
+  },
+  "searchBehavior": {
+    "defaultMode": "Bangumi metadata",
+    "sourceMode": "Enabled anime search providers only; Bangumi excluded; per-source results, pagination and retry; at most four concurrent providers",
+    "explicitSourceEntry": "Starts source mode scoped to that source; metadata mode remains available",
+    "identity": "Original sourceId and remoteId navigate through production DetailPage and PlayerPage; no fabricated subjectId or title merge",
+    "cancellation": "Mode/query changes cancel requests and revoke late results; metadata tags do not become playback-site query words"
+  },
+  "issue7": {
+    "rootCause": "media_kit stream.error forwards FFmpeg log diagnostics; PlayerPage incorrectly mapped all of them to a fatal playback overlay",
+    "beforeFixActualWindowsDecode": "Replay exact tcp: ffurl_read returned 0xffffff76 event into decoding production PlayerPage: position advanced but fatal overlay remained, assertion failed",
+    "fix": "Active-media generation plus actual idle-active decoder state and error diagnostic; Android native fatal callback unchanged",
+    "actualWindowsPlayerPage": {
+      "positionBeforeMs": 1125,
+      "positionAfterMs": 3625,
+      "diagnosticDidNotBlockContinuingPlayback": true,
+      "realHttp404TerminalFailureVisible": true,
+      "retryRestoredActualPlayback": true,
+      "pausedDiagnosticDidNotFail": true
+    },
+    "permanentNativeRegression": "integration_test/windows_playback_error_live_test.dart: real decoder, generated WAV, genuine missing optional audio diagnostics during playback/pause, missing primary media failure, reopening and normal EOF; passed"
+  },
+  "nativeJourney": {
+    "scope": "Production SearchPage, DeclarativeSource and real loopback HTTP, production DetailPage, source episode selection, native PlayerPage; isolated memory database/preferences, user profile not opened",
+    "windows": "Bangumi empty -> source-only title -> episode 1 -> real video decode -> issue diagnostic -> actual missing media error -> retry",
+    "android": {
+      "serial": "emulator-5554",
+      "originalAvd": "noval_api35",
+      "installMode": "adb -s emulator-5554 install -r; original data preserved",
+      "journey": "Bangumi empty -> playback source result -> site detail -> episode 1 -> Media3 native video",
+      "observedNativeTime": "0:02 / 0:45",
+      "proxy": "Original 10.0.2.2:7890 yielded loopback HTTP 502; temporarily disabled only during fixture run, restored and read back afterward",
+      "passed": true
+    },
+    "limits": "Controlled source/API/media prove client behavior, not external site availability or all real-world transient failures. No remote account login, payment, captcha, or writes. Temporary source/entry/video removed after smoke. Permanent native regression remains."
+  },
+  "verification": {"flutterPassed": 1978, "flutterSkipped": 5, "analyze": "No issues found", "pythonPassed": 118, "encodingErrors": 0, "uiDocDriftErrors": 0, "sourceFilesExactSecretScanned": 1481, "sourceFilesWithExactSecrets": 0, "localSigningSecretAvailable": false},
+  "normalBuilds": {"windowsRelease": "passed", "androidReleaseAcceptanceSigning": "passed", "mihonAbiDescriptorsPassed": 128, "originalApi35NormalEntrypointInstallReplace": "Success; no uninstall or data clear"},
+  "release": {"status": "pending", "platforms": ["android", "windows"], "iosWorkspaceNotChanged": true}
+}
