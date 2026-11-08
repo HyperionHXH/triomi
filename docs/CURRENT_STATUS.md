@@ -1,8 +1,8 @@
 # Triomi 当前状态
 
-## 当前请求：主线0.15.2同步iOS191（验收中）
+## 当前请求：主线0.15.2同步iOS192（验收中）
 
-固定主线`c8090cbd1472d766cddece813cc2dab562406bc`（0.15.2），merge `fd3cb7b`保留两侧历史；190实际键盘布局失败修正后下一次推送递增至iOS191，沿用原Bundle ID、iOS15、Keychain、WebKit/AVPlayer及漫画宿主协议。不使用账号或Secrets；用户原禁用账号workflow已从精确Git对象恢复，私有草稿不提交。旧Release不覆盖。
+固定主线`c8090cbd1472d766cddece813cc2dab562406bc`（0.15.2），merge `fd3cb7b`保留两侧历史；191的派生安全区修正后下一次推送递增至iOS192，沿用原Bundle ID、iOS15、Keychain、WebKit/AVPlayer及漫画宿主协议。不使用账号或Secrets；用户原禁用账号workflow已从精确Git对象恢复，私有草稿不提交。旧Release不覆盖。
 
 本轮保留主线章节状态/历史重置时钟、备份合并、下载检查点/暂停/删除屏障、漫画来源布局和番剧/小说界面改进。资料搜索继续独立于插件记录，不能因规则注册表缺失或加载失败变成0来源；安装目录移除已废弃的独立AGE项与资料规则项，既存用户记录不自动删除。匿名元数据预检按descriptor ID选择实际来源，不再以相同媒体类型定位。
 
@@ -26,6 +26,9 @@ Windows真实程序已通过新增2项文件SQLite/生产路由阅读验收：�
 `fed5adc/42453683812`主巡检13图后保存搜索时出现真实负键盘viewInsets，`Dialog`的AnimatedPadding断言及根Scaffold浮动SnackBar出屏；即时监听/上传已生效，现场一出即取证并取消后续。生产根`TriomiApp`在Navigator/Scaffold上方统一把非法负遮挡尺寸归零，正常非负值直接透传，不改正文、键盘避让或吞掉异常。新回归先复现相同`padding.isNonNegative`，修复后47项根布局/来源/目录/哔咔/弹幕消费回归与静态分析通过；实际Windows程序弹窗输入→正遮挡→负帧→保存/可见提示→正遮挡再次避让通过，临时入口已移除。旧2438/6全量为189基线，不冒称191完整全量。
 
 191将后续实网阶段设为前置成功才启动，失败现场仍always上传；成功发布要求的所有门槛原样保留。失败运行不再执行无效后续检查，用户数据/禁用账号草稿不变。
+
+191/dac13aa本地全量2439通过/6既有跳过，正常Windows/Android编译通过；实际iOS42457998615证明Dialog负padding断言已消失，但根shell仍报浮动SnackBar出屏。现场树确认NavigationBar所属根Scaffold，继续最小复现发现负viewInsets同时伴随派生padding被放大：底栏高度变900px。192在归零负遮挡时同步按`max(viewPadding-viewInsets,0)`重算派生padding，保留物理安全区；正常非负帧仍原样透传。新扩展回归先红900px、后绿正常底栏且提示条可见，13项根/来源及实际Windows程序同一帧序列通过；无异常抑制或修改Snackbar样式。
+
 
 
 

@@ -180,6 +180,15 @@ void main() {
           GoRoute(
             path: '/',
             builder: (context, _) => Scaffold(
+              bottomNavigationBar: NavigationBar(
+                destinations: const [
+                  NavigationDestination(icon: Icon(Icons.book), label: 'Books'),
+                  NavigationDestination(
+                    icon: Icon(Icons.settings),
+                    label: 'Settings',
+                  ),
+                ],
+              ),
               body: Center(
                 child: FilledButton(
                   onPressed: () async {
@@ -232,9 +241,14 @@ void main() {
         final before = tester.getRect(find.text('Save'));
         expect(before.bottom, lessThanOrEqualTo(620));
         tester.view.viewInsets = const FakeViewPadding(bottom: -1000);
+        tester.view.padding = const FakeViewPadding(bottom: 1000);
         await tester.pump(const Duration(milliseconds: 16));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
+        expect(
+          tester.getSize(find.byType(NavigationBar)).height,
+          lessThan(150),
+        );
         expect(find.text('retained draft'), findsOneWidget);
         await tester.tap(find.text('Save'));
         await tester.pumpAndSettle();
@@ -245,6 +259,7 @@ void main() {
         );
         expect(tester.takeException(), isNull);
         tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+        tester.view.resetPadding();
         await tester.pumpAndSettle();
         expect(
           tester.getRect(find.text('Saved draft')).bottom,

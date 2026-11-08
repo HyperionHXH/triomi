@@ -151,7 +151,13 @@ class _TriomiAppState extends ConsumerState<TriomiApp>
           EdgeInsetsGeometry.infinity,
         ) as EdgeInsets;
         return MediaQuery(
-          data: media.copyWith(viewInsets: insets),
+          data: media.copyWith(
+            viewInsets: insets,
+            padding: (media.viewPadding - insets).clamp(
+              EdgeInsets.zero,
+              EdgeInsetsGeometry.infinity,
+            ) as EdgeInsets,
+          ),
           child: child!,
         );
       },
