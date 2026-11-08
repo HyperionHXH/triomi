@@ -75,7 +75,7 @@ jobs:
           path: .dart_tool/hooks_runner/shared/ech_http/build/prebuilt/
           key: ios-ech-deps-${{ runner.os }}-${{ runner.arch }}-${{ steps.sdk.outputs.flutter-version }}-${{ hashFiles('packages/ech_http/lib/src/build_support/dependencies.json', 'packages/ech_http/hook/build.dart', 'packages/ech_http/src/**') }}
       - name: Build unsigned iOS device release
-        run: flutter build ios --release --no-codesign
+        run: flutter build ios --release --no-codesign --verbose
       - name: Validate and package the unsigned IPA
         run: python tools/package_ios.py
       - name: Select and boot an available iPhone simulator

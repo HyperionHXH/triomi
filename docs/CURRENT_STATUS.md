@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-## 当前请求：主线0.15.2同步iOS193（验收中）
+## 当前请求：主线0.15.2同步iOS194（验收中）
 
 固定主线`c8090cbd1472d766cddece813cc2dab562406bc`（0.15.2），merge `fd3cb7b`保留两侧历史；键盘/安全区已实际iOS越过，恢复字段巡检修正后下一次推送递增至iOS193，沿用原Bundle ID、iOS15、Keychain、WebKit/AVPlayer及漫画宿主协议。不使用账号或Secrets；用户原禁用账号workflow已从精确Git对象恢复，私有草稿不提交。旧Release不覆盖。
 
@@ -30,6 +30,9 @@ Windows真实程序已通过新增2项文件SQLite/生产路由阅读验收：�
 191/dac13aa本地全量2439通过/6既有跳过，正常Windows/Android编译通过；实际iOS42457998615证明Dialog负padding断言已消失，但根shell仍报浮动SnackBar出屏。现场树确认NavigationBar所属根Scaffold，继续最小复现发现负viewInsets同时伴随派生padding被放大：底栏高度变900px。192在归零负遮挡时同步按`max(viewPadding-viewInsets,0)`重算派生padding，保留物理安全区；正常非负帧仍原样透传。新扩展回归先红900px、后绿正常底栏且提示条可见，13项根/来源及实际Windows程序同一帧序列通过；无异常抑制或修改Snackbar样式。
 
 192/8ec283c全量2439通过/6既有跳过、正常Windows/Android编译通过、限定静态复核无新问题。实际iOS42462287250已越过全部键盘/保存搜索故障点，截图`03_manga_saved_search.png`实际读取确认提示条、底栏与搜索结果正常；主巡检25图后返回来源页读取恢复字段时命中新旧过渡页面而`Too many elements`。193只修巡检定位：限定SourcesPage所属ModalRoute为current且入场animation完成，语言/内容/输入均从同一页读取，不用first随取。实际Windows生产TriomiApp+AppRouter来源→漫画→来源烟测恢复精确查询并唯一命中当前页通过；修改文件analyze零问题。一次全巡检Windows回放因首屏封面不解码提前失败，未冒称本地全巡检通过；临时回放和专用smoke入口均已移除。失败运行不交付IPA。
+
+193/3f5de8a的42466128639在设备Release就失败，Flutter仅显示通用Development Team/Provisioning提示，实际命令仍`--no-codesign`，本轮未改Runner工程签名。先前同工程多次unsigned成功，不能据此要求账号或乱改身份；194只为原build增加verbose以取得被隐藏的Xcode target/原始原因，成功条件及签名禁用保持。通过既有主机代理取回诊断日志，不改应用网络/TLS。
+
 
 
 
