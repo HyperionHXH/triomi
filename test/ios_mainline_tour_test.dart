@@ -50,6 +50,7 @@ class _ReplaySource implements DiscoverProvider, SearchProvider {
     name: id == 'visual-tour-manga-js' ? '视觉巡检夹具 · 漫画 JS' : '另一漫画来源',
     type: MediaType.manga,
     kind: SourceKind.plugin,
+    baseUrl: 'https://fixture.example.test/',
     lang: id == 'visual-tour-manga-js' ? 'zh' : 'en',
     nsfw: nsfw,
   );
@@ -579,7 +580,15 @@ void main() {
       expect(saved.language, 'zh');
       expect(saved.content, SourceContentRestriction.excludeNsfw);
       expect(
-        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+        tester
+            .widget<EditableText>(
+              find.descendant(
+                of: find.byType(TextFormField),
+                matching: find.byType(EditableText),
+              ),
+            )
+            .controller
+            .text,
         saved.query,
       );
       expect(

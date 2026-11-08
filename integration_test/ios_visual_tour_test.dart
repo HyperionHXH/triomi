@@ -897,7 +897,10 @@ void main() {
       expect(restoredFilters.language, 'zh');
       expect(restoredFilters.content, SourceContentRestriction.excludeNsfw);
       final restoredQuery = find.descendant(
-        of: activeInstalledPage,
+        of: find.descendant(
+          of: activeInstalledPage,
+          matching: find.byType(TextFormField),
+        ),
         matching: find.byType(EditableText),
       );
       expect(restoredQuery, findsOneWidget);
