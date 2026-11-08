@@ -15,7 +15,7 @@ class FlutterWindow : public Win32Window {
  public:
   // Creates a new FlutterWindow hosting a Flutter view running |project|.
   explicit FlutterWindow(const flutter::DartProject& project, bool worker = false,
-                         bool backup_worker = false);
+                         bool backup_worker = false, bool content_worker = false);
   virtual ~FlutterWindow();
 
  protected:
@@ -30,6 +30,7 @@ class FlutterWindow : public Win32Window {
   flutter::DartProject project_;
   bool worker_;
   bool backup_worker_;
+  bool content_worker_;
   DesktopMihonRuntime mihon_runtime_;
 
   // The Flutter instance hosted by this window.

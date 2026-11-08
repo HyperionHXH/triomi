@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -91,6 +92,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   bool _switchingChapter = false;
   Timer? _saveDebounce;
   bool _keepScreenOn = false;
+  final _screenOwner = 'novel-${UniqueKey()}';
   bool _scrollUpdateScheduled = false;
   double? _publishedScrollPosition;
   int? _publishedScrollPercent;
@@ -121,7 +123,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     // 屏幕常亮（阅读期间），退出时关闭。
     _keepScreenOn = _settings.keepScreenOn;
     if (_keepScreenOn) {
-      unawaited(platformChannel.setKeepScreenOn(true));
+      unawaited(platformChannel.setKeepScreenOn(true, owner: _screenOwner));
     }
     // 屏幕方向（B4）：进入锁定，退出恢复跟随系统。
     unawaited(_applyOrientation(_settings.orientation));
@@ -140,7 +142,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     // dispose 里不能用 ref；仓储已在 initState 里取出。
     unawaited(_persistProgress(commit: true));
     if (_keepScreenOn) {
-      unawaited(platformChannel.setKeepScreenOn(false));
+      unawaited(platformChannel.setKeepScreenOn(false, owner: _screenOwner));
     }
     unawaited(SystemChrome.setPreferredOrientations(<DeviceOrientation>[]));
     super.dispose();
@@ -148,6 +150,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.windows &&
+        _keepScreenOn) {
+      final visible =
+          state == AppLifecycleState.resumed ||
+          state == AppLifecycleState.inactive;
+      unawaited(platformChannel.setKeepScreenOn(visible, owner: _screenOwner));
+    }
     if (state != AppLifecycleState.resumed) {
       unawaited(_persistProgress(commit: true));
     }
@@ -653,7 +663,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
     if (updated.keepScreenOn != _keepScreenOn) {
       _keepScreenOn = updated.keepScreenOn;
-      unawaited(platformChannel.setKeepScreenOn(_keepScreenOn));
+      unawaited(
+        platformChannel.setKeepScreenOn(_keepScreenOn, owner: _screenOwner),
+      );
     }
     setState(() {
       _resumePosition = anchor;

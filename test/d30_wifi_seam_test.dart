@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/db/app_database.dart';
@@ -76,6 +77,45 @@ void main() {
     ),
     preferences: prefs,
     interfaceNamesResolver: resolver,
+  );
+
+  test(
+    'Windows uses native unmetered policy rather than interface spelling',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      const native = MethodChannel('triomi/platform');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      var permitted = true;
+      var probes = 0;
+      messenger.setMockMethodCallHandler(native, (call) async {
+        expect(call.method, 'mangaUpdateConstraints');
+        expect(call.arguments, {'wifiOnly': true, 'batteryNotLow': false});
+        probes++;
+        return permitted;
+      });
+      addTearDown(() {
+        debugDefaultTargetPlatformOverride = null;
+        messenger.setMockMethodCallHandler(native, null);
+      });
+      final service = serviceOf(prefs: preferences);
+      expect(await service.isOnWifi(), isTrue);
+      permitted = false;
+      expect(await service.isOnWifi(), isFalse);
+      expect(
+        await serviceOf(
+          prefs: preferences,
+          resolver: () async => ['wlan0'],
+        ).isOnWifi(),
+        isTrue,
+      );
+      expect(probes, 2);
+      messenger.setMockMethodCallHandler(
+        native,
+        (_) async => throw PlatformException(code: 'unavailable'),
+      );
+      expect(await service.isOnWifi(), isFalse);
+    },
   );
 
   group('looksLikeWifi：接口名 → WiFi 判定', () {

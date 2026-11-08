@@ -18,6 +18,7 @@ import 'core/source/windows_mihon_host.dart';
 import 'core/storage/preferences.dart';
 import 'core/storage/secure_store.dart';
 import 'features/library/data/manga_update_background.dart';
+import 'features/library/data/windows_content_updates.dart';
 import 'features/schedule/data/background_update_check.dart';
 import 'features/settings/app_update_service.dart';
 import 'features/settings/cache_management_service.dart';
@@ -52,6 +53,10 @@ Future<void> main([List<String> args = const []]) async {
   // argument. Dispatch before MediaKit, credentials, source runtimes or UI.
   if (args.length == 1 && args.first == '--triomi-local-backup') {
     await runScheduledBackupEntrypoint();
+    return;
+  }
+  if (args.length == 1 && args.first == '--triomi-content-updates') {
+    await runWindowsContentUpdatesEntrypoint();
     return;
   }
   WidgetsFlutterBinding.ensureInitialized();
@@ -140,7 +145,7 @@ Future<void> main([List<String> args = const []]) async {
 }
 
 Future<void> _maintainUpdateStorage() async {
-  if (!Platform.isAndroid) return;
+  if (!Platform.isAndroid && !Platform.isWindows) return;
   final updater = AppUpdateService();
   try {
     await updater.maintainStorage();

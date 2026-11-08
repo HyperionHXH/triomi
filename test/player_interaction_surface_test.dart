@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -23,6 +24,8 @@ class _PlayerHarnessState extends State<_PlayerHarness> {
   bool enabled = true;
   bool deviceVolume = false;
   bool volumeEnabled = true;
+  bool mediaActionsEnabled = true;
+  final mediaActions = <String>[];
   double? requestedVolume;
   int session = 0;
   final seeks = <Duration>[];
@@ -65,6 +68,15 @@ class _PlayerHarnessState extends State<_PlayerHarness> {
             seekHudTop: widget.topToolbar ? 58 : 25,
             onTap: () {},
             onTogglePlay: () => toggles++,
+            onPlay: mediaActionsEnabled ? () => mediaActions.add('play') : null,
+            onPause: mediaActionsEnabled
+                ? () => mediaActions.add('pause')
+                : null,
+            onStop: mediaActionsEnabled ? () => mediaActions.add('stop') : null,
+            onNext: mediaActionsEnabled ? () => mediaActions.add('next') : null,
+            onPrevious: mediaActionsEnabled
+                ? () => mediaActions.add('previous')
+                : null,
             onSeek: (target) => setState(() {
               seeks.add(target);
               position = target;
@@ -139,7 +151,168 @@ class _PlayerHarnessState extends State<_PlayerHarness> {
   );
 }
 
+Future<bool> _mediaEvent(
+  WidgetTester tester,
+  LogicalKeyboardKey key, {
+  bool repeat = false,
+  bool up = false,
+}) {
+  // Explicit play/pause have logical events but no Windows VK mapping in the
+  // Flutter simulator. Android's mapping emits the same production KeyEvent.
+  if (up) {
+    return tester.sendKeyUpEvent(
+      key,
+      platform: 'android',
+      physicalKey: PhysicalKeyboardKey.mediaPlayPause,
+    );
+  }
+  if (repeat) {
+    return tester.sendKeyRepeatEvent(
+      key,
+      platform: 'android',
+      physicalKey: PhysicalKeyboardKey.mediaPlayPause,
+    );
+  }
+  return tester.sendKeyDownEvent(
+    key,
+    platform: 'android',
+    physicalKey: PhysicalKeyboardKey.mediaPlayPause,
+  );
+}
+
 void main() {
+  testWidgets('Windows media keys dispatch supported actions exactly once', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final key = GlobalKey<_PlayerHarnessState>();
+    await tester.pumpWidget(_PlayerHarness(key: key));
+    key.currentState!.buttonFocus.requestFocus();
+    await tester.pump();
+    for (final mediaKey in [
+      LogicalKeyboardKey.mediaPlayPause,
+      LogicalKeyboardKey.mediaPlay,
+      LogicalKeyboardKey.mediaPause,
+      LogicalKeyboardKey.mediaStop,
+      LogicalKeyboardKey.mediaTrackNext,
+      LogicalKeyboardKey.mediaTrackPrevious,
+    ]) {
+      expect(await _mediaEvent(tester, mediaKey), isTrue);
+      expect(await _mediaEvent(tester, mediaKey, repeat: true), isTrue);
+      expect(await _mediaEvent(tester, mediaKey, up: true), isTrue);
+    }
+    expect(key.currentState!.toggles, 1);
+    expect(key.currentState!.mediaActions, [
+      'play',
+      'pause',
+      'stop',
+      'next',
+      'previous',
+    ]);
+    expect(key.currentState!.controlActivations, 0);
+    key.currentState!.update(
+      () => key.currentState!.mediaActionsEnabled = false,
+    );
+    await tester.pump();
+    for (final mediaKey in [
+      LogicalKeyboardKey.mediaPlay,
+      LogicalKeyboardKey.mediaPause,
+      LogicalKeyboardKey.mediaStop,
+      LogicalKeyboardKey.mediaTrackNext,
+      LogicalKeyboardKey.mediaTrackPrevious,
+    ]) {
+      expect(await _mediaEvent(tester, mediaKey), isFalse);
+      expect(await _mediaEvent(tester, mediaKey, up: true), isFalse);
+    }
+    expect(key.currentState!.mediaActions.length, 5);
+    await tester.pumpWidget(const SizedBox());
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('media keys respect editor, modifiers, route and lifecycle', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final key = GlobalKey<_PlayerHarnessState>();
+    await tester.pumpWidget(_PlayerHarness(key: key));
+    final state = key.currentState!;
+    state.textFocus.requestFocus();
+    await tester.pump();
+    expect(
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlayPause),
+      isFalse,
+    );
+    state.buttonFocus.requestFocus();
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    expect(
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlayPause),
+      isFalse,
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    final context = tester.element(find.byType(PlayerInteractionSurface));
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (_) => const AlertDialog(content: Text('Media dialog')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlayPause),
+      isFalse,
+    );
+    Navigator.of(context, rootNavigator: true).pop();
+    await tester.pumpAndSettle();
+    state.buttonFocus.requestFocus();
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump();
+    expect(
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlayPause),
+      isFalse,
+    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    state.update(() => state.enabled = false);
+    await tester.pump();
+    expect(
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlayPause),
+      isFalse,
+    );
+    expect(state.toggles, 0);
+    expect(state.mediaActions, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('Android media keys retain the native playback boundary', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final key = GlobalKey<_PlayerHarnessState>();
+    await tester.pumpWidget(_PlayerHarness(key: key));
+    key.currentState!.buttonFocus.requestFocus();
+    await tester.pump();
+    expect(
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlayPause),
+      isFalse,
+    );
+    expect(await _mediaEvent(tester, LogicalKeyboardKey.mediaPlay), isFalse);
+    expect(
+      await _mediaEvent(tester, LogicalKeyboardKey.mediaPlay, up: true),
+      isFalse,
+    );
+    expect(key.currentState!.toggles, 0);
+    expect(key.currentState!.mediaActions, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   testWidgets('space toggles playback once from video and focused controls', (
     tester,
   ) async {

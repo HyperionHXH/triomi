@@ -1,652 +1,337 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/models/video_resolve_cancellation.dart';
+import 'package:triomi/core/source/windows_source_session.dart';
 import 'package:triomi/features/player/windows_video_resolver.dart';
-import 'package:webview_windows/webview_windows.dart';
 
 void main() {
-  const channel = MethodChannel('io.jns.webview.win');
-  late List<String> calls;
-  late Completer<Object?>? version;
-  late VideoResolveCancellation activeOwner;
-  Object? resolverError;
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const session = MethodChannel('triomi/windows-web-session');
+  const paths = MethodChannel('plugins.flutter.io/path_provider');
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  late List<MethodCall> calls;
+  late Map<int, Map<Object?, Object?>> starts;
+  late List<int> closes;
+  late Map<String, ResolvedDesktopVideo> results;
+  late Map<String, Object> errors;
+  late List<VideoResolveCancellation> owners;
+  late BuildContext context;
+  Future<void> Function(MethodCall)? onStart;
+  Future<String?> Function(MethodCall)? onCookies;
+  Future<void> Function(int)? onClose;
 
   setUp(() {
     calls = [];
-    version = null;
-    activeOwner = VideoResolveCancellation();
-    resolverError = null;
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-          calls.add(call.method);
-          if (call.method == 'getWebViewVersion') {
-            return version == null ? null : await version!.future;
-          }
-          return null;
-        });
+    starts = {};
+    closes = [];
+    results = {};
+    errors = {};
+    owners = [];
+    onStart = null;
+    onCookies = null;
+    onClose = null;
+    messenger.setMockMethodCallHandler(paths, (_) async => 'C:/triomi-test');
+    messenger.setMockMethodCallHandler(session, (call) async {
+      calls.add(call);
+      final args = call.arguments as Map;
+      if (call.method == 'open') return {'saved': true};
+      if (call.method == 'startVideo') {
+        starts[args['id'] as int] = args;
+        await onStart?.call(call);
+      } else if (call.method == 'closeVideo') {
+        closes.add(args['id'] as int);
+        await onClose?.call(args['id'] as int);
+      } else if (call.method == 'videoCookies') {
+        return onCookies == null ? 'native=target' : await onCookies!(call);
+      }
+      return null;
+    });
   });
   tearDown(() {
-    activeOwner.dispose();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, null);
+    for (final owner in owners) {
+      owner.dispose();
+    }
+    messenger.setMockMethodCallHandler(session, null);
+    messenger.setMockMethodCallHandler(paths, null);
   });
 
-  Future<void> open(WidgetTester tester, PlaySource line) async {
+  Future<void> pumpUntil(WidgetTester tester, bool Function() done) async {
+    for (var i = 0; i < 100 && !done(); i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 5)),
+      );
+      await tester.pump(const Duration(milliseconds: 5));
+    }
+    expect(done(), isTrue);
+  }
+
+  Future<void> mount(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
-          builder: (context) {
-            return TextButton(
-              onPressed: () async {
-                try {
-                  await resolveWindowsVideo(
-                    context,
-                    line,
-                    cancellation: activeOwner,
-                  );
-                } catch (error) {
-                  resolverError = error;
-                }
-              },
-              child: const Text('播放'),
-            );
+          builder: (value) {
+            context = value;
+            return const SizedBox();
           },
         ),
       ),
     );
-    await tester.tap(find.text('播放'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
   }
 
-  Future<void> pumpUntil(
-    WidgetTester tester,
-    bool Function() complete,
-    String operation,
-  ) async {
-    await tester.pump();
-    for (var attempt = 0; attempt < 200 && !complete(); attempt++) {
-      // Native/path-provider completions can require real I/O. Their widget
-      // callbacks still need FakeAsync pumps; awaiting a barrier alone stalls.
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 10)),
-      );
-      await tester.pump(const Duration(milliseconds: 10));
-    }
-    expect(
-      complete(),
-      isTrue,
-      reason: '$operation must complete within bounded pumps',
-    );
+  VideoResolveCancellation launch(
+    String key, {
+    String sourceId = 'source-a',
+    String sourceUrl = 'https://site.test/',
+    String url = 'https://site.test/play',
+    bool background = false,
+    Map<String, String> headers = const {'User-Agent': 'configured-browser'},
+  }) {
+    final owner = VideoResolveCancellation();
+    owners.add(owner);
+    unawaited(() async {
+      try {
+        results[key] = await resolveWindowsVideo(
+          context,
+          PlaySource(name: key, url: url, webPage: true, headers: headers),
+          sourceId: sourceId,
+          sourceUrl: sourceUrl,
+          cancellation: owner,
+          allowBackground: background,
+        );
+      } catch (error) {
+        errors[key] = error;
+      }
+    }());
+    return owner;
+  }
+
+  void media(
+    int id, {
+    String url = 'https://cdn.test/a/video.mp4?token=1',
+    bool omit = false,
+  }) {
+    testerMessage({
+      'id': id,
+      'message': jsonEncode({
+        'type': 'triomi-media',
+        'url': url,
+        'page': 'https://site.test/play',
+        'referer': 'https://site.test/',
+        'Cookie': 'page=forged',
+        'agent': 'page-forged',
+        'omitCookies': omit,
+      }),
+    });
   }
 
   testWidgets(
-    'unavailable browser returns a player error without inserting a modal route',
+    'renderer reuses approved source login profile and exact native URL cookies',
     (tester) async {
-      await open(
-        tester,
-        const PlaySource(
-          name: 'test',
-          url: 'https://site.example/play',
-          webPage: true,
+      await mount(tester);
+      expect(
+        await WindowsSourceSession.open(
+          sourceId: 'source-a',
+          url: 'https://site.test/login',
+          userAgent: 'configured-browser',
         ),
+        isTrue,
       );
-      await tester.pumpAndSettle();
-      expect(resolverError, isA<StateError>());
-      expect(
-        activeOwner.isCancelled,
-        isFalse,
-        reason: 'a browser failure must not turn a failed download into a paused one',
-      );
-      expect(find.byType(Dialog), findsNothing);
-      expect(find.text('播放'), findsOneWidget);
-      expect(calls, ['getWebViewVersion']);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets(
-    'late runtime probe after cancellation does not initialize a browser',
-    (tester) async {
-      version = Completer<Object?>();
-      await open(
-        tester,
-        const PlaySource(
-          name: 'test',
-          url: 'https://site.example/play',
-          webPage: true,
-        ),
-      );
-      activeOwner.cancel();
-      await tester.pumpAndSettle();
-      version!.complete('130.0');
-      await tester.pumpAndSettle();
-      expect(calls, ['getWebViewVersion']);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets(
-    'declared parent enters the player on DOM readiness without waiting for images',
-    (tester) async {
-      final messenger =
-          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-      const view = MethodChannel('io.jns.webview.win/41');
-      const events = MethodChannel('io.jns.webview.win/41/events');
-      const paths = MethodChannel('plugins.flutter.io/path_provider');
-      final navigation = <MethodCall>[];
-      messenger.setMockMethodCallHandler(paths, (_) async => 'C:/triomi-test');
-      messenger.setMockMethodCallHandler(channel, (call) async {
-        calls.add(call.method);
-        if (call.method == 'getWebViewVersion') return '130.0';
-        if (call.method == 'initialize') return {'textureId': 41};
-        return null;
-      });
-      messenger.setMockMethodCallHandler(view, (call) async {
-        navigation.add(call);
-        return null;
-      });
-      messenger.setMockMethodCallHandler(events, (_) async => null);
-      addTearDown(() {
-        messenger.setMockMethodCallHandler(view, null);
-        messenger.setMockMethodCallHandler(events, null);
-        messenger.setMockMethodCallHandler(paths, null);
-      });
-      await open(
-        tester,
-        const PlaySource(
-          name: 'test',
-          url: 'https://site.example/play/episode-1',
-          headers: {'Referer': 'https://site.example/'},
-          webPage: true,
-        ),
-      );
-      await pumpUntil(
-        tester,
-        () => navigation.any((call) => call.method == 'loadUrl'),
-        'parent navigation',
-      );
-      await tester.pumpAndSettle();
-      expect(
-        navigation.where((c) => c.method == 'loadUrl').single.arguments,
-        'https://site.example/',
-      );
-      Future<void> parentReady() async {
-        tester.binding.channelBuffers.push(
-          events.name,
-          const StandardMethodCodec().encodeSuccessEnvelope({
-            'type': 'webMessageReceived',
-            'value': jsonEncode({
-              'type': 'triomi-parent-ready',
-              'page': 'https://redirected.test/home',
-            }),
-          }),
-          (_) {},
-        );
-        await tester.pump();
-      }
-
-      tester.binding.channelBuffers.push(
-        events.name,
-        const StandardMethodCodec().encodeSuccessEnvelope({
-          'type': 'urlChanged',
-          'value': 'https://redirected.test/home',
-        }),
-        (_) {},
-      );
-      await tester.pump();
-      await parentReady();
-      final playerNavigation = navigation.where(
-        (call) => call.method == 'executeScript',
-      );
-      expect(playerNavigation, hasLength(1));
-      expect(
-        playerNavigation.single.arguments,
-        contains('https://site.example/play/episode-1'),
-      );
-      Future<void> loadError(WebErrorStatus status) async {
-        tester.binding.channelBuffers.push(
-          events.name,
-          const StandardMethodCodec().encodeSuccessEnvelope({
-            'type': 'onLoadError',
-            'value': status.index,
-          }),
-          (_) {},
-        );
-        await tester.pump();
-      }
-
-      await loadError(WebErrorStatus.WebErrorStatusOperationCanceled);
-      expect(
-        resolverError,
-        isNull,
-        reason: 'entering player cancels unfinished parent resources',
-      );
-      await loadError(WebErrorStatus.WebErrorStatusCertificateIsInvalid);
-      await pumpUntil(
-        tester,
-        () => resolverError != null,
-        'TLS failure cleanup',
-      );
-      expect(
-        resolverError,
-        isA<StateError>(),
-        reason: 'destination TLS failures must not be suppressed',
-      );
-      await parentReady();
-      expect(
-        navigation.where((call) => call.method == 'executeScript'),
-        hasLength(1),
-      );
-      activeOwner.cancel();
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets(
-    'unsafe URL and unsupported authentication headers fail before browser creation',
-    (tester) async {
-      for (final line in [
-        const PlaySource(name: 'test', url: 'file:///secret'),
-        const PlaySource(
-          name: 'test',
-          url: 'https://user:password@site.example/play',
-        ),
-        const PlaySource(
-          name: 'test',
-          url: 'https://site.example/play',
-          headers: {'Authorization': 'private'},
-        ),
-      ]) {
-        await open(tester, line);
-        await tester.pumpAndSettle();
-        expect(resolverError, isA<StateError>());
-        expect(find.byType(Dialog), findsNothing);
-      }
-      expect(calls, isEmpty);
-      expect(tester.takeException(), isNull);
-    },
-  );
-  testWidgets(
-    'cancel owner removes only its resolver, not another root route',
-    (tester) async {
-      version = Completer<Object?>();
-      final owner = VideoResolveCancellation();
-      addTearDown(owner.dispose);
-      final navigator = GlobalKey<NavigatorState>();
-      Object? outcome;
-      await tester.pumpWidget(
-        MaterialApp(
-          navigatorKey: navigator,
-          home: Builder(
-            builder: (context) => TextButton(
-              child: const Text('下载'),
-              onPressed: () async {
-                try {
-                  await resolveWindowsVideo(
-                    context,
-                    const PlaySource(
-                      name: 'page',
-                      url: 'https://site.test/play',
-                      webPage: true,
-                    ),
-                    cancellation: owner,
-                  );
-                } catch (error) {
-                  outcome = error;
-                }
-              },
-            ),
-          ),
-        ),
-      );
-      await tester.tap(find.text('下载'));
-      await tester.pump();
-      unawaited(
-        navigator.currentState!.push(
-          MaterialPageRoute<void>(
-            builder: (_) => const Scaffold(body: Text('unrelated route')),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      owner.cancel('已暂停');
-      await tester.pumpAndSettle();
-      expect(find.text('unrelated route'), findsOneWidget);
-      expect(outcome, isA<VideoResolveCancelled>());
-      version!.complete('130.0');
-      await tester.pumpAndSettle();
-      expect(calls, ['getWebViewVersion']);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets('desktop focus loss does not cancel a visible pending player', (
-    tester,
-  ) async {
-    version = Completer<Object?>();
-    await open(
-      tester,
-      const PlaySource(
-        name: 'page',
-        url: 'https://site.test/play',
-        webPage: true,
-      ),
-    );
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-    await tester.pump();
-    expect(
-      activeOwner.isCancelled,
-      isFalse,
-      reason:
-          'a visible desktop window may be unfocused while its page resolves',
-    );
-    expect(resolverError, isNull);
-    activeOwner.cancel();
-    version!.complete('130.0');
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pumpAndSettle();
-  });
-
-  testWidgets(
-    'background cancels automatic resolution without a route transition',
-    (tester) async {
-      version = Completer<Object?>();
-      await open(
-        tester,
-        const PlaySource(
-          name: 'page',
-          url: 'https://site.test/play',
-          webPage: true,
-        ),
-      );
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-      await tester.pumpAndSettle();
-      expect(resolverError, isA<VideoResolveCancelled>());
-      version!.complete('130.0');
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.pumpAndSettle();
-      expect(calls, ['getWebViewVersion']);
-      expect(tester.takeException(), isNull);
-    },
-  );
-  testWidgets(
-    'minimized download resolves while ignoring page credentials and capturing exact native cookie',
-    (tester) async {
-      final messenger =
-          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-      const view = MethodChannel('io.jns.webview.win/42');
-      const events = MethodChannel('io.jns.webview.win/42/events');
-      const paths = MethodChannel('plugins.flutter.io/path_provider');
-      const session = MethodChannel('triomi/windows-web-session');
-      final loaded = Completer<void>();
-      final cookieRequested = Completer<void>();
-      final cookieRelease = Completer<String?>();
-      final closed = Completer<void>();
-      final closeRelease = Completer<void>();
-      final cookieUrls = <String>[];
-      messenger.setMockMethodCallHandler(paths, (_) async => 'C:/triomi-test');
-      messenger.setMockMethodCallHandler(channel, (call) async {
-        if (call.method == 'getWebViewVersion') return '130.0';
-        if (call.method == 'initialize') return {'textureId': 42};
-        if (call.method == 'dispose') {
-          closed.complete();
-          await closeRelease.future;
-        }
-        return null;
-      });
-      messenger.setMockMethodCallHandler(view, (call) async {
-        if (call.method == 'loadUrl') loaded.complete();
-        return null;
-      });
-      messenger.setMockMethodCallHandler(events, (_) async => null);
-      messenger.setMockMethodCallHandler(session, (call) async {
-        expect(call.method, 'videoCookies');
-        cookieUrls.add((call.arguments as Map)['url'] as String);
-        cookieRequested.complete();
-        return cookieRelease.future;
-      });
-      addTearDown(() {
-        tester.binding.handleAppLifecycleStateChanged(
-          AppLifecycleState.resumed,
-        );
-        if (!cookieRelease.isCompleted) {
-          cookieRelease.complete('native=exact-target');
-        }
-        if (!closeRelease.isCompleted) closeRelease.complete();
-        messenger.setMockMethodCallHandler(view, null);
-        messenger.setMockMethodCallHandler(events, null);
-        messenger.setMockMethodCallHandler(paths, null);
-        messenger.setMockMethodCallHandler(session, null);
-      });
-      ResolvedDesktopVideo? result;
-      final navigatorKey = GlobalKey<NavigatorState>();
-      await tester.pumpWidget(
-        MaterialApp(
-          navigatorKey: navigatorKey,
-          home: Builder(
-            builder: (context) => TextButton(
-              child: const Text('下载'),
-              onPressed: () async {
-                result = await resolveWindowsVideo(
-                  navigatorKey.currentState!.context,
-                  const PlaySource(
-                    name: 'page',
-                    url: 'https://site.test/play',
-                    webPage: true,
-                    headers: {'User-Agent': 'configured-browser'},
-                  ),
-                  allowBackground: true,
-                );
-              },
-            ),
-          ),
-        ),
-      );
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-      await tester.tap(find.text('下载'));
-      await pumpUntil(tester, () => loaded.isCompleted, 'player navigation');
-      await tester.pumpAndSettle();
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
-      await tester.pump();
-      expect(
-        closed.isCompleted,
-        isFalse,
-        reason: 'minimizing a download must not dispose its authorized browser',
-      );
-      void reportMedia(String url) {
-        // Enqueue platform events before pumping, never await their FakeAsync
-        // acknowledgement before the callbacks that produce it can run.
-        tester.binding.channelBuffers.push(
-          events.name,
-          const StandardMethodCodec().encodeSuccessEnvelope({
-            'type': 'webMessageReceived',
-            'value': jsonEncode({
-              'type': 'triomi-media',
-              'url': url,
-              'page': 'https://site.test/play',
-              'referer': 'https://site.test/',
-              'agent': 'untrusted',
-              'Cookie': 'untrusted=secret',
-            }),
-          }),
-          (_) {},
-        );
-      }
-
-      reportMedia('https://cdn.test/a/video.mp4');
-      await pumpUntil(
-        tester,
-        () => cookieRequested.isCompleted,
-        'exact-target cookie lookup',
-      );
-      expect(
-        result,
-        isNull,
-        reason: 'native cookie capture must finish before resolution',
-      );
-      expect(
-        closed.isCompleted,
-        isFalse,
-        reason: 'cookie lookup needs the live browser profile',
-      );
-      reportMedia('https://cdn.test/late/video.mp4');
-      await tester.pump();
-      expect(
-        cookieUrls,
-        ['https://cdn.test/a/video.mp4'],
-        reason:
-            'late media messages must not replace the target being captured',
-      );
-      cookieRelease.complete('native=exact-target');
-      await pumpUntil(tester, () => closed.isCompleted, 'native browser close');
-      expect(
-        result,
-        isNull,
-        reason: 'resolve completion must wait for native browser close',
-      );
-      closeRelease.complete();
-      await pumpUntil(tester, () => result != null, 'download resolution');
-      await tester.pumpAndSettle();
-      expect(cookieUrls, ['https://cdn.test/a/video.mp4']);
-      expect(result!.url, 'https://cdn.test/a/video.mp4');
-      expect(result!.headers, {
+      final login = calls.last.arguments as Map;
+      launch('play');
+      await pumpUntil(tester, () => starts.length == 1);
+      final id = starts.keys.single;
+      expect(starts[id]!['profile'], login['profile']);
+      expect(starts[id]!['origin'], 'https://site.test');
+      expect(starts[id]!['userAgent'], 'configured-browser');
+      expect(starts[id]!['script'], contains('Response.prototype.text'));
+      media(id);
+      await pumpUntil(tester, () => results.containsKey('play'));
+      final lookup =
+          calls.singleWhere((call) => call.method == 'videoCookies').arguments
+              as Map;
+      expect(lookup['profile'], login['profile']);
+      expect(lookup['url'], 'https://cdn.test/a/video.mp4?token=1');
+      expect(lookup['origin'], 'https://site.test');
+      expect(results['play']!.headers, {
         'User-Agent': 'configured-browser',
         'Referer': 'https://site.test/',
-        'Cookie': 'native=exact-target',
+        'Cookie': 'native=target',
       });
-      expect(tester.takeException(), isNull);
+      expect(closes, everyElement(id));
+      expect(find.byType(Dialog), findsNothing);
     },
   );
 
   testWidgets(
-    'cancelling cookie capture waits for native close and ignores the late cookie',
+    'source identity and origin isolate renderers and CDN cookie jars',
     (tester) async {
-      final messenger =
-          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-      const view = MethodChannel('io.jns.webview.win/43');
-      const events = MethodChannel('io.jns.webview.win/43/events');
-      const paths = MethodChannel('plugins.flutter.io/path_provider');
-      const session = MethodChannel('triomi/windows-web-session');
-      final owner = VideoResolveCancellation();
-      final loaded = Completer<void>();
-      final cookieRequested = Completer<void>();
-      final cookieRelease = Completer<String?>();
-      final closed = Completer<void>();
-      final closeRelease = Completer<void>();
-      final cookieUrls = <String>[];
-      var disposeCalls = 0;
-      messenger.setMockMethodCallHandler(paths, (_) async => 'C:/triomi-test');
-      messenger.setMockMethodCallHandler(channel, (call) async {
-        if (call.method == 'getWebViewVersion') return '130.0';
-        if (call.method == 'initialize') return {'textureId': 43};
-        if (call.method == 'dispose') {
-          disposeCalls++;
-          if (!closed.isCompleted) closed.complete();
-          await closeRelease.future;
-        }
-        return null;
-      });
-      messenger.setMockMethodCallHandler(view, (call) async {
-        if (call.method == 'loadUrl') loaded.complete();
-        return null;
-      });
-      messenger.setMockMethodCallHandler(events, (_) async => null);
-      messenger.setMockMethodCallHandler(session, (call) async {
-        expect(call.method, 'videoCookies');
-        cookieUrls.add((call.arguments as Map)['url'] as String);
-        cookieRequested.complete();
-        return cookieRelease.future;
-      });
-      addTearDown(() {
-        if (!cookieRelease.isCompleted) {
-          cookieRelease.complete('late=native-cookie');
-        }
-        if (!closeRelease.isCompleted) closeRelease.complete();
-        owner.dispose();
-        messenger.setMockMethodCallHandler(view, null);
-        messenger.setMockMethodCallHandler(events, null);
-        messenger.setMockMethodCallHandler(paths, null);
-        messenger.setMockMethodCallHandler(session, null);
-      });
-      ResolvedDesktopVideo? result;
-      Object? outcome;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => TextButton(
-              child: const Text('下载'),
-              onPressed: () async {
-                try {
-                  result = await resolveWindowsVideo(
-                    context,
-                    const PlaySource(
-                      name: 'page',
-                      url: 'https://site.test/play',
-                      webPage: true,
-                    ),
-                    cancellation: owner,
-                  );
-                } catch (error) {
-                  outcome = error;
-                }
-              },
-            ),
-          ),
-        ),
-      );
-      await tester.tap(find.text('下载'));
-      await pumpUntil(tester, () => loaded.isCompleted, 'player navigation');
-      await tester.pumpAndSettle();
-      tester.binding.channelBuffers.push(
-        events.name,
-        const StandardMethodCodec().encodeSuccessEnvelope({
-          'type': 'webMessageReceived',
-          'value': jsonEncode({
-            'type': 'triomi-media',
-            'url': 'https://cdn.test/a/video.mp4',
-            'page': 'https://site.test/play',
-            'referer': 'https://site.test/',
-          }),
-        }),
-        (_) {},
-      );
-      await pumpUntil(
-        tester,
-        () => cookieRequested.isCompleted,
-        'cookie capture',
-      );
-      owner.cancel('下载已暂停');
-      await pumpUntil(
-        tester,
-        () => closed.isCompleted,
-        'cancelled native browser close',
+      await mount(tester);
+      launch('a');
+      launch('b', sourceId: 'source-b');
+      launch('c', sourceUrl: 'https://other.test/');
+      await pumpUntil(tester, () => starts.length == 3);
+      final profiles = starts.values.map((args) => args['profile']).toSet();
+      expect(profiles.length, 3);
+      final expected = sha256.convert(
+        utf8.encode('source-a\nhttps://site.test'),
       );
       expect(
-        outcome,
-        isNull,
-        reason: 'cancellation must wait for native browser close',
+        starts.values.first['profile'],
+        endsWith('/windows-source-sessions/$expected'),
       );
-      expect(result, isNull);
-      closeRelease.complete();
-      await pumpUntil(tester, () => outcome != null, 'cancelled resolution');
-      expect(outcome, isA<VideoResolveCancelled>());
-      cookieRelease.complete('late=native-cookie');
-      await tester.pumpAndSettle();
-      expect(
-        result,
-        isNull,
-        reason: 'a late native cookie must not publish cancelled media',
-      );
-      expect(cookieUrls, ['https://cdn.test/a/video.mp4']);
-      expect(disposeCalls, 1);
-      expect(tester.takeException(), isNull);
+      final ids = starts.keys.toList();
+      for (final id in ids) {
+        media(id);
+      }
+      await pumpUntil(tester, () => results.length == 3);
+      final lookups = calls
+          .where((call) => call.method == 'videoCookies')
+          .map((call) => call.arguments as Map);
+      expect(lookups.map((args) => args['profile']).toSet(), profiles);
+      expect(lookups.map((args) => args['url']).toSet(), {
+        'https://cdn.test/a/video.mp4?token=1',
+      });
     },
+  );
+
+  testWidgets(
+    'cancelling playback leaves independent download controller running',
+    (tester) async {
+      await mount(tester);
+      final playback = launch('play');
+      final download = launch('download', background: true);
+      await pumpUntil(tester, () => starts.length == 2);
+      final ids = starts.keys.toList();
+      playback.cancel('playback closed');
+      await pumpUntil(tester, () => errors.containsKey('play'));
+      expect(errors['play'], isA<VideoResolveCancelled>());
+      expect(closes, isNot(contains(ids[1])));
+      expect(download.isCancelled, isFalse);
+      media(ids[0]);
+      media(ids[1]);
+      await pumpUntil(tester, () => results.containsKey('download'));
+      expect(results.containsKey('play'), isFalse);
+    },
+  );
+
+  testWidgets(
+    'pending native initialization is cancelled and drained before completion',
+    (tester) async {
+      await mount(tester);
+      final release = Completer<void>();
+      onStart = (_) => release.future;
+      final owner = launch('play');
+      await pumpUntil(tester, () => starts.isNotEmpty);
+      owner.cancel();
+      await pumpUntil(tester, () => closes.isNotEmpty);
+      expect(errors, isEmpty);
+      release.complete();
+      await pumpUntil(tester, () => errors.containsKey('play'));
+      expect(closes, [starts.keys.single, starts.keys.single]);
+      expect(results, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'late native cookie cannot publish cancelled media and close is awaited',
+    (tester) async {
+      await mount(tester);
+      final cookie = Completer<String?>();
+      final close = Completer<void>();
+      onCookies = (_) => cookie.future;
+      onClose = (_) => close.future;
+      final owner = launch('play');
+      await pumpUntil(tester, () => starts.isNotEmpty);
+      media(starts.keys.single);
+      await pumpUntil(
+        tester,
+        () => calls.any((call) => call.method == 'videoCookies'),
+      );
+      owner.cancel();
+      await pumpUntil(tester, () => closes.isNotEmpty);
+      expect(errors, isEmpty);
+      close.complete();
+      await pumpUntil(tester, () => errors.containsKey('play'));
+      cookie.complete('late=secret');
+      await tester.pump();
+      expect(results, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'HTTP anonymous playback and explicit credential omission never export login cookies',
+    (tester) async {
+      await mount(tester);
+      launch(
+        'anonymous',
+        sourceUrl: 'http://site.test/',
+        url: 'http://site.test/play',
+      );
+      await pumpUntil(tester, () => starts.length == 1);
+      media(starts.keys.first, url: 'http://cdn.test/video.mp4');
+      await pumpUntil(tester, () => results.containsKey('anonymous'));
+      launch('omit');
+      await pumpUntil(tester, () => starts.length == 2);
+      media(starts.keys.last, omit: true);
+      await pumpUntil(tester, () => results.containsKey('omit'));
+      expect(calls.where((call) => call.method == 'videoCookies'), isEmpty);
+      expect(
+        results.values.every((result) => !result.headers.containsKey('Cookie')),
+        isTrue,
+      );
+      expect(results['omit']!.omitCookies, isTrue);
+    },
+  );
+
+  testWidgets(
+    'HTTPS media downgrade and arbitrary source auth headers are rejected',
+    (tester) async {
+      await mount(tester);
+      final owner = launch('play');
+      await pumpUntil(tester, () => starts.isNotEmpty);
+      media(starts.keys.single, url: 'http://cdn.test/video.mp4');
+      await tester.pump();
+      expect(results, isEmpty);
+      expect(calls.where((call) => call.method == 'videoCookies'), isEmpty);
+      owner.cancel();
+      await pumpUntil(tester, () => errors.containsKey('play'));
+      launch('auth', headers: {'Authorization': 'secret'});
+      await pumpUntil(tester, () => errors.containsKey('auth'));
+      expect(errors['auth'], isA<StateError>());
+      expect(starts.length, 1);
+    },
+  );
+
+  testWidgets(
+    'hidden foreground owner cancels without cancelling background download',
+    (tester) async {
+      await mount(tester);
+      launch('play');
+      final download = launch('download', background: true);
+      await pumpUntil(tester, () => starts.length == 2);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      await pumpUntil(tester, () => errors.containsKey('play'));
+      expect(download.isCancelled, isFalse);
+      media(starts.keys.last);
+      await pumpUntil(tester, () => results.containsKey('download'));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    },
+  );
+}
+
+void testerMessage(Map<String, Object> message) {
+  ServicesBinding.instance.channelBuffers.push(
+    'triomi/windows-web-session',
+    const StandardMethodCodec().encodeMethodCall(
+      MethodCall('videoMessage', message),
+    ),
+    (_) {},
   );
 }

@@ -468,10 +468,13 @@ class PlatformChannel {
     }
   }
 
-  /// 屏幕常亮（Android FLAG_KEEP_SCREEN_ON）。
-  Future<void> setKeepScreenOn(bool enabled) async {
+  /// Readers share Android's window flag; Windows keeps independent leases.
+  Future<void> setKeepScreenOn(bool enabled, {String owner = 'reader'}) async {
     try {
-      await _channel.invokeMethod<bool>('keepScreenOn', enabled);
+      await _channel.invokeMethod<bool>(
+        'keepScreenOn',
+        _desktop ? {'enabled': enabled, 'owner': owner} : enabled,
+      );
     } on PlatformException {
       // 平台实现缺失或调用失败：静默降级。
     } on MissingPluginException {

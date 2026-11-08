@@ -40,16 +40,38 @@ def add(parent, name, **attrs):
 
 
 def installer_source(stage: Path, files: list[str], version: str, build: int,
-                     icon: Path, license_rtf: Path) -> ET.ElementTree:
+                     icon: Path, license_rtf: Path, *, windows_revision: int = 0) -> ET.ElementTree:
+    if not isinstance(windows_revision, int) or not 0 <= windows_revision <= 2147483647:
+        raise ValueError('Windows servicing revision must be a nonnegative MSI integer')
+    product_identity = f'product:{version}+{build}'
+    if windows_revision:
+        product_identity += f':windows.{windows_revision}'
+    revision_key = rf'Software\Triomi\Installer\Versions\{version}+{build}'
     ET.register_namespace('', WIX_NS)
     ET.register_namespace('ui', UI_NS)
     wix = ET.Element('{' + WIX_NS + '}Wix')
     package = add(wix, 'Package', Name='Triomi', Manufacturer='HyperionHXH',
                   Version=msi_version(version, build), UpgradeCode=UPGRADE_CODE,
-                  ProductCode=str(uuid.uuid5(IDENTITY, f'product:{version}+{build}')),
+                  ProductCode=str(uuid.uuid5(IDENTITY, product_identity)),
                   Scope='perUser', Language='2052', InstallerVersion='500')
     add(package, 'MajorUpgrade', DowngradeErrorMessage='A newer Triomi version is already installed.',
-        Schedule='afterInstallInitialize')
+        Schedule='afterInstallInitialize',
+        **({'AllowSameVersionUpgrades': 'yes'} if windows_revision else {}))
+    revision_property = add(package, 'Property', Id='INSTALLEDWINDOWSREVISION', Secure='yes')
+    add(revision_property, 'RegistrySearch', Id='SearchInstalledWindowsRevision', Root='HKCU',
+        Key=revision_key, Name='InstalledWindowsRevision', Type='raw', Bitness='always64')
+    # REG_SZ decimal text has no RegLocator DWORD '#' prefix. An integer RHS
+    # forces numeric comparison (so revision 10 is newer than revision 2).
+    add(package, 'Launch',
+        Condition=f'REMOVE="ALL" OR NOT INSTALLEDWINDOWSREVISION OR INSTALLEDWINDOWSREVISION <= {windows_revision}',
+        Message='A newer Triomi Windows servicing revision is already installed.')
+    # AppSearch must populate the property before either UI or silent execution
+    # checks it, and rejection must precede the early major-upgrade removal.
+    for sequence_name in ('InstallUISequence', 'InstallExecuteSequence'):
+        sequence = add(package, sequence_name)
+        add(sequence, 'AppSearch', Before='LaunchConditions')
+        add(sequence, 'LaunchConditions', Before=(
+            'CostInitialize' if sequence_name == 'InstallUISequence' else 'InstallValidate'))
     add(package, 'MediaTemplate', EmbedCab='yes', CompressionLevel='high')
     add(package, 'Icon', Id='AppIcon', SourceFile=str(icon))
     add(package, 'Property', Id='ARPPRODUCTICON', Value='AppIcon')
@@ -61,6 +83,16 @@ def installer_source(stage: Path, files: list[str], version: str, build: int,
     install = add(programs, 'Directory', Id='INSTALLFOLDER', Name='Triomi')
     directories = {'': install}
     component_ids = []
+    # Keep one component identity/keypath for this version/build across all
+    # servicing revisions, including revision zero. Native ZIP updates write
+    # the same REG_SZ value after committing the verified PE revision.
+    revision_component = stable_id('WindowsRevision', f'{version}+{build}')
+    component = add(install, 'Component', Id=revision_component,
+                    Guid=str(uuid.uuid5(IDENTITY, f'windows-revision:{version}+{build}')),
+                    Bitness='always64')
+    add(component, 'RegistryValue', Root='HKCU', Key=revision_key,
+        Name='InstalledWindowsRevision', Type='string', Value=str(windows_revision), KeyPath='yes')
+    component_ids.append(revision_component)
     # Build the directory tree independently of traversal order.
     for name in files:
         parent = Path(name).parent
@@ -120,7 +152,11 @@ def package_windows(bundle: Path, output: Path, version: str, build: int, dotnet
     with zipfile.ZipFile(bundle_zip, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for name in files:
             archive.write(bundle / name, name)
-    manifest = build_manifest(bundle_zip, version, build)
+    revision = re.search(r'^#define TRIOMI_WINDOWS_REVISION (\d+)\s*$',
+                         (ROOT / 'windows/runner/windows_revision.h').read_text(encoding='utf-8'), re.MULTILINE)
+    if not revision:
+        raise ValueError('Windows servicing revision is missing')
+    manifest = build_manifest(bundle_zip, version, build, windows_revision=int(revision[1]))
     (output / 'triomi-windows.update.json').write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     work = ROOT / 'build/windows-installer'
@@ -131,7 +167,8 @@ def package_windows(bundle: Path, output: Path, version: str, build: int, dotnet
     license_rtf.write_text(r'{\rtf1\ansi\deff0 {\fonttbl {\f0 Consolas;}}\f0\fs16 ' + text + '}', encoding='ascii')
     source = work / 'Triomi.wxs'
     installer_source(bundle.resolve(), files, version, build,
-                     ROOT / 'windows/runner/resources/app_icon.ico', license_rtf).write(
+                     ROOT / 'windows/runner/resources/app_icon.ico', license_rtf,
+                     windows_revision=int(revision[1])).write(
                          source, encoding='utf-8', xml_declaration=True)
     subprocess.run([dotnet, 'tool', 'run', 'wix', '--', 'build', str(source), '-arch', 'x64',
                     '-ext', 'WixToolset.UI.wixext/6.0.2', '-culture', 'zh-CN',

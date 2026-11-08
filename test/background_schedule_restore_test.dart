@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/features/schedule/data/background_update_check.dart';
@@ -26,8 +28,16 @@ void main() {
       final preferences = memoryPreferences();
       await preferences.set(backgroundCheckPreferenceKey, true);
       expect(await restoreBackgroundUpdateSchedule(preferences), true);
-      expect(calls.single.method, 'scheduleBackgroundCheck');
-      expect(calls.single.arguments, true);
+      expect(
+        calls.single.method,
+        Platform.isWindows ? 'scheduleMangaUpdates' : 'scheduleBackgroundCheck',
+      );
+      expect(
+        calls.single.arguments,
+        Platform.isWindows
+            ? {'backgroundCheck': true, 'mangaUpdates': false}
+            : true,
+      );
       expect(preferences.get<bool>(backgroundCheckPreferenceKey), true);
     },
   );
@@ -38,7 +48,15 @@ void main() {
       await restoreBackgroundUpdateSchedule(preferences);
       await preferences.set(backgroundCheckPreferenceKey, false);
       await restoreBackgroundUpdateSchedule(preferences);
-      expect(calls.map((c) => c.arguments), [false, false]);
+      expect(
+        calls.map((c) => c.arguments),
+        Platform.isWindows
+            ? [
+                {'backgroundCheck': false, 'mangaUpdates': false},
+                {'backgroundCheck': false, 'mangaUpdates': false},
+              ]
+            : [false, false],
+      );
       expect(preferences.get<bool>(backgroundCheckPreferenceKey), false);
     },
   );

@@ -143,16 +143,20 @@ class AppUpdateReadyView extends StatelessWidget {
             spacing: AppSpacing.sm,
             runSpacing: AppSpacing.xs,
             children: [
-              if (android)
+              if (android || windows)
                 FilledButton.icon(
                   key: const ValueKey('app-update-ready-install'),
                   style: FilledButton.styleFrom(minimumSize: _actionSize),
                   onPressed: busy ? null : onInstall,
-                  icon: const Icon(Icons.install_mobile_outlined),
+                  icon: Icon(
+                    windows
+                        ? Icons.install_desktop_outlined
+                        : Icons.install_mobile_outlined,
+                  ),
                   label: const Text('立即安装'),
                 ),
               if (windows)
-                FilledButton.icon(
+                OutlinedButton.icon(
                   key: const ValueKey('app-update-ready-reveal'),
                   style: FilledButton.styleFrom(minimumSize: _actionSize),
                   onPressed: busy ? null : onRevealWindows,
@@ -191,22 +195,12 @@ class AppUpdateHandoffView extends StatelessWidget {
       children: [
         _StatusHeading(
           icon: windows ? Icons.folder_open_outlined : Icons.open_in_new,
-          title: windows ? '已交给文件资源管理器' : '已交给系统安装器',
+          title: windows ? '更新程序已就绪' : '已交给系统安装器',
           subtitle: '尚未确认安装完成',
         ),
         const SizedBox(height: AppSpacing.md),
         if (windows) ...[
-          const _InstallStep(number: '1', text: '在文件资源管理器中找到已选中的 ZIP。'),
-          const _InstallStep(
-            number: '2',
-            text: '选择“全部解压缩”，解压到一个新文件夹，保留全部 DLL 和 data 文件。',
-          ),
-          const _InstallStep(
-            number: '3',
-            text: '关闭 Triomi，从新文件夹运行 triomi.exe，并将快捷方式指向新位置。',
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          const Text('原有应用数据保留。'),
+          const Text('Triomi 退出后将替换已核验的应用文件并重启。失败时回滚；个人数据不在替换范围内。'),
         ] else
           const Text('请在系统安装器中确认。返回后可重新读取当前版本。'),
         const SizedBox(height: AppSpacing.md),
@@ -253,7 +247,7 @@ Future<bool?> showAppUpdateReadyDialog(
             if (actionable)
               Text(
                 windows
-                    ? '打开 ZIP 所在位置。请解压到新文件夹，关闭 Triomi 后运行新版本。'
+                    ? '确认后关闭 Triomi，安装已核验的文件并自动重启。替换失败会回滚，个人数据保留。安装目录无写入权限时可改用手动安装包。'
                     : '重新核验后打开系统安装器，由你确认安装；保留应用数据。',
               ),
             const SizedBox(height: AppSpacing.sm),
@@ -273,7 +267,7 @@ Future<bool?> showAppUpdateReadyDialog(
             key: const ValueKey('app-update-ready-confirm'),
             style: FilledButton.styleFrom(minimumSize: _actionSize),
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(windows ? '打开文件位置' : '立即安装'),
+            child: Text(windows ? '安装并重启' : '立即安装'),
           ),
       ],
     ),
@@ -425,7 +419,8 @@ bool _canRevealWindows(AppUpdateCandidate candidate) =>
 
 String _mib(int bytes) => '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MiB';
 String _version(AppUpdateInfo info) =>
-    '${info.version}（构建 ${info.versionCode}）';
+    '${info.version}（构建 ${info.versionCode}）'
+    '${info.platform == 'windows' ? ' · Windows 修订 ${info.windowsRevision}' : ''}';
 
 String _candidateExplanation(AppUpdateCandidate candidate) =>
     switch (candidate.decision) {
@@ -594,25 +589,6 @@ class _StatusHeading extends StatelessWidget {
         ),
       ),
     ],
-  );
-}
-
-class _InstallStep extends StatelessWidget {
-  const _InstallStep({required this.number, required this.text});
-  final String number;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('$number.', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(child: Text(text)),
-      ],
-    ),
   );
 }
 

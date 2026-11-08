@@ -18,7 +18,9 @@ import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/library/data/manga_update_background.dart';
 import 'package:triomi/features/library/data/manga_update_execution_lock.dart';
 import 'package:triomi/features/library/data/manga_update_service.dart';
+import 'package:triomi/features/library/data/windows_content_updates.dart';
 
+import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
 
 class UpdateSource extends DetailProvider {
@@ -87,6 +89,7 @@ void main() {
     MangaUpdateOptions options = const MangaUpdateOptions(),
     Future<bool> Function()? allow,
     Future<void> Function(MediaItem, List<Chapter>, Set<String>)? download,
+    bool Function()? shouldContinue,
   }) {
     final s = MangaUpdateService(
       db: db,
@@ -94,6 +97,7 @@ void main() {
           SourceRegistrySnapshot(entries: List.of(sources), failures: []),
       options: options,
       constraintsAllow: allow ?? () async => true,
+      shouldContinue: shouldContinue,
       downloadNew: download,
     );
     services.add(s);
@@ -440,13 +444,23 @@ void main() {
         .setMockMethodCallHandler(const MethodChannel('triomi/platform'), (
           call,
         ) async {
-          if (call.method == 'canNotifyMangaUpdates') return true;
+          if (call.method == 'canNotifyMangaUpdates') {
+            return true;
+          }
           if (call.method == 'notifyMangaUpdate') {
             deliveries++;
             return true;
           }
           throw StateError('unexpected platform call');
         });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('triomi/content-notifications'), (call) async {
+          expect(call.method, 'notify');
+          deliveries++;
+          return true;
+        });
+    addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('triomi/content-notifications'), null));
     addTearDown(
       () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
@@ -486,6 +500,258 @@ void main() {
       container.dispose();
     }
   });
+  test('a deferred queue does not starve new library entries or reset pending history', () async {
+    await seed('s', 'old');
+    final updates = service();
+    await updates.enqueue();
+    await db
+        .update(db.mangaUpdates)
+        .write(
+          const MangaUpdatesCompanion(
+            status: Value('deferred'),
+            generation: Value(7),
+            notifiedGeneration: Value(6),
+            error: Value('network deferred'),
+          ),
+        );
+    await seed('s', 'new');
+    await updates.enqueue(preservePending: true);
+    final rows = await db.select(db.mangaUpdates).get();
+    expect(rows.length, 2);
+    final old = rows.firstWhere((row) => row.remoteId == 'old');
+    expect(old.status, 'deferred');
+    expect(old.generation, 7);
+    expect(old.notifiedGeneration, 6);
+    expect(old.error, 'network deferred');
+    expect(rows.firstWhere((row) => row.remoteId == 'new').status, 'queued');
+  });
+
+  test('native notification rejection rolls back only its generation reservation and permits retry', () async {
+    await seed('s', 'a');
+    await db
+        .into(db.mangaUpdates)
+        .insert(
+          MangaUpdatesCompanion.insert(
+            sourceId: 's',
+            remoteId: 'a',
+            status: const Value('success'),
+            added: const Value(2),
+            generation: const Value(3),
+            notifiedGeneration: const Value(1),
+          ),
+        );
+    var reject = true, notifications = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('triomi/platform'), (
+          call,
+        ) async {
+          if (call.method == 'canNotifyMangaUpdates') {
+            return true;
+          }
+          if (call.method == 'notifyMangaUpdate') {
+            notifications++;
+            if (reject) {
+              throw PlatformException(code: 'notification_unavailable');
+            }
+            return true;
+          }
+          throw StateError('unexpected native call');
+        });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('triomi/content-notifications'), (call) async {
+          notifications++;
+          if (reject) {
+            throw PlatformException(code: 'notification_unavailable');
+          }
+          return true;
+        });
+    addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('triomi/content-notifications'), null));
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('triomi/platform'),
+            null,
+          ),
+    );
+    final container = ProviderContainer(
+      overrides: [databaseProvider.overrideWithValue(db)],
+    );
+    try {
+      await expectLater(
+        notifyMangaUpdates(container),
+        throwsA(isA<PlatformException>()),
+      );
+      expect(
+        (await db.select(db.mangaUpdates).get()).single.notifiedGeneration,
+        1,
+      );
+      reject = false;
+      await notifyMangaUpdates(container);
+      expect(
+        (await db.select(db.mangaUpdates).get()).single.notifiedGeneration,
+        3,
+      );
+      expect(notifications, 2);
+    } finally {
+      container.dispose();
+    }
+  });
+
+  test('deferred production checks remain due instead of recording twelve-hour completion', () async {
+    await seed('s', 'a');
+    add(UpdateSource('s', (_) async => [
+      const Chapter(sourceId: 's', remoteId: 'a-old', title: 'old'),
+      const Chapter(sourceId: 's', remoteId: 'a-new', title: 'new'),
+    ]));
+    final prefs = memoryPreferences();
+    await prefs.set('manga.updates.background', true);
+    var networkAllowed = false;
+    final updates = service(allow: () async => networkAllowed);
+    final coordinator = WindowsContentUpdateCoordinator(
+      preferences: prefs,
+      runAnime: (_) async {},
+      runManga: (_) => runMangaUpdateCycle(
+        service: updates, shouldContinue: () => true, notify: () async {},
+      ),
+    );
+    try {
+      await coordinator.run();
+      expect((await db.select(db.mangaUpdates).get()).single.status, 'deferred');
+      expect(prefs.get<String>('content.updates.mangaCompleted'), isNull);
+      expect(prefs.get<String>('content.updates.mangaCompleted.error'), isNotNull);
+      networkAllowed = true;
+      await coordinator.run();
+      expect((await db.select(db.mangaUpdates).get()).single.status, 'success');
+      expect(prefs.get<String>('content.updates.mangaCompleted'), isNotNull);
+      expect(prefs.get<String>('content.updates.mangaCompleted.error'), isNull);
+    } finally {
+      await coordinator.dispose();
+    }
+  });
+
+  test('last-chapter cancellation after final constraints cannot commit a catalog', () async {
+    await seed('s', 'a');
+    add(UpdateSource('s', (_) async => [
+      const Chapter(sourceId: 's', remoteId: 'a-old', title: 'old'),
+      const Chapter(sourceId: 's', remoteId: 'a-late', title: 'late'),
+    ]));
+    var enabled = true, checks = 0;
+    final updates = service(
+      shouldContinue: () => enabled,
+      allow: () async {
+        if (++checks == 2) enabled = false;
+        return true;
+      },
+    );
+    await expectLater(runMangaUpdateCycle(
+      service: updates, shouldContinue: () => enabled, notify: () async {},
+    ), throwsA(isA<MangaUpdateIncomplete>()));
+    expect(checks, 2);
+    expect((await library.loadChapters('s', 'a')).single.remoteId, 'a-old');
+    final row = (await db.select(db.mangaUpdates).get()).single;
+    expect(row.status, 'queued');
+    expect(row.generation, 0);
+    expect((await library.listLibrary()).single.entry.unreadCount, 5);
+  });
+
+  test('coordinator cancellation synchronously cancels an in-flight production manga service', () async {
+    await seed('s', 'a');
+    final entered = Completer<void>(), reply = Completer<List<Chapter>>();
+    add(UpdateSource('s', (_) {
+      entered.complete();
+      return reply.future;
+    }));
+    final prefs = memoryPreferences();
+    await prefs.set('manga.updates.background', true);
+    final updates = service();
+    final coordinator = WindowsContentUpdateCoordinator(
+      preferences: prefs,
+      runAnime: (_) async {},
+      runManga: (token) async {
+        token.addListener(updates.cancel);
+        try {
+          await runMangaUpdateCycle(service: updates,
+            shouldContinue: () => !token.cancelled, notify: () async {});
+        } finally {
+          token.removeListener(updates.cancel);
+        }
+      },
+    );
+    final running = coordinator.run();
+    await entered.future;
+    coordinator.cancel();
+    expect(updates.wasCancelled, isTrue);
+    reply.complete([const Chapter(sourceId: 's', remoteId: 'late', title: 'late')]);
+    await running;
+    expect((await library.loadChapters('s', 'a')).single.remoteId, 'a-old');
+    expect(prefs.get<String>('content.updates.mangaCompleted'), isNull);
+    await coordinator.dispose();
+  });
+
+  test('cancellation during transactional catalog writes rolls back chapters unread and generation', () async {
+    await seed('s', 'a');
+    add(UpdateSource('s', (_) async => [
+      const Chapter(sourceId: 's', remoteId: 'a-old', title: 'old'),
+      const Chapter(sourceId: 's', remoteId: 'a-new', title: 'new'),
+    ]));
+    var continuationChecks = 0;
+    final updates = service(shouldContinue: () => ++continuationChecks == 1);
+    await expectLater(runMangaUpdateCycle(
+      service: updates, shouldContinue: () => true, notify: () async {},
+    ), throwsA(isA<MangaUpdateIncomplete>()));
+    expect(continuationChecks, 2);
+    expect((await library.loadChapters('s', 'a')).single.remoteId, 'a-old');
+    final row = (await db.select(db.mangaUpdates).get()).single;
+    expect(row.generation, 0);
+    expect(row.status, 'queued');
+    expect((await library.listLibrary()).single.entry.unreadCount, 5);
+  });
+
+  test('Windows batch keeps unpresented generations pending until each native acknowledgement', () async {
+    await seed('s', 'a');
+    await seed('s', 'b');
+    for (final remote in ['a', 'b']) {
+      await db.into(db.mangaUpdates).insert(MangaUpdatesCompanion.insert(
+        sourceId: 's', remoteId: remote, status: const Value('success'),
+        generation: const Value(1), added: const Value(1),
+      ));
+    }
+    const channel = MethodChannel('triomi/content-notifications');
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(const MethodChannel('triomi/platform'), (call) async =>
+        call.method == 'canNotifyMangaUpdates');
+    final entered = Completer<void>(), firstPresented = Completer<bool>();
+    var calls = 0;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (++calls == 1) {
+        entered.complete();
+        return firstPresented.future;
+      }
+      throw PlatformException(code: 'notification_expired_without_presentation');
+    });
+    addTearDown(() {
+      messenger.setMockMethodCallHandler(channel, null);
+      messenger.setMockMethodCallHandler(const MethodChannel('triomi/platform'), null);
+    });
+    final container = ProviderContainer(overrides: [databaseProvider.overrideWithValue(db)]);
+    try {
+      final attempt = expectLater(notifyMangaUpdates(container), throwsA(isA<PlatformException>()));
+      await entered.future;
+      expect((await db.select(db.mangaUpdates).get()).every((row) => row.notifiedGeneration == 0), isTrue);
+      firstPresented.complete(true);
+      await attempt;
+      final rows = await db.select(db.mangaUpdates).get();
+      expect(rows.where((row) => row.notifiedGeneration == 1).length, 1);
+      expect(rows.where((row) => row.notifiedGeneration == 0).length, 1);
+      messenger.setMockMethodCallHandler(channel, (_) async => true);
+      await notifyMangaUpdates(container);
+      expect((await db.select(db.mangaUpdates).get()).every((row) => row.notifiedGeneration == 1), isTrue);
+    } finally {
+      container.dispose();
+    }
+  }, skip: !Platform.isWindows);
+
   test('execution lease rejects overlapping callers and allows the next owner after release', () async {
     final dir = await Directory.systemTemp.createTemp('triomi-update-lease-');
     try {

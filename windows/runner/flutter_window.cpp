@@ -120,10 +120,16 @@ std::vector<PendingProxy> pending_proxies;
 #include "app_update.h"
 #include "windows_web_session.h"
 #include "backup_documents.h"
+#include "windows_file_actions.h"
+#include "windows_playback_feedback.h"
+#include "windows_update_install.h"
+#include "windows_system_media.h"
+#include "windows_content_updates.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project, bool worker,
-                             bool backup_worker)
-    : project_(project), worker_(worker), backup_worker_(backup_worker) {}
+                             bool backup_worker, bool content_worker)
+    : project_(project), worker_(worker), backup_worker_(backup_worker),
+      content_worker_(content_worker) {}
 
 FlutterWindow::~FlutterWindow() {}
 
@@ -148,7 +154,10 @@ bool FlutterWindow::OnCreate() {
   if (!worker_ && !backup_worker_) RegisterPlugins(flutter_controller_->engine());
   if (!worker_ && !backup_worker_) {
     RegisterWindowsWebSession(flutter_controller_->engine()->messenger(), GetHandle());
-    RegisterBackupDocuments(flutter_controller_->engine()->messenger(), GetHandle());
+    if (!content_worker_) RegisterBackupDocuments(flutter_controller_->engine()->messenger(), GetHandle());
+    InitializeWindowsPlaybackFeedback(GetHandle());
+    InitializeWindowsContentUpdates(GetHandle(), flutter_controller_->engine()->messenger());
+    if (!content_worker_) InitializeWindowsSystemMedia(flutter_controller_->engine()->messenger(), GetHandle());
   }
   if (!worker_) {
     platform_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
@@ -156,6 +165,30 @@ bool FlutterWindow::OnCreate() {
         &flutter::StandardMethodCodec::GetInstance());
     platform_channel_->SetMethodCallHandler(
         [this](const auto& call, auto result) {
+          if (!backup_worker_) {
+            if (HandleWindowsContentUpdates(call, result.get())) return;
+            if (content_worker_ && call.method_name() == "completeContentUpdates") {
+              const auto* ok = call.arguments() == nullptr ? nullptr : std::get_if<bool>(call.arguments());
+              if (!ok) { result->Error("invalid_exit", "worker result is required"); return; }
+              result->Success();
+              ::PostQuitMessage(*ok ? 0 : 1);
+              return;
+            }
+            if (!content_worker_ && HandleWindowsFileAction(GetHandle(), call.method_name(), call.arguments(), result.get())) return;
+            if (HandleWindowsPlaybackFeedback(call, result.get())) return;
+            if (!content_worker_ && call.method_name() == "installWindowsUpdate") {
+              const auto* args = call.arguments() == nullptr ? nullptr :
+                  std::get_if<flutter::EncodableMap>(call.arguments());
+              if (!args) { result->Error("windows_update_install", "Expected update argument map"); return; }
+              try {
+                LaunchWindowsUpdate(GetHandle(), *args);
+                result->Success(flutter::EncodableValue(true));
+              } catch (const std::exception& error) {
+                result->Error("windows_update_install", error.what());
+              }
+              return;
+            }
+          }
           if (call.method_name() == "setWindowFullscreen") {
             if (worker_ || backup_worker_) {
               result->Error("window_unavailable", "Fullscreen requires the main window");
@@ -434,10 +467,10 @@ bool FlutterWindow::OnCreate() {
           result->Success(flutter::EncodableValue(static_cast<int64_t>(available.QuadPart)));
         });
   }
-  SetChildContent(flutter_controller_->view()->GetNativeWindow(), !backup_worker_);
+  SetChildContent(flutter_controller_->view()->GetNativeWindow(), !backup_worker_ && !content_worker_);
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    if (!worker_ && !backup_worker_) this->Show();
+    if (!worker_ && !backup_worker_ && !content_worker_) this->Show();
   });
 
   // Flutter can complete the first frame before the "show window" callback is
@@ -449,6 +482,9 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  CloseWindowsPlaybackFeedback();
+  CloseWindowsSystemMedia();
+  CloseWindowsContentUpdates();
   mihon_runtime_.Stop();
   CloseWindowsWebSessions();
   KillTimer(GetHandle(), kProxyTimer);
@@ -465,6 +501,9 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (WindowsSystemMediaOnMessage(hwnd, message, wparam, lparam)) return 0;
+  WindowsPlaybackFeedbackOnMessage(message);
+  WindowsContentUpdatesOnMessage(message, wparam, lparam);
   if (message == WM_TIMER && wparam == kProxyTimer) {
     for (auto it = pending_proxies.begin(); it != pending_proxies.end();) {
       if (it->route.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {

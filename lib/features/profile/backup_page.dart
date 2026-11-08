@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,6 +15,7 @@ import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../library/data/library_providers.dart';
+import '../library/data/windows_content_updates.dart';
 import '../schedule/data/background_update_check.dart';
 import '../settings/settings_controller.dart';
 import 'backup_location_settings.dart';
@@ -37,7 +36,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   String? _status;
   List<BackupDocument> _local = const [];
 
-  /// 后台更新检查（T7-7）：设置位 + Android 原生周期任务（JobScheduler）。
+  /// Persisted request reconciled with Android jobs or Windows Task Scheduler.
   bool _backgroundCheck = false;
   bool _scheduledBackup = false;
   bool _includeSourceRules = true;
@@ -45,12 +44,8 @@ class _BackupPageState extends ConsumerState<BackupPage> {
 
   static const String backgroundCheckKey = backgroundCheckPreferenceKey;
 
-  // T7-7 实现：不引入 workmanager 插件，走 MethodChannel + Android JobScheduler。
-  // 排程（12 小时 / 仅 WiFi）由原生侧注册周期任务；任务触发时拉起 headless
-  // FlutterEngine 执行 Dart 入口 `backgroundUpdateCheck`（见
-  // features/schedule/data/background_update_check.dart）：读本地追番 → 拉
-  // Bangumi 今日放送 → 有命中才发本地通知（无命中不打扰）。默认关闭，
-  // 开启前申请通知权限（Android 13+），被拒则保持关闭。
+  // Windows runs on the current user's interactive token, never while logged
+  // out. The foreground provider checks against the same single database.
 
   @override
   void initState() {
@@ -59,6 +54,11 @@ class _BackupPageState extends ConsumerState<BackupPage> {
         ref.read(preferencesProvider).get<bool>(backgroundCheckKey) ?? false;
     _scheduledBackup =
         ref.read(preferencesProvider).get<bool>(scheduledBackupKey) ?? false;
+    final prefs = ref.read(preferencesProvider);
+    _status =
+        prefs.get<String>(windowsContentScheduleErrorKey) ??
+        prefs.get<String>('content.updates.animeCompleted.error') ??
+        prefs.get<String>('content.updates.lastError');
     unawaited(_refreshLocal());
   }
 
@@ -146,7 +146,11 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                   contentPadding: EdgeInsets.zero,
                   dense: true,
                   title: const Text('后台检查更新'),
-                  subtitle: const Text('仅 WiFi 下检查追番更新，需要通知权限。'),
+                  subtitle: Text(
+                    Platform.isWindows
+                        ? windowsContentBehaviorDescription
+                        : '仅 WiFi 下检查追番更新，需要通知权限。',
+                  ),
                   value: _backgroundCheck,
                   onChanged: _busy ? null : _toggleBackgroundCheck,
                 ),
@@ -332,47 +336,54 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     }
   }
 
-  /// 后台更新提醒开关：开启前先要通知权限，Android 上登记 JobScheduler
-  /// 周期任务；被拒或排程失败时保持关闭并说明原因。
   Future<void> _toggleBackgroundCheck(bool value) async {
     final preferences = ref.read(preferencesProvider);
-    if (!value) {
-      await preferences.set(backgroundCheckKey, false);
-      await platformChannel.scheduleBackgroundCheck(false);
-      if (!mounted) return;
-      setState(() => _backgroundCheck = false);
-      return;
+    setState(() => _busy = true);
+    try {
+      if (Platform.isWindows) {
+        await preferences.set(backgroundCheckKey, value);
+        await preferences.flush();
+        final scheduled = await restoreBackgroundUpdateSchedule(preferences);
+        if (!mounted) return;
+        setState(() {
+          _backgroundCheck = value;
+          _status = scheduled
+              ? (value
+                    ? windowsContentBehaviorDescription
+                    : '追番后台检查已关闭；漫画后台更新不受影响')
+              : preferences.get<String>(windowsContentScheduleErrorKey);
+        });
+        return;
+      }
+      if (!Platform.isAndroid) {
+        if (mounted) setState(() => _status = '当前平台不支持后台内容检查');
+        return;
+      }
+      if (value && !await platformChannel.requestNotificationPermission()) {
+        if (mounted) setState(() => _status = '没有通知权限，无法开启后台更新提醒');
+        return;
+      }
+      if (!await platformChannel.scheduleBackgroundCheck(value)) {
+        if (mounted) setState(() => _status = '后台检查排程失败，请稍后重试');
+        return;
+      }
+      await preferences.set(backgroundCheckKey, value);
+      if (mounted) {
+        setState(() {
+          _backgroundCheck = value;
+          _status = value ? '已开启：约每 12 小时检查一次追番更新（仅 WiFi）' : '已关闭追番后台检查';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _backgroundCheck = preferences.get<bool>(backgroundCheckKey) ?? false;
+          _status = '后台更新排程失败；请检查系统任务设置后重试';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-
-    if (defaultTargetPlatform != TargetPlatform.android) {
-      // 排程是 Android 专属能力；其它平台只保存偏好。
-      await preferences.set(backgroundCheckKey, true);
-      if (!mounted) return;
-      setState(() {
-        _backgroundCheck = true;
-        _status = '当前平台仅保存偏好，后台排程为 Android 专属';
-      });
-      return;
-    }
-
-    final granted = await platformChannel.requestNotificationPermission();
-    if (!granted) {
-      if (!mounted) return;
-      setState(() => _status = '没有通知权限，无法开启后台更新提醒');
-      return;
-    }
-    final scheduled = await platformChannel.scheduleBackgroundCheck(true);
-    if (!scheduled) {
-      if (!mounted) return;
-      setState(() => _status = '后台检查排程失败，请稍后重试');
-      return;
-    }
-    await preferences.set(backgroundCheckKey, true);
-    if (!mounted) return;
-    setState(() {
-      _backgroundCheck = true;
-      _status = '已开启：约每 12 小时检查一次追番更新（仅 WiFi）';
-    });
   }
 
   Future<void> _pickBackup() async {

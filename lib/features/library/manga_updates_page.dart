@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +14,7 @@ import 'data/library_providers.dart';
 import 'data/manga_update_background.dart';
 import 'data/manga_update_execution_lock.dart';
 import 'data/manga_update_service.dart';
+import 'data/windows_content_updates.dart';
 
 class MangaUpdatesPage extends ConsumerStatefulWidget {
   const MangaUpdatesPage({super.key, this.embedded = false});
@@ -23,6 +26,16 @@ class MangaUpdatesPage extends ConsumerStatefulWidget {
 class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
   bool _running = false;
   String? _error;
+  @override
+  void initState() {
+    super.initState();
+    final prefs = ref.read(preferencesProvider);
+    _error =
+        prefs.get<String>(windowsContentScheduleErrorKey) ??
+        prefs.get<String>('content.updates.mangaCompleted.error') ??
+        prefs.get<String>('content.updates.lastError');
+  }
+
   Future<void> _run() async {
     if (_running) return;
     final container = ProviderScope.containerOf(context);
@@ -102,8 +115,12 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
                     onChanged: (v) => set(() => auto = v),
                   ),
                   SwitchListTile(
-                    title: const Text('Android后台每12小时更新'),
-                    subtitle: const Text('不支持的平台明确拒绝；通知使用已有授权'),
+                    title: const Text('后台每 12 小时更新'),
+                    subtitle: Text(
+                      Platform.isWindows
+                          ? windowsContentBehaviorDescription
+                          : '不支持的平台明确拒绝；通知使用已有授权',
+                    ),
                     value: background,
                     onChanged: (v) => set(() => background = v),
                   ),
@@ -182,11 +199,16 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
     if (selected == null) return;
     await prefs.set('manga.updates.options', selected.toJson());
     await prefs.set('manga.updates.background', background);
+    await prefs.flush();
     final scheduled = await scheduleMangaUpdates(prefs);
     ref.invalidate(mangaUpdateServiceProvider);
     if (mounted) {
       setState(
-        () => _error = background && !scheduled ? '当前平台无法安排后台任务，手动更新仍可用' : null,
+        () => _error = !scheduled
+            ? (Platform.isWindows
+                  ? prefs.get<String>(windowsContentScheduleErrorKey)
+                  : '当前平台无法安排后台任务，手动更新仍可用')
+            : null,
       );
     }
   }
@@ -237,6 +259,7 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
                     .where(
                       (row) =>
                           (row.status == 'success' && row.added > 0) ||
+                          row.error != null ||
                           row.status == 'failed' ||
                           row.status == 'deferred' ||
                           (!_running &&
@@ -280,7 +303,7 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
                               title: Text(item?.title ?? row.remoteId),
                               subtitle: Text(
                                 '${sourceLabels[row.sourceId] ?? row.sourceId}\n'
-                                '${failed ? (row.error ?? '检查尚未完成，请刷新重新检查') : '新增 ${row.added} 章'}',
+                                '${row.error ?? (failed ? '检查尚未完成，请刷新重新检查' : '新增 ${row.added} 章')}',
                               ),
                               onTap: item == null
                                   ? null

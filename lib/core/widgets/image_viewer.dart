@@ -11,9 +11,9 @@ import '../source/source_providers.dart';
 import '../theme/app_tokens.dart';
 import 'source_network_image.dart';
 
-/// 全屏图片查看器：缩放拖动、系统返回退出、长按保存到相册。
+/// 全屏图片查看器：缩放拖动、系统返回退出、长按保存图片。
 ///
-/// 小说插图与漫画页共用。零插件：保存走 MethodChannel（MediaStore）。
+/// 小说插图与漫画页共用。Android 使用 MediaStore，Windows 保存到 Pictures/Triomi。
 Future<void> showImageViewer(
   BuildContext context, {
   required String imageUrl,
@@ -121,8 +121,8 @@ class _ImageViewerPageState extends ConsumerState<_ImageViewerPage> {
   );
 }
 
-/// 长按保存到相册：加载字节（本地读文件 / 网络走统一网络层）→
-/// MethodChannel（MediaStore）→ SnackBar 反馈。
+/// 保存图片：加载字节（本地读文件 / 网络走统一网络层）→
+/// 平台存储 → SnackBar 显示实际保存位置。
 Future<void> saveImageWithFeedback(
   BuildContext context, {
   required String imageUrl,
@@ -144,7 +144,12 @@ Future<void> saveImageWithFeedback(
   final fileName = 'triomi-${DateTime.now().millisecondsSinceEpoch}.png';
   final uri = await platformChannel.saveImageToGallery(bytes, fileName);
   if (!context.mounted) return;
-  _showToast(context, uri == null ? '保存失败' : '已保存到相册（Pictures/Triomi）');
+  _showToast(
+    context,
+    uri == null
+        ? '保存失败'
+        : (Platform.isWindows ? '已保存到本机：$uri' : '已保存到相册（Pictures/Triomi）'),
+  );
 }
 
 /// 加载图片字节：本地路径直接读文件；网络图走 [SourceHttpClient.fetchBytes]
@@ -167,9 +172,12 @@ Future<Uint8List?> loadImageBytes(
     final windowsPath = RegExp(r'^[A-Za-z]:[\\/]').hasMatch(url);
     final hasScheme = RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*:').hasMatch(url);
     final uri = hasScheme && !windowsPath ? Uri.parse(url) : null;
-    if (uri != null && (uri.scheme != 'file' ||
-        uri.host.isNotEmpty || uri.hasQuery || uri.hasFragment ||
-        !uri.path.startsWith('/'))) {
+    if (uri != null &&
+        (uri.scheme != 'file' ||
+            uri.host.isNotEmpty ||
+            uri.hasQuery ||
+            uri.hasFragment ||
+            !uri.path.startsWith('/'))) {
       return null;
     }
     final file = uri == null ? File(url) : File.fromUri(uri);

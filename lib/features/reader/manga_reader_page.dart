@@ -138,6 +138,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
   ProgressReporter? _trackingReporter;
   bool _keepScreenOn = false;
+  final _screenOwner = 'manga-${UniqueKey()}';
   bool _volumeKeyTurn = false;
 
   @override
@@ -181,7 +182,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       }
     });
     if (_keepScreenOn) {
-      unawaited(platformChannel.setKeepScreenOn(true));
+      unawaited(platformChannel.setKeepScreenOn(true, owner: _screenOwner));
     }
     unawaited(
       _applyOrientation(
@@ -218,7 +219,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     unawaited(_persistProgress());
     unawaited(_setImmersive(immersive: false));
     if (_keepScreenOn) {
-      unawaited(platformChannel.setKeepScreenOn(false));
+      unawaited(platformChannel.setKeepScreenOn(false, owner: _screenOwner));
     }
     unawaited(SystemChrome.setPreferredOrientations(<DeviceOrientation>[]));
     super.dispose();
@@ -227,6 +228,12 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
+    if (Platform.isWindows && _keepScreenOn) {
+      final visible =
+          state == AppLifecycleState.resumed ||
+          state == AppLifecycleState.inactive;
+      unawaited(platformChannel.setKeepScreenOn(visible, owner: _screenOwner));
+    }
     if (state != AppLifecycleState.resumed) unawaited(_persistProgress());
   }
 

@@ -40,7 +40,10 @@ class _CacheManagementPageState extends ConsumerState<CacheManagementPage> {
   void initState() {
     super.initState();
     _updater =
-        widget.updater ?? (Platform.isAndroid ? AppUpdateService() : null);
+        widget.updater ??
+        ((Platform.isAndroid || Platform.isWindows)
+            ? AppUpdateService()
+            : null);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scan());
   }
 

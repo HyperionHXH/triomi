@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cwctype>
 #include <cwchar>
 #include <functional>
@@ -61,20 +62,23 @@ struct Url {
   std::wstring origin;
   std::wstring host;
 };
-bool ParseHttps(const std::wstring& text, Url& url) {
+bool ParseHttps(const std::wstring& text, Url& url, bool allow_http = false) {
   if (text.empty() || text.find_first_of(L"\r\n\t") != std::wstring::npos) return false;
   URL_COMPONENTS parts{};
   parts.dwStructSize = sizeof(parts);
   parts.dwSchemeLength = parts.dwHostNameLength = parts.dwUserNameLength =
       parts.dwPasswordLength = static_cast<DWORD>(-1);
   if (!WinHttpCrackUrl(text.c_str(), static_cast<DWORD>(text.size()), 0, &parts) ||
-      parts.nScheme != INTERNET_SCHEME_HTTPS || !parts.dwHostNameLength ||
+      (parts.nScheme != INTERNET_SCHEME_HTTPS &&
+       !(allow_http && parts.nScheme == INTERNET_SCHEME_HTTP)) || !parts.dwHostNameLength ||
       parts.dwUserNameLength || parts.dwPasswordLength) return false;
   url.host.assign(parts.lpszHostName, parts.dwHostNameLength);
   std::transform(url.host.begin(), url.host.end(), url.host.begin(),
       [](wchar_t c) { return static_cast<wchar_t>(std::towlower(c)); });
-  url.origin = L"https://" + url.host;
-  if (parts.nPort != INTERNET_DEFAULT_HTTPS_PORT) url.origin += L":" + std::to_wstring(parts.nPort);
+  const bool https = parts.nScheme == INTERNET_SCHEME_HTTPS;
+  url.origin = (https ? L"https://" : L"http://") + url.host;
+  if (parts.nPort != (https ? INTERNET_DEFAULT_HTTPS_PORT : INTERNET_DEFAULT_HTTP_PORT))
+    url.origin += L":" + std::to_wstring(parts.nPort);
   return true;
 }
 std::wstring CanonicalPath(const std::wstring& path) {
@@ -110,6 +114,8 @@ struct Profile : std::enable_shared_from_this<Profile> {
   EventRegistrationToken popup_token{};
   EventRegistrationToken permission_token{};
 
+  bool video_mode = false;
+  bool allow_http = false;
   bool Approved() const {
     return GetFileAttributesW((path + L"/session-approved").c_str()) != INVALID_FILE_ATTRIBUTES;
   }
@@ -190,7 +196,8 @@ struct Profile : std::enable_shared_from_this<Profile> {
                       LPWSTR raw = nullptr;
                       args->get_Uri(&raw);
                       Url target;
-                      const bool allowed = profile && ParseHttps(raw ? raw : L"", target) && target.origin == profile->origin;
+                      const bool allowed = profile && ParseHttps(raw ? raw : L"", target, profile->allow_http) &&
+                          (profile->video_mode || target.origin == profile->origin);
                       CoTaskMemFree(raw);
                       if (!allowed) args->put_Cancel(TRUE);
                       return S_OK;
@@ -220,7 +227,7 @@ struct Profile : std::enable_shared_from_this<Profile> {
     auto self = shared_from_this();
     const HRESULT status = cookies->GetCookies(url.c_str(),
       Callback<ICoreWebView2GetCookiesCompletedHandler>(
-        [self, result](HRESULT status, ICoreWebView2CookieList* list) -> HRESULT {
+        [self, result, url](HRESULT status, ICoreWebView2CookieList* list) -> HRESULT {
           if (shutting_down) return S_OK;
           if (FAILED(status) || !list) { Failed(result); return S_OK; }
           UINT count = 0;
@@ -229,18 +236,47 @@ struct Profile : std::enable_shared_from_this<Profile> {
             result->Error("cookies_too_large", "browser cookie header exceeds request limit");
             return S_OK;
           }
+          Url target;
+          URL_COMPONENTS parts{}; parts.dwStructSize = sizeof(parts);
+          parts.dwUrlPathLength = static_cast<DWORD>(-1);
+          if (!ParseHttps(url, target) || !WinHttpCrackUrl(url.c_str(),
+              static_cast<DWORD>(url.size()), 0, &parts)) { Failed(result); return S_OK; }
+          const std::wstring request_path = parts.dwUrlPathLength
+              ? std::wstring(parts.lpszUrlPath, parts.dwUrlPathLength) : L"/";
           size_t bytes = 0;
           std::vector<std::pair<size_t, std::string>> values;
           for (UINT i = 0; i < count; ++i) {
             ComPtr<ICoreWebView2Cookie> cookie;
             if (FAILED(list->GetValueAtIndex(i, &cookie))) continue;
-            LPWSTR name = nullptr, value = nullptr, path_value = nullptr;
-            cookie->get_Name(&name);
-            cookie->get_Value(&value);
-            cookie->get_Path(&path_value);
+            LPWSTR name = nullptr, value = nullptr, path_value = nullptr, domain_value = nullptr;
+            const bool metadata = SUCCEEDED(cookie->get_Name(&name)) && SUCCEEDED(cookie->get_Value(&value)) &&
+                SUCCEEDED(cookie->get_Path(&path_value)) && SUCCEEDED(cookie->get_Domain(&domain_value));
             const auto key = Utf8(name), content = Utf8(value);
-            const size_t path_length = path_value ? wcslen(path_value) : 0;
-            CoTaskMemFree(name); CoTaskMemFree(value); CoTaskMemFree(path_value);
+            std::wstring domain = domain_value ? domain_value : L"";
+            const std::wstring cookie_path = path_value && *path_value ? path_value : L"/";
+            const size_t path_length = cookie_path.size();
+            CoTaskMemFree(name); CoTaskMemFree(value); CoTaskMemFree(path_value); CoTaskMemFree(domain_value);
+            if (!metadata || domain.empty() || cookie_path.front() != L'/') continue;
+            std::transform(domain.begin(), domain.end(), domain.begin(),
+                [](wchar_t c) { return static_cast<wchar_t>(std::towlower(c)); });
+            const bool domain_cookie = !domain.empty() && domain[0] == L'.';
+            if (domain_cookie) domain.erase(0, 1);
+            const bool host_match = domain == target.host || (domain_cookie &&
+                target.host.size() > domain.size() &&
+                target.host.compare(target.host.size() - domain.size(), domain.size(), domain) == 0 &&
+                target.host[target.host.size() - domain.size() - 1] == L'.');
+            const bool path_match = request_path == cookie_path ||
+                (request_path.size() > cookie_path.size() &&
+                 request_path.compare(0, cookie_path.size(), cookie_path) == 0 &&
+                 (cookie_path.back() == L'/' || request_path[cookie_path.size()] == L'/'));
+            BOOL secure = FALSE, session_cookie = TRUE;
+            double expires = 0;
+            if (FAILED(cookie->get_IsSecure(&secure)) || FAILED(cookie->get_IsSession(&session_cookie)) ||
+                FAILED(cookie->get_Expires(&expires))) continue;
+            const double now = std::chrono::duration<double>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            if (!host_match || !path_match || (secure && url.find(L"https://") != 0) ||
+                (!session_cookie && expires <= now)) continue;
             bytes += key.size() + content.size() + 3;
             if (bytes > 32768) {
               result->Error("cookies_too_large", "browser cookie header exceeds request limit");
@@ -267,6 +303,141 @@ struct Profile : std::enable_shared_from_this<Profile> {
   }
 };
 std::map<std::wstring, std::shared_ptr<Profile>> profiles;
+
+struct VideoSession {
+  int64_t id = 0;
+  std::shared_ptr<Profile> profile;
+  bool active = true;
+  bool entered = false;
+  std::wstring target;
+  void Close() {
+    active = false;
+    if (profile->web) profile->web->Stop();
+    if (profile->controller) profile->controller->Close();
+    profile->cookies.Reset(); profile->web.Reset(); profile->controller.Reset();
+    profile->ready = false;
+  }
+  void Error(const char* message) {
+    if (active && channel) channel->InvokeMethod("videoMessage", std::make_unique<Value>(Map{
+      {Value("id"), Value(id)}, {Value("error"), Value(message)}}));
+  }
+};
+std::map<int64_t, std::shared_ptr<VideoSession>> videos;
+int64_t VideoId(const Map& args) {
+  const auto found = args.find(Value("id"));
+  if (found == args.end()) return 0;
+  if (const auto* id = std::get_if<int32_t>(&found->second)) return *id;
+  if (const auto* id = std::get_if<int64_t>(&found->second)) return *id;
+  return 0;
+}
+std::wstring JavascriptString(const std::wstring& value) {
+  std::wstring escaped = L"\"";
+  for (const auto c : value) {
+    if (c == L'"' || c == L'\\') escaped += L'\\';
+    if (c < 32 || c == 0x2028 || c == 0x2029) {
+      wchar_t hex[7]; swprintf_s(hex, L"\\u%04x", static_cast<unsigned>(c)); escaped += hex;
+    } else escaped += c;
+  }
+  return escaped + L"\"";
+}
+bool SourceProfilePath(const std::wstring& raw) {
+  const auto path = CanonicalPath(raw);
+  const auto separator = path.find_last_of(L'\\');
+  if (separator == std::wstring::npos || path.size() - separator - 1 != 64) return false;
+  const auto parent = path.substr(0, separator);
+  const std::wstring suffix = L"\\windows-source-sessions";
+  if (parent.size() < suffix.size() || parent.compare(parent.size() - suffix.size(), suffix.size(), suffix) != 0) return false;
+  for (size_t i = separator + 1; i < path.size(); ++i)
+    if (!((path[i] >= L'0' && path[i] <= L'9') || (path[i] >= L'a' && path[i] <= L'f'))) return false;
+  auto component = path;
+  while (component.size() > 3) {
+    const DWORD attributes = GetFileAttributesW(component.c_str());
+    if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) return false;
+    const auto slash = component.find_last_of(L'\\');
+    if (slash == std::wstring::npos) break;
+    component.resize(slash);
+  }
+  return true;
+}
+void StartVideo(const Map& args, SharedResult result) {
+  const auto id = VideoId(args);
+  const auto path = Wide(Text(args, "profile")), target = Wide(Text(args, "url"));
+  const auto script = Wide(Text(args, "script")), agent = Wide(Text(args, "userAgent"));
+  const auto referer = Wide(Text(args, "referer"));
+  Url source, destination, parent;
+  if (id <= 0 || videos.count(id) || !SourceProfilePath(path) ||
+      !ParseHttps(Wide(Text(args, "origin")), source, true) || !ParseHttps(target, destination, true) ||
+      script.empty() || agent.empty() || agent.find_first_of(L"\r\n") != std::wstring::npos ||
+      (!referer.empty() && !ParseHttps(referer, parent, destination.origin.find(L"http://") == 0))) {
+    result->Error("invalid_video", "invalid source video context"); return;
+  }
+  // A controller per operation; never close or navigate the user's login UI.
+  auto video = std::make_shared<VideoSession>(); video->id = id; video->target = target;
+  video->profile = std::make_shared<Profile>(); video->profile->path = path;
+  video->profile->origin = source.origin; video->profile->video_mode = true;
+  video->profile->allow_http = destination.origin.find(L"http://") == 0;
+  videos[id] = video;
+  video->profile->Ensure([video, result, target, script, agent, referer](bool success) {
+    if (shutting_down) { video->Close(); return; }
+    if (!video->active) { video->Close(); result->Success(); return; }
+    if (!success) { Failed(result); return; }
+    auto profile = video->profile;
+    RECT bounds{0, 0, 1280, 720}; profile->controller->put_Bounds(bounds);
+    ComPtr<ICoreWebView2Settings> settings; ComPtr<ICoreWebView2Settings2> settings2;
+    profile->web->get_Settings(&settings);
+    if (!settings || FAILED(settings.As(&settings2)) || FAILED(settings2->put_UserAgent(agent.c_str()))) {
+      Failed(result); return;
+    }
+    EventRegistrationToken message_token{}, navigation_token{};
+    const auto weak = std::weak_ptr<VideoSession>(video);
+    const HRESULT messages = profile->web->add_WebMessageReceived(
+      Callback<ICoreWebView2WebMessageReceivedEventHandler>(
+        [weak, referer](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT {
+          const auto session = weak.lock();
+          if (!session || !session->active || !channel) return S_OK;
+          LPWSTR json = nullptr;
+          if (FAILED(args->get_WebMessageAsJson(&json))) return S_OK;
+          const auto message = Utf8(json); CoTaskMemFree(json);
+          if (message.size() > 131072) return S_OK;
+          if (!referer.empty() && !session->entered && message.find("triomi-parent-ready") != std::string::npos) {
+            LPWSTR sender = nullptr, current = nullptr;
+            args->get_Source(&sender); session->profile->web->get_Source(&current);
+            const bool top = sender && current && std::wstring(sender) == current;
+            CoTaskMemFree(sender); CoTaskMemFree(current);
+            if (top) {
+              session->entered = true;
+              const auto link = L"(() => { const a=document.createElement('a'); a.href=" +
+                  JavascriptString(session->target) + L";a.target='_self';document.body.appendChild(a);a.click(); })();";
+              session->profile->web->ExecuteScript(link.c_str(), nullptr);
+            }
+          }
+          channel->InvokeMethod("videoMessage", std::make_unique<Value>(Map{
+            {Value("id"), Value(session->id)}, {Value("message"), Value(message)}}));
+          return S_OK;
+        }).Get(), &message_token);
+    const HRESULT navigation = profile->web->add_NavigationCompleted(
+      Callback<ICoreWebView2NavigationCompletedEventHandler>(
+        [weak](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT {
+          const auto session = weak.lock(); BOOL success = FALSE; args->get_IsSuccess(&success);
+          COREWEBVIEW2_WEB_ERROR_STATUS status; args->get_WebErrorStatus(&status);
+          if (session && !success && status != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED)
+            session->Error(Utf8(L"\u64ad\u653e\u9875\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u6216\u6362\u6765\u6e90").c_str());
+          return S_OK;
+        }).Get(), &navigation_token);
+    if (FAILED(messages) || FAILED(navigation)) { Failed(result); return; }
+    const HRESULT injected = profile->web->AddScriptToExecuteOnDocumentCreated(script.c_str(),
+      Callback<ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler>(
+        [video, result, target, referer](HRESULT status, LPCWSTR) -> HRESULT {
+          if (shutting_down) { video->Close(); return S_OK; }
+          if (!video->active) { video->Close(); result->Success(); return S_OK; }
+          if (FAILED(status) || FAILED(video->profile->web->Navigate((referer.empty() ? target : referer).c_str()))) {
+            Failed(result); return S_OK;
+          }
+          result->Success(); return S_OK;
+        }).Get());
+    if (FAILED(injected)) Failed(result);
+  });
+}
 
 LRESULT CALLBACK BrowserProc(HWND window, UINT message, WPARAM wparam, LPARAM lparam) {
   auto* profile = reinterpret_cast<Profile*>(GetWindowLongPtrW(window, GWLP_USERDATA));
@@ -344,6 +515,12 @@ void Handle(const flutter::MethodCall<Value>& call, std::unique_ptr<Result> raw_
   const auto* args = call.arguments() ? std::get_if<Map>(call.arguments()) : nullptr;
   if (!args) { result->Error("invalid_args", "session arguments required"); return; }
   const auto& method = call.method_name();
+  if (method == "startVideo") { StartVideo(*args, result); return; }
+  if (method == "closeVideo") {
+    const auto found = videos.find(VideoId(*args));
+    if (found != videos.end()) { found->second->Close(); videos.erase(found); }
+    result->Success(); return;
+  }
   if (method == "clearHttpCache") {
     const auto path = Wide(Text(*args, "profile"));
     const DWORD attributes = GetFileAttributesW(path.c_str());
@@ -385,18 +562,18 @@ void Handle(const flutter::MethodCall<Value>& call, std::unique_ptr<Result> raw_
   }
   const auto url = Wide(Text(*args, "url"));
   const auto path = Wide(Text(*args, "profile"));
+  const bool video = method == "videoCookies";
   Url parsed, allowed;
   if (!ParseHttps(url, parsed) || !ParseHttps(Wide(Text(*args, "origin")), allowed) ||
-      parsed.origin != allowed.origin || path.empty()) {
-    result->Error("invalid_url", "session requires an exact HTTPS origin"); return;
+      (!video && parsed.origin != allowed.origin) || !SourceProfilePath(path)) {
+    result->Error("invalid_url", "session requires an owned source HTTPS profile"); return;
   }
-  const bool video = method == "videoCookies";
   auto& slot = profiles[path];
   if (!slot) {
-    slot = std::make_shared<Profile>(); slot->path = path; slot->origin = parsed.origin;
+    slot = std::make_shared<Profile>(); slot->path = path; slot->origin = allowed.origin;
   }
   auto profile = slot;
-  if (!video && profile->origin != parsed.origin) { result->Success(Value("")); return; }
+  if (profile->origin != allowed.origin) { result->Success(Value("")); return; }
   if (method != "open" && !video && !profile->Approved()) {
     if (method == "store") result->Success();
     else result->Success(Value(""));
@@ -481,6 +658,8 @@ void WindowsWebSessionOnResize() {
 }
 void CloseWindowsWebSessions() {
   shutting_down = true;
+  for (const auto& entry : videos) entry.second->Close();
+  videos.clear();
   for (const auto& entry : profiles) entry.second->Finish(false);
   profiles.clear();
   channel.reset();

@@ -82,7 +82,7 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
                 TextField(
                   controller: pathController,
                   decoration: const InputDecoration(
-                    labelText: '本机绝对路径：ZIP/CBZ、图片或图片目录',
+                    labelText: '手动路径（可选）：ZIP/CBZ、图片或图片目录',
                     hintText: r'D:\Comics\My Comic',
                   ),
                   maxLines: 3,
@@ -100,7 +100,7 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
             onPressed: () => Navigator.pop(dialog),
             child: const Text('取消'),
           ),
-          if (Platform.isAndroid)
+          if (Platform.isAndroid || Platform.isWindows)
             TextButton(
               onPressed: () {
                 final title = titleController.text.trim();
@@ -109,6 +109,14 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
                 }
               },
               child: const Text('选择图片目录'),
+            ),
+          if (Platform.isWindows)
+            TextButton(
+              onPressed: () {
+                final title = titleController.text.trim();
+                if (title.isNotEmpty) Navigator.pop(dialog, (title, 'file'));
+              },
+              child: const Text('选择漫画文件'),
             ),
           FilledButton(
             onPressed: () {
@@ -147,6 +155,15 @@ class _LocalComicLibraryPageState extends ConsumerState<LocalComicLibraryPage> {
         if (selected == null) return;
         paths = (selected['paths'] as List).cast<String>();
         pickerDirectory = Directory(selected['directory'] as String);
+      } else if (Platform.isWindows &&
+          (options.$2 == 'directory' || options.$2 == 'file')) {
+        final selected = await _channel.invokeMapMethod<String, Object?>(
+          'pickLocalComic',
+          {'directory': options.$2 == 'directory'},
+        );
+        if (selected == null) return;
+        // Windows returns original paths, never a staging directory to delete.
+        paths = (selected['paths'] as List).cast<String>();
       }
       if (!mounted || cancellation.cancelled) return;
       final confirmed = await showDialog<bool>(

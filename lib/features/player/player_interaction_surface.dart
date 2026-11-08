@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -33,6 +34,11 @@ class PlayerInteractionSurface extends StatefulWidget {
     this.seekHudTop = 25,
     this.volumeEnabled = true,
     this.volumeFollowsDevice = false,
+    this.onPlay,
+    this.onPause,
+    this.onStop,
+    this.onNext,
+    this.onPrevious,
   });
 
   final bool enabled;
@@ -47,6 +53,14 @@ class PlayerInteractionSurface extends StatefulWidget {
   final double holdSpeed;
   final VoidCallback onTap;
   final VoidCallback onTogglePlay;
+
+  /// Windows focused media keys only consume actions the player supports.
+  /// Android keeps its native MediaSession input handling.
+  final VoidCallback? onPlay;
+  final VoidCallback? onPause;
+  final VoidCallback? onStop;
+  final VoidCallback? onNext;
+  final VoidCallback? onPrevious;
   final ValueChanged<Duration> onSeek;
   final VoidCallback onScrubStart;
   final ValueChanged<Duration> onScrubUpdate;
@@ -176,6 +190,17 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
   bool _ownsFocus(FocusNode node) =>
       node == _focus || node.ancestors.contains(_focus);
 
+  VoidCallback? _mediaAction(LogicalKeyboardKey key) {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) return null;
+    if (key == LogicalKeyboardKey.mediaPlayPause) return widget.onTogglePlay;
+    if (key == LogicalKeyboardKey.mediaPlay) return widget.onPlay;
+    if (key == LogicalKeyboardKey.mediaPause) return widget.onPause;
+    if (key == LogicalKeyboardKey.mediaStop) return widget.onStop;
+    if (key == LogicalKeyboardKey.mediaTrackNext) return widget.onNext;
+    if (key == LogicalKeyboardKey.mediaTrackPrevious) return widget.onPrevious;
+    return null;
+  }
+
   KeyEventResult _onKey(KeyEvent event) {
     final node = FocusManager.instance.primaryFocus;
     if (node == null) return KeyEventResult.ignored;
@@ -186,7 +211,8 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
         key == LogicalKeyboardKey.arrowUp ||
         key == LogicalKeyboardKey.arrowDown;
     final space = key == LogicalKeyboardKey.space;
-    if (!arrow && !space) return KeyEventResult.ignored;
+    final mediaAction = _mediaAction(key);
+    if (!arrow && !space && mediaAction == null) return KeyEventResult.ignored;
     if (event is KeyUpEvent) {
       if (key == _heldKey) _clearKey();
       final focusContext = node.context;
@@ -211,6 +237,11 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
       return KeyEventResult.ignored;
     }
     if (_dragOrigin != null || _adjustBrightness != null || _holding) {
+      return KeyEventResult.handled;
+    }
+    if (mediaAction != null) {
+      // Hardware repeat must never toggle twice or skip multiple episodes.
+      if (event is KeyDownEvent) mediaAction();
       return KeyEventResult.handled;
     }
     if (space) {

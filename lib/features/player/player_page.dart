@@ -37,6 +37,7 @@ import 'data/danmaku_settings.dart';
 import 'data/hybrid_danmaku_client.dart';
 import 'data/playback_buffer_policy.dart';
 import 'data/player_settings.dart';
+import 'data/windows_system_media.dart';
 import 'episode_comments_panel.dart';
 import 'episode_selector.dart';
 import 'player_interaction_surface.dart';
@@ -155,6 +156,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   bool _chapterCompleted = false;
   Duration _resumeStart = Duration.zero;
   bool _playing = false;
+  bool _windowsVisible = true;
+  WindowsSystemMediaSession? _windowsSystemMedia;
+  bool _windowsMediaStopped = false;
 
   @override
   void initState() {
@@ -239,6 +243,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           enableHardwareAcceleration: true,
         ),
       );
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+        _windowsSystemMedia = WindowsSystemMediaSession(
+          onCommand: _onWindowsSystemMediaCommand,
+        );
+      }
 
       _positionSub = _player.stream.position.listen(_onPosition);
       _durationSub = _player.stream.duration.listen((duration) {
@@ -250,6 +259,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       _playingSub = _player.stream.playing.listen((playing) {
         if (mounted) {
           setState(() => _playing = playing);
+          unawaited(_setWindowsKeepAwake(_playing && _windowsVisible));
+          if (playing) _windowsMediaStopped = false;
+          _updateWindowsSystemMedia();
           _updateDanmakuClock();
           _scheduleChromeHide();
         }
@@ -340,12 +352,15 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       _loading = false;
       _error = SourceException.sanitizeMessage(message);
     });
+    _updateWindowsSystemMedia();
   }
 
   // ---------------------------------------------------------------- 加载
 
   Future<void> _load() async {
     _clearTransientInput();
+    _windowsSystemMedia?.replace();
+    _windowsMediaStopped = false;
     _configureDanmaku(force: true);
     if (!_validSelection) {
       setState(() {
@@ -473,16 +488,89 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           );
         });
       }
+    } finally {
+      if (mounted && seq == _loadSeq) _updateWindowsSystemMedia();
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Losing focus is not minimizing: Windows may keep playing background audio.
+    _windowsVisible =
+        state == AppLifecycleState.resumed ||
+        state == AppLifecycleState.inactive;
+    unawaited(_setWindowsKeepAwake(_playing && _windowsVisible));
+    _updateWindowsSystemMedia();
     if (state != AppLifecycleState.resumed) {
       if (mounted) setState(_clearTransientInput);
       unawaited(_persistProgress());
     } else if (_useNativeAndroidVideo) {
       unawaited(_readBrightness());
+    }
+  }
+
+  Future<void> _setWindowsKeepAwake(bool enabled) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) return;
+    try {
+      await const MethodChannel('triomi/platform').invokeMethod<bool>(
+        'keepScreenOn',
+        {'enabled': enabled, 'owner': 'player:$_resolverOwner'},
+      );
+    } on PlatformException catch (error) {
+      debugPrint('Windows player keep-awake failed: ${error.message}');
+    } on MissingPluginException {
+      // Older desktop hosts do not implement keep-awake.
+    }
+  }
+
+  void _updateWindowsSystemMedia() {
+    final session = _windowsSystemMedia;
+    if (session == null) return;
+    final ready =
+        mounted &&
+        _validSelection &&
+        !_loading &&
+        !_awaitingPlaybackStart &&
+        _error == null &&
+        (_windowsVisible || _settings.backgroundAudio);
+    unawaited(
+      session.update(
+        enabled: ready,
+        state: _playing
+            ? 'playing'
+            : (_windowsMediaStopped || _chapterCompleted
+                  ? 'stopped'
+                  : 'paused'),
+        title: _validSelection ? '${_item.title} · ${_chapter.title}' : '',
+        artist: _item.title,
+        canNext:
+            ready && adjacentEpisodeIndex(_chapters, _chapterIndex, 1) != null,
+        canPrevious:
+            ready && adjacentEpisodeIndex(_chapters, _chapterIndex, -1) != null,
+      ),
+    );
+  }
+
+  Future<void> _onWindowsSystemMediaCommand(String command) async {
+    if (!mounted ||
+        !_validSelection ||
+        _loading ||
+        _awaitingPlaybackStart ||
+        _error != null ||
+        (!_windowsVisible && !_settings.backgroundAudio)) {
+      return;
+    }
+    switch (command) {
+      case 'play':
+        await _setPlayback(true);
+      case 'pause':
+        await _setPlayback(false);
+      case 'stop':
+        await _stopPlayback();
+      case 'next':
+        await _switchChapter(1);
+      case 'previous':
+        await _switchChapter(-1);
     }
   }
 
@@ -522,6 +610,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       }
       _chapterCompleted = true;
       if (_duration > Duration.zero) _position = _duration;
+      _updateWindowsSystemMedia();
       await _persistProgress();
       if (!mounted || !_settings.autoNext) return;
       final target = adjacentEpisodeIndex(_chapters, _chapterIndex, 1);
@@ -536,6 +625,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   Future<void> _applyControls() async {
     if (!mounted) return;
     _updateDanmakuClock();
+    _updateWindowsSystemMedia();
     if (_useNativeAndroidVideo) {
       await _nativeVideoController.setRate(_speed);
       await _nativeVideoController.setAspectRatio(_settings.aspectRatio.ratio);
@@ -563,6 +653,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     Duration startPosition = Duration.zero,
   }) async {
     _clearTransientInput();
+    _windowsSystemMedia?.replace();
+    _windowsMediaStopped = false;
     _prepareTimer?.cancel();
     _awaitingPlaybackStart = true;
     final seq = ++_resolveSeq;
@@ -575,9 +667,20 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         final owner = _desktopResolve = VideoResolveCancellation();
         late final ResolvedDesktopVideo result;
         try {
+          final registry = await ref.read(sourcesProvider.future);
+          final selectedSource = registry.enabledEntries
+              .where((entry) => entry.descriptor.id == _item.sourceId)
+              .firstOrNull;
+          if (selectedSource == null ||
+              selectedSource.descriptor.baseUrl == null) {
+            throw StateError('播放来源已不可用或缺少明确站点身份');
+          }
+          if (!mounted || seq != _resolveSeq) return;
           result = await resolveWindowsVideo(
             context,
             line!,
+            sourceId: selectedSource.descriptor.id,
+            sourceUrl: selectedSource.descriptor.baseUrl!,
             cancellation: owner,
           );
         } finally {
@@ -946,6 +1049,15 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       holdSpeed: _settings.holdSpeed,
       onTap: _toggleChrome,
       onTogglePlay: () => unawaited(_togglePlay()),
+      onPlay: () => unawaited(_setPlayback(true)),
+      onPause: () => unawaited(_setPlayback(false)),
+      onStop: () => unawaited(_stopPlayback()),
+      onNext: adjacentEpisodeIndex(_chapters, _chapterIndex, 1) == null
+          ? null
+          : () => unawaited(_switchChapter(1)),
+      onPrevious: adjacentEpisodeIndex(_chapters, _chapterIndex, -1) == null
+          ? null
+          : () => unawaited(_switchChapter(-1)),
       onSeek: (target) => unawaited(_seekTo(target)),
       onScrubStart: _beginScrub,
       onScrubUpdate: _previewScrub,
@@ -1241,20 +1353,33 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     }
   }
 
-  Future<void> _togglePlay() async {
+  Future<void> _togglePlay() => _setPlayback(!_playing);
+
+  Future<void> _setPlayback(bool playing) async {
     if (_loading || _awaitingPlaybackStart || _error != null) return;
     _revealChrome();
-    if (_chapterCompleted && !_playing) {
+    if (_chapterCompleted && playing) {
       await _seekTo(Duration.zero);
       if (!mounted) return;
     }
+    if (playing) _windowsMediaStopped = false;
     if (_useNativeAndroidVideo) {
-      _playing
-          ? await _nativeVideoController.pause()
-          : await _nativeVideoController.play();
+      playing
+          ? await _nativeVideoController.play()
+          : await _nativeVideoController.pause();
     } else {
-      _playing ? await _player.pause() : await _player.play();
+      playing ? await _player.play() : await _player.pause();
     }
+  }
+
+  Future<void> _stopPlayback() async {
+    if (_loading || _awaitingPlaybackStart || _error != null) return;
+    _windowsMediaStopped = true;
+    final sequence = _loadSeq;
+    await _setPlayback(false);
+    if (!mounted || sequence != _loadSeq) return;
+    await _seekTo(Duration.zero);
+    _updateWindowsSystemMedia();
   }
 
   void _toggleChrome() {
@@ -1752,6 +1877,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           _error = SourceException.sanitizeMessage('$error');
         });
       }
+    } finally {
+      if (mounted && seq == _loadSeq) _updateWindowsSystemMedia();
     }
   }
 
@@ -1946,6 +2073,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           _settings = previous;
           _speed = previous.speed;
         });
+        _updateWindowsSystemMedia();
       }
       rethrow;
     }
@@ -2066,6 +2194,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   @override
   void dispose() {
+    _windowsSystemMedia?.dispose();
     _danmakuAssociation?.close();
     _danmakuClient?.close();
     _danmakuDisplay?.close();
@@ -2077,6 +2206,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     ++_brightnessRevision;
     _desktopResolve?.cancel('播放器已关闭');
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_setWindowsKeepAwake(false));
     _chromeTimer?.cancel();
     _prepareTimer?.cancel();
     _playerErrorSub?.cancel();

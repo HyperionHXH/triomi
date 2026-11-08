@@ -46,6 +46,8 @@ final downloadResolveContextProvider = Provider<BuildContext? Function()>(
 typedef DownloadVideoResolver = Future<PlaySource> Function(
   PlaySource source,
   VideoResolveCancellation cancellation,
+  String sourceId,
+  String sourceUrl,
 );
 
 final downloadVideoResolverProvider = Provider<DownloadVideoResolver?>((ref) {
@@ -55,7 +57,7 @@ final downloadVideoResolverProvider = Provider<DownloadVideoResolver?>((ref) {
   }
   if (defaultTargetPlatform != TargetPlatform.windows) return null;
   final contextForResolve = ref.watch(downloadResolveContextProvider);
-  return (source, cancellation) async {
+  return (source, cancellation, sourceId, sourceUrl) async {
     final context = contextForResolve();
     if (context == null || !context.mounted) {
       throw VideoResolveCancelled('请打开应用，在下载页继续此任务');
@@ -63,6 +65,8 @@ final downloadVideoResolverProvider = Provider<DownloadVideoResolver?>((ref) {
     final result = await resolveWindowsVideo(
       context,
       source,
+      sourceId: sourceId,
+      sourceUrl: sourceUrl,
       cancellation: cancellation,
       allowBackground: true,
     );
@@ -84,7 +88,11 @@ final downloadServiceProvider = Provider<DownloadService>(
     resolveVideo: ref.watch(downloadVideoResolverProvider),
     videoCookieForUrl:
         !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
-        ? WindowsSourceSession.videoCookies
+        ? (url, sourceId, sourceUrl) => WindowsSourceSession.videoCookies(
+            url,
+            sourceId: sourceId,
+            sourceUrl: sourceUrl,
+          )
         : null,
   ),
 );
@@ -92,6 +100,8 @@ final downloadServiceProvider = Provider<DownloadService>(
 Future<PlaySource> _resolveAndroidVideo(
   PlaySource source,
   VideoResolveCancellation cancellation,
+  String sourceId,
+  String sourceUrl,
 ) async {
   const channel = MethodChannel('triomi/platform');
   void cancel() {
@@ -183,7 +193,7 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>> {
     );
     _notifications = _repository.watchGroups().listen((groups) {
       if (_activeId == null) return;
-      if (kIsWeb || !Platform.isAndroid) return;
+      if (kIsWeb || !(Platform.isAndroid || Platform.isWindows)) return;
       for (final group in groups) {
         for (final entry in group.entries) {
           if (entry.row.id == _activeId) {
@@ -501,6 +511,11 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>> {
           return;
         }
       }
+      if (!kIsWeb && Platform.isWindows) {
+        // Optional desktop shell feedback must not stop an in-process queue.
+        nativeLease = await platformChannel.beginDownloadQueue();
+      }
+      if (_disposed || !ref.mounted) return;
       final service = ref.read(downloadServiceProvider);
       while (!_disposed) {
         final generation = _queueGeneration;

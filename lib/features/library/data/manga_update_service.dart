@@ -67,6 +67,10 @@ class MangaUpdateOptions {
   };
 }
 
+class _MangaUpdateCancelled implements Exception {
+  const _MangaUpdateCancelled();
+}
+
 class MangaUpdateService {
   MangaUpdateService({
     required this.db,
@@ -74,11 +78,13 @@ class MangaUpdateService {
     required this.options,
     required this.constraintsAllow,
     this.downloadNew,
+    this.shouldContinue,
   });
   final AppDatabase db;
   final Future<SourceRegistrySnapshot> Function() snapshot;
   final MangaUpdateOptions options;
   final Future<bool> Function() constraintsAllow;
+  final bool Function()? shouldContinue;
   final Future<void> Function(
     MediaItem item,
     List<Chapter> chapters,
@@ -86,6 +92,9 @@ class MangaUpdateService {
   )?
   downloadNew;
   bool _cancelled = false, _running = false;
+  bool _constraintsInterrupted = false;
+  bool get constraintsInterrupted => _constraintsInterrupted;
+  bool get wasCancelled => _cancelled;
   Completer<void>? _done;
   int completed = 0, total = 0;
   final _progress = StreamController<(int, int)>.broadcast(sync: true);
@@ -97,7 +106,11 @@ class MangaUpdateService {
     await _progress.close();
   }
 
-  Future<void> enqueue({Set<String>? itemKeys, bool onlyFailed = false}) async {
+  Future<void> enqueue({
+    Set<String>? itemKeys,
+    bool onlyFailed = false,
+    bool preservePending = false,
+  }) async {
     final library = await LibraryRepository(db)
         .listLibrary(type: MediaType.manga, revealHidden: true);
     final snapshot = await LibraryRepository(db)
@@ -133,6 +146,13 @@ class MangaUpdateService {
       if (onlyFailed && old?.status != 'failed' && old?.status != 'deferred') {
         continue;
       }
+      if (preservePending &&
+          old != null &&
+          (old.status == 'queued' ||
+              old.status == 'running' ||
+              old.status == 'deferred')) {
+        continue;
+      }
       await db
           .into(db.mangaUpdates)
           .insertOnConflictUpdate(
@@ -149,6 +169,7 @@ class MangaUpdateService {
     if (_running) return;
     _running = true;
     _cancelled = false;
+    _constraintsInterrupted = false;
     completed = 0;
     _done = Completer<void>();
     try {
@@ -211,6 +232,7 @@ class MangaUpdateService {
             while (!_cancelled && index < group.length) {
               final row = group[index++];
               if (!await constraintsAllow()) {
+                _constraintsInterrupted = true;
                 await _state(row, 'deferred', '网络/电量条件不满足');
                 completed++;
                 if (!_progress.isClosed) _progress.add((completed, total));
@@ -286,6 +308,7 @@ class MangaUpdateService {
         return;
       }
       if (!await constraintsAllow()) {
+        _constraintsInterrupted = true;
         await _state(row, 'deferred', '网络/电量条件已变化，未提交更新');
         return;
       }
@@ -305,7 +328,8 @@ class MangaUpdateService {
           ? <Chapter>[]
           : chapters.where((c) => !ids.contains(c.remoteId)).toList();
       await db.transaction(() async {
-        if (_cancelled) {
+        if (_cancelled || shouldContinue?.call() == false) {
+          _cancelled = true;
           await _state(row, 'queued', null);
           return;
         }
@@ -314,7 +338,15 @@ class MangaUpdateService {
           itemRemoteId: row.remoteId,
           chapters: chapters,
         );
+        if (_cancelled || shouldContinue?.call() == false) {
+          _cancelled = true;
+          throw const _MangaUpdateCancelled();
+        }
         await _state(row, 'success', null, added: added.length);
+        if (_cancelled || shouldContinue?.call() == false) {
+          _cancelled = true;
+          throw const _MangaUpdateCancelled();
+        }
       });
       if (_cancelled) return;
       final readable = {
@@ -331,6 +363,9 @@ class MangaUpdateService {
           await _state(row, 'success', '目录更新成功；自动下载入队失败，可在下载页重试');
         }
       }
+    } on _MangaUpdateCancelled {
+      // saveChapters and unread/generation changes were rolled back together.
+      await _state(row, 'queued', null);
     } catch (error) {
       await _state(row, 'failed', SourceException.sanitizeMessage('$error'));
     }

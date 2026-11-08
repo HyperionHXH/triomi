@@ -122,6 +122,8 @@ class _StartupService extends AppUpdateService {
 
   @override
   void attachProgress() {}
+  @override
+  Future<AppUpdateCandidate?> pendingCandidate() async => null;
 
   @override
   Future<AppUpdateInfo> current() async {

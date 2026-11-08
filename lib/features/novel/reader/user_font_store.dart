@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -102,6 +103,20 @@ class UserFontStore {
     final lower = sourcePath.toLowerCase();
     if (!lower.endsWith('.ttf') && !lower.endsWith('.otf')) {
       throw StateError('只支持 TTF / OTF 字体文件');
+    }
+    if (Platform.isWindows) {
+      const limit = 64 * 1024 * 1024;
+      if (await source.length() > limit) {
+        throw StateError('字体文件不能超过 64 MiB');
+      }
+      final builder = BytesBuilder(copy: false);
+      await for (final chunk in source.openRead(0, limit + 1)) {
+        builder.add(chunk);
+      }
+      if (builder.length > limit) {
+        throw StateError('字体文件不能超过 64 MiB');
+      }
+      return importBytes(source.uri.pathSegments.last, builder.takeBytes());
     }
     final dir = await _directory();
     final name = source.uri.pathSegments.last;

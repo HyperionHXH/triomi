@@ -283,15 +283,19 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         final current = await _readCurrent(token);
         if (current != null) {
           _publishCurrent(current);
-          if (_candidate == null && current.platform == 'android') {
+          if (_candidate == null && _supported) {
             final pending = await _service.pendingCandidate();
             token.check();
             if (mounted && pending != null) {
-              _task.markHandedOff(pending);
+              if (current.platform == 'android') {
+                _task.markHandedOff(pending);
+              } else {
+                _task.retain(pending);
+              }
               setState(() {
                 _candidate = pending;
-                _handedOff = true;
-                _handoffWindows = false;
+                _handedOff = current.platform == 'android';
+                _handoffWindows = current.platform == 'windows';
               });
             }
           }
@@ -351,7 +355,11 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         if (!_supported) {
           return;
         }
-        final releases = await _service.releases(token);
+        final releases = await _service.resolveWindowsRevisions(
+          current,
+          await _service.releases(token),
+          token,
+        );
         token.check();
         if (mounted) {
           setState(() {
@@ -443,6 +451,17 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     final versionOrder = release.compareVersionTo(current);
     if (versionOrder == null) return '当前安装版本无法识别，请先核对安装包。';
     final build = release.advertisedBuild;
+    if (_windows && versionOrder == 0 && release.windowsBuild != null) {
+      if (release.windowsBuild! < current.versionCode ||
+          (release.windowsBuild == current.versionCode &&
+              (release.windowsRevision ?? 0) < current.windowsRevision)) {
+        return '这是较早的 Windows 修订，不能降级。';
+      }
+      if (release.windowsBuild == current.versionCode &&
+          (release.windowsRevision ?? 0) == current.windowsRevision) {
+        return '已安装此 Windows 修订。';
+      }
+    }
     if (versionOrder < 0 || (build != null && build < current.versionCode)) {
       return '这是较早的版本，为保护应用数据不提供降级。';
     }
@@ -627,17 +646,18 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
   }) async {
     final alreadyHandedOff = _handedOff;
     await _run(
-      windows ? '正在打开更新包位置' : '正在打开系统安装器',
+      windows ? '正在准备安装并重启' : '正在打开系统安装器',
       (token) async {
         _handoffInFlight = candidate;
         _task.handoffInFlight = candidate;
         try {
           if (windows) {
-            await _service.revealWindowsBundle(candidate, token);
+            await _service.installWindowsBundle(candidate, token);
           } else {
             await _service.launchInstaller(candidate);
           }
           _task.markHandedOff(candidate);
+          if (windows) await SystemNavigator.pop();
           if (!mounted && !windows && !_task.hasConsumers) {
             await _service.abandon(candidate).catchError((Object _) {});
             _task.releaseCandidate(candidate);
@@ -958,8 +978,17 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                     AppUpdateReadyView(
                       candidate: candidate,
                       busy: _locked,
-                      onInstall: _android ? _offerReady : null,
-                      onRevealWindows: _windows ? _offerReady : null,
+                      onInstall: _supported ? _offerReady : null,
+                      onRevealWindows: _windows
+                          ? () => _run(
+                              '正在打开更新包位置',
+                              (token) => _service.revealWindowsBundle(
+                                candidate,
+                                token,
+                              ),
+                              targetLabel: '手动安装包',
+                            )
+                          : null,
                       onDiscard: _discard,
                     ),
                   ],

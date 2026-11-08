@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -837,6 +837,13 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               onProgress: (completed, total) {},
               directoryUri: directoryUri,
               writeToTree: (uri, fileName, bytes) async {
+                if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+                  return NovelExportService.writeToLocalDirectory(
+                    uri,
+                    fileName,
+                    bytes,
+                  );
+                }
                 // D49：返回系统真实 document URI；null/空 → 服务层回退。
                 return await platformChannel.writeToTree(
                       uri,
@@ -857,6 +864,13 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               onProgress: (completed, total) {},
               directoryUri: directoryUri,
               writeToTree: (uri, fileName, bytes) async {
+                if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+                  return NovelExportService.writeToLocalDirectory(
+                    uri,
+                    fileName,
+                    bytes,
+                  );
+                }
                 return await platformChannel.writeToTree(
                       uri,
                       fileName,
@@ -868,13 +882,12 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             );
       if (!mounted) return;
       navigator.pop();
-      // D50：显式区分保存位置——授权目录成功 / 用户取消目录选择 /
-      // 授权目录写入失败回退；回退是导出成功，不得报成导出失败。
+      final directoryLabel = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows ? '所选目录' : '授权目录';
       final location = result.savedToAuthorizedDirectory
-          ? '已保存到授权目录'
+          ? '已保存到$directoryLabel'
           : (directoryUri == null
-                ? '未选择授权目录，已保存到应用导出目录'
-                : '授权目录写入失败，已保存到应用导出目录');
+                ? '未选择$directoryLabel，已保存到应用导出目录'
+                : '$directoryLabel写入失败，已保存到应用导出目录');
       messenger.showSnackBar(
         SnackBar(
           content: Text(

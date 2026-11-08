@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/models/chapter.dart';
@@ -28,8 +29,8 @@ class NovelExportResult {
   final int exportedChapters;
   final int skippedChapters;
 
-  /// D50：true = 写入了用户授权的 SAF 目录；false = 应用导出目录
-  /// （用户取消目录选择或授权目录写入失败后的回退）。
+  /// true = 写入用户选择的 SAF / Windows 目录；false = 应用导出目录
+  /// （用户取消目录选择或所选目录写入失败后的回退）。
   final bool savedToAuthorizedDirectory;
 }
 
@@ -157,6 +158,50 @@ abstract final class NovelExportService {
     final dir = Directory('${docs.path}${Platform.pathSeparator}exports');
     if (!dir.existsSync()) dir.createSync(recursive: true);
     return dir;
+  }
+
+  /// Windows folder selections are real paths, not SAF trees. Only a single
+  /// export filename is accepted; preserve existing files with numbered names.
+  static Future<String> writeToLocalDirectory(
+    String directory,
+    String name,
+    List<int> bytes,
+  ) async {
+    if (!p.isAbsolute(directory) ||
+        name.isEmpty ||
+        name == '.' ||
+        name == '..' ||
+        name.contains(RegExp(r'[\\/:*?"<>|\x00-\x1f]')) ||
+        name.endsWith('.') ||
+        name.endsWith(' ')) {
+      throw ArgumentError(
+        'Expected an absolute directory and safe export name',
+      );
+    }
+    final root = Directory(directory);
+    if (!await root.exists()) {
+      throw FileSystemException('Export directory missing', directory);
+    }
+    var attempt = 0;
+    while (true) {
+      final candidate = attempt == 0
+          ? name
+          : '${p.basenameWithoutExtension(name)}($attempt)${p.extension(name)}';
+      final file = File(p.join(root.path, candidate));
+      if (await FileSystemEntity.type(file.path, followLinks: false) !=
+          FileSystemEntityType.notFound) {
+        attempt++;
+        continue;
+      }
+      await file.create(exclusive: true);
+      try {
+        await file.writeAsBytes(bytes, flush: true);
+      } catch (_) {
+        await file.delete();
+        rethrow;
+      }
+      return file.path;
+    }
   }
 
   /// 统一写出：SAF 授权目录优先（提供注入器时），失败/未提供回退私有目录。
