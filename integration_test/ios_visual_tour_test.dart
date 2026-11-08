@@ -880,30 +880,38 @@ void main() {
       FocusManager.instance.primaryFocus?.unfocus();
       await go(AppRoutes.manga);
       await go('${AppRoutes.sources}?type=manga');
+      final activeInstalledPage = find.byElementPredicate((element) {
+        if (element.widget is! SourcesPage) return false;
+        final route = ModalRoute.of(element);
+        return route?.isCurrent == true &&
+            route?.animation?.status == AnimationStatus.completed;
+      });
+      await until(
+        () => activeInstalledPage.evaluate().length == 1,
+        'only the active completed source route may supply restored filters',
+      );
       final restoredFilters = SourceFilters.fromJson(
         fixtures.preferences.get<Object?>('sources.filters.installed.manga'),
       );
       expect(restoredFilters.query, fixtures.sourceId(MediaType.manga));
       expect(restoredFilters.language, 'zh');
       expect(restoredFilters.content, SourceContentRestriction.excludeNsfw);
+      final restoredQuery = find.descendant(
+        of: activeInstalledPage,
+        matching: find.byType(EditableText),
+      );
+      expect(restoredQuery, findsOneWidget);
       expect(
-        tester
-            .widget<EditableText>(
-              find
-                  .descendant(
-                    of: find.byType(SourcesPage),
-                    matching: find.byType(EditableText),
-                  )
-                  .hitTestable(),
-            )
-            .controller
-            .text,
+        tester.widget<EditableText>(restoredQuery).controller.text,
         restoredFilters.query,
       );
       expect(
         tester
             .widget<DropdownButton<String>>(
-              find.byKey(const ValueKey('source-language-filter')),
+              find.descendant(
+                of: activeInstalledPage,
+                matching: find.byKey(const ValueKey('source-language-filter')),
+              ),
             )
             .value,
         'zh',
@@ -911,7 +919,10 @@ void main() {
       expect(
         tester
             .widget<DropdownButton<SourceContentRestriction>>(
-              find.byKey(const ValueKey('source-content-filter')),
+              find.descendant(
+                of: activeInstalledPage,
+                matching: find.byKey(const ValueKey('source-content-filter')),
+              ),
             )
             .value,
         SourceContentRestriction.excludeNsfw,
