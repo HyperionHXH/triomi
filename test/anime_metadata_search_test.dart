@@ -97,14 +97,7 @@ Future<ProviderContainer> _render(
     ],
   );
   addTearDown(() async {
-    // A deliberately failing registry must not replay its error into a later
-    // test's zone after this container is disposed.
     await tester.pumpWidget(const SizedBox.shrink());
-    try {
-      await container.read(sourcesProvider.future);
-    } catch (_) {
-      // Expected for the load-error scenario.
-    }
     router?.dispose();
     container.dispose();
     await tester.runAsync(db.close);
@@ -161,9 +154,6 @@ void main() {
             : const [],
       );
       await _search(tester, '公开资料');
-      debugPrint(
-        'DBG state=$state errorView=${find.text('无法准备搜索来源，请重试').evaluate().length} retry=${find.text('重试').evaluate().length}',
-      );
       expect(http.requests, hasLength(1));
       expect(http.requests.single.method, 'POST');
       expect(

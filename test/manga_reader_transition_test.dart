@@ -330,6 +330,36 @@ void main() {
     },
   );
 
+  testWidgets(
+    'manual next previews current and next before loading either title as content',
+    (tester) async {
+      final fixture = await open(tester);
+      expect(find.text('1/2'), findsOneWidget);
+      await tester.tap(find.byTooltip('下一章'));
+      await tester.pump();
+      expect(find.text('当前章节：'), findsOneWidget);
+      expect(find.text('第一话'), findsOneWidget);
+      expect(find.text('下一章：'), findsOneWidget);
+      expect(find.text('真正的第二话'), findsOneWidget);
+      expect(find.byType(PageView), findsNothing);
+      expect(fixture.downloads.requests, ['local-comic/1']);
+      final library = fixture.container.read(libraryRepositoryProvider);
+      expect(
+        await tester.runAsync(
+          () => library.chapterPositionOf('local-comic', 'book', '2'),
+        ),
+        isNull,
+        reason: 'A next-chapter title in the preview is not a visit',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, '继续阅读'));
+      await settle(tester);
+      expect(fixture.downloads.requests, ['local-comic/1', 'local-comic/2']);
+      expect(find.text('当前章节：'), findsNothing);
+      expect(find.text('1/2'), findsOneWidget);
+      await closeReader(tester);
+    },
+  );
+
   testWidgets('descending 3,2,1 first chapter continues to actual second', (
     tester,
   ) async {

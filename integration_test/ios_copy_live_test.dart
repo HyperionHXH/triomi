@@ -512,8 +512,29 @@ void main() {
       expect(followingContent.images, isNotEmpty);
       await tester.tap(find.byTooltip('下一章'));
       await until(
-        () => find.text(following.title).evaluate().isNotEmpty,
-        'Production next-chapter control must change the live chapter',
+        () =>
+            find.text('当前章节：').evaluate().isNotEmpty &&
+            find.text(oldest.title).evaluate().isNotEmpty &&
+            find.text('下一章：').evaluate().isNotEmpty &&
+            find.text(following.title).evaluate().isNotEmpty &&
+            find.text('继续阅读').evaluate().isNotEmpty,
+        'Next-chapter control must show the current/next confirmation before loading',
+      );
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is MangaPageImage &&
+              widget.url == followingContent.images.first,
+        ),
+        findsNothing,
+        reason: 'The transition title alone is not a loaded next chapter',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, '继续阅读'));
+      await until(
+        () =>
+            find.text('继续阅读').evaluate().isEmpty &&
+            find.text(following.title).evaluate().isNotEmpty,
+        'Confirming must leave the transition and open the actual next chapter',
       );
       await until(
         () => find

@@ -76,11 +76,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
 
   bool get _useNativeAndroidVideo =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-  bool get _isIOS =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+  bool get _isIOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
   bool get _useNativeVideo => _useNativeAndroidVideo || _isIOS;
   VideoPlatformController get _activeNativeController =>
       _isIOS ? _iosVideoController : _nativeVideoController;
+
   /// initState 里从 ref 取出保存；dispose 里写最后一次进度时用。
   LibraryRepository? _libraryRepository;
 
@@ -472,7 +472,6 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         startPosition: startPosition,
       );
 
-
       if (mounted && seq == _loadSeq) {
         setState(() {
           _loading = false;
@@ -538,8 +537,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         _resumeStart = Duration.zero;
         await _seekTo(Duration.zero);
         if (!mounted) return;
-        if (_useNativeAndroidVideo) {
-          await _nativeVideoController.play();
+        if (_useNativeVideo) {
+          await _activeNativeController.play();
         } else {
           await _player.play();
         }
@@ -1936,7 +1935,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   Future<void> _enterPip() async {
     final result = _isIOS
         ? await _iosVideoController.enterPip()
-        : await const MethodChannel('triomi/platform').invokeMethod<bool>('enterVideoPip');
+        : await const MethodChannel('triomi/platform')
+              .invokeMethod<bool>('enterVideoPip');
     if (result != true) _toast('此设备不支持画中画');
   }
 
@@ -2068,7 +2068,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     );
     if (!mounted || selected == null) return;
     if (_useNativeVideo) {
-      await _activeNativeController.selectSubtitle(selected == 'no' ? null : selected);
+      await _activeNativeController.selectSubtitle(
+        selected == 'no' ? null : selected,
+      );
     } else {
       await _player.setSubtitleTrack(
         selected == 'no'
@@ -2200,18 +2202,20 @@ class _VideoArea extends StatelessWidget {
           return Center(
             child: SizedBox(
               width: width,
-              height: aspectRatio == null ? constraints.maxHeight : width / aspectRatio!,
+              height: aspectRatio == null
+                  ? constraints.maxHeight
+                  : width / aspectRatio!,
               child: isIosVideoPlatform
                   ? iosController.buildView()
                   : controller == null
-                      ? _NativeAndroidVideoView(controller: nativeController)
-                      : Video(
-                          controller: controller!,
-                          controls: null,
-                          fit: aspectRatio == null ? BoxFit.contain : BoxFit.fill,
-                          pauseUponEnteringBackgroundMode: !backgroundAudio,
-                          resumeUponEnteringForegroundMode: !backgroundAudio,
-                        ),
+                  ? _NativeAndroidVideoView(controller: nativeController)
+                  : Video(
+                      controller: controller!,
+                      controls: null,
+                      fit: aspectRatio == null ? BoxFit.contain : BoxFit.fill,
+                      pauseUponEnteringBackgroundMode: !backgroundAudio,
+                      resumeUponEnteringForegroundMode: !backgroundAudio,
+                    ),
             ),
           );
         },

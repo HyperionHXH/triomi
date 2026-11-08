@@ -521,13 +521,14 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
           ? '${entry.descriptor.name} · $_query'
           : '${entry.descriptor.name} · 筛选搜索';
       if (!mounted) return;
-      final name = TextEditingController(text: generated);
+      var name = generated;
       final selected = await showDialog<String>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('保存搜索'),
-          content: TextField(
-            controller: name,
+          content: TextFormField(
+            initialValue: generated,
+            onChanged: (value) => name = value,
             decoration: InputDecoration(
               labelText: '名称（可选）',
               hintText: generated,
@@ -540,13 +541,12 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
               child: const Text('取消'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(context, name.text.trim()),
+              onPressed: () => Navigator.pop(context, name.trim()),
               child: const Text('保存'),
             ),
           ],
         ),
       );
-      name.dispose();
       if (selected == null || !mounted) return;
       await ref
           .read(mangaFeedRepositoryProvider)

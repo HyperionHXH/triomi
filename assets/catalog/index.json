@@ -102,20 +102,6 @@
       ]
     },
     {
-      "id": "age-anime",
-      "name": "AGE 番剧",
-      "type": "anime",
-      "version": "1.0.1",
-      "url": "asset://assets/rules/age-anime-js.json",
-      "capabilities": [
-        "discover",
-        "search",
-        "detail",
-        "content"
-      ],
-      "license": "Triomi 规则 / 站点内容权利归各自权利人"
-    },
-    {
       "id": "copymanga",
       "name": "拷贝漫画",
       "type": "manga",
@@ -128,18 +114,6 @@
         "content"
       ],
       "license": "Triomi 独立 API 协议实现 / 内容权利归各自权利人"
-    },
-    {
-      "id": "bangumi-anime",
-      "name": "Bangumi 番剧资料（无播放）",
-      "type": "anime",
-      "version": "1.0.0",
-      "url": "asset://assets/rules/bangumi-anime.json",
-      "capabilities": [
-        "search",
-        "detail"
-      ],
-      "license": "Bangumi API"
     }
   ]
 }

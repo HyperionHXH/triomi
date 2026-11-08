@@ -156,6 +156,42 @@ class CaptureProtocolTests(unittest.TestCase):
             self.assertIn('Duplicate screenshot frame', json.loads(body)['error'])
         self.assertEqual(len(self.session.manifest['captures']), 1)
 
+    def test_home_and_all_follows_identical_frame_remains_a_hard_failure(self):
+        def same_frame(command, **kwargs):
+            Path(command[-1]).write_bytes(png(120, 240, (30, 50, 80)))
+            return subprocess.CompletedProcess(command, 0, '', '')
+
+        with patch.object(tour.subprocess, 'run', side_effect=same_frame):
+            self.assertEqual(self.capture('01_home_shelf.png', route='/anime')[0], 200)
+            status, body = self.capture('09_follows_all.png', route='/anime')
+        self.assertEqual(status, 409)
+        self.assertIn('Duplicate screenshot frame', json.loads(body)['error'])
+        self.assertEqual(len(self.session.manifest['captures']), 1)
+
+    def test_mainline_frames_are_registered_once_and_mandatory(self):
+        names = (
+            '02_source_filters_restored.png', '03_manga_saved_search.png',
+            '09_follows_doing.png', '09_follows_want.png', '09_follows_done.png',
+            '09_follows_paused.png', '09_follows_dropped.png',
+            '10_manga_source_comfortable.png', '10_manga_source_panorama.png',
+            '10_manga_source_compact.png', '10_manga_source_list.png',
+            '10_manga_source_dark_large_comfortable.png', '10_manga_source_dark_large_panorama.png',
+            '10_manga_source_dark_large_compact.png', '10_manga_source_dark_large_list.png',
+        )
+        self.assertEqual(len(tour.EXPECTED_CAPTURES), 87)
+        self.assertEqual(len(tour.EXPECTED_CAPTURES), len(set(tour.EXPECTED_CAPTURES)))
+        for name in names:
+            with self.subTest(name=name):
+                self.assertEqual(tour.EXPECTED_CAPTURES.count(name), 1)
+                self.assertIn(name, self.session.manifest['expected_captures'])
+        self.frame = 0
+        with patch.object(tour.subprocess, 'run', side_effect=self.screenshot):
+            for name in tour.EXPECTED_CAPTURES:
+                if name != '09_follows_paused.png':
+                    self.assertEqual(self.capture(name)[0], 200)
+        with self.assertRaisesRegex(ValueError, '09_follows_paused.png'):
+            self.session.validate_captures()
+
     def test_complete_capture_validation_rejects_missing_and_changed_files(self):
         self.frame = 0
         with patch.object(tour.subprocess, 'run', side_effect=self.screenshot):

@@ -153,21 +153,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         );
       }
       if (!mounted || generation != _generation) return;
-      var candidates = <SourceEntry>[];
-      try {
-        final snapshot = await ref.read(sourcesProvider.future);
-        if (!mounted || generation != _generation) return;
-        candidates = snapshot.enabledWith(SourceCapability.search);
-      } catch (_) {
-        // A broken plugin registry must not hide the public metadata search.
-        if (!mounted || generation != _generation) return;
-      }
-      if (widget.type == MediaType.anime &&
-          !candidates.any((entry) => entry.descriptor.id == 'bangumi-anime')) {
-        // Public subject metadata shares the recommendation/detail client.
-        // A missing, disabled or broken plugin record must not hide search.
-        candidates = [...candidates, _publicMetadataEntry()];
-      }
+      final candidates = widget.type == MediaType.anime
+          ? [_publicMetadataEntry()]
+          : (await ref.read(sourcesProvider.future))
+                .enabledWith(SourceCapability.search);
+      if (!mounted || generation != _generation) return;
       final sources = candidates.where((entry) {
         if (entry.descriptor.type != widget.type) return false;
         if (widget.type == MediaType.anime) {
@@ -231,27 +221,17 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     _requests.remove(id)?.cancel();
     final owner = SourceRequestCancellation();
     _requests[id] = owner;
-    SourceEntry? resolved;
     try {
-      try {
-        final snapshot = await ref.read(sourcesProvider.future);
-        resolved = snapshot.enabledEntries
-            .where((e) => e.descriptor.id == id)
-            .firstOrNull;
-      } catch (_) {
-        // A broken plugin registry must not hide the public metadata search.
-      }
-      if (resolved == null &&
-          widget.type == MediaType.anime &&
-          id == BangumiPublicClient.sourceId) {
-        resolved = _publicMetadataEntry();
-      }
+      final active = widget.type == MediaType.anime
+          ? _publicMetadataEntry()
+          : (await ref.read(sourcesProvider.future)).enabledEntries
+                .where((candidate) => candidate.descriptor.id == id)
+                .firstOrNull;
       if (!mounted || generation != _generation || owner.cancelled) return;
-      if (resolved == null || resolved.source is! SearchProvider) {
+      if (active == null || active.source is! SearchProvider) {
         throw StateError('来源已停用或不支持搜索');
       }
-      final entry = resolved;
-      final provider = entry.source as SearchProvider;
+      final provider = active.source as SearchProvider;
       final items = await owner
           .run(() {
             if (provider is BangumiSource) {
@@ -299,7 +279,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       }
       setState(
         () => _rows[id] = _SearchRow(
-          entry,
+          active,
           pending: false,
           items: unique.values.toList(),
           page: page,
@@ -453,15 +433,16 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   @override
   Widget build(BuildContext context) {
     final rows = _rows.values.toList();
-    final searchable =
-        ref
-            .watch(sourcesProvider)
-            .asData
-            ?.value
-            .enabledWith(SourceCapability.search)
-            .where((entry) => entry.descriptor.type == widget.type)
-            .toList() ??
-        <SourceEntry>[];
+    final searchable = widget.type == MediaType.anime
+        ? const <SourceEntry>[]
+        : ref
+                  .watch(sourcesProvider)
+                  .asData
+                  ?.value
+                  .enabledWith(SourceCapability.search)
+                  .where((entry) => entry.descriptor.type == widget.type)
+                  .toList() ??
+              <SourceEntry>[];
     final finished = rows.where((row) => !row.pending).length;
     final history =
         ref.watch(preferencesProvider).get<List<Object?>>(_historyKey) ?? [];

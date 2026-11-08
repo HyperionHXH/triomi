@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:triomi/core/backup/backup_service.dart';
 import 'package:triomi/core/db/app_database.dart';
@@ -14,6 +15,8 @@ import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/source/source_repository.dart';
 import 'package:triomi/core/storage/preferences.dart';
+import 'package:triomi/features/anime/data/anime_collection_service.dart';
+import 'package:triomi/features/anime/data/anime_follow_metadata.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/player/data/hybrid_danmaku_client.dart';
@@ -324,6 +327,9 @@ class IosTourFixtures {
     // repository from this isolated UI tour. Default loading has its own test.
     await preferences.set('kazumi.repositories', <String, bool>{});
     await preferences.set('anime.workspace.tab', 2);
+    // The home frame starts in a real subset. Selecting 全部 must change both
+    // the persisted bucket and visible works, not recapture the same pixels.
+    await preferences.set('anime.follows.status', 'doing');
     await preferences.set('manga.workspace.tab', 0);
     await preferences.set('novel.workspace.tab', 1);
     await preferences.set('novel.discovery.source', sourceId(MediaType.novel));
@@ -337,7 +343,7 @@ class IosTourFixtures {
     final library = LibraryRepository(database);
     for (final type in MediaType.values) {
       final titles = switch (type) {
-        MediaType.anime => ['星空放映室', '风之旅人', '夏日的回声'],
+        MediaType.anime => ['星空放映室', '风之旅人', '夏日的回声', '冬夜电台', '未完的旅途'],
         MediaType.manga => ['海港漫游', '月下图书馆', '旅行手记'],
         MediaType.novel => ['星海来信', '远方的灯塔', '雨后的庭院'],
       };
@@ -433,6 +439,28 @@ function content(url, chapter) { return ${jsonEncode(fixtureContent)}; }
       );
       for (final book in collection) {
         await library.addToLibrary(book);
+      }
+      if (type == MediaType.anime) {
+        final statuses = animeCollectionStatuses.keys.toList();
+        const progress = [2.0, 0.0, 3.0, 1.0, 0.0];
+        for (var index = 0; index < collection.length; index++) {
+          final book = collection[index];
+          await (database.update(database.libraryEntries)..where(
+                (row) =>
+                    row.sourceId.equals(book.sourceId) &
+                    row.remoteId.equals(book.remoteId),
+              ))
+              .write(
+                LibraryEntriesCompanion(
+                  status: Value(statuses[index]),
+                  progress: Value(progress[index]),
+                ),
+              );
+          // Include both known and honestly unknown episode totals.
+          if (index == 0 || index == 2) {
+            await cacheAnimeEpisodeTotal(database, book, index == 0 ? 12 : 3);
+          }
+        }
       }
       await library.saveChapters(
         itemSourceId: sourceId(type),

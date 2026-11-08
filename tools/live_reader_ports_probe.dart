@@ -132,7 +132,11 @@ void main() {
                   .read(sourceRegistryProvider)
                   .load();
               expect(snapshot.failures.length, 0);
-              final source = snapshot.enabledEntries.single.source as JsSource;
+              final source =
+                  snapshot.enabledEntries
+                          .singleWhere((entry) => entry.descriptor.id == id)
+                          .source
+                      as JsSource;
               record['adapter'] = source.runtimeType.toString();
               record['stage'] = 'initialize';
               await source.initialize();

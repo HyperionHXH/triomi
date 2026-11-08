@@ -11,6 +11,7 @@ import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_descriptor.dart';
+import 'package:triomi/core/source/bangumi_public_client.dart';
 import 'package:triomi/core/source/bangumi_source.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/rule_schema.dart';
@@ -165,21 +166,12 @@ void main() {
     tester.view.physicalSize = const Size(1200, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final close = await render(tester, MediaType.anime, [
-      _SearchSource(
-        'bangumi-anime',
-        MediaType.anime,
-        (_) async => [
-          for (var index = 0; index < 60; index++)
-            MediaItem(
-              sourceId: 'bangumi-anime',
-              remoteId: '$index',
-              type: MediaType.anime,
-              title: 'Anime result $index',
-            ),
-        ],
-      ),
-    ]);
+    final close = await render(
+      tester,
+      MediaType.anime,
+      const [],
+      metadataHttp: FakeHttpClient((_) async => metadataPage(0, 60)),
+    );
     await search(tester, 'keyword');
     final collection = find.byType(MediaItemCollection);
     final page = find.byType(SearchPage);
@@ -209,31 +201,25 @@ void main() {
         addTearDown(tester.view.reset);
         final pages = <int>[];
         var failNextPage = true;
-        final source = _PagedSearchSource((query, page) async {
+        final http = FakeHttpClient((request) async {
+          final offset = int.parse(
+            Uri.parse(request.url).queryParameters['offset']!,
+          );
+          final page = offset ~/ BangumiPublicClient.pageSize + 1;
           pages.add(page);
           if (page == 2 && failNextPage) {
             failNextPage = false;
             throw StateError('temporary failure');
           }
-          if (page > 2) return [];
-          return [
-            for (
-              var index = page == 1 ? 0 : 60;
-              index < (page == 1 ? 60 : 65);
-              index++
-            )
-              MediaItem(
-                sourceId: 'bangumi-anime',
-                remoteId: '$index',
-                type: MediaType.anime,
-                title: 'Anime result $index',
-              ),
-          ];
+          return page > 2
+              ? metadataPage(65, 65)
+              : metadataPage(page == 1 ? 0 : 60, page == 1 ? 60 : 65);
         });
         final close = await render(
           tester,
           MediaType.anime,
-          [source],
+          const [],
+          metadataHttp: http,
           layout: scenario.layout,
           textScale: scenario.scale,
         );
@@ -616,6 +602,17 @@ void main() {
   });
 }
 
+SourceResponse metadataPage(int start, int end) => SourceResponse(
+  statusCode: 200,
+  body: jsonEncode({
+    'total': 65,
+    'data': [
+      for (var index = start; index < end; index++)
+        {'id': index, 'type': 2, 'name': 'Anime result $index'},
+    ],
+  }),
+);
+
 Future<void> advance(WidgetTester tester) async {
   for (var index = 0; index < 8; index++) {
     await tester.pump(const Duration(milliseconds: 30));
@@ -653,17 +650,6 @@ class _SearchSource implements SearchProvider {
   @override
   Future<List<MediaItem>> search(String keyword, {int page = 1}) =>
       call(keyword);
-}
-
-class _PagedSearchSource extends _SearchSource {
-  _PagedSearchSource(this.searchPage)
-    : super('bangumi-anime', MediaType.anime, (_) async => []);
-
-  final Future<List<MediaItem>> Function(String, int) searchPage;
-
-  @override
-  Future<List<MediaItem>> search(String keyword, {int page = 1}) =>
-      searchPage(keyword, page);
 }
 
 class _TaggedSource extends _SearchSource implements TagSearchProvider {

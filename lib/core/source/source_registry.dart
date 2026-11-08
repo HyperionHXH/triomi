@@ -59,7 +59,8 @@ class SourceEntry {
   final bool? _canRemove;
 
   bool get isBuiltin => descriptor.kind == SourceKind.builtin;
-  bool get canRemove => _canRemove ?? (!isBuiltin || ruleText != null);
+  bool get canRemove =>
+      !isInternal && (_canRemove ?? (!isBuiltin || ruleText != null));
 
   /// Application-owned metadata remains resolvable, but is not a plugin.
   bool get isInternal => descriptor.id == SourceRepository.internalMetadataId;

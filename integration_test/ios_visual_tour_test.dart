@@ -12,11 +12,20 @@ import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/router/app_router.dart';
 import 'package:triomi/core/source/catalog_repository.dart';
+import 'package:triomi/core/source/source_filters.dart';
 import 'package:triomi/core/source/source_providers.dart';
+import 'package:triomi/core/source/source_repository.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
+import 'package:triomi/features/anime/anime_follows_page.dart';
+import 'package:triomi/features/anime/data/anime_collection_service.dart';
+import 'package:triomi/features/anime/data/anime_follow_metadata.dart';
+import 'package:triomi/features/discover/manga_feed_repository.dart';
+import 'package:triomi/features/discover/widgets/media_item_card.dart';
 import 'package:triomi/features/library/data/anime_identity_repository.dart';
 import 'package:triomi/features/library/data/library_providers.dart';
+import 'package:triomi/features/manga/manga_source_layout.dart';
+import 'package:triomi/features/manga/manga_source_page.dart';
 import 'package:triomi/features/novel/novel_shelf_view.dart';
 import 'package:triomi/features/novel/reader/novel_reader_page.dart';
 import 'package:triomi/features/player/danmaku_settings_page.dart';
@@ -33,6 +42,7 @@ import 'package:triomi/features/reader/manga_page_image.dart';
 import 'package:triomi/features/reader/manga_reader_page.dart';
 import 'package:triomi/features/settings/onboarding_page.dart';
 import 'package:triomi/features/settings/settings_controller.dart';
+import 'package:triomi/features/sources/kazumi_repositories_sheet.dart';
 
 import 'fixtures/ios_test_binding.dart';
 import 'fixtures/ios_tour_fixtures.dart';
@@ -218,6 +228,112 @@ void main() {
         await pumpFor(const Duration(milliseconds: 350));
       }
 
+      Finder filledButton(String label) => find.ancestor(
+        of: find.text(label),
+        matching: find.byWidgetPredicate((widget) => widget is FilledButton),
+      );
+
+      final mangaSourceRoute = MangaSourcePage.location(
+        fixtures.sourceId(MediaType.manga),
+        listing: 'tour',
+      );
+      Future<void> captureMangaLayouts(
+        String prefix,
+        Brightness brightness,
+      ) async {
+        await go(mangaSourceRoute);
+        await until(
+          () => find
+              .text(fixtures.item(MediaType.manga).title)
+              .evaluate()
+              .isNotEmpty,
+          'production source directory must execute its actual JS feed',
+        );
+        expect(
+          MediaQuery.sizeOf(tester.element(find.byType(MangaSourcePage))).width,
+          lessThan(600),
+        );
+        expect(
+          Theme.of(tester.element(find.byType(MangaSourcePage))).brightness,
+          brightness,
+        );
+        for (final layout in MangaSourceLayout.values) {
+          await tester.tap(find.byTooltip('显示布局'));
+          await pumpFor();
+          for (final option in MangaSourceLayout.values) {
+            expect(find.text(option.label), findsOneWidget);
+          }
+          final option = find.ancestor(
+            of: find.text(layout.label),
+            matching: find.byType(CheckedPopupMenuItem<MangaSourceLayout>),
+          );
+          expect(option, findsOneWidget);
+          await tester.ensureVisible(option);
+          await pumpFor(const Duration(milliseconds: 200));
+          expect(option.hitTestable(), findsOneWidget);
+          await tester.tap(option);
+          await pumpFor(const Duration(milliseconds: 350));
+          expect(
+            fixtures.preferences.get<String>('manga.source.layout'),
+            layout.name,
+          );
+          // Re-enter to consume the saved preference, not just setState's preview.
+          await go(mangaSourceRoute);
+          await until(
+            () => find
+                .text(fixtures.item(MediaType.manga).title)
+                .evaluate()
+                .isNotEmpty,
+            'saved source layout must restore with actual catalogue results',
+          );
+          final viewport = tester.getRect(find.byType(MangaSourcePage));
+          if (layout == MangaSourceLayout.list) {
+            expect(find.byType(MangaSourceCard), findsNothing);
+            expect(find.byType(MediaItemRow), findsWidgets);
+          } else {
+            final cards = find.byType(MangaSourceCard);
+            expect(cards, findsWidgets);
+            expect(tester.widget<MangaSourceCard>(cards.first).layout, layout);
+            final first = tester.getRect(cards.at(0));
+            final second = tester.getRect(cards.at(1));
+            expect(first.width, closeTo(second.width, .01));
+            expect(first.top, closeTo(second.top, .01));
+            expect(second.left - first.right, closeTo(12, .01));
+            expect(
+              first.left - viewport.left,
+              closeTo(viewport.right - second.right, .01),
+            );
+            final image = find.descendant(
+              of: cards.first,
+              matching: find.byType(Image),
+            );
+            await until(
+              () => tester
+                  .widgetList<RawImage>(
+                    find.descendant(
+                      of: cards.first,
+                      matching: find.byType(RawImage),
+                    ),
+                  )
+                  .any((image) => image.image != null),
+              'source cover must finish real image decoding',
+            );
+            expect(
+              tester.widget<Image>(image.first).fit,
+              layout == MangaSourceLayout.panorama
+                  ? BoxFit.contain
+                  : BoxFit.cover,
+            );
+          }
+          expect(find.byTooltip('显示布局').hitTestable(), findsOneWidget);
+          await screenshot(
+            '${prefix}_${layout.name}.png',
+            mangaSourceRoute,
+            '生产漫画${layout.label}，窄屏对称排版、保存后重新进入；${brightness.name}主题',
+          );
+        }
+      }
+
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
@@ -236,21 +352,34 @@ void main() {
       );
       await until(
         () => tester
-            .widgetList<RawImage>(find.byType(RawImage))
+            .widgetList<RawImage>(
+              find.descendant(
+                of: find.byType(AnimeFollowsPage),
+                matching: find.byType(RawImage),
+              ),
+            )
             .any((image) => image.image != null),
         'shelf cover must actually decode',
+      );
+      expect(fixtures.preferences.get<int>('anime.workspace.tab'), 2);
+      expect(fixtures.preferences.get<String>('anime.follows.status'), 'doing');
+      expect(find.text('1 部'), findsOneWidget);
+      expect(find.textContaining('已看 2 集 / 共 12 集'), findsOneWidget);
+      expect(
+        find.text(fixtures.items[MediaType.anime]![1].title),
+        findsNothing,
       );
       await screenshot(
         '01_home_shelf.png',
         AppRoutes.anime,
-        '已填充的番剧书架首页，生产 AdaptiveShell 与书架渲染',
+        '生产追番首页恢复在看桶，显示真实本地收藏、2/12进度及已解码封面',
       );
 
-      // Follows bucket and local sync dialog (no remote writes).
-      await tapText('我的追番');
+      // Follows starts in 在看, so 全部 is a distinct real database-backed state.
+      await tapText('全部');
       await until(
         () => find.byTooltip('同步收藏').evaluate().isNotEmpty,
-        'tapping the follows segment must leave the recommendation shelf',
+        'selecting all follows must retain the production sync control',
       );
       await until(
         () => find
@@ -259,6 +388,35 @@ void main() {
             .isNotEmpty,
         'follows page must render the seeded followed item',
       );
+      expect(fixtures.preferences.get<String>('anime.follows.status'), '');
+      expect(find.text('5 部'), findsOneWidget);
+      expect(
+        container
+            .read(animeFollowsProvider)
+            .requireValue
+            .map((row) => row.item.remoteId),
+        unorderedEquals(
+          fixtures.items[MediaType.anime]!.map((book) => book.remoteId),
+        ),
+      );
+      final followsScroll = find.descendant(
+        of: find.descendant(
+          of: find.byType(AnimeFollowsPage),
+          matching: find.byType(GridView),
+        ),
+        matching: find.byType(Scrollable),
+      );
+      for (final book in fixtures.items[MediaType.anime]!) {
+        await tester.scrollUntilVisible(
+          find.text(book.title),
+          180,
+          scrollable: followsScroll,
+        );
+        await pumpFor();
+        expect(find.text(book.title), findsOneWidget);
+      }
+      tester.state<ScrollableState>(followsScroll).position.jumpTo(0);
+      await pumpFor();
       await screenshot(
         '09_follows_all.png',
         AppRoutes.anime,
@@ -269,6 +427,18 @@ void main() {
         () => find.textContaining('· 第 1 步').evaluate().isNotEmpty,
         'local sync dialog must open with its stage list',
       );
+      expect(
+        tester.widget<FilledButton>(filledButton('开始同步')).onPressed,
+        isNull,
+        reason: 'Logged-out tour must not start remote collection writes',
+      );
+      for (final stage in [
+        'WebDAV 收藏 · 第 1 步',
+        'Bangumi 状态 · 第 2 步',
+        '回传 WebDAV · 第 3 步',
+      ]) {
+        expect(find.text(stage), findsOneWidget);
+      }
       await screenshot(
         '09_follows_sync_dialog.png',
         AppRoutes.anime,
@@ -279,8 +449,57 @@ void main() {
         () => find.byType(AlertDialog).evaluate().isEmpty,
         'cancel must close the sync dialog without starting a task',
       );
+      expect(
+        fixtures.preferences.get<String>('anime.follows.syncPriority'),
+        isNull,
+      );
       cleanExceptions(AppRoutes.anime);
-      await tapText('推荐');
+      await tester.tap(find.byTooltip('切换列表'));
+      await pumpFor();
+      final animeBooks = fixtures.items[MediaType.anime]!;
+      var statusIndex = 0;
+      for (final status in animeCollectionStatuses.entries) {
+        final statusChip = find.widgetWithText(FilterChip, status.value);
+        expect(statusChip, findsOneWidget);
+        await tester.ensureVisible(statusChip);
+        await pumpFor(const Duration(milliseconds: 200));
+        expect(statusChip.hitTestable(), findsOneWidget);
+        await tester.tap(statusChip);
+        await pumpFor(const Duration(milliseconds: 350));
+        expect(
+          fixtures.preferences.get<String>('anime.follows.status'),
+          status.key,
+        );
+        expect(find.text('1 部'), findsOneWidget);
+        final book = animeBooks[statusIndex];
+        expect(find.text(book.title), findsOneWidget);
+        for (final other in animeBooks.where((item) => item != book)) {
+          expect(find.text(other.title), findsNothing);
+        }
+        final row = find.widgetWithText(ListTile, book.title);
+        expect(
+          find.descendant(of: row, matching: find.byType(MediaCover)),
+          findsOneWidget,
+        );
+        final progress = [2, 0, 3, 1, 0][statusIndex];
+        final total = statusIndex == 0
+            ? 12
+            : statusIndex == 2
+            ? 3
+            : null;
+        expect(
+          find.text(
+            '${status.value} · ${animeWatchProgressLabel(progress, total)}',
+          ),
+          findsOneWidget,
+        );
+        await screenshot(
+          '09_follows_${status.key}.png',
+          AppRoutes.anime,
+          '生产${status.value}桶：独立收藏身份、封面与真实进度；无远端写入',
+        );
+        statusIndex++;
+      }
 
       // Independent workspace states.
       await go(AppRoutes.manga);
@@ -295,6 +514,67 @@ void main() {
         '01_manga_shelf.png',
         AppRoutes.manga,
         '漫画独立书库，含确定性书架封面',
+      );
+      await captureMangaLayouts('10_manga_source', Brightness.light);
+      await tester.tap(find.byTooltip('搜索当前来源'));
+      await pumpFor();
+      await tester.enterText(find.byType(TextField), '海港');
+      await tester.tap(find.byTooltip('提交来源搜索'));
+      await until(
+        () => find
+            .text(fixtures.item(MediaType.manga).title)
+            .evaluate()
+            .isNotEmpty,
+        'source-scoped search must execute the real JS fixture',
+      );
+      await tester.tap(find.byTooltip('来源更多'));
+      await pumpFor();
+      await tapText('保存搜索');
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        '海港 · 已保存巡检',
+      );
+      await tapText('保存');
+      await until(
+        () =>
+            container
+                .read(mangaFeedsProvider)
+                .asData
+                ?.value
+                .any((row) => row.name == '海港 · 已保存巡检' && row.query == '海港') ==
+            true,
+        'saved source search must persist through the production repository',
+      );
+      Navigator.of(tester.element(find.byType(MangaSourcePage))).pop();
+      await pumpFor();
+      await go(AppRoutes.manga);
+      await go(mangaSourceRoute);
+      await until(
+        () => find.text('海港 · 已保存巡检').evaluate().isNotEmpty,
+        'saved search chip must return after leaving the source directory',
+      );
+      await tapText('海港 · 已保存巡检');
+      await until(
+        () => find.text('搜索：海港 · 3 部').evaluate().isNotEmpty,
+        'saved search must restore its keyword and rerun the actual source',
+      );
+      expect(
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+        '海港',
+      );
+      final savedSearch =
+          (await container.read(mangaFeedRepositoryProvider).list())
+              .singleWhere((row) => row.name == '海港 · 已保存巡检');
+      expect(savedSearch.sourceId, fixtures.sourceId(MediaType.manga));
+      expect(savedSearch.query, '海港');
+      expect((jsonDecode(savedSearch.filtersJson) as Map)['filters'], isEmpty);
+      await screenshot(
+        '03_manga_saved_search.png',
+        mangaSourceRoute,
+        '生产来源内搜索保存后离开再返回，关键词、来源身份和真实结果均恢复',
       );
       await go(AppRoutes.novel);
       await until(
@@ -355,25 +635,69 @@ void main() {
       // Rules, JS management, Kazumi repository and iOS Mihon fallback.
       await go('${AppRoutes.sources}?type=anime');
       expect(find.text('视觉巡检夹具 · 番剧 JS').evaluate(), isNotEmpty);
+      expect(find.text('番剧插件'), findsOneWidget);
+      final internalMetadata = (await container.read(sourcesProvider.future))
+          .entries
+          .singleWhere(
+            (entry) =>
+                entry.descriptor.id == SourceRepository.internalMetadataId,
+          );
+      expect(internalMetadata.enabled, isTrue);
+      expect(internalMetadata.isInternal, isTrue);
+      expect(internalMetadata.canRemove, isFalse);
+      expect(find.text(internalMetadata.descriptor.name), findsNothing);
+      expect(
+        find.byTooltip('启用来源 ${internalMetadata.descriptor.name}'),
+        findsNothing,
+      );
       await screenshot(
         '02_anime_sources.png',
         '${AppRoutes.sources}?type=anime',
         '生产来源管理显示 JS 夹具与规则能力',
       );
-      await tapText('添加番剧来源');
-      await tapText('番剧规则仓库');
+      await tapText('添加插件来源');
+      final repositorySheet = find.byType(KazumiRepositoriesSheet);
       await until(
-        () => find.text('启用或添加仓库以浏览规则').evaluate().isNotEmpty,
-        'Kazumi repository setup must finish without network errors',
+        () =>
+            repositorySheet.evaluate().isNotEmpty &&
+            find
+                .descendant(
+                  of: repositorySheet,
+                  matching: find.byType(CircularProgressIndicator),
+                )
+                .evaluate()
+                .isEmpty,
+        'empty Kazumi repository setup must finish without network errors',
       );
+      expect(
+        fixtures.preferences.get<Map<dynamic, dynamic>>('kazumi.repositories'),
+        isEmpty,
+      );
+      expect(
+        find.descendant(
+          of: repositorySheet,
+          matching: find.byType(DropdownButton<String>),
+        ),
+        findsNothing,
+      );
+      expect(find.text('管理仓库 · 0'), findsOneWidget);
+      expect(find.text('本仓库 0 个插件'), findsOneWidget);
+      final installMissing = find.descendant(
+        of: repositorySheet,
+        matching: find.ancestor(
+          of: find.text('安装本仓库未安装插件'),
+          matching: find.byWidgetPredicate((widget) => widget is TextButton),
+        ),
+      );
+      expect(tester.widget<TextButton>(installMissing).onPressed, isNull);
       await screenshot(
         '02_kazumi_repositories.png',
         '${AppRoutes.sources}?type=anime',
         '生产 Kazumi 仓库设置，未添加外部仓库',
       );
-      Navigator.of(tester.element(find.text('启用或添加仓库以浏览规则'))).pop();
+      Navigator.of(tester.element(repositorySheet)).pop();
       await pumpFor();
-      await tapText('添加番剧来源');
+      await tapText('添加插件来源');
       await tapText('手动导入规则');
       expect(find.text('导入番剧规则'), findsOneWidget);
       await screenshot(
@@ -392,7 +716,7 @@ void main() {
             .isNotEmpty,
         'general source management must show installed JS rules',
       );
-      expect(find.text('来源管理'), findsOneWidget);
+      expect(find.text('番剧插件'), findsOneWidget);
       await screenshot(
         '02_source_rules.png',
         AppRoutes.sources,
@@ -415,7 +739,7 @@ void main() {
       );
       final mangaDexInstall = find.descendant(
         of: mangaDexOffer,
-        matching: find.widgetWithText(FilledButton, '安装'),
+        matching: filledButton('安装'),
       );
       expect(mangaDexInstall, findsOneWidget);
       await screenshot(
@@ -491,7 +815,7 @@ void main() {
       );
       final remoteInstall = find.descendant(
         of: remoteOffer,
-        matching: find.widgetWithText(FilledButton, '安装'),
+        matching: filledButton('安装'),
       );
       await tester.ensureVisible(remoteInstall);
       await pumpFor();
@@ -531,6 +855,52 @@ void main() {
         '02_remote_rule_installed.png',
         '${AppRoutes.sources}?type=manga',
         '应用内远程规则安装后默认启用，原漫画来源及书库保持',
+      );
+      await tester.enterText(
+        find.byType(TextFormField),
+        fixtures.sourceId(MediaType.manga),
+      );
+      await pumpFor();
+      await tapKey('source-language-filter');
+      await tapText('中文 (zh)');
+      await tapKey('source-content-filter');
+      await tapText('排除已标记 NSFW');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await go(AppRoutes.manga);
+      await go('${AppRoutes.sources}?type=manga');
+      final restoredFilters = SourceFilters.fromJson(
+        fixtures.preferences.get<Object?>('sources.filters.installed.manga'),
+      );
+      expect(restoredFilters.query, fixtures.sourceId(MediaType.manga));
+      expect(restoredFilters.language, 'zh');
+      expect(restoredFilters.content, SourceContentRestriction.excludeNsfw);
+      expect(
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+        restoredFilters.query,
+      );
+      expect(
+        tester
+            .widget<DropdownButton<String>>(
+              find.byKey(const ValueKey('source-language-filter')),
+            )
+            .value,
+        'zh',
+      );
+      expect(
+        tester
+            .widget<DropdownButton<SourceContentRestriction>>(
+              find.byKey(const ValueKey('source-content-filter')),
+            )
+            .value,
+        SourceContentRestriction.excludeNsfw,
+      );
+      expect(find.text(fixtures.sourceName(MediaType.manga)), findsOneWidget);
+      expect(find.text('MangaDex 漫画（开放 API）'), findsNothing);
+      expect(find.text('xkcd'), findsNothing);
+      await screenshot(
+        '02_source_filters_restored.png',
+        '${AppRoutes.sources}?type=manga',
+        '生产来源搜索、中文和内容筛选保存后离开再返回；未移除或停用其他来源',
       );
       await go(AppRoutes.novel);
       await go('${AppRoutes.sources}?type=novel');
@@ -598,13 +968,25 @@ void main() {
         '生产作品详情、测试简介与实际章节目录',
       );
 
-      // Metadata search remains available without an installed Bangumi rule.
+      // Metadata is an application-owned, hidden and nonremovable base, not a plugin.
       final registry = await container.read(sourcesProvider.future);
-      expect(
-        registry.entries.where(
-          (entry) => entry.descriptor.id == 'bangumi-anime',
+      final metadataBase = registry.entries.singleWhere(
+        (entry) => entry.descriptor.id == SourceRepository.internalMetadataId,
+      );
+      expect(metadataBase.enabled, isTrue);
+      expect(metadataBase.canRemove, isFalse);
+      expect(registry.manageableEntries, isNot(contains(metadataBase)));
+      final productionRegistry = container.read(sourceRegistryProvider);
+      await expectLater(
+        productionRegistry.setEnabled(
+          SourceRepository.internalMetadataId,
+          enabled: false,
         ),
-        isEmpty,
+        throwsStateError,
+      );
+      await expectLater(
+        productionRegistry.remove(SourceRepository.internalMetadataId),
+        throwsStateError,
       );
       final metadataSearch = AppRoutes.searchFor(
         MediaType.anime,
@@ -1286,7 +1668,9 @@ void main() {
             route,
             '没有外部目录授权就没有本地备份列表；不把私有暂存称为安全备份',
           );
-          final backupScroll = tester.state<ScrollableState>(verticalScroll).position;
+          final backupScroll = tester
+              .state<ScrollableState>(verticalScroll)
+              .position;
           final emptyOffset = backupScroll.pixels;
           expect(emptyOffset, greaterThan(0));
           final reposition = backupScroll.animateTo(
@@ -1477,6 +1861,7 @@ void main() {
         '保存后的深色主题应用于真实漫画书架，非孤立预览',
       );
       tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+      await captureMangaLayouts('10_manga_source_dark_large', Brightness.dark);
       await go(AppRoutes.downloads);
       expect(find.byTooltip('下载操作').hitTestable(), findsOneWidget);
       await screenshot(
@@ -1496,7 +1881,7 @@ void main() {
       debugPrint('IOS_VISUAL_TOUR_CAPTURES=$captureIndex');
       expect(
         captureIndex,
-        72,
+        87,
         reason: 'Every agreed production tour surface must be captured',
       );
     },
