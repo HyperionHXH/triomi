@@ -54,6 +54,24 @@ jobs:
           "TMP=$testTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - run: flutter pub get
       - run: python tools/setup_quickjs_dll.py
+      - name: Prepare checksum-pinned SQLite native asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'triomi-sqlite-native'
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          gh release download sqlite3-3.6.0 --repo simolus3/sqlite3.dart --pattern sqlite3.x64.windows.dll --dir $stage
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $asset = Join-Path $stage 'sqlite3.x64.windows.dll'
+          $expected = 'c5a4ebf9922c63fa252a01c4679992f1fbaa2762b962b78ba6cbdc5cbf7ca91c'
+          if ((Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
+            throw 'Upstream SQLite asset differs from sqlite3 3.6.0 pinned checksum'
+          }
+          # The package hook independently checks this exact digest before reuse.
+          $cache = '.dart_tool/hooks_runner/shared/sqlite3/build/download-c5a4ebf9'
+          New-Item -ItemType Directory -Force $cache | Out-Null
+          Copy-Item $asset (Join-Path $cache 'sqlite3.dll')
       - run: flutter analyze
       - run: flutter test
       - name: Check Python tools and documentation
