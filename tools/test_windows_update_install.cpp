@@ -253,6 +253,18 @@ void Run(const std::wstring& helper) {
   const auto own_revision = ReadInstalledRevision(Image());
   Require(own_revision.version == L"0.0.0+0" && own_revision.revision == 1,
       "Compile and link tools/test_windows_update_install.rc before running this smoke suite");
+  // This dedicated test process and its children must create per-user files,
+  // including files created inside the real helper. Elevated CI tokens otherwise
+  // default to the Administrators group. No user application token is changed.
+  Handle token;
+  HANDLE raw_token = nullptr;
+  Require(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_ADJUST_DEFAULT, &raw_token),
+      "Cannot open isolated smoke token");
+  token.reset(raw_token);
+  const auto owner_sid = UserSid();
+  TOKEN_OWNER owner{const_cast<BYTE*>(owner_sid.data())};
+  Require(SetTokenInformation(token.get(), TokenOwner, &owner, sizeof(owner)),
+      "Cannot configure isolated smoke per-user file ownership");
   SmokeRegistry servicing;
   wchar_t temp[241]{};
   const DWORD length = GetTempPathW(240, temp);
