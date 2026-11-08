@@ -95,6 +95,24 @@ jobs:
           $cache = '.dart_tool/hooks_runner/shared/ech_http/build/prebuilt'
           New-Item -ItemType Directory -Force $cache | Out-Null
           Copy-Item $asset (Join-Path $cache ('windows-x64-' + $pin.sha256 + '.zip'))
+      - name: Prepare original media-kit native archives
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $cache = 'build/windows/x64'
+          New-Item -ItemType Directory -Force $cache | Out-Null
+          $pins = @(
+            @{Repo='media-kit/libmpv-win32-video-build'; Tag='2023-09-24'; Name='mpv-dev-x86_64-20230924-git-652a1dd.7z'; MD5='a832ef24b3a6ff97cd2560b5b9d04cd8'},
+            @{Repo='alexmercerind/flutter-windows-ANGLE-OpenGL-ES'; Tag='v1.0.1'; Name='ANGLE.7z'; MD5='e866f13e8d552348058afaafe869b1ed'}
+          )
+          foreach ($pin in $pins) {
+            gh release download $pin.Tag --repo $pin.Repo --pattern $pin.Name --dir $cache
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if ((Get-FileHash (Join-Path $cache $pin.Name) -Algorithm MD5).Hash.ToLowerInvariant() -ne $pin.MD5) {
+              throw 'Upstream media-kit archive differs from the package integrity pin'
+            }
+          }
       - run: flutter analyze
       - run: flutter test
       - name: Check Python tools and documentation
