@@ -1,6 +1,6 @@
 # Triomi 主线执行清单
 
-## 当前增量：W189 Windows单端功能对齐（0.15.3+188不变，Windows修订1，本地验证完成，待Windows发布）
+## 当前增量：W189 Windows单端功能对齐（0.15.3+188不变，Windows修订1，已发布并核验）
 
 比较当前Android与Windows实际能力后，补Windows更新安装闭环、内容自动检查/通知、文件操作、阅读/播放常亮、任务栏反馈、SMTC媒体控制和来源隔离登录播放。现有等价实现复用，系统PiP/亮度与JVM会话差异不假装支持。只交付Windows源码与Windows资产，不重发Android/iOS、不移动原发布标签；具体证据统一见[当前状态](CURRENT_STATUS.md)和[平台盘点](PLATFORM_DEPENDENCY_AUDIT.md)。
 
