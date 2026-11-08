@@ -126,7 +126,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
       - name: Isolate Flutter acceptance from native WebContent stress tests
         id: flutter-simulator
-        if: ${{ !cancelled() && steps.simulator.outputs.udid != '' }}
+        if: ${{ success() && steps.simulator.outputs.udid != '' }}
         run: |
           set -euo pipefail
           native='${{ steps.simulator.outputs.udid }}'
@@ -148,7 +148,7 @@ jobs:
           path: build/ios/acceptance/
           if-no-files-found: warn
       - name: Install the recording decoder when unavailable
-        if: ${{ !cancelled() && steps.simulator.outputs.udid != '' }}
+        if: ${{ success() && steps.simulator.outputs.udid != '' }}
         run: |
           set -euo pipefail
           if ! command -v ffprobe >/dev/null 2>&1; then
@@ -157,7 +157,7 @@ jobs:
           ffprobe -version
       - name: Isolate visual tour from the preceding Flutter test engine
         id: tour-simulator
-        if: ${{ !cancelled() && steps.flutter-simulator.outputs.udid != '' }}
+        if: ${{ success() && steps.flutter-simulator.outputs.udid != '' }}
         run: |
           set -euo pipefail
           previous='${{ steps.flutter-simulator.outputs.udid }}'
@@ -169,7 +169,7 @@ jobs:
           xcrun simctl bootstatus "$device" -b
       - name: Capture the complete production iOS visual tour
         id: visual-tour
-        if: ${{ !cancelled() && steps.tour-simulator.outputs.udid != '' }}
+        if: ${{ success() && steps.tour-simulator.outputs.udid != '' }}
         timeout-minutes: 22
         run: python tools/run_ios_visual_tour.py --device '${{ steps.tour-simulator.outputs.udid }}'
       - name: Upload visual tour screenshots, recording and diagnostics

@@ -13,7 +13,8 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen, url2pathname
 
 ROOT = Path(__file__).resolve().parents[1]
-NAMES = ('libsqlite3.arm64.ios.dylib', 'libsqlite3.arm64.ios_sim.dylib')
+NAMES = ('libsqlite3.arm64.ios.dylib', 'libsqlite3.arm64.ios_sim.dylib',
+         'libsqlite3.x64.ios_sim.dylib')
 MAX_BYTES = 8 * 1024 * 1024
 
 

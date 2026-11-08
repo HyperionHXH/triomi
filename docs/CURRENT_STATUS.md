@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-## 当前请求：主线0.15.2同步iOS195（验收中）
+## 当前请求：主线0.15.2同步iOS196（验收中）
 
 固定主线`c8090cbd1472d766cddece813cc2dab562406bc`（0.15.2），merge `fd3cb7b`保留两侧历史；键盘/安全区已实际iOS越过，恢复字段巡检修正后下一次推送递增至iOS193，沿用原Bundle ID、iOS15、Keychain、WebKit/AVPlayer及漫画宿主协议。不使用账号或Secrets；用户原禁用账号workflow已从精确Git对象恢复，私有草稿不提交。旧Release不覆盖。
 
@@ -34,6 +34,9 @@ Windows真实程序已通过新增2项文件SQLite/生产路由阅读验收：�
 193/3f5de8a的42466128639在设备Release就失败，Flutter仅显示通用Development Team/Provisioning提示，实际命令仍`--no-codesign`，本轮未改Runner工程签名。先前同工程多次unsigned成功，不能据此要求账号或乱改身份；194只为原build增加verbose以取得被隐藏的Xcode target/原始原因，成功条件及签名禁用保持。通过既有主机代理取回诊断日志，不改应用网络/TLS。
 
 194/cd62dd8实际unsigned设备编译/IPA结构成功；42466751682模拟器host失败明确为sqlite3-3.6.0下载摘要不匹配。独立实取官方浏览器资产URL返回HTTP504、92字节HTML，其SHA256恰为日志`bef140a1...`；官方资产API返回1,714,976B真二进制，摘要精确匹配包钉死的`1218e774...`，否定“需要Apple账号”判断。195在CI先从官方GitHub资产API预取两个arm64设备/模拟器库，期望摘要仍从锁定包读取、官方服务器digest/大小双核对、8MiB上限/原子落盘，原包hook再次校验；无重钉哈希/升级依赖/TLS放宽。三项完整性回归及真实API预取两个库通过；没有将504文件加入产物。193签名通用提示根因仍未直接证实，不把194成功外推为已根治该提示。
+
+195/f00fcf7的42467785685已证实两个arm64预取/设备编译通过，模拟器是universal构建还需要x64库，同一504错误页阻塞。196补齐实际需要的x64 simulator资产，官方API实取并精确匹配包内`c41f725b...`，三个库全部验证通过；不移除x64架构或绕过校验。早期原生host失败后的所有模拟器/解码器setup也统一success门槛，诊断仍always上传。
+
 
 
 
