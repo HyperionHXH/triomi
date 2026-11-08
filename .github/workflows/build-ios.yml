@@ -168,6 +168,13 @@ jobs:
         if: ${{ !cancelled() && steps.tour-simulator.outputs.udid != '' }}
         timeout-minutes: 22
         run: python tools/run_ios_visual_tour.py --device '${{ steps.tour-simulator.outputs.udid }}'
+      - name: Upload visual tour screenshots, recording and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: triomi-ios-visual-tour
+          path: build/ios/visual-tour/
+          if-no-files-found: warn
       - name: Create disposable live source audit simulator
         id: audit-simulator
         if: ${{ !cancelled() && steps.tour-simulator.outputs.udid != '' }}
@@ -239,13 +246,6 @@ jobs:
           path: |
             build/ios/copy-live/
             build/ios/manga-sources-live/
-          if-no-files-found: warn
-      - name: Upload visual tour screenshots, recording and diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: triomi-ios-visual-tour
-          path: build/ios/visual-tour/
           if-no-files-found: warn
       - name: Upload the exact validated IPA
         if: success() && steps.acceptance.outcome == 'success' && steps.visual-tour.outcome == 'success' && steps.manga-live.outcome == 'success' && steps.copy-live.outcome == 'success' && steps.reader-visual.outcome == 'success' && steps.reader-metadata.outcome == 'success'

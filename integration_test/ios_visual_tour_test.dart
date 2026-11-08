@@ -43,6 +43,7 @@ import 'package:triomi/features/reader/manga_reader_page.dart';
 import 'package:triomi/features/settings/onboarding_page.dart';
 import 'package:triomi/features/settings/settings_controller.dart';
 import 'package:triomi/features/sources/kazumi_repositories_sheet.dart';
+import 'package:triomi/features/sources/sources_page.dart';
 
 import 'fixtures/ios_test_binding.dart';
 import 'fixtures/ios_tour_fixtures.dart';
@@ -842,6 +843,10 @@ void main() {
       );
       Navigator.of(tester.element(find.text('漫画来源目录'))).pop();
       await until(
+        () => find.byType(BottomSheet).evaluate().isEmpty,
+        'remote catalog must unmount before editing installed-source filters',
+      );
+      await until(
         () =>
             container
                 .read(sourcesProvider)
@@ -856,8 +861,15 @@ void main() {
         '${AppRoutes.sources}?type=manga',
         '应用内远程规则安装后默认启用，原漫画来源及书库保持',
       );
+      final installedSourceQuery = find
+          .descendant(
+            of: find.byType(SourcesPage),
+            matching: find.byType(TextFormField),
+          )
+          .hitTestable();
+      expect(installedSourceQuery, findsOneWidget);
       await tester.enterText(
-        find.byType(TextFormField),
+        installedSourceQuery,
         fixtures.sourceId(MediaType.manga),
       );
       await pumpFor();
@@ -875,7 +887,17 @@ void main() {
       expect(restoredFilters.language, 'zh');
       expect(restoredFilters.content, SourceContentRestriction.excludeNsfw);
       expect(
-        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+        tester
+            .widget<EditableText>(
+              find
+                  .descendant(
+                    of: find.byType(SourcesPage),
+                    matching: find.byType(EditableText),
+                  )
+                  .hitTestable(),
+            )
+            .controller
+            .text,
         restoredFilters.query,
       );
       expect(
