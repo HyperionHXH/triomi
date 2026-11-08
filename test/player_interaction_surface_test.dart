@@ -29,6 +29,7 @@ class _PlayerHarnessState extends State<_PlayerHarness> {
   final holds = <bool>[];
   int saves = 0;
   int toggles = 0;
+  int controlActivations = 0;
   final sliderFocus = FocusNode();
   final buttonFocus = FocusNode();
   final textFocus = FocusNode();
@@ -117,7 +118,7 @@ class _PlayerHarnessState extends State<_PlayerHarness> {
                             children: [
                               TextButton(
                                 focusNode: buttonFocus,
-                                onPressed: () {},
+                                onPressed: () => controlActivations++,
                                 child: const Text('Control'),
                               ),
                               Expanded(child: TextField(focusNode: textFocus)),
@@ -139,6 +140,66 @@ class _PlayerHarnessState extends State<_PlayerHarness> {
 }
 
 void main() {
+  testWidgets('space toggles playback once from video and focused controls', (
+    tester,
+  ) async {
+    final key = GlobalKey<_PlayerHarnessState>();
+    await tester.pumpWidget(_PlayerHarness(key: key));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('player-blank-input')));
+    await tester.pump(kDoubleTapTimeout);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.space);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.space);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.space);
+    expect(key.currentState!.toggles, 1);
+    key.currentState!.buttonFocus.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(key.currentState!.toggles, 2);
+    key.currentState!.sliderFocus.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(key.currentState!.toggles, 3);
+    expect(key.currentState!.controlActivations, 0);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('space does not control playback while editing or covered', (
+    tester,
+  ) async {
+    final key = GlobalKey<_PlayerHarnessState>();
+    await tester.pumpWidget(_PlayerHarness(key: key));
+    await tester.pump();
+    key.currentState!.textFocus.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(key.currentState!.toggles, 0);
+    key.currentState!.buttonFocus.requestFocus();
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    expect(key.currentState!.toggles, 0);
+    final context = tester.element(find.byType(PlayerInteractionSurface));
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (_) => const AlertDialog(content: Text('Dialog')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(key.currentState!.toggles, 0);
+    Navigator.of(context, rootNavigator: true).pop();
+    await tester.pumpAndSettle();
+    key.currentState!.buttonFocus.requestFocus();
+    key.currentState!.update(() => key.currentState!.enabled = false);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    expect(key.currentState!.toggles, 0);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'device HUD follows snapped readback and external keys; unavailable volume has no writes',
     (tester) async {

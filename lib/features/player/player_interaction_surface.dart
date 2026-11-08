@@ -185,7 +185,8 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
         key == LogicalKeyboardKey.arrowRight ||
         key == LogicalKeyboardKey.arrowUp ||
         key == LogicalKeyboardKey.arrowDown;
-    if (!arrow) return KeyEventResult.ignored;
+    final space = key == LogicalKeyboardKey.space;
+    if (!arrow && !space) return KeyEventResult.ignored;
     if (event is KeyUpEvent) {
       if (key == _heldKey) _clearKey();
       final focusContext = node.context;
@@ -210,6 +211,11 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
       return KeyEventResult.ignored;
     }
     if (_dragOrigin != null || _adjustBrightness != null || _holding) {
+      return KeyEventResult.handled;
+    }
+    if (space) {
+      // Own the whole key sequence before focused buttons can activate again.
+      if (event is KeyDownEvent) widget.onTogglePlay();
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowUp ||
@@ -631,7 +637,11 @@ class _PlayerInteractionSurfaceState extends State<PlayerInteractionSurface>
             const ValueKey('player-seek-hud'),
           ),
         if (_active && _levelHudBrightness != null) _levelHud(),
-        if (widget.controls != null) widget.controls!,
+        if (widget.controls != null)
+          KeyedSubtree(
+            key: const ValueKey('player-controls'),
+            child: widget.controls!,
+          ),
       ],
     ),
   );

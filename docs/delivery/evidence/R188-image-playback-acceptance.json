@@ -1,0 +1,119 @@
+{
+  "version": "0.15.3+188",
+  "status": "local-full-regression-and-native-smoke-passed-normal-builds-pending",
+  "issues": {
+    "5": "https://github.com/HyperionHXH/triomi/issues/5",
+    "6": "https://github.com/HyperionHXH/triomi/issues/6"
+  },
+  "rootCauses": {
+    "pluginIcons": "Installer saved only iconUrl; widget always used network image provider.",
+    "animeCovers": "MediaCover read CoverStore, but online SourceNetworkImage never wrote successful public covers.",
+    "spacePause": "Input boundary handled arrows only, so blank video ignored space and focused controls owned activation."
+  },
+  "behavior": {
+    "installedArtwork": "Persist bounded decoded PNG at trusted install; lazy existing-install backfill; local-first; retain old icon on image failure; uninstall package-specific cleanup.",
+    "uninstalledArtwork": "Network-backed as before.",
+    "coverCache": "Reuse existing CoverStore only for original strict anonymous public Bangumi URL allowlist; client-specific in-flight identities remain distinct.",
+    "playback": "Space keydown toggles once before controls; ignores editing/modifiers/modal/disabled; menu owns its keys and stable keyed controls preserve menu across disabling gestures."
+  },
+  "runtime": {
+    "windowsPlayer": {
+      "platform": "windows",
+      "realNativeDecode": true,
+      "nativeFullscreenAcknowledged": true,
+      "settingsMenuSpaceActivatesOptionWithoutPausing": true,
+      "focusedFullscreenButtonSpacePausesWithoutLeavingFullscreen": true,
+      "pausedPositionMs": 1291,
+      "heldSpaceResumesOnce": true,
+      "restoredWindowSpacePauses": true,
+      "windowSizeBefore": [
+        1898.0,
+        1024.0
+      ],
+      "windowSizeFullscreen": [
+        2560.0,
+        1600.0
+      ],
+      "keyDelivery": "Flutter integration binding into production input; no OS keyboard hardware claim",
+      "userProfileOpened": false
+    },
+    "imagesOnline": {
+      "phase": "online",
+      "productionNativeFlutter": true,
+      "userProfileOpened": false,
+      "iconSource": "https://cdn.jsdelivr.net/gh/keiyoushi/extensions-source@main/src/all/mangadex/res/mipmap-xhdpi/ic_launcher.png",
+      "iconSavedBytes": 4282,
+      "coverDecoded": [
+        560,
+        800
+      ],
+      "coverSavedBytes": 104716,
+      "iconDecoded": [
+        96,
+        96
+      ],
+      "bothProductionWidgetsRendered": true,
+      "offlineRequests": 0
+    },
+    "imagesColdOffline": {
+      "phase": "offline",
+      "productionNativeFlutter": true,
+      "userProfileOpened": false,
+      "coverDecoded": [
+        560,
+        800
+      ],
+      "coverSavedBytes": 104716,
+      "iconDecoded": [
+        96,
+        96
+      ],
+      "bothProductionWidgetsRendered": true,
+      "offlineRequests": 0
+    }
+  },
+  "checks": {
+    "targetedFlutterPassed": 101,
+    "pythonPassed": 117,
+    "analyze": "No issues found",
+    "encodingErrors": 0,
+    "uiDocDriftErrors": 0,
+    "deliveryErrors": 0,
+    "historicalDeliveryWarnings": 35,
+    "flutterPassed": 1940,
+    "flutterPlatformSkipped": 4,
+    "fullFlutterOutput": "artifact://8321",
+    "sourceSecretScan": {
+      "sourceFilesScanned": 1451,
+      "sourceFilesWithExactSecrets": 0,
+      "localSigningSecretAvailable": false,
+      "scope": "Exact existing account values, encodings and packaged private/debug names; signing values only if locally available; not a complete vulnerability audit",
+      "artifacts": [],
+      "passed": true
+    }
+  },
+  "reviews": {
+    "actionableFindingsFixed": [
+      "Sequential repository icon backfill held global installation lock: metadata-only repair plus visible-row byte backfill.",
+      "Mounted FileImage did not reload same-URL icon replacement: keyed remount and red-to-blue pixel regression.",
+      "Space intercepted settings-menu activation: menu disables playback input; keyed controls preserve active menu."
+    ],
+    "scope": "Independent static image and keyboard reviewers; not a claim of no vulnerabilities."
+  },
+  "iosIsolation": {
+    "mainlineMerged": "c8090cbd1472d766cddecec813cc2dab562406bc",
+    "mergeCommit": "fd3cb7b7a551e6997a2bcb7124ad5743037c3dcc",
+    "observedHead": "c0de54e91098f4609bec914ab64f989dbe7f59c8",
+    "documentedTarget": "0.15.2, independent iOS189 acceptance work; checked again before normal release builds",
+    "iosWorkspaceModifiedByThisTask": false,
+    "iosCITriggeredByThisTask": false
+  },
+  "limits": [
+    "Flutter-delivered integration key events, not physical OS-keyboard input.",
+    "Actual native image widget rendering observed programmatically, no desktop pixel-inspection claim.",
+    "Standalone image smoke loaded real repository artwork with production image storage; it did not reinstall a third-party executable plugin.",
+    "Installation/update trust and failed-artwork lifecycle covered by isolated contract regressions.",
+    "Original user device data not touched.",
+    "Earlier failed/superseded targeted runs preserved; not counted as passing."
+  ]
+}

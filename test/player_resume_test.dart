@@ -231,7 +231,28 @@ void main() {
         await settleRoute();
       }
 
-      await menuTap('speed');
+      final playbackCalls = nativeCalls
+          .where((call) => call.method == 'play' || call.method == 'pause')
+          .length;
+      final speedEntry = find.byKey(const ValueKey('player-menu-speed'));
+      Focus.of(
+        tester.element(
+          find.descendant(of: speedEntry, matching: find.text('播放倍速')),
+        ),
+      ).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await settleRoute();
+      expect(
+        find.byKey(const ValueKey('player-menu-speed-1.5')),
+        findsOneWidget,
+      );
+      expect(
+        nativeCalls
+            .where((call) => call.method == 'play' || call.method == 'pause')
+            .length,
+        playbackCalls,
+      );
       await menuTap('speed-1.5');
       expect(
         (nativeCalls.lastWhere((call) => call.method == 'setRate').arguments

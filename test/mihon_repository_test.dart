@@ -712,6 +712,14 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, '卸载'));
       await tester.pumpAndSettle();
+      final uninstallDeadline = DateTime.now().add(const Duration(seconds: 5));
+      while (find.text('Unavailable English plugin').evaluate().isNotEmpty &&
+          DateTime.now().isBefore(uninstallDeadline)) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
       expect(nativeCalls.map((call) => call.method), ['mihonUninstall']);
       expect(
         preferences.get<Map<dynamic, dynamic>>('mihon.installedPackages'),
@@ -1106,13 +1114,6 @@ void main() {
         preferences.get<Map<dynamic, dynamic>>('mihon.installedPackages'),
         installed,
       );
-      expect(preferences.get<Map<dynamic, dynamic>>('mihon.hostStatus'), {
-        for (final entry in status.entries)
-          entry.key: {
-            ...entry.value,
-            'iconUrl': 'https://example.com/icon.png',
-          },
-      });
       expect(
         await tester.runAsync(
           () => Directory('${support.path}/mihon-desktop').exists(),

@@ -933,7 +933,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           !_awaitingPlaybackStart &&
           _error == null &&
           !_inPip &&
-          !_episodesOpen,
+          !_episodesOpen &&
+          !_menuOpen,
       session: _loadSeq,
       position: _position,
       duration: Duration(milliseconds: _sliderMax.toInt()),
