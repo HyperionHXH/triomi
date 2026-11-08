@@ -170,6 +170,98 @@ void main() {
   );
 
   testWidgets(
+    'root layout preserves keyboard avoidance and rejects negative dismissal frames',
+    (tester) async {
+      tester.view.physicalSize = const Size(400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final router = GoRouter(
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (context, _) => Scaffold(
+              body: Center(
+                child: FilledButton(
+                  onPressed: () async {
+                    final saved = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Keyboard consumer'),
+                        content: const TextField(),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Save'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (saved == true && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Saved draft')),
+                      );
+                    }
+                  },
+                  child: const Text('Open keyboard consumer'),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+      final appContainer = ProviderContainer(
+        overrides: [
+          preferencesProvider.overrideWithValue(memoryPreferences()),
+          secureStoreProvider.overrideWithValue(MemorySecureStore()),
+          routerProvider.overrideWithValue(router),
+        ],
+      );
+      try {
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: appContainer,
+            child: const TriomiApp(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Open keyboard consumer'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField), 'retained draft');
+        tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+        await tester.pumpAndSettle();
+        final before = tester.getRect(find.text('Save'));
+        expect(before.bottom, lessThanOrEqualTo(620));
+        tester.view.viewInsets = const FakeViewPadding(bottom: -1000);
+        await tester.pump(const Duration(milliseconds: 16));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text('retained draft'), findsOneWidget);
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+        expect(find.text('Saved draft'), findsOneWidget);
+        expect(
+          tester.getRect(find.text('Saved draft')).bottom,
+          lessThanOrEqualTo(900),
+        );
+        expect(tester.takeException(), isNull);
+        tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+        await tester.pumpAndSettle();
+        expect(
+          tester.getRect(find.text('Saved draft')).bottom,
+          lessThanOrEqualTo(660),
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        router.dispose();
+        appContainer.dispose();
+        container.dispose();
+        await tester.runAsync(db.close);
+      }
+    },
+  );
+
+  testWidgets(
     'switching workspaces retains each scoped search stack and input',
     (tester) async {
       tester.view.physicalSize = const Size(400, 1000);

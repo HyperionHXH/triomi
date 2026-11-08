@@ -140,6 +140,21 @@ class _TriomiAppState extends ConsumerState<TriomiApp>
         covers: appearance.coverAppearance,
       ),
       themeMode: appearance.themeMode,
+      builder: (context, child) {
+        final media = MediaQuery.of(context);
+        if (media.viewInsets.isNonNegative) return child!;
+        // iOS keyboard dismissal can briefly report an out-of-view frame.
+        // Normalize once above both Navigator dialogs and Scaffold snackbars;
+        // positive keyboard avoidance and all other system metrics stay intact.
+        final insets = media.viewInsets.clamp(
+          EdgeInsets.zero,
+          EdgeInsetsGeometry.infinity,
+        ) as EdgeInsets;
+        return MediaQuery(
+          data: media.copyWith(viewInsets: insets),
+          child: child!,
+        );
+      },
       routeInformationProvider: router.routeInformationProvider,
       routeInformationParser: router.routeInformationParser,
       routerDelegate: router.routerDelegate,
