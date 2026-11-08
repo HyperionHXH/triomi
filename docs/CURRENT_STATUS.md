@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-## 当前请求：R190 动漫双模式搜索与桌面播放误报修复（0.15.4+190，双端实跑完成，发布前验证中）
+## 当前请求：R190 动漫双模式搜索与桌面播放误报修复（0.15.4+190，双端已发布核验）
 
 保留Bangumi资料搜索，恢复并列“播放源检索”，按名称查询已启用动画来源并分别展示结果、进度、错误、单站重试和分页。来源专属入口默认本站；可切回资料模式。切模式取消旧请求，晚到结果不覆盖当前查询，资料标签不泄漏到播放站。作品直接以原(sourceId,remoteId)进入本站详情、列表和选集，不依赖Bangumi收录、不按标题自动关联。
 
@@ -9,6 +9,11 @@
 受控双端实跑使用生产SearchPage→DeclarativeSource/真实loopback HTTP→DetailPage→PlayerPage，不打开用户配置。Bangumi返回空结果，来源返回独有作品，两端均选第1集原生播放；Android实际时间`0:02 / 0:45`，Windows1125→3625ms，诊断不遮挡、真实404报错、重试恢复及暂停诊断通过。原API35只install-r保留数据，回环验收暂取消旧代理后已恢复`10.0.2.2:7890`。受控夹具不冒称外部所有站点播放通过；临时入口与视频资源已移除，最终正常入口构建/全量回归/签名和公开产物另记。按用户要求，issue修复及双端验证完成后才进入提交发布阶段；iOS独立工作区不变。
 
 最终本机Flutter **1978通过/5平台条件跳过**，analyze零问题，Python **118项通过**，UTF-8与UI/文档漂移零错误；1481个源码/证据文件现有账号值/编码扫描零命中，本机无正式签名私钥，不冒称已扫描私钥。保留永久原生错误回归，双端loopback临时入口和视频已删除。正常WindowsRelease、Android正常入口Release验收包均已编译，Mihon ABI **128项通过**，原API35 install-r保数据恢复到正常入口。Android首次遭本地生成插件注册文件夹带integration_test，刷新生产入口/插件生成后已重建通过，未修改生产插件列表或跳过编译。最终签名与公开发布证据继续更新于[R190记录](delivery/evidence/R190-anime-source-search-acceptance.json)。
+
+[v0.15.4正式发布](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.4)已完成，[Android/Windows/publish三任务](https://github.com/HyperionHXH/triomi/actions/runs/42495342379)全部成功，源码`70734b20a543872f4ec8b1dd58fa841d85214457`。远端真实mpv回归将测试输出固定null以支持无音频设备runner，仍执行真实解码、播放时钟、可恢复诊断及缺失主媒体失败，不跳过测试、不修改生产输出。
+
+五项公开资产均完整下载且GitHub digest/公共SHA256一致：APK **162852724字节 / `eb0982e46c9629419608cfac4250140c7a7c2c2346b84e5f6fcc768225066732`**；Windows ZIP **255557001字节 / `9d65be10c71682f201ce689728f0c0ef387b1c68a8881e04ae687b8135220497`**；MSI **244228297字节 / `26db6eb6c7ed7b808c4345b1f1a839f6bffc63a2aa1307ed8e021b0852e99eed`**。ZIP全部467成员匹配清单；APK实际版本0.15.4/190、原生产证书`731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309`验签及ABI128通过。公开APK626成员与ZIP467成员账号值扫描零命中、无私钥/调试文件名；MSI仅原始容器扫描，不冒称压缩成员检查。10个既有iOS发布资产身份不变。#7已[回写验证及下载地址并关闭](https://github.com/HyperionHXH/triomi/issues/7#issuecomment-6723585460)。
+
 
 
 ## 当前请求：W189 Windows/Android功能对齐（版本保持0.15.3+188，Windows修订1，已发布并核验）

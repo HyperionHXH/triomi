@@ -1,6 +1,6 @@
 {
   "version": "0.15.4+190",
-  "status": "native-dual-platform-and-local-release-gates-passed-ready-for-submission",
+  "status": "complete-dual-platform-release-and-issue-verified",
   "requirements": {
     "bangumiSearchRetained": true,
     "independentPlaybackSourceNameSearchRestored": true,
@@ -46,5 +46,115 @@
   },
   "verification": {"flutterPassed": 1978, "flutterSkipped": 5, "analyze": "No issues found", "pythonPassed": 118, "encodingErrors": 0, "uiDocDriftErrors": 0, "sourceFilesExactSecretScanned": 1481, "sourceFilesWithExactSecrets": 0, "localSigningSecretAvailable": false},
   "normalBuilds": {"windowsRelease": "passed", "androidReleaseAcceptanceSigning": "passed", "mihonAbiDescriptorsPassed": 128, "originalApi35NormalEntrypointInstallReplace": "Success; no uninstall or data clear"},
-  "release": {"status": "pending", "platforms": ["android", "windows"], "iosWorkspaceNotChanged": true}
+  "release": {
+    "passed": true,
+    "tag": "v0.15.4",
+    "version": "0.15.4+190",
+    "sourceCommit": "70734b20a543872f4ec8b1dd58fa841d85214457",
+    "workflowRun": "42495342379",
+    "workflowUrl": "https://github.com/HyperionHXH/triomi/actions/runs/42495342379",
+    "releaseUrl": "https://github.com/HyperionHXH/triomi/releases/tag/v0.15.4",
+    "assets": [
+      {
+        "name": "SHA256SUMS.txt",
+        "assetId": 724382292,
+        "bytes": 348,
+        "sha256": "bfcb70f56cfbbca6e649385c4d18f0ad458f425218e7ad5c9fa1371a7468ffdd"
+      },
+      {
+        "name": "triomi-android.apk",
+        "assetId": 724382293,
+        "bytes": 162852724,
+        "sha256": "eb0982e46c9629419608cfac4250140c7a7c2c2346b84e5f6fcc768225066732"
+      },
+      {
+        "name": "triomi-windows.msi",
+        "assetId": 724382294,
+        "bytes": 244228297,
+        "sha256": "26db6eb6c7ed7b808c4345b1f1a839f6bffc63a2aa1307ed8e021b0852e99eed"
+      },
+      {
+        "name": "triomi-windows.update.json",
+        "assetId": 724382299,
+        "bytes": 81423,
+        "sha256": "f1a34be2ff75370e367367a413aecc419c6bf36ac7a7cbbab5e32d25fb4b19fe"
+      },
+      {
+        "name": "triomi-windows.zip",
+        "assetId": 724382295,
+        "bytes": 255557001,
+        "sha256": "9d65be10c71682f201ce689728f0c0ef387b1c68a8881e04ae687b8135220497"
+      }
+    ],
+    "windowsMembersVerified": 467,
+    "androidIdentity": "package: name='io.github.hyperionhxh.triomi' versionCode='190' versionName='0.15.4' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+    "androidSignatureVerified": true,
+    "productionCertificateSha256": "731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309",
+    "mihonAbi": "Mihon ABI OK: 128 descriptors across 1 DEX files (5671 public/protected classes, 47138 visible members).",
+    "protectedIosReleasesUnchanged": 10,
+    "onlyAndroidAndWindowsPublished": true,
+    "status": "complete-public-release-signed-artifacts-verified",
+    "privacy": {
+      "sourceFilesScanned": 1481,
+      "sourceFilesWithExactSecrets": 0,
+      "localSigningSecretAvailable": false,
+      "scope": "Exact local account values and encodings; signing values only if available; ZIP payload members plus MSI raw container; not a general security audit",
+      "artifacts": [
+        {
+          "file": "SHA256SUMS.txt",
+          "bytes": 348,
+          "sha256": "bfcb70f56cfbbca6e649385c4d18f0ad458f425218e7ad5c9fa1371a7468ffdd",
+          "membersScanned": 0,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0,
+          "rawContainerWithExactSecrets": false
+        },
+        {
+          "file": "triomi-android.apk",
+          "bytes": 162852724,
+          "sha256": "eb0982e46c9629419608cfac4250140c7a7c2c2346b84e5f6fcc768225066732",
+          "membersScanned": 626,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0
+        },
+        {
+          "file": "triomi-windows.msi",
+          "bytes": 244228297,
+          "sha256": "26db6eb6c7ed7b808c4345b1f1a839f6bffc63a2aa1307ed8e021b0852e99eed",
+          "membersScanned": 0,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0,
+          "rawContainerWithExactSecrets": false
+        },
+        {
+          "file": "triomi-windows.update.json",
+          "bytes": 81423,
+          "sha256": "f1a34be2ff75370e367367a413aecc419c6bf36ac7a7cbbab5e32d25fb4b19fe",
+          "membersScanned": 0,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0,
+          "rawContainerWithExactSecrets": false
+        },
+        {
+          "file": "triomi-windows.zip",
+          "bytes": 255557001,
+          "sha256": "9d65be10c71682f201ce689728f0c0ef387b1c68a8881e04ae687b8135220497",
+          "membersScanned": 467,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0
+        }
+      ],
+      "passed": true
+    },
+    "issue7": {
+      "state": "closed",
+      "resolutionComment": "https://github.com/HyperionHXH/triomi/issues/7#issuecomment-6723585460"
+    },
+    "remoteNativeRegression": "passed with real mpv null audio output; no physical endpoint required, decoder clock/error semantics unchanged"
+  }
 }
