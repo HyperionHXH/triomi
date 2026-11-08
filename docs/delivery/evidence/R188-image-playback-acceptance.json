@@ -1,6 +1,6 @@
 {
   "version": "0.15.3+188",
-  "status": "local-full-regression-and-native-smoke-passed-normal-builds-pending",
+  "status": "complete-public-release-full-ci-and-public-artifacts-verified",
   "issues": {
     "5": "https://github.com/HyperionHXH/triomi/issues/5",
     "6": "https://github.com/HyperionHXH/triomi/issues/6"
@@ -115,5 +115,198 @@
     "Installation/update trust and failed-artwork lifecycle covered by isolated contract regressions.",
     "Original user device data not touched.",
     "Earlier failed/superseded targeted runs preserved; not counted as passing."
-  ]
+  ],
+  "commit": "481c964a9815fff5082dcb6c3715a93b768798f3",
+  "localBuilds": {
+    "windowsRelease": "success; normal main, ProductVersion/FileVersion 0.15.3+188",
+    "androidAcceptanceRelease": {
+      "status": "success",
+      "bytes": 162741212,
+      "sha256": "3a316311821e2a7e8b5da9a0df2534fb4a15e329d185a18da7adf898116472b8"
+    },
+    "androidMihonAbi": "128 descriptors across 1 DEX; 5671 public/protected classes, 47138 visible members"
+  },
+  "remoteRuns": {
+    "completeMainlineBuild": {
+      "id": 42446962575,
+      "headSha": "481c964a9815fff5082dcb6c3715a93b768798f3",
+      "conclusion": "success",
+      "jobs": {
+        "windows": "success",
+        "python-tools": "success",
+        "android": "success",
+        "test": "success"
+      },
+      "flutterPassed": 1943,
+      "flutterSkipped": 1,
+      "analyze": "No issues found",
+      "testLog": "artifact://8351"
+    },
+    "productionSignedRelease": {
+      "id": 42446979609,
+      "headSha": "481c964a9815fff5082dcb6c3715a93b768798f3",
+      "conclusion": "success"
+    },
+    "duplicateSameCommitTagBuild": {
+      "id": 42446978468,
+      "cancellation": "Requested cancellation of self-triggered redundant validation; not counted as passing."
+    }
+  },
+  "intermediateFailures": [
+    {
+      "scope": "first integrated icon/cover regressions",
+      "detail": "Named-parameter/import mismatch corrected; widget filesystem waits moved to real async; obsolete eager-backfill expectations migrated to actual lazy image consumer; uninstall waits for completed filesystem work."
+    },
+    {
+      "scope": "native Windows verification attempt",
+      "detail": "One later launch failed waiting for debug connection. Root cause unproven; failed attempt not counted as passing. Subsequent final native player and image cold-process runs passed."
+    },
+    {
+      "scope": "local Android native asset build",
+      "detail": "GitHub download of pinned arm64 dependency timed out. Read-only copied archive from existing local iOS build cache after exact 88f22585... SHA-256 verification; unchanged normal build and ABI then passed."
+    }
+  ],
+  "localArtifactSecretScan": {
+    "sourceFilesScanned": 1451,
+    "sourceFilesWithExactSecrets": 0,
+    "localSigningSecretAvailable": false,
+    "scope": "Exact existing account values, encodings and packaged private/debug names; signing values only if locally available; not a complete vulnerability audit",
+    "artifacts": [
+      {
+        "file": "app-release.apk",
+        "bytes": 162741212,
+        "sha256": "3a316311821e2a7e8b5da9a0df2534fb4a15e329d185a18da7adf898116472b8",
+        "membersScanned": 626,
+        "membersWithExactSecrets": 0,
+        "privateMaterialNames": 0,
+        "debugNames": 0
+      }
+    ],
+    "passed": true
+  },
+  "publication": {
+    "tag": "v0.15.3",
+    "releaseUrl": "https://github.com/HyperionHXH/triomi/releases/tag/v0.15.3",
+    "releaseId": 438034636,
+    "assets": [
+      {
+        "name": "SHA256SUMS.txt",
+        "bytes": 348,
+        "sha256": "11fe8fd9ed553752a9c900050cbaeb61dd2c42e70a6d921cfd8b7fd9b14e83fd"
+      },
+      {
+        "name": "triomi-android.apk",
+        "bytes": 162754436,
+        "sha256": "cda8f7705114feadb17949fe087a074ac45628e29bb5dadd63bc3287354bf75d"
+      },
+      {
+        "name": "triomi-windows.msi",
+        "bytes": 244271904,
+        "sha256": "ff7b77b8692da923fbb3eb133a87bcf5859877480c770b356b46b1cd23b31a6e"
+      },
+      {
+        "name": "triomi-windows.update.json",
+        "bytes": 81425,
+        "sha256": "1ac123d9d2bb85f1d0537644df9f19f082616a2e67c817eb69a9e023f4494e2d"
+      },
+      {
+        "name": "triomi-windows.zip",
+        "bytes": 255596791,
+        "sha256": "8e8087ac1602928a5b3cd5b1e56b87df79a18a163b5264912eeff200e0aaa72a"
+      }
+    ],
+    "downloadTransport": "GitHub CLI release asset download; digests verified against API and public manifest",
+    "windows": {
+      "membersVerified": 467,
+      "version": "0.15.3",
+      "build": 188,
+      "msiProductVersion": "0.15.188"
+    },
+    "android": {
+      "identity": "package: name='io.github.hyperionhxh.triomi' versionCode='188' versionName='0.15.3' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+      "signatureVerified": true,
+      "certificateSha256": "731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309",
+      "mihonAbi": "Mihon ABI OK: 128 descriptors across 1 DEX files (5671 public/protected classes, 47138 visible members)."
+    },
+    "packagedRulesByteIdentical": 26,
+    "previousReleaseFilesUnchanged": true,
+    "installationPerformed": false
+  },
+  "publicSecretScan": {
+    "sourceFilesScanned": 1451,
+    "sourceFilesWithExactSecrets": 0,
+    "localSigningSecretAvailable": false,
+    "scope": "Exact existing account values, encodings and packaged private/debug names; signing values only if locally available; not a complete vulnerability audit",
+    "artifacts": [
+      {
+        "file": "triomi-android.apk",
+        "bytes": 162754436,
+        "sha256": "cda8f7705114feadb17949fe087a074ac45628e29bb5dadd63bc3287354bf75d",
+        "membersScanned": 626,
+        "membersWithExactSecrets": 0,
+        "privateMaterialNames": 0,
+        "debugNames": 0
+      },
+      {
+        "file": "triomi-windows.zip",
+        "bytes": 255596791,
+        "sha256": "8e8087ac1602928a5b3cd5b1e56b87df79a18a163b5264912eeff200e0aaa72a",
+        "membersScanned": 467,
+        "membersWithExactSecrets": 0,
+        "privateMaterialNames": 0,
+        "debugNames": 0
+      },
+      {
+        "file": "triomi-windows.msi",
+        "bytes": 244271904,
+        "sha256": "ff7b77b8692da923fbb3eb133a87bcf5859877480c770b356b46b1cd23b31a6e",
+        "membersScanned": 1,
+        "membersWithExactSecrets": 0,
+        "privateMaterialNames": 0,
+        "debugNames": 0
+      },
+      {
+        "file": "triomi-windows.update.json",
+        "bytes": 81425,
+        "sha256": "1ac123d9d2bb85f1d0537644df9f19f082616a2e67c817eb69a9e023f4494e2d",
+        "membersScanned": 1,
+        "membersWithExactSecrets": 0,
+        "privateMaterialNames": 0,
+        "debugNames": 0
+      },
+      {
+        "file": "SHA256SUMS.txt",
+        "bytes": 348,
+        "sha256": "11fe8fd9ed553752a9c900050cbaeb61dd2c42e70a6d921cfd8b7fd9b14e83fd",
+        "membersScanned": 1,
+        "membersWithExactSecrets": 0,
+        "privateMaterialNames": 0,
+        "debugNames": 0
+      }
+    ],
+    "passed": true
+  },
+  "productionUpdater": {
+    "tag": "v0.15.3",
+    "anonymous": true,
+    "productionService": true,
+    "checksums": {
+      "SHA256SUMS.txt": "11fe8fd9ed553752a9c900050cbaeb61dd2c42e70a6d921cfd8b7fd9b14e83fd",
+      "triomi-android.apk": "cda8f7705114feadb17949fe087a074ac45628e29bb5dadd63bc3287354bf75d",
+      "triomi-windows.msi": "ff7b77b8692da923fbb3eb133a87bcf5859877480c770b356b46b1cd23b31a6e",
+      "triomi-windows.update.json": "1ac123d9d2bb85f1d0537644df9f19f082616a2e67c817eb69a9e023f4494e2d",
+      "triomi-windows.zip": "8e8087ac1602928a5b3cd5b1e56b87df79a18a163b5264912eeff200e0aaa72a"
+    },
+    "installationPerformed": false
+  },
+  "publicRuleByteComparison": {
+    "basis": "Exact immutable v0.15.3 Git blobs, no whitespace normalization of public files",
+    "allPackagedRulesMatchedBothPlatforms": 26,
+    "localLegacyWorkingTreeCrlfDifferences": 11,
+    "comparisonToolCorrection": "Initial checker compared legacy CRLF working-tree copies; investigation proved both public archives exactly match committed LF blobs. Corrected checker uses immutable tag bytes. No release asset or source change."
+  },
+  "issuesClosed": {
+    "5": true,
+    "6": true
+  }
 }
