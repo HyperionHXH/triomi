@@ -10,7 +10,15 @@
 namespace {
 using namespace triomi_update;
 void Directory(const std::wstring& path) {
-  Require(CreateDirectoryW(path.c_str(), nullptr) || GetLastError() == ERROR_ALREADY_EXISTS,
+  // Elevated runners can default new directory ownership to Administrators.
+  // Exercise the supported per-user staging layout, without weakening Pins.
+  const auto sid = UserSid();
+  SECURITY_DESCRIPTOR descriptor{};
+  Require(InitializeSecurityDescriptor(&descriptor, SECURITY_DESCRIPTOR_REVISION) &&
+      SetSecurityDescriptorOwner(&descriptor, const_cast<BYTE*>(sid.data()), FALSE),
+      "Cannot assign isolated staging owner");
+  SECURITY_ATTRIBUTES attributes{sizeof(attributes), &descriptor, FALSE};
+  Require(CreateDirectoryW(path.c_str(), &attributes) || GetLastError() == ERROR_ALREADY_EXISTS,
       "Smoke directory creation failed");
 }
 void TextFile(const std::wstring& path, const std::string& text) {
