@@ -73,7 +73,9 @@ jobs:
       - name: Exercise real native updater rollback and ownership
         shell: cmd
         run: |
-          call "C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
+          for /f "usebackq delims=" %%I in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "TRIOMI_VS=%%I"
+          if not defined TRIOMI_VS exit /b 1
+          call "%TRIOMI_VS%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
           if errorlevel 1 exit /b %errorlevel%
           rc /nologo /fo build\test_windows_update_install.res tools\test_windows_update_install.rc
           if errorlevel 1 exit /b %errorlevel%
