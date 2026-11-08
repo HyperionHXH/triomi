@@ -113,6 +113,19 @@ jobs:
               throw 'Upstream media-kit archive differs from the package integrity pin'
             }
           }
+      - name: Prepare checksum-pinned extension host
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $cache = 'build/extension-runtime-cache'
+          New-Item -ItemType Directory -Force $cache | Out-Null
+          gh release download v2.4.2366 --repo Suwayomi/Suwayomi-Server --pattern Suwayomi-Server-v2.4.2366.jar --dir $cache
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $expected = 'af9feb20af9d7ebe9e30769e6c6ebc7fc7ab1c447388d42e0280b1da5fe07bfd'
+          if ((Get-FileHash (Join-Path $cache 'Suwayomi-Server-v2.4.2366.jar') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
+            throw 'Upstream extension host differs from the existing runtime pin'
+          }
       - run: flutter analyze
       - run: flutter test
       - name: Check Python tools and documentation
