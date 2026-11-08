@@ -72,6 +72,29 @@ jobs:
           $cache = '.dart_tool/hooks_runner/shared/sqlite3/build/download-c5a4ebf9'
           New-Item -ItemType Directory -Force $cache | Out-Null
           Copy-Item $asset (Join-Path $cache 'sqlite3.dll')
+      - name: Prepare checksum-pinned ECH dependency SDK
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $manifest = Get-Content packages/ech_http/lib/src/build_support/dependencies.json -Raw | ConvertFrom-Json
+          $pin = $manifest.targets.'windows-x64'
+          $url = [Uri]$pin.url
+          if ($url.Host -ne 'github.com') { throw 'Unexpected SDK asset host' }
+          $parts = $url.AbsolutePath.Trim('/').Split('/')
+          $repository = $parts[0] + '/' + $parts[1]
+          $assetName = $parts[-1]
+          $stage = Join-Path $env:RUNNER_TEMP 'triomi-ech-native'
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          gh release download $pin.release --repo $repository --pattern $assetName --dir $stage
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $asset = Join-Path $stage $assetName
+          if ((Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pin.sha256) {
+            throw 'Upstream ECH SDK differs from the existing dependency pin'
+          }
+          $cache = '.dart_tool/hooks_runner/shared/ech_http/build/prebuilt'
+          New-Item -ItemType Directory -Force $cache | Out-Null
+          Copy-Item $asset (Join-Path $cache ('windows-x64-' + $pin.sha256 + '.zip'))
       - run: flutter analyze
       - run: flutter test
       - name: Check Python tools and documentation
