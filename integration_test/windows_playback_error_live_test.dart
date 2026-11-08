@@ -54,6 +54,9 @@ void main() {
       }
 
       try {
+        // Hosted Windows has no audio endpoint. Decode normally but discard the
+        // output, keeping the real mpv playback clock and fatal-error behavior.
+        await native.setProperty('ao', 'null');
         await monitor.initialize();
         monitor.reset();
         monitor.opening();
