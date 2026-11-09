@@ -90,6 +90,8 @@ std::wstring CanonicalPath(const std::wstring& path) {
   const DWORD written = GetFullPathNameW(path.c_str(), size, full.data(), nullptr);
   if (!written || written >= size) return {};
   full.resize(written);
+  if (full.rfind(L"\\\\?\\UNC\\", 0) == 0) full = L"\\\\" + full.substr(8);
+  else if (full.rfind(L"\\\\?\\", 0) == 0) full.erase(0, 4);
   // Short aliases must compare as the same directory, never a different jar.
   const DWORD long_size = GetLongPathNameW(full.c_str(), nullptr, 0);
   if (long_size) {
@@ -138,15 +140,6 @@ struct SourceEnvironment : std::enable_shared_from_this<SourceEnvironment> {
       stage = "profile-directory"; Complete(HRESULT_FROM_WIN32(ERROR_DIRECTORY)); return;
     }
     std::wstring browser_path = path;
-    const DWORD short_size = GetShortPathNameW(path.c_str(), nullptr, 0);
-    if (short_size) {
-      std::wstring short_path(short_size, L'\0');
-      const DWORD length = GetShortPathNameW(path.c_str(), short_path.data(), short_size);
-      if (length && length < short_size) {
-        short_path.resize(length);
-        if (CanonicalPath(short_path) == CanonicalPath(path)) browser_path = std::move(short_path);
-      }
-    }
     const DWORD browser_attributes = GetFileAttributesW((browser_path + L"\\EBWebView").c_str());
     if (browser_attributes != INVALID_FILE_ATTRIBUTES && !(browser_attributes & FILE_ATTRIBUTE_DIRECTORY)) {
       stage = "profile-directory"; Complete(HRESULT_FROM_WIN32(ERROR_DIRECTORY)); return;
@@ -158,6 +151,8 @@ struct SourceEnvironment : std::enable_shared_from_this<SourceEnvironment> {
       stage = "profile-writable"; Complete(HRESULT_FROM_WIN32(GetLastError())); return;
     }
     DeleteFileW(probe);
+    browser_path = path.rfind(L"\\\\", 0) == 0
+        ? L"\\\\?\\UNC\\" + path.substr(2) : L"\\\\?\\" + path;
     const HRESULT started = CreateCoreWebView2EnvironmentWithOptions(nullptr, browser_path.c_str(), nullptr,
       Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
         [self](HRESULT status, ICoreWebView2Environment* environment) -> HRESULT {

@@ -299,17 +299,11 @@ void main() {
         );
         // Terminate only the browser process whose command line points to this
         // exclusive synthetic profile. Never touch the user's Edge processes.
-        final shortResult = await Process.run('powershell.exe', [
-          '-NoProfile',
-          '-Command',
-          "(New-Object -ComObject Scripting.FileSystemObject).GetFolder('${profile.path.replaceAll('/', r'\').replaceAll("'", "''")}').ShortPath",
-        ]);
-        expect(shortResult.exitCode, 0);
-        final shortPath = '${shortResult.stdout}'.trim();
+        final profilePath = profile.path.replaceAll('/', r'\');
         final browserPids = await Process.run('powershell.exe', [
           '-NoProfile',
           '-Command',
-          "Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | Where-Object { \$_.CommandLine -and \$_.CommandLine.IndexOf('${shortPath.replaceAll("'", "''")}', [StringComparison]::OrdinalIgnoreCase) -ge 0 -and \$_.CommandLine -notmatch '--type=' } | Select-Object -ExpandProperty ProcessId",
+          "Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | Where-Object { \$_.CommandLine -and \$_.CommandLine.IndexOf('${profilePath.replaceAll("'", "''")}', [StringComparison]::OrdinalIgnoreCase) -ge 0 -and \$_.CommandLine -notmatch '--type=' } | Select-Object -ExpandProperty ProcessId",
         ]);
         expect(browserPids.exitCode, 0);
         final pids = '${browserPids.stdout}'
@@ -322,7 +316,7 @@ void main() {
           pids,
           hasLength(1),
           reason:
-              'Only the exclusive fixture browser may be terminated; short path: $shortPath',
+              'Only the exclusive fixture browser may be terminated; profile: $profilePath',
         );
         final started = events[650] = Completer<void>();
         await channel.invokeMethod<void>('startVideo', {

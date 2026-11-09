@@ -13,8 +13,8 @@
     "shortPathBaseline": "Actual WebView2: 35 sequential, 4 concurrent and 10 initialization-cancel/reopen operations passed",
     "deepColdUnicodeProfileBeforeFix": "First controller-create failed with 0x80080005",
     "singleVariableCheck": "Reducing intermediate path from 80 characters to 10 while retaining Unicode, cold directory and cookie-store checks passed",
-    "fixedDeepPath": "Original directory and cookies retained; same-directory OS 8.3 name used when available, canonical long identity rechecked; shared environment per source directory; deep-path operations passed",
-    "limitations": "When the volume does not provide an 8.3 name, the original directory remains in use and actual startup failure is reported. No automatic anonymous replacement, junction, credential move, TLS bypass, or claim that every arbitrarily deep path works."
+    "fixedDeepPath": "Original directory and cookies retained; same-directory Windows extended path used, canonical identity strips prefix before comparison; shared environment per source directory. Initial 8.3 alias workaround passed locally but failed on hosted runner, so removed.",
+    "limitations": "No anonymous replacement, junction, credential move or TLS bypass. Original reporter machine code was discarded by the previous version; verified client startup classes do not establish the unique original machine failure."
   },
   "codeReview": [
     {"defect": "Every operation constructed an independent environment for the same source directory; initialization was not coordinated", "change": "One canonical-directory environment, coalesced creation, independent cancellable controllers"},

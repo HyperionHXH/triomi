@@ -4,7 +4,7 @@
 
 [#8](https://github.com/HyperionHXH/triomi/issues/8)截图实际错误是`Windows source browser is unavailable`，发生在WebView2网页解析器创建、尚未进入解码。旧原生`Failed`把环境、控制器、脚本、Cookie错误统一折叠，无法从旧截图追溯用户机器的原始HRESULT；不能无证据归咎网络或宣称所有重试失败同一原因。
 
-本机真实WebView2反馈链路：普通短目录35次连续/4次并发/10次初始化中取消重开通过；冷的较深Unicode来源目录首次controller-create失败`0x80080005`，只缩短中间路径便通过，证明本机路径依赖故障。修后创建来源目录、用系统8.3别名指向同一个原目录并展开长路径做隔离校验；不移动/清空Cookie、不换公共目录、不使用junction，不放宽TLS。按规范化来源目录共享一个environment并合并并发创建，单次解析controller仍独立，取消不关闭登录或下载。保留安全stage/HRESULT，浏览器进程退出可在重试时重建。未获短名的系统仍使用原目录并准确报告失败，不对超深路径跨系统保证成功。
+本机真实WebView2反馈链路：普通短目录35次连续/4次并发/10次初始化中取消重开通过；冷的较深Unicode来源目录首次controller-create失败`0x80080005`，只缩短中间路径便通过，证明本机路径依赖故障。初版同目录8.3别名在本机有效但远端仍失败，不能跨磁盘依赖短名；现改为原目录的Windows扩展路径`\\?\`（UNC相应转换），隔离比较去前缀再展开原身份。创建前检查目录属性及实际写入，不移动/清空Cookie、不换公共目录、不使用junction，不放宽TLS。按规范化来源目录共享一个environment并合并并发创建，单次解析controller仍独立，取消不关闭登录或下载。保留安全stage/HRESULT，浏览器进程退出可在重试时重建。任意路径与系统策略是否支持仍按实际错误报告，不假造成功。
 
 审查同时确认：原`VideoController.waitUntilFirstFrameRendered`是controller生命期一次性Future，不能证明后续每集准备好；线路切换只推进resolve代次但外层用load代次发布，旧线路失败可能覆盖新线路；切集在查本地历史期间没有立即取消旧浏览器。现在`DesktopPlaybackSession`统一串行stop/open、每媒体就绪/取消和致命错误；切集立即撤销解析，线路sheet及异步进度保存按当前代次生效。Android仍为Media3，不新增解码器。
 
