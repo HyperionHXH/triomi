@@ -1,0 +1,45 @@
+{
+  "version": "0.15.4+190",
+  "windowsRevision": 1,
+  "status": "local-native-consumer-and-windows-package-verified-publication-pending",
+  "issue": "https://github.com/HyperionHXH/triomi/issues/8",
+  "reportedFailure": {
+    "screenshot": "Windows source browser is unavailable; black screen, 0:00 / 0:00, episode 53",
+    "stage": "Native WebView2 source-browser initialization, before decoder media open",
+    "notTheSameAsIssue7": "Issue7 was a nonfatal FFmpeg log shown over continuing video",
+    "uncertainty": "Old code discarded the exact stage and HRESULT. The reporter supplied no playback source or original native code; this workstation reproduction proves a matching failure class, not the unique cause on the reporter's machine."
+  },
+  "investigation": {
+    "shortPathBaseline": "Actual WebView2: 35 sequential, 4 concurrent and 10 initialization-cancel/reopen operations passed",
+    "deepColdUnicodeProfileBeforeFix": "First controller-create failed with 0x80080005",
+    "singleVariableCheck": "Reducing intermediate path from 80 characters to 10 while retaining Unicode, cold directory and cookie-store checks passed",
+    "fixedDeepPath": "Original directory and cookies retained; same-directory OS 8.3 name used when available, canonical long identity rechecked; shared environment per source directory; deep-path operations passed",
+    "limitations": "When the volume does not provide an 8.3 name, the original directory remains in use and actual startup failure is reported. No automatic anonymous replacement, junction, credential move, TLS bypass, or claim that every arbitrarily deep path works."
+  },
+  "codeReview": [
+    {"defect": "Every operation constructed an independent environment for the same source directory; initialization was not coordinated", "change": "One canonical-directory environment, coalesced creation, independent cancellable controllers"},
+    {"defect": "Generic Failed erased environment/controller/script/cookie failure codes", "change": "Safe stage plus exact HRESULT; no URL, local user path, cookie or credentials in diagnostic details"},
+    {"defect": "Cancelled pending controller could still be allocated after close", "change": "Terminal closed state is checked both before controller creation and in callback; cancelled created controller closed"},
+    {"defect": "No browser ProcessFailed lifecycle invalidation", "change": "Process exit invalidates shared environment and pending resolver; explicit retry recreates; only fixture browser process terminated in regression"},
+    {"defect": "VideoController.waitUntilFirstFrameRendered completes once per controller, not each file", "change": "DesktopPlaybackSession serializes stop/open and waits for actual current media time-pos/idle status"},
+    {"defect": "Source-line changes used resolve generation while outer result publication checked only load generation", "change": "Line choices have current load generation and captured directory; switching increments load identity; stale sheet/results cannot publish"},
+    {"defect": "Old resolver was not cancelled until history/content loads completed", "change": "Episode retry/switch cancels immediately; asynchronous completion/save transitions check current load identity"}
+  ],
+  "kazumiComparison": {
+    "readOnlyRevision": "02afdabf72af7eee04a7403786ee60236701086c",
+    "referenceFiles": ["lib/services/video_source/webview_video_source_service.dart", "lib/webview/video/impl/video_webview_windows_impl.dart", "lib/pages/video/video_controller.dart", "lib/services/player/player_error_mapper.dart"],
+    "adoptedPrinciples": ["Reuse browser infrastructure rather than booting each resolve", "Serialize operations sharing mutable playback state", "Separate session ownership and revoke stale results", "Distinguish resolver failure, decoder failure and diagnostic logs"],
+    "notCopied": ["Global/shared cross-source credentials", "1500MiB default packet cache", "Narrow log substring errors as universal fatal classification"],
+    "primaryWebView2Contract": "https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/process-model"
+  },
+  "actualRuntime": {
+    "nativeSuite": "integration_test/windows_playback_lifecycle_live_test.dart",
+    "browser": ["deep Unicode cold profile", "35 serial", "4 simultaneous", "10 pending-cancel/reopen", "source cookie persists", "different source cannot read synthetic cookie", "browser process death becomes explicit failure then retry succeeds", "invalid profile file reports stage/HRESULT without leaking its path", "8 production Dart resolver cycles"],
+    "decoder": ["actual mpv nonfatal diagnostic during play", "paused diagnostic", "genuine missing media", "reopen", "held HTTP bytes do not inherit previous readiness", "superseded open cannot replace next media", "bounded timeout and reopen", "normal EOF"],
+    "productionPageSmoke": {"temporaryFixtureRemoved": true, "realWebView2AndVideo": true, "isolatedProfileAndDatabase": true, "firstEpisodeDecodedMs": 1625, "samePageNextEpisodeDecoded": true, "realHttp404FailureVisible": true, "independentPageReopens": 3, "userDataOpened": false}
+  },
+  "testHarnessCorrection": "Invalid-profile negative fixture initially let a regular file path reach WebView2, causing the user-visible Edge data-directory modal. Native directory and exclusive-write preflight now rejects it before Edge startup. Test hosts were stopped; no user browser data was changed. Terminal decoder ownership now follows on_load/on_unload lifecycle events rather than transient idle sampling alone.",
+  "localChecks": {"flutterPassed": 1978, "flutterSkipped": 5, "fullSuiteScope": "Lifecycle cutover before final ordered-event/timeout refinement", "finalRelevantConsumerTestsPassed": 41, "analyze": "No issues found", "finalNativeTestsPassed": 2, "finalTimeoutAndHostChecks": "passed; modal-free invalid-directory preflight and native load/unload ownership", "pythonToolsPassed": 118},
+  "normalBuild": {"windowsRelease": "passed", "zipAndMsi": "passed", "sourceFilesExactSecretScanned": 1482, "sourceFilesWithExactSecrets": 0, "localZipMembersScanned": 468, "membersWithExactSecrets": 0, "privateOrDebugNames": 0, "localSigningPrivateKeyAvailable": false, "scope": "MSI raw-container only, ZIP member payloads; not a full security audit"},
+  "publication": {"status": "pending", "scope": "Windows-only servicing revision; keep Android/iOS assets and current release tag unchanged"}
+}

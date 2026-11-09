@@ -87,6 +87,8 @@ jobs:
           cl /nologo /std:c++17 /EHsc /W4 /utf-8 /DNOMINMAX tools\test_windows_update_install.cpp build\test_windows_update_install.res /Fe:build\test_windows_update_install.exe /Fo:build\test_windows_update_install.obj /link bcrypt.lib advapi32.lib shell32.lib ole32.lib uuid.lib version.lib user32.lib
           if errorlevel 1 exit /b %errorlevel%
           build\test_windows_update_install.exe "%CD%\build\windows\x64\runner\Release\triomi_update_helper.exe"
+      - name: Verify native source browser and per-media playback lifecycle
+        run: flutter test --no-pub integration_test/windows_playback_lifecycle_live_test.dart -d windows
       - uses: actions/upload-artifact@v4
         with:
           name: triomi-windows-servicing

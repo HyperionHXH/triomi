@@ -1,5 +1,26 @@
 # Triomi 当前状态
 
+## 当前请求：R191 桌面播放根因复查（0.15.4+190，Windows修订1，验证中）
+
+[#8](https://github.com/HyperionHXH/triomi/issues/8)截图实际错误是`Windows source browser is unavailable`，发生在WebView2网页解析器创建、尚未进入解码。旧原生`Failed`把环境、控制器、脚本、Cookie错误统一折叠，无法从旧截图追溯用户机器的原始HRESULT；不能无证据归咎网络或宣称所有重试失败同一原因。
+
+本机真实WebView2反馈链路：普通短目录35次连续/4次并发/10次初始化中取消重开通过；冷的较深Unicode来源目录首次controller-create失败`0x80080005`，只缩短中间路径便通过，证明本机路径依赖故障。修后创建来源目录、用系统8.3别名指向同一个原目录并展开长路径做隔离校验；不移动/清空Cookie、不换公共目录、不使用junction，不放宽TLS。按规范化来源目录共享一个environment并合并并发创建，单次解析controller仍独立，取消不关闭登录或下载。保留安全stage/HRESULT，浏览器进程退出可在重试时重建。未获短名的系统仍使用原目录并准确报告失败，不对超深路径跨系统保证成功。
+
+审查同时确认：原`VideoController.waitUntilFirstFrameRendered`是controller生命期一次性Future，不能证明后续每集准备好；线路切换只推进resolve代次但外层用load代次发布，旧线路失败可能覆盖新线路；切集在查本地历史期间没有立即取消旧浏览器。现在`DesktopPlaybackSession`统一串行stop/open、每媒体就绪/取消和致命错误；切集立即撤销解析，线路sheet及异步进度保存按当前代次生效。Android仍为Media3，不新增解码器。
+
+对照只读Kazumi `02afdabf72af7eee04a7403786ee60236701086c`：WebViewVideoSourceService复用浏览器、串行解析、取消旧请求；VideoPageController以AsyncSession隔离过期结果，PlayerErrorMapper不把所有日志当故障。学习所有权/阶段分离，不复制其1500MiB默认缓存、窄字符串错误匹配或全局会话；Triomi保留128MiB有界缓存和来源隔离。Microsoft[进程模型](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/process-model)确认同目录环境共享浏览器进程且配置须一致。
+
+实际生产PlayerPage受控实跑通过：深层独立来源目录→真实WebView2网页→视频解码1625ms→同页下一集→真实404显示失败→退出独立重开3次继续解码。永久原生测试覆盖深路径、连续/并发/初始化取消、实际Dart resolver、Cookie保留/来源隔离、失败阶段，以及第二媒体等待自身HTTP字节、取消旧open、暂停/正常EOF/真实坏媒体。仅本机受控网页与媒体，不冒称用户具体站点或环境已远程验收；未访问用户账号配置。完整全量、编译与Windows单端发布继续执行。
+
+用户现场看到Edge“无法读取和写入数据目录”的弹窗，路径包含测试专用`NOT-A~`：来自本轮刻意创建“路径是普通文件”的负例，不是用户播放站。初版检查把ERROR_FILE_EXISTS当目录有效，Edge再弹原生UI；已停止自有测试宿主，生产预检改为确认目录属性及独占临时写入可用，非法路径不调用WebView2。测试不通过自动点击掩盖窗口。超时/替换回归也暴露采样idle状态可能早于新媒体载入，现依据原生on_load/on_unload顺序绑定本次媒体终止，不凭旧日志或上一文件路径猜状态。
+
+本轮全量1978通过/5平台条件跳过；最终有序事件/超时收口后41项播放/续播/解析/媒体键/更新相关消费者通过，analyze零问题，实际原生生命周期2项通过。Python工具118项、UTF-8及文档漂移通过。此前测试同时启动多个Windows集成入口产生第二宿主启动失败，现合并单入口原生套件，不并发启动多个profile writer。正常WindowsRelease/ZIP/MSI编译成功记录将以最终源码与发布校验更新。
+
+正常main的WindowsRelease与完整ZIP/MSI打包已通过；1482个源码/证据文件和本地ZIP468成员的现有账号值/编码扫描零命中，无私钥/调试文件名。MSI只扫描原始容器，本机无正式签名私钥，不扩大安全审计结论。本轮使用Windows单端servicing修订1，语义版本/构建号仍0.15.4+190，原Android/iOS文件和既有tag不移动；公开字节及远端原生回归另记。
+
+
+
+
 ## 当前请求：R190 动漫双模式搜索与桌面播放误报修复（0.15.4+190，双端已发布核验）
 
 保留Bangumi资料搜索，恢复并列“播放源检索”，按名称查询已启用动画来源并分别展示结果、进度、错误、单站重试和分页。来源专属入口默认本站；可切回资料模式。切模式取消旧请求，晚到结果不覆盖当前查询，资料标签不泄漏到播放站。作品直接以原(sourceId,remoteId)进入本站详情、列表和选集，不依赖Bangumi收录、不按标题自动关联。

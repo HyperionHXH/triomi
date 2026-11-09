@@ -89,7 +89,7 @@ jobs:
         shell: pwsh
         run: ./tools/package_windows.ps1
       - name: Verify real desktop playback error semantics
-        run: flutter test --no-pub integration_test/windows_playback_error_live_test.dart -d windows
+        run: flutter test --no-pub integration_test/windows_playback_lifecycle_live_test.dart -d windows
       - uses: actions/upload-artifact@v4
         with:
           name: triomi-windows-release

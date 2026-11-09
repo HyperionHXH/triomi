@@ -34,7 +34,7 @@ import 'danmaku_sources_panel.dart';
 import 'data/danmaku_overlay.dart';
 import 'data/danmaku_session.dart';
 import 'data/danmaku_settings.dart';
-import 'data/desktop_playback_errors.dart';
+import 'data/desktop_playback_session.dart';
 import 'data/hybrid_danmaku_client.dart';
 import 'data/playback_buffer_policy.dart';
 import 'data/player_settings.dart';
@@ -101,7 +101,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   StreamSubscription<Duration>? _bufferSub;
   StreamSubscription<bool>? _playingSub;
   Timer? _progressTimer;
-  DesktopPlaybackErrors? _desktopErrors;
+  DesktopPlaybackSession? _desktopErrors;
   Future<void>? _desktopErrorReady;
   Timer? _prepareTimer;
   StreamSubscription<bool>? _completedSub;
@@ -271,7 +271,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       _completedSub = _player.stream.completed.listen((completed) {
         if (completed) unawaited(_onCompleted());
       });
-      _desktopErrors = DesktopPlaybackErrors(
+      _desktopErrors = DesktopPlaybackSession(
         _player,
         onFailure: _onNativeVideoError,
       );
@@ -377,6 +377,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     }
     final seq = ++_loadSeq;
     ++_resolveSeq;
+    _desktopResolve?.cancel('已切换剧集或重新加载');
     _desktopErrors?.reset();
     final chapter = _chapter;
     _awaitingPlaybackStart = true;
@@ -599,6 +600,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       return;
     }
     _advancing = true;
+    final generation = _loadSeq;
     try {
       // Older builds stored EOF as the resume anchor. Replaying such a chapter
       // must restart it rather than immediately interpreting EOF as a new watch.
@@ -607,7 +609,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           _resumeStart >= _duration - const Duration(seconds: 1)) {
         _resumeStart = Duration.zero;
         await _seekTo(Duration.zero);
-        if (!mounted) return;
+        if (!mounted || generation != _loadSeq) return;
         if (_useNativeAndroidVideo) {
           await _nativeVideoController.play();
         } else {
@@ -619,7 +621,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       if (_duration > Duration.zero) _position = _duration;
       _updateWindowsSystemMedia();
       await _persistProgress();
-      if (!mounted || !_settings.autoNext) return;
+      if (!mounted || generation != _loadSeq || !_settings.autoNext) return;
       final target = adjacentEpisodeIndex(_chapters, _chapterIndex, 1);
       if (target == null) return;
       setState(() => _chapterIndex = target);
@@ -759,15 +761,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       await _desktopErrorReady;
       await applyDesktopPlaybackBufferPolicy(_player.platform as NativePlayer);
       if (!mounted || seq != _resolveSeq) return;
-      _desktopErrors!.opening();
-      await _player.open(
+      await _desktopErrors!.open(
         Media(url, httpHeaders: headers, start: startPosition),
-      );
-      if (!mounted || seq != _resolveSeq) return;
-      await _player.play();
-      await _videoController!.waitUntilFirstFrameRendered.timeout(
-        const Duration(seconds: 30),
-        onTimeout: () => throw TimeoutException('视频首帧等待超时，请重试或更换播放来源'),
       );
       if (!mounted || seq != _resolveSeq) return;
       _awaitingPlaybackStart = false;
@@ -952,6 +947,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   // ---------------------------------------------------------------- 章节切换
 
   Future<void> _switchChapter(int delta) async {
+    final generation = _loadSeq;
     final target = adjacentEpisodeIndex(_chapters, _chapterIndex, delta);
     if (target == null) {
       _toast(delta > 0 ? '已经是最后一集' : '已经是第一集');
@@ -959,7 +955,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     }
     _danmakuSession.restart(fetch: false);
     await _persistProgress();
-    if (!mounted) return;
+    if (!mounted || generation != _loadSeq) return;
     setState(() => _chapterIndex = target);
     await _load();
   }
@@ -1262,9 +1258,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         _chapters[index].sourceId != _item.sourceId) {
       return;
     }
+    final generation = _loadSeq;
     _danmakuSession.restart(fetch: false);
     await _persistProgress();
-    if (!mounted) return;
+    if (!mounted || generation != _loadSeq) return;
     setState(() => _chapterIndex = index);
     await _load();
   }
@@ -1841,6 +1838,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
   }
 
   Future<void> _pickLine() async {
+    final selectionGeneration = _loadSeq;
+    final lines = _lines;
     final selected = await showModalBottomSheet<int>(
       context: context,
       showDragHandle: true,
@@ -1848,23 +1847,30 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            for (var index = 0; index < _lines.length; index++)
+            for (var index = 0; index < lines.length; index++)
               ListTile(
                 leading: Icon(
                   index == _lineIndex
                       ? Icons.radio_button_checked
                       : Icons.radio_button_off,
                 ),
-                title: Text(_lines[index].name),
+                title: Text(lines[index].name),
                 onTap: () => Navigator.of(context).pop(index),
               ),
           ],
         ),
       ),
     );
-    if (!mounted || selected == null || selected == _lineIndex) return;
+    if (!mounted ||
+        selectionGeneration != _loadSeq ||
+        selected == null ||
+        selected == _lineIndex ||
+        selected < 0 ||
+        selected >= lines.length) {
+      return;
+    }
     _configureDanmaku(force: true);
-    final seq = _loadSeq;
+    final seq = ++_loadSeq;
     setState(() {
       _lineIndex = selected;
       _loading = true;
@@ -1872,8 +1878,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     });
     try {
       await _openLine(
-        _lines[selected].url,
-        line: _lines[selected],
+        lines[selected].url,
+        line: lines[selected],
         startPosition: _position,
       );
       if (mounted && seq == _loadSeq) {
@@ -2383,7 +2389,7 @@ class _VideoArea extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              '检查网络后重试，或切换到其他线路与剧集。',
+                              '请查看下方具体原因，重试或切换其他线路与剧集。',
                               textAlign: TextAlign.center,
                               style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(color: Colors.white70),

@@ -2,6 +2,7 @@
 
 #include <WebView2.h>
 #include <winhttp.h>
+#include <shlobj.h>
 #include <wrl.h>
 #include <flutter/encodable_value.h>
 #include <flutter/method_channel.h>
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cwctype>
 #include <cwchar>
 #include <functional>
@@ -88,31 +90,133 @@ std::wstring CanonicalPath(const std::wstring& path) {
   const DWORD written = GetFullPathNameW(path.c_str(), size, full.data(), nullptr);
   if (!written || written >= size) return {};
   full.resize(written);
+  // Short aliases must compare as the same directory, never a different jar.
+  const DWORD long_size = GetLongPathNameW(full.c_str(), nullptr, 0);
+  if (long_size) {
+    std::wstring expanded(long_size, L'\0');
+    const DWORD length = GetLongPathNameW(full.c_str(), expanded.data(), long_size);
+    if (length && length < long_size) { expanded.resize(length); full = std::move(expanded); }
+  }
   std::transform(full.begin(), full.end(), full.begin(), [](wchar_t c) {
     return c == L'/' ? L'\\' : static_cast<wchar_t>(std::towlower(c));
   });
   while (!full.empty() && full.back() == L'\\') full.pop_back();
   return full;
 }
-void Failed(const SharedResult& result) {
-  result->Error("browser_unavailable", "Windows source browser is unavailable");
+void Failed(const SharedResult& result, const char* stage = "browser-operation", HRESULT status = E_FAIL) {
+  char code[16]{};
+  sprintf_s(code, "0x%08lX", static_cast<unsigned long>(status));
+  result->Error("browser_unavailable", std::string("Windows browser failure at ") + stage + " (" + code + ")",
+      Value(Map{{Value("stage"), Value(stage)}, {Value("hresult"), Value(code)}}));
+}
+
+// An environment owns a source's browser process group. Controllers are
+// disposable operations, not owners of independently booted browser processes.
+struct SourceEnvironment : std::enable_shared_from_this<SourceEnvironment> {
+  std::wstring path;
+  ComPtr<ICoreWebView2Environment> value;
+  bool loading = false;
+  const char* stage = "environment-create";
+  std::vector<std::function<void(HRESULT)>> waiting;
+  void Complete(HRESULT status) {
+    loading = false;
+    auto callbacks = std::move(waiting);
+    for (auto& callback : callbacks) callback(status);
+  }
+  void Ensure(std::function<void(HRESULT)> done) {
+    if (value) { done(S_OK); return; }
+    waiting.push_back(std::move(done));
+    if (loading) return;
+    loading = true;
+    auto self = shared_from_this();
+    const int created = SHCreateDirectoryExW(nullptr, path.c_str(), nullptr);
+    if (created != ERROR_SUCCESS && created != ERROR_ALREADY_EXISTS && created != ERROR_FILE_EXISTS) {
+      stage = "profile-create"; Complete(HRESULT_FROM_WIN32(created)); return;
+    }
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+      stage = "profile-directory"; Complete(HRESULT_FROM_WIN32(ERROR_DIRECTORY)); return;
+    }
+    std::wstring browser_path = path;
+    const DWORD short_size = GetShortPathNameW(path.c_str(), nullptr, 0);
+    if (short_size) {
+      std::wstring short_path(short_size, L'\0');
+      const DWORD length = GetShortPathNameW(path.c_str(), short_path.data(), short_size);
+      if (length && length < short_size) {
+        short_path.resize(length);
+        if (CanonicalPath(short_path) == CanonicalPath(path)) browser_path = std::move(short_path);
+      }
+    }
+    const DWORD browser_attributes = GetFileAttributesW((browser_path + L"\\EBWebView").c_str());
+    if (browser_attributes != INVALID_FILE_ATTRIBUTES && !(browser_attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+      stage = "profile-directory"; Complete(HRESULT_FROM_WIN32(ERROR_DIRECTORY)); return;
+    }
+    // A real, exclusive empty probe verifies directory writes before starting
+    // Edge. It never opens or replaces an existing cookie/database file.
+    wchar_t probe[MAX_PATH]{};
+    if (!GetTempFileNameW(browser_path.c_str(), L"twm", 0, probe)) {
+      stage = "profile-writable"; Complete(HRESULT_FROM_WIN32(GetLastError())); return;
+    }
+    DeleteFileW(probe);
+    const HRESULT started = CreateCoreWebView2EnvironmentWithOptions(nullptr, browser_path.c_str(), nullptr,
+      Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
+        [self](HRESULT status, ICoreWebView2Environment* environment) -> HRESULT {
+          if (shutting_down || FAILED(status) || !environment) {
+            self->stage = "environment-create";
+            self->Complete(FAILED(status) ? status : E_ABORT); return S_OK;
+          }
+          ComPtr<ICoreWebView2Environment7> environment7;
+          LPWSTR actual = nullptr;
+          HRESULT query = environment->QueryInterface(IID_PPV_ARGS(&environment7));
+          if (SUCCEEDED(query)) query = environment7->get_UserDataFolder(&actual);
+          if (FAILED(query)) {
+            CoTaskMemFree(actual); self->stage = "environment-profile-query";
+            self->Complete(query); return S_OK;
+          }
+          const bool dedicated = actual && CanonicalPath(actual) == CanonicalPath(self->path);
+          CoTaskMemFree(actual);
+          if (!dedicated) {
+            self->stage = "environment-profile-isolation"; self->Complete(E_ACCESSDENIED); return S_OK;
+          }
+          self->value = environment;
+          self->Complete(S_OK); return S_OK;
+        }).Get());
+    if (FAILED(started)) { stage = "environment-start"; Complete(started); }
+  }
+};
+std::map<std::wstring, std::shared_ptr<SourceEnvironment>> environments;
+std::shared_ptr<SourceEnvironment> EnvironmentFor(const std::wstring& path) {
+  auto& entry = environments[CanonicalPath(path)];
+  if (!entry) { entry = std::make_shared<SourceEnvironment>(); entry->path = CanonicalPath(path); }
+  return entry;
 }
 
 struct Profile : std::enable_shared_from_this<Profile> {
   std::wstring path;
   std::wstring origin;
-  ComPtr<ICoreWebView2Environment> environment;
+  std::shared_ptr<SourceEnvironment> environment;
   ComPtr<ICoreWebView2Controller> controller;
   ComPtr<ICoreWebView2> web;
   ComPtr<ICoreWebView2CookieManager> cookies;
   std::vector<std::function<void(bool)>> waiting;
   bool loading = false;
   bool ready = false;
+  bool closed = false;
+  HRESULT failure = E_FAIL;
+  const char* failure_stage = "browser-initialization";
+  void Reject(const char* stage, HRESULT status) {
+    failure_stage = stage; failure = FAILED(status) ? status : E_UNEXPECTED;
+    if (controller) controller->Close();
+    controller.Reset(); web.Reset(); cookies.Reset();
+    Complete(false);
+  }
   HWND surface = nullptr;
   SharedResult pending;
   EventRegistrationToken navigation_token{};
   EventRegistrationToken popup_token{};
   EventRegistrationToken permission_token{};
+  EventRegistrationToken process_token{};
+  std::function<void()> process_failed;
 
   bool video_mode = false;
   bool allow_http = false;
@@ -145,42 +249,31 @@ struct Profile : std::enable_shared_from_this<Profile> {
     for (auto& callback : callbacks) callback(success);
   }
   void Ensure(std::function<void(bool)> done) {
-    if (ready) { done(true); return; }
+    if (ready && environment && environment->value) { done(true); return; }
     waiting.push_back(std::move(done));
     if (loading) return;
     loading = true;
+    if (controller) controller->Close();
+    controller.Reset(); web.Reset(); cookies.Reset(); ready = false;
     auto self = shared_from_this();
-    const HRESULT started = CreateCoreWebView2EnvironmentWithOptions(nullptr, path.c_str(), nullptr,
-      Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
-        [self](HRESULT status, ICoreWebView2Environment* environment) -> HRESULT {
-          if (FAILED(status) || !environment || shutting_down) { self->Complete(false); return S_OK; }
-          // Enterprise/environment overrides must never redirect this bridge
-          // into a general browser store or another provider's credentials.
-          ComPtr<ICoreWebView2Environment7> environment7;
-          LPWSTR actual = nullptr;
-          if (FAILED(environment->QueryInterface(IID_PPV_ARGS(&environment7))) ||
-              FAILED(environment7->get_UserDataFolder(&actual))) {
-            CoTaskMemFree(actual); self->Complete(false); return S_OK;
-          }
-          const bool dedicated = actual &&
-              CanonicalPath(actual) == CanonicalPath(self->path);
-          CoTaskMemFree(actual);
-          if (!dedicated) { self->Complete(false); return S_OK; }
-          self->environment = environment;
-          const HRESULT creating = environment->CreateCoreWebView2Controller(owner_window,
+    environment = EnvironmentFor(path);
+    environment->Ensure([self](HRESULT status) {
+          if (self->closed || shutting_down) { self->Reject("controller-cancelled", E_ABORT); return; }
+          if (FAILED(status)) { self->Reject(self->environment->stage, status); return; }
+          const HRESULT creating = self->environment->value->CreateCoreWebView2Controller(owner_window,
             Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
               [self](HRESULT controller_status, ICoreWebView2Controller* controller) -> HRESULT {
-                if (FAILED(controller_status) || !controller || shutting_down) {
-                  self->Complete(false); return S_OK;
+                if (FAILED(controller_status) || !controller || shutting_down || self->closed) {
+                  if (controller) controller->Close();
+                  self->Reject("controller-create", FAILED(controller_status) ? controller_status : E_ABORT); return S_OK;
                 }
                 self->controller = controller;
                 controller->put_IsVisible(FALSE);
-                controller->get_CoreWebView2(&self->web);
+                HRESULT setup = controller->get_CoreWebView2(&self->web);
                 ComPtr<ICoreWebView2_2> web2;
-                if (!self->web || FAILED(self->web.As(&web2)) ||
-                    FAILED(web2->get_CookieManager(&self->cookies))) {
-                  self->Complete(false); return S_OK;
-                }
+                if (SUCCEEDED(setup)) setup = self->web ? self->web.As(&web2) : E_POINTER;
+                if (SUCCEEDED(setup)) setup = web2->get_CookieManager(&self->cookies);
+                if (FAILED(setup)) { self->Reject("controller-cookie-manager", setup); return S_OK; }
                 ComPtr<ICoreWebView2Settings> settings;
                 self->web->get_Settings(&settings);
                 if (settings) {
@@ -212,16 +305,29 @@ struct Profile : std::enable_shared_from_this<Profile> {
                     [](ICoreWebView2*, ICoreWebView2PermissionRequestedEventArgs* args) -> HRESULT {
                       args->put_State(COREWEBVIEW2_PERMISSION_STATE_DENY); return S_OK;
                     }).Get(), &self->permission_token);
-                if (FAILED(navigation) || FAILED(popup) || FAILED(permission)) {
-                  controller->Close(); self->Complete(false); return S_OK;
+                const HRESULT process = self->web->add_ProcessFailed(
+                  Callback<ICoreWebView2ProcessFailedEventHandler>(
+                    [weak = std::weak_ptr<Profile>(self)](ICoreWebView2*, ICoreWebView2ProcessFailedEventArgs* args) -> HRESULT {
+                      const auto profile = weak.lock();
+                      if (!profile || profile->closed || shutting_down) return S_OK;
+                      COREWEBVIEW2_PROCESS_FAILED_KIND kind;
+                      if (FAILED(args->get_ProcessFailedKind(&kind))) return S_OK;
+                      if (kind != COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED &&
+                          kind != COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED) return S_OK;
+                      profile->ready = false;
+                      if (kind == COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED)
+                        profile->environment->value.Reset();
+                      if (profile->process_failed) profile->process_failed();
+                      return S_OK;
+                    }).Get(), &self->process_token);
+                if (FAILED(navigation) || FAILED(popup) || FAILED(permission) || FAILED(process)) {
+                  self->Reject("controller-policy", FAILED(navigation) ? navigation : FAILED(popup) ? popup : FAILED(permission) ? permission : process); return S_OK;
                 }
                 self->Complete(true);
                 return S_OK;
               }).Get());
-          if (FAILED(creating)) self->Complete(false);
-          return S_OK;
-        }).Get());
-    if (FAILED(started)) Complete(false);
+          if (FAILED(creating)) self->Reject("controller-start", creating);
+        });
   }
   void ReadCookies(const std::wstring& url, SharedResult result) {
     auto self = shared_from_this();
@@ -229,7 +335,7 @@ struct Profile : std::enable_shared_from_this<Profile> {
       Callback<ICoreWebView2GetCookiesCompletedHandler>(
         [self, result, url](HRESULT status, ICoreWebView2CookieList* list) -> HRESULT {
           if (shutting_down) return S_OK;
-          if (FAILED(status) || !list) { Failed(result); return S_OK; }
+          if (FAILED(status) || !list) { Failed(result, "cookies-read", FAILED(status) ? status : E_POINTER); return S_OK; }
           UINT count = 0;
           list->get_Count(&count);
           if (count > 256) {
@@ -240,7 +346,7 @@ struct Profile : std::enable_shared_from_this<Profile> {
           URL_COMPONENTS parts{}; parts.dwStructSize = sizeof(parts);
           parts.dwUrlPathLength = static_cast<DWORD>(-1);
           if (!ParseHttps(url, target) || !WinHttpCrackUrl(url.c_str(),
-              static_cast<DWORD>(url.size()), 0, &parts)) { Failed(result); return S_OK; }
+              static_cast<DWORD>(url.size()), 0, &parts)) { Failed(result, "cookies-url", E_INVALIDARG); return S_OK; }
           const std::wstring request_path = parts.dwUrlPathLength
               ? std::wstring(parts.lpszUrlPath, parts.dwUrlPathLength) : L"/";
           size_t bytes = 0;
@@ -312,6 +418,7 @@ struct VideoSession {
   std::wstring target;
   void Close() {
     active = false;
+    profile->closed = true;
     if (profile->web) profile->web->Stop();
     if (profile->controller) profile->controller->Close();
     profile->cookies.Reset(); profile->web.Reset(); profile->controller.Reset();
@@ -376,18 +483,21 @@ void StartVideo(const Map& args, SharedResult result) {
   video->profile = std::make_shared<Profile>(); video->profile->path = path;
   video->profile->origin = source.origin; video->profile->video_mode = true;
   video->profile->allow_http = destination.origin.find(L"http://") == 0;
+  video->profile->process_failed = [weak = std::weak_ptr<VideoSession>(video)] {
+    if (const auto session = weak.lock()) session->Error("Windows browser process exited during video resolution; retry to reopen the source browser");
+  };
   videos[id] = video;
   video->profile->Ensure([video, result, target, script, agent, referer](bool success) {
     if (shutting_down) { video->Close(); return; }
     if (!video->active) { video->Close(); result->Success(); return; }
-    if (!success) { Failed(result); return; }
+    if (!success) { Failed(result, video->profile->failure_stage, video->profile->failure); return; }
     auto profile = video->profile;
     RECT bounds{0, 0, 1280, 720}; profile->controller->put_Bounds(bounds);
     ComPtr<ICoreWebView2Settings> settings; ComPtr<ICoreWebView2Settings2> settings2;
-    profile->web->get_Settings(&settings);
-    if (!settings || FAILED(settings.As(&settings2)) || FAILED(settings2->put_UserAgent(agent.c_str()))) {
-      Failed(result); return;
-    }
+    HRESULT settings_status = profile->web->get_Settings(&settings);
+    if (SUCCEEDED(settings_status)) settings_status = settings ? settings.As(&settings2) : E_POINTER;
+    if (SUCCEEDED(settings_status)) settings_status = settings2->put_UserAgent(agent.c_str());
+    if (FAILED(settings_status)) { Failed(result, "video-user-agent", settings_status); return; }
     EventRegistrationToken message_token{}, navigation_token{};
     const auto weak = std::weak_ptr<VideoSession>(video);
     const HRESULT messages = profile->web->add_WebMessageReceived(
@@ -424,18 +534,18 @@ void StartVideo(const Map& args, SharedResult result) {
             session->Error(Utf8(L"\u64ad\u653e\u9875\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u6216\u6362\u6765\u6e90").c_str());
           return S_OK;
         }).Get(), &navigation_token);
-    if (FAILED(messages) || FAILED(navigation)) { Failed(result); return; }
+    if (FAILED(messages) || FAILED(navigation)) { Failed(result, "video-events", FAILED(messages) ? messages : navigation); return; }
     const HRESULT injected = profile->web->AddScriptToExecuteOnDocumentCreated(script.c_str(),
       Callback<ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler>(
         [video, result, target, referer](HRESULT status, LPCWSTR) -> HRESULT {
           if (shutting_down) { video->Close(); return S_OK; }
           if (!video->active) { video->Close(); result->Success(); return S_OK; }
-          if (FAILED(status) || FAILED(video->profile->web->Navigate((referer.empty() ? target : referer).c_str()))) {
-            Failed(result); return S_OK;
-          }
+          if (FAILED(status)) { Failed(result, "video-script", status); return S_OK; }
+          const HRESULT navigation = video->profile->web->Navigate((referer.empty() ? target : referer).c_str());
+          if (FAILED(navigation)) { Failed(result, "video-navigate", navigation); return S_OK; }
           result->Success(); return S_OK;
         }).Get());
-    if (FAILED(injected)) Failed(result);
+    if (FAILED(injected)) Failed(result, "video-script-start", injected);
   });
 }
 
@@ -584,7 +694,7 @@ void Handle(const flutter::MethodCall<Value>& call, std::unique_ptr<Result> raw_
   if (method == "store") captured = std::make_shared<Map>(*args);
   profile->Ensure([profile, method, url, parsed, agent, result, captured](bool success) {
     if (shutting_down) return;
-    if (!success) { Failed(result); return; }
+    if (!success) { Failed(result, profile->failure_stage, profile->failure); return; }
     if (method == "open") {
       OpenBrowser(profile, url, agent, result); return;
     }
@@ -662,6 +772,7 @@ void CloseWindowsWebSessions() {
   videos.clear();
   for (const auto& entry : profiles) entry.second->Finish(false);
   profiles.clear();
+  environments.clear();
   channel.reset();
   owner_window = nullptr;
 }

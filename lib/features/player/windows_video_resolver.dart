@@ -235,8 +235,12 @@ class _DesktopVideoProbe with WidgetsBindingObserver {
           omitCookies: message['omitCookies'] == true,
         ),
       );
-    } catch (_) {
-      _fail(StateError('无法读取网页会话，请关闭后重试'));
+    } catch (error) {
+      if (error is PlatformException && error.code == 'browser_unavailable') {
+        _fail(error);
+      } else {
+        _fail(StateError('无法读取网页会话，请关闭后重试'));
+      }
     } finally {
       _capturing = false;
     }
