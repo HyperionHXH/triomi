@@ -1,11 +1,13 @@
-name: build-ios
+name: iOS · Cloud build and full acceptance
 
 on:
   push:
-    branches: [feat/ios, master, main]
+    branches: [master, main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+  # Local-first feat/ios pushes use build-ios-local.yml. Dispatch this workflow
+  # explicitly when development relies on cloud simulator/runtime validation.
 
 jobs:
   build:

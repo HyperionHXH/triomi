@@ -1,0 +1,179 @@
+name: iOS · Local acceptance then build
+
+on:
+  push:
+    branches: [feat/ios]
+    paths-ignore: ['docs/**', '**/*.md']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish this locally accepted version as an independent iOS release'
+        type: boolean
+        default: false
+
+concurrency:
+  group: ios-local-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Resolve the pinned Flutter SDK
+        id: sdk
+        run: python tools/resolve_ios_toolchain.py --github-output "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.sdk.outputs.flutter-version }}
+          channel: stable
+          cache: true
+      - name: Prepare the native build toolchain
+        run: |
+          set -euo pipefail
+          python tools/resolve_ios_toolchain.py --verify-installed
+          flutter pub get
+          for tool in cmake ninja; do
+            if ! command -v "$tool" >/dev/null 2>&1; then brew install "$tool"; fi
+          done
+          xcodebuild -version
+          pod --version
+      - name: Fingerprint native dependencies
+        id: native
+        run: |
+          fingerprint="$( { xcodebuild -version; xcrun --sdk iphoneos --show-sdk-version; ruby --version; pod --version; } | shasum -a 256 | cut -d ' ' -f 1)"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods
+          key: ios-pods-${{ runner.os }}-${{ runner.arch }}-${{ steps.sdk.outputs.flutter-version }}-${{ steps.native.outputs.fingerprint }}-${{ hashFiles('pubspec.lock', 'ios/Podfile', 'ios/Podfile.lock') }}
+      - name: Install CocoaPods
+        working-directory: ios
+        run: pod install
+      - uses: actions/cache@v4
+        with:
+          path: .dart_tool/hooks_runner/shared/ech_http/build/prebuilt/
+          key: ios-ech-deps-${{ runner.os }}-${{ runner.arch }}-${{ steps.sdk.outputs.flutter-version }}-${{ hashFiles('packages/ech_http/lib/src/build_support/dependencies.json', 'packages/ech_http/hook/build.dart', 'packages/ech_http/src/**') }}
+      - name: Prepare checksum-pinned SQLite
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/prepare_ios_sqlite_assets.py
+      # Local Mac/USB acceptance owns behavioral checks. This job deliberately
+      # does not boot a simulator or repeat tests, tours or live-source probes.
+      - name: Compile the production unsigned iOS app
+        run: flutter build ios --release --no-codesign --verbose
+      - name: Validate and package the IPA
+        id: package
+        run: |
+          set -euo pipefail
+          python tools/package_ios.py
+          python - <<'PY'
+          import hashlib, json, os, plistlib, re, zipfile
+          from pathlib import Path
+          root = Path('build/ios/ipa')
+          ipa = root / 'Triomi-iOS-Unsigned.ipa'
+          with zipfile.ZipFile(ipa) as archive:
+              info = plistlib.loads(archive.read('Payload/Runner.app/Info.plist'))
+          version, build = info['CFBundleShortVersionString'], info['CFBundleVersion']
+          if not re.fullmatch(r'\d+\.\d+\.\d+', version) or not re.fullmatch(r'\d+', build):
+              raise ValueError('Release requires an exact numeric version/build')
+          tag = f'v{version}-ios.{build}'
+          digest = hashlib.sha256(ipa.read_bytes()).hexdigest()
+          (root / 'SHA256SUMS.txt').write_text(f'{digest}  {ipa.name}\n')
+          (root / 'release-metadata.json').write_text(json.dumps({
+              'tag': tag, 'sha': os.environ['GITHUB_SHA'], 'sha256': digest,
+              'bytes': ipa.stat().st_size, 'version': version, 'build': build,
+              'route': 'local-acceptance-cloud-build-only',
+          }, indent=2) + '\n')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'tag={tag}\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: triomi-ios-local-build
+          path: |
+            build/ios/ipa/Triomi-iOS-Unsigned.ipa
+            build/ios/ipa/SHA256SUMS.txt
+            build/ios/ipa/release-metadata.json
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/feat/ios'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: triomi-ios-local-build
+          path: artifacts
+      - name: Publish only the exact locally accepted iOS build
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const crypto = require('crypto');
+            const { owner, repo } = context.repo;
+            const meta = JSON.parse(fs.readFileSync('artifacts/release-metadata.json', 'utf8'));
+            const name = 'Triomi-iOS-Unsigned.ipa';
+            const data = fs.readFileSync(`artifacts/${name}`);
+            const digest = crypto.createHash('sha256').update(data).digest('hex');
+            if (meta.sha !== context.sha || meta.sha256 !== digest || meta.bytes !== data.length ||
+                meta.tag !== `v${meta.version}-ios.${meta.build}` ||
+                !/^v\d+\.\d+\.\d+-ios\.\d+$/.test(meta.tag)) {
+              throw new Error('Build identity, version or IPA integrity differs');
+            }
+            try {
+              const ref = (await github.rest.git.getRef({ owner, repo, ref: `tags/${meta.tag}` })).data;
+              if (ref.object.type !== 'commit' || ref.object.sha !== context.sha) {
+                throw new Error('Refusing to reuse a tag from a different commit');
+              }
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            let release;
+            try {
+              release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag: meta.tag })).data;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              release = (await github.rest.repos.createRelease({
+                owner, repo, tag_name: meta.tag, target_commitish: context.sha,
+                name: `Triomi ${meta.version} · iOS ${meta.build}`,
+                body: `Local Mac/USB acceptance followed by GitHub production compilation.\n\nSource: ${context.sha}\nBuild: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}\n\nDownload Triomi-iOS-Unsigned.ipa and sign it before installation (iOS 15+). Cloud simulator tests, visual tours and live-source audits are not run by this workflow; see docs/CURRENT_STATUS.md for measured local coverage and limits.`,
+                prerelease: false, make_latest: 'false',
+              })).data;
+            }
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, { owner, repo, release_id: release.id, per_page: 100 });
+            for (const filename of [name, 'SHA256SUMS.txt', 'release-metadata.json']) {
+              const bytes = fs.readFileSync(`artifacts/${filename}`);
+              const expected = `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
+              const existing = assets.find(asset => asset.name === filename);
+              if (existing) {
+                if (existing.digest !== expected) throw new Error(`Refusing to replace ${filename}`);
+                continue;
+              }
+              const uploaded = (await github.rest.repos.uploadReleaseAsset({
+                owner, repo, release_id: release.id, name: filename, data: bytes,
+                headers: { 'content-type': 'application/octet-stream', 'content-length': bytes.length },
+              })).data;
+              if (uploaded.size !== bytes.length || (uploaded.digest && uploaded.digest !== expected)) {
+                throw new Error(`Published ${filename} differs from validated bytes`);
+              }
+            }
+            core.info(`Published ${release.html_url}; no existing assets were replaced.`);

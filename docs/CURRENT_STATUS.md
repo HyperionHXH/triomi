@@ -1,8 +1,8 @@
 # Triomi 当前状态
 
-## 当前请求：主线 f3f08bb 同步 iOS 0.15.4+198（开发与验收中）
+## 当前请求：主线 f3f08bb 同步 iOS 0.15.4+198（本地验收完成，按新路线编译发布）
 
-本轮以主线 `f3f08bb812c55aadcf96b3c0e294e970e2fd1661` 为固定基线，完整合并 iOS197 之后的22个主线提交；保留原工作树未提交文件，在独立集成工作树实现。提交/推送与新IPA发布获本轮用户授权，必须先完成本地回归和USB真机验收，再经过原GitHub iOS发布门槛。以下历史验收不是本轮通过证据。
+本轮固定合并主线 `f3f08bb812c55aadcf96b3c0e294e970e2fd1661` 的22个提交，保留原工作树未提交文件。本地Mac/USB验收已完成。用户最新明确要求区分开发路线：本轮改用“本地验收→GitHub仅编译/校验IPA/发布”，不再以重复云端综合/巡检/实网为发布前置；原完整云端路线保留可手动运行，后文先前门槛/失败记录保留为历史，不冒称全部云端验收通过。
 
 | 同步项 | iOS 实现与验收要求 |
 | --- | --- |
@@ -14,7 +14,9 @@
 | 备份、文件、导出与图片保存 | 保留iOS系统选择器、安全作用域书签、Photos与数据身份；合入Windows文件能力时不得删除iOS入口或将目录路径冒称照片相册 |
 | 共享调度/下载/阅读器修复 | 迁移所有共享调用契约，覆盖取消/暂停/删除屏障、进度恢复和旧数据；保留Keychain及应用Bundle ID |
 
-验收证据待本轮实际运行补齐：Mac analyze/全量Flutter/Python工具回归、iOS编译与USB真机功能场景、精确提交GitHub原生/集成/视觉与实网门槛、公开IPA版本与摘要。不得使用个人账号或私有浏览器配置，不清设备数据。
+现行路线：`feat/ios`代码推送仅触发`build-ios-local.yml`，产出IPA/校验文件/源码身份；手动运行并勾选publish才创建独立iOS Release，旧资产/其他平台不替换。`build-ios.yml`仍保留完整原生/综合/截图/实网验收，改为手动或原master/main/tag/PR触发，不再监听普通feat/ios推送。完整云端42828879635按用户要求取消；既有21原生（1跳过）/JSC3成功与综合搜索失败不抹去。本地受控场景不外推真实账号/全部来源/iCloud/锁屏硬件PiP。
+
+分支已清理：五个`diagnostic/ios181-connectivity`、`diagnostic/ios182-connectivity`、`diagnostic/ios182-content-endpoints`、`diagnostic/pica181-auth-rejection`、`diagnostic/pica181-public-protocol`均为旧181/182一次性探测，无打开PR或工作树引用，已按用户授权删除远端及本地跟踪引用。远端仅保留`master`与`feat/ios`。集成本地`feat/ios-sync`已重命名`feat/ios`并跟踪同名远端；`ios-sync/`目录名不变。原master工作树和旧197 detached工作树保留，不删除其中未提交工作；两条workflow共用同一iOS分支，不新增长期分支。
 
 本机Python工具164项通过；首轮Mac全量2437通过/26平台跳过/48失败，原结果保留。多数失败来自Darwin默认`/var`临时目录别名触发既有安全校验，改用真实`TMPDIR=$HOME/triomi-test-tmp`后相关文件/备份/缓存检查通过，不放宽生产路径校验。环回回归改为IPv4/IPv6两种系统实际支持的本地地址；来源身份回归显式注入测试FFI引擎、导入弹层夹具显式保存空仓库列表以排除真实网络。`flutter_js 0.8.7`的macOS FFI JSC双实例共享静态回调，实测30秒超时且固定包源码已核对；该QuickJS双实例检查不冒称Mac通过，另在实际iOS WebKit加入同时双会话header/结果隔离门槛。
 

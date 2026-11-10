@@ -1,14 +1,23 @@
 # Triomi iOS 端适配改动说明与自签安装指南
 
-## 0.15.4 / iOS198：主线同步与本地验收中
+## 0.15.4 / iOS198：本地验收完成，按本地优先路线编译发布
 
 固定合并主线 `f3f08bb812c55aadcf96b3c0e294e970e2fd1661` 的22个提交；版本 `0.15.4+198`，沿用 Bundle ID、iOS15、Keychain、WebKit/AVPlayer 和安全作用域文件书签。番剧全局搜索新增“Bangumi资料 / 播放源检索”：资料搜索不依赖插件，播放源模式仅查已启用且支持搜索的番剧来源，按站分页/重试/取消，结果直接进入本站目录。匿名公开封面使用既有 CoverStore 持久缓存；Mihon APK图标/Windows JVM不作为iOS执行能力。
 
 播放仍走原生 AVPlayer，并接入系统 Now Playing 与播放/暂停/停止/上下一集命令；媒体代次、页面可见性与PiP控制会话归属，替换解析时立即撤销旧会话，旧页面的周期事件不得抢回新播放器。iOS15/16对无后缀HLS仍受系统识别能力约束，iOS17+传递公开MIME覆盖。下载接入新版来源上下文与取消协议。Windows安装器、WebView2/COM、SMTC及后台检查属于Windows实现；iOS保留系统挂起/前台恢复边界，不自动安装IPA。
 
-验收使用本机Mac编译与USB连接的iOS15.8.3，单独安装 `io.github.hyperionhxh.triomi.acceptance`，不覆盖原应用/数据/Keychain。夹具通过Documents文件共享传输，不进入正式IPA；每轮报告带唯一运行ID。实际Apple原生/综合/截图和实网门槛仍须通过，不能把Mac单元测试、受控媒体或合成图片称作真实账号/四源实网/锁屏/PiP硬件验收。
+本地验收使用Mac编译与USB连接的iOS15.8.3，单独安装 `io.github.hyperionhxh.triomi.acceptance`，不覆盖原应用/数据/Keychain。夹具通过Documents共享传输，不进入正式IPA；每轮报告带唯一运行ID。用户已要求本地验收后不重复云端综合/截图/实网门槛；这些未执行项不因此变成通过，真实账号/四源实网/锁屏/PiP硬件边界照常保留。
 
-本地门槛已通过：Mac全量2484/27明确平台条件跳过、Python164、analyze零问题；正常设备Release/IPA结构与原生测试包已编译，USB iOS15.8.3独立身份410场景全部成功。五张实际屏幕图逐张读取，覆盖原生视频/弹幕/重播和资料/播放源/混合来源搜索；夹具封面占位不是实网封面证据。Github原生owner XCTest、全巡检与实网门槛仍待精确提交执行。
+本地门槛已通过：Mac全量2484/27明确平台条件跳过、Python164、analyze零问题；正常设备Release/IPA结构与原生测试包已编译，USB iOS15.8.3独立身份410场景全部成功。五张实际屏幕图逐张读取，覆盖原生视频/弹幕/重播和资料/播放源/混合来源搜索；夹具封面占位不是实网封面证据。此前云端原生owner XCTest/21项（1跳过）与JSC3通过；综合新增四项输入/布局失败保留，helper聚焦已修且18项Mac回归通过，不声称完整云端成功。
+
+### 两种开发/发布路线
+
+| 路线 | 触发方式 | GitHub负责 | 适用情形 |
+| --- | --- | --- | --- |
+| 本地优先：`build-ios-local.yml` | `feat/ios`代码push自动打包；Run workflow选该分支、勾publish发布 | 精确SDK/依赖准备、正常main设备Release、IPA结构/版本/SHA256、上传Artifact；显式发布时创建独立`v版本-ios.构建号`，拒绝覆盖旧tag/资产 | 本地Mac＋USB已验收，当前默认 |
+| 原云端完整：`build-ios.yml` | Run workflow选择`feat/ios`；原master/main/tag/PR触发仍保留 | 原生桥/JSC、综合、完整截图录像、实网及原打包门槛 | 没有本地环境，或需要补充模拟器/实网证据 |
+
+不需要新分支。`master`是多端主线，`feat/ios`是iOS适配；`feat/ios-sync`已统一改名为`feat/ios`。开发方法属于workflow选择，不创建“本地版/云端版”两份长期代码。仅文档修改不触发本地优先构建；每次发布递增pubspec构建号，避免同一版本资产被新字节替换。GitHub生成的包仍是unsigned，设备安装仍需签名。
 
 当前已发布基线为 [v0.15.2-ios.197](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.2-ios.197)：精确 `3610ea4` / [42472524269](https://github.com/HyperionHXH/triomi/actions/runs/42472524269) 成功，GitHub资产14,063,218字节，服务器SHA-256 `b9dc4f838ed3f2f54b17296da71608d546ff395baa7162fba60a1929e75a29bb`。198尚未交付；下面183及更早章节保留为历史，不能覆盖本节发布状态。
 
