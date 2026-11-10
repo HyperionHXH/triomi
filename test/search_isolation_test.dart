@@ -815,7 +815,11 @@ Future<void> advance(WidgetTester tester) async {
 }
 
 Future<void> search(WidgetTester tester, String query) async {
-  await tester.enterText(find.byType(TextField), query);
+  final field = find.byType(TextField);
+  await tester.tap(field);
+  await tester.pump();
+  await tester.enterText(field, query);
+  expect(tester.widget<TextField>(field).controller!.text, query);
   await tester.tap(find.byTooltip('搜索'));
   await advance(tester);
 }

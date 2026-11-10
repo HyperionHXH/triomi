@@ -30,6 +30,8 @@ USB最终运行 `436be47e1d3b40aba236dabcf516d066`：iPhone8,2 / iOS15.8.3，**4
 
 首推`21df54f` / [42818604108](https://github.com/HyperionHXH/triomi/actions/runs/42818604108)在SQLite预取元数据API收到明确`HTTP403 rate limit exceeded`，未进入应用构建，所有后续门槛按原策略跳过、未发布IPA。仅该步骤传入GitHub自动只读token，脚本限定官方HTTPS API且用unredirected header，签名CDN重定向不携带token；锁定摘要/大小/原hook复核保持。真实官方认证元数据与1,668,776字节arm64库下载并校验成功，真实本地HTTP重定向证明仅origin收到合成授权标记、下一跳无Authorization；3项完整性回归通过。不是换源、放宽TLS或重钉哈希，修正后另推精确提交继续原门槛。
 
+`b1132ad` / [42819625270](https://github.com/HyperionHXH/triomi/actions/runs/42819625270)已通过认证预取、正常设备Release/IPA、原生21项（1项模拟器条件跳过）及JSC3项，新增实际AVPlayer双owner回归也通过。综合运行推进407项后，新并入的搜索viewport/三布局4项失败：输入helper没有像既有metadata测试那样先tap重连原生焦点，结果集合不存在；同套后续单站/双模式/取消路径继续通过，不能用USB的注册键盘通过外推原生键盘。仅helper补显式tap/pump、输入后精确controller文本断言，保留所有原UI/分页断言，不改生产搜索或扩大超时；失败截图为测试结束后的SpringBoard，原flutter/simulator日志保留。新提交继续全部门槛，不发布失败IPA。
+
 ## 历史记录（保留原失败与发布证据）
 
 ## 当前请求：主线0.15.2同步iOS197（验收中）
