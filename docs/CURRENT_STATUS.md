@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-## 当前请求：R191 桌面播放根因复查（0.15.4+190，Windows修订1，验证中）
+## 当前请求：R191 桌面播放根因复查（0.15.4+190，Windows修订1，已发布）
 
 [#8](https://github.com/HyperionHXH/triomi/issues/8)截图实际错误是`Windows source browser is unavailable`，发生在WebView2网页解析器创建、尚未进入解码。旧原生`Failed`把环境、控制器、脚本、Cookie错误统一折叠，无法从旧截图追溯用户机器的原始HRESULT；不能无证据归咎网络或宣称所有重试失败同一原因。
 
@@ -17,6 +17,11 @@
 本轮全量1978通过/5平台条件跳过；最终有序事件/超时收口后41项播放/续播/解析/媒体键/更新相关消费者通过，analyze零问题，实际原生生命周期2项通过。Python工具118项、UTF-8及文档漂移通过。此前测试同时启动多个Windows集成入口产生第二宿主启动失败，现合并单入口原生套件，不并发启动多个profile writer。正常WindowsRelease/ZIP/MSI编译成功记录将以最终源码与发布校验更新。
 
 正常main的WindowsRelease与完整ZIP/MSI打包已通过；1482个源码/证据文件和本地ZIP468成员的现有账号值/编码扫描零命中，无私钥/调试文件名。MSI只扫描原始容器，本机无正式签名私钥，不扩大安全审计结论。本轮使用Windows单端servicing修订1，语义版本/构建号仍0.15.4+190，原Android/iOS文件和既有tag不移动；公开字节及远端原生回归另记。
+
+[Windows单端发布](https://github.com/HyperionHXH/triomi/actions/runs/42646419110)第二次作业已全部成功，包含完整回归、正常编译/打包、真实更新器、浏览器与原生播放生命周期。当前源码`0d6e0cc763867a86d945e7f02b4e15ab14427fe3`，Windows修订1已替换原发布下载，不移动tag或Android文件。#8已[回写根因、修复与下载地址](https://github.com/HyperionHXH/triomi/issues/8#issuecomment-6754962594)，保留打开等待报告者用新包确认；不以本机夹具代替其机器验收。
+
+公开元数据复核：Windows ZIP 255558311字节，GitHub SHA256=`e3b65896a04d58d7b8c3a5c15902dc8cfc6d7689f1c60a667b3bb9072c318e65`；MSI 244240585字节，SHA256=`8ac2af7aa214f98f9f067e5cea7475f458100bef3bfe087897b1c52f11828ca3`。已下载更新清单，版本190/修订1/源码及ZIP摘要匹配GitHub元数据，清单467成员；Android资产仍ID724382293、162852724字节及原`eb0982e4…`摘要，10个iOS发布资产及原tag身份保持不变。远端打包校验通过，但本机大文件回下载多次TLS超时/连接重置，换网络后API可达而Release下载仍失败；不宣称公开ZIP/MSI在本机完整重算或扫描通过，不以额外下载限制阻挡已通过原生门槛的Windows修订交付。
+
 
 
 

@@ -1,7 +1,7 @@
 {
   "version": "0.15.4+190",
   "windowsRevision": 1,
-  "status": "local-native-consumer-and-windows-package-verified-publication-pending",
+  "status": "published-windows-servicing-remote-runtime-and-manifest-verified",
   "issue": "https://github.com/HyperionHXH/triomi/issues/8",
   "reportedFailure": {
     "screenshot": "Windows source browser is unavailable; black screen, 0:00 / 0:00, episode 53",
@@ -41,5 +41,53 @@
   "testHarnessCorrection": "Invalid-profile negative fixture initially let a regular file path reach WebView2, causing the user-visible Edge data-directory modal. Native directory and exclusive-write preflight now rejects it before Edge startup. Test hosts were stopped; no user browser data was changed. Terminal decoder ownership now follows on_load/on_unload lifecycle events rather than transient idle sampling alone.",
   "localChecks": {"flutterPassed": 1978, "flutterSkipped": 5, "fullSuiteScope": "Lifecycle cutover before final ordered-event/timeout refinement", "finalRelevantConsumerTestsPassed": 41, "analyze": "No issues found", "finalNativeTestsPassed": 2, "finalTimeoutAndHostChecks": "passed; modal-free invalid-directory preflight and native load/unload ownership", "pythonToolsPassed": 118},
   "normalBuild": {"windowsRelease": "passed", "zipAndMsi": "passed", "sourceFilesExactSecretScanned": 1482, "sourceFilesWithExactSecrets": 0, "localZipMembersScanned": 468, "membersWithExactSecrets": 0, "privateOrDebugNames": 0, "localSigningPrivateKeyAvailable": false, "scope": "MSI raw-container only, ZIP member payloads; not a full security audit"},
-  "publication": {"status": "pending", "scope": "Windows-only servicing revision; keep Android/iOS assets and current release tag unchanged"}
+  "publication": {
+    "status": "published-remote-ci-and-manifest-verified",
+    "workflowRun": "42646419110",
+    "workflowUrl": "https://github.com/HyperionHXH/triomi/actions/runs/42646419110",
+    "remoteAllGatesPassed": true,
+    "sourceCommit": "0d6e0cc763867a86d945e7f02b4e15ab14427fe3",
+    "version": "0.15.4+190",
+    "windowsRevision": 1,
+    "assets": [
+      {
+        "name": "SHA256SUMS.txt",
+        "id": 728113557,
+        "size": 348,
+        "digest": "sha256:b88d22c0a33fdd926ceab67c22c025b76a37ca4cd53bac17b71c5c0baf8dd9ab"
+      },
+      {
+        "name": "triomi-android.apk",
+        "id": 724382293,
+        "size": 162852724,
+        "digest": "sha256:eb0982e46c9629419608cfac4250140c7a7c2c2346b84e5f6fcc768225066732"
+      },
+      {
+        "name": "triomi-windows.msi",
+        "id": 728113554,
+        "size": 244240585,
+        "digest": "sha256:8ac2af7aa214f98f9f067e5cea7475f458100bef3bfe087897b1c52f11828ca3"
+      },
+      {
+        "name": "triomi-windows.update.json",
+        "id": 728113556,
+        "size": 79632,
+        "digest": "sha256:f1f71cfea64c7dfc90728deb88fa2430068733e297546c978e26da4c08d4c35f"
+      },
+      {
+        "name": "triomi-windows.zip",
+        "id": 728113558,
+        "size": 255558311,
+        "digest": "sha256:e3b65896a04d58d7b8c3a5c15902dc8cfc6d7689f1c60a667b3bb9072c318e65"
+      }
+    ],
+    "manifestMatchesGithubZipDigest": true,
+    "manifestMembers": 467,
+    "androidAssetUnchanged": true,
+    "iosReleasesUnchanged": 10,
+    "releaseTagUnchanged": "70734b20a543872f4ec8b1dd58fa841d85214457",
+    "issueComment": "https://github.com/HyperionHXH/triomi/issues/8#issuecomment-6754962594",
+    "issueRemainsOpenForReporterConfirmation": true,
+    "fullLocalPublicDownload": "not-completed; initial interrupted transfer, 900-second timeout, HTTPS connection resets/timeouts; alternate retrieval cancelled after remote integrity proof. Do not claim all public payloads locally rehashed."
+  }
 }
