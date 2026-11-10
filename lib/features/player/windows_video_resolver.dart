@@ -2,8 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:webview_windows/webview_windows.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/models/chapter.dart';
 import '../../core/models/video_resolve_cancellation.dart';
@@ -22,129 +21,52 @@ class ResolvedDesktopVideo {
   final bool omitCookies;
 }
 
-/// Resolves the ordinary site in a private viewport behind the player.
-/// TLS, origin, cookies and cancellation stay enforced without a modal step.
+/// Each invocation owns a native controller in the source's dedicated profile.
+/// Playback and download owners never cancel each other's browser or login UI.
 Future<ResolvedDesktopVideo> resolveWindowsVideo(
   BuildContext context,
   PlaySource line, {
+  required String sourceId,
+  required String sourceUrl,
   VideoResolveCancellation? cancellation,
   bool allowBackground = false,
 }) async {
-  final owner = cancellation ?? VideoResolveCancellation();
-  if (!context.mounted || owner.isCancelled) {
-    throw VideoResolveCancelled(owner.reason);
-  }
-  final lifecycle = WidgetsBinding.instance.lifecycleState;
-  if (lifecycle == AppLifecycleState.detached ||
-      !allowBackground &&
-          (lifecycle == AppLifecycleState.hidden ||
-              lifecycle == AppLifecycleState.paused)) {
-    throw VideoResolveCancelled('请显示应用窗口后继续网页解析');
-  }
-  // Queue resolution starts at the root Navigator itself, above its Overlay.
-  // Player pages already have an Overlay ancestor.
-  final overlay =
-      Overlay.maybeOf(context, rootOverlay: true) ??
-      Navigator.maybeOf(context, rootNavigator: true)?.overlay;
-  if (overlay == null || !overlay.mounted) {
-    throw VideoResolveCancelled('播放页面已关闭，请重新打开后继续解析');
-  }
-  final result = Completer<ResolvedDesktopVideo>();
-  final closed = Completer<void>();
-  var created = false;
-  final entry = OverlayEntry(
-    builder: (_) {
-      created = true;
-      return Positioned.fill(
-        child: IgnorePointer(
-          child: ExcludeSemantics(
-            child: Opacity(
-              opacity: 0,
-              child: _DesktopVideoProbe(
-                line: line,
-                owner: owner,
-                closed: closed,
-                allowBackground: allowBackground,
-                onResolved: (value) {
-                  if (!result.isCompleted) result.complete(value);
-                },
-                onError: (message) {
-                  if (!result.isCompleted) {
-                    result.completeError(StateError(message));
-                  }
-                },
-              ),
-            ),
-          ),
-        ),
-      );
-    },
+  if (!context.mounted) throw VideoResolveCancelled('播放页面已关闭');
+  final probe = _DesktopVideoProbe(
+    line,
+    sourceId,
+    sourceUrl,
+    cancellation ?? VideoResolveCancellation(),
+    allowBackground,
   );
-  void cancel() {
-    if (!result.isCompleted) {
-      result.completeError(VideoResolveCancelled(owner.reason));
-    }
-  }
-
-  owner.addListener(cancel);
-  overlay.insert(entry);
-  // A minimized window suppresses ordinary frames. Build the private browser
-  // once so its native network work can continue without a visible viewport.
-  if (allowBackground) WidgetsBinding.instance.scheduleForcedFrame();
   try {
-    return await result.future;
+    return await probe.resolve();
   } finally {
-    owner.removeListener(cancel);
-    entry.remove();
-    entry.dispose();
-    if (allowBackground) WidgetsBinding.instance.scheduleForcedFrame();
-    if (!created && !closed.isCompleted) closed.complete();
-    await closed.future;
-    if (cancellation == null) owner.dispose();
+    if (cancellation == null) probe.owner.dispose();
   }
 }
 
-class _DesktopVideoProbe extends StatefulWidget {
-  const _DesktopVideoProbe({
-    required this.line,
-    required this.owner,
-    required this.closed,
-    required this.allowBackground,
-    required this.onResolved,
-    required this.onError,
-  });
+class _DesktopVideoProbe with WidgetsBindingObserver {
+  _DesktopVideoProbe(
+    this.line,
+    this.sourceId,
+    this.sourceUrl,
+    this.owner,
+    this.allowBackground,
+  );
+  static const _channel = MethodChannel('triomi/windows-web-session');
+  static final _owners = <int, _DesktopVideoProbe>{};
+  static int _nextId = 0;
   final PlaySource line;
+  final String sourceId;
+  final String sourceUrl;
   final VideoResolveCancellation owner;
-  final Completer<void> closed;
   final bool allowBackground;
-  final ValueChanged<ResolvedDesktopVideo> onResolved;
-  final ValueChanged<String> onError;
-
-  @override
-  State<_DesktopVideoProbe> createState() => _DesktopVideoProbeState();
-}
-
-class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
-    with WidgetsBindingObserver {
-  static Future<void>? _environment;
-  static bool _environmentReady = false;
-  final _web = WebviewController();
-  StreamSubscription<dynamic>? _messages;
-  StreamSubscription<WebErrorStatus>? _errors;
-  StreamSubscription<String>? _urls;
-  Uri? _documentUrl;
-  Uri? _parentDocument;
-  Uri? _parent;
-  bool _enteredPlayer = false;
+  final _result = Completer<ResolvedDesktopVideo>();
+  late final int _id = ++_nextId;
   Timer? _deadline;
-  bool _ready = false;
-  bool _initialized = false;
-  Future<void>? _closingWeb;
-  bool _finished = false;
-  String? _error;
-  Future<void>? _creating;
-  Future<void>? _initializing;
   bool _capturing = false;
+  bool _closed = false;
   static const _defaultAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -160,143 +82,97 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
         : null;
   }
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    widget.owner.addListener(_cancelBrowser);
-    _deadline = Timer(const Duration(seconds: 45), () {
-      _fail('播放页未返回可播放地址，请重试或换来源');
-    });
-    _initializing = _initialize();
-    unawaited(_initializing);
+  static Future<void> _dispatch(MethodCall call) async {
+    if (call.method != 'videoMessage' || call.arguments is! Map) return;
+    final args = call.arguments as Map;
+    final probe = _owners[args['id']];
+    if (probe == null) return;
+    if (args['error'] is String) {
+      probe._fail(StateError(args['error'] as String));
+    } else {
+      await probe._onMessage(args['message']);
+    }
   }
 
-  void _cancelBrowser() {
-    _finished = true;
-    _deadline?.cancel();
-    // Backgrounding may suppress frames: close the native surface now.
-    unawaited(() async {
-      if (_creating != null) await _initializing;
-      await _disposeWeb();
-    }());
+  void _fail(Object error) {
+    if (!_result.isCompleted) _result.completeError(error);
   }
+
+  void _cancel() => _fail(VideoResolveCancelled(owner.reason));
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Desktop inactive means visible but unfocused, not a hidden application.
-    // WebView2 focus changes and normal multitasking must not cancel the page.
     if (state == AppLifecycleState.detached ||
-        !widget.allowBackground &&
+        !allowBackground &&
             (state == AppLifecycleState.hidden ||
                 state == AppLifecycleState.paused)) {
-      widget.owner.cancel('应用窗口已隐藏，请显示窗口后继续网页解析');
+      owner.cancel('应用窗口已隐藏，请显示窗口后继续网页解析');
     }
   }
 
-  Future<void> _initialize() async {
-    try {
-      if (_httpUri(widget.line.url) == null) {
-        throw StateError('播放页必须是 HTTP(S) 地址');
-      }
-      final headers = {
-        for (final e in widget.line.headers.entries)
-          e.key.toLowerCase(): e.value,
-      };
-      if (headers.keys.any((k) => k != 'user-agent' && k != 'referer')) {
-        throw StateError('此来源需要桌面暂不支持的专用请求头，请更换来源');
-      }
-      if (await WebviewController.getWebViewVersion() == null) {
-        throw StateError('请安装 Microsoft Edge WebView2 Runtime 后重试');
-      }
-      if (!mounted || _finished || _error != null) return;
-      if (!_environmentReady) {
-        _environment ??= _initializeEnvironment();
-        await _environment;
-        _environment = null;
-      }
-      if (!mounted || _finished || _error != null) return;
-      _creating = _web.initialize();
-      await _creating;
-      _initialized = true;
-      if (!mounted || _finished || _error != null) {
-        await _disposeWeb();
-        return;
-      }
-      await _web.setPopupWindowPolicy(WebviewPopupWindowPolicy.deny);
-      if (!mounted || _finished) return;
-      _agent = headers['user-agent'] ?? _defaultAgent;
-      if (_agent.isEmpty || _agent.contains(RegExp(r'[\r\n]'))) {
-        throw StateError('来源 User-Agent 无效，请更换来源');
-      }
-      await _web.setUserAgent(_agent);
-      if (!mounted || _finished) return;
-      _messages = _web.webMessage.listen(_onMessage);
-      _urls = _web.url.listen((value) => _documentUrl = _httpUri(value));
-      _errors = _web.onLoadError.listen((status) {
-        // Following the parent link deliberately cancels its remaining load.
-        // Certificate, connection and destination failures still fail normally.
-        if (_enteredPlayer &&
-            (status == WebErrorStatus.WebErrorStatusOperationCanceled ||
-                (status == WebErrorStatus.WebErrorStatusConnectionAborted &&
-                    _documentUrl == _parentDocument))) {
-          return;
-        }
-        _fail('播放页加载失败，请重试或换来源');
-      });
-      await _web.addScriptToExecuteOnDocumentCreated(
-        'window.__triomiLegacyParser = ${widget.line.useLegacyParser};\n$_script',
-      );
-      if (!mounted || _finished || _error != null) {
-        await _disposeWeb();
-        return;
-      }
-      setState(() => _ready = true);
-      // The plugin cannot set arbitrary headers. Navigate through a link in
-      // the real parent document so its normal referrer policy applies.
-      _parent = _httpUri(headers['referer']);
-      if (_parent == _httpUri(widget.line.url)) _parent = null;
-      await _web.loadUrl((_parent ?? _httpUri(widget.line.url)!).toString());
-    } catch (error) {
-      _fail(
-        error is StateError ? error.message.toString() : '网页播放组件暂不可用，请重试或更换来源',
-      );
+  Future<ResolvedDesktopVideo> resolve() async {
+    final target = _httpUri(line.url);
+    final source = _httpUri(sourceUrl);
+    if (target == null || source == null || sourceId.isEmpty) {
+      throw StateError('播放页和来源必须是有效 HTTP(S) 地址');
     }
-  }
-
-  static Future<void> _initializeEnvironment() async {
-    try {
-      final support = await getApplicationSupportDirectory();
-      await WebviewController.initializeEnvironment(
-        userDataPath: '${support.path}/video-webview',
-      );
-      // Keep completed state, not a Future bound to its caller's async zone.
-      _environmentReady = true;
-    } catch (_) {
-      _environment = null;
-      rethrow;
+    final headers = {
+      for (final e in line.headers.entries) e.key.toLowerCase(): e.value,
+    };
+    if (headers.keys.any((key) => key != 'user-agent' && key != 'referer')) {
+      throw StateError('此来源需要桌面暂不支持的专用请求头，请更换来源');
     }
-  }
-
-  void _enterPlayer() {
-    if (_enteredPlayer || _parent == null || !mounted || _finished) return;
-    _enteredPlayer = true;
-    unawaited(
-      _web
-          .executeScript(
-            '(() => { const a = document.createElement("a"); '
-            'a.href = ${jsonEncode(widget.line.url)}; '
-            'a.target = "_self"; document.body.appendChild(a); a.click(); })();',
-          )
-          .catchError((Object _) {
-            _fail('播放页导航失败，请重试或换来源');
-            return null;
-          }),
+    _agent = headers['user-agent'] ?? _defaultAgent;
+    if (_agent.isEmpty || _agent.contains(RegExp(r'[\r\n]'))) {
+      throw StateError('来源 User-Agent 无效，请更换来源');
+    }
+    if (owner.isCancelled) throw VideoResolveCancelled(owner.reason);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle != null) didChangeAppLifecycleState(lifecycle);
+    if (owner.isCancelled) throw VideoResolveCancelled(owner.reason);
+    _channel.setMethodCallHandler(_dispatch);
+    _owners[_id] = this;
+    WidgetsBinding.instance.addObserver(this);
+    owner.addListener(_cancel);
+    _deadline = Timer(
+      const Duration(seconds: 45),
+      () => _fail(StateError('播放页未返回可播放地址，请重试或换来源')),
     );
+    // Observe errors immediately, including while asynchronous environment
+    // creation is pending. Close only after creation has acknowledged ownership.
+    final start = WindowsSourceSession.startVideo(
+      id: _id,
+      sourceId: sourceId,
+      sourceUrl: sourceUrl,
+      url: line.url,
+      isCancelled: () => owner.isCancelled || _closed,
+      userAgent: _agent,
+      referer: _httpUri(headers['referer']) == target
+          ? null
+          : _httpUri(headers['referer'])?.toString(),
+      script:
+          'window.__triomiLegacyParser = ${line.useLegacyParser};\n$_script',
+    ).catchError(_fail);
+    try {
+      return await _result.future;
+    } finally {
+      _closed = true;
+      _deadline?.cancel();
+      _owners.remove(_id);
+      WidgetsBinding.instance.removeObserver(this);
+      owner.removeListener(_cancel);
+      // Signal immediately too: pending native initialization must not navigate
+      // a cancelled owner. The second close drains its eventual controller.
+      await WindowsSourceSession.closeVideo(_id);
+      await start;
+      await WindowsSourceSession.closeVideo(_id);
+    }
   }
 
   Future<void> _onMessage(dynamic message) async {
-    if (!mounted || _finished || _capturing || _error != null) return;
+    if (_closed || _result.isCompleted || _capturing || owner.isCancelled) {
+      return;
+    }
     if (message is String) {
       try {
         message = jsonDecode(message);
@@ -304,41 +180,24 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
         return;
       }
     }
-    if (message is! Map) return;
-    if (message['type'] == 'triomi-parent-ready') {
-      final page = _httpUri(message['page']?.toString());
-      // Compare against the native top-level URL to allow real redirects,
-      // never a frame's claimed parent or a downgrade of the HTTPS parent.
-      if (_parent != null &&
-          page != null &&
-          (_parent!.scheme != 'https' || page.scheme == 'https') &&
-          (page.removeFragment() == _parent?.removeFragment() ||
-              page.removeFragment() == _documentUrl?.removeFragment())) {
-        _parentDocument = page.removeFragment();
-        _enterPlayer();
-      }
-      return;
-    }
-    if (message['type'] != 'triomi-media') return;
+    if (message is! Map || message['type'] != 'triomi-media') return;
     final uri = _httpUri(message['url']?.toString());
-    if (_httpUri(widget.line.url)?.scheme == 'https' &&
-        uri?.scheme != 'https') {
+    if (uri == null ||
+        _httpUri(line.url)?.scheme == 'https' && uri.scheme != 'https') {
       return;
     }
     final hls = message['mimeType'] == 'application/vnd.apple.mpegurl';
-    // An extensionless URL requires observed media evidence, never a plain link.
-    if (uri == null ||
-        (!hls &&
-            message['evidence'] != 'video' &&
-            !RegExp(
-              r'\.(m3u8|mp4|m4v)$',
-              caseSensitive: false,
-            ).hasMatch(uri.path))) {
+    if (!hls &&
+        message['evidence'] != 'video' &&
+        !RegExp(
+          r'\.(m3u8|mp4|m4v)$',
+          caseSensitive: false,
+        ).hasMatch(uri.path)) {
       return;
     }
     final url = uri.toString();
-    if (widget.line.unavailableVideoUrls.contains(url)) {
-      _fail('此线路返回了站点的加载失败占位，请更换播放列表');
+    if (line.unavailableVideoUrls.contains(url)) {
+      _fail(StateError('此线路返回了站点的加载失败占位，请更换播放列表'));
       return;
     }
     if (const [
@@ -348,21 +207,19 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
     ].any(url.contains)) {
       return;
     }
-    // Only the configured browser UA and exact-target native CookieManager
-    // output may become request headers. Never accept page-supplied credentials.
     final page = _httpUri(message['page']?.toString());
     final referer = _httpUri(message['referer']?.toString());
     _capturing = true;
     try {
       final cookie = message['omitCookies'] == true
           ? null
-          : await WindowsSourceSession.videoCookies(url);
-      if (!mounted || _finished || _error != null || widget.owner.isCancelled) {
-        return;
-      }
-      _finished = true;
-      _deadline?.cancel();
-      widget.onResolved(
+          : await WindowsSourceSession.videoCookies(
+              url,
+              sourceId: sourceId,
+              sourceUrl: sourceUrl,
+            );
+      if (_closed || _result.isCompleted || owner.isCancelled) return;
+      _result.complete(
         ResolvedDesktopVideo(
           url,
           {
@@ -378,62 +235,16 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
           omitCookies: message['omitCookies'] == true,
         ),
       );
-    } catch (_) {
-      _fail('无法读取网页会话，请关闭后重试');
+    } catch (error) {
+      if (error is PlatformException && error.code == 'browser_unavailable') {
+        _fail(error);
+      } else {
+        _fail(StateError('无法读取网页会话，请关闭后重试'));
+      }
     } finally {
       _capturing = false;
     }
   }
-
-  void _fail(String message) {
-    if (!mounted || _finished || _error != null) return;
-    _deadline?.cancel();
-    _finished = true;
-    if (_ready) unawaited(_web.stop().catchError((Object _) {}));
-    setState(() => _error = message);
-    widget.onError(message);
-  }
-
-  Future<void> _disposeWeb() {
-    if (!_initialized) return Future<void>.value();
-    return _closingWeb ??= () async {
-      try {
-        await _web.dispose();
-      } catch (_) {
-        // Never log request/session data while closing a failed browser.
-      }
-    }();
-  }
-
-  @override
-  void dispose() {
-    if (!_finished) widget.owner.cancel('播放页面已关闭');
-    _finished = true;
-    WidgetsBinding.instance.removeObserver(this);
-    widget.owner.removeListener(_cancelBrowser);
-    _deadline?.cancel();
-    unawaited(_messages?.cancel());
-    unawaited(_errors?.cancel());
-    unawaited(_urls?.cancel());
-    unawaited(() async {
-      try {
-        if (_creating != null) await _initializing;
-        await _disposeWeb();
-      } finally {
-        if (!widget.closed.isCompleted) widget.closed.complete();
-      }
-    }());
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => _ready
-      ? Webview(
-          _web,
-          permissionRequested: (_, _, _) async =>
-              WebviewPermissionDecision.deny,
-        )
-      : const SizedBox.expand();
 
   static const _script = r'''
 (() => {
@@ -454,7 +265,10 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
       if (!/^https?:$/.test(u.protocol) ||
           (reported.has(u.href) && (!mimeType || reported.get(u.href))) ||
           (mimeType !== hls && evidence !== 'video' && !/\.(m3u8|mp4|m4v)$/i.test(u.pathname))) return;
-      const policy = document.referrerPolicy || 'strict-origin-when-cross-origin';
+      // Document.referrerPolicy is not exposed by all Chromium documents.
+      // Read the active meta policy instead of silently inventing a Referer.
+      const meta = [...document.querySelectorAll('meta[name="referrer" i]')].at(-1);
+      const policy = document.referrerPolicy || meta?.content?.trim().toLowerCase() || 'strict-origin-when-cross-origin';
       const same = u.origin === location.origin;
       const downgrade = location.protocol === 'https:' && u.protocol === 'http:';
       let ref = '';
@@ -554,13 +368,9 @@ class _DesktopVideoProbeState extends State<_DesktopVideoProbe>
       } catch (_) {}
     });
   };
-  const ready = () => {
-    if (window === window.top) window.chrome.webview.postMessage({type:'triomi-parent-ready',page:location.href});
-    scan();
-  };
   new MutationObserver(scan).observe(document,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready, {once:true});
-  else ready();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scan, {once:true});
+  else scan();
   setInterval(scan, 500);
 })();
 ''';

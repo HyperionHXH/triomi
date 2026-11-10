@@ -158,6 +158,7 @@ void main() {
           () => overlay().active.isNotEmpty,
           'Loopback independent pools must produce active rendered danmaku',
         );
+        await captureIosDeviceEvidence('avplayer-playing-danmaku');
         await showControls();
         await tester.tap(find.byTooltip('暂停'));
         await until(
@@ -252,6 +253,7 @@ void main() {
           lessThan(15),
           reason: 'Replayed history must not restore the old EOF anchor',
         );
+        await captureIosDeviceEvidence('avplayer-replayed-persisted');
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump(const Duration(milliseconds: 500));
         await library.recordHistory(

@@ -5,9 +5,11 @@ from pathlib import Path
 import zipfile
 
 
-def build_manifest(bundle: Path, version: str, version_code: int) -> dict:
+def build_manifest(bundle: Path, version: str, version_code: int, *, windows_revision: int = 0) -> dict:
     if version_code < 1 or not version:
         raise ValueError('A real release version and positive build code are required')
+    if not isinstance(windows_revision, int) or not 0 <= windows_revision <= 65535:
+        raise ValueError('Windows servicing revision must be 0..65535')
     files = {}
     folded = set()
     total = 0
@@ -43,7 +45,8 @@ def build_manifest(bundle: Path, version: str, version_code: int) -> dict:
     with bundle.open('rb') as source:
         digest = hashlib.file_digest(source, 'sha256').hexdigest()
     return {'platform': 'windows', 'packageName': 'io.github.hyperionhxh.triomi',
-            'version': version, 'versionCode': version_code, 'sha256': digest, 'files': files}
+            'version': version, 'versionCode': version_code, 'sha256': digest, 'files': files,
+            **({'windowsRevision': windows_revision} if windows_revision else {})}
 
 
 def main() -> None:
@@ -52,8 +55,9 @@ def main() -> None:
     parser.add_argument('--version', required=True)
     parser.add_argument('--version-code', required=True, type=int)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--windows-revision', type=int, default=0)
     args = parser.parse_args()
-    manifest = build_manifest(args.bundle, args.version, args.version_code)
+    manifest = build_manifest(args.bundle, args.version, args.version_code, windows_revision=args.windows_revision)
     args.output.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     print(f'Windows update manifest: {len(manifest["files"])} verified members')
 

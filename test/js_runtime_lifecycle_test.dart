@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/models/chapter.dart';
@@ -301,52 +302,64 @@ async function search(keyword, page) {
       expect(await source.search('x'), isEmpty);
     });
 
-    test('规则级 headers 与实例隔离：两个源各带各的头', () async {
-      if (!available) {
-        markTestSkipped('flutter_js 原生库在宿主不可用');
-      }
-      final httpA = ScriptedHttp()
-        ..script.add(jsonEncode(<String, Object?>{'name': '源 A 的结果'}));
-      final httpB = ScriptedHttp()
-        ..script.add(jsonEncode(<String, Object?>{'name': '源 B 的结果'}));
-      const searchScript = '''
+    test(
+      '规则级 headers 与实例隔离：两个源各带各的头',
+      () async {
+        if (!available) {
+          markTestSkipped('flutter_js 原生库在宿主不可用');
+        }
+        final httpA = ScriptedHttp()
+          ..script.add(jsonEncode(<String, Object?>{'name': '源 A 的结果'}));
+        final httpB = ScriptedHttp()
+          ..script.add(jsonEncode(<String, Object?>{'name': '源 B 的结果'}));
+        const searchScript = '''
 async function search(keyword, page) {
   const response = await triomi.fetch('https://example.com/api');
   return [{ remoteId: '1', title: JSON.parse(response.body).name }];
 }
 ''';
-      final ruleA = jsRule(
-        id: 'd22-a',
-        script: searchScript,
-        headers: const <String, String>{'Referer': 'https://a.example.com'},
-      );
-      final ruleB = jsRule(
-        id: 'd22-b',
-        script: searchScript,
-        headers: const <String, String>{'Referer': 'https://b.example.com'},
-      );
-      final sourceA = JsSource(
-        rule: ruleA,
-        runtime: FlutterJsRuntime(),
-        http: httpA,
-      );
-      final sourceB = JsSource(
-        rule: ruleB,
-        runtime: FlutterJsRuntime(),
-        http: httpB,
-      );
-      addTearDown(sourceA.dispose);
-      addTearDown(sourceB.dispose);
-      await sourceA.initialize();
-      await sourceB.initialize();
+        final ruleA = jsRule(
+          id: 'd22-a',
+          script: searchScript,
+          headers: const <String, String>{'Referer': 'https://a.example.com'},
+        );
+        final ruleB = jsRule(
+          id: 'd22-b',
+          script: searchScript,
+          headers: const <String, String>{'Referer': 'https://b.example.com'},
+        );
+        final sourceA = JsSource(
+          rule: ruleA,
+          runtime: FlutterJsRuntime(),
+          http: httpA,
+        );
+        final sourceB = JsSource(
+          rule: ruleB,
+          runtime: FlutterJsRuntime(),
+          http: httpB,
+        );
+        addTearDown(sourceA.dispose);
+        addTearDown(sourceB.dispose);
+        await sourceA.initialize();
+        await sourceB.initialize();
 
-      await sourceA.search('x');
-      await sourceB.search('x');
-      expect(httpA.requests.single.headers['Referer'], 'https://a.example.com');
-      expect(httpB.requests.single.headers['Referer'], 'https://b.example.com');
-      expect(httpA.requests, hasLength(1), reason: '实例间互不串扰');
-      expect(httpB.requests, hasLength(1));
-    });
+        await sourceA.search('x');
+        await sourceB.search('x');
+        expect(
+          httpA.requests.single.headers['Referer'],
+          'https://a.example.com',
+        );
+        expect(
+          httpB.requests.single.headers['Referer'],
+          'https://b.example.com',
+        );
+        expect(httpA.requests, hasLength(1), reason: '实例间互不串扰');
+        expect(httpB.requests, hasLength(1));
+      },
+      skip: Platform.isMacOS
+          ? 'flutter_js 0.8.7 JSC uses one static callback for all FFI engines; actual iOS WKWebView isolation is exercised in ios_js_runtime_test.dart'
+          : false,
+    );
 
     test('连接失败的错误文本不携带 URL 查询串里的凭据（缺陷回归，当前失败）', () async {
       if (!available) {

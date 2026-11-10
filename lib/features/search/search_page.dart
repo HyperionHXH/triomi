@@ -84,6 +84,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   late List<String> _tags = List.of(widget.initialTags);
   bool _submitted = false;
   bool _tagBusy = false;
+  late bool _animeSourceSearch;
+  bool get _animeMetadata =>
+      widget.type == MediaType.anime && !_animeSourceSearch;
+  List<String> get _searchTags =>
+      widget.type == MediaType.anime && _animeSourceSearch ? const [] : _tags;
   String get _historyKey => 'search.history.${widget.type.name}';
 
   SourceEntry _publicMetadataEntry() {
@@ -101,8 +106,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   @override
   void initState() {
     super.initState();
-    // Anime always searches metadata, even when launched from a playback source.
-    _scopeId = widget.type != MediaType.anime && widget.sourceOnly
+    _animeSourceSearch =
+        widget.type == MediaType.anime &&
+        widget.sourceOnly &&
+        widget.initialSourceId != null &&
+        widget.initialSourceId != 'bangumi-anime';
+    _scopeId = widget.sourceOnly && widget.initialSourceId != 'bangumi-anime'
         ? widget.initialSourceId
         : null;
     if (widget.initialQuery.trim().isNotEmpty || _tags.isNotEmpty) {
@@ -127,7 +136,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   Future<void> _submit() async {
     final query = _controller.text.trim();
-    final hasCriteria = query.isNotEmpty || _tags.isNotEmpty;
+    final hasCriteria = query.isNotEmpty || _searchTags.isNotEmpty;
     final generation = ++_generation;
     _cancelRequests();
     setState(() {
@@ -153,7 +162,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         );
       }
       if (!mounted || generation != _generation) return;
-      final candidates = widget.type == MediaType.anime
+      final candidates = _animeMetadata
           ? [_publicMetadataEntry()]
           : (await ref.read(sourcesProvider.future))
                 .enabledWith(SourceCapability.search);
@@ -161,7 +170,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       final sources = candidates.where((entry) {
         if (entry.descriptor.type != widget.type) return false;
         if (widget.type == MediaType.anime) {
-          return entry.descriptor.id == 'bangumi-anime';
+          if (_animeMetadata) return entry.descriptor.id == 'bangumi-anime';
+          if (entry.descriptor.id == 'bangumi-anime') return false;
         }
         if (_scopeId != null && entry.descriptor.id != _scopeId) return false;
         return true;
@@ -222,7 +232,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final owner = SourceRequestCancellation();
     _requests[id] = owner;
     try {
-      final active = widget.type == MediaType.anime
+      final active = _animeMetadata
           ? _publicMetadataEntry()
           : (await ref.read(sourcesProvider.future)).enabledEntries
                 .where((candidate) => candidate.descriptor.id == id)
@@ -238,18 +248,18 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               return provider.searchFiltered(
                 query,
                 page: page,
-                filter: AnimePublicFilter(tags: List.of(_tags)),
+                filter: AnimePublicFilter(tags: List.of(_searchTags)),
               );
             }
-            if (_tags.isNotEmpty && provider is TagSearchProvider) {
+            if (_searchTags.isNotEmpty && provider is TagSearchProvider) {
               return (provider as TagSearchProvider).searchTagged(
                 query,
-                tags: _tags,
+                tags: _searchTags,
                 page: page,
               );
             }
             return provider.search(
-              [..._tags, if (query.isNotEmpty) query].join(' '),
+              [..._searchTags, if (query.isNotEmpty) query].join(' '),
               page: page,
             );
           })
@@ -433,16 +443,20 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   @override
   Widget build(BuildContext context) {
     final rows = _rows.values.toList();
-    final searchable = widget.type == MediaType.anime
-        ? const <SourceEntry>[]
-        : ref
-                  .watch(sourcesProvider)
-                  .asData
-                  ?.value
-                  .enabledWith(SourceCapability.search)
-                  .where((entry) => entry.descriptor.type == widget.type)
-                  .toList() ??
-              <SourceEntry>[];
+    final searchable =
+        ref
+            .watch(sourcesProvider)
+            .asData
+            ?.value
+            .enabledWith(SourceCapability.search)
+            .where(
+              (entry) =>
+                  entry.descriptor.type == widget.type &&
+                  (widget.type != MediaType.anime ||
+                      entry.descriptor.id != 'bangumi-anime'),
+            )
+            .toList() ??
+        <SourceEntry>[];
     final finished = rows.where((row) => !row.pending).length;
     final history =
         ref.watch(preferencesProvider).get<List<Object?>>(_historyKey) ?? [];
@@ -471,14 +485,29 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               ),
             ),
           ),
-          if (_tags.isNotEmpty)
+          if (widget.type == MediaType.anime)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Bangumi资料')),
+                  ButtonSegment(value: true, label: Text('播放源检索')),
+                ],
+                selected: {_animeSourceSearch},
+                onSelectionChanged: (value) {
+                  setState(() => _animeSourceSearch = value.single);
+                  unawaited(_submit());
+                },
+              ),
+            ),
+          if (_searchTags.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final tag in _tags)
+                  for (final tag in _searchTags)
                     InputChip(
                       label: Text(tag),
                       deleteButtonTooltipMessage: '移除标签 $tag',
@@ -501,7 +530,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 onPressed: _tagBusy ? null : _editTags,
               ),
             ),
-          if (widget.type != MediaType.anime)
+          if (!_animeMetadata)
             Align(
               alignment: Alignment.centerLeft,
               child: PopupMenuButton<String>(
@@ -588,7 +617,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                     title: '没有可搜索的${widget.type.label}来源',
                     message: '请在当前模块启用来源。',
                   )
-                : widget.type == MediaType.anime && rows.isNotEmpty
+                : _animeMetadata && rows.isNotEmpty
                 ? _animeResults(rows.single)
                 : ListView.separated(
                     itemCount: rows.length,
@@ -747,6 +776,27 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   ),
                 );
               },
+            ),
+          ),
+        if (row.items.isNotEmpty && widget.type == MediaType.anime)
+          SizedBox(
+            height: MediaQuery.textScalerOf(context).scale(13) * 3 + 190,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: row.items.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (_, index) => SizedBox(
+                width: 124,
+                child: MediaItemCard(
+                  item: row.items[index],
+                  sourceName: descriptor.name,
+                  onTap: () => context.push(
+                    AppRoutes.detailFor(row.items[index]),
+                    extra: row.items[index],
+                  ),
+                ),
+              ),
             ),
           ),
         if (row.items.isNotEmpty && widget.type == MediaType.novel)

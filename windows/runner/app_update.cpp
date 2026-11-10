@@ -27,11 +27,25 @@ static flutter::EncodableMap InspectExecutable(const wchar_t* path) {
   std::string utf8(utf8_size, '\0');
   WideCharToMultiByte(CP_UTF8, 0, path, -1, utf8.data(), utf8_size, nullptr, nullptr);
   utf8.pop_back();
+  wchar_t* revision_value = nullptr;
+  UINT revision_size = 0;
+  int64_t revision = 0;
+  if (VerQueryValueW(data.data(), L"\\StringFileInfo\\040904e4\\TriomiWindowsRevision",
+          reinterpret_cast<void**>(&revision_value), &revision_size) &&
+      revision_value && revision_size > 1) {
+    for (UINT i = 0; i + 1 < revision_size; ++i) {
+      if (revision_value[i] < L'0' || revision_value[i] > L'9')
+        throw std::runtime_error("Windows revision invalid");
+      revision = revision * 10 + revision_value[i] - L'0';
+      if (revision > 65535) throw std::runtime_error("Windows revision invalid");
+    }
+  }
   using flutter::EncodableValue;
   return {{EncodableValue("packageName"), EncodableValue("io.github.hyperionhxh.triomi")},
           {EncodableValue("platform"), EncodableValue("windows")},
           {EncodableValue("version"), EncodableValue(version)},
           {EncodableValue("versionCode"), EncodableValue(static_cast<int64_t>(LOWORD(info->dwFileVersionLS)))},
+          {EncodableValue("windowsRevision"), EncodableValue(revision)},
           {EncodableValue("path"), EncodableValue(utf8)}};
 }
 

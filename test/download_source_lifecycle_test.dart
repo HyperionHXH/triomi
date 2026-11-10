@@ -494,7 +494,7 @@ void main() {
         var resolves = 0;
         await setup(
           [source.entry()],
-          resolver: (line, owner) async {
+          resolver: (line, owner, sourceId, sourceUrl) async {
             resolves++;
             owner.addListener(() {
               if (!cancelled.isCompleted) cancelled.complete();
@@ -547,7 +547,7 @@ void main() {
         final closed = Completer<void>();
         await setup(
           [source.entry()],
-          resolver: (line, owner) async {
+          resolver: (line, owner, sourceId, sourceUrl) async {
             owner.addListener(() {
               if (!closed.isCompleted) closed.complete();
             });
@@ -588,7 +588,7 @@ void main() {
         final closed = Completer<void>();
         await setup(
           [source.entry()],
-          resolver: (line, owner) async {
+          resolver: (line, owner, sourceId, sourceUrl) async {
             owner.addListener(() {
               if (!closed.isCompleted) closed.complete();
             });
@@ -658,7 +658,7 @@ void main() {
         final disposed = Completer<void>();
         await setup(
           [source.entry()],
-          resolver: (line, owner) async {
+          resolver: (line, owner, sourceId, sourceUrl) async {
             owner.addListener(() {
               if (!cancelled.isCompleted) cancelled.complete();
             });

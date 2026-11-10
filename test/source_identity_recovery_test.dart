@@ -12,6 +12,7 @@ import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_descriptor.dart';
 import 'package:triomi/core/source/bangumi_source.dart';
 import 'package:triomi/core/source/http_client.dart';
+import 'package:triomi/core/source/js/runtime/js_runtime_factory_io.dart';
 import 'package:triomi/core/source/kazumi_repository.dart';
 import 'package:triomi/core/source/kazumi_source.dart';
 import 'package:triomi/core/source/source_catalog.dart';
@@ -48,6 +49,7 @@ void main() {
     repository = SourceRepository(db);
     registry = SourceRegistry(
       repository: repository,
+      jsRuntimeFactory: FlutterJsRuntime.new,
       http: FakeHttpClient(
         (_) async => throw StateError('Must remain offline'),
       ),
@@ -421,6 +423,7 @@ void main() {
       final playbackRegistry = SourceRegistry(
         repository: repository,
         http: http,
+        jsRuntimeFactory: FlutterJsRuntime.new,
       );
       final snapshot = await _finishIdentityOwned(
         tester,

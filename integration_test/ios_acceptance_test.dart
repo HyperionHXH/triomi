@@ -1,3 +1,5 @@
+import '../test/search_isolation_test.dart' as search_parity;
+import 'fixtures/ios_test_binding.dart';
 import 'ios_anime_metadata_search_test.dart' as anime_search;
 import 'ios_chinese_rules_test.dart' as chinese_rules;
 import 'ios_ech_http_test.dart' as native_http;
@@ -22,4 +24,5 @@ void main() {
   reader_state.main();
   storage.main();
   video.main();
+  search_parity.main(capture: captureIosDeviceEvidence);
 }

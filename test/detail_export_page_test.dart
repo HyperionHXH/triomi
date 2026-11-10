@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -89,12 +90,14 @@ void main() {
 
   void exportTest(String name, WidgetTesterCallback body) {
     testWidgets(name, (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
       try {
         await body(tester);
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump(const Duration(milliseconds: 1));
         await tester.runAsync(db.close);
+        debugDefaultTargetPlatformOverride = null;
       }
     });
   }

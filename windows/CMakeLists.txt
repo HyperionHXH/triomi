@@ -1,5 +1,5 @@
 # Project-level configuration.
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.19)
 project(triomi LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
@@ -52,23 +52,19 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
+include(media_dependencies.cmake)
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
-add_dependencies(${BINARY_NAME} webview_windows_DEPENDENCIES_DOWNLOAD)
+list(APPEND PLUGIN_BUNDLED_LIBRARIES ${TRIOMI_MEDIA_BUNDLED_LIBRARIES})
 
-# The plugin pins SDK 1.0.1210.39, which predates Profile2 HTTP-only cache
-# clearing. Keep its dependency untouched; the runner owns a separate SDK pin.
-# Do not upgrade packages in the shared plugin/Pub cache or race its downloader.
-# Reuse the plugin's resolved cache entry, not a second PATH search (Flutter's
-# build environment may no longer expose nuget.exe on PATH at MSBuild time).
-if(NUGET AND EXISTS "${NUGET}")
-  get_filename_component(TRIOMI_NUGET "${NUGET}" ABSOLUTE)
-elseif(EXISTS "${CMAKE_BINARY_DIR}/nuget.exe")
-  set(TRIOMI_NUGET "${CMAKE_BINARY_DIR}/nuget.exe")
-else()
-  message(FATAL_ERROR "WebView2 requires the NuGet executable resolved by webview_windows")
+# Native source-isolated sessions and resolvers share one pinned public SDK.
+# No process-global WebView plugin or second legacy SDK is required.
+find_program(TRIOMI_NUGET NAMES nuget.exe nuget
+  HINTS "${CMAKE_BINARY_DIR}")
+if(NOT TRIOMI_NUGET)
+  message(FATAL_ERROR "WebView2 requires NuGet on PATH")
 endif()
 add_custom_target(triomi_webview_sdk ALL
   COMMAND "${TRIOMI_NUGET}" install Microsoft.Web.WebView2
@@ -76,7 +72,6 @@ add_custom_target(triomi_webview_sdk ALL
     -OutputDirectory "${CMAKE_BINARY_DIR}/triomi-webview-packages"
   VERBATIM
 )
-add_dependencies(triomi_webview_sdk webview_windows_DEPENDENCIES_DOWNLOAD)
 add_dependencies(${BINARY_NAME} triomi_webview_sdk)
 
 
@@ -94,7 +89,12 @@ endif()
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
 
-install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
+install(TARGETS ${BINARY_NAME} triomi_update_helper RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+# A reused build directory may still contain the removed global renderer.
+install(CODE "file(REMOVE \"${CMAKE_INSTALL_PREFIX}/webview_windows_plugin.dll\")"
+  COMPONENT Runtime)
+install(CODE "file(REMOVE \"${CMAKE_INSTALL_PREFIX}/media_kit_libs_windows_video_plugin.dll\")"
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"

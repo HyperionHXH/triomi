@@ -7,7 +7,7 @@ import 'package:triomi/core/source/http_adapter_io.dart';
 void main() {
   test('new connections prefer a working current DNS address without retaining removed routes', () async {
     final first = InternetAddress('127.0.0.1');
-    final second = InternetAddress('127.0.0.2');
+    final second = InternetAddress.loopbackIPv6;
     final working = await ServerSocket.bind(second, 0);
     final peers = <Socket>[];
     final workingSub = working.listen(peers.add);
@@ -213,14 +213,14 @@ void main() {
 
   test('failed system-resolved LK route tries DoH alternatives', () async {
     final reservation = await ServerSocket.bind(
-      InternetAddress('127.0.0.2'),
+      InternetAddress.loopbackIPv4,
       0,
     );
     final unavailablePort = reservation.port;
     await reservation.close();
     var queries = 0;
     final resolver = SourceDnsFallback(
-      systemLookup: (_) async => [InternetAddress('127.0.0.2')],
+      systemLookup: (_) async => [InternetAddress.loopbackIPv4],
       query: (_) async {
         queries++;
         return {};

@@ -2,6 +2,7 @@
 //
 #pragma code_page(65001)
 #include "resource.h"
+#include "windows_revision.h"
 
 #define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////
@@ -97,6 +98,7 @@ BEGIN
             VALUE "OriginalFilename", "triomi.exe" "\0"
             VALUE "ProductName", "triomi" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
+            VALUE "TriomiWindowsRevision", TRIOMI_WINDOWS_REVISION_STRING "\0"
         END
     END
     BLOCK "VarFileInfo"

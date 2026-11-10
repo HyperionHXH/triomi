@@ -1,5 +1,35 @@
 # Triomi 当前状态
 
+## 当前请求：主线 f3f08bb 同步 iOS 0.15.4+198（开发与验收中）
+
+本轮以主线 `f3f08bb812c55aadcf96b3c0e294e970e2fd1661` 为固定基线，完整合并 iOS197 之后的22个主线提交；保留原工作树未提交文件，在独立集成工作树实现。提交/推送与新IPA发布获本轮用户授权，必须先完成本地回归和USB真机验收，再经过原GitHub iOS发布门槛。以下历史验收不是本轮通过证据。
+
+| 同步项 | iOS 实现与验收要求 |
+| --- | --- |
+| 0.15.3 封面与已安装图标持久化 | 复用CoverStore安全公开图片缓存；Mihon APK图标仅其支持平台执行，iOS兼容规则不新增APK/JVM |
+| 0.15.4 番剧资料/播放源双模式搜索 | 保留不依赖规则注册表的公开Bangumi资料入口；播放源模式只查询启用的anime搜索来源，分页/重试/取消隔离，本站详情直接选集 |
+| 播放生命周期与输入 | EOF/切集/线路选择按代次生效；iOS继续AVPlayer，不初始化桌面media_kit或Windows SMTC；触控/键盘操作共享语义 |
+| 网页解析与下载上下文 | iOS继续WKWebView、精确requestId取消与Cookie域/路径/Secure隔离；接入新版下载resolver来源参数，不复制WebView2/COM修复 |
+| 更新、后台检查与通知 | 主线Windows安装器/修订号/任务栏/进程租约仅Windows；iOS保留前台检查和系统挂起边界，不伪造无限后台任务或IPA自动安装 |
+| 备份、文件、导出与图片保存 | 保留iOS系统选择器、安全作用域书签、Photos与数据身份；合入Windows文件能力时不得删除iOS入口或将目录路径冒称照片相册 |
+| 共享调度/下载/阅读器修复 | 迁移所有共享调用契约，覆盖取消/暂停/删除屏障、进度恢复和旧数据；保留Keychain及应用Bundle ID |
+
+验收证据待本轮实际运行补齐：Mac analyze/全量Flutter/Python工具回归、iOS编译与USB真机功能场景、精确提交GitHub原生/集成/视觉与实网门槛、公开IPA版本与摘要。不得使用个人账号或私有浏览器配置，不清设备数据。
+
+本机Python工具164项通过；首轮Mac全量2437通过/26平台跳过/48失败，原结果保留。多数失败来自Darwin默认`/var`临时目录别名触发既有安全校验，改用真实`TMPDIR=$HOME/triomi-test-tmp`后相关文件/备份/缓存检查通过，不放宽生产路径校验。环回回归改为IPv4/IPv6两种系统实际支持的本地地址；来源身份回归显式注入测试FFI引擎、导入弹层夹具显式保存空仓库列表以排除真实网络。`flutter_js 0.8.7`的macOS FFI JSC双实例共享静态回调，实测30秒超时且固定包源码已核对；该QuickJS双实例检查不冒称Mac通过，另在实际iOS WebKit加入同时双会话header/结果隔离门槛。
+
+独立审查发现并修复新增iOS系统媒体会话三项问题：旧路线仍存活的播放器周期更新可抢回新会话、PiP后台被Dart可见性误禁用、换集/线路解析开始未立即撤销旧会话。现按明确启用边沿取得原生owner，周期更新仅owner发布；页面覆盖/恢复与PiP控制授权，换源立即停用旧会话。生产PlayerPage的旧EOF/落库/媒体命令/PiP后台/覆盖路线恢复回归已通过；新增实际AVPlayer双owner XCTest待Apple原生门槛。不把通道回放称为硬件锁屏/PiP通过。
+
+USB独立应用已成功编译并安装（iOS15.8.3，原Triomi不覆盖）；初始构建失败的verbose根因为SQLite/ECH浏览器下载拒绝/连接重置，不是Flutter通用提示中的签名要求。按锁定哈希预取SQLite三架构，复用原ECH已校验ZIP并由原hook再次核验后编译通过。AFC完整容器接口被AppSync应用拒绝，改用既有Documents文件共享路径；实际套件/截图验收继续进行，未以安装成功代替功能通过。
+
+修正环境与隔离测试后，Mac完整串行Flutter **2484通过/27项明确平台条件跳过**，958.92秒，analyze零问题；27项含不在Mac提供的原生平台用例及上述FFI JSC双实例，实际iOS WebKit双实例已在USB首次套件成功。原生RunnerTests已用设备SDK/Release/ENABLE_TESTABILITY=YES编译成功（未在VM执行），原Swift/API弃用警告保留。首轮USB实际410场景中388成功/22失败，AVPlayer真实暂停/seek/弹幕/EOF/旧锚重播落库与同时双WebKit会话成功；失败集中在输入/搜索UI，release模式原`FlutterErrorDetails.toString()`丢诊断，已加原始exception/stack报告继续定位，不算套件通过，也未推送发布。Flutter截图不含原生AVPlayer层，改为USB屏幕截图握手取证，不用黑色平台层截图冒称视频画面通过。
+
+USB二轮取得原始exception/stack后，22失败具体为：release `TestTextInput`未注册而发送client=-1，框架只在debug接受该特殊ID，故输入没有写入控制器；另两项沿用主机相对`File('assets/...')`，手机沙盒中不存在。仅USB测试binding显式注册测试输入客户端，云端原生键盘巡检保持不变；测试规则读取改用既有可移植asset helper，不改生产搜索/账号设置或放宽断言。实际USB截图握手已取得AVPlayer彩条测试图和弹幕叠层，旧Flutter截图黑层不是播放器不解码。
+
+USB最终运行 `436be47e1d3b40aba236dabcf516d066`：iPhone8,2 / iOS15.8.3，**410场景全部成功，零failure/diagnostic**。五张实际USB屏幕图已逐张读取：两个原生视频/弹幕与三张双模式搜索/混合来源状态；search新增18项同时纳入GitHub实际iOS综合入口。当前Mac最终18项搜索回归通过，analyze零问题；完整2484/27为此前同生产代码基线。正常`lib/main.dart`设备Release及原IPA结构/12原生二进制/11framework/Bundle ID/iOS15/0.15.4+198已验证，本机SHA256 `8266d145df91562d1eeebf4483ce14582c22cfbef6078c8805477ffb459cd8e0`，不混作未来GitHub公开包摘要。打包工具原Python3.11限定的`file_digest`在VM3.9失败，改为同SHA256分块读取后正常打包通过。原设备Triomi及账号不变；下一步推送精确merge并执行原GitHub全部门槛，通过前不发布。
+
+## 历史记录（保留原失败与发布证据）
+
 ## 当前请求：主线0.15.2同步iOS197（验收中）
 
 固定主线`c8090cbd1472d766cddece813cc2dab562406bc`（0.15.2），merge `fd3cb7b`保留两侧历史；键盘/安全区已实际iOS越过，恢复字段巡检修正后下一次推送递增至iOS193，沿用原Bundle ID、iOS15、Keychain、WebKit/AVPlayer及漫画宿主协议。不使用账号或Secrets；用户原禁用账号workflow已从精确Git对象恢复，私有草稿不提交。旧Release不覆盖。
@@ -43,9 +73,57 @@ Windows真实程序已通过新增2项文件SQLite/生产路由阅读验收：�
 
 
 
+## 当前请求：R192 完整修复桌面播放后再解决issue（Windows修订2，已发布并核验，#8已解决）
 
+本轮不把网站错误直接排除：原生与独立Chromium、相同播放页/媒体、直连与现有系统代理分层对照，另以普通主程序真实画面验证。客户端已定位并修复四项根因：
 
+- **COM所有权**：旧2023版libmpv的WASAPI热插拔在读取音频设备列表的线程初始化COM，却在销毁线程无条件释放，破坏主平台STA。独立STA进程旧DLL失败、新DLL八轮保持STA；原生五Player销毁后新来源浏览器回归修前复现`0x800401F0`、修后通过。改为SHA256固定的shinchiro Windows x64 `20261110/a61f6c3abd`，含上游[4dfee616](https://github.com/mpv-player/mpv/commit/4dfee616d0fd278b5f488726c3c13e524ebf354e)；不再依赖旧pub解码包或Flutter未来将移除的独立UI线程措施。Android Media3与iOS独立工作区不变。
+- **入口导航竞争**：真实MXdm捕获旧`nav=2`失败时当前已`nav=3`；只过滤旧事件仍能遇到站点跳转与宿主DOMContentLoaded链接竞争。现按当前NavigationId处理失败，入口当前文档成功完成后只进入播放页一次；取消/真实404继续报错，不吞当前导航失败。回归覆盖入口脚本/meta跳转、取消与来源隔离。
+- **Referrer策略**：Chromium页面不提供有效`document.referrerPolicy`时旧代码默认补Referer，违背meta `no-referrer`；按页面策略保留空Referer，DM84《芙莉莲》从准备超时恢复完整26:00媒体，未绕TLS或站点权限。
+- **无后缀HLS**：AGE清单真实183段/1395秒，旧路径却按普通播放列表只播约8秒。将解析出的HLS MIME传到每次DesktopPlaybackSession.open，限定本次解复用格式，下一媒体清除；永久原生回归验证跨片推进及随后普通WAV仍8秒，不把首段解码算整集通过。
 
+普通`lib/main.dart` Release（0.15.4+190/Windows修订2）已实际操作：AGE《境界触发者》第1集0:43/23:15，同窗口切第2集0:29/23:16；7sefun原列表4第53集实际画面、+80秒、暂停2:05保持，关闭应用后独立PID恢复2:05/22:43；DM84《芙莉莲》第1集真实动画/双语字幕0:34→4:04/26:00，全屏2560×1600再恢复原窗口持续播放。原设置倍速1.0x保留，原数据不清。仅主程序重启，不重启系统或工具宿主。
+
+MXdm样本另有外部路线限制：同一旧集CDN直连HTTP200、现有127.0.0.1:7890代理HTTP403，另一个最新集CDN同代理403；独立Chromium也在0:00/readyState0并报媒体`net::ERR_FAILED`。这证明本机既有路线上的媒体访问限制，不证明整站永久失效，也不将它归咎用户网络或用偷偷切代理/放宽TLS掩盖。修后7sefun、AGE、DM84三条真实来源已恢复；不承诺任意网站、地区、账号或未来失效媒体均可播放。
+
+本机原生生命周期两项通过（含COM/HLS/导航/no-referrer/真实失败）、播放消费者73项通过；最终全量1978通过/5平台条件跳过、analyze零问题、Python118项、编码/文档漂移零错误。正常Release与完整ZIP/MSI已构建，467成员逐项匹配，旧解码插件无残留，源码1501文件及ZIP账号值/编码扫描零命中；本机无签名私钥，MSI仅原始容器扫描。最终包独立重开《芙莉莲》4:50→5:37/26:00真帧续播通过。
+
+远端首轮被测试缺花括号的analyze info挡住，已修测试语法；第二轮通过全量/打包后，更新器真进程回归暴露退出前DELETE打开运行中EXE的旧缺陷。预检改只读校验，替换权限仍在精确父进程退出并获得writer锁后取得；本机独立原生工具已验证成功等待/替换重启、hash拒绝、锁文件拒绝、真实中途回滚、原生失败窗口和writer争用，不跳过门槛。用户明确授权最终验证后仅发布Windows修订2并解决#8；公开字节未完成核验前不称已交付，原Android、10个iOS发布和v0.15.4标签保持。详见[R191持续综合证据](delivery/evidence/R191-windows-playback-investigation.json)的R192追加部分。
+
+最终[Windows单端发布42786677377](https://github.com/HyperionHXH/triomi/actions/runs/42786677377)全部成功，源码`f2f0d3a3cab34e0222a0d0f5cdeea3fc352c8290`；远端Flutter1982通过/1平台条件跳过、原生播放/浏览器2项、更新器完整锁保护/回滚、analyze与118工具测试通过。[公开v0.15.4](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.4)的Windows修订2五项文件完整核对，ZIP/MSI通过原资产API下载，Android复用先前已核对的相同公开字节并再次哈希；全部大小、GitHub digest和公共SHA256一致，ZIP466成员逐项匹配更新清单，固定解码DLL哈希正确、无旧插件。ZIP **290238420字节 / `3c36ba76e433fdfb5884908c70b6f798e33b7e1b66eddf76c3a310ac83fa6ecb`**，MSI **272764953字节 / `59b4ccfaa6890d3c70156f34c6b3236139c81a555a5892300c62c4c1f8e33cef`**；不把本机先前467成员包的摘要混作公开包。
+
+实际公开ZIP完整解压后普通启动，原历史/设置保留，《芙莉莲》5:55续播并推进7:20/26:00，真实人物/石桥场景及双语字幕已目视、正常退出。公开ZIP466成员账号值/编码扫描零命中，无私钥/debug名称；MSI仅原始容器，未冒称压缩成员审计或MSI安装生命周期。原Android资产ID/大小/摘要、10个iOS发布及v0.15.4标签逐一确认未变。完成上述验证后才[回写并关闭#8](https://github.com/HyperionHXH/triomi/issues/8#issuecomment-6763796376)，状态`closed/completed`已由GitHub API确认；未宣称任意站点或报告者机器已远程验收。后续仅提交证据文档，不移动标签或重发资产。
+
+## 当前请求：R191 桌面播放根因复查（0.15.4+190，Windows修订1，已发布）
+
+[#8](https://github.com/HyperionHXH/triomi/issues/8)截图实际错误是`Windows source browser is unavailable`，发生在WebView2网页解析器创建、尚未进入解码。旧原生`Failed`把环境、控制器、脚本、Cookie错误统一折叠，无法从旧截图追溯用户机器的原始HRESULT；不能无证据归咎网络或宣称所有重试失败同一原因。
+
+本机真实WebView2反馈链路：普通短目录35次连续/4次并发/10次初始化中取消重开通过；冷的较深Unicode来源目录首次controller-create失败`0x80080005`，只缩短中间路径便通过，证明本机路径依赖故障。初版同目录8.3别名在本机有效但远端仍失败，不能跨磁盘依赖短名；现改为原目录的Windows扩展路径`\\?\`（UNC相应转换），隔离比较去前缀再展开原身份。创建前检查目录属性及实际写入，不移动/清空Cookie、不换公共目录、不使用junction，不放宽TLS。按规范化来源目录共享一个environment并合并并发创建，单次解析controller仍独立，取消不关闭登录或下载。保留安全stage/HRESULT，浏览器进程退出可在重试时重建。任意路径与系统策略是否支持仍按实际错误报告，不假造成功。
+
+审查同时确认：原`VideoController.waitUntilFirstFrameRendered`是controller生命期一次性Future，不能证明后续每集准备好；线路切换只推进resolve代次但外层用load代次发布，旧线路失败可能覆盖新线路；切集在查本地历史期间没有立即取消旧浏览器。现在`DesktopPlaybackSession`统一串行stop/open、每媒体就绪/取消和致命错误；切集立即撤销解析，线路sheet及异步进度保存按当前代次生效。Android仍为Media3，不新增解码器。
+
+对照只读Kazumi `02afdabf72af7eee04a7403786ee60236701086c`：WebViewVideoSourceService复用浏览器、串行解析、取消旧请求；VideoPageController以AsyncSession隔离过期结果，PlayerErrorMapper不把所有日志当故障。学习所有权/阶段分离，不复制其1500MiB默认缓存、窄字符串错误匹配或全局会话；Triomi保留128MiB有界缓存和来源隔离。Microsoft[进程模型](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/process-model)确认同目录环境共享浏览器进程且配置须一致。
+
+实际生产PlayerPage受控实跑通过：深层独立来源目录→真实WebView2网页→视频解码1625ms→同页下一集→真实404显示失败→退出独立重开3次继续解码。永久原生测试覆盖深路径、连续/并发/初始化取消、实际Dart resolver、Cookie保留/来源隔离、失败阶段，以及第二媒体等待自身HTTP字节、取消旧open、暂停/正常EOF/真实坏媒体。仅本机受控网页与媒体，不冒称用户具体站点或环境已远程验收；未访问用户账号配置。完整全量、编译与Windows单端发布继续执行。
+
+用户现场看到Edge“无法读取和写入数据目录”的弹窗，路径包含测试专用`NOT-A~`：来自本轮刻意创建“路径是普通文件”的负例，不是用户播放站。初版检查把ERROR_FILE_EXISTS当目录有效，Edge再弹原生UI；已停止自有测试宿主，生产预检改为确认目录属性及独占临时写入可用，非法路径不调用WebView2。测试不通过自动点击掩盖窗口。超时/替换回归也暴露采样idle状态可能早于新媒体载入，现依据原生on_load/on_unload顺序绑定本次媒体终止，不凭旧日志或上一文件路径猜状态。
+
+本轮全量1978通过/5平台条件跳过；最终有序事件/超时收口后41项播放/续播/解析/媒体键/更新相关消费者通过，analyze零问题，实际原生生命周期2项通过。Python工具118项、UTF-8及文档漂移通过。此前测试同时启动多个Windows集成入口产生第二宿主启动失败，现合并单入口原生套件，不并发启动多个profile writer。正常WindowsRelease/ZIP/MSI编译成功记录将以最终源码与发布校验更新。
+
+正常main的WindowsRelease与完整ZIP/MSI打包已通过；1482个源码/证据文件和本地ZIP468成员的现有账号值/编码扫描零命中，无私钥/调试文件名。MSI只扫描原始容器，本机无正式签名私钥，不扩大安全审计结论。本轮使用Windows单端servicing修订1，语义版本/构建号仍0.15.4+190，原Android/iOS文件和既有tag不移动；公开字节及远端原生回归另记。
+
+[Windows单端发布](https://github.com/HyperionHXH/triomi/actions/runs/42646419110)第二次作业已全部成功，包含完整回归、正常编译/打包、真实更新器、浏览器与原生播放生命周期。当前源码`0d6e0cc763867a86d945e7f02b4e15ab14427fe3`，Windows修订1已替换原发布下载，不移动tag或Android文件。#8已[回写根因、修复与下载地址](https://github.com/HyperionHXH/triomi/issues/8#issuecomment-6754962594)，保留打开等待报告者用新包确认；不以本机夹具代替其机器验收。
+
+公开产物收尾已完成：通过GitHub原资产API续下ZIP/MSI，五项完整公开文件的实际大小、SHA256均与当前GitHub digest及SHA256SUMS一致。Windows ZIP 255558311字节、SHA256=`e3b65896a04d58d7b8c3a5c15902dc8cfc6d7689f1c60a667b3bb9072c318e65`，全部467成员重算并匹配更新清单；MSI 244240585字节、SHA256=`8ac2af7aa214f98f9f067e5cea7475f458100bef3bfe087897b1c52f11828ca3`。清单版本190/修订1/源码均一致；Android资产仍ID724382293、162852724字节及原`eb0982e4…`摘要，实际完整字节不变，10个iOS发布资产及原tag身份保持不变。1482个源码/证据文件、公开APK626成员和ZIP467成员的现有账号值/编码扫描零命中，无私钥/调试文件名；MSI仅原始容器扫描，不声称检查其压缩成员。此前回下载TLS超时/重置的缺口现已清除，详见[最终R191证据](delivery/evidence/R191-windows-playback-investigation.json)。
+### 追加：公开包真实多番剧复查，发现COM引用耗尽（本地修复，尚未发布）
+
+本轮实际运行下载的修订1普通主程序，不是受控夹具：DM84《境界触发者》第一季第1集真实画面/字幕及时间0:00→2:13/23:15；退出重进恢复3:47；同页下一集最终1:20/23:16。7sefun第53集与AGE第1集播放页失败，DM84《葬送的芙莉莲》第1集准备超时、MXdm同作品播放页失败，全部保留，不把打开目录或0:00当播放成功。
+
+连续退出播放器后，MXdm新来源实际报`environment-create (0x800401F0)`。原生调用栈证明主窗口线程原为STA，libmpv销毁却在该线程执行无对应成功初始化的`CoUninitialize`；多次销毁后只剩隐式MTA。永久原生回归加入五个真实Player销毁并等待依赖的延迟释放，再创建新来源浏览器，修前第1次解析确定复现同一错误。`windows/runner/main.cpp`明确选择独立Dart UI线程，隔离mpv与平台STA；不增加COM引用掩盖泄漏、不吞异常、不重试。当前固定Flutter3.47.5支持此策略，但引擎已标明未来会移除独立线程；后续升级Flutter前必须重新处理libmpv线程/COM所有权并保留此回归，不能无检查移回合并线程。
+
+修后正常Release已构建并实际运行：DM84《海贼王》1180集真实画面0:24/23:36，独立退出重启恢复1:30并推进到1:47、动画草地/人物真实显示。MXdm《海贼王》两条线路仍失败；补保留WebView2导航状态，最终实读`9 = CONNECTION_RESET`，与COM失败分开，不无证宣称整站失效、网络无问题或全部修好。原生浏览器/解码两项专项已通过，覆盖销毁后的35连续/4并发/10取消重开；最新诊断增补的最终专项结果见综合证据。
+
+按用户最新要求，修好并充分实播前不提交/回写issue修复结论，不关闭#8、不提交源码、不推送或替换公开资产。当前公开下载仍为上文修订1；本地修改不是已发布修复。原用户数据、Cookie、凭据、Android/iOS资产保持，不清数据。截图及结果见[R191综合证据](delivery/evidence/R191-windows-playback-investigation.json)的`postPublicationLiveVerification`。
 
 
 
@@ -447,6 +525,55 @@ Documents/Application Support 根目录排除 iCloud 备份，持久业务数据
 第四次 [macOS 运行39449835099](https://github.com/HyperionHXH/triomi/actions/runs/39449835099)原生 XCTest 10/10 通过，真实 Dart JS 超时重载通过。HTTP/选择器用例在取标题时误传 baseUrl，触发现有共享宿主的 URL 解析而断言失败；本地主机对相同宿主复现一致。已移除夹具取文本时多传的 baseUrl，保留原始标题断言，不修改 Android/Windows 选择器契约。CI 合并三组真实集成场景到一次模拟器启动，未删除用例或放松断言。
 
 第五次 [macOS 运行39453571279](https://github.com/HyperionHXH/triomi/actions/runs/39453571279)（提交 d25f796）全部通过：原生 XCTest、合并后的 JS/存储/视频真实集成用例、未签名 IPA 校验打包与上传（triomi-ios-unsigned 11.4 MB）。feat/ios 的 iOS 适配、后台播放与无签名构建闭环完成，可从该 Run 的 Artifacts 下载 IPA 侧载。
+## 当前请求：R190 动漫双模式搜索与桌面播放误报修复（0.15.4+190，双端已发布核验）
+
+保留Bangumi资料搜索，恢复并列“播放源检索”，按名称查询已启用动画来源并分别展示结果、进度、错误、单站重试和分页。来源专属入口默认本站；可切回资料模式。切模式取消旧请求，晚到结果不覆盖当前查询，资料标签不泄漏到播放站。作品直接以原(sourceId,remoteId)进入本站详情、列表和选集，不依赖Bangumi收录、不按标题自动关联。
+
+[#7](https://github.com/HyperionHXH/triomi/issues/7)：media_kit把FFmpeg网络诊断日志送入error流，旧页面立即显示致命失败，即使视频仍推进。已用实际Windows解码器回放截图同一`tcp: ffurl_read returned 0xffffff76`事件失败前复现；修后以当前媒体引擎idle+错误诊断为终止失败，活动/暂停/正常EOF不误报，真正404仍显示错误，重试可恢复。Android保留Media3原生错误语义。永久原生回归覆盖播放、暂停、缺失媒体、重开和正常EOF。
+
+受控双端实跑使用生产SearchPage→DeclarativeSource/真实loopback HTTP→DetailPage→PlayerPage，不打开用户配置。Bangumi返回空结果，来源返回独有作品，两端均选第1集原生播放；Android实际时间`0:02 / 0:45`，Windows1125→3625ms，诊断不遮挡、真实404报错、重试恢复及暂停诊断通过。原API35只install-r保留数据，回环验收暂取消旧代理后已恢复`10.0.2.2:7890`。受控夹具不冒称外部所有站点播放通过；临时入口与视频资源已移除，最终正常入口构建/全量回归/签名和公开产物另记。按用户要求，issue修复及双端验证完成后才进入提交发布阶段；iOS独立工作区不变。
+
+最终本机Flutter **1978通过/5平台条件跳过**，analyze零问题，Python **118项通过**，UTF-8与UI/文档漂移零错误；1481个源码/证据文件现有账号值/编码扫描零命中，本机无正式签名私钥，不冒称已扫描私钥。保留永久原生错误回归，双端loopback临时入口和视频已删除。正常WindowsRelease、Android正常入口Release验收包均已编译，Mihon ABI **128项通过**，原API35 install-r保数据恢复到正常入口。Android首次遭本地生成插件注册文件夹带integration_test，刷新生产入口/插件生成后已重建通过，未修改生产插件列表或跳过编译。最终签名与公开发布证据继续更新于[R190记录](delivery/evidence/R190-anime-source-search-acceptance.json)。
+
+[v0.15.4正式发布](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.4)已完成，[Android/Windows/publish三任务](https://github.com/HyperionHXH/triomi/actions/runs/42495342379)全部成功，源码`70734b20a543872f4ec8b1dd58fa841d85214457`。远端真实mpv回归将测试输出固定null以支持无音频设备runner，仍执行真实解码、播放时钟、可恢复诊断及缺失主媒体失败，不跳过测试、不修改生产输出。
+
+五项公开资产均完整下载且GitHub digest/公共SHA256一致：APK **162852724字节 / `eb0982e46c9629419608cfac4250140c7a7c2c2346b84e5f6fcc768225066732`**；Windows ZIP **255557001字节 / `9d65be10c71682f201ce689728f0c0ef387b1c68a8881e04ae687b8135220497`**；MSI **244228297字节 / `26db6eb6c7ed7b808c4345b1f1a839f6bffc63a2aa1307ed8e021b0852e99eed`**。ZIP全部467成员匹配清单；APK实际版本0.15.4/190、原生产证书`731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309`验签及ABI128通过。公开APK626成员与ZIP467成员账号值扫描零命中、无私钥/调试文件名；MSI仅原始容器扫描，不冒称压缩成员检查。10个既有iOS发布资产身份不变。#7已[回写验证及下载地址并关闭](https://github.com/HyperionHXH/triomi/issues/7#issuecomment-6723585460)。
+
+
+
+## 当前请求：W189 Windows/Android功能对齐（版本保持0.15.3+188，Windows修订1，已发布并核验）
+
+实际差距以[平台能力盘点](PLATFORM_DEPENDENCY_AUDIT.md)当前W189段为准，不沿用旧“没有Windows构建工具/不支持文件选择”的历史结论。Windows原有启动检查不是缺失，但下载后只打开ZIP而无安装交接；本轮补齐独立修订发现、完整核验后安装/回滚/重启、待安装恢复与空间维护，版本和Android构建号不变。
+
+其余已接入：字体/图片/本地漫画COM选择器、插图保存到实际Pictures目录、小说选目录导出、独立常亮/执行租约、任务栏下载进度、SMTC后台媒体/媒体键、来源隔离WebView2登录态解析、追番/漫画Task Scheduler与前台协同检查及通知。已保留原有备份/字幕/规则更新/独立插件信任与账号边界，原设备数据不清。旧Windows客户端首次更新仍可能需要手动下载安装，因为旧版不会识别同版本修订。
+
+本地完整Flutter **1975通过/5平台条件跳过**，analyze零问题，Python **118项通过**，编码零错误、UI/文档漂移零错误。正常main的WindowsRelease与ZIP/MSI打包成功；实际Windows Installer只读会话验证10个修订/卸载条件：修订2/10不能降至1，卸载仍允许；UI与执行序列分别使用合法的CostInitialize/InstallValidate锚点。原生helper独立进程smoke通过父进程等待、真实替换/重启、servicing注册表写入/较高修订保留、SHA拒绝、文件锁拒绝、中途回滚、失败窗口的具体结果路径、配置writer互斥与安全路径拒绝；注册表smoke仅用0.0.0+0独立键并还原。
+
+实际原生集成在独立应用目录完成：真实TTF导入注册、本地漫画保留原文件、图片落盘、同名导出避让、任务栏API、SMTC和播放/暂停媒体键、按来源隔离的WebView2合成会话及精确媒体Cookie。当前用户计划任务的注册/两个开关与原任务恢复已证；隐藏后台Flutter进程实际运行两类空书架更新，独立重启读回完成时间。两条原生通知均收到Windows串行呈现确认。未打开用户配置、未登录真实站点、未发送远端账号写入。临时原生入口已删除。
+
+限制：没有把powercfg未观察到的常亮请求写成通过；物理媒体硬件、文件选择对话框的人机操作、像素视觉、真实第三方账号仍未验收。1477个源码/证据文件及公开ZIP的467个成员现有账号值/编码扫描零命中，无私钥/调试文件名；MSI只扫描原始容器，不宣称检查其压缩成员；本机无签名私钥文件。完整证据见[W189记录](delivery/evidence/W189-windows-parity-acceptance.json)。
+
+[Windows单端CI与发布](https://github.com/HyperionHXH/triomi/actions/runs/42470185658)全部通过；[原v0.15.3发布](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.3)仅替换Windows ZIP/MSI/更新清单及公共摘要。源码固定`d840b7e41d6b85dea7251df19c596f677f605b01`；公开ZIP **255551354字节 / SHA256 `8369b3a70b7f4ab8e2fb28cd5ded7280cb17d5d4bf63073712ed08da6063b447`**，MSI **244216009字节 / SHA256 `c9cf3d675f879bf825017bd1f283702357069fa368cca21d99938ac6d9d1c11e`**。已实际下载全部公开资产，摘要与GitHub digest匹配，ZIP全部467成员与更新清单一致；执行公开包内helper的独立回归通过，公开MSI的10个条件与编译后动作顺序通过。原标签仍指向`481c964a9815fff5082dcb6c3715a93b768798f3`，未移动。
+
+Android资产仍为ID **722895661**、162754436字节、SHA256 `cda8f7705114feadb17949fe087a074ac45628e29bb5dadd63bc3287354bf75d`，身份及实际下载字节均与发布前一致；10个既有iOS发布的全部资产ID/大小/digest保持不变。首次CI的工具链路径、上游下载504/摘要拒绝及提权runner测试夹具owner已修正：用vswhere找工具链、同源API下载原pin且保留独立校验、仅测试进程设当前用户默认owner；未绕过生产安全检查或重发其他平台。
+
+## 当前请求：0.15.3（构建188）插件图标持久化、番剧封面与全屏空格暂停（已发布并核验）
+
+已安装漫画插件的图标随可信安装下载、实际解码后保存为应用支持目录中的独立PNG；旧安装按可见图标惰性补齐，未安装目录仍可现场加载。图标不是插件执行/签名凭据，下载或解码失败不撤销可信安装、不替换旧有效图标；卸载只清本包图标。仓库刷新只修复URL元数据，不在全局安装事务内逐个等待网络图标；同URL更新后已挂载图标重新解析新文件。
+
+[#5](https://github.com/HyperionHXH/triomi/issues/5)：番剧在线封面原先只读既有CoverStore而不写入，内存淘汰后需重取。现在仅对原有严格白名单的匿名Bangumi公开图片，在成功解码后按原URL写入同一存储；滚回、销毁重建及离线重开可复用。私有/签名/任意来源URL不共享此缓存，改变网络客户端仍隔离在途请求，损坏缓存按读取字节匹配移除后修复。
+
+[#6](https://github.com/HyperionHXH/triomi/issues/6)：播放器输入层原只处理方向键，现空格按下只切换一次播放并消费重复/释放，优先于聚焦的全屏按钮；编辑框、修饰键、其他路由及停用状态不抢键。设置菜单打开时暂停播放器快捷键处理，稳定控制层身份避免菜单随手势层隐藏被重建。实际Windows生产PlayerPage解码30秒媒体，原生全屏2560×1600、焦点留全屏按钮时空格暂停、长按仅恢复一次、还原窗口后暂停均通过；真实菜单选项聚焦后Space打开倍速子页且视频继续。键盘由Flutter集成绑定注入，不冒称物理OS键盘验证。
+
+发布前保护iOS：其merge `fd3cb7b`已固定合入旧主线`c8090cbd1472d766cddecec813cc2dab562406bc`，后续`c0de54e`等独立提交和当前文档明确仍以0.15.2为基线；本轮不修改iOS工作区、不让其自动合入0.15.3。实际最终状态与公开资产核验另记。
+
+本地完整Flutter **1940通过/4平台条件跳过**，analyze零问题，Python117项通过、编码零错误、UI/文档漂移零错误；交付扫描零错误/35条历史模板警告保留。真实仓库MangaDex图标96×96/4282字节、公开番剧封面560×800/104716字节持久保存后，结束进程；第二原生进程用拒绝网络的客户端仍渲染两生产图片控件，网络请求0。安装信任与图标失败/更新/卸载由消费者回归验证，未为烟测重装第三方可执行插件。原设备数据未改；临时入口已删除。1451个源码/证据文件账号值及编码扫描零命中；本机无签名私钥文件，不声称已扫描私钥。正常main的WindowsRelease、Android验收Release及128项Mihon ABI通过；Android首轮依赖下载超时后只补入SHA完全匹配的既有缓存，未改源码/TLS。
+
+正式[v0.15.3](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.3)固定提交`481c964a9815fff5082dcb6c3715a93b768798f3`；[完整远端检查42446962575](https://github.com/HyperionHXH/triomi/actions/runs/42446962575)全部成功，Flutter **1943通过/1跳过**、analyze无问题，双端打包及Python检查成功。[生产签名发布42446979609](https://github.com/HyperionHXH/triomi/actions/runs/42446979609)成功，稳定更新渠道已指向本版本。自行触发的同提交重复Tag检查已取消，不冒称该取消运行通过。
+
+五个公开文件已完整下载并核对GitHub摘要及SHA256SUMS；Windows ZIP467成员与更新清单逐项相符，MSI版本0.15.188；APK0.15.3+188、原生产证书`731ecd30…`、128项Mihon ABI通过。两包26个规则JSON与不可变标签Git字节完全一致；首次检查误对照本机11份遗留CRLF副本，已改为精确标签字节，不修改或归一化已发布资产。公开APK626成员、ZIP467成员、MSI及清单账号值/编码与私钥文件名扫描零命中。生产更新服务匿名发现本版本及5项摘要，未安装公开包；旧v0.15.2资产尺寸/摘要未变，issue #5/#6已关闭。完整证据见[R188验收](delivery/evidence/R188-image-playback-acceptance.json)。
+
+
 ## 当前请求：0.15.2（构建187）来源身份、追番与漫画阅读体验（已发布并完成核验）
 
 Bangumi 改为隐藏、不可移除的内置资料/搜索能力，加载时恢复旧版删除、停用或替换造成的缺失；不作为可观看插件。新装只保留官方 Kazumi AGE；旧默认 AGE 与新规则的作品/分集 ID 不同，不按名称强行迁移。无引用的原始旧规则事务退役；有收藏、目录、下载、历史或播放关联的旧引擎保留原 ID，并在 AGE 的旧记录来源管理中处理；用户编辑规则不自动删除。

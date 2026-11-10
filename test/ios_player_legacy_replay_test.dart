@@ -166,6 +166,76 @@ void main() {
       ),
       12,
     );
+    final mediaId = (open.arguments as Map)['mediaId'];
+    expect(
+      (calls.lastWhere((call) => call.method == 'setSystemMedia').arguments
+          as Map)['enabled'],
+      isTrue,
+    );
+    calls.clear();
+    await event('mediaCommand', {'mediaId': mediaId, 'command': 'pause'});
+    expect(calls.where((call) => call.method == 'pause'), hasLength(1));
+    calls.clear();
+    await event('mediaCommand', {'mediaId': -1, 'command': 'play'});
+    expect(
+      calls.where((call) => call.method == 'play'),
+      isEmpty,
+      reason: 'A retired media session cannot resume the current episode',
+    );
+    await event('pip', {'enabled': true});
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await settle();
+    expect(
+      (calls.lastWhere((call) => call.method == 'setSystemMedia').arguments
+          as Map)['enabled'],
+      isTrue,
+      reason:
+          'Active PiP keeps system media available without background audio',
+    );
+    calls.clear();
+    await event('mediaCommand', {'mediaId': mediaId, 'command': 'pause'});
+    expect(calls.where((call) => call.method == 'pause'), hasLength(1));
+    await event('pip', {'enabled': false});
+    expect(
+      (calls.lastWhere((call) => call.method == 'setSystemMedia').arguments
+          as Map)['enabled'],
+      isFalse,
+    );
+    calls.clear();
+    await event('mediaCommand', {'mediaId': mediaId, 'command': 'play'});
+    expect(calls.where((call) => call.method == 'play'), isEmpty);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await settle();
+    final navigator = Navigator.of(tester.element(find.byType(PlayerPage)));
+    unawaited(
+      navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('Another route')),
+        ),
+      ),
+    );
+    await settle();
+    expect(
+      (calls.lastWhere((call) => call.method == 'setSystemMedia').arguments
+          as Map)['enabled'],
+      isFalse,
+      reason: 'A covered player cannot steal a newer route’s media session',
+    );
+    calls.clear();
+    await event('mediaCommand', {'mediaId': mediaId, 'command': 'play'});
+    expect(calls.where((call) => call.method == 'play'), isEmpty);
+    navigator.pop();
+    await settle();
+    expect(
+      (calls.lastWhere((call) => call.method == 'setSystemMedia').arguments
+          as Map)['enabled'],
+      isTrue,
+      reason: 'Returning to the player reacquires the native media session',
+    );
+    await event('mediaCommand', {'mediaId': mediaId, 'command': 'stop'});
+    expect(calls.where((call) => call.method == 'seek').last.arguments, {
+      'positionMs': 0,
+    });
     await tester.pumpWidget(const SizedBox.shrink());
     await settle();
     debugDefaultTargetPlatformOverride = null;

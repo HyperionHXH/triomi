@@ -3,6 +3,7 @@ import CFNetwork
 import CryptoKit
 import AVFoundation
 import Flutter
+import MediaPlayer
 import UIKit
 import WebKit
 import XCTest
@@ -29,6 +30,52 @@ final class RunnerTests: XCTestCase {
     }
     wait(for: [done], timeout: 15)
     return value
+  }
+
+  func testRetiringPlayerCannotReclaimOrClearReplacementNowPlaying() throws {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("media-owner-\(UUID().uuidString).wav")
+    var wave = Data()
+    func text(_ value: String) { wave.append(value.data(using: .ascii)!) }
+    func number<T: FixedWidthInteger>(_ value: T) {
+      var little = value.littleEndian
+      withUnsafeBytes(of: &little) { wave.append(contentsOf: $0) }
+    }
+    text("RIFF"); number(UInt32(32036)); text("WAVEfmt "); number(UInt32(16))
+    number(UInt16(1)); number(UInt16(1)); number(UInt32(8000)); number(UInt32(16000))
+    number(UInt16(2)); number(UInt16(16)); text("data"); number(UInt32(32000))
+    wave.append(Data(repeating: 0, count: 32000))
+    try wave.write(to: url)
+    defer { try? FileManager.default.removeItem(at: url) }
+    let messenger = IosVideoTestMessenger()
+    let old = IosVideoPlatformView(frame: .zero, viewId: -201, messenger: messenger)
+    let next = IosVideoPlatformView(frame: .zero, viewId: -202, messenger: messenger)
+    func call(_ view: IosVideoPlatformView, _ method: String, _ args: [String: Any] = [:]) {
+      let done = expectation(description: method)
+      view.handle(FlutterMethodCall(methodName: method, arguments: args)) {
+        XCTAssertFalse($0 is FlutterError); done.fulfill()
+      }
+      wait(for: [done], timeout: 15)
+    }
+    var oldDisposed = false
+    defer { if !oldDisposed { call(old, "dispose") }; call(next, "dispose") }
+    for (view, title) in [(old, "retiring"), (next, "replacement")] {
+      let prepared = expectation(description: "Prepare actual AVPlayer item")
+      messenger.prepared = { prepared.fulfill() }
+      call(view, "open", ["url": url.absoluteString, "mediaId": 1])
+      wait(for: [prepared], timeout: 15)
+      messenger.prepared = nil
+      call(view, "setSystemMedia", ["mediaId": 1, "enabled": true, "title": title])
+    }
+    let center = MPNowPlayingInfoCenter.default()
+    XCTAssertEqual(center.nowPlayingInfo?[MPMediaItemPropertyTitle] as? String, "replacement")
+    call(old, "pause") // Also publishes a state, just like its periodic observer.
+    XCTAssertEqual(center.nowPlayingInfo?[MPMediaItemPropertyTitle] as? String, "replacement")
+    call(old, "setSystemMedia", ["mediaId": 0, "enabled": false])
+    call(old, "dispose")
+    oldDisposed = true
+    XCTAssertEqual(center.nowPlayingInfo?[MPMediaItemPropertyTitle] as? String, "replacement")
+    call(next, "setSystemMedia", ["mediaId": 1, "enabled": false])
+    XCTAssertNil(center.nowPlayingInfo)
   }
 
   func testExportBookmarkPersistsAndNeverOverwritesExistingDocument() throws {
@@ -620,4 +667,20 @@ private final class IosMediaScriptProbe: NSObject, WKScriptMessageHandler, WKNav
       let callback = finished; finished = nil; callback?(message.body)
     }
   }
+}
+
+private final class IosVideoTestMessenger: NSObject, FlutterBinaryMessenger {
+  var prepared: (() -> Void)?
+  func send(onChannel channel: String, message: Data?) {
+    if let message = message,
+       FlutterStandardMethodCodec.sharedInstance().decodeMethodCall(message).method == "prepared" {
+      prepared?()
+    }
+  }
+  func send(onChannel channel: String, message: Data?, binaryReply callback: FlutterBinaryReply?) {
+    send(onChannel: channel, message: message)
+    callback?(nil)
+  }
+  func setMessageHandlerOnChannel(_ channel: String, binaryMessageHandler handler: FlutterBinaryMessageHandler?) -> FlutterBinaryMessengerConnection { 1 }
+  func cleanUpConnection(_ connection: FlutterBinaryMessengerConnection) {}
 }

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -27,8 +26,15 @@ import 'package:triomi/features/search/search_page.dart';
 
 import 'fixtures/fake_http_client.dart';
 import 'fixtures/fake_preferences.dart';
+import 'fixtures/portable_rule_test_support.dart';
 
-void main() {
+void main({Future<void> Function(String name)? capture}) {
+  late String metadataRuleText;
+  setUpAll(() async {
+    metadataRuleText = await readSourceRuleAsset(
+      'assets/rules/bangumi-anime.json',
+    );
+  });
   Future<Future<void> Function()> render(
     WidgetTester tester,
     MediaType type,
@@ -50,12 +56,19 @@ void main() {
         'onlyWatching': true,
       });
     }
+    final metadata = sources
+        .where((source) => source.descriptor.id == 'bangumi-anime')
+        .firstOrNull;
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
         preferencesProvider.overrideWithValue(preferences),
         if (metadataHttp != null)
           sourceHttpClientProvider.overrideWithValue(metadataHttp),
+        if (type == MediaType.anime && metadataHttp == null && metadata != null)
+          bangumiPublicClientProvider.overrideWithValue(
+            _MetadataSearchClient(metadata),
+          ),
         sourcesProvider.overrideWith(
           () => _Sources(
             SourceRegistrySnapshot(
@@ -262,9 +275,12 @@ void main() {
         final retry = find.widgetWithText(TextButton, '重试本站');
         await reach(retry);
         expect(
-          result(59),
-          findsOneWidget,
-          reason: 'Append failure must preserve the already loaded results.',
+          tester
+              .widget<MediaItemCollection>(collection)
+              .items
+              .map((item) => item.remoteId),
+          [for (var index = 0; index < 60; index++) '$index'],
+          reason: 'Append failure preserves all earlier results even when the retry row scrolls them offscreen.',
         );
         await tester.tap(retry);
         await advance(tester);
@@ -285,7 +301,153 @@ void main() {
   }
 
   testWidgets(
-    'anime search from a scoped playback source still searches metadata only',
+    'anime site pagination retries only the failed page and preserves earlier results',
+    (tester) async {
+      final pages = <int>[];
+      var fail = true;
+      final close = await render(tester, MediaType.anime, [
+        _PagedSearchSource((query, page) async {
+          pages.add(page);
+          if (page == 2 && fail) {
+            fail = false;
+            throw StateError('offline');
+          }
+          return [
+            MediaItem(
+              sourceId: 'paged-site',
+              remoteId: '$page',
+              type: MediaType.anime,
+              title: 'page $page',
+            ),
+          ];
+        }, id: 'paged-site'),
+      ], sourceId: 'paged-site');
+      await search(tester, 'name');
+      final next = find.widgetWithText(TextButton, '加载本站下一页');
+      await tester.ensureVisible(next);
+      await advance(tester);
+      await tester.tap(next);
+      await advance(tester);
+      expect(pages, [1, 2]);
+      expect(find.text('page 1'), findsOneWidget);
+      final retry = find.widgetWithText(TextButton, '重试本站');
+      await tester.ensureVisible(retry);
+      await advance(tester);
+      await tester.tap(retry);
+      await advance(tester);
+      expect(pages, [1, 2, 2]);
+      expect(find.text('page 1'), findsOneWidget);
+      expect(find.text('page 2'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await close();
+    },
+  );
+
+  testWidgets(
+    'anime playback-source entry searches only that site without Bangumi',
+    (tester) async {
+      final calls = <String>[];
+      final close = await render(tester, MediaType.anime, [
+        for (final id in ['bangumi-anime', 'chosen-site', 'other-site'])
+          _SearchSource(id, MediaType.anime, (query) async {
+            calls.add(id);
+            return [
+              MediaItem(
+                sourceId: id,
+                remoteId: 'same-id',
+                type: MediaType.anime,
+                title: '$id result',
+              ),
+            ];
+          }),
+      ], sourceId: 'chosen-site');
+      await search(tester, 'unlisted');
+      expect(calls, ['chosen-site']);
+      expect(find.text('chosen-site result'), findsOneWidget);
+      expect(find.text('other-site result'), findsNothing);
+      await capture?.call('anime-playback-source-results');
+      await tester.tap(find.text('Bangumi资料'));
+      await advance(tester);
+      expect(calls, ['chosen-site', 'bangumi-anime']);
+      await capture?.call('anime-metadata-results');
+      await close();
+    },
+  );
+
+  testWidgets(
+    'anime source mode finds unlisted titles independently and cancels late results on mode switch',
+    (tester) async {
+      final late = Completer<List<MediaItem>>();
+      SourceRequestCancellation? owner;
+      var metadataCalls = 0;
+      final close = await render(tester, MediaType.anime, [
+        _SearchSource('bangumi-anime', MediaType.anime, (_) async {
+          metadataCalls++;
+          return [];
+        }),
+        _SearchSource(
+          'custom-site',
+          MediaType.anime,
+          (query) async => [
+            MediaItem(
+              sourceId: 'custom-site',
+              remoteId: 'site-only',
+              type: MediaType.anime,
+              title: query,
+            ),
+          ],
+        ),
+        _SearchSource('slow-site', MediaType.anime, (_) {
+          owner = SourceRequestCancellation.current;
+          return late.future;
+        }),
+        _SearchSource(
+          'broken-site',
+          MediaType.anime,
+          (_) async => throw StateError('offline'),
+        ),
+        _SearchSource(
+          'novel-site',
+          MediaType.novel,
+          (_) async => throw StateError('must not search novels'),
+        ),
+      ]);
+      await search(tester, '未被Bangumi收录的作品');
+      expect(metadataCalls, 1);
+      expect(find.byType(MediaItemCard), findsNothing);
+      await tester.tap(find.text('播放源检索'));
+      await advance(tester);
+      expect(metadataCalls, 1);
+      final card = find.byWidgetPredicate(
+        (widget) =>
+            widget is MediaItemCard && widget.item.remoteId == 'site-only',
+      );
+      expect(card, findsOneWidget);
+      expect(tester.widget<MediaItemCard>(card).item.sourceId, 'custom-site');
+      expect(find.text('novel-site'), findsNothing);
+      expect(owner?.cancelled, isFalse);
+      await capture?.call('anime-mixed-source-states');
+      await tester.tap(find.text('Bangumi资料'));
+      await advance(tester);
+      expect(owner?.cancelled, isTrue);
+      late.complete([
+        const MediaItem(
+          sourceId: 'slow-site',
+          remoteId: 'late',
+          type: MediaType.anime,
+          title: 'late-result',
+        ),
+      ]);
+      await advance(tester);
+      expect(find.text('late-result'), findsNothing);
+      expect(card, findsNothing);
+      expect(metadataCalls, 2);
+      await close();
+    },
+  );
+
+  testWidgets(
+    'anime metadata mode keeps keyword and pagination independent of calendar filters',
     (tester) async {
       final http = FakeHttpClient(
         (request) async => SourceResponse(
@@ -305,9 +467,7 @@ void main() {
         ),
       );
       final metadata = BangumiSource(
-        rule: SourceRule.parseJson(
-          File('assets/rules/bangumi-anime.json').readAsStringSync(),
-        ),
+        rule: SourceRule.parseJson(metadataRuleText),
         http: http,
       );
       var playbackCalls = 0;
@@ -321,7 +481,7 @@ void main() {
             return [];
           }),
         ],
-        sourceId: 'playback-site',
+        sourceId: 'bangumi-anime',
         metadataHttp: http,
       );
       await search(tester, 'keyword');
@@ -344,6 +504,8 @@ void main() {
           matching: find.byType(Scrollable),
         ),
       );
+      await tester.ensureVisible(nextPage);
+      await advance(tester);
       await tester.tap(nextPage);
       await advance(tester);
       final next = http.requests.last;
@@ -364,9 +526,7 @@ void main() {
       final pending = Completer<SourceResponse>();
       final http = FakeHttpClient((_) => pending.future);
       final source = BangumiSource(
-        rule: SourceRule.parseJson(
-          File('assets/rules/bangumi-anime.json').readAsStringSync(),
-        ),
+        rule: SourceRule.parseJson(metadataRuleText),
         http: http,
       );
       var unrelatedCalls = 0;
@@ -602,6 +762,41 @@ void main() {
   });
 }
 
+class _MetadataSearchClient extends BangumiPublicClient {
+  _MetadataSearchClient(this.provider)
+    : super(
+        FakeHttpClient(
+          (_) async => const SourceResponse(
+            statusCode: 500,
+            body: 'unexpected transport',
+          ),
+        ),
+      );
+
+  final SearchProvider provider;
+
+  @override
+  Future<BangumiPublicPage> search({
+    AnimePublicFilter filter = const AnimePublicFilter(),
+    int offset = 0,
+    int limit = BangumiPublicClient.pageSize,
+    String keyword = '',
+  }) async {
+    final items = await provider.search(
+      keyword,
+      page: offset ~/ BangumiPublicClient.pageSize + 1,
+    );
+    return BangumiPublicPage(
+      rows: [
+        for (final item in items)
+          {'id': item.remoteId, 'type': 2, 'name': item.title},
+      ],
+      nextOffset: offset + items.length,
+      hasMore: items.length == limit,
+    );
+  }
+}
+
 SourceResponse metadataPage(int start, int end) => SourceResponse(
   statusCode: 200,
   body: jsonEncode({
@@ -650,6 +845,17 @@ class _SearchSource implements SearchProvider {
   @override
   Future<List<MediaItem>> search(String keyword, {int page = 1}) =>
       call(keyword);
+}
+
+class _PagedSearchSource extends _SearchSource {
+  _PagedSearchSource(this.searchPage, {String id = 'bangumi-anime'})
+    : super(id, MediaType.anime, (_) async => []);
+
+  final Future<List<MediaItem>> Function(String, int) searchPage;
+
+  @override
+  Future<List<MediaItem>> search(String keyword, {int page = 1}) =>
+      searchPage(keyword, page);
 }
 
 class _TaggedSource extends _SearchSource implements TagSearchProvider {

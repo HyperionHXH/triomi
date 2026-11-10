@@ -1,0 +1,679 @@
+{
+  "version": "0.15.4+190",
+  "windowsRevision": 2,
+  "status": "r192-complete-client-repair-public-r2-verified",
+  "issue": "https://github.com/HyperionHXH/triomi/issues/8",
+  "r192CompleteRepair": {
+    "status": "complete-client-repair-and-public-r2-actual-playback-verified",
+    "windowsRevision": 2,
+    "supersedes": "postPublicationLiveVerification temporary thread split and incomplete source diagnosis; historical observations retained",
+    "defects": [
+      {
+        "cause": "Pinned 2023 libmpv WASAPI hotplug COM initialized and released on different threads",
+        "proofBefore": "Repeated real Player destruction depleted platform STA; first new browser environment returned 0x800401F0. Isolated old-DLL STA probe failed after audio-device-list enumeration/destruction.",
+        "fix": "Application-owned SHA256-pinned mpv a61f6c3abd containing upstream 4dfee616d0fd278b5f488726c3c13e524ebf354e; remove old media_kit_libs_windows_video pub package and temporary separate UI thread policy",
+        "proofAfter": "Eight isolated DLL cycles preserved MAINSTA; five real Player destruction followed by cold source browser, 35 serial / 4 concurrent / 10 cancellation cycles passed on normal merged Flutter threads",
+        "upstream": "https://github.com/mpv-player/mpv/commit/4dfee616d0fd278b5f488726c3c13e524ebf354e"
+      },
+      {
+        "cause": "Stale navigation errors and simultaneous site redirect/DOMContentLoaded host navigation terminated valid resolver",
+        "proofBefore": "Actual MXdm failed nav=2 while current=3. Native redirect regression then exposed current navigation reset from overlapping entry navigation.",
+        "fix": "Only current NavigationId owns failure; native current-document NavigationCompleted starts one normal link into playback page after entry redirects; remove obsolete triomi-parent-ready script callback",
+        "proofAfter": "Real WebView2 script/meta redirect fixture resolves; current 404 still errors; no TLS bypass or blind retry"
+      },
+      {
+        "cause": "Undefined document.referrerPolicy silently replaced meta no-referrer with default policy",
+        "proofBefore": "Real DM84 Frieren manifest HTTP200 but native media preparation timed out with invented Referer",
+        "fix": "Honor active meta referrer policy when document property is unavailable",
+        "proofAfter": "Same public episode decoded beyond 12 seconds / 1560.017 seconds; normal release actual frames through 4:04; permanent no-referrer fixture has no Referer header"
+      },
+      {
+        "cause": "Extensionless HLS response selected generic playlist and played only a roughly eight-second segment",
+        "proofBefore": "AGE real manifest 183 segments and 1395 seconds, but decoded duration 8.289 seconds",
+        "fix": "Pass existing resolved MIME into per-open DesktopPlaybackSession demuxer-lavf-format=hls; reset format before ordinary media",
+        "proofAfter": "Same source 12095ms / 1395000ms, file-format=hls, playlist-count=1; permanent real AAC HLS advances across segments then ordinary WAV retains duration 8 seconds"
+      }
+    ],
+    "dependencies": {
+      "mpv": {
+        "repository": "shinchiro/mpv-winbuild-cmake",
+        "release": "20261110",
+        "archive": "mpv-dev-x86_64-20261110-git-a61f6c3abd.7z",
+        "sha256": "f07b97a72f2394a7798d6e1d36d952bbfd63577e25cef051f716751ea5dc9688",
+        "revision": "a61f6c3abd",
+        "requiredFix": "4dfee616d0fd278b5f488726c3c13e524ebf354e"
+      },
+      "angle": {
+        "repository": "alexmercerind/flutter-windows-ANGLE-OpenGL-ES",
+        "release": "v1.0.1",
+        "archive": "ANGLE.7z",
+        "sha256": "cc5911bb15d596fd5a2b362613ad35b7093b427117269a7359054a65746a5f9a"
+      }
+    },
+    "normalReleaseVisual": [
+      {
+        "source": "AGE",
+        "work": "境界触发者",
+        "episode": "1",
+        "position": "0:43 / 23:15",
+        "screenshot": "R192-live-1-age.png",
+        "visual": "animated figure in blue coat under cloudy sky"
+      },
+      {
+        "source": "AGE",
+        "work": "境界触发者",
+        "episode": "2",
+        "position": "0:29 / 23:16",
+        "transition": "same-window next episode",
+        "screenshot": "R192-live-2-age.png",
+        "visual": "animated glasses-wearing figure and bright particles"
+      },
+      {
+        "source": "7sefun",
+        "work": "境界触发者",
+        "episode": "53",
+        "list": "4",
+        "position": "2:05 / 22:43",
+        "seekButton": "+80s advanced",
+        "paused": "triangle control and stable position",
+        "screenshot": "R192-live-3-7sefun.png",
+        "visual": "green opening credits characters and Japanese subtitles"
+      },
+      {
+        "source": "7sefun",
+        "work": "境界触发者",
+        "episode": "53",
+        "position": "2:05 / 22:43",
+        "transition": "independent app restart; PID changed 15692 to 3648",
+        "screenshot": "R192-live-4-7sefun.png",
+        "visual": "same decoded opening frame then normal playback"
+      },
+      {
+        "source": "DM84",
+        "work": "葬送的芙莉莲",
+        "episode": "1",
+        "position": "0:34 / 26:00",
+        "screenshot": "R192-live-5-dm84.png",
+        "visual": "pink-haired elf, Japanese opening credits and Chinese subtitles"
+      },
+      {
+        "source": "DM84",
+        "work": "葬送的芙莉莲",
+        "episode": "1",
+        "position": "4:04 / 26:00",
+        "fullscreen": "2560x1600; exited back to original 1902x1071 window; playback continuous",
+        "screenshot": "R192-live-6-dm84.png",
+        "visual": "four animated characters at tavern counter; Japanese/Chinese subtitles"
+      }
+    ],
+    "externalSourceExclusion": {
+      "MXdm": {
+        "page": "https://www.dcc3.com/play/1180-1-1/",
+        "independentChromium": "readyState=0, position=0, same CDN net::ERR_FAILED; page loads",
+        "sameOldEpisodeCdn": {
+          "host": "vip15.play-cdn15.com",
+          "path": "/20230724/20152_3d63a4ac/index.m3u8",
+          "directHttp": 200,
+          "configuredProxyHttp": 403
+        },
+        "differentLatestCdn": {
+          "host": "cdn.yzzy31-play.com",
+          "path": "/20260928/26763_f6968547/index.m3u8",
+          "configuredProxyHttp": 403
+        },
+        "conclusion": "Observed existing-route CDN restriction, not a permanent all-site outage and not proof the original reporter network is defective. Application does not silently bypass proxy or TLS."
+      },
+      "remainingUnknown": "Arbitrary websites/accounts/regions and reporter machine not exhaustively verifiable. No claim that every media URL or future source rule is functional."
+    },
+    "checks": {
+      "flutterPassed": 1978,
+      "flutterSkipped": 5,
+      "nativeTestsPassed": 2,
+      "nativeSuite": "integration_test/windows_playback_lifecycle_live_test.dart",
+      "affectedConsumerTestsPassed": 73,
+      "analyze": "No issues found",
+      "pythonToolsPassed": 118,
+      "textEncodingErrors": 0,
+      "docDriftErrors": 0,
+      "docDriftWarnings": 0,
+      "normalWindowsRelease": "built and actually played",
+      "finalPackagedHlsResume": {"restored":"4:50 / 26:00","advanced":"5:37 / 26:00","screenshot":"R192-final-bundle-frieren-resume.png","normalExitVerified":true},
+      "nativeUpdaterParentAndRollback": {"before":"Remote run 42783882591 rejected DELETE open of still-running parent image before READY; no publication occurred","fix":"Preflight reads and validates; exclusive DELETE replacement handles remain after exact parent exit and profile writer mutex","after":"Native standalone compile/run passed parent wait, verified copy/restart, servicing persistence/max preservation, hash rejection, locked target, mid-copy rollback, native failure dialogs, writer contention and unsafe paths"},
+      "localArtifactScope": "Local hashes below precede the final updater-only preflight correction; final remote package identities supersede these when published",
+      "localZipMsi": "built",
+      "localZipMembersMatchedToManifestAndBundle": 467,
+      "localArtifacts": [
+        {
+          "name": "triomi-windows.zip",
+          "bytes": 289992060,
+          "sha256": "0afd72a1e34c5d2eb345bf62c84fe93a83035e0713de5124e9c4b81a4f928889"
+        },
+        {
+          "name": "triomi-windows.msi",
+          "bytes": 272625854,
+          "sha256": "6d9fdd6ccae820eac807944f0278f3455cfdfbb023f4dc97d9aa59cbdf96a1ba"
+        },
+        {
+          "name": "triomi-windows.update.json",
+          "bytes": 81426,
+          "sha256": "197c9a8306420cfca97e374ed1997f4d2edfeaae64e7e272bf8f55959a0d14c4"
+        }
+      ],
+      "mpvDllSha256": "5feefdced585b98282f9fd1ebe0a14c3b8c0827bff0ebf26fa43e735a789fed1",
+      "privacy": {
+        "filesScanned": 1501,
+        "filesWithAccountValueOrEncoding": 0,
+        "signingSecretAvailable": false,
+        "scope": "Existing account values/encodings only; no available signing private-key values; runtime smoke scripts removed before scan",
+        "zipMembersScanned": 467,
+        "zipMembersWithSecrets": 0,
+        "privateOrDebugNames": 0,
+        "msiRawContainerWithSecrets": 0,
+        "msiCompressedPayloadInspected": false
+      }
+    },
+    "harnessBoundaries": [
+      "Interrupted tool process lost runtime; overlapping orphaned test hosts caused build-file contention; subsequently serial native hosts and final suite passed. No system reboot initiated by repair.",
+      "Public diagnostic one-off had incomplete finalization after three source records; those records prove only observed decoding, not test-suite pass. Final normal application visual proof and permanent native suite are separate.",
+      "First remote run 42782911671 stopped at a missing-braces lint in redirect fixture; fixed and targeted analyze passed. Second run 42783882591 passed analyze/full suite/package but stopped at genuine updater parent preflight access defect; fixed without skipping gate. Third run uses f2f0d3a3cab34e0222a0d0f5cdeea3fc352c8290.",
+      "Local packaging first chose .NET runtime without SDK; existing _tools/dotnet-10 SDK used successfully, no new SDK installed.",
+      "Temporary public probes and native tracing removed; no account session/cookie contents placed in evidence."
+    ],
+    "publication": {
+      "authorized": true,
+      "scope": "Commit/push this repair; Windows revision2 only; preserve Android, 10 iOS releases and v0.15.4 tag; close issue8 only after final public verification",
+      "state": "published-all-remote-gates-public-bytes-and-real-package-playback-verified",
+      "issueState": "closed",
+      "issueStateReason": "completed",
+      "issueComment": "https://github.com/HyperionHXH/triomi/issues/8#issuecomment-6763796376",
+      "issueClosedOnlyAfterPublicVerification": true,
+      "verifiedPublicRelease": {
+        "passed": true,
+        "version": "0.15.4+190",
+        "windowsRevision": 2,
+        "sourceCommit": "f2f0d3a3cab34e0222a0d0f5cdeea3fc352c8290",
+        "workflowRun": "42786677377",
+        "workflowUrl": "https://github.com/HyperionHXH/triomi/actions/runs/42786677377",
+        "releaseUrl": "https://github.com/HyperionHXH/triomi/releases/tag/v0.15.4",
+        "assets": [
+          {
+            "name": "SHA256SUMS.txt",
+            "assetId": 730823511,
+            "bytes": 348,
+            "sha256": "fbfbdad07903b1d15201e7962feef94a78e37d7dbab7643f90c7d84787fd7c46"
+          },
+          {
+            "name": "triomi-android.apk",
+            "assetId": 724382293,
+            "bytes": 162852724,
+            "sha256": "eb0982e46c9629419608cfac4250140c7a7c2c2346b84e5f6fcc768225066732"
+          },
+          {
+            "name": "triomi-windows.msi",
+            "assetId": 730823509,
+            "bytes": 272764953,
+            "sha256": "59b4ccfaa6890d3c70156f34c6b3236139c81a555a5892300c62c4c1f8e33cef"
+          },
+          {
+            "name": "triomi-windows.update.json",
+            "assetId": 730823513,
+            "bytes": 79473,
+            "sha256": "fc2a1fc764debdeaa0f59eee6f8fa0b34cfad82fc54d02cc63fddbf862b5c39c"
+          },
+          {
+            "name": "triomi-windows.zip",
+            "assetId": 730823510,
+            "bytes": 290238420,
+            "sha256": "3c36ba76e433fdfb5884908c70b6f798e33b7e1b66eddf76c3a310ac83fa6ecb"
+          }
+        ],
+        "windowsMembersVerified": 466,
+        "mpvBinarySha256": "5feefdced585b98282f9fd1ebe0a14c3b8c0827bff0ebf26fa43e735a789fed1",
+        "androidUnchanged": {
+          "id": 724382293,
+          "name": "triomi-android.apk",
+          "size": 162852724,
+          "digest": "sha256:eb0982e46c9629419608cfac4250140c7a7c2c2346b84e5f6fcc768225066732"
+        },
+        "iosReleasesUnchanged": 10,
+        "releaseTagUnchanged": "70734b20a543872f4ec8b1dd58fa841d85214457",
+        "windowsOnlyPublication": true,
+        "actualPublicPackageSmoke": {
+          "path": "D:\\noval_and_manga\\_tools\\R192-actual-published-app",
+          "restored": "5:55 / 26:00",
+          "advanced": "7:20 / 26:00",
+          "frames": "Animated characters, night market bilingual subtitles, later green stone bridge scene",
+          "screenshots": [
+            "R192-public-package-frieren-playing.png",
+            "R192-public-package-frieren-subtitles.png"
+          ],
+          "normalExit": true,
+          "msiInstalledThisRound": false
+        },
+        "privacy": {
+          "zipMembersScanned": 466,
+          "zipMembersWithAccountValues": 0,
+          "rawMsiWithAccountValues": 0,
+          "privateOrDebugNames": 0,
+          "signingPrivateKeyAvailable": false,
+          "scope": "Exact existing account values/encodings; ZIP decompressed members and MSI raw container, not MSI compressed payload audit"
+        },
+        "remoteChecks": {
+          "flutterPassed": 1982,
+          "flutterSkipped": 1,
+          "nativeLifecyclePassed": 2,
+          "updaterSmoke": "all parent-wait/replacement/rollback/lock/writer checks passed",
+          "pythonToolsPassed": 118,
+          "analyze": "No issues found"
+        }
+      },
+      "issueUrl": "https://github.com/HyperionHXH/triomi/issues/8"
+    }
+  },
+  "reportedFailure": {
+    "screenshot": "Windows source browser is unavailable; black screen, 0:00 / 0:00, episode 53",
+    "stage": "Native WebView2 source-browser initialization, before decoder media open",
+    "notTheSameAsIssue7": "Issue7 was a nonfatal FFmpeg log shown over continuing video",
+    "uncertainty": "Old code discarded the exact stage and HRESULT. The reporter supplied no playback source or original native code; this workstation reproduction proves a matching failure class, not the unique cause on the reporter's machine."
+  },
+  "investigation": {
+    "shortPathBaseline": "Actual WebView2: 35 sequential, 4 concurrent and 10 initialization-cancel/reopen operations passed",
+    "deepColdUnicodeProfileBeforeFix": "First controller-create failed with 0x80080005",
+    "singleVariableCheck": "Reducing intermediate path from 80 characters to 10 while retaining Unicode, cold directory and cookie-store checks passed",
+    "fixedDeepPath": "Original directory and cookies retained; same-directory Windows extended path used, canonical identity strips prefix before comparison; shared environment per source directory. Initial 8.3 alias workaround passed locally but failed on hosted runner, so removed.",
+    "limitations": "No anonymous replacement, junction, credential move or TLS bypass. Original reporter machine code was discarded by the previous version; verified client startup classes do not establish the unique original machine failure."
+  },
+  "codeReview": [
+    {"defect": "Every operation constructed an independent environment for the same source directory; initialization was not coordinated", "change": "One canonical-directory environment, coalesced creation, independent cancellable controllers"},
+    {"defect": "Generic Failed erased environment/controller/script/cookie failure codes", "change": "Safe stage plus exact HRESULT; no URL, local user path, cookie or credentials in diagnostic details"},
+    {"defect": "Cancelled pending controller could still be allocated after close", "change": "Terminal closed state is checked both before controller creation and in callback; cancelled created controller closed"},
+    {"defect": "No browser ProcessFailed lifecycle invalidation", "change": "Process exit invalidates shared environment and pending resolver; explicit retry recreates; only fixture browser process terminated in regression"},
+    {"defect": "VideoController.waitUntilFirstFrameRendered completes once per controller, not each file", "change": "DesktopPlaybackSession serializes stop/open and waits for actual current media time-pos/idle status"},
+    {"defect": "Source-line changes used resolve generation while outer result publication checked only load generation", "change": "Line choices have current load generation and captured directory; switching increments load identity; stale sheet/results cannot publish"},
+    {"defect": "Old resolver was not cancelled until history/content loads completed", "change": "Episode retry/switch cancels immediately; asynchronous completion/save transitions check current load identity"}
+  ],
+  "kazumiComparison": {
+    "readOnlyRevision": "02afdabf72af7eee04a7403786ee60236701086c",
+    "referenceFiles": ["lib/services/video_source/webview_video_source_service.dart", "lib/webview/video/impl/video_webview_windows_impl.dart", "lib/pages/video/video_controller.dart", "lib/services/player/player_error_mapper.dart"],
+    "adoptedPrinciples": ["Reuse browser infrastructure rather than booting each resolve", "Serialize operations sharing mutable playback state", "Separate session ownership and revoke stale results", "Distinguish resolver failure, decoder failure and diagnostic logs"],
+    "notCopied": ["Global/shared cross-source credentials", "1500MiB default packet cache", "Narrow log substring errors as universal fatal classification"],
+    "primaryWebView2Contract": "https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/process-model"
+  },
+  "actualRuntime": {
+    "nativeSuite": "integration_test/windows_playback_lifecycle_live_test.dart",
+    "browser": ["deep Unicode cold profile", "35 serial", "4 simultaneous", "10 pending-cancel/reopen", "source cookie persists", "different source cannot read synthetic cookie", "browser process death becomes explicit failure then retry succeeds", "invalid profile file reports stage/HRESULT without leaking its path", "8 production Dart resolver cycles"],
+    "decoder": ["actual mpv nonfatal diagnostic during play", "paused diagnostic", "genuine missing media", "reopen", "held HTTP bytes do not inherit previous readiness", "superseded open cannot replace next media", "bounded timeout and reopen", "normal EOF"],
+    "productionPageSmoke": {"temporaryFixtureRemoved": true, "realWebView2AndVideo": true, "isolatedProfileAndDatabase": true, "firstEpisodeDecodedMs": 1625, "samePageNextEpisodeDecoded": true, "realHttp404FailureVisible": true, "independentPageReopens": 3, "userDataOpened": false}
+  },
+  "testHarnessCorrection": "Invalid-profile negative fixture initially let a regular file path reach WebView2, causing the user-visible Edge data-directory modal. Native directory and exclusive-write preflight now rejects it before Edge startup. Test hosts were stopped; no user browser data was changed. Terminal decoder ownership now follows on_load/on_unload lifecycle events rather than transient idle sampling alone.",
+  "localChecks": {"flutterPassed": 1978, "flutterSkipped": 5, "fullSuiteScope": "Lifecycle cutover before final ordered-event/timeout refinement", "finalRelevantConsumerTestsPassed": 41, "analyze": "No issues found", "finalNativeTestsPassed": 2, "finalTimeoutAndHostChecks": "passed; modal-free invalid-directory preflight and native load/unload ownership", "pythonToolsPassed": 118},
+  "normalBuild": {"windowsRelease": "passed", "zipAndMsi": "passed", "sourceFilesExactSecretScanned": 1482, "sourceFilesWithExactSecrets": 0, "localZipMembersScanned": 468, "membersWithExactSecrets": 0, "privateOrDebugNames": 0, "localSigningPrivateKeyAvailable": false, "scope": "MSI raw-container only, ZIP member payloads; not a full security audit"},
+  "postPublicationLiveVerification": {
+    "status": "client-com-defect-fixed-locally-real-site-results-mixed-not-published",
+    "publicBuild": {
+      "version": "0.15.4+190",
+      "windowsRevision": 1,
+      "zipSha256": "e3b65896a04d58d7b8c3a5c15902dc8cfc6d7689f1c60a667b3bb9072c318e65"
+    },
+    "publicTrials": [
+      {
+        "title": "境界触发者",
+        "source": "7sefun",
+        "list": "4",
+        "episode": "53",
+        "result": "failed",
+        "error": "播放页加载失败，请重试或换来源",
+        "browserUnavailable": false,
+        "screenshot": "R191-live-7sefun-world-trigger-failed.png",
+        "at": "2026-11-10T10:37:36.467778"
+      },
+      {
+        "title": "境界触发者",
+        "source": "AGE",
+        "episode": "1",
+        "result": "failed",
+        "error": "播放页加载失败，请重试或换来源",
+        "screenshot": "R191-live-age-world-trigger-failed.png"
+      },
+      {
+        "title": "境界触发者 第一季",
+        "source": "DM84",
+        "list": "1",
+        "episode": "1",
+        "result": "played",
+        "duration": "23:15",
+        "observedPosition": "2:13",
+        "visual": "World Trigger opening followed by animated characters with subtitles"
+      },
+      {
+        "title": "境界触发者 第一季",
+        "source": "DM84",
+        "episode": "2",
+        "result": "played",
+        "observedPosition": "1:20 / 23:16",
+        "screenshot": "R191-live-dm84-world-trigger-episode2.png",
+        "transition": "next episode; loading initially retained prior frame/time, then new episode began at start"
+      },
+      {
+        "title": "境界触发者",
+        "source": "MXdm",
+        "episode": "01",
+        "result": "failed",
+        "error": "Windows browser failure at environment-create (0x800401F0)",
+        "screenshot": "R191-live-mxdm-com-not-initialized.png"
+      },
+      {
+        "title": "葬送的芙莉莲",
+        "source": "DM84",
+        "episode": "1",
+        "result": "failed",
+        "error": "TimeoutException: 视频准备超时，请重试或更换播放来源",
+        "screenshot": "R191-live-dm84-frieren-timeout.png"
+      },
+      {
+        "title": "葬送的芙莉莲",
+        "source": "MXdm",
+        "episode": "01",
+        "result": "failed",
+        "error": "播放页加载失败，请重试或换来源",
+        "screenshot": "R191-live-mxdm-frieren-page-failed.png"
+      }
+    ],
+    "publicResume": {
+      "title": "境界触发者 第一季",
+      "source": "DM84",
+      "episode": "1",
+      "restoredPosition": "3:47 / 23:15",
+      "screenshot": "R191-live-dm84-world-trigger-resume.png"
+    },
+    "clientDefect": {
+      "failure": "environment-create (0x800401F0)",
+      "runtimeEvidence": "Main window/browser creation used the same native thread. It started as MAINSTA, then became implicit MTA after repeated libmpv destruction. Native CoUninitialize stacks originate in libmpv-2.dll without matching successful initialization on that thread.",
+      "reproduction": "Five real Player instances are initialized and disposed; wait six seconds for media_kit delayed mpv_terminate_destroy, then create a cold source environment. Before fix, sequential resolve 1 fails with exact 0x800401F0.",
+      "fix": "Explicit Flutter UIThreadPolicy::RunOnSeparateThread isolates Dart/mpv from native platform STA; no blind retry, COM refcount padding, cookie removal or TLS bypass.",
+      "maintenanceConstraint": "Flutter 3.47.5 supports this policy but engine warns unmerged threads will be removed in future; verify and replace mpv/COM ownership before an SDK upgrade removes support.",
+      "trace": [
+        {
+          "name": "CoInitializeEx",
+          "tid": 15496,
+          "before": {
+            "hr": -2147221008,
+            "type": 4294967295,
+            "qualifier": 0
+          },
+          "after": {
+            "hr": 0,
+            "type": 3,
+            "qualifier": 0
+          },
+          "ret": "0x0",
+          "stack": [
+            "0x7ff67232bd70",
+            "0x7ff67236698a",
+            "0x7ff8d47ee8d7 KERNEL32.DLL!BaseThreadInitThunk",
+            "0x7ff8d62cc40c ntdll.dll!RtlUserThreadStart"
+          ]
+        },
+        {
+          "name": "CoInitializeEx",
+          "tid": 15496,
+          "before": {
+            "hr": 0,
+            "type": 3,
+            "qualifier": 0
+          },
+          "after": {
+            "hr": 0,
+            "type": 3,
+            "qualifier": 0
+          },
+          "ret": "0x1",
+          "stack": [
+            "0x7ff8d40368d6 IMM32.dll!ImmUnlockIMCC",
+            "0x7ff8d4035d39 IMM32.dll!CtfImmTIMActivate",
+            "0x7ff8d4035bc0 IMM32.dll!CtfImmTIMActivate",
+            "0x7ff8d40333b1 IMM32.dll!ImmGetCompositionFontW",
+            "0x7ff8d40354d9 IMM32.dll!ImmSetActiveContext",
+            "0x7ff8d5f1d6cc USER32.dll!GetAppCompatFlags",
+            "0x7ff8d5f1c7b1 USER32.dll!UpdateWindow",
+            "0x7ff8d5f1c300 USER32.dll!GetCapture",
+            "0x7ff8d5f1c186 USER32.dll!GetCapture",
+            "0x7ff8d5f26b46 USER32.dll!CallWindowProcW",
+            "0x7ff8d5f263cc USER32.dll!SendMessageW",
+            "0x7ff8d5f57fc3 USER32.dll!GetWindowDpiAwarenessContext",
+            "0x7ff8d63a5a74 ntdll.dll!KiUserCallbackDispatcher",
+            "0x7ff8d2b21c24 win32u.dll!NtUserSetFocus",
+            "0x7ff67232d627",
+            "0x7ff672328f9a"
+          ]
+        },
+        {
+          "name": "CoUninitialize",
+          "tid": 15496,
+          "before": {
+            "hr": 0,
+            "type": 3,
+            "qualifier": 0
+          },
+          "after": {
+            "hr": 0,
+            "type": 3,
+            "qualifier": 0
+          },
+          "ret": "0x2",
+          "stack": [
+            "0x7ff8660e7abc libmpv-2.dll!mpv_hook_continue",
+            "0x7ff8660fbb0a libmpv-2.dll!mpv_hook_continue",
+            "0x7ff8660d75ab libmpv-2.dll!mpv_event_to_node",
+            "0x1bea78e5e84",
+            "0x1beb82fed59",
+            "0x50b7b2e640",
+            "0x1bea81ef0c2",
+            "0x7ff8660d789f libmpv-2.dll!mpv_create_weak_client",
+            "0x50b7b2e640",
+            "0x1bea78e5e23",
+            "0x50b7b2e668",
+            "0x1bea7fe2bd8",
+            "0x1bece650781",
+            "0x1beb82fed99",
+            "0x1bece650781",
+            "0x50b7b2e678"
+          ]
+        }
+      ]
+    },
+    "fixedBuild": {
+      "path": "D:\\noval_and_manga\\triomi-main\\build\\windows\\x64\\runner\\Release\\triomi.exe",
+      "bytes": 482816,
+      "sha256": "249a85625ead2d46b4714f719fe0191a8d5ea0bbc84f76d446c92ec1d338dbc8",
+      "entrypoint": "normal lib/main.dart",
+      "published": false
+    },
+    "fixedTrials": [
+      {
+        "title": "海贼王",
+        "source": "MXdm",
+        "list": "1",
+        "episode": "01",
+        "result": "failed",
+        "error": "播放页加载失败，请重试或换来源",
+        "screenshot": "retained outside repository in original desktop capture"
+      },
+      {
+        "title": "海贼王",
+        "source": "MXdm",
+        "list": "2",
+        "episode": "001",
+        "result": "failed",
+        "error": "播放页加载失败，请重试或换来源",
+        "screenshot": "retained outside repository in original desktop capture"
+      },
+      {
+        "title": "海贼王",
+        "source": "DM84",
+        "list": "1",
+        "episode": "1180",
+        "result": "played",
+        "observedPosition": "0:24 / 23:36",
+        "visual": "animated bird and Japanese opening credits",
+        "screenshot": "R191-live-fixed-one-piece-playing.png"
+      },
+      {
+        "title": "海贼王",
+        "source": "DM84",
+        "list": "1",
+        "episode": "1180",
+        "result": "played-after-independent-restart",
+        "restoredPosition": "1:30 / 23:36",
+        "advancedPosition": "1:47 / 23:36",
+        "visual": "blue-haired animated figure running across grass; trees and sky rendered",
+        "screenshot": "R191-live-fixed-one-piece-restarted.png"
+      },
+      {
+        "title": "海贼王",
+        "source": "MXdm",
+        "list": "1",
+        "episode": "01",
+        "result": "failed",
+        "error": "播放页加载失败 (WebView2 navigation status 9)",
+        "decodedStatus": "CONNECTION_RESET",
+        "screenshot": "R191-live-mxdm-connection-reset.png"
+      }
+    ],
+    "verification": {
+      "nativeSuite": "integration_test/windows_playback_lifecycle_live_test.dart",
+      "beforeFix": "FAIL, sequential resolve 1, environment-create 0x800401F0",
+      "finalAfterFix": "2 passed, 0 failed; real decoder lifecycle plus five destroyed players before 35 serial / 4 concurrent / 10 cancelled-reopen browser cases and production resolver cycles",
+      "fullFlutterSuiteRerun": false,
+      "normalReleaseBuilt": true,
+      "finalNormalAppRealFrames": "One Piece episode 1180, independent app restart restores 1:30 / 23:36 and advances to 1:47 with animated character/grass/trees visible"
+    },
+    "remainingFailures": {
+      "mxdm": "One Piece lists 1 and 2 still fail. Final native navigation status 9 is COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_RESET. Cause of transport reset not established; no statement that all sources or original reporter environment are fixed.",
+      "otherSources": "7sefun/AGE page failures and DM84 Frieren preparation timeout remain recorded as failures, not broadly attributed to the COM defect."
+    },
+    "userGate": {
+      "instruction": "Do not submit issue repair before actually fixed and verified",
+      "issueCommentWrittenThisContinuation": false,
+      "issueClosed": false,
+      "sourceCommittedOrPushed": false,
+      "publicAssetsChanged": false,
+      "externalCompletionClaim": "withheld; existing published revision 1 remains unchanged"
+    },
+    "dataSafety": "No uninstall, profile cleanup, cookie move, credential disclosure or Android/iOS asset change. Normal read-only playback records/search history are real user-visible application activity."
+  },
+  "publication": {
+    "passed": true,
+    "tag": "v0.15.4",
+    "version": "0.15.4+190",
+    "windowsRevision": 1,
+    "sourceCommit": "0d6e0cc763867a86d945e7f02b4e15ab14427fe3",
+    "workflowRun": "42646419110",
+    "workflowUrl": "https://github.com/HyperionHXH/triomi/actions/runs/42646419110",
+    "releaseUrl": "https://github.com/HyperionHXH/triomi/releases/tag/v0.15.4",
+    "assets": [
+      {
+        "name": "SHA256SUMS.txt",
+        "assetId": 728113557,
+        "bytes": 348,
+        "sha256": "b88d22c0a33fdd926ceab67c22c025b76a37ca4cd53bac17b71c5c0baf8dd9ab"
+      },
+      {
+        "name": "triomi-android.apk",
+        "assetId": 724382293,
+        "bytes": 162852724,
+        "sha256": "eb0982e46c9629419608cfac4250140c7a7c2c2346b84e5f6fcc768225066732"
+      },
+      {
+        "name": "triomi-windows.msi",
+        "assetId": 728113554,
+        "bytes": 244240585,
+        "sha256": "8ac2af7aa214f98f9f067e5cea7475f458100bef3bfe087897b1c52f11828ca3"
+      },
+      {
+        "name": "triomi-windows.update.json",
+        "assetId": 728113556,
+        "bytes": 79632,
+        "sha256": "f1f71cfea64c7dfc90728deb88fa2430068733e297546c978e26da4c08d4c35f"
+      },
+      {
+        "name": "triomi-windows.zip",
+        "assetId": 728113558,
+        "bytes": 255558311,
+        "sha256": "e3b65896a04d58d7b8c3a5c15902dc8cfc6d7689f1c60a667b3bb9072c318e65"
+      }
+    ],
+    "windowsMembersVerified": 467,
+    "androidAssetAndActualPublicBytesUnchanged": {
+      "id": 724382293,
+      "name": "triomi-android.apk",
+      "size": 162852724,
+      "digest": "sha256:eb0982e46c9629419608cfac4250140c7a7c2c2346b84e5f6fcc768225066732"
+    },
+    "releaseTagUnchanged": "70734b20a543872f4ec8b1dd58fa841d85214457",
+    "protectedIosReleasesUnchanged": 10,
+    "windowsOnlyPublication": true,
+    "status": "complete-public-bytes-and-members-verified",
+    "remoteAllGatesPassed": true,
+    "fullLocalPublicDownload": "complete; public ZIP/MSI resumed through original GitHub asset API, all five public assets hashed against current GitHub digests and SHA256SUMS",
+    "privacy": {
+      "sourceFilesScanned": 1482,
+      "sourceFilesWithExactSecrets": 0,
+      "localSigningSecretAvailable": false,
+      "scope": "Exact local account values and encodings; signing values only if available; ZIP payload members plus MSI raw container; not a general security audit",
+      "artifacts": [
+        {
+          "file": "SHA256SUMS.txt",
+          "bytes": 348,
+          "sha256": "b88d22c0a33fdd926ceab67c22c025b76a37ca4cd53bac17b71c5c0baf8dd9ab",
+          "membersScanned": 0,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0,
+          "rawContainerWithExactSecrets": false
+        },
+        {
+          "file": "triomi-android.apk",
+          "bytes": 162852724,
+          "sha256": "eb0982e46c9629419608cfac4250140c7a7c2c2346b84e5f6fcc768225066732",
+          "membersScanned": 626,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0
+        },
+        {
+          "file": "triomi-windows.msi",
+          "bytes": 244240585,
+          "sha256": "8ac2af7aa214f98f9f067e5cea7475f458100bef3bfe087897b1c52f11828ca3",
+          "membersScanned": 0,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0,
+          "rawContainerWithExactSecrets": false
+        },
+        {
+          "file": "triomi-windows.update.json",
+          "bytes": 79632,
+          "sha256": "f1f71cfea64c7dfc90728deb88fa2430068733e297546c978e26da4c08d4c35f",
+          "membersScanned": 0,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0,
+          "rawContainerWithExactSecrets": false
+        },
+        {
+          "file": "triomi-windows.zip",
+          "bytes": 255558311,
+          "sha256": "e3b65896a04d58d7b8c3a5c15902dc8cfc6d7689f1c60a667b3bb9072c318e65",
+          "membersScanned": 467,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0
+        }
+      ],
+      "passed": true
+    },
+    "issueComment": "https://github.com/HyperionHXH/triomi/issues/8#issuecomment-6754962594",
+    "issueRemainsOpenForReporterConfirmation": true
+  }
+}

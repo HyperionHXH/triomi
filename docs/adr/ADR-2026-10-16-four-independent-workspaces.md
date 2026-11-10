@@ -62,6 +62,16 @@ R187漫画章节显示排序与阅读顺序分离；单源原目录根据有效�
 
 R187追番收藏夹拥有Bangumi同步入口及WebDAV→Bangumi→回传WebDAV阶段；一般收藏历史页只管理DAV。取消防止排队请求重新发起并保留未来自动调度，成功步骤不因其他服务失败撤销。推荐/时间表去除冗余来源状态小字，追番区分已看进度与未知总集数。稀疏快照不擦除有效封面，资料取得后持久补全，失败由显式有限重试恢复。
 
+R190按用户要求恢复动漫两种并列检索，替代R178的“全局仅资料”限制：默认Bangumi资料搜索保持原流程；播放源检索只查询当前启用且支持搜索的动画来源，分别显示结果、错误、重试及分页。用户主动切换模式或来源范围时取消旧请求，晚到结果不能覆盖当前查询；资料标签不作为播放站关键词隐式发送。来源专属搜索入口默认本站，仍可切回Bangumi资料。来源作品沿用(sourceId,remoteId)直接进入现有本站目录与播放器，不虚构subjectId、不按标题合并、不强制匹配Bangumi。
+
+桌面media_kit的error流是解码器日志通道，不等同终止事件。#7的tcp读取错误在实际解码器仍活动时不显示致命失败层；只有本次媒体已启动、引擎idle且有错误诊断时报告失败。正常EOF不当失败，切换/退出撤销旧诊断与异步查询，真实打不开媒体的错误及重试仍保留。Android继续消费Media3的原生播放错误回调，不使用桌面日志判据。
+
+R191桌面生命周期审查：#8的`Windows source browser is unavailable`发生在WebView2创建阶段，不能归咎FFmpeg或站点网络。原生环境按规范化来源目录共享且合并并发初始化，操作各有独立controller，不导航或关闭登录窗口/其他下载。启动前检查目录和写入，再用原目录的Windows扩展路径`\\?\`（UNC相应转换）初始化，比较隔离身份时去前缀；不依赖磁盘8.3配置，不另建凭据目录、不清Cookie、不使用junction。系统错误保留实际stage/HRESULT，不自动换匿名目录。浏览器进程退出使环境失效，用户重试重新初始化。WebView2同目录环境共享进程且配置须一致，参见[进程模型](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/process-model)。
+
+对照只读Kazumi的`WebViewVideoSourceService`串行解析/复用与`AsyncSessionOwner`过期结果隔离，Triomi将桌面原生open/stop、每媒体就绪与终止错误集中进`DesktopPlaybackSession`。不再用`VideoController.waitUntilFirstFrameRendered`作为每集就绪：该Future只在controller生命期首次完成，切集不会重置。新媒体先stop旧媒体并串行打开，独立等待实际time-pos/idle状态；取消唤醒旧等待且只允许当前代次完成。切集立即撤销旧浏览器解析；线路sheet绑定打开时目录与代次，过期选择/保存完成不能覆盖新集。Android仍使用原Media3 prepared与错误语义，不引入第二解码器。
+
+
+
 
 
 

@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -48,9 +49,12 @@ class DownloadService {
   final Future<PlaySource> Function(
     PlaySource source,
     VideoResolveCancellation cancellation,
+    String sourceId,
+    String sourceUrl,
   )?
   resolveVideo;
-  final Future<String?> Function(String url)? videoCookieForUrl;
+  final Future<String?> Function(String url, String sourceId, String sourceUrl)?
+  videoCookieForUrl;
 
   /// 网络接口名枚举器（D30 seam）：默认直读 dart:io；测试注入替身。
   final InterfaceNamesResolver? _interfaceNamesResolver;
@@ -62,12 +66,25 @@ class DownloadService {
 
   Future<void> setWifiOnly(bool value) => preferences.set(wifiOnlyKey, value);
 
-  /// 当前是否连接 WiFi：走 [InterfaceNamesResolver]（默认 dart:io）。
-  ///
-  /// 实例方法（非 static）以便注入；调度器停泵判定仍用 [isOnWifiDefault]。
+  /// Windows uses the OS unmetered-network policy (including Ethernet).
+  /// Injected interface resolvers and Android retain their existing behavior.
   Future<bool> isOnWifi() async {
-    final resolver = _interfaceNamesResolver ?? defaultInterfaceNames;
-    return isOnWifiDefault(resolver: resolver);
+    final resolver = _interfaceNamesResolver;
+    if (resolver != null) return isOnWifiDefault(resolver: resolver);
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      try {
+        return await const MethodChannel('triomi/platform').invokeMethod<bool>(
+              'mangaUpdateConstraints',
+              {'wifiOnly': true, 'batteryNotLow': false},
+            ) ??
+            false;
+      } on PlatformException {
+        return false;
+      } on MissingPluginException {
+        return false;
+      }
+    }
+    return isOnWifiDefault();
   }
 
   /// 当前是否连接 WiFi（无插件实现：直接看网络接口）。
@@ -220,7 +237,12 @@ class DownloadService {
           if (resolveVideo == null) {
             throw StateError('该来源需要网页解析，当前平台无法进行离线下载');
           }
-          source = await resolveVideo!(source, owner);
+          source = await resolveVideo!(
+            source,
+            owner,
+            row.sourceId,
+            provider.descriptor.baseUrl ?? '',
+          );
           check();
           if (source.webPage) throw StateError('网页解析没有返回真实视频地址');
         }
@@ -231,8 +253,15 @@ class DownloadService {
               http: http,
               sourceId: row.sourceId,
               headers: source.headers,
-              cookieForUrl: resolvedFromPage && !source.omitCookies
-                  ? videoCookieForUrl
+              cookieForUrl:
+                  resolvedFromPage &&
+                      !source.omitCookies &&
+                      videoCookieForUrl != null
+                  ? (url) => videoCookieForUrl!(
+                      url,
+                      row.sourceId,
+                      provider.descriptor.baseUrl ?? '',
+                    )
                   : null,
               shouldContinue: () {
                 check();

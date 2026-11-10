@@ -84,6 +84,7 @@ class IosVideoController implements VideoPlatformController {
     required this.onError,
     required this.onCompleted,
     required this.onPip,
+    required this.onMediaCommand,
   });
 
   final void Function(NativeVideoState state) onState;
@@ -92,6 +93,7 @@ class IosVideoController implements VideoPlatformController {
   final void Function(String message) onError;
   final VoidCallback onCompleted;
   final void Function(bool enabled) onPip;
+  final Future<void> Function(String command) onMediaCommand;
 
   MethodChannel? _channel;
   int? _viewId;
@@ -102,6 +104,7 @@ class IosVideoController implements VideoPlatformController {
   Duration _pendingStartPosition = Duration.zero;
   String _pendingTitle = 'Triomi';
   bool _disposed = false;
+  int _mediaId = 0;
 
   void attach(int id) {
     if (_disposed) return;
@@ -131,6 +134,10 @@ class IosVideoController implements VideoPlatformController {
         case 'error':
           final message = args['message']?.toString().trim();
           onError(message == null || message.isEmpty ? '原生播放器发生错误' : message);
+        case 'mediaCommand':
+          if (args['mediaId'] == _mediaId && args['command'] is String) {
+            await onMediaCommand(args['command'] as String);
+          }
       }
     });
     unawaited(_readMediaVolume(channel));
@@ -190,6 +197,7 @@ class IosVideoController implements VideoPlatformController {
     String title = 'Triomi',
   }) async {
     if (_disposed) return;
+    _mediaId++;
     _pendingUrl = url;
     _pendingHeaders = headers;
     _pendingMimeType = mimeType;
@@ -205,6 +213,7 @@ class IosVideoController implements VideoPlatformController {
       'omitCookies': omitCookies,
       'startMs': startPosition.inMilliseconds,
       'title': title,
+      'mediaId': _mediaId,
     });
   }
 
@@ -244,7 +253,8 @@ class IosVideoController implements VideoPlatformController {
 
   @override
   Future<List<Map<Object?, Object?>>> subtitleTracks() async {
-    final raw = await _channel?.invokeListMethod<Object?>('subtitleTracks') ??
+    final raw =
+        await _channel?.invokeListMethod<Object?>('subtitleTracks') ??
         const <Object?>[];
     return <Map<Object?, Object?>>[
       for (final row in raw)
@@ -255,6 +265,21 @@ class IosVideoController implements VideoPlatformController {
   @override
   Future<void> selectSubtitle(String? id) =>
       _invoke('selectSubtitle', <String, Object?>{'id': id});
+
+  Future<void> updateSystemMedia({
+    required bool enabled,
+    required String title,
+    required String artist,
+    required bool canNext,
+    required bool canPrevious,
+  }) => _invoke('setSystemMedia', {
+    'mediaId': _mediaId,
+    'enabled': enabled,
+    'title': title,
+    'artist': artist,
+    'canNext': canNext,
+    'canPrevious': canPrevious,
+  });
 
   Future<bool> enterPip() async {
     final result = await _channel?.invokeMethod<bool>('enterPip');
@@ -310,16 +335,17 @@ class _IosVideoViewState extends State<IosVideoView> {
 
   @override
   Widget build(BuildContext context) => UiKitView(
-        viewType: 'triomi/ios-video',
-        onPlatformViewCreated: (id) {
-          _viewId = id;
-          widget.controller.attach(id);
-        },
-        layoutDirection: TextDirection.ltr,
-        creationParams: const <String, Object?>{},
-        creationParamsCodec: const StandardMessageCodec(),
-      );
+    viewType: 'triomi/ios-video',
+    onPlatformViewCreated: (id) {
+      _viewId = id;
+      widget.controller.attach(id);
+    },
+    layoutDirection: TextDirection.ltr,
+    creationParams: const <String, Object?>{},
+    creationParamsCodec: const StandardMessageCodec(),
+  );
 }
 
 /// Exposed for tests and platform adapters that need to identify iOS.
-bool get isIosVideoPlatform => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+bool get isIosVideoPlatform =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;

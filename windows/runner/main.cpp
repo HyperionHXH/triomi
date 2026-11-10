@@ -11,11 +11,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   std::vector<std::string> command_line_arguments = GetCommandLineArguments();
   const bool backup_worker = command_line_arguments.size() == 1 &&
       command_line_arguments.front() == "--triomi-local-backup";
+  const bool content_worker = command_line_arguments.size() == 1 &&
+      command_line_arguments.front() == "--triomi-content-updates";
   const bool worker = !command_line_arguments.empty() &&
       command_line_arguments.front() == "--triomi-js-worker";
 
   // Silent background jobs must never create a console or display a window.
-  if (!backup_worker &&
+  if (!backup_worker && !content_worker &&
       !::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
     CreateAndAttachConsole();
   }
@@ -24,7 +26,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // SQLite. The OS releases this mutex even after crashes; never delete locks.
   ProfileOwnership profile;
   if (!worker && !profile.Acquire()) {
-    if (!backup_worker) {
+    if (!backup_worker && !content_worker) {
       ::MessageBoxW(nullptr,
           L"Triomi is already open, or a local backup is running. Please retry after it closes.",
           L"Triomi", MB_OK | MB_ICONINFORMATION);
@@ -62,7 +64,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
-  FlutterWindow window(project, worker, backup_worker);
+  FlutterWindow window(project, worker, backup_worker, content_worker);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
   if (!window.Create(L"triomi", origin, size)) {

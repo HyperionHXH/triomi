@@ -24,7 +24,10 @@ class CoverStore {
   /// Reject redirected roots. Only Android's user-zero alias and iOS's
   /// exact /var -> /private/var system prefix may preserve the entire suffix.
   Future<Directory?> verifiedDirectory() async {
-    final type = await FileSystemEntity.type(directory.path, followLinks: false);
+    final type = await FileSystemEntity.type(
+      directory.path,
+      followLinks: false,
+    );
     if (type == FileSystemEntityType.notFound) return null;
     if (type != FileSystemEntityType.directory) {
       throw const FileSystemException('封面目录不是普通目录');
@@ -33,9 +36,13 @@ class CoverStore {
     final resolved = p.normalize(await directory.resolveSymbolicLinks());
     var verified = p.equals(supplied, resolved);
     if (!verified && Platform.isAndroid) {
-      for (final aliases in const [('/data/data/', '/data/user/0/'), ('/data/user/0/', '/data/data/')]) {
+      for (final aliases in const [
+        ('/data/data/', '/data/user/0/'),
+        ('/data/user/0/', '/data/data/'),
+      ]) {
         if (supplied.startsWith(aliases.$1) &&
-            resolved == '${aliases.$2}${supplied.substring(aliases.$1.length)}') {
+            resolved ==
+                '${aliases.$2}${supplied.substring(aliases.$1.length)}') {
           verified = true;
         }
       }
@@ -63,8 +70,45 @@ class CoverStore {
     final root = await verifiedDirectory();
     if (root == null) return null;
     final file = File(p.join(root.path, p.basename(_file(url).path)));
-    if (await FileSystemEntity.type(file.path, followLinks: false) != FileSystemEntityType.file) return null;
+    if (await FileSystemEntity.type(file.path, followLinks: false) !=
+        FileSystemEntityType.file) {
+      return null;
+    }
     return await file.length() > 0 ? file : null;
+  }
+
+  /// Discard a matching failed decode snapshot. Revalidate the file before
+  /// deletion, using the same verified root and artifact lease as writes.
+  Future<void> removeIfMatches(String url, Uint8List expected) async {
+    final lease = await BackupArtifactGuard.acquireOperation();
+    try {
+      final file = await find(url);
+      if (file == null) return;
+      final before = await file.stat();
+      final current = await file.readAsBytes();
+      if (current.length != expected.length) return;
+      for (var index = 0; index < current.length; index++) {
+        if (current[index] != expected[index]) return;
+      }
+      final root = await verifiedDirectory();
+      final after = await file.stat();
+      if (root == null ||
+          !p.equals(p.dirname(file.path), root.path) ||
+          await FileSystemEntity.type(file.path, followLinks: false) !=
+              FileSystemEntityType.file ||
+          before.size != after.size ||
+          before.modified != after.modified ||
+          before.changed != after.changed ||
+          !p.equals(
+            p.normalize(await file.resolveSymbolicLinks()),
+            p.normalize(file.absolute.path),
+          )) {
+        return;
+      }
+      await file.delete();
+    } finally {
+      await lease.release();
+    }
   }
 
   /// Existing local bytes win. A killed write leaves no published partial file.

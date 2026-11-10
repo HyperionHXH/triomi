@@ -11,9 +11,9 @@ import '../source/source_providers.dart';
 import '../theme/app_tokens.dart';
 import 'source_network_image.dart';
 
-/// 全屏图片查看器：缩放拖动、系统返回退出、长按保存到相册。
+/// 全屏图片查看器：缩放拖动、系统返回退出、长按保存图片。
 ///
-/// 小说插图与漫画页共用。保存走原生 MediaStore / iOS Photos 通道。
+/// 小说插图与漫画页共用。Android/iOS 保存到相册，Windows 保存到 Pictures/Triomi。
 Future<void> showImageViewer(
   BuildContext context, {
   required String imageUrl,
@@ -25,8 +25,11 @@ Future<void> showImageViewer(
     PageRouteBuilder<void>(
       opaque: false,
       barrierColor: Colors.black,
-      pageBuilder: (context, animation, secondaryAnimation) =>
-          _ImageViewerPage(imageUrl: imageUrl, sourceId: sourceId, imageHeaders: imageHeaders),
+      pageBuilder: (context, animation, secondaryAnimation) => _ImageViewerPage(
+        imageUrl: imageUrl,
+        sourceId: sourceId,
+        imageHeaders: imageHeaders,
+      ),
       transitionsBuilder: (context, animation, secondaryAnimation, child) =>
           FadeTransition(opacity: animation, child: child),
     ),
@@ -34,7 +37,11 @@ Future<void> showImageViewer(
 }
 
 class _ImageViewerPage extends ConsumerStatefulWidget {
-  const _ImageViewerPage({required this.imageUrl, required this.sourceId, required this.imageHeaders});
+  const _ImageViewerPage({
+    required this.imageUrl,
+    required this.sourceId,
+    required this.imageHeaders,
+  });
 
   final String imageUrl;
   final String sourceId;
@@ -125,8 +132,8 @@ class _ImageViewerPageState extends ConsumerState<_ImageViewerPage> {
   );
 }
 
-/// 长按保存到相册：加载字节（本地读文件 / 网络走统一网络层）→
-/// MethodChannel（MediaStore / Photos）→ SnackBar 反馈。
+/// 保存图片：加载字节（本地读文件 / 网络走统一网络层）→
+/// 平台存储 → SnackBar 显示实际保存位置。
 Future<void> saveImageWithFeedback(
   BuildContext context, {
   required String imageUrl,
@@ -150,7 +157,16 @@ Future<void> saveImageWithFeedback(
   final fileName = 'triomi-${DateTime.now().millisecondsSinceEpoch}.png';
   final uri = await platformChannel.saveImageToGallery(bytes, fileName);
   if (!context.mounted) return;
-  _showToast(context, uri == null ? '保存失败' : '已保存到相册');
+  _showToast(
+    context,
+    uri == null
+        ? '保存失败'
+        : Platform.isWindows
+        ? '已保存到本机：$uri'
+        : Platform.isIOS
+        ? '已保存到相册'
+        : '已保存到相册（Pictures/Triomi）',
+  );
 }
 
 /// 加载图片字节：本地路径直接读文件；网络图走 [SourceHttpClient.fetchBytes]
@@ -164,7 +180,11 @@ Future<Uint8List?> loadImageBytes(
   if (url.startsWith('http://') || url.startsWith('https://')) {
     if (http == null) return null;
     try {
-      final data = await http.fetchBytes(url, sourceId: sourceId, headers: headers);
+      final data = await http.fetchBytes(
+        url,
+        sourceId: sourceId,
+        headers: headers,
+      );
       return Uint8List.fromList(data);
     } catch (_) {
       return null;
@@ -174,9 +194,12 @@ Future<Uint8List?> loadImageBytes(
     final windowsPath = RegExp(r'^[A-Za-z]:[\\/]').hasMatch(url);
     final hasScheme = RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*:').hasMatch(url);
     final uri = hasScheme && !windowsPath ? Uri.parse(url) : null;
-    if (uri != null && (uri.scheme != 'file' ||
-        uri.host.isNotEmpty || uri.hasQuery || uri.hasFragment ||
-        !uri.path.startsWith('/'))) {
+    if (uri != null &&
+        (uri.scheme != 'file' ||
+            uri.host.isNotEmpty ||
+            uri.hasQuery ||
+            uri.hasFragment ||
+            !uri.path.startsWith('/'))) {
       return null;
     }
     final file = uri == null ? File(url) : File.fromUri(uri);

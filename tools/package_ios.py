@@ -195,8 +195,11 @@ def package_ios(app: Path, output: Path) -> None:
             require(plistlib.loads(zipped.read('Payload/Runner.app/Info.plist'))['CFBundleIdentifier'] ==
                     metadata['bundleIdentifier'], 'Packaged bundle metadata changed')
         archive.replace(output)
+    checksum = hashlib.sha256()
     with output.open('rb') as stream:
-        digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            checksum.update(chunk)
+    digest = checksum.hexdigest()
     print(f'Validated unsigned iOS IPA: {output}')
     print(f'Metadata: {metadata}')
     print(f'SHA256: {digest}')

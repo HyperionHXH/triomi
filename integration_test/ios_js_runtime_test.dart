@@ -16,10 +16,58 @@ import 'package:triomi/core/source/rule_schema.dart';
 
 import '../test/fixtures/fake_http_client.dart';
 
+import '../test/js_runtime_lifecycle_test.dart' show ScriptedHttp, jsRule;
 import 'fixtures/ios_test_binding.dart';
 
 void main() {
   initializeIosIntegrationBinding();
+
+  testWidgets(
+    'iOS WebKit keeps simultaneous rule headers and results isolated',
+    (tester) async {
+      expect(Platform.isIOS, isTrue);
+      await tester.pumpWidget(const SizedBox());
+      const script = '''
+async function search() {
+  const response = await triomi.fetch('https://example.com/api');
+  return [{ remoteId: '1', title: JSON.parse(response.body).name }];
+}
+''';
+      final httpA = ScriptedHttp()
+        ..script.add(jsonEncode({'name': 'Source A'}));
+      final httpB = ScriptedHttp()
+        ..script.add(jsonEncode({'name': 'Source B'}));
+      final sourceA = JsSource(
+        rule: jsRule(
+          id: 'ios-header-a',
+          script: script,
+          headers: {'Referer': 'https://a.example.com'},
+        ),
+        runtime: IosJsRuntime(),
+        http: httpA,
+      );
+      final sourceB = JsSource(
+        rule: jsRule(
+          id: 'ios-header-b',
+          script: script,
+          headers: {'Referer': 'https://b.example.com'},
+        ),
+        runtime: IosJsRuntime(),
+        http: httpB,
+      );
+      addTearDown(sourceA.dispose);
+      addTearDown(sourceB.dispose);
+      await Future.wait([sourceA.initialize(), sourceB.initialize()]);
+      final results = await Future.wait([
+        sourceA.search('x'),
+        sourceB.search('x'),
+      ]);
+      expect(results[0].single.title, 'Source A');
+      expect(results[1].single.title, 'Source B');
+      expect(httpA.requests.single.headers['Referer'], 'https://a.example.com');
+      expect(httpB.requests.single.headers['Referer'], 'https://b.example.com');
+    },
+  );
 
   testWidgets(
     'iOS WebKit uses real host HTTP/selectors and revokes cancelled sessions',

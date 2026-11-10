@@ -171,6 +171,41 @@ void main() {
     );
   });
 
+  test('a newer verified Windows revision updates without changing package version', () {
+    AppUpdateInfo desktop(int revision, String bytes) => AppUpdateInfo.fromMap({
+      'packageName': 'io.github.hyperionhxh.triomi',
+      'platform': 'windows',
+      'version': '0.15.3',
+      'versionCode': 188,
+      'sha256': bytes,
+      'windowsRevision': revision,
+    });
+    expect(
+      appUpdateDecision(
+        desktop(0, hash),
+        desktop(1, otherHash),
+        signatureVerified: false,
+      ),
+      'upgrade',
+    );
+    expect(
+      appUpdateDecision(
+        desktop(1, hash),
+        desktop(0, otherHash),
+        signatureVerified: false,
+      ),
+      'downgrade',
+    );
+    expect(
+      appUpdateDecision(
+        desktop(1, hash),
+        desktop(1, otherHash),
+        signatureVerified: false,
+      ),
+      'sameVersionChanged',
+    );
+  });
+
   group('real bounded staging files', () {
     late Directory directory;
     setUp(() async {

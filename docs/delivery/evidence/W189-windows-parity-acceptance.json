@@ -1,0 +1,728 @@
+{
+  "version": "0.15.3+188",
+  "windowsRevision": 1,
+  "status": "complete-public-windows-only-release-and-runtime-verified",
+  "changes": [
+    "Windows same-version revision discovery and verified helper install/restart/rollback",
+    "Pending installer recovery and safe storage maintenance",
+    "Task Scheduler and foreground anime/manga update coordination",
+    "Serial native notifications committed only after Windows presentation acknowledgement",
+    "COM file pickers, real image save, destination-safe novel export and local comics",
+    "Independent display/execution leases and taskbar download feedback",
+    "SMTC and native media keys over the existing player",
+    "Source/origin-isolated WebView2 login and exact-URL media cookies"
+  ],
+  "verification": {
+    "flutter": {
+      "passed": 1975,
+      "skipped": 5
+    },
+    "analyze": "No issues found",
+    "python": {
+      "passed": 118
+    },
+    "encodingErrors": 0,
+    "uiDocDriftErrors": 0,
+    "windowsNormalReleaseBuild": true,
+    "windowsZipAndMsiPackaged": true
+  },
+  "runtime": {
+    "nativeParity": {
+      "userDataOpened": false,
+      "identity": {
+        "packageName": "io.github.hyperionhxh.triomi",
+        "path": "D:\\noval_and_manga\\triomi-main\\build\\windows\\x64\\runner\\Debug\\triomi.exe",
+        "platform": "windows",
+        "version": "0.15.3",
+        "versionCode": 188,
+        "windowsRevision": 1
+      },
+      "selectedDirectoryExportCollisionSafe": true,
+      "realTtfImportedAndRegistered": true,
+      "localComicActualImportPreservesOriginal": true,
+      "nativeSaveImageActualFile": true,
+      "taskbarQueueAccepted": true,
+      "taskbarUpdateAccepted": true,
+      "actualPowerRequestsObserved": false,
+      "nativeNetworkConstraints": true,
+      "actualTaskSchedulerRegistrationAndIndependentSwitches": true,
+      "originalScheduledTaskRestored": true,
+      "nativeNotificationAvailable": true,
+      "serialNotificationPresentationConfirmed": true,
+      "nativeNotificationResults": [
+        true,
+        true
+      ],
+      "nativeSmtcUpdateCompleted": true,
+      "actualMediaKeyNativePlaybackPauseResume": true,
+      "syntheticCookieObservedBeforeResolution": true,
+      "realSourceProfileAuthenticatedRenderer": true,
+      "realForeignSourceIsolation": true,
+      "exactNativeMediaCookie": "synthetic session present; value not recorded",
+      "resolverRequests": [
+        "/login",
+        "/favicon.ico",
+        "/play",
+        "/play"
+      ],
+      "serverObservedAuthenticatedPage": true,
+      "serverObservedUnauthenticatedPage": true
+    },
+    "hiddenWorker": {
+      "animeCompleted": "2026-11-08T16:10:37.740105",
+      "mangaCompleted": "2026-11-08T16:10:37.746760",
+      "animeError": null,
+      "mangaError": null,
+      "workerError": null,
+      "profile": "isolated empty library; no third-party account requests",
+      "passed": true
+    },
+    "msiEngine": {
+      "actualWindowsInstallerEngine": true,
+      "noInstallationPerformed": true,
+      "condition": "REMOVE=\"ALL\" OR NOT INSTALLEDWINDOWSREVISION OR INSTALLEDWINDOWSREVISION <= 1",
+      "cases": [
+        {
+          "installedRevision": "",
+          "uninstall": false,
+          "allowed": true
+        },
+        {
+          "installedRevision": "",
+          "uninstall": true,
+          "allowed": true
+        },
+        {
+          "installedRevision": "0",
+          "uninstall": false,
+          "allowed": true
+        },
+        {
+          "installedRevision": "0",
+          "uninstall": true,
+          "allowed": true
+        },
+        {
+          "installedRevision": "1",
+          "uninstall": false,
+          "allowed": true
+        },
+        {
+          "installedRevision": "1",
+          "uninstall": true,
+          "allowed": true
+        },
+        {
+          "installedRevision": "2",
+          "uninstall": false,
+          "allowed": false
+        },
+        {
+          "installedRevision": "2",
+          "uninstall": true,
+          "allowed": true
+        },
+        {
+          "installedRevision": "10",
+          "uninstall": false,
+          "allowed": false
+        },
+        {
+          "installedRevision": "10",
+          "uninstall": true,
+          "allowed": true
+        }
+      ],
+      "uiActions": [
+        "FatalError",
+        "UserExit",
+        "ExitDialog",
+        "FindRelatedProducts",
+        "ValidateProductID",
+        "PrepareDlg",
+        "AppSearch",
+        "LaunchConditions",
+        "CostInitialize",
+        "FileCost",
+        "CostFinalize",
+        "MigrateFeatureStates",
+        "ResumeDlg",
+        "WelcomeDlg",
+        "WelcomeEulaDlg",
+        "MaintenanceWelcomeDlg",
+        "ProgressDlg",
+        "ExecuteAction"
+      ],
+      "executeActions": [
+        "FindRelatedProducts",
+        "ValidateProductID",
+        "CostInitialize",
+        "FileCost",
+        "CostFinalize",
+        "MigrateFeatureStates",
+        "AppSearch",
+        "LaunchConditions",
+        "InstallValidate",
+        "InstallInitialize",
+        "RemoveExistingProducts",
+        "ProcessComponents",
+        "UnpublishFeatures",
+        "RemoveRegistryValues",
+        "RemoveShortcuts",
+        "RemoveFiles",
+        "RemoveFolders",
+        "CreateFolders",
+        "InstallFiles",
+        "CreateShortcuts",
+        "WriteRegistryValues",
+        "RegisterUser",
+        "RegisterProduct",
+        "PublishFeatures",
+        "PublishProduct",
+        "InstallFinalize"
+      ]
+    },
+    "nativeInstaller": {
+      "passed": true,
+      "cases": [
+        "exact parent wait",
+        "verified copy and exact app restart",
+        "actual test servicing registry persistence",
+        "higher installed revision preserved",
+        "hash mismatch rejection",
+        "locked destination unchanged",
+        "mid-copy rollback",
+        "native failure dialog contains exact outcome path",
+        "exclusive profile writer contention",
+        "unsafe path rejection"
+      ],
+      "registryScope": "0.0.0+0 test key only; original value restored",
+      "note": "Command/button activation was unreliable for inactive native dialogs despite observed recovery and failure details. Test-only WM_CLOSE acknowledges the held process's MB_OK-only MessageBox without focus stealing; final clean native suite passed in 5.83 seconds. Production has no failure-UI bypass."
+    }
+  },
+  "privacy": {
+    "sourceFilesScanned": 1476,
+    "sourceFilesWithExactSecrets": 0,
+    "localSigningSecretAvailable": false,
+    "scope": "Exact local account values and encodings; signing values only if available; ZIP payload members plus MSI raw container; not a general security audit",
+    "artifacts": [
+      {
+        "file": "SHA256SUMS.txt",
+        "bytes": 266,
+        "sha256": "b7f2fca96bb7e5521214b926c722c25cfb73f1bf534ae6af36525331b6a1ee39",
+        "membersScanned": 0,
+        "membersWithExactSecrets": 0,
+        "privateMaterialNames": 0,
+        "debugNames": 0,
+        "rawContainerWithExactSecrets": false
+      },
+      {
+        "file": "triomi-windows.msi",
+        "bytes": 244101486,
+        "sha256": "e5dcccd54e7bd880ef3a9ac8154e73642f38833e0e96ab2ba67afcd276ab4414",
+        "membersScanned": 0,
+        "membersWithExactSecrets": 0,
+        "privateMaterialNames": 0,
+        "debugNames": 0,
+        "rawContainerWithExactSecrets": false
+      },
+      {
+        "file": "triomi-windows.update.json",
+        "bytes": 81589,
+        "sha256": "247af4d00e78754361bf9d59a80936946ec7a845a2de00a67612a65c92b35d40",
+        "membersScanned": 0,
+        "membersWithExactSecrets": 0,
+        "privateMaterialNames": 0,
+        "debugNames": 0,
+        "rawContainerWithExactSecrets": false
+      },
+      {
+        "file": "triomi-windows.zip",
+        "bytes": 255377909,
+        "sha256": "f8213215bbea667173cd3eba42c2e66391164edc3706c31ca49a1c5ec8970ff2",
+        "membersScanned": 468,
+        "membersWithExactSecrets": 0,
+        "privateMaterialNames": 0,
+        "debugNames": 0
+      }
+    ],
+    "passed": true
+  },
+  "protectedPublicationBaseline": {
+    "release": {
+      "id": 438034636,
+      "tag": "v0.15.3",
+      "assets": [
+        {
+          "id": 722895664,
+          "name": "SHA256SUMS.txt",
+          "size": 348,
+          "digest": "sha256:11fe8fd9ed553752a9c900050cbaeb61dd2c42e70a6d921cfd8b7fd9b14e83fd"
+        },
+        {
+          "id": 722895661,
+          "name": "triomi-android.apk",
+          "size": 162754436,
+          "digest": "sha256:cda8f7705114feadb17949fe087a074ac45628e29bb5dadd63bc3287354bf75d"
+        },
+        {
+          "id": 722895660,
+          "name": "triomi-windows.msi",
+          "size": 244271904,
+          "digest": "sha256:ff7b77b8692da923fbb3eb133a87bcf5859877480c770b356b46b1cd23b31a6e"
+        },
+        {
+          "id": 722895665,
+          "name": "triomi-windows.update.json",
+          "size": 81425,
+          "digest": "sha256:1ac123d9d2bb85f1d0537644df9f19f082616a2e67c817eb69a9e023f4494e2d"
+        },
+        {
+          "id": 722895662,
+          "name": "triomi-windows.zip",
+          "size": 255596791,
+          "digest": "sha256:8e8087ac1602928a5b3cd5b1e56b87df79a18a163b5264912eeff200e0aaa72a"
+        }
+      ]
+    },
+    "iosReleases": [
+      {
+        "id": 436447866,
+        "tag": "v0.13.1-ios.183",
+        "assets": [
+          {
+            "id": 717018654,
+            "name": "SHA256SUMS.txt",
+            "size": 90,
+            "digest": "sha256:cca09c4c7e2e5f04c73036a77c12410f104183ca6a8075d0a8cbc13778f72267"
+          },
+          {
+            "id": 717018653,
+            "name": "Triomi-iOS-Unsigned.ipa",
+            "size": 13928194,
+            "digest": "sha256:e4400b203dd33b0a2378347732f534ee98dab0c8fe7d47f27b06b6e691c71b1c"
+          }
+        ]
+      },
+      {
+        "id": 435238071,
+        "tag": "v0.12.0-ios.182",
+        "assets": [
+          {
+            "id": 713509745,
+            "name": "SHA256SUMS.txt",
+            "size": 91,
+            "digest": "sha256:09629e2de47ac7b365e04c669d5bebfc2fd96a0d479f665107fc6d3b58a03d0e"
+          },
+          {
+            "id": 713509744,
+            "name": "Triomi-iOS-Unsigned.ipa",
+            "size": 13823088,
+            "digest": "sha256:4164b4e38386b3852f551f7cec795bb83014d3e9d72069df4eed366a9c814ff9"
+          }
+        ]
+      },
+      {
+        "id": 434770788,
+        "tag": "v0.12.0-ios.181",
+        "assets": [
+          {
+            "id": 712004898,
+            "name": "SHA256SUMS.txt",
+            "size": 90,
+            "digest": "sha256:17ae1c059b7cdb9195d5d2ecaa2e34683894dc4db1195fdb8bfd24ecec057672"
+          },
+          {
+            "id": 712004896,
+            "name": "Triomi-iOS-Unsigned.ipa",
+            "size": 13818695,
+            "digest": "sha256:358905e4d3b81bba3d7335ce3a367d4c266c421e3e55a2431bb70af7924beddc"
+          }
+        ]
+      },
+      {
+        "id": 434109964,
+        "tag": "v0.12.0-ios.180",
+        "assets": [
+          {
+            "id": 709986124,
+            "name": "SHA256SUMS.txt",
+            "size": 91,
+            "digest": "sha256:fc45e7a020ec2729206ea8f899df5a841cadaa88eebcad99e135c4affd09a823"
+          },
+          {
+            "id": 709986122,
+            "name": "Triomi-iOS-Unsigned.ipa",
+            "size": 13819502,
+            "digest": "sha256:7d2e49d2bbeadc283c4a46628c99abbee3d5ca5be2b7d4988111ff1990310ea9"
+          }
+        ]
+      },
+      {
+        "id": 433766930,
+        "tag": "v0.12.0-ios.179",
+        "assets": [
+          {
+            "id": 709056944,
+            "name": "SHA256SUMS.txt",
+            "size": 91,
+            "digest": "sha256:24cf2cdd6d4a212fe383021bea18fa560d4fa58642729bc0b2fe2fe1e586dcd8"
+          },
+          {
+            "id": 709056955,
+            "name": "Triomi-iOS-Unsigned.ipa",
+            "size": 13820120,
+            "digest": "sha256:0372ad5ccfeb057dd642e0931af44c026173b46dd1578917180fb341e23bd2e7"
+          }
+        ]
+      },
+      {
+        "id": 432506551,
+        "tag": "v0.12.0-ios.178",
+        "assets": [
+          {
+            "id": 705075643,
+            "name": "Triomi-iOS-Unsigned.ipa",
+            "size": 13756231,
+            "digest": "sha256:bfc790667166b6716ecb0d24a0f021f91483cd64451b74a156d2284cd35f6fc3"
+          }
+        ]
+      },
+      {
+        "id": 428006520,
+        "tag": "v0.12.0-ios.177",
+        "assets": [
+          {
+            "id": 688899879,
+            "name": "Triomi-iOS-Unsigned.ipa",
+            "size": 13696709,
+            "digest": "sha256:1e0b24d6dc03905411d9eb8bac62a8da0bce1826043b0f58917392bf0829a554"
+          }
+        ]
+      },
+      {
+        "id": 427570985,
+        "tag": "v0.12.0-ios.176",
+        "assets": [
+          {
+            "id": 687735369,
+            "name": "Triomi-iOS-Unsigned.ipa",
+            "size": 13652314,
+            "digest": "sha256:b3fbac2b9be463acecb72aad2f1e7e71c5972c865e57a0e52c8e9660dd30b651"
+          }
+        ]
+      },
+      {
+        "id": 427488624,
+        "tag": "v0.12.0-ios.175",
+        "assets": [
+          {
+            "id": 687433897,
+            "name": "Triomi-iOS-Unsigned.ipa",
+            "size": 13610827,
+            "digest": "sha256:f609e9d0f76ae7702138c704e0924d7c4a57b90ac4d6a38d2941af4d42c8474b"
+          }
+        ]
+      },
+      {
+        "id": 423812936,
+        "tag": "v0.12.0-ios.174",
+        "assets": [
+          {
+            "id": 676804546,
+            "name": "Triomi-iOS-Unsigned.ipa",
+            "size": 13429552,
+            "digest": "sha256:a0758a5b8e385b9bb623f3267a7e1b5f00b123623e50d89f50ddf522ec702706"
+          }
+        ]
+      }
+    ],
+    "version": "0.15.3+188",
+    "immutableTag": "481c964a9815fff5082dcb6c3715a93b768798f3",
+    "windowsRevision": 1
+  },
+  "limits": [
+    "No pixel-level visual acceptance",
+    "COM picker human interaction not exercised",
+    "powercfg did not observe display/execution requests; not claimed accepted",
+    "Physical media hardware not exercised; native media-key commands were sent to production playback",
+    "Only isolated synthetic source authentication; no real third-party account/login or paid/captcha actions",
+    "Hidden worker ran real initialization and empty-library cycles, not an external website account update",
+    "MSI raw container scanned; compressed MSI members not independently secret-scanned",
+    "Local signing secret unavailable",
+    "Old clients may require one manual MSI/ZIP installation because they do not recognize Windows servicing revisions"
+  ],
+  "publication": {
+    "status": "complete-public-windows-only-release-verified",
+    "passed": true,
+    "workflowRun": "42470185658",
+    "workflowUrl": "https://github.com/HyperionHXH/triomi/actions/runs/42470185658",
+    "sourceCommit": "d840b7e41d6b85dea7251df19c596f677f605b01",
+    "version": "0.15.3+188",
+    "windowsRevision": 1,
+    "releaseId": 438034636,
+    "releaseUrl": "https://github.com/HyperionHXH/triomi/releases/tag/v0.15.3",
+    "releaseTagUnchanged": true,
+    "tagCommit": "481c964a9815fff5082dcb6c3715a93b768798f3",
+    "androidAssetUnchanged": {
+      "id": 722895661,
+      "name": "triomi-android.apk",
+      "size": 162754436,
+      "digest": "sha256:cda8f7705114feadb17949fe087a074ac45628e29bb5dadd63bc3287354bf75d"
+    },
+    "iosReleasesUnchanged": [
+      {
+        "releaseId": 436447866,
+        "tag": "v0.13.1-ios.183",
+        "assetsUnchanged": true
+      },
+      {
+        "releaseId": 435238071,
+        "tag": "v0.12.0-ios.182",
+        "assetsUnchanged": true
+      },
+      {
+        "releaseId": 434770788,
+        "tag": "v0.12.0-ios.181",
+        "assetsUnchanged": true
+      },
+      {
+        "releaseId": 434109964,
+        "tag": "v0.12.0-ios.180",
+        "assetsUnchanged": true
+      },
+      {
+        "releaseId": 433766930,
+        "tag": "v0.12.0-ios.179",
+        "assetsUnchanged": true
+      },
+      {
+        "releaseId": 432506551,
+        "tag": "v0.12.0-ios.178",
+        "assetsUnchanged": true
+      },
+      {
+        "releaseId": 428006520,
+        "tag": "v0.12.0-ios.177",
+        "assetsUnchanged": true
+      },
+      {
+        "releaseId": 427570985,
+        "tag": "v0.12.0-ios.176",
+        "assetsUnchanged": true
+      },
+      {
+        "releaseId": 427488624,
+        "tag": "v0.12.0-ios.175",
+        "assetsUnchanged": true
+      },
+      {
+        "releaseId": 423812936,
+        "tag": "v0.12.0-ios.174",
+        "assetsUnchanged": true
+      }
+    ],
+    "publicAssetsActuallyDownloadedAndHashed": [
+      {
+        "name": "SHA256SUMS.txt",
+        "assetId": 723598154,
+        "bytes": 348,
+        "sha256": "df3bf10c1670c1855c51d0facab2cb0e8acc822c5c68b55f6ffa115d0072e00e"
+      },
+      {
+        "name": "triomi-android.apk",
+        "assetId": 722895661,
+        "bytes": 162754436,
+        "sha256": "cda8f7705114feadb17949fe087a074ac45628e29bb5dadd63bc3287354bf75d"
+      },
+      {
+        "name": "triomi-windows.msi",
+        "assetId": 723598153,
+        "bytes": 244216009,
+        "sha256": "c9cf3d675f879bf825017bd1f283702357069fa368cca21d99938ac6d9d1c11e"
+      },
+      {
+        "name": "triomi-windows.update.json",
+        "assetId": 723598157,
+        "bytes": 79632,
+        "sha256": "b49c20c30eccc0c60c020a1db5fdbd6bf222e6794c19f2173ef3a464e4159ca9"
+      },
+      {
+        "name": "triomi-windows.zip",
+        "assetId": 723598156,
+        "bytes": 255551354,
+        "sha256": "8369b3a70b7f4ab8e2fb28cd5ded7280cb17d5d4bf63073712ed08da6063b447"
+      }
+    ],
+    "zipMembersValidatedAgainstManifest": 467,
+    "publicManifestSourceCommitMatched": true,
+    "windowsOnlyPublication": true,
+    "actualPublicUpdaterHelperSmokePassed": true,
+    "publicExactSecretScan": {
+      "sourceFilesScanned": 1477,
+      "sourceFilesWithExactSecrets": 0,
+      "localSigningSecretAvailable": false,
+      "scope": "Exact local account values and encodings; signing values only if available; ZIP payload members plus MSI raw container; not a general security audit",
+      "artifacts": [
+        {
+          "file": "SHA256SUMS.txt",
+          "bytes": 348,
+          "sha256": "df3bf10c1670c1855c51d0facab2cb0e8acc822c5c68b55f6ffa115d0072e00e",
+          "membersScanned": 0,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0,
+          "rawContainerWithExactSecrets": false
+        },
+        {
+          "file": "triomi-android.apk",
+          "bytes": 162754436,
+          "sha256": "cda8f7705114feadb17949fe087a074ac45628e29bb5dadd63bc3287354bf75d",
+          "membersScanned": 0,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0,
+          "rawContainerWithExactSecrets": false
+        },
+        {
+          "file": "triomi-windows.msi",
+          "bytes": 244216009,
+          "sha256": "c9cf3d675f879bf825017bd1f283702357069fa368cca21d99938ac6d9d1c11e",
+          "membersScanned": 0,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0,
+          "rawContainerWithExactSecrets": false
+        },
+        {
+          "file": "triomi-windows.update.json",
+          "bytes": 79632,
+          "sha256": "b49c20c30eccc0c60c020a1db5fdbd6bf222e6794c19f2173ef3a464e4159ca9",
+          "membersScanned": 0,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0,
+          "rawContainerWithExactSecrets": false
+        },
+        {
+          "file": "triomi-windows.zip",
+          "bytes": 255551354,
+          "sha256": "8369b3a70b7f4ab8e2fb28cd5ded7280cb17d5d4bf63073712ed08da6063b447",
+          "membersScanned": 467,
+          "membersWithExactSecrets": 0,
+          "privateMaterialNames": 0,
+          "debugNames": 0
+        }
+      ],
+      "passed": true
+    },
+    "publicMsiEngine": {
+      "passed": true,
+      "actualWindowsInstallerEngine": true,
+      "noInstallationPerformed": true,
+      "actualPackage": "D:\\noval_and_manga\\_tools\\W189-release-public\\triomi-windows.msi",
+      "condition": "REMOVE=\"ALL\" OR NOT INSTALLEDWINDOWSREVISION OR INSTALLEDWINDOWSREVISION <= 1",
+      "cases": [
+        {
+          "installedRevision": "",
+          "uninstall": false,
+          "allowed": true
+        },
+        {
+          "installedRevision": "",
+          "uninstall": true,
+          "allowed": true
+        },
+        {
+          "installedRevision": "0",
+          "uninstall": false,
+          "allowed": true
+        },
+        {
+          "installedRevision": "0",
+          "uninstall": true,
+          "allowed": true
+        },
+        {
+          "installedRevision": "1",
+          "uninstall": false,
+          "allowed": true
+        },
+        {
+          "installedRevision": "1",
+          "uninstall": true,
+          "allowed": true
+        },
+        {
+          "installedRevision": "2",
+          "uninstall": false,
+          "allowed": false
+        },
+        {
+          "installedRevision": "2",
+          "uninstall": true,
+          "allowed": true
+        },
+        {
+          "installedRevision": "10",
+          "uninstall": false,
+          "allowed": false
+        },
+        {
+          "installedRevision": "10",
+          "uninstall": true,
+          "allowed": true
+        }
+      ],
+      "uiActions": [
+        "FatalError",
+        "UserExit",
+        "ExitDialog",
+        "FindRelatedProducts",
+        "ValidateProductID",
+        "PrepareDlg",
+        "AppSearch",
+        "LaunchConditions",
+        "CostInitialize",
+        "FileCost",
+        "CostFinalize",
+        "MigrateFeatureStates",
+        "ResumeDlg",
+        "WelcomeDlg",
+        "WelcomeEulaDlg",
+        "MaintenanceWelcomeDlg",
+        "ProgressDlg",
+        "ExecuteAction"
+      ],
+      "executeActions": [
+        "FindRelatedProducts",
+        "ValidateProductID",
+        "CostInitialize",
+        "FileCost",
+        "CostFinalize",
+        "MigrateFeatureStates",
+        "AppSearch",
+        "LaunchConditions",
+        "InstallValidate",
+        "InstallInitialize",
+        "RemoveExistingProducts",
+        "ProcessComponents",
+        "UnpublishFeatures",
+        "RemoveRegistryValues",
+        "RemoveShortcuts",
+        "RemoveFiles",
+        "RemoveFolders",
+        "CreateFolders",
+        "InstallFiles",
+        "CreateShortcuts",
+        "WriteRegistryValues",
+        "RegisterUser",
+        "RegisterProduct",
+        "PublishFeatures",
+        "PublishProduct",
+        "InstallFinalize"
+      ]
+    },
+    "ciProvisioning": "Original pinned SQLite, ECH SDK, media-kit and Suwayomi assets fetched through upstream GitHub release API; existing hook/package integrity checks retained. Native toolchain found with vswhere. Dedicated smoke process uses current-user owner on elevated runners; production ownership checks unchanged."
+  }
+}

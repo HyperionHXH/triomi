@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/theme/app_theme.dart';
 import 'package:triomi/features/settings/app_update_page.dart';
@@ -138,6 +139,13 @@ class _UpdateService extends AppUpdateService {
   }
 
   @override
+  Future<List<AppUpdateRelease>> resolveWindowsRevisions(
+    AppUpdateInfo current,
+    List<AppUpdateRelease> releases,
+    AppUpdateCancellation token,
+  ) async => releases;
+
+  @override
   Future<AppUpdateCandidate> downloadRelease(
     AppUpdateRelease release,
     AppUpdateCancellation token,
@@ -185,6 +193,16 @@ class _UpdateService extends AppUpdateService {
   ) async {
     token.check();
     handedOff.add(candidate);
+  }
+
+  @override
+  Future<void> installWindowsBundle(
+    AppUpdateCandidate candidate,
+    AppUpdateCancellation token,
+  ) async {
+    token.check();
+    handedOff.add(candidate);
+    if (launchResult != null) await launchResult;
   }
 }
 
@@ -368,41 +386,6 @@ void main() {
     expect(task.candidate, same(replacement));
     expect(task.handedOff, isFalse);
   });
-
-  testWidgets(
-    'a download after Windows Explorer handoff remains explicitly cancellable',
-    (tester) async {
-      final service = _UpdateService(
-        platform: 'windows',
-        available: _releases([163], platform: 'windows'),
-      );
-      await _open(tester, service);
-      await _tap(tester, 'app-update-check');
-      await _download(tester);
-      await _tap(tester, 'app-update-ready-confirm');
-      expect(service.handedOff, hasLength(1));
-      final complete = Completer<AppUpdateCandidate>();
-      service.download = (_, _) => complete.future;
-      await _tap(tester, 'app-update-download');
-      await tester.tap(
-        find.byKey(const ValueKey('app-update-download-confirm')),
-      );
-      await tester.pump();
-      final transfer = tester.widget<AppUpdateTransferView>(
-        find.byType(AppUpdateTransferView),
-      );
-      expect(transfer.onCancel, isNotNull);
-      transfer.onCancel!();
-      await tester.pump();
-      final late = service.candidate(164, path: '/owned/stage/cancelled.zip');
-      complete.complete(late);
-      await tester.pumpAndSettle();
-      expect(service.tokens.last.cancelled, isTrue);
-      expect(service.discarded, [late]);
-      expect(service.handedOff, hasLength(1));
-      await tester.pumpWidget(const SizedBox.shrink());
-    },
-  );
 
   testWidgets('startup update choice fits phone and desktop dialogs', (
     tester,
@@ -831,6 +814,16 @@ void main() {
   testWidgets(
     'Windows identity selects ZIP workflow and never queries Android permission',
     (tester) async {
+      var closeRequests = 0;
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'SystemNavigator.pop') closeRequests++;
+        return null;
+      });
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+      );
       final service = _UpdateService(
         platform: 'windows',
         available: _releases([163], platform: 'windows'),
@@ -841,12 +834,13 @@ void main() {
       await _tap(tester, 'app-update-ready-later');
       expect(
         find.byKey(const ValueKey('app-update-ready-install')),
-        findsNothing,
+        findsOneWidget,
       );
-      await _tap(tester, 'app-update-ready-reveal');
+      await _tap(tester, 'app-update-ready-install');
       await _tap(tester, 'app-update-ready-confirm');
       expect(service.permissionReads, 0);
       expect(service.handedOff, hasLength(1));
+      expect(closeRequests, 1);
       expect(
         tester
             .widget<AppUpdateHandoffView>(find.byType(AppUpdateHandoffView))

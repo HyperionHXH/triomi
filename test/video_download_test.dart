@@ -31,6 +31,7 @@ class FakeAnimeSource implements ContentProvider {
     name: '替身番剧源',
     type: MediaType.anime,
     kind: SourceKind.plugin,
+    baseUrl: 'https://trusted-source.test/',
     capabilities: <SourceCapability>{
       SourceCapability.detail,
       SourceCapability.content,
@@ -401,9 +402,9 @@ seg-1.ts
         repository: DownloadRepository(db),
         http: http,
         preferences: memoryPreferences(),
-        videoCookieForUrl: (_) async =>
+        videoCookieForUrl: (_, _, _) async =>
             throw StateError('must not restore cookies'),
-        resolveVideo: (_, _) async => const PlaySource(
+        resolveVideo: (_, _, _, _) async => const PlaySource(
           name: 'resolved',
           url: stream,
           mimeType: 'application/vnd.apple.mpegurl',
@@ -485,7 +486,9 @@ seg-1.ts
         repository: DownloadRepository(db),
         http: http,
         preferences: memoryPreferences(),
-        resolveVideo: (source, owner) async {
+        resolveVideo: (source, owner, sourceId, sourceUrl) async {
+          expect(sourceId, 'fake-anime');
+          expect(sourceUrl, 'https://trusted-source.test/');
           resolves++;
           expect(source.webPage, isTrue);
           expect(owner.isCancelled, isFalse);
@@ -499,7 +502,9 @@ seg-1.ts
             },
           );
         },
-        videoCookieForUrl: (url) async {
+        videoCookieForUrl: (url, sourceId, sourceUrl) async {
+          expect(sourceId, 'fake-anime');
+          expect(sourceUrl, 'https://trusted-source.test/');
           expect(url, 'https://cdn.test/video.mp4');
           return 'exact=target';
         },

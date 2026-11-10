@@ -24,6 +24,12 @@ enum IosVideoAudioSession {
   }
 }
 
+/// Remote command targets belong to one live video view. Retiring a view must
+/// never clear a newer view's Now Playing session.
+private enum IosNowPlayingOwner {
+  static var current: Int64?
+}
+
 final class IosVideoPlatformViewFactory: NSObject, FlutterPlatformViewFactory {
   private let messenger: FlutterBinaryMessenger
   init(messenger: FlutterBinaryMessenger) { self.messenger = messenger; super.init() }
@@ -61,6 +67,13 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
   private var volumeRequestGeneration = 0
   private var pendingStartMs: Int64 = 0
   private var playbackRate: Float = 1
+  private var mediaId = 0
+  private var systemMediaEnabled = false
+  private var mediaTitle = "Triomi"
+  private var mediaArtist = ""
+  private var canNext = false
+  private var canPrevious = false
+  private var remoteTargets = [(MPRemoteCommand, Any)]()
 
   init(frame: CGRect, viewId: Int64, messenger: FlutterBinaryMessenger) {
     self.viewId = viewId
@@ -97,6 +110,7 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
       DispatchQueue.main.async { self?.emitState() }
     }
     installNotifications()
+    installRemoteCommands()
   }
 
   func view() -> UIView { container }
@@ -106,7 +120,7 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     !interruptionPaused && (UIApplication.shared.applicationState != .background || backgroundAudio || pipActive)
   }
 
-  private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+  func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     guard !disposed else { result(FlutterError(code: "disposed", message: "Video view is disposed", details: nil)); return }
     let args = call.arguments as? [String: Any] ?? [:]
     switch call.method {
@@ -123,6 +137,10 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
       }
       do {
         try IosVideoAudioSession.acquire(viewId)
+        mediaId = (args["mediaId"] as? NSNumber)?.intValue ?? 0
+        mediaTitle = args["title"] as? String ?? "Triomi"
+        systemMediaEnabled = false
+        clearNowPlaying()
         open(url, headers: args["headers"] as? [String: String] ?? [:],
              mimeType: mimeType, omitCookies: args["omitCookies"] as? Bool == true,
              start: max(0, (args["startMs"] as? NSNumber)?.int64Value ?? 0))
@@ -178,6 +196,16 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     case "setBackgroundAudio":
       backgroundAudio = args["enabled"] as? Bool == true
       updateLayer(); applyPlaybackIntent(); result(nil)
+    case "setSystemMedia":
+      guard (args["mediaId"] as? NSNumber)?.intValue == mediaId else { result(nil); return }
+      let enabled = args["enabled"] as? Bool == true
+      if enabled && !systemMediaEnabled { IosNowPlayingOwner.current = viewId }
+      systemMediaEnabled = enabled
+      mediaTitle = args["title"] as? String ?? "Triomi"
+      mediaArtist = args["artist"] as? String ?? ""
+      canNext = args["canNext"] as? Bool == true
+      canPrevious = args["canPrevious"] as? Bool == true
+      publishNowPlaying(); result(nil)
     case "subtitleTracks": result(subtitleTracks())
     case "selectSubtitle":
       if let group = item?.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) {
@@ -296,6 +324,66 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     callback?(success)
   }
 
+  private func installRemoteCommands() {
+    let center = MPRemoteCommandCenter.shared()
+    for (command, name) in [
+      (center.playCommand, "play"), (center.pauseCommand, "pause"),
+      (center.togglePlayPauseCommand, "toggle"), (center.stopCommand, "stop"),
+      (center.nextTrackCommand, "next"), (center.previousTrackCommand, "previous")
+    ] {
+      let target = command.addTarget { [weak self] _ in
+        guard let self = self, !self.disposed, self.systemMediaEnabled,
+              IosNowPlayingOwner.current == self.viewId, self.prepared,
+              self.canPlay, name != "next" || self.canNext,
+              name != "previous" || self.canPrevious else { return .noActionableNowPlayingItem }
+        let id = self.mediaId
+        DispatchQueue.main.async { [weak self] in
+          guard let self = self, !self.disposed, self.mediaId == id,
+                self.systemMediaEnabled, IosNowPlayingOwner.current == self.viewId else { return }
+          self.channel.invokeMethod("mediaCommand", arguments: ["mediaId": id, "command": name])
+        }
+        return .success
+      }
+      remoteTargets.append((command, target))
+    }
+  }
+
+  private func clearNowPlaying() {
+    guard IosNowPlayingOwner.current == viewId else { return }
+    IosNowPlayingOwner.current = nil
+    MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+    let center = MPRemoteCommandCenter.shared()
+    for command in [center.playCommand, center.pauseCommand, center.togglePlayPauseCommand,
+                    center.stopCommand, center.nextTrackCommand, center.previousTrackCommand] {
+      command.isEnabled = false
+    }
+  }
+
+  private func publishNowPlaying() {
+    guard !disposed, systemMediaEnabled, prepared,
+          UIApplication.shared.applicationState != .background || backgroundAudio || pipActive else {
+      clearNowPlaying(); return
+    }
+    guard IosNowPlayingOwner.current == viewId else { return }
+    let seconds = player.currentTime().seconds
+    let duration = item?.duration.seconds ?? 0
+    MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+      MPMediaItemPropertyTitle: mediaTitle,
+      MPMediaItemPropertyArtist: mediaArtist,
+      MPMediaItemPropertyPlaybackDuration: duration.isFinite ? max(0, duration) : 0,
+      MPNowPlayingInfoPropertyElapsedPlaybackTime: seconds.isFinite ? max(0, seconds) : 0,
+      MPNowPlayingInfoPropertyPlaybackRate: player.rate,
+      MPNowPlayingInfoPropertyDefaultPlaybackRate: playbackRate
+    ]
+    let center = MPRemoteCommandCenter.shared()
+    center.playCommand.isEnabled = true
+    center.pauseCommand.isEnabled = true
+    center.togglePlayPauseCommand.isEnabled = true
+    center.stopCommand.isEnabled = true
+    center.nextTrackCommand.isEnabled = canNext
+    center.previousTrackCommand.isEnabled = canPrevious
+  }
+
   private func installNotifications() {
     let center = NotificationCenter.default
     for name in [UIApplication.didEnterBackgroundNotification, UIApplication.didBecomeActiveNotification] {
@@ -356,7 +444,12 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     result["playing"] = player.rate > 0
     return result
   }
-  private func emitState() { if !disposed { channel.invokeMethod("state", arguments: state()) } }
+  private func emitState() {
+    if !disposed {
+      publishNowPlaying()
+      channel.invokeMethod("state", arguments: state())
+    }
+  }
 
   func pictureInPictureControllerDidStartPictureInPicture(_ controller: AVPictureInPictureController) {
     finishPipRequest(true); channel.invokeMethod("pip", arguments: ["enabled": true])
@@ -374,6 +467,9 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
 
   private func dispose() {
     guard !disposed else { return }
+    clearNowPlaying()
+    for (command, target) in remoteTargets { command.removeTarget(target) }
+    remoteTargets.removeAll()
     disposed = true; generation += 1
     pipDeadline?.cancel(); pipResult?(false); pipResult = nil
     pipController?.delegate = nil; pipController?.stopPictureInPicture(); pipController = nil

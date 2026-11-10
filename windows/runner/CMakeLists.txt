@@ -17,6 +17,11 @@ add_executable(${BINARY_NAME} WIN32
   "app_update.cpp"
   "windows_web_session.cpp"
   "desktop_mihon_runtime.cpp"
+  "windows_file_actions.cpp"
+  "windows_playback_feedback.cpp"
+  "windows_update_install.cpp"
+  "windows_system_media.cpp"
+  "windows_content_updates.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
   "Runner.rc"
   "runner.exe.manifest"
@@ -25,6 +30,7 @@ add_executable(${BINARY_NAME} WIN32
 # Apply the standard set of build settings. This can be removed for applications
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
+target_compile_options(${BINARY_NAME} PRIVATE /utf-8)
 
 if(TRIOMI_MIHON_ACCEPTANCE_BUILD)
   target_compile_definitions(${BINARY_NAME} PRIVATE TRIOMI_MIHON_ACCEPTANCE_BUILD
@@ -48,6 +54,15 @@ target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib" "taskschd.lib" "ole32.
 target_link_libraries(${BINARY_NAME} PRIVATE "version.lib" "shell32.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "winhttp.lib"
   "${CMAKE_BINARY_DIR}/triomi-webview-packages/Microsoft.Web.WebView2/build/native/Microsoft.Web.WebView2.targets")
+target_link_libraries(${BINARY_NAME} PRIVATE bcrypt uuid)
+target_link_libraries(${BINARY_NAME} PRIVATE windowsapp runtimeobject)
+
+add_executable(triomi_update_helper WIN32 "windows_update_helper.cpp")
+apply_standard_settings(triomi_update_helper)
+target_compile_options(triomi_update_helper PRIVATE /utf-8)
+target_compile_definitions(triomi_update_helper PRIVATE NOMINMAX)
+target_link_libraries(triomi_update_helper PRIVATE bcrypt advapi32 shell32 ole32 uuid version user32)
+add_dependencies(${BINARY_NAME} triomi_update_helper)
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

@@ -11,7 +11,9 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/source/system_proxy_adapter.dart';
 import '../../core/storage/preferences.dart';
+import 'windows_update_storage.dart';
 
 const appUpdateProductionSigner =
     '9b474750e4c2af300eb5a0207bfb9e477030f22bb390a7da7a40d3854edec077';
@@ -66,11 +68,13 @@ class AppUpdateInfo {
     this.signerSha256,
     required this.platform,
     this.artifactSha256,
+    this.windowsRevision = 0,
   });
   final String packageName, version, sha256, platform;
   final String? signerSha256;
   final String? artifactSha256;
   final int versionCode;
+  final int windowsRevision;
   factory AppUpdateInfo.fromMap(Map<Object?, Object?> map) => AppUpdateInfo(
     packageName: map['packageName'] as String,
     versionCode: map['versionCode'] as int,
@@ -79,6 +83,9 @@ class AppUpdateInfo {
     signerSha256: map['signerSha256'] as String?,
     platform: map['platform'] as String,
     artifactSha256: map['artifactSha256'] as String?,
+    windowsRevision: map['windowsRevision'] is int
+        ? map['windowsRevision'] as int
+        : 0,
   );
 }
 
@@ -114,6 +121,12 @@ String appUpdateDecision(
   }
   if (offeredVersion.compareVersion(currentVersion) < 0) return 'downgrade';
   if (offered.versionCode < current.versionCode) return 'downgrade';
+  if (current.platform == 'windows' &&
+      offered.versionCode == current.versionCode &&
+      offeredVersion.compareVersion(currentVersion) == 0) {
+    if (offered.windowsRevision < current.windowsRevision) return 'downgrade';
+    if (offered.windowsRevision > current.windowsRevision) return 'upgrade';
+  }
   if (offered.versionCode == current.versionCode) {
     return (offered.artifactSha256 ?? offered.sha256) == current.sha256
         ? 'alreadyInstalled'
@@ -246,14 +259,31 @@ class AppUpdateRelease {
     required this.prerelease,
     required this.publishedAt,
     required this.assets,
+    this.windowsRevision,
+    this.windowsBuild,
   });
   final String tag, name, notes, publishedAt;
   final _AppUpdateVersion _version;
   String get version => _version.version;
   int? get advertisedBuild => _version.build;
-  String get identity => _version.identity;
+  String get identity =>
+      '${_version.identity}${windowsRevision == null ? '' : '-windows.$windowsRevision'}';
+  final int? windowsRevision, windowsBuild;
   String get versionLabel =>
-      '$version${advertisedBuild == null ? '' : ' · 构建 $advertisedBuild'}';
+      '$version${advertisedBuild == null ? '' : ' · 构建 $advertisedBuild'}'
+      '${windowsRevision == null ? '' : ' · Windows 修订 $windowsRevision'}';
+  AppUpdateRelease withWindowsManifest(int revision, int build) =>
+      AppUpdateRelease._(
+        tag: tag,
+        name: name,
+        version: _version,
+        notes: notes,
+        prerelease: prerelease,
+        publishedAt: publishedAt,
+        assets: assets,
+        windowsRevision: revision,
+        windowsBuild: build,
+      );
   final bool prerelease;
   final Map<String, AppUpdateReleaseAsset> assets;
   int compareTo(AppUpdateRelease other) => _version.compareTo(other._version);
@@ -267,6 +297,11 @@ class AppUpdateRelease {
     if (current == null) return false;
     final order = _version.compareVersion(current);
     if (order < 0) return false;
+    if (installed.platform == 'windows' && order == 0 && windowsBuild != null) {
+      return windowsBuild! > installed.versionCode ||
+          (windowsBuild == installed.versionCode &&
+              (windowsRevision ?? 0) > installed.windowsRevision);
+    }
     final build = advertisedBuild;
     if (build != null && build <= installed.versionCode) return false;
     return order > 0 ||
@@ -438,10 +473,12 @@ checkStartupAppUpdate(
       return null;
     }
     cancellation.check();
-    final release = newestAppUpdateRelease(
+    final releasesForPlatform = await service.resolveWindowsRevisions(
       current,
       releases as List<AppUpdateRelease>,
+      cancellation,
     );
+    final release = newestAppUpdateRelease(current, releasesForPlatform);
     if (!preferences.automaticAppUpdateCheckEnabled) return null;
     return release == null ? null : (current: current, release: release);
   } on AppUpdateCancelled {
@@ -581,6 +618,11 @@ class AppUpdateService {
     _dio.options.extra.clear();
     _dio.options.connectTimeout = const Duration(seconds: 20);
     _dio.options.receiveTimeout = const Duration(seconds: 40);
+    if (dio == null && Platform.isWindows) {
+      _dio.httpClientAdapter = SystemProxyHttpClientAdapter(
+        createClient: HttpClient.new,
+      );
+    }
   }
   static const _native = MethodChannel('triomi/app-update');
   final Dio _dio;
@@ -636,6 +678,11 @@ class AppUpdateService {
   }
 
   Future<void> beginDownloadForeground() async {
+    if (Platform.isWindows) {
+      await const MethodChannel('triomi/platform')
+          .invokeMethod<bool>('beginAppUpdate');
+      return;
+    }
     if (!Platform.isAndroid) return;
     // Same user-visible notification permission policy as the content queue.
     await const MethodChannel('triomi/platform')
@@ -650,6 +697,15 @@ class AppUpdateService {
   }
 
   Future<void> updateDownloadForeground(AppUpdateProgress progress) async {
+    if (Platform.isWindows) {
+      await const MethodChannel('triomi/platform')
+          .invokeMethod<bool>('updateAppUpdate', {
+            'progress': progress.total == null || progress.total! <= 0
+                ? 0.0
+                : (progress.bytes / progress.total!).clamp(0.0, 1.0),
+          });
+      return;
+    }
     if (!Platform.isAndroid) return;
     await _native.invokeMethod<bool>('updateDownloadForeground', {
       'phase': progress.phase,
@@ -659,6 +715,11 @@ class AppUpdateService {
   }
 
   Future<void> endDownloadForeground() async {
+    if (Platform.isWindows) {
+      await const MethodChannel('triomi/platform')
+          .invokeMethod<bool>('endAppUpdate');
+      return;
+    }
     if (Platform.isAndroid) {
       await _native.invokeMethod<void>('endDownloadForeground');
     }
@@ -687,6 +748,11 @@ class AppUpdateService {
 
   /// Pure inspection: this method never removes staging files.
   Future<AppUpdateStorageInfo> storageInfo() async {
+    if (Platform.isWindows) {
+      return AppUpdateStorageInfo.fromMap(
+        await WindowsUpdateStorage(rootOverride: windowsUpdateRoot).inspect(),
+      );
+    }
     if (!Platform.isAndroid) return const AppUpdateStorageInfo();
     return AppUpdateStorageInfo.fromMap(
       (await _native.invokeMethod<Map<Object?, Object?>>('storageInfo'))!,
@@ -696,6 +762,12 @@ class AppUpdateService {
   /// Run after startup's first frame. Reaps installed/abandoned owned stages.
   /// Explicit clear additionally requests all safely reclaimable stages only.
   Future<AppUpdateStorageInfo> maintainStorage({bool clear = false}) async {
+    if (Platform.isWindows) {
+      return AppUpdateStorageInfo.fromMap(
+        await WindowsUpdateStorage(rootOverride: windowsUpdateRoot)
+            .inspect(clear: clear, maintain: true),
+      );
+    }
     if (!Platform.isAndroid) return const AppUpdateStorageInfo();
     return AppUpdateStorageInfo.fromMap(
       (await _native.invokeMethod<Map<Object?, Object?>>('maintainStorage', {
@@ -705,6 +777,48 @@ class AppUpdateService {
   }
 
   Future<AppUpdateCandidate?> pendingCandidate() async {
+    if (Platform.isWindows) {
+      final storage = WindowsUpdateStorage(rootOverride: windowsUpdateRoot);
+      final stages = await storage.stages();
+      stages.sort(
+        (a, b) => b.statSync().modified.compareTo(a.statSync().modified),
+      );
+      for (final stage in stages) {
+        if (await storage.protected(stage)) continue;
+        final metadata = await storage.metadata(stage);
+        if (metadata == null) continue;
+        final token = AppUpdateCancellation();
+        WindowsUpdateStorage.active.add(p.normalize(stage.absolute.path));
+        try {
+          final manifest = await _regular(
+            p.join(stage.path, 'verified-manifest.json'),
+          );
+          if (await manifest.length() > 1024 * 1024) continue;
+          final raw = jsonDecode(await manifest.readAsString());
+          final zip = await _regular(p.join(stage.path, 'verified-bundle.zip'));
+          final hash = (await sha256.bind(zip.openRead()).first).toString();
+          if (raw is! Map ||
+              raw['platform'] != 'windows' ||
+              raw['packageName'] != 'io.github.hyperionhxh.triomi' ||
+              raw['sha256'] != hash ||
+              metadata['sha256'] != hash ||
+              raw['files'] is! Map) {
+            continue;
+          }
+          final candidate = await _inspectWindowsStage(stage, raw, hash, token);
+          if (candidate.canInstall) return candidate;
+          if (candidate.decision == 'alreadyInstalled' ||
+              candidate.decision == 'downgrade') {
+            await storage.save(stage, {...metadata, 'completed': true});
+          }
+        } catch (_) {
+          // A damaged stage is never offered as an installable update.
+        } finally {
+          WindowsUpdateStorage.active.remove(p.normalize(stage.absolute.path));
+        }
+      }
+      return null;
+    }
     if (!Platform.isAndroid) return null;
     final raw = await _native.invokeMethod<Map<Object?, Object?>>(
       'pendingCandidate',
@@ -768,6 +882,55 @@ class AppUpdateService {
           4 * 1024 * 1024,
         ),
       );
+
+  /// Fetch only the small, digest-verified desktop manifest for same-version
+  /// servicing releases. Startup never downloads the ZIP or executes a file.
+  Future<List<AppUpdateRelease>> resolveWindowsRevisions(
+    AppUpdateInfo current,
+    List<AppUpdateRelease> releases,
+    AppUpdateCancellation token,
+  ) async {
+    if (current.platform != 'windows') return releases;
+    final resolved = <AppUpdateRelease>[];
+    for (final release in releases) {
+      token.check();
+      if (release.compareVersionTo(current) == 0 &&
+          release.assets.containsKey('triomi-windows.update.json') &&
+          release.assets.containsKey('triomi-windows.zip')) {
+        final checksums = await releaseChecksums(release, token);
+        final asset = release.assets['triomi-windows.update.json']!;
+        final bytes = await _readBounded(
+          asset.url,
+          token,
+          1024 * 1024,
+          asset: asset,
+        );
+        final raw = jsonDecode(utf8.decode(bytes));
+        if (checksums[asset.name] != sha256.convert(bytes).toString() ||
+            raw is! Map ||
+            raw['platform'] != 'windows' ||
+            raw['packageName'] != current.packageName ||
+            raw['version'] is! String ||
+            !release.matchesPackage(
+              raw['version'] as String,
+              raw['versionCode'],
+            ) ||
+            raw['sha256'] != checksums['triomi-windows.zip']) {
+          throw const FormatException('Windows 修订清单与公开发布不符');
+        }
+        final revision = raw['windowsRevision'] ?? 0;
+        if (revision is! int || revision < 0 || revision > 65535) {
+          throw const FormatException('Windows 修订号无效');
+        }
+        resolved.add(
+          release.withWindowsManifest(revision, raw['versionCode'] as int),
+        );
+      } else {
+        resolved.add(release);
+      }
+    }
+    return resolved;
+  }
 
   Future<List<int>> _readBounded(
     Uri uri,
@@ -1197,6 +1360,10 @@ class AppUpdateService {
               await root.resolveSymbolicLinks()) {
         throw const FormatException('暂存清理只允许应用专用目录');
       }
+      if (await WindowsUpdateStorage(rootOverride: windowsUpdateRoot)
+          .protected(directory)) {
+        throw StateError('更新程序仍在使用该暂存，不能移除');
+      }
       await directory.delete(recursive: true);
     }
   }
@@ -1251,6 +1418,7 @@ class AppUpdateService {
     token.check();
     final directory = await Directory(await root.resolveSymbolicLinks())
         .createTemp('bundle-');
+    WindowsUpdateStorage.active.add(p.normalize(directory.absolute.path));
     final staged = File(p.join(directory.path, 'verified-bundle.zip'));
     final marker = File(p.join(directory.path, 'cancel'));
     token._marker = marker;
@@ -1264,67 +1432,170 @@ class AppUpdateService {
         expectedBytes: await zip.length(),
         onProgress: onProgress,
       );
-      token.check();
-      onProgress?.call(const AppUpdateProgress('bundle', 0));
-      final stagedPath = staged.path, markerPath = marker.path;
-      final memberHashes = raw['files'] as Map;
-      token.check();
-      final executablePath = await Isolate.run(
-        () => verifyWindowsUpdateZip(stagedPath, memberHashes, markerPath),
-      );
-      token.check();
-      final executableInfo = (await const MethodChannel('triomi/platform')
-          .invokeMethod<Map<Object?, Object?>>('inspectAppUpdateInfo', {
-            'path': executablePath,
-          }))!;
-      token.check();
-      final executableHash =
-          (await sha256.bind(File(executablePath).openRead()).first).toString();
-      token.check();
-      await File(executablePath).delete();
-      token.check();
-      if (executableInfo['versionCode'] != raw['versionCode'] ||
-          executableInfo['version'] != raw['version']) {
-        throw const FormatException('桌面 EXE 实际版本与清单不符');
-      }
-      token.check();
-      final installed = await current();
-      token.check();
-      final offered = AppUpdateInfo(
-        packageName: raw['packageName'] as String,
-        versionCode: raw['versionCode'] as int,
-        version: raw['version'] as String,
-        sha256: hash,
-        artifactSha256: executableHash,
-        platform: 'windows',
-      );
-      final savedManifest = File(
-        p.join(directory.path, 'verified-manifest.json'),
-      );
-      await savedManifest.writeAsString(jsonEncode(raw), flush: true);
-      onProgress?.call(const AppUpdateProgress('manifest', 0));
-      token.check();
-      final bytes = await staged.length();
-      token.check();
-      return AppUpdateCandidate(
-        current: installed,
-        offered: offered,
-        path: staged.path,
-        bytes: bytes,
-        source: '用户指定桌面 ZIP 与外部完整性清单（未经发布者签名）',
-        decision: appUpdateDecision(
-          installed,
-          offered,
-          signatureVerified: false,
-        ),
-        signatureVerified: false,
-        manifestPath: savedManifest.path,
-      );
+      final candidate = await _inspectWindowsStage(directory, raw, hash, token);
+      await WindowsUpdateStorage(rootOverride: windowsUpdateRoot)
+          .save(directory, {
+            'version': candidate.offered.version,
+            'versionCode': candidate.offered.versionCode,
+            'windowsRevision': candidate.offered.windowsRevision,
+            'sha256': candidate.offered.sha256,
+          });
+      return candidate;
     } catch (_) {
       await directory.delete(recursive: true);
       rethrow;
     } finally {
+      WindowsUpdateStorage.active.remove(p.normalize(directory.absolute.path));
       token._marker = null;
+    }
+  }
+
+  Future<AppUpdateCandidate> _inspectWindowsStage(
+    Directory directory,
+    Map<Object?, Object?> raw,
+    String hash,
+    AppUpdateCancellation token,
+  ) async {
+    final staged = File(p.join(directory.path, 'verified-bundle.zip'));
+    final marker = File(p.join(directory.path, 'cancel'));
+    token.check();
+    onProgress?.call(const AppUpdateProgress('bundle', 0));
+    final stagedPath = staged.path, markerPath = marker.path;
+    final memberHashes = raw['files'] as Map;
+    token.check();
+    final executablePath = await Isolate.run(
+      () => verifyWindowsUpdateZip(stagedPath, memberHashes, markerPath),
+    );
+    token.check();
+    final executableInfo = (await const MethodChannel('triomi/platform')
+        .invokeMethod<Map<Object?, Object?>>('inspectAppUpdateInfo', {
+          'path': executablePath,
+        }))!;
+    token.check();
+    final executableHash =
+        (await sha256.bind(File(executablePath).openRead()).first).toString();
+    token.check();
+    await File(executablePath).delete();
+    token.check();
+    if (executableInfo['versionCode'] != raw['versionCode'] ||
+        executableInfo['version'] != raw['version']) {
+      throw const FormatException('桌面 EXE 实际版本与清单不符');
+    }
+    final revision = raw['windowsRevision'] ?? 0;
+    if (revision is! int ||
+        revision < 0 ||
+        revision > 65535 ||
+        (executableInfo['windowsRevision'] ?? 0) != revision) {
+      throw const FormatException('桌面修订号与实际程序不符');
+    }
+    token.check();
+    final installed = await current();
+    token.check();
+    final offered = AppUpdateInfo(
+      packageName: raw['packageName'] as String,
+      versionCode: raw['versionCode'] as int,
+      version: raw['version'] as String,
+      sha256: hash,
+      artifactSha256: executableHash,
+      platform: 'windows',
+      windowsRevision: raw['windowsRevision'] is int
+          ? raw['windowsRevision'] as int
+          : 0,
+    );
+    final savedManifest = File(
+      p.join(directory.path, 'verified-manifest.json'),
+    );
+    await savedManifest.writeAsString(jsonEncode(raw), flush: true);
+    onProgress?.call(const AppUpdateProgress('manifest', 0));
+    token.check();
+    final bytes = await staged.length();
+    token.check();
+    return AppUpdateCandidate(
+      current: installed,
+      offered: offered,
+      path: staged.path,
+      bytes: bytes,
+      source: '用户指定桌面 ZIP 与外部完整性清单（未经发布者签名）',
+      decision: appUpdateDecision(installed, offered, signatureVerified: false),
+      signatureVerified: false,
+      manifestPath: savedManifest.path,
+    );
+  }
+
+  /// The helper validates again, waits for this process, rolls back failed
+  /// writes and restarts Triomi. The page owns the explicit user confirmation.
+  Future<void> installWindowsBundle(
+    AppUpdateCandidate candidate,
+    AppUpdateCancellation token,
+  ) async {
+    if (!Platform.isWindows ||
+        candidate.offered.platform != 'windows' ||
+        candidate.manifestPath == null ||
+        !candidate.canInstall) {
+      throw StateError('此更新包不能安装到当前 Windows 应用');
+    }
+    final storage = WindowsUpdateStorage(rootOverride: windowsUpdateRoot);
+    final stage = (await storage.stages())
+        .where(
+          (entry) => p.equals(
+            p.join(entry.path, 'verified-bundle.zip'),
+            candidate.path,
+          ),
+        )
+        .firstOrNull;
+    if (stage == null || await storage.protected(stage)) {
+      throw StateError('更新暂存不存在或正在使用');
+    }
+    WindowsUpdateStorage.active.add(p.normalize(stage.absolute.path));
+    final marker = File(p.join(stage.path, 'cancel'));
+    token._marker = marker;
+    Directory? payload;
+    var handedOff = false;
+    try {
+      final manifest = await _regular(candidate.manifestPath!);
+      if (await manifest.length() > 1024 * 1024) {
+        throw const FormatException('更新清单过大');
+      }
+      final raw = jsonDecode(await manifest.readAsString());
+      final zip = await _regular(candidate.path);
+      final hash = (await sha256.bind(zip.openRead()).first).toString();
+      if (raw is! Map ||
+          raw['sha256'] != hash ||
+          hash != candidate.offered.sha256) {
+        throw const FormatException('更新包或清单已改变');
+      }
+      final checked = await _inspectWindowsStage(stage, raw, hash, token);
+      if (!checked.canInstall) throw StateError('当前程序已更新或不能接受该修订');
+      payload = await stage.createTemp('payload-');
+      final payloadPath = payload.path,
+          zipPath = zip.path,
+          markerPath = marker.path;
+      final files = (raw['files'] as Map).cast<Object?, Object?>();
+      onProgress?.call(const AppUpdateProgress('install', 0));
+      final inspected = await Isolate.run(
+        () => verifyWindowsUpdateZip(
+          zipPath,
+          files,
+          markerPath,
+          destinationPath: payloadPath,
+        ),
+      );
+      await File(inspected).delete();
+      token.check();
+      final accepted = await const MethodChannel('triomi/platform')
+          .invokeMethod<bool>('installWindowsUpdate', {
+            'payloadPath': payloadPath,
+            'files': files,
+            'consent': true,
+          });
+      if (accepted != true) throw StateError('Windows 未接受更新交接，现有应用未改动');
+      handedOff = true;
+    } finally {
+      token._marker = null;
+      WindowsUpdateStorage.active.remove(p.normalize(stage.absolute.path));
+      if (!handedOff && payload != null && await payload.exists()) {
+        await payload.delete(recursive: true);
+      }
     }
   }
 }
@@ -1345,13 +1616,14 @@ Future<File> _regular(String path) async {
   return File(await File(absolute).resolveSymbolicLinks());
 }
 
-/// Static desktop ZIP byte verification; used by the real staging flow before
-/// querying PE resources. No member names become filesystem paths.
+/// Bounded member verification. Optional extraction is only into a fresh,
+/// caller-owned directory and uses the same validated member names and hashes.
 Future<String> verifyWindowsUpdateZip(
   String zipPath,
   Map<Object?, Object?> files,
-  String markerPath,
-) async {
+  String markerPath, {
+  String? destinationPath,
+}) async {
   void checkCancelled() {
     if (File(markerPath).existsSync()) throw const AppUpdateCancelled();
   }
@@ -1389,6 +1661,19 @@ Future<String> verifyWindowsUpdateZip(
   } finally {
     await handle.close();
   }
+  final destination = destinationPath == null
+      ? null
+      : Directory(destinationPath);
+  if (destination != null &&
+      (await FileSystemEntity.type(destination.path, followLinks: false) !=
+              FileSystemEntityType.directory ||
+          !p.equals(
+            await destination.resolveSymbolicLinks(),
+            destination.absolute.path,
+          ) ||
+          await destination.list().isEmpty == false)) {
+    throw const FormatException('更新展开目录必须是新的普通空目录');
+  }
   checkCancelled();
   final input = InputFileStream(zipPath);
   final temporary = await Directory(p.dirname(zipPath)).createTemp('verify-');
@@ -1416,6 +1701,18 @@ Future<String> verifyWindowsUpdateZip(
           name.contains('\\') ||
           name.startsWith('/') ||
           name.contains(':') ||
+          RegExp(r'[<>"|?*\x00-\x1f]').hasMatch(name) ||
+          name
+              .split('/')
+              .any(
+                (part) =>
+                    part.isNotEmpty &&
+                    RegExp(
+                      r'^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)',
+                      caseSensitive: false,
+                    ).hasMatch(part),
+              ) ||
+          name.contains('//') ||
           name
               .split('/')
               .any(
@@ -1494,7 +1791,13 @@ Future<String> verifyWindowsUpdateZip(
         await file.copy(executable.path);
         checkCancelled();
       }
-      await file.delete();
+      if (destination != null) {
+        final target = File(p.joinAll([destination.path, ...name.split('/')]));
+        await target.parent.create(recursive: true);
+        await file.rename(target.path);
+      } else {
+        await file.delete();
+      }
     }
     if (actual.length != files.length ||
         !actual.contains('triomi.exe') ||

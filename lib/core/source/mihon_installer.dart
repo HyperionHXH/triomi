@@ -11,6 +11,7 @@ import '../models/source_exception.dart';
 import '../platform/platform_channel.dart';
 import '../storage/preferences.dart';
 import 'http_client.dart';
+import 'mihon_icon_storage.dart';
 import 'mihon_repository.dart';
 import 'source_filters.dart';
 
@@ -59,7 +60,8 @@ class MihonInstaller {
   final SourceHttpClient http;
   final Preferences preferences;
 
-  /// Recovers artwork from an already fetched index without changing trust.
+  /// Repairs display URLs from a fetched index without waiting for artwork I/O.
+  /// Installed rows obtain missing bytes lazily outside the metadata transaction.
   Future<Map<String, String>> cacheRepositoryIcons(
     Iterable<MihonExtension> extensions,
   ) => _withMetadataLock(() async {
@@ -73,36 +75,30 @@ class MihonInstaller {
     };
     final recovered = <String, String>{};
     for (final extension in extensions) {
+      if (installed?.containsKey(extension.packageName) != true) continue;
       final previous = statuses[extension.packageName];
       if (previous is! Map) continue;
       final sameVersion =
           installed?[extension.packageName] == extension.versionName ||
           previous['versionName'] == extension.versionName &&
               previous['versionCode'] == extension.versionCode;
-      if (!sameVersion) continue;
-      final existing = Uri.tryParse('${previous['iconUrl'] ?? ''}'.trim());
-      if (_isIconUri(existing)) continue;
-      final icon = Uri.tryParse(extension.iconUrl.trim());
-      if (!_isIconUri(icon)) continue;
-      final url = icon!.toString();
-      statuses[extension.packageName] = <String, Object?>{
-        for (final entry in previous.entries) '${entry.key}': entry.value,
-        'iconUrl': url,
-      };
-      recovered[extension.packageName] = url;
+      var url = MihonIconStorage.iconUrl(previous['iconUrl']);
+      if (url == null && sameVersion) {
+        url = MihonIconStorage.iconUrl(extension.iconUrl);
+        if (url != null) {
+          statuses[extension.packageName] = <String, Object?>{
+            for (final entry in previous.entries) '${entry.key}': entry.value,
+            'iconUrl': url,
+          };
+          recovered[extension.packageName] = url;
+        }
+      }
     }
     if (recovered.isNotEmpty) {
       await preferences.set('mihon.hostStatus', statuses);
     }
     return recovered;
   });
-
-  static bool _isIconUri(Uri? uri) =>
-      uri != null &&
-      uri.scheme == 'https' &&
-      uri.host.isNotEmpty &&
-      uri.userInfo.isEmpty &&
-      !uri.hasFragment;
 
   Future<Map<String, Object?>> install(
     MihonExtension extension, {
@@ -248,6 +244,8 @@ class MihonInstaller {
       // This is display metadata, never permission to execute or enable.
       status['name'] = extension.name;
       status['iconUrl'] = extension.iconUrl;
+      await MihonIconStorage(http: http)
+          .obtain(extension.packageName, extension.iconUrl, refresh: true);
       if (desktop) {
         status['desktopArtifactSource'] = extension.jarUrl ?? extension.apkUrl;
         if (status['filterProbe'] == 'unknown') {
@@ -365,6 +363,14 @@ class MihonInstaller {
           if ('$package' != packageName) package,
       ]);
     }
+    final previous = preferences.get<Map<dynamic, dynamic>>(
+      'mihon.hostStatus',
+    )?[packageName];
+    final iconUrl = MihonIconStorage.iconUrl(
+      previous is Map ? previous['iconUrl'] : null,
+    );
+    if (iconUrl != null) status['iconUrl'] = iconUrl;
+    await MihonIconStorage(http: http).obtain(packageName, iconUrl);
     final restoredNsfw = sourceNsfwFlag(files.pending[packageName]?['nsfw']);
     final manifestNsfw = sourceNsfwFlag(current['nsfw']);
     status['nsfw'] = restoredNsfw == true || manifestNsfw == true
@@ -455,6 +461,7 @@ class MihonInstaller {
           await preferences.flush();
           rethrow;
         }
+        await MihonIconStorage(http: http).remove(packageName);
       });
 
   Future<void> _download(MihonExtension extension, File candidate) =>

@@ -30,15 +30,19 @@ class BangumiRoutePolicy {
     r'^/(?:r/\d+(?:x\d+)?/)?pic/(?:cover|crt)/',
   );
 
-  String coverRequestUrl(String url) {
-    if (!mirrorEnabled) return url;
+  /// Public cover identity is independent of the chosen network route. Only
+  /// these anonymous URLs may share persisted bytes across HTTP clients.
+  bool isPublicCover(String url) {
     final uri = Uri.tryParse(url);
-    if (uri == null ||
-        uri.scheme != 'https' ||
+    return uri != null && _isPublicCover(uri);
+  }
+
+  static bool _isPublicCover(Uri uri) {
+    if (uri.scheme != 'https' ||
         uri.userInfo.isNotEmpty ||
         uri.hasFragment ||
         uri.hasPort) {
-      return url;
+      return false;
     }
     final picture =
         uri.host == 'lain.bgm.tv' &&
@@ -62,7 +66,13 @@ class BangumiRoutePolicy {
                   'small',
                   'grid',
                 }.contains(uri.queryParameters['type'])));
-    if (!picture && !apiPicture) return url;
+    return picture || apiPicture;
+  }
+
+  String coverRequestUrl(String url) {
+    if (!mirrorEnabled) return url;
+    final uri = Uri.tryParse(url);
+    if (uri == null || !_isPublicCover(uri)) return url;
     return Uri.https('wsrv.nl', '/', {
       'url': '${uri.host}${uri.path}${uri.hasQuery ? '?${uri.query}' : ''}',
       if (uri.path.toLowerCase().endsWith('.gif')) 'n': '-1',

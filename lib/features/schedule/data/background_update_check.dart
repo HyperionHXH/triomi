@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +9,7 @@ import '../../../core/models/media_type.dart';
 import '../../../core/platform/platform_channel.dart';
 import '../../../core/storage/preferences.dart';
 import '../../library/data/library_providers.dart';
+import '../../library/data/windows_content_updates.dart';
 import 'schedule_providers.dart';
 
 /// 追番条目所属的内置规则来源 id（与放送表条目映射规则一致）。
@@ -16,9 +19,11 @@ const String backgroundCheckPreferenceKey = 'updates.backgroundCheck';
 /// Reconcile system scheduling with the persisted user choice at every
 /// foreground startup, without prompting for permissions.
 Future<bool> restoreBackgroundUpdateSchedule(Preferences preferences) =>
-    platformChannel.scheduleBackgroundCheck(
-      preferences.get<bool>(backgroundCheckPreferenceKey) ?? false,
-    );
+    Platform.isWindows
+    ? reconcileWindowsContentUpdateSchedule(preferences)
+    : platformChannel.scheduleBackgroundCheck(
+        preferences.get<bool>(backgroundCheckPreferenceKey) ?? false,
+      );
 
 /// 后台更新检查的结论；没有命中任何追番时**不产生结论**（返回 null，不打扰）。
 class BackgroundUpdateResult {

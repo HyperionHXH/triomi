@@ -9,6 +9,7 @@ import 'core/router/app_router.dart';
 import 'core/storage/preferences.dart';
 import 'core/theme/app_theme.dart';
 import 'features/library/data/library_auto_sync.dart';
+import 'features/library/data/windows_content_updates.dart';
 import 'features/settings/app_update_page.dart';
 import 'features/settings/app_update_service.dart';
 import 'features/settings/app_update_widgets.dart';
@@ -67,6 +68,7 @@ class _TriomiAppState extends ConsumerState<TriomiApp>
     }
     if (!mounted) return;
     ref.read(libraryAutoSyncProvider.notifier).onResumed();
+    ref.read(windowsContentUpdatesProvider);
     await _checkForStartupUpdate();
   }
 
@@ -94,7 +96,7 @@ class _TriomiAppState extends ConsumerState<TriomiApp>
       final dismissedTag = ref
           .read(preferencesProvider)
           .get<String>('app-update.dismissed.${current.platform}');
-      if (dismissedTag == update.tag) return;
+      if (dismissedTag == update.identity) return;
       final navigatorContext = AppRouter.rootNavigator?.context;
       if (navigatorContext == null || !navigatorContext.mounted) return;
       final shouldOpen = await showStartupUpdateDialog(
@@ -116,7 +118,7 @@ class _TriomiAppState extends ConsumerState<TriomiApp>
       } else if (shouldOpen == false) {
         await ref
             .read(preferencesProvider)
-            .set('app-update.dismissed.${current.platform}', update.tag);
+            .set('app-update.dismissed.${current.platform}', update.identity);
       }
     } catch (_) {
       // A startup network failure must not block or interrupt the home screen.
