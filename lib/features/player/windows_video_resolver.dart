@@ -265,7 +265,10 @@ class _DesktopVideoProbe with WidgetsBindingObserver {
       if (!/^https?:$/.test(u.protocol) ||
           (reported.has(u.href) && (!mimeType || reported.get(u.href))) ||
           (mimeType !== hls && evidence !== 'video' && !/\.(m3u8|mp4|m4v)$/i.test(u.pathname))) return;
-      const policy = document.referrerPolicy || 'strict-origin-when-cross-origin';
+      // Document.referrerPolicy is not exposed by all Chromium documents.
+      // Read the active meta policy instead of silently inventing a Referer.
+      const meta = [...document.querySelectorAll('meta[name="referrer" i]')].at(-1);
+      const policy = document.referrerPolicy || meta?.content?.trim().toLowerCase() || 'strict-origin-when-cross-origin';
       const same = u.origin === location.origin;
       const downgrade = location.protocol === 'https:' && u.protocol === 'http:';
       let ref = '';
@@ -365,13 +368,9 @@ class _DesktopVideoProbe with WidgetsBindingObserver {
       } catch (_) {}
     });
   };
-  const ready = () => {
-    if (window === window.top) window.chrome.webview.postMessage({type:'triomi-parent-ready',page:location.href});
-    scan();
-  };
   new MutationObserver(scan).observe(document,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready, {once:true});
-  else ready();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scan, {once:true});
+  else scan();
   setInterval(scan, 500);
 })();
 ''';

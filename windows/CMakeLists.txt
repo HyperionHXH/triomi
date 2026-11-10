@@ -1,5 +1,5 @@
 # Project-level configuration.
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.19)
 project(triomi LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
@@ -52,10 +52,12 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
+include(media_dependencies.cmake)
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
+list(APPEND PLUGIN_BUNDLED_LIBRARIES ${TRIOMI_MEDIA_BUNDLED_LIBRARIES})
 
 # Native source-isolated sessions and resolvers share one pinned public SDK.
 # No process-global WebView plugin or second legacy SDK is required.
@@ -91,6 +93,8 @@ install(TARGETS ${BINARY_NAME} triomi_update_helper RUNTIME DESTINATION "${CMAKE
   COMPONENT Runtime)
 # A reused build directory may still contain the removed global renderer.
 install(CODE "file(REMOVE \"${CMAKE_INSTALL_PREFIX}/webview_windows_plugin.dll\")"
+  COMPONENT Runtime)
+install(CODE "file(REMOVE \"${CMAKE_INSTALL_PREFIX}/media_kit_libs_windows_video_plugin.dll\")"
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"

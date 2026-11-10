@@ -62,6 +62,7 @@ class DesktopPlaybackSession {
   Future<void> open(
     Media media, {
     Duration timeout = const Duration(seconds: 30),
+    String? mimeType,
   }) {
     reset();
     final generation = _generation;
@@ -71,6 +72,13 @@ class DesktopPlaybackSession {
       // stop is a command barrier. The old file must not provide time-pos or
       // diagnostics while readiness for the new media is being established.
       await player.stop();
+      if (_disposed || generation != _generation) return;
+      // Extensionless HLS endpoints can be mistaken for a generic playlist.
+      // Set the demux hint per open, and clear it before a later MP4/local file.
+      await _native.setProperty(
+        'demuxer-lavf-format',
+        mimeType == 'application/vnd.apple.mpegurl' ? 'hls' : '',
+      );
       if (_disposed || generation != _generation) return;
       final ready = _ready = Completer<void>();
       ready.future.ignore(); // Attach before asynchronous native open can fail.

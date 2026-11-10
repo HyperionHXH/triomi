@@ -763,6 +763,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
       if (!mounted || seq != _resolveSeq) return;
       await _desktopErrors!.open(
         Media(url, httpHeaders: headers, start: startPosition),
+        mimeType: mimeType,
       );
       if (!mounted || seq != _resolveSeq) return;
       _awaitingPlaybackStart = false;

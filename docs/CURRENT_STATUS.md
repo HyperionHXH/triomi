@@ -1,5 +1,20 @@
 # Triomi 当前状态
 
+## 当前请求：R192 完整修复桌面播放后再解决issue（Windows修订2，本机验证完成，发布中）
+
+本轮不把网站错误直接排除：原生与独立Chromium、相同播放页/媒体、直连与现有系统代理分层对照，另以普通主程序真实画面验证。客户端已定位并修复四项根因：
+
+- **COM所有权**：旧2023版libmpv的WASAPI热插拔在读取音频设备列表的线程初始化COM，却在销毁线程无条件释放，破坏主平台STA。独立STA进程旧DLL失败、新DLL八轮保持STA；原生五Player销毁后新来源浏览器回归修前复现`0x800401F0`、修后通过。改为SHA256固定的shinchiro Windows x64 `20261110/a61f6c3abd`，含上游[4dfee616](https://github.com/mpv-player/mpv/commit/4dfee616d0fd278b5f488726c3c13e524ebf354e)；不再依赖旧pub解码包或Flutter未来将移除的独立UI线程措施。Android Media3与iOS独立工作区不变。
+- **入口导航竞争**：真实MXdm捕获旧`nav=2`失败时当前已`nav=3`；只过滤旧事件仍能遇到站点跳转与宿主DOMContentLoaded链接竞争。现按当前NavigationId处理失败，入口当前文档成功完成后只进入播放页一次；取消/真实404继续报错，不吞当前导航失败。回归覆盖入口脚本/meta跳转、取消与来源隔离。
+- **Referrer策略**：Chromium页面不提供有效`document.referrerPolicy`时旧代码默认补Referer，违背meta `no-referrer`；按页面策略保留空Referer，DM84《芙莉莲》从准备超时恢复完整26:00媒体，未绕TLS或站点权限。
+- **无后缀HLS**：AGE清单真实183段/1395秒，旧路径却按普通播放列表只播约8秒。将解析出的HLS MIME传到每次DesktopPlaybackSession.open，限定本次解复用格式，下一媒体清除；永久原生回归验证跨片推进及随后普通WAV仍8秒，不把首段解码算整集通过。
+
+普通`lib/main.dart` Release（0.15.4+190/Windows修订2）已实际操作：AGE《境界触发者》第1集0:43/23:15，同窗口切第2集0:29/23:16；7sefun原列表4第53集实际画面、+80秒、暂停2:05保持，关闭应用后独立PID恢复2:05/22:43；DM84《芙莉莲》第1集真实动画/双语字幕0:34→4:04/26:00，全屏2560×1600再恢复原窗口持续播放。原设置倍速1.0x保留，原数据不清。仅主程序重启，不重启系统或工具宿主。
+
+MXdm样本另有外部路线限制：同一旧集CDN直连HTTP200、现有127.0.0.1:7890代理HTTP403，另一个最新集CDN同代理403；独立Chromium也在0:00/readyState0并报媒体`net::ERR_FAILED`。这证明本机既有路线上的媒体访问限制，不证明整站永久失效，也不将它归咎用户网络或用偷偷切代理/放宽TLS掩盖。修后7sefun、AGE、DM84三条真实来源已恢复；不承诺任意网站、地区、账号或未来失效媒体均可播放。
+
+本机原生生命周期两项通过（含COM/HLS/导航/no-referrer/真实失败）、播放消费者73项通过；最终analyze/构建/打包与公开字节校验随后回填。用户已明确授权：全部验证通过后提交推送本轮修复、仅发布Windows修订2，再回写解决#8；原Android、iOS发布及v0.15.4标签不移动，公开下载尚未更新前不称修订2已发布。详见[R191持续综合证据](delivery/evidence/R191-windows-playback-investigation.json)的R192追加部分。
+
 ## 当前请求：R191 桌面播放根因复查（0.15.4+190，Windows修订1，已发布）
 
 [#8](https://github.com/HyperionHXH/triomi/issues/8)截图实际错误是`Windows source browser is unavailable`，发生在WebView2网页解析器创建、尚未进入解码。旧原生`Failed`把环境、控制器、脚本、Cookie错误统一折叠，无法从旧截图追溯用户机器的原始HRESULT；不能无证据归咎网络或宣称所有重试失败同一原因。
@@ -21,6 +36,16 @@
 [Windows单端发布](https://github.com/HyperionHXH/triomi/actions/runs/42646419110)第二次作业已全部成功，包含完整回归、正常编译/打包、真实更新器、浏览器与原生播放生命周期。当前源码`0d6e0cc763867a86d945e7f02b4e15ab14427fe3`，Windows修订1已替换原发布下载，不移动tag或Android文件。#8已[回写根因、修复与下载地址](https://github.com/HyperionHXH/triomi/issues/8#issuecomment-6754962594)，保留打开等待报告者用新包确认；不以本机夹具代替其机器验收。
 
 公开产物收尾已完成：通过GitHub原资产API续下ZIP/MSI，五项完整公开文件的实际大小、SHA256均与当前GitHub digest及SHA256SUMS一致。Windows ZIP 255558311字节、SHA256=`e3b65896a04d58d7b8c3a5c15902dc8cfc6d7689f1c60a667b3bb9072c318e65`，全部467成员重算并匹配更新清单；MSI 244240585字节、SHA256=`8ac2af7aa214f98f9f067e5cea7475f458100bef3bfe087897b1c52f11828ca3`。清单版本190/修订1/源码均一致；Android资产仍ID724382293、162852724字节及原`eb0982e4…`摘要，实际完整字节不变，10个iOS发布资产及原tag身份保持不变。1482个源码/证据文件、公开APK626成员和ZIP467成员的现有账号值/编码扫描零命中，无私钥/调试文件名；MSI仅原始容器扫描，不声称检查其压缩成员。此前回下载TLS超时/重置的缺口现已清除，详见[最终R191证据](delivery/evidence/R191-windows-playback-investigation.json)。
+### 追加：公开包真实多番剧复查，发现COM引用耗尽（本地修复，尚未发布）
+
+本轮实际运行下载的修订1普通主程序，不是受控夹具：DM84《境界触发者》第一季第1集真实画面/字幕及时间0:00→2:13/23:15；退出重进恢复3:47；同页下一集最终1:20/23:16。7sefun第53集与AGE第1集播放页失败，DM84《葬送的芙莉莲》第1集准备超时、MXdm同作品播放页失败，全部保留，不把打开目录或0:00当播放成功。
+
+连续退出播放器后，MXdm新来源实际报`environment-create (0x800401F0)`。原生调用栈证明主窗口线程原为STA，libmpv销毁却在该线程执行无对应成功初始化的`CoUninitialize`；多次销毁后只剩隐式MTA。永久原生回归加入五个真实Player销毁并等待依赖的延迟释放，再创建新来源浏览器，修前第1次解析确定复现同一错误。`windows/runner/main.cpp`明确选择独立Dart UI线程，隔离mpv与平台STA；不增加COM引用掩盖泄漏、不吞异常、不重试。当前固定Flutter3.47.5支持此策略，但引擎已标明未来会移除独立线程；后续升级Flutter前必须重新处理libmpv线程/COM所有权并保留此回归，不能无检查移回合并线程。
+
+修后正常Release已构建并实际运行：DM84《海贼王》1180集真实画面0:24/23:36，独立退出重启恢复1:30并推进到1:47、动画草地/人物真实显示。MXdm《海贼王》两条线路仍失败；补保留WebView2导航状态，最终实读`9 = CONNECTION_RESET`，与COM失败分开，不无证宣称整站失效、网络无问题或全部修好。原生浏览器/解码两项专项已通过，覆盖销毁后的35连续/4并发/10取消重开；最新诊断增补的最终专项结果见综合证据。
+
+按用户最新要求，修好并充分实播前不提交/回写issue修复结论，不关闭#8、不提交源码、不推送或替换公开资产。当前公开下载仍为上文修订1；本地修改不是已发布修复。原用户数据、Cookie、凭据、Android/iOS资产保持，不清数据。截图及结果见[R191综合证据](delivery/evidence/R191-windows-playback-investigation.json)的`postPublicationLiveVerification`。
+
 
 
 

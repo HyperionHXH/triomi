@@ -1,0 +1,16 @@
+{
+  "mpv": {
+    "repository": "shinchiro/mpv-winbuild-cmake",
+    "release": "20261110",
+    "archive": "mpv-dev-x86_64-20261110-git-a61f6c3abd.7z",
+    "sha256": "f07b97a72f2394a7798d6e1d36d952bbfd63577e25cef051f716751ea5dc9688",
+    "revision": "a61f6c3abd",
+    "requiredFix": "4dfee616d0fd278b5f488726c3c13e524ebf354e"
+  },
+  "angle": {
+    "repository": "alexmercerind/flutter-windows-ANGLE-OpenGL-ES",
+    "release": "v1.0.1",
+    "archive": "ANGLE.7z",
+    "sha256": "cc5911bb15d596fd5a2b362613ad35b7093b427117269a7359054a65746a5f9a"
+  }
+}

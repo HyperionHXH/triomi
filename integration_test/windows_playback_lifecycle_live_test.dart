@@ -113,8 +113,48 @@ void main() {
         // controller's already-completed first-frame Future.
         final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
         final entered = <HttpRequest>[];
-        final listener = server.listen(entered.add);
+        // One second of deterministic mono AAC silence, repeated by a real HLS
+        // manifest. A suffixless URL must retain all segments, not play one AAC.
+        final segment = base64Decode(
+          '//FsQANf/NwATGF2YzYzLjEuMTAyAAIwQA7/8WxAAX/8ARggB//xbEABf/wBGCAH//FsQAF//AEYIAf/8WxAAX/8ARggB//xbEABf/wBGCAH//FsQAF//AEYIAf/8WxAAX/8ARggB//xbEABf/wBGCAH',
+        );
+        final listener = server.listen((request) async {
+          if (request.uri.path == '/manifest') {
+            request.response.headers.contentType = ContentType(
+              'application',
+              'octet-stream',
+            );
+            request.response.write(
+              '#EXTM3U\n#EXT-X-TARGETDURATION:2\n'
+              '#EXT-X-MEDIA-SEQUENCE:0\n'
+              '${List.generate(4, (i) => '#EXTINF:1.0,\nsegment.aac?n=$i\n').join()}'
+              '#EXT-X-ENDLIST\n',
+            );
+            await request.response.close();
+          } else if (request.uri.path == '/segment.aac') {
+            request.response.add(segment);
+            await request.response.close();
+          } else {
+            entered.add(request);
+          }
+        });
         try {
+          await monitor.open(
+            Media('http://127.0.0.1:${server.port}/manifest'),
+            mimeType: 'application/vnd.apple.mpegurl',
+          );
+          await waitFor(
+            () => player.state.position > const Duration(milliseconds: 1500),
+          );
+          expect(
+            player.state.duration,
+            greaterThan(const Duration(seconds: 3)),
+          );
+          await monitor.open(Media(file.uri.toString()));
+          await waitFor(
+            () => player.state.position > const Duration(milliseconds: 100),
+          );
+          expect(player.state.duration, const Duration(seconds: 8));
           final address = 'http://127.0.0.1:${server.port}/readiness.wav';
           var opened = false;
           final held = monitor.open(Media(address)).then((_) => opened = true);
@@ -195,8 +235,50 @@ void main() {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final origin = 'http://127.0.0.1:${server.port}';
       const sourceOrigin = 'https://browser-lifecycle.invalid';
+      final currentPageRequested = Completer<void>();
       server.listen((request) async {
         request.response.headers.contentType = ContentType.html;
+        if (request.uri.path == '/pending-image') {
+          await currentPageRequested.future;
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+          return;
+        }
+        if (request.uri.path == '/entry') {
+          request.response.write(
+            '<html><body><img src="$origin/pending-image">'
+            '<script>addEventListener("DOMContentLoaded",()=>location.replace("$origin/redirect"));</script>'
+            '</body></html>',
+          );
+          await request.response.close();
+          return;
+        }
+        if (request.uri.path == '/redirect') {
+          if (!currentPageRequested.isCompleted)
+            currentPageRequested.complete();
+          request.response.write(
+            '<html><head><meta http-equiv="refresh" content="0;url=$origin/resolve"></head></html>',
+          );
+          await request.response.close();
+          return;
+        }
+        if (request.uri.path == '/missing-page') {
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+          return;
+        }
+        if (request.uri.path == '/private-referrer') {
+          request.response.write(
+            '<html><head><meta name="referrer" content="no-referrer"></head>'
+            '<body><video src="$origin/private-media.mp4"></video></body></html>',
+          );
+          await request.response.close();
+          return;
+        }
+        if (request.uri.path == '/resolve' &&
+            !currentPageRequested.isCompleted) {
+          currentPageRequested.complete();
+        }
         request.response.write(
           request.uri.path == '/resolve'
               ? '<html><body><video src="$origin/media.mp4"></video></body></html>'
@@ -239,6 +321,17 @@ void main() {
       }
 
       try {
+        MediaKit.ensureInitialized();
+        // libmpv teardown must not consume the platform thread's COM apartment.
+        // Exercise real player destruction before creating a new source browser,
+        // not only controller reuse within an already-created environment.
+        for (var i = 0; i < 5; i++) {
+          final player = Player();
+          await (player.platform as NativePlayer).getProperty('idle-active');
+          await player.dispose();
+        }
+        // media_kit schedules mpv_terminate_destroy five seconds after dispose.
+        await Future<void>.delayed(const Duration(seconds: 6));
         for (var i = 1; i <= 35; i++) {
           try {
             await resolve(i);
@@ -384,6 +477,43 @@ void main() {
                 },
               ),
             ),
+          );
+          final navigated = await resolveWindowsVideo(
+            context,
+            PlaySource(
+              name: 'redirecting source entry',
+              url: '$origin/resolve',
+              webPage: true,
+              headers: {'Referer': '$origin/entry'},
+            ),
+            sourceId: 'overlapping-navigation',
+            sourceUrl: origin,
+          );
+          expect(navigated.url, '$origin/media.mp4');
+          final privateReferrer = await resolveWindowsVideo(
+            context,
+            PlaySource(
+              name: 'private referrer source',
+              url: '$origin/private-referrer',
+              webPage: true,
+            ),
+            sourceId: 'no-referrer-policy',
+            sourceUrl: origin,
+          );
+          expect(privateReferrer.url, '$origin/private-media.mp4');
+          expect(privateReferrer.headers.containsKey('Referer'), isFalse);
+          await expectLater(
+            resolveWindowsVideo(
+              context,
+              PlaySource(
+                name: 'missing current page',
+                url: '$origin/missing-page',
+                webPage: true,
+              ),
+              sourceId: 'current-navigation-failure',
+              sourceUrl: origin,
+            ),
+            throwsStateError,
           );
           for (var i = 0; i < 8; i++) {
             final media = await resolveWindowsVideo(

@@ -411,6 +411,7 @@ struct VideoSession {
   bool active = true;
   bool entered = false;
   std::wstring target;
+  UINT64 navigation_id = 0;
   void Close() {
     active = false;
     profile->closed = true;
@@ -493,43 +494,71 @@ void StartVideo(const Map& args, SharedResult result) {
     if (SUCCEEDED(settings_status)) settings_status = settings ? settings.As(&settings2) : E_POINTER;
     if (SUCCEEDED(settings_status)) settings_status = settings2->put_UserAgent(agent.c_str());
     if (FAILED(settings_status)) { Failed(result, "video-user-agent", settings_status); return; }
-    EventRegistrationToken message_token{}, navigation_token{};
+    EventRegistrationToken message_token{}, starting_token{}, navigation_token{};
     const auto weak = std::weak_ptr<VideoSession>(video);
     const HRESULT messages = profile->web->add_WebMessageReceived(
       Callback<ICoreWebView2WebMessageReceivedEventHandler>(
-        [weak, referer](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT {
+        [weak](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT {
           const auto session = weak.lock();
           if (!session || !session->active || !channel) return S_OK;
           LPWSTR json = nullptr;
           if (FAILED(args->get_WebMessageAsJson(&json))) return S_OK;
           const auto message = Utf8(json); CoTaskMemFree(json);
           if (message.size() > 131072) return S_OK;
-          if (!referer.empty() && !session->entered && message.find("triomi-parent-ready") != std::string::npos) {
-            LPWSTR sender = nullptr, current = nullptr;
-            args->get_Source(&sender); session->profile->web->get_Source(&current);
-            const bool top = sender && current && std::wstring(sender) == current;
-            CoTaskMemFree(sender); CoTaskMemFree(current);
-            if (top) {
-              session->entered = true;
-              const auto link = L"(() => { const a=document.createElement('a'); a.href=" +
-                  JavascriptString(session->target) + L";a.target='_self';document.body.appendChild(a);a.click(); })();";
-              session->profile->web->ExecuteScript(link.c_str(), nullptr);
-            }
-          }
           channel->InvokeMethod("videoMessage", std::make_unique<Value>(Map{
             {Value("id"), Value(session->id)}, {Value("message"), Value(message)}}));
           return S_OK;
         }).Get(), &message_token);
+    const HRESULT starting = profile->web->add_NavigationStarting(
+      Callback<ICoreWebView2NavigationStartingEventHandler>(
+        [weak](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* args) -> HRESULT {
+          if (const auto session = weak.lock()) {
+            args->get_NavigationId(&session->navigation_id);
+          }
+          return S_OK;
+        }).Get(), &starting_token);
     const HRESULT navigation = profile->web->add_NavigationCompleted(
       Callback<ICoreWebView2NavigationCompletedEventHandler>(
-        [weak](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT {
+        [weak, has_referer = !referer.empty()](ICoreWebView2* sender, ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT {
           const auto session = weak.lock(); BOOL success = FALSE; args->get_IsSuccess(&success);
-          COREWEBVIEW2_WEB_ERROR_STATUS status; args->get_WebErrorStatus(&status);
-          if (session && !success && status != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED)
-            session->Error(Utf8(L"\u64ad\u653e\u9875\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u6216\u6362\u6765\u6e90").c_str());
+          COREWEBVIEW2_WEB_ERROR_STATUS status = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
+          args->get_WebErrorStatus(&status);
+          UINT64 navigation_id = 0;
+          args->get_NavigationId(&navigation_id);
+          // A page may start another navigation before the old request reports
+          // its reset/abort. Only the current document owns resolver failure.
+          if (!session || !session->active || navigation_id != session->navigation_id) return S_OK;
+          if (success && has_referer && !session->entered) {
+            // Let the entry document finish its own redirects before creating
+            // one user-like link navigation. DOMContentLoaded can race a site's
+            // location.replace/meta-refresh and reset the actual playback page.
+            session->entered = true;
+            LPWSTR current = nullptr;
+            sender->get_Source(&current);
+            const bool at_target = current && std::wstring(current) == session->target;
+            CoTaskMemFree(current);
+            if (!at_target) {
+              session->navigation_id = 0;
+              const auto link = L"(() => { const a=document.createElement('a'); a.href=" +
+                  JavascriptString(session->target) + L";a.target='_self';document.body.appendChild(a);a.click(); })();";
+              const HRESULT started = sender->ExecuteScript(link.c_str(), nullptr);
+              if (FAILED(started)) session->Error("Windows browser failed to enter the playback page");
+            }
+          }
+          if (session && !success && status != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED) {
+            const auto phase = has_referer && !session->entered ? "source-entry" : "playback-page";
+            ComPtr<ICoreWebView2NavigationCompletedEventArgs2> response;
+            int http_status = 0;
+            if (SUCCEEDED(args->QueryInterface(IID_PPV_ARGS(&response))))
+              response->get_HttpStatusCode(&http_status);
+            const auto message = Utf8(L"\u64ad\u653e\u9875\u52a0\u8f7d\u5931\u8d25") +
+                " (WebView2 " + phase + " navigation status " + std::to_string(static_cast<int>(status)) +
+                (http_status > 0 ? ", HTTP " + std::to_string(http_status) : "") + ")";
+            session->Error(message.c_str());
+          }
           return S_OK;
         }).Get(), &navigation_token);
-    if (FAILED(messages) || FAILED(navigation)) { Failed(result, "video-events", FAILED(messages) ? messages : navigation); return; }
+    if (FAILED(messages) || FAILED(starting) || FAILED(navigation)) { Failed(result, "video-events", FAILED(messages) ? messages : FAILED(starting) ? starting : navigation); return; }
     const HRESULT injected = profile->web->AddScriptToExecuteOnDocumentCreated(script.c_str(),
       Callback<ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler>(
         [video, result, target, referer](HRESULT status, LPCWSTR) -> HRESULT {

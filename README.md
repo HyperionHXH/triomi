@@ -87,6 +87,8 @@ flutter test
 
 Windows 完整 ZIP/MSI 打包使用 `tools/package_windows.ps1`，另需 JDK 21、Python 3.12+ 与 .NET 10 SDK。Android 正式发布需要已有签名配置，普通 Actions 验收包不能用于覆盖正式签名安装。
 
+Windows 解码库与 ANGLE 的固定版本和SHA256保存在 `windows/media-dependencies.json`，由CMake验证后构建，不加载机器上任意同名DLL。解码库使用mpv官方[安装页](https://mpv.io/installation/)列出的[shinchiro构建](https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261110)，对应[mpv源码a61f6c3abd](https://github.com/mpv-player/mpv/tree/a61f6c3abd)及其依赖/许可证；更新时必须验证Windows原生播放生命周期套件，不回退到带COM热插拔缺陷的2023解码包。
+
 - [来源规则格式](docs/RULE_FORMAT.md)
 - [弹幕来源与使用边界](docs/DANMAKU.md)
 - [开发路线与待办](docs/ROADMAP.md)

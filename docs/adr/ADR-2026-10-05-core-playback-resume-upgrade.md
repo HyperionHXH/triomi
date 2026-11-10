@@ -124,3 +124,11 @@ C149补验：API26动态自有loopback新增章通知、自动下载PNG/hash及�
 历史2026-10-11续播修复：按来源/作品/章节查chapterPositionOf，Android prepared后完成seek再播放、准备期禁止覆盖历史，Windows Media.start，Android不分配无用media_kit。14项回归和原307f27/8c913420/d12625包/真帧证据保留 `C125-player-resume-final.json`、artifacts.json、windows-bundle.json；这批是代理导航前历史范围，不用旧hash或Sky限制代表当前交付。
 
 新307f27验收包API26离线专项通过：正常Wi-Fi设置开关关闭与svc data关闭，dumpsys无默认网络，强停独立进程经离线详情恢复LNS3/13，真实中文正文及字体已目视。Wi-Fi/data恢复到原值，默认网络105，见C125-player-resume-api26-offline.json/png。
+
+## R192 Windows解码器COM所有权与逐媒体格式（2026-11-10）
+
+旧libmpv WASAPI热插拔在调用线程初始化MTA，却在销毁线程CoUninitialize。Flutter合并平台/UI线程后会耗尽STA引用，WebView2失败只是后果；不靠重复CoInitialize、忽略HRESULT或已被上游计划移除的独立UI线程隐藏。Windows解码/ANGLE构建输入归应用持有，`windows/media-dependencies.json`固定上游归档与SHA256、`media_dependencies.cmake`只接受匹配字节，CI准备脚本复用同一固定值。mpv `a61f6c3abd`包含4dfee616热插拔MTA租约修复，保留media_kit/ANGLE渲染与Android Media3，不新增引擎。普通平台STA继续用于浏览器/COM选择器/SMTC。
+
+WebView入口脚本/meta跳转与宿主DOMContentLoaded链接不能同时争夺导航。失败须属于当前NavigationId；入口当前文档成功完成后再执行一次普通链接进入播放页。媒体Referrer遵守页面meta策略，不存在策略时才使用浏览器默认；来源独立Cookie与TLS边界不变。
+
+HLS格式来自已验证的响应MIME/清单嗅探，不依赖后缀。每次串行stop/open设置本媒体`demuxer-lavf-format=hls`，普通媒体恢复空值；不把HLS的一个TS/AAC分片作为完整媒体，也不把一次controller首帧Future复用作新集就绪。永久原生回归覆盖真实音频设备枚举/销毁后的浏览器、HLS跨片与普通媒体回切、入口跳转及no-referrer。实网与最终交付以CURRENT_STATUS和综合JSON为准。

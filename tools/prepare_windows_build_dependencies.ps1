@@ -38,10 +38,11 @@ try {
     Get-PinnedAsset ($parts[0] + '/' + $parts[1]) $pin.release $parts[-1] `
         ('.dart_tool/hooks_runner/shared/ech_http/build/prebuilt/windows-x64-' + $pin.sha256 + '.zip') $pin.sha256
 
-    Get-PinnedAsset 'media-kit/libmpv-win32-video-build' '2023-09-24' 'mpv-dev-x86_64-20230924-git-652a1dd.7z' `
-        'build/windows/x64/mpv-dev-x86_64-20230924-git-652a1dd.7z' 'a832ef24b3a6ff97cd2560b5b9d04cd8' 'MD5'
-    Get-PinnedAsset 'alexmercerind/flutter-windows-ANGLE-OpenGL-ES' 'v1.0.1' 'ANGLE.7z' `
-        'build/windows/x64/ANGLE.7z' 'e866f13e8d552348058afaafe869b1ed' 'MD5'
+    $media = Get-Content windows/media-dependencies.json -Raw | ConvertFrom-Json
+    foreach ($dependency in @($media.mpv, $media.angle)) {
+        Get-PinnedAsset $dependency.repository $dependency.release $dependency.archive `
+            ('build/windows/x64/' + $dependency.archive) $dependency.sha256
+    }
     Get-PinnedAsset 'Suwayomi/Suwayomi-Server' 'v2.4.2366' 'Suwayomi-Server-v2.4.2366.jar' `
         'build/extension-runtime-cache/Suwayomi-Server-v2.4.2366.jar' `
         'af9feb20af9d7ebe9e30769e6c6ebc7fc7ab1c447388d42e0280b1da5fe07bfd'
