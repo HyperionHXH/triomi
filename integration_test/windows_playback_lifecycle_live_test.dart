@@ -254,8 +254,9 @@ void main() {
           return;
         }
         if (request.uri.path == '/redirect') {
-          if (!currentPageRequested.isCompleted)
+          if (!currentPageRequested.isCompleted) {
             currentPageRequested.complete();
+          }
           request.response.write(
             '<html><head><meta http-equiv="refresh" content="0;url=$origin/resolve"></head></html>',
           );
