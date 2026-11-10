@@ -1,10 +1,10 @@
 {
   "version": "0.15.4+190",
-  "windowsRevision": 1,
-  "status": "r192-client-repair-real-playback-verified-publication-pending",
+  "windowsRevision": 2,
+  "status": "r192-complete-client-repair-public-r2-verified",
   "issue": "https://github.com/HyperionHXH/triomi/issues/8",
   "r192CompleteRepair": {
-    "status": "local-client-repair-and-real-playback-verified-publication-pending",
+    "status": "complete-client-repair-and-public-r2-actual-playback-verified",
     "windowsRevision": 2,
     "supersedes": "postPublicationLiveVerification temporary thread split and incomplete source diagnosis; historical observations retained",
     "defects": [
@@ -137,6 +137,9 @@
       "docDriftErrors": 0,
       "docDriftWarnings": 0,
       "normalWindowsRelease": "built and actually played",
+      "finalPackagedHlsResume": {"restored":"4:50 / 26:00","advanced":"5:37 / 26:00","screenshot":"R192-final-bundle-frieren-resume.png","normalExitVerified":true},
+      "nativeUpdaterParentAndRollback": {"before":"Remote run 42783882591 rejected DELETE open of still-running parent image before READY; no publication occurred","fix":"Preflight reads and validates; exclusive DELETE replacement handles remain after exact parent exit and profile writer mutex","after":"Native standalone compile/run passed parent wait, verified copy/restart, servicing persistence/max preservation, hash rejection, locked target, mid-copy rollback, native failure dialogs, writer contention and unsafe paths"},
+      "localArtifactScope": "Local hashes below precede the final updater-only preflight correction; final remote package identities supersede these when published",
       "localZipMsi": "built",
       "localZipMembersMatchedToManifestAndBundle": 467,
       "localArtifacts": [
@@ -172,13 +175,98 @@
     "harnessBoundaries": [
       "Interrupted tool process lost runtime; overlapping orphaned test hosts caused build-file contention; subsequently serial native hosts and final suite passed. No system reboot initiated by repair.",
       "Public diagnostic one-off had incomplete finalization after three source records; those records prove only observed decoding, not test-suite pass. Final normal application visual proof and permanent native suite are separate.",
+      "First remote run 42782911671 stopped at a missing-braces lint in redirect fixture; fixed and targeted analyze passed. Second run 42783882591 passed analyze/full suite/package but stopped at genuine updater parent preflight access defect; fixed without skipping gate. Third run uses f2f0d3a3cab34e0222a0d0f5cdeea3fc352c8290.",
       "Local packaging first chose .NET runtime without SDK; existing _tools/dotnet-10 SDK used successfully, no new SDK installed.",
       "Temporary public probes and native tracing removed; no account session/cookie contents placed in evidence."
     ],
     "publication": {
       "authorized": true,
       "scope": "Commit/push this repair; Windows revision2 only; preserve Android, 10 iOS releases and v0.15.4 tag; close issue8 only after final public verification",
-      "state": "pending",
+      "state": "published-all-remote-gates-public-bytes-and-real-package-playback-verified",
+      "issueState": "closed",
+      "issueStateReason": "completed",
+      "issueComment": "https://github.com/HyperionHXH/triomi/issues/8#issuecomment-6763796376",
+      "issueClosedOnlyAfterPublicVerification": true,
+      "verifiedPublicRelease": {
+        "passed": true,
+        "version": "0.15.4+190",
+        "windowsRevision": 2,
+        "sourceCommit": "f2f0d3a3cab34e0222a0d0f5cdeea3fc352c8290",
+        "workflowRun": "42786677377",
+        "workflowUrl": "https://github.com/HyperionHXH/triomi/actions/runs/42786677377",
+        "releaseUrl": "https://github.com/HyperionHXH/triomi/releases/tag/v0.15.4",
+        "assets": [
+          {
+            "name": "SHA256SUMS.txt",
+            "assetId": 730823511,
+            "bytes": 348,
+            "sha256": "fbfbdad07903b1d15201e7962feef94a78e37d7dbab7643f90c7d84787fd7c46"
+          },
+          {
+            "name": "triomi-android.apk",
+            "assetId": 724382293,
+            "bytes": 162852724,
+            "sha256": "eb0982e46c9629419608cfac4250140c7a7c2c2346b84e5f6fcc768225066732"
+          },
+          {
+            "name": "triomi-windows.msi",
+            "assetId": 730823509,
+            "bytes": 272764953,
+            "sha256": "59b4ccfaa6890d3c70156f34c6b3236139c81a555a5892300c62c4c1f8e33cef"
+          },
+          {
+            "name": "triomi-windows.update.json",
+            "assetId": 730823513,
+            "bytes": 79473,
+            "sha256": "fc2a1fc764debdeaa0f59eee6f8fa0b34cfad82fc54d02cc63fddbf862b5c39c"
+          },
+          {
+            "name": "triomi-windows.zip",
+            "assetId": 730823510,
+            "bytes": 290238420,
+            "sha256": "3c36ba76e433fdfb5884908c70b6f798e33b7e1b66eddf76c3a310ac83fa6ecb"
+          }
+        ],
+        "windowsMembersVerified": 466,
+        "mpvBinarySha256": "5feefdced585b98282f9fd1ebe0a14c3b8c0827bff0ebf26fa43e735a789fed1",
+        "androidUnchanged": {
+          "id": 724382293,
+          "name": "triomi-android.apk",
+          "size": 162852724,
+          "digest": "sha256:eb0982e46c9629419608cfac4250140c7a7c2c2346b84e5f6fcc768225066732"
+        },
+        "iosReleasesUnchanged": 10,
+        "releaseTagUnchanged": "70734b20a543872f4ec8b1dd58fa841d85214457",
+        "windowsOnlyPublication": true,
+        "actualPublicPackageSmoke": {
+          "path": "D:\\noval_and_manga\\_tools\\R192-actual-published-app",
+          "restored": "5:55 / 26:00",
+          "advanced": "7:20 / 26:00",
+          "frames": "Animated characters, night market bilingual subtitles, later green stone bridge scene",
+          "screenshots": [
+            "R192-public-package-frieren-playing.png",
+            "R192-public-package-frieren-subtitles.png"
+          ],
+          "normalExit": true,
+          "msiInstalledThisRound": false
+        },
+        "privacy": {
+          "zipMembersScanned": 466,
+          "zipMembersWithAccountValues": 0,
+          "rawMsiWithAccountValues": 0,
+          "privateOrDebugNames": 0,
+          "signingPrivateKeyAvailable": false,
+          "scope": "Exact existing account values/encodings; ZIP decompressed members and MSI raw container, not MSI compressed payload audit"
+        },
+        "remoteChecks": {
+          "flutterPassed": 1982,
+          "flutterSkipped": 1,
+          "nativeLifecyclePassed": 2,
+          "updaterSmoke": "all parent-wait/replacement/rollback/lock/writer checks passed",
+          "pythonToolsPassed": 118,
+          "analyze": "No issues found"
+        }
+      },
       "issueUrl": "https://github.com/HyperionHXH/triomi/issues/8"
     }
   },

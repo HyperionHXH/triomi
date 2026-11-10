@@ -1,5 +1,9 @@
 # 平台能力与依赖盘点（D26）
 
+## R192 Windows修订2（已发布核验）
+
+移除旧`media_kit_libs_windows_video 1.0.11`的2023 DLL，改应用构建固定mpv `a61f6c3abd/20261110`与ANGLE归档SHA256，包含WASAPI跨线程COM热插拔租约修复；media_kit API/原生ANGLE渲染与Android Media3不变。平台/UI线程保持Flutter正常合并，不依赖上游将移除的独立UI线程措施。WebView按当前导航序列和入口文档完成串行，页面no-referrer及每媒体HLS格式正确传递/清除；不关闭TLS或清Cookie。真实来源/公开包/远端1982回归、2项原生生命周期与完整Windows发布、外部CDN路线限制均以[当前状态](CURRENT_STATUS.md)和R191综合JSON的R192追加段为准。
+
 ## R191 桌面播放复查
 
 来源浏览器初始化与视频解码是不同失败阶段；深层来源目录已在本机复现WebView2控制器创建失败，原始HRESULT现在保留。来源环境共享、同目录Windows扩展路径启动和取消所有权不改变登录/下载隔离，不依赖磁盘8.3短名。每个媒体独立stop/open/就绪，不能复用controller一次性首帧Future。与只读Kazumi的具体对照、实跑及未证实范围见[当前状态](CURRENT_STATUS.md)。
