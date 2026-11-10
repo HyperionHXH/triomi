@@ -28,6 +28,8 @@ USB二轮取得原始exception/stack后，22失败具体为：release `TestTextI
 
 USB最终运行 `436be47e1d3b40aba236dabcf516d066`：iPhone8,2 / iOS15.8.3，**410场景全部成功，零failure/diagnostic**。五张实际USB屏幕图已逐张读取：两个原生视频/弹幕与三张双模式搜索/混合来源状态；search新增18项同时纳入GitHub实际iOS综合入口。当前Mac最终18项搜索回归通过，analyze零问题；完整2484/27为此前同生产代码基线。正常`lib/main.dart`设备Release及原IPA结构/12原生二进制/11framework/Bundle ID/iOS15/0.15.4+198已验证，本机SHA256 `8266d145df91562d1eeebf4483ce14582c22cfbef6078c8805477ffb459cd8e0`，不混作未来GitHub公开包摘要。打包工具原Python3.11限定的`file_digest`在VM3.9失败，改为同SHA256分块读取后正常打包通过。原设备Triomi及账号不变；下一步推送精确merge并执行原GitHub全部门槛，通过前不发布。
 
+首推`21df54f` / [42818604108](https://github.com/HyperionHXH/triomi/actions/runs/42818604108)在SQLite预取元数据API收到明确`HTTP403 rate limit exceeded`，未进入应用构建，所有后续门槛按原策略跳过、未发布IPA。仅该步骤传入GitHub自动只读token，脚本限定官方HTTPS API且用unredirected header，签名CDN重定向不携带token；锁定摘要/大小/原hook复核保持。真实官方认证元数据与1,668,776字节arm64库下载并校验成功，真实本地HTTP重定向证明仅origin收到合成授权标记、下一跳无Authorization；3项完整性回归通过。不是换源、放宽TLS或重钉哈希，修正后另推精确提交继续原门槛。
+
 ## 历史记录（保留原失败与发布证据）
 
 ## 当前请求：主线0.15.2同步iOS197（验收中）

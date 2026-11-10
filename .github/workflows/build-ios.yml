@@ -75,6 +75,8 @@ jobs:
           path: .dart_tool/hooks_runner/shared/ech_http/build/prebuilt/
           key: ios-ech-deps-${{ runner.os }}-${{ runner.arch }}-${{ steps.sdk.outputs.flutter-version }}-${{ hashFiles('packages/ech_http/lib/src/build_support/dependencies.json', 'packages/ech_http/hook/build.dart', 'packages/ech_http/src/**') }}
       - name: Prepare package-pinned SQLite through the official asset API
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           python -m unittest discover -s tools -p 'test_prepare_ios_sqlite_assets.py'
           python tools/prepare_ios_sqlite_assets.py

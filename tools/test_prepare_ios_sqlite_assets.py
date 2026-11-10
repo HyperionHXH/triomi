@@ -28,6 +28,8 @@ class PinnedSqliteTests(unittest.TestCase):
     def test_nonofficial_asset_origin_rejected_before_network(self):
         with self.assertRaises(ValueError):
             fetch('https://api.github.com.evil.invalid/sqlite.dylib', binary=True)
+        with self.assertRaises(ValueError):
+            fetch('http://api.github.com/sqlite.dylib', binary=True)
 
 
 if __name__ == '__main__':

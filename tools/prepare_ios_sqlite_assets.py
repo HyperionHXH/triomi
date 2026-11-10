@@ -6,6 +6,7 @@ and shared-cache layout so the unmodified hook independently verifies them again
 """
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import tempfile
@@ -19,12 +20,17 @@ MAX_BYTES = 8 * 1024 * 1024
 
 
 def fetch(url, *, binary=False):
-    if urlparse(url).hostname != 'api.github.com':
+    origin = urlparse(url)
+    if origin.scheme != 'https' or origin.hostname != 'api.github.com':
         raise ValueError('SQLite metadata and assets must use the official GitHub API')
     request = Request(url, headers={
         'Accept': 'application/octet-stream' if binary else 'application/vnd.github+json',
         'User-Agent': 'Triomi-pinned-sqlite-prefetch',
     })
+    token = os.environ.get('GITHUB_TOKEN')
+    if token:
+        # urllib does not copy unredirected headers to signed asset/CDN URLs.
+        request.add_unredirected_header('Authorization', 'Bearer ' + token)
     with urlopen(request, timeout=60) as response:
         payload = response.read(MAX_BYTES + 1)
     if len(payload) > MAX_BYTES:
