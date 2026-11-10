@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-## 当前请求：主线 f3f08bb 同步 iOS 0.15.4+198（本地验收完成，按新路线编译发布）
+## 当前交付：主线 f3f08bb 同步 iOS 0.15.4+198（本地验收＋云端仅编译，已发布核验）
 
 本轮固定合并主线 `f3f08bb812c55aadcf96b3c0e294e970e2fd1661` 的22个提交，保留原工作树未提交文件。本地Mac/USB验收已完成。用户最新明确要求区分开发路线：本轮改用“本地验收→GitHub仅编译/校验IPA/发布”，不再以重复云端综合/巡检/实网为发布前置；原完整云端路线保留可手动运行，后文先前门槛/失败记录保留为历史，不冒称全部云端验收通过。
 
@@ -17,6 +17,8 @@
 现行路线：`feat/ios`代码推送仅触发`build-ios-local.yml`，产出IPA/校验文件/源码身份；手动运行并勾选publish才创建独立iOS Release，旧资产/其他平台不替换。`build-ios.yml`仍保留完整原生/综合/截图/实网验收，改为手动或原master/main/tag/PR触发，不再监听普通feat/ios推送。完整云端42828879635按用户要求取消；既有21原生（1跳过）/JSC3成功与综合搜索失败不抹去。本地受控场景不外推真实账号/全部来源/iCloud/锁屏硬件PiP。
 
 分支已清理：五个`diagnostic/ios181-connectivity`、`diagnostic/ios182-connectivity`、`diagnostic/ios182-content-endpoints`、`diagnostic/pica181-auth-rejection`、`diagnostic/pica181-public-protocol`均为旧181/182一次性探测，无打开PR或工作树引用，已按用户授权删除远端及本地跟踪引用。远端仅保留`master`与`feat/ios`。集成本地`feat/ios-sync`已重命名`feat/ios`并跟踪同名远端；`ios-sync/`目录名不变。原master工作树和旧197 detached工作树保留，不删除其中未提交工作；两条workflow共用同一iOS分支，不新增长期分支。
+
+新路线 [42831744567](https://github.com/HyperionHXH/triomi/actions/runs/42831744567) 实际成功，精确源码 `dd243f1a47043fdbed3b6c7d9192d9944b0d198c`，仅设备Release编译、IPA结构/版本/摘要、Artifact与显式发布，无模拟器/测试/截图/实网阶段。已公开 [v0.15.4-ios.198](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.4-ios.198)，下载`Triomi-iOS-Unsigned.ipa`，版本0.15.4+198/iOS15+，**14,104,041字节**，SHA-256 **`7905fb399758a02a4694b8b073014726281cb1837364fa32382293d114bcd0cb`**。认证与匿名完整公开下载、内部Bundle/版本/最低系统/ZIP181成员/无夹具视频、SHA256SUMS、release-metadata源码身份与tag精确指向均一致；46个旧Release资产ID/尺寸/摘要全部未变，未改变全项目Latest。包未签名，安装仍需合法签名；覆盖升级不要卸载原应用。
 
 本机Python工具164项通过；首轮Mac全量2437通过/26平台跳过/48失败，原结果保留。多数失败来自Darwin默认`/var`临时目录别名触发既有安全校验，改用真实`TMPDIR=$HOME/triomi-test-tmp`后相关文件/备份/缓存检查通过，不放宽生产路径校验。环回回归改为IPv4/IPv6两种系统实际支持的本地地址；来源身份回归显式注入测试FFI引擎、导入弹层夹具显式保存空仓库列表以排除真实网络。`flutter_js 0.8.7`的macOS FFI JSC双实例共享静态回调，实测30秒超时且固定包源码已核对；该QuickJS双实例检查不冒称Mac通过，另在实际iOS WebKit加入同时双会话header/结果隔离门槛。
 

@@ -1,6 +1,6 @@
 # Triomi iOS 端适配改动说明与自签安装指南
 
-## 0.15.4 / iOS198：本地验收完成，按本地优先路线编译发布
+## 0.15.4 / iOS198：本地优先路线已发布并核验
 
 固定合并主线 `f3f08bb812c55aadcf96b3c0e294e970e2fd1661` 的22个提交；版本 `0.15.4+198`，沿用 Bundle ID、iOS15、Keychain、WebKit/AVPlayer 和安全作用域文件书签。番剧全局搜索新增“Bangumi资料 / 播放源检索”：资料搜索不依赖插件，播放源模式仅查已启用且支持搜索的番剧来源，按站分页/重试/取消，结果直接进入本站目录。匿名公开封面使用既有 CoverStore 持久缓存；Mihon APK图标/Windows JVM不作为iOS执行能力。
 
@@ -19,7 +19,7 @@
 
 不需要新分支。`master`是多端主线，`feat/ios`是iOS适配；`feat/ios-sync`已统一改名为`feat/ios`。开发方法属于workflow选择，不创建“本地版/云端版”两份长期代码。仅文档修改不触发本地优先构建；每次发布递增pubspec构建号，避免同一版本资产被新字节替换。GitHub生成的包仍是unsigned，设备安装仍需签名。
 
-当前已发布基线为 [v0.15.2-ios.197](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.2-ios.197)：精确 `3610ea4` / [42472524269](https://github.com/HyperionHXH/triomi/actions/runs/42472524269) 成功，GitHub资产14,063,218字节，服务器SHA-256 `b9dc4f838ed3f2f54b17296da71608d546ff395baa7162fba60a1929e75a29bb`。198尚未交付；下面183及更早章节保留为历史，不能覆盖本节发布状态。
+当前下载：[v0.15.4-ios.198](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.4-ios.198)，Assets选择`Triomi-iOS-Unsigned.ipa`（不是Source code ZIP）。本地优先运行[42831744567](https://github.com/HyperionHXH/triomi/actions/runs/42831744567)成功，精确源码`dd243f1`，内部0.15.4+198/iOS15+，14,104,041字节，SHA-256 `7905fb399758a02a4694b8b073014726281cb1837364fa32382293d114bcd0cb`；服务器摘要、匿名完整回读、SHA256SUMS和release-metadata均匹配。原46个Release资产保持，全项目Latest不改。未签名仍需合法签名侧载；覆盖升级保留原Bundle ID/签名身份，不先卸载。下面197/183及更早章节保留为历史，不覆盖本节状态。
 
 
 
