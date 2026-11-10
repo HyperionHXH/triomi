@@ -61,10 +61,14 @@ void CheckDestinations(const Plan& p, Pins& pins) {
     }
     const DWORD attributes = GetFileAttributesW(full.c_str());
     if (attributes != INVALID_FILE_ATTRIBUTES) {
-      Handle original(CreateFileW(full.c_str(), GENERIC_READ | DELETE | READ_CONTROL, FILE_SHARE_READ,
-          nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
+      // The exact parent is still running during READY preflight. Windows may
+      // deny DELETE on its mapped image; Install acquires replacement/delete
+      // handles only after that process exits and writer ownership is held.
+      Handle original(CreateFileW(full.c_str(), GENERIC_READ | READ_CONTROL,
+          FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+          FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
       Require(static_cast<bool>(original),
-          "An installed file is locked or not writable without elevation; use the manual MSI");
+          "An installed file cannot be read for update validation; use the manual MSI");
       Normal(original.get(), false);
       Require(!(attributes & FILE_ATTRIBUTE_READONLY), "An installed file is read-only; use the manual MSI");
     } else {
