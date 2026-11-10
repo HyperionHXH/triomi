@@ -20,7 +20,7 @@
 
 [Windows单端发布](https://github.com/HyperionHXH/triomi/actions/runs/42646419110)第二次作业已全部成功，包含完整回归、正常编译/打包、真实更新器、浏览器与原生播放生命周期。当前源码`0d6e0cc763867a86d945e7f02b4e15ab14427fe3`，Windows修订1已替换原发布下载，不移动tag或Android文件。#8已[回写根因、修复与下载地址](https://github.com/HyperionHXH/triomi/issues/8#issuecomment-6754962594)，保留打开等待报告者用新包确认；不以本机夹具代替其机器验收。
 
-公开元数据复核：Windows ZIP 255558311字节，GitHub SHA256=`e3b65896a04d58d7b8c3a5c15902dc8cfc6d7689f1c60a667b3bb9072c318e65`；MSI 244240585字节，SHA256=`8ac2af7aa214f98f9f067e5cea7475f458100bef3bfe087897b1c52f11828ca3`。已下载更新清单，版本190/修订1/源码及ZIP摘要匹配GitHub元数据，清单467成员；Android资产仍ID724382293、162852724字节及原`eb0982e4…`摘要，10个iOS发布资产及原tag身份保持不变。远端打包校验通过，但本机大文件回下载多次TLS超时/连接重置，换网络后API可达而Release下载仍失败；不宣称公开ZIP/MSI在本机完整重算或扫描通过，不以额外下载限制阻挡已通过原生门槛的Windows修订交付。
+公开产物收尾已完成：通过GitHub原资产API续下ZIP/MSI，五项完整公开文件的实际大小、SHA256均与当前GitHub digest及SHA256SUMS一致。Windows ZIP 255558311字节、SHA256=`e3b65896a04d58d7b8c3a5c15902dc8cfc6d7689f1c60a667b3bb9072c318e65`，全部467成员重算并匹配更新清单；MSI 244240585字节、SHA256=`8ac2af7aa214f98f9f067e5cea7475f458100bef3bfe087897b1c52f11828ca3`。清单版本190/修订1/源码均一致；Android资产仍ID724382293、162852724字节及原`eb0982e4…`摘要，实际完整字节不变，10个iOS发布资产及原tag身份保持不变。1482个源码/证据文件、公开APK626成员和ZIP467成员的现有账号值/编码扫描零命中，无私钥/调试文件名；MSI仅原始容器扫描，不声称检查其压缩成员。此前回下载TLS超时/重置的缺口现已清除，详见[最终R191证据](delivery/evidence/R191-windows-playback-investigation.json)。
 
 
 
