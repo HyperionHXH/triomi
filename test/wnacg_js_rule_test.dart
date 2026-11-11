@@ -132,6 +132,29 @@ void main() {
   );
 
   sourceRuleTest(
+    'WNACG duplicate menu labels cannot capture free-form detail tag searches',
+    () async {
+      const repeatedMenu = '''<ul id="album_tabs">
+<li><a href="/albums-index-cate-1.html">漢化</a></li>
+<li><a href="/albums-index-cate-9.html">漢化</a></li>
+<li><a href="/albums-index-cate-10.html">漢化</a></li>
+</ul>''';
+      final http = FakeHttpClient((_) async => html(repeatedMenu + card));
+      final source = await prepare(http);
+      final taxonomy = await source.searchTags();
+      expect(taxonomy.map((tag) => tag.id), ['category:1', 'category:9', 'category:10']);
+      await source.searchTagged('', tags: ['漢化'], page: 2);
+      expect(http.lastRequest.url, '$base/albums-index-page-2-tag-%E6%BC%A2%E5%8C%96.html');
+      await source.searchTagged('', tags: ['tag:漢化'], page: 3);
+      expect(http.lastRequest.url, '$base/albums-index-page-3-tag-%E6%BC%A2%E5%8C%96.html');
+      await source.searchTagged('', tags: [taxonomy[1].label], page: 2);
+      expect(http.lastRequest.url, '$base/albums-index-page-2-cate-9.html');
+      await source.searchTagged('', tags: ['category:10'], page: 3);
+      expect(http.lastRequest.url, '$base/albums-index-page-3-cate-10.html');
+    },
+  );
+
+  sourceRuleTest(
     'WNACG single gallery metadata supplies exactly one stable chapter',
     () async {
       final source = await prepare(FakeHttpClient((_) async => html(info)));

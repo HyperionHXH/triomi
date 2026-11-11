@@ -95,7 +95,7 @@ void main() {
       id: 'wnacg',
       file: 'wnacg-js.json',
       old: '1.0.1',
-      next: '1.0.2',
+      next: '1.0.3',
       label: 'Fixture Tag',
     ),
     (

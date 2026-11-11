@@ -132,24 +132,42 @@ void main() {
   );
 
   sourceRuleTest(
-    'JM online taxonomy distinguishes categories from conjunctive search tags',
+    'JM live taxonomy routes slug categories and named search shortcuts separately',
     () async {
       final http = api((request) async {
         if (Uri.parse(request.url).path == '/categories') {
           return {
             'categories': [
+              {'id': 0, 'name': '最新A漫', 'slug': '', 'total_albums': 0},
               {
-                'name': 'Fixture Category',
+                'id': '1',
+                'name': '同人',
                 'slug': 'doujin',
+                'type': 'slug',
                 'sub_categories': [
-                  {'name': 'Fixture Subcategory', 'slug': 'sub'},
+                  {'CID': '1', 'name': '汉化', 'slug': 'chinese'},
+                  {'CID': '3', 'name': 'CG图集', 'slug': 'CG'},
+                  {'CID': '20', 'name': '禁漫去码', 'slug': 'no_mosaic'},
                 ],
+              },
+              {
+                'id': '7',
+                'name': 'Cosplay',
+                'slug': 'another_cosplay',
+                'type': 'search',
+              },
+              {'id': '8', 'name': '3D', 'slug': '3D', 'type': 'search'},
+              {
+                'id': '9',
+                'name': '禁漫汉化组',
+                'slug': '禁漫汉化组',
+                'type': 'search',
               },
             ],
             'blocks': [
               {
-                'title': 'Fixture Group',
-                'content': ['Fixture Tag'],
+                'title': '主题A漫',
+                'content': ['纯爱', '全彩'],
               },
             ],
           };
@@ -160,26 +178,130 @@ void main() {
       });
       final source = await prepare(http);
       expect((await source.searchTags()).map((t) => t.id), [
+        'category:0',
         'category:doujin',
-        'category:doujin_sub',
-        'tag:Fixture Tag',
+        'category:doujin_chinese',
+        'category:doujin_CG',
+        'category:doujin_no_mosaic',
+        'tag:Cosplay',
+        'tag:3D',
+        'tag:禁漫汉化组',
+        'tag:纯爱',
+        'tag:全彩',
       ]);
-      await source.searchTagged('', tags: ['category:doujin_sub']);
-      expect(
-        Uri.parse(http.lastRequest.url).queryParameters['c'],
-        'doujin_sub',
-      );
-      await source.searchTagged('Fixture', tags: ['tag:Fixture Tag']);
-      expect(
-        Uri.parse(http.lastRequest.url).queryParameters['search_query'],
-        'Fixture +Fixture Tag',
-      );
+      for (final category in ['doujin', 'doujin_chinese', 'doujin_CG', 'doujin_no_mosaic']) {
+        final result = await source.searchTagged('', tags: ['category:$category'], page: 2);
+        expect(result.single.remoteId, '101');
+        final request = Uri.parse(http.lastRequest.url);
+        expect(request.path, '/categories/filter');
+        expect(request.queryParameters['c'], category);
+        expect(request.queryParameters['page'], '2');
+        expect(request.queryParameters.containsKey('search_query'), isFalse);
+      }
+      for (final name in ['Cosplay', '3D', '禁漫汉化组']) {
+        final result = await source.searchTagged('', tags: ['tag:$name']);
+        expect(result.single.remoteId, '101');
+        final request = Uri.parse(http.lastRequest.url);
+        expect(request.path, '/search');
+        expect(request.queryParameters['search_query'], '+$name');
+        expect(request.queryParameters.containsKey('c'), isFalse);
+      }
+      await source.searchTagged('', tags: ['tag:禁漫汉化组', 'tag:全彩'], page: 2);
+      var request = Uri.parse(http.lastRequest.url);
+      expect(request.path, '/search');
+      expect(request.queryParameters['search_query'], '+禁漫汉化组 +全彩');
+      expect(request.queryParameters['page'], '2');
+      await source.searchTagged('Fixture & 測試', tags: ['tag:纯爱', 'tag:全彩']);
+      request = Uri.parse(http.lastRequest.url);
+      expect(request.path, '/search');
+      expect(request.queryParameters['search_query'], 'Fixture & 測試 +纯爱 +全彩');
+      final count = http.requests.length;
+      for (final tags in [
+        ['category:doujin', 'category:single'],
+        ['category:doujin', 'tag:全彩'],
+        ['category:doujin&c=0'],
+        ['category:../search'],
+        ['category:doujin%26c%3D0'],
+        ['category:禁漫汉化组'],
+        ['category:'],
+        ['unknown:全彩'],
+      ]) {
+        await expectLater(
+          source.searchTagged('', tags: tags),
+          throwsA(isA<SourceException>()),
+        );
+      }
       await expectLater(
         source.searchTagged('keyword', tags: ['category:doujin']),
         throwsA(isA<SourceException>()),
       );
+      expect(
+        http.requests.skip(count).map((r) => Uri.parse(r.url).path),
+        everyElement('/categories'),
+      );
     },
   );
+
+  sourceRuleTest('JM preserves failure for the live untitled search record instead of fabricating or dropping it', () async {
+    final http = api((request) async {
+      if (Uri.parse(request.url).path == '/categories') {
+        return {
+          'categories': <Object?>[],
+          'blocks': [
+            {'title': '语言', 'content': ['中文']},
+          ],
+        };
+      }
+      return {
+        'content': [
+          listItem(),
+          {
+            'id': '74549',
+            'author': '桃吹リオ',
+            'description': null,
+            'name': '',
+            'image': '',
+            'category': {'id': '3', 'title': '短篇'},
+            'category_sub': {'id': null, 'title': null},
+            'liked': false,
+            'is_favorite': false,
+            'update_at': 1686195172,
+            'adddate': '2018-04-18',
+          },
+          listItem('102'),
+        ],
+      };
+    });
+    final source = await prepare(http);
+    await expectLater(
+      source.searchTagged('', tags: ['tag:中文'], page: 2),
+      throwsA(isA<SourceException>()),
+    );
+    final request = Uri.parse(http.lastRequest.url);
+    expect(request.path, '/search');
+    expect(request.queryParameters['search_query'], '+中文');
+    expect(request.queryParameters['page'], '2');
+  });
+
+  for (final category in [
+    {'id': '1', 'name': '同人', 'type': 'slug', 'slug': 'doujin&c=0'},
+    {'id': '1', 'name': '同人', 'type': 'slug', 'slug': '禁漫汉化组'},
+    {'id': '1', 'name': '同人', 'type': 'slug', 'slug': ''},
+    {
+      'id': '1',
+      'name': '同人',
+      'type': 'slug',
+      'slug': 'doujin',
+      'sub_categories': [
+        {'CID': '1', 'name': '汉化', 'slug': 'chinese/../../search'},
+      ],
+    },
+  ]) {
+    sourceRuleTest('JM rejects unsafe taxonomy identity: ${jsonEncode(category)}', () async {
+      final source = await prepare(api((_) async => {'categories': [category]}));
+      await expectLater(source.searchTags(), throwsA(isA<SourceException>()));
+    });
+  }
 
   sourceRuleTest('JM detail preserves metadata and orders multi-part albums for forward reader navigation', () async {
     final http = api(

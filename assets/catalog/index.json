@@ -52,7 +52,7 @@
       "type": "manga",
       "lang": "zh",
       "nsfw": true,
-      "version": "1.0.2",
+      "version": "1.0.3",
       "url": "asset://assets/rules/wnacg-js.json",
       "capabilities": [
         "discover",
@@ -68,7 +68,7 @@
       "type": "manga",
       "lang": "zh",
       "nsfw": true,
-      "version": "1.0.1",
+      "version": "1.0.3",
       "url": "asset://assets/rules/jmcomic-js.json",
       "capabilities": [
         "discover",
