@@ -14,6 +14,10 @@
 
 最终USB运行`756b5a818a2745729c6873b6a7f8cb9a`：**427/427全部通过，零failure/diagnostic**。实际WebKit漫画/动漫标签查询、第二页及Bangumi切换、插图三模式重试/全屏/保存/迟到旧章、原生IPA身份/篡改拒绝与三规则显式升级均通过。Mac完整2510/27、最终定向17及标签2通过；正常生产IPA与原生测试包编译通过，实际生产IPA由下载端解析通过。新版本仍0.15.4+198/修订1；接下来仅编译发布、公开摘要核验与TrollStore正常接管安装。
 
+已发布核验：[v0.15.4-ios.198-r1](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.4-ios.198-r1)，精确`dbfff699d8ff3fac8eb6f0bf85920b86152f04b4` / [仅编译发布42931818607](https://github.com/HyperionHXH/triomi/actions/runs/42931818607)成功；IPA **14,169,884字节 / SHA256 `1474202eb71da0b40f787e2bbe0ce2633ca036922c786228d0fbffa4205ef684`**，内部0.15.4+198/修订1/iOS15，服务器与匿名完整下载、manifest/SHA256SUMS及源码身份一致。原47个Release资产ID/大小/摘要不变。兼容仓库`29019af`已公开Copy1.1.1、WN1.0.2、MD1.0.6，双CI成功、公开规则字节/hash匹配；用户已安装旧规则仍需在目录明确点更新，不静默改代码/信任/启用状态。
+
+最终安装：TrollStore正常UI自动操作遇到系统Touch ID授权，用户不在设备旁，未代替或绕过认证。随后用户明确改授权“按之前安装”，因此将已核验公开修订1IPA按原AppSync身份重签并覆盖安装普通`io.github.hyperionhxh.triomi`，成功启动PID16036、实际漫画浏览页面已截图读取；设备API确认0.15.4+198/修订1，app/team/keychain权限与旧安装相同，私有备份数据库各原业务表数量保持，无卸载/清数据。未读取凭据、不冒称真实账号登录复验。临时Acceptance及DeviceInstall.xctrunner均已移除，不再留下测试应用冒充正式版；没有手改桌面布局。现有三个旧漫画规则保留，回设备后从漫画→浏览→JS/API漫画来源目录刷新并明确更新上述版本后使用完整标签修复。
+
 
 ## 当前交付：主线 f3f08bb 同步 iOS 0.15.4+198（本地验收＋云端仅编译，已发布核验）
 

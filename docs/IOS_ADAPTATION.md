@@ -10,6 +10,8 @@
 
 本轮语义版本与构建号不变，用包内`TriomiIosRevision=1`及独立tag`v0.15.4-ios.198-r1`表示修复；只接受更高修订，不覆盖原198资产。公开IPA在打包校验前附最小app/team/keychain身份ad-hoc blob，保留现有访问组，不含get-task-allow/JIT/private权限；这仍不是Apple有效签名。TrollStore正常导入后自行重签，其他侧载工具仍需合法签名。首次从非TrollStore安装接管同Bundle时可出现巨魔的“Force Installation”确认，先保留外部备份，不要卸载旧应用。
 
+修订1已交付：[v0.15.4-ios.198-r1](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.4-ios.198-r1)，dbfff699/42931818607仅编译发布成功；公开IPA14,169,884字节，SHA256 `1474202eb71da0b40f787e2bbe0ce2633ca036922c786228d0fbffa4205ef684`，匿名完整回读和manifest一致。Mac2510/27平台跳过、USB427全通过。原198及另46个Release资产保持。本机TrollStore操作因Touch ID受阻，用户后续明确授权原AppSync安装方式，实际普通Triomi现已0.15.4+198/修订1并正常启动，数据未清；不是TrollStore已接管。测试应用及临时自动化runner已移除。
+
 
 ## 0.15.4 / iOS198：本地优先路线已发布并核验
 
