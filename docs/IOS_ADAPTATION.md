@@ -1,5 +1,16 @@
 # Triomi iOS 端适配改动说明与自签安装指南
 
+## iOS198 修订1：插图、标签与应用内更新（版本保持0.15.4+198）
+
+小说插图保留章节图片头与原URL语义，解析相对/lazy/转义签名地址；行内及全屏失败后均可点“重新加载”，只重取该图，不重排正文、不重置进度。HTTP/HTTPS大小写均走统一网络；图片保存沿用同源请求头。源站过期签名可用阅读菜单重新加载章节刷新，手动重试不绕过源站权限或验证码。
+
+漫画详情标签按来源taxonomy映射到真实标签ID，动漫播放源保留标签并与资料模式分别查询。Copy1.1.1、WNACG1.0.2、MangaDex1.0.6需要从原兼容仓库刷新后明确更新已安装规则；应用不在启动时覆盖自定义/停用插件，书库/历史/下载身份保持。规则代码变化按原安全策略可能要求来源重新登录。
+
+通用设置现在提供自动更新检查与应用更新页。iOS启动或回前台按节流检查官方iOS发布，有更新时提示；可查看说明、手动下载/取消/重试，离开页面后由应用任务持有。系统挂起时不保证持续下载，返回后失败可显式重试。校验manifest、SHA256、包身份/版本/构建/修订后，用户确认“分享IPA”交给TrollStore或原签名工具；取消分享仍可移除暂存包，不谎称分享完成就是安装完成。不依赖APNs服务，不自动安装。
+
+本轮语义版本与构建号不变，用包内`TriomiIosRevision=1`及独立tag`v0.15.4-ios.198-r1`表示修复；只接受更高修订，不覆盖原198资产。公开IPA在打包校验前附最小app/team/keychain身份ad-hoc blob，保留现有访问组，不含get-task-allow/JIT/private权限；这仍不是Apple有效签名。TrollStore正常导入后自行重签，其他侧载工具仍需合法签名。首次从非TrollStore安装接管同Bundle时可出现巨魔的“Force Installation”确认，先保留外部备份，不要卸载旧应用。
+
+
 ## 0.15.4 / iOS198：本地优先路线已发布并核验
 
 固定合并主线 `f3f08bb812c55aadcf96b3c0e294e970e2fd1661` 的22个提交；版本 `0.15.4+198`，沿用 Bundle ID、iOS15、Keychain、WebKit/AVPlayer 和安全作用域文件书签。番剧全局搜索新增“Bangumi资料 / 播放源检索”：资料搜索不依赖插件，播放源模式仅查已启用且支持搜索的番剧来源，按站分页/重试/取消，结果直接进入本站目录。匿名公开封面使用既有 CoverStore 持久缓存；Mihon APK图标/Windows JVM不作为iOS执行能力。
@@ -17,7 +28,7 @@
 | 本地优先：`build-ios-local.yml` | `feat/ios`代码push自动打包；Run workflow选该分支、勾publish发布 | 精确SDK/依赖准备、正常main设备Release、IPA结构/版本/SHA256、上传Artifact；显式发布时创建独立`v版本-ios.构建号`，拒绝覆盖旧tag/资产 | 本地Mac＋USB已验收，当前默认 |
 | 原云端完整：`build-ios.yml` | Run workflow选择`feat/ios`；原master/main/tag/PR触发仍保留 | 原生桥/JSC、综合、完整截图录像、实网及原打包门槛 | 没有本地环境，或需要补充模拟器/实网证据 |
 
-不需要新分支。`master`是多端主线，`feat/ios`是iOS适配；`feat/ios-sync`已统一改名为`feat/ios`。开发方法属于workflow选择，不创建“本地版/云端版”两份长期代码。仅文档修改不触发本地优先构建；每次发布递增pubspec构建号，避免同一版本资产被新字节替换。GitHub生成的包仍是unsigned，设备安装仍需签名。
+不需要新分支。`master`是多端主线，`feat/ios`是iOS适配；`feat/ios-sync`已统一改名为`feat/ios`。开发方法属于workflow选择，不创建“本地版/云端版”两份长期代码。仅文档修改不触发本地优先构建。普通版本递增pubspec构建号；用户要求同版本修复时递增包内iOS修订号、使用新-rN tag，绝不把旧tag资产换成新字节。GitHub包未持有Apple发布身份，设备安装由TrollStore或合法签名工具完成。
 
 当前下载：[v0.15.4-ios.198](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.4-ios.198)，Assets选择`Triomi-iOS-Unsigned.ipa`（不是Source code ZIP）。本地优先运行[42831744567](https://github.com/HyperionHXH/triomi/actions/runs/42831744567)成功，精确源码`dd243f1`，内部0.15.4+198/iOS15+，14,104,041字节，SHA-256 `7905fb399758a02a4694b8b073014726281cb1837364fa32382293d114bcd0cb`；服务器摘要、匿名完整回读、SHA256SUMS和release-metadata均匹配。原46个Release资产保持，全项目Latest不改。未签名仍需合法签名侧载；覆盖升级保留原Bundle ID/签名身份，不先卸载。下面197/183及更早章节保留为历史，不覆盖本节状态。
 

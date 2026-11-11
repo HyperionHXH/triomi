@@ -106,6 +106,8 @@ def validate_application(app: Path) -> dict:
     require(version is not None, 'Expected pubspec version major.minor.patch+build')
     require(info.get('CFBundleShortVersionString') == version.group(1) and
             info.get('CFBundleVersion') == version.group(2), 'IPA version does not match pubspec.yaml')
+    revision = info.get('TriomiIosRevision', 0)
+    require(type(revision) is int and 0 <= revision <= 65535, 'Invalid iOS servicing revision')
     require(bool(re.fullmatch(r'\d+(?:\.\d+){0,2}', info.get('MinimumOSVersion', ''))),
             'Missing/invalid minimum iOS version')
     root = app.resolve()
@@ -163,6 +165,7 @@ def validate_application(app: Path) -> dict:
     return {
         'bundleIdentifier': info['CFBundleIdentifier'],
         'version': info['CFBundleShortVersionString'], 'build': info['CFBundleVersion'],
+        'iosRevision': revision,
         'minimumOSVersion': info['MinimumOSVersion'], 'nativeBinaries': binaries,
         'frameworks': frameworks,
     }
@@ -181,8 +184,21 @@ def package_ios(app: Path, output: Path) -> None:
         payload = stage / 'Payload'
         payload.mkdir()
         shutil.copytree(app, payload / app.name, symlinks=True)
+        # TrollStore preserves supplied identities instead of selecting its
+        # wildcard Keychain defaults. This ad-hoc blob is not Apple signing
+        # and deliberately contains no development, JIT or private privilege.
+        entitlements = stage / 'identity.plist'
+        entitlements.write_bytes(plistlib.dumps({
+            'application-identifier': metadata['bundleIdentifier'],
+            'com.apple.developer.team-identifier': '0000000000',
+            'keychain-access-groups': [metadata['bundleIdentifier']],
+        }))
+        staged_app = payload / app.name
+        subprocess.run(['codesign', '--force', '--sign', '-', '--entitlements',
+                        str(entitlements), str(staged_app)], check=True)
+        check_signature(staged_app / 'Runner', application=True)
         archive = stage / output.name
-        # Preserve framework symlinks and executable modes; do not re-sign or strip.
+        # Preserve framework symlinks and executable modes; never strip code.
         subprocess.run(['zip', '-r', '-y', str(archive), 'Payload'], cwd=stage, check=True)
         with zipfile.ZipFile(archive) as zipped:
             require(zipped.testzip() is None, 'IPA zip integrity check failed')

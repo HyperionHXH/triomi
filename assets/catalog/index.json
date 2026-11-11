@@ -19,7 +19,7 @@
       "id": "mangadex",
       "name": "MangaDex 漫画（开放 API）",
       "type": "manga",
-      "version": "1.0.5",
+      "version": "1.0.6",
       "url": "asset://assets/rules/mangadex-api-js.json",
       "capabilities": [
         "discover",
@@ -28,7 +28,7 @@
         "content"
       ],
       "license": "MangaDex API / 内容授权由发布者负责",
-      "updatedAt": "2026-10-05T00:00:00Z"
+      "updatedAt": "2026-11-10T00:00:00Z"
     },
     {
       "id": "ehentai",
@@ -52,7 +52,7 @@
       "type": "manga",
       "lang": "zh",
       "nsfw": true,
-      "version": "1.0.1",
+      "version": "1.0.2",
       "url": "asset://assets/rules/wnacg-js.json",
       "capabilities": [
         "discover",
@@ -105,7 +105,7 @@
       "id": "copymanga",
       "name": "拷贝漫画",
       "type": "manga",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "url": "asset://assets/rules/copymanga-js.json",
       "capabilities": [
         "discover",

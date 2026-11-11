@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:html/parser.dart' as html_parser;
 
 /// 小说正文的排版块：标题 / 段落 / 插图。
 ///
@@ -45,7 +46,7 @@ abstract final class ReaderContentParser {
     dotAll: true,
   );
   static final RegExp _imageRegex = RegExp(
-    r'<img\b([^>]*)>',
+    r'''<img\b((?:[^>"']|"[^"]*"|'[^']*')*)>''',
     caseSensitive: false,
     dotAll: true,
   );
@@ -68,8 +69,9 @@ abstract final class ReaderContentParser {
   static List<ReaderBlock> parse({
     required String bodyHtml,
     required String bodyText,
+    String? baseUrl,
   }) {
-    final htmlBlocks = _parseHtml(bodyHtml);
+    final htmlBlocks = _parseHtml(bodyHtml, baseUrl);
     if (htmlBlocks.isNotEmpty) return htmlBlocks;
 
     final paragraphs = <ReaderBlock>[
@@ -84,7 +86,7 @@ abstract final class ReaderContentParser {
         : paragraphs;
   }
 
-  static List<ReaderBlock> _parseHtml(String html) {
+  static List<ReaderBlock> _parseHtml(String html, String? baseUrl) {
     if (html.trim().isEmpty) return const <ReaderBlock>[];
     final blocks = <ReaderBlock>[];
 
@@ -103,7 +105,7 @@ abstract final class ReaderContentParser {
     for (final (_, match, isParagraph) in events) {
       final tag = (match.group(1) ?? 'img').toLowerCase();
       if (!isParagraph) {
-        final illustration = _toIllustration(match);
+        final illustration = _toIllustration(match, baseUrl);
         if (illustration != null) blocks.add(illustration);
         continue;
       }
@@ -117,9 +119,9 @@ abstract final class ReaderContentParser {
       final indent =
           attributes.toLowerCase().contains('text-indent') ||
           attributes.toLowerCase().contains('ln-paragraph--indent');
-      _appendParagraphContent(blocks, content, indent);
+      _appendParagraphContent(blocks, content, indent, baseUrl);
     }
-    if (blocks.isEmpty) _appendParagraphContent(blocks, html, false);
+    if (blocks.isEmpty) _appendParagraphContent(blocks, html, false, baseUrl);
     return blocks;
   }
 
@@ -138,6 +140,7 @@ abstract final class ReaderContentParser {
     List<ReaderBlock> out,
     String content,
     bool firstLineIndent,
+    String? baseUrl,
   ) {
     var cursor = 0;
     var firstText = true;
@@ -148,7 +151,7 @@ abstract final class ReaderContentParser {
         firstLineIndent && firstText,
       );
       firstText = false;
-      final illustration = _toIllustration(match);
+      final illustration = _toIllustration(match, baseUrl);
       if (illustration != null) out.add(illustration);
       cursor = match.end;
     }
@@ -185,44 +188,46 @@ abstract final class ReaderContentParser {
     }
   }
 
-  static IllustrationBlock? _toIllustration(RegExpMatch match) {
-    final attributes = match.group(1) ?? '';
+  static IllustrationBlock? _toIllustration(
+    RegExpMatch match,
+    String? baseUrl,
+  ) {
+    // The HTML parser handles entity-escaped signed queries, unquoted values,
+    // and exact attribute names (a regex for `src` also matches `data-src`).
+    final image = html_parser
+        .parseFragment(match.group(0)!)
+        .querySelector('img');
+    if (image == null) return null;
+    final attributes = image.attributes;
     final src = <String>[
-      for (final name in ['src', 'data-src', 'data-original', 'data-url'])
-        if (_attribute(attributes, name) case final value?
-            when value.trim().isNotEmpty)
-          _toHttpsImageUrl(value.trim()),
+      for (final name in ['data-src', 'data-original', 'data-url', 'src'])
+        if (attributes[name] case final value? when value.trim().isNotEmpty)
+          _imageUrl(value.trim(), baseUrl),
     ].firstOrNull;
     if (src == null) return null;
     return IllustrationBlock(
       src,
-      width: int.tryParse(
-        _attribute(attributes, 'img-width') ??
-            _attribute(attributes, 'width') ??
-            '',
-      ),
+      width: int.tryParse(attributes['img-width'] ?? attributes['width'] ?? ''),
       height: int.tryParse(
-        _attribute(attributes, 'img-height') ??
-            _attribute(attributes, 'height') ??
-            '',
+        attributes['img-height'] ?? attributes['height'] ?? '',
       ),
     );
   }
 
-  static String? _attribute(String attributes, String name) {
-    final match = RegExp(
-      '\\b${RegExp.escape(name)}\\s*=\\s*["\']([^"\']+)["\']',
-      caseSensitive: false,
-    ).firstMatch(attributes);
-    return match?.group(1);
-  }
-
-  static String _toHttpsImageUrl(String value) {
-    if (value.toLowerCase().startsWith('https://')) return value;
-    if (value.toLowerCase().startsWith('http://')) {
-      return 'https://${value.split('//').last}';
+  static String _imageUrl(String value, String? baseUrl) {
+    final base = baseUrl == null ? null : Uri.tryParse(baseUrl);
+    if (value.startsWith('//')) {
+      return '${base?.scheme == 'http' ? 'http' : 'https'}:$value';
     }
-    if (value.startsWith('//')) return 'https:$value';
+    final uri = Uri.tryParse(value);
+    if (uri != null &&
+        !uri.hasScheme &&
+        base != null &&
+        (base.scheme == 'https' || base.scheme == 'http')) {
+      return base.resolveUri(uri).toString();
+    }
+    // Explicit schemes and signed query bytes belong to the source. Do not
+    // silently upgrade HTTP or split on `//` inside a query parameter.
     return value;
   }
 }

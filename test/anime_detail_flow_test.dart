@@ -304,10 +304,17 @@ void main() {
   });
   testWidgets('番剧标签进入公开在线筛选而不写入标题关键词', (tester) async {
     final db = openTestDatabase();
+    final http = FakeHttpClient(
+      (request) async => const SourceResponse(
+        statusCode: 200,
+        body: '{"data":[{"id":73,"type":2,"name":"在线标签关联作品"}],"total":1}',
+      ),
+    );
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
         preferencesProvider.overrideWithValue(memoryPreferences()),
+        sourceHttpClientProvider.overrideWithValue(http),
         sourcesProvider.overrideWith(() => _Sources(_Site())),
       ],
     );
@@ -351,6 +358,13 @@ void main() {
     expect(search.initialTags, ['科幻']);
     expect(search.initialQuery, isEmpty);
     expect(find.byType(TextField), findsOneWidget);
+    final request = http.requests.single;
+    expect(request.method, 'POST');
+    expect(Uri.parse(request.url).path, endsWith('/search/subjects'));
+    final body = jsonDecode(request.body!) as Map;
+    expect(body['keyword'], isEmpty);
+    expect((body['filter'] as Map)['tag'], ['科幻']);
+    expect(find.text('在线标签关联作品'), findsOneWidget);
   });
 
   testWidgets(

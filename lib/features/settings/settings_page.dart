@@ -142,23 +142,22 @@ class SettingsPage extends ConsumerWidget {
           SettingsGroup(
             title: '关于',
             children: <Widget>[
-              if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS)
-                SwitchListTile(
-                  key: const ValueKey('automatic-app-update-check'),
-                  secondary: const Icon(Icons.update_outlined),
-                  title: const Text('启动时检查应用更新'),
-                  subtitle: const Text('仅检查新版本，不自动下载或安装；关闭后仍可手动检查'),
-                  value: ref.watch(automaticAppUpdateCheckProvider),
-                  onChanged: (enabled) => ref
-                      .read(automaticAppUpdateCheckProvider.notifier)
-                      .setEnabled(enabled),
-                ),
+              SwitchListTile(
+                key: const ValueKey('automatic-app-update-check'),
+                secondary: const Icon(Icons.update_outlined),
+                title: const Text('启动时检查应用更新'),
+                subtitle: const Text('仅检查新版本，不自动下载或安装；关闭后仍可手动检查'),
+                value: ref.watch(automaticAppUpdateCheckProvider),
+                onChanged: (enabled) => ref
+                    .read(automaticAppUpdateCheckProvider.notifier)
+                    .setEnabled(enabled),
+              ),
               ListTile(
                 leading: const Icon(Icons.system_update_outlined),
                 title: const Text('版本管理与应用更新'),
                 subtitle: Text(
                   defaultTargetPlatform == TargetPlatform.iOS && !kIsWeb
-                      ? 'iOS 请从 Release 下载 IPA，并通过原侧载工具签名更新'
+                      ? '独立 iOS 发布、SHA-256 核验与 IPA 安装工具交接'
                       : 'GitHub 发布版本、更新说明、下载与安装',
                 ),
                 trailing: const Icon(Icons.chevron_right),

@@ -56,14 +56,17 @@ async function searchTags() {
   }).filter(function(t) {return t.id && t.label;});
 }
 async function searchTagged(keyword, page, tags) {
-  var taxonomy = await searchTags();
+  var uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  var taxonomy = tags.every(function(tag) {return uuid.test(tag);}) ? [] : await searchTags();
   var url = '/manga?limit=20&offset=' + ((page - 1) * 20) +
     '&includes[]=cover_art&availableTranslatedLanguage[]=zh&availableTranslatedLanguage[]=zh-hk' +
-    '&includedTagsMode=AND&title=' + encodeURIComponent(keyword);
+    '&includedTagsMode=AND';
+  if (keyword.trim()) url += '&title=' + encodeURIComponent(keyword);
   for (var i = 0; i < tags.length; i++) {
-    var selected = taxonomy.find(function(t) {return t.id === tags[i] || t.label === tags[i];});
-    if (!selected) throw new Error('MangaDex 没有此标签：' + tags[i]);
-    url += '&includedTags[]=' + encodeURIComponent(selected.id);
+    var selected = taxonomy.find(function(tag) {return tag.id === tags[i] || tag.label === tags[i];});
+    var id = uuid.test(tags[i]) ? tags[i] : selected && selected.id;
+    if (!id) throw new Error('MangaDex 没有此标签：' + tags[i]);
+    url += '&includedTags[]=' + encodeURIComponent(id);
   }
   return discover(url, page);
 }
@@ -122,7 +125,7 @@ async function content(url, chapter, options) {
 def main():
     path = ROOT / 'assets/rules/mangadex-api-js.json'
     rule = json.loads(path.read_text(encoding='utf-8'))
-    rule['version'] = '1.0.5'
+    rule['version'] = '1.0.6'
     for feed in rule['feeds']:
         feed['url'] = feed['url'].replace(
             'availableTranslatedLanguage[]=zh&',
@@ -134,7 +137,7 @@ def main():
     catalog = json.loads(catalog_path.read_text(encoding='utf-8'))
     for entry in catalog['sources']:
         if entry['id'] == 'mangadex':
-            entry['version'] = '1.0.5'
+            entry['version'] = '1.0.6'
     catalog_path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
 

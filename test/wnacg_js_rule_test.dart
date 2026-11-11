@@ -103,6 +103,35 @@ void main() {
   });
 
   sourceRuleTest(
+    'WNACG detail labels search the server tag endpoint rather than titles',
+    () async {
+      final http = FakeHttpClient(
+        (request) async => html(
+          request.url.contains('/photos-index-aid-') ? info : menu + card,
+        ),
+      );
+      final source = await prepare(http);
+      final detail = await source.detail(manga);
+      final result = await source.searchTagged(
+        '',
+        tags: [detail.tags.single],
+        page: 3,
+      );
+      expect(result.single.remoteId, '101');
+      expect(
+        http.lastRequest.url,
+        '$base/albums-index-page-3-tag-Fixture%20Tag.html',
+      );
+      expect(
+        http.requests.any(
+          (request) => request.url.contains('/search/index.php'),
+        ),
+        isFalse,
+      );
+    },
+  );
+
+  sourceRuleTest(
     'WNACG single gallery metadata supplies exactly one stable chapter',
     () async {
       final source = await prepare(FakeHttpClient((_) async => html(info)));

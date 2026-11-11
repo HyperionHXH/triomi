@@ -88,16 +88,72 @@ void main() {
     expect(http.requests, hasLength(1));
   });
 
+  test('detail tag labels use taxonomy IDs and server paging without an empty title filter', () async {
+    const tagId = '391b0423-d847-456f-aff0-8b0cfc03066b';
+    final http = FakeHttpClient((request) async {
+      final uri = Uri.parse(request.url);
+      if (uri.path == '/manga/tag') {
+        return response({
+          'result': 'ok',
+          'data': [
+            {
+              'id': tagId,
+              'attributes': {
+                'name': {'en': 'Action'},
+              },
+            },
+          ],
+        });
+      }
+      expect(uri.path, '/manga');
+      expect(uri.queryParametersAll['includedTags[]'], [tagId]);
+      expect(uri.queryParameters['includedTagsMode'], 'AND');
+      expect(uri.queryParameters.containsKey('title'), isFalse);
+      expect(uri.queryParameters['offset'], '20');
+      expect(uri.queryParametersAll['availableTranslatedLanguage[]'], [
+        'zh',
+        'zh-hk',
+      ]);
+      return response({
+        'result': 'ok',
+        'data': [node],
+      });
+    });
+    final source = await sourceOf(http);
+    final results = await source.searchTagged('', tags: ['Action'], page: 2);
+    expect(results.single.title, '中文标题');
+    expect(
+      results.single.tags,
+      isEmpty,
+      reason: 'Trust server filters, not incomplete local tags',
+    );
+    expect(http.requests, hasLength(2));
+    // Published rules also serve older compatible hosts, which pass labels
+    // directly rather than resolving taxonomy IDs in the application bridge.
+    final legacyHost = await source.runtime.call('searchTagged', [
+      '',
+      2,
+      ['Action'],
+    ]);
+    expect(
+      legacyHost,
+      isA<List<Object?>>().having((rows) => rows.length, 'length', 1),
+    );
+    expect(http.requests, hasLength(4));
+  });
+
   test('没有用户偏好时原图优先，不自动选择节流列表', () async {
     final source = await sourceOf(
-      FakeHttpClient((_) async => response({
-        'baseUrl': 'https://img.test',
-        'chapter': {
-          'hash': 'h',
-          'data': ['original.png'],
-          'dataSaver': ['compressed.jpg'],
-        },
-      })),
+      FakeHttpClient(
+        (_) async => response({
+          'baseUrl': 'https://img.test',
+          'chapter': {
+            'hash': 'h',
+            'data': ['original.png'],
+            'dataSaver': ['compressed.jpg'],
+          },
+        }),
+      ),
     );
     expect((await source.content(chapter)).images, [
       'https://img.test/data/h/original.png',
@@ -259,14 +315,16 @@ void main() {
   for (final missingSaver in [null, <String>[]]) {
     test('开启低流量但未提供节流列表时回退原图 $missingSaver', () async {
       final source = await sourceOf(
-        FakeHttpClient((_) async => response({
-          'baseUrl': 'https://img.test',
-          'chapter': {
-            'hash': 'h',
-            'data': ['original.png'],
-            'dataSaver': ?missingSaver,
-          },
-        })),
+        FakeHttpClient(
+          (_) async => response({
+            'baseUrl': 'https://img.test',
+            'chapter': {
+              'hash': 'h',
+              'data': ['original.png'],
+              'dataSaver': ?missingSaver,
+            },
+          }),
+        ),
         requestOptions: () => {'dataSaver': true},
       );
       expect((await source.content(chapter)).images, [
@@ -277,14 +335,16 @@ void main() {
 
   test('选中的节流列表损坏时拒绝成功，不伪造另一份正文', () async {
     final source = await sourceOf(
-      FakeHttpClient((_) async => response({
-        'baseUrl': 'https://img.test',
-        'chapter': {
-          'hash': 'h',
-          'data': ['original.png'],
-          'dataSaver': ['ok.jpg', ''],
-        },
-      })),
+      FakeHttpClient(
+        (_) async => response({
+          'baseUrl': 'https://img.test',
+          'chapter': {
+            'hash': 'h',
+            'data': ['original.png'],
+            'dataSaver': ['ok.jpg', ''],
+          },
+        }),
+      ),
       requestOptions: () => {'dataSaver': true},
     );
     await expectLater(source.content(chapter), throwsA(isA<SourceException>()));

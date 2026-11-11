@@ -54,9 +54,14 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
       _busy || _prompting || _backPrompting || _task.handoffInFlight != null;
   bool get _android => _current?.platform == 'android';
   bool get _windows => _current?.platform == 'windows';
-  bool get _supported => !_unsupportedPlatform && (_android || _windows);
-  String get _assetName =>
-      _windows ? 'triomi-windows.zip' : 'triomi-android.apk';
+  bool get _ios => _current?.platform == 'ios';
+  bool get _supported =>
+      !_unsupportedPlatform && (_android || _windows || _ios);
+  String get _assetName => _ios
+      ? 'Triomi-iOS-Unsigned.ipa'
+      : _windows
+      ? 'triomi-windows.zip'
+      : 'triomi-android.apk';
 
   Object get _listStage {
     if (_busy) {
@@ -331,8 +336,11 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     setState(() {
       _current = current;
       _task.current = current;
-      _unsupportedPlatform =
-          current.platform != 'android' && current.platform != 'windows';
+      _unsupportedPlatform = !{
+        'android',
+        'windows',
+        'ios',
+      }.contains(current.platform);
       if (candidate != null && refreshed != null && _task.owns(candidate)) {
         _task.retain(refreshed);
       }
@@ -355,7 +363,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         if (!_supported) {
           return;
         }
-        final releases = await _service.resolveWindowsRevisions(
+        final releases = await _service.resolvePlatformRevisions(
           current,
           await _service.releases(token),
           token,
@@ -364,7 +372,13 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         if (mounted) {
           setState(() {
             _releases = releases;
-            _selected = widget.initialRelease ?? releases.firstOrNull;
+            _selected =
+                releases
+                    .where(
+                      (release) => release.tag == widget.initialRelease?.tag,
+                    )
+                    .firstOrNull ??
+                releases.firstOrNull;
             if (releases.isEmpty) {
               _message = '官方仓库暂时没有可识别的发布版本，请稍后再检查。';
             }
@@ -451,6 +465,9 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     final versionOrder = release.compareVersionTo(current);
     if (versionOrder == null) return '当前安装版本无法识别，请先核对安装包。';
     final build = release.advertisedBuild;
+    if (_ios && !release.isNewerThan(current)) {
+      return '此 iOS 版本、构建或修订已安装或更旧，无需重复安装。';
+    }
     if (_windows && versionOrder == 0 && release.windowsBuild != null) {
       if (release.windowsBuild! < current.versionCode ||
           (release.windowsBuild == current.versionCode &&
@@ -465,12 +482,21 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     if (versionOrder < 0 || (build != null && build < current.versionCode)) {
       return '这是较早的版本，为保护应用数据不提供降级。';
     }
-    if (build == current.versionCode) return '已安装此构建，无需重复安装。';
+    if (!_ios && build == current.versionCode) return '已安装此构建，无需重复安装。';
     if (!release.assets.containsKey(_assetName)) {
-      return '此版本尚未提供 ${_windows ? 'Windows 完整 ZIP' : 'Android APK'}，可选择其他发布版本。';
+      return '此版本尚未提供 ${_ios
+          ? 'iOS IPA'
+          : _windows
+          ? 'Windows 完整 ZIP'
+          : 'Android APK'}，可选择其他发布版本。';
     }
     if (_windows && !release.assets.containsKey('triomi-windows.update.json')) {
       return '此版本尚未提供 Windows 完整成员清单，暂时无法安全更新。';
+    }
+    if (_ios &&
+        (!release.assets.containsKey('triomi-ios.update.json') ||
+            !release.assets.containsKey('SHA256SUMS.txt'))) {
+      return '此版本尚未提供 iOS 修订清单及 SHA-256，暂时无法安全更新。';
     }
     return null;
   }
@@ -517,9 +543,17 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     if (_locked || release == null || _releaseIssue(release) != null) return;
     final consent = await _confirm(
       '下载 ${release.versionLabel}',
-      '从官方 GitHub $appUpdateRepository 匿名下载${_windows ? '完整 Windows ZIP 与成员清单' : 'Android APK'}。'
+      '从官方 GitHub $appUpdateRepository 匿名下载${_ios
+              ? '独立 iOS IPA 与修订清单'
+              : _windows
+              ? '完整 Windows ZIP 与成员清单'
+              : 'Android APK'}。'
           '核验大小、SHA-256 与版本，最多 512 MiB。安装需另行确认。\n\n'
-          '${_windows ? 'Windows 包未签名：完整性校验不等同发布者签名。' : 'Android 还需通过系统验签，并匹配当前实际安装证书。'}',
+          '${_ios
+              ? '请保持应用前台；离开此页仍继续，切到后台可能被 iOS 暂停。核验后仅分享 IPA 给 TrollStore / 原签名工具；不会绕过签名或自动安装。'
+              : _windows
+              ? 'Windows 包未签名：完整性校验不等同发布者签名。'
+              : 'Android 还需通过系统验签，并匹配当前实际安装证书。'}',
       '下载并核验',
       actionKey: 'app-update-download-confirm',
     );
@@ -592,6 +626,8 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
       await _install(candidate);
     } else if (candidate.offered.platform == 'windows') {
       await _handoff(candidate, windows: true);
+    } else if (candidate.offered.platform == 'ios') {
+      await _handoff(candidate, windows: false);
     }
   }
 
@@ -646,7 +682,11 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
   }) async {
     final alreadyHandedOff = _handedOff;
     await _run(
-      windows ? '正在准备安装并重启' : '正在打开系统安装器',
+      windows
+          ? '正在准备安装并重启'
+          : _ios
+          ? '正在分享已核验的 IPA'
+          : '正在打开系统安装器',
       (token) async {
         _handoffInFlight = candidate;
         _task.handoffInFlight = candidate;
@@ -658,7 +698,9 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
           }
           _task.markHandedOff(candidate);
           if (windows) await SystemNavigator.pop();
-          if (!mounted && !windows && !_task.hasConsumers) {
+          if (!mounted &&
+              candidate.offered.platform == 'android' &&
+              !_task.hasConsumers) {
             await _service.abandon(candidate).catchError((Object _) {});
             _task.releaseCandidate(candidate);
           }
@@ -697,6 +739,8 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         if (mounted) {
           setState(() {
             _candidate = null;
+            _handedOff = false;
+            _handoffWindows = false;
             _message = '已移除本次更新包，应用和个人数据保持不变。';
           });
         }
@@ -934,6 +978,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                       onCancel: _cancellable ? _cancelActive : null,
                       cancelling: _token?.cancelled == true,
                       continuesInBackground: _observingDownload,
+                      suspendsInBackground: _ios,
                     ),
                   ],
                   if (_message != null) ...[
@@ -996,6 +1041,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                     const SizedBox(height: AppSpacing.md),
                     AppUpdateHandoffView(
                       windows: _handoffWindows,
+                      ios: _ios,
                       onRefreshCurrent: _locked ? null : _loadCurrent,
                     ),
                     const SizedBox(height: AppSpacing.xs),
@@ -1012,11 +1058,25 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                               : Icons.install_mobile_rounded,
                         ),
                         label: Text(
-                          _handoffWindows ? '再次打开更新包位置' : '需要时再次打开安装器',
+                          _ios
+                              ? '再次分享已核验的 IPA'
+                              : _handoffWindows
+                              ? '再次打开更新包位置'
+                              : '需要时再次打开安装器',
                         ),
                       )
                     else
                       const Text('此更新包已不再适用于当前安装版本，无需再次交接。'),
+                    if (_ios && candidate != null)
+                      OutlinedButton.icon(
+                        key: const ValueKey('app-update-handoff-discard'),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(48, 48),
+                        ),
+                        onPressed: _locked ? null : _discard,
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('移除暂存 IPA'),
+                      ),
                   ],
                   if (_busy ||
                       _message != null ||
@@ -1247,6 +1307,8 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                                   Icon(
                                     _windows
                                         ? Icons.desktop_windows_outlined
+                                        : _ios
+                                        ? Icons.phone_iphone_outlined
                                         : Icons.android_rounded,
                                     color: theme.colorScheme.primary,
                                   ),
@@ -1259,11 +1321,17 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                                         Text(
                                           _windows
                                               ? 'Windows 完整更新包'
+                                              : _ios
+                                              ? 'iOS 独立更新包'
                                               : 'Android 安装包',
                                           style: theme.textTheme.titleSmall,
                                         ),
                                         Text(
-                                          '${(asset.bytes / 1024 / 1024).toStringAsFixed(1)} MiB · ${_windows ? 'ZIP + 成员清单，未签名' : 'APK，核对实际安装签名'}',
+                                          '${(asset.bytes / 1024 / 1024).toStringAsFixed(1)} MiB · ${_ios
+                                              ? 'IPA + 修订清单，安装工具确认'
+                                              : _windows
+                                              ? 'ZIP + 成员清单，未签名'
+                                              : 'APK，核对实际安装签名'}',
                                           style: theme.textTheme.bodySmall,
                                         ),
                                       ],
@@ -1330,7 +1398,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                       ),
                     ),
                   ],
-                  if (_supported) ...[
+                  if (_android || _windows) ...[
                     const SizedBox(height: AppSpacing.sm),
                     ExpansionTile(
                       key: const ValueKey('app-update-local-packages'),
@@ -1401,4 +1469,4 @@ String _currentIdentity(AppUpdateInfo info) =>
     '版本 ${info.version} · 构建 ${info.versionCode}\n'
     '字节 SHA-256：${info.sha256}'
     '${info.artifactSha256 == null ? '' : '\nEXE SHA-256：${info.artifactSha256}'}\n'
-    '签名证书 SHA-256：${info.signerSha256 ?? 'Windows 未签名；仅核验完整性'}';
+    '${info.platform == 'ios' ? 'iOS 修订：${info.iosRevision}\n签名与安装由 TrollStore / 原签名工具确认' : '签名证书 SHA-256：${info.signerSha256 ?? 'Windows 未签名；仅核验完整性'}'}';

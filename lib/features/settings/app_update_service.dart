@@ -69,12 +69,14 @@ class AppUpdateInfo {
     required this.platform,
     this.artifactSha256,
     this.windowsRevision = 0,
+    this.iosRevision = 0,
   });
   final String packageName, version, sha256, platform;
   final String? signerSha256;
   final String? artifactSha256;
   final int versionCode;
   final int windowsRevision;
+  final int iosRevision;
   factory AppUpdateInfo.fromMap(Map<Object?, Object?> map) => AppUpdateInfo(
     packageName: map['packageName'] as String,
     versionCode: map['versionCode'] as int,
@@ -86,6 +88,7 @@ class AppUpdateInfo {
     windowsRevision: map['windowsRevision'] is int
         ? map['windowsRevision'] as int
         : 0,
+    iosRevision: map['iosRevision'] is int ? map['iosRevision'] as int : 0,
   );
 }
 
@@ -121,6 +124,13 @@ String appUpdateDecision(
   }
   if (offeredVersion.compareVersion(currentVersion) < 0) return 'downgrade';
   if (offered.versionCode < current.versionCode) return 'downgrade';
+  if (current.platform == 'ios' &&
+      offered.versionCode == current.versionCode &&
+      offeredVersion.compareVersion(currentVersion) == 0) {
+    if (offered.iosRevision < current.iosRevision) return 'downgrade';
+    if (offered.iosRevision > current.iosRevision) return 'upgrade';
+    return 'alreadyInstalled';
+  }
   if (current.platform == 'windows' &&
       offered.versionCode == current.versionCode &&
       offeredVersion.compareVersion(currentVersion) == 0) {
@@ -261,17 +271,24 @@ class AppUpdateRelease {
     required this.assets,
     this.windowsRevision,
     this.windowsBuild,
+    this.iosRevision,
+    this.iosBuild,
+    this.iosOnly = false,
   });
   final String tag, name, notes, publishedAt;
   final _AppUpdateVersion _version;
   String get version => _version.version;
-  int? get advertisedBuild => _version.build;
+  int? get advertisedBuild => iosBuild ?? _version.build;
   String get identity =>
-      '${_version.identity}${windowsRevision == null ? '' : '-windows.$windowsRevision'}';
+      '${_version.identity}${windowsRevision == null ? '' : '-windows.$windowsRevision'}'
+      '${iosRevision == null ? '' : '-ios.${iosBuild ?? 0}-r$iosRevision'}';
   final int? windowsRevision, windowsBuild;
+  final int? iosRevision, iosBuild;
+  final bool iosOnly;
   String get versionLabel =>
       '$version${advertisedBuild == null ? '' : ' · 构建 $advertisedBuild'}'
-      '${windowsRevision == null ? '' : ' · Windows 修订 $windowsRevision'}';
+      '${windowsRevision == null ? '' : ' · Windows 修订 $windowsRevision'}'
+      '${iosRevision == null ? '' : ' · iOS 修订 $iosRevision'}';
   AppUpdateRelease withWindowsManifest(int revision, int build) =>
       AppUpdateRelease._(
         tag: tag,
@@ -286,17 +303,46 @@ class AppUpdateRelease {
       );
   final bool prerelease;
   final Map<String, AppUpdateReleaseAsset> assets;
-  int compareTo(AppUpdateRelease other) => _version.compareTo(other._version);
+  AppUpdateRelease withIosManifest(int revision, int build) =>
+      AppUpdateRelease._(
+        tag: tag,
+        name: name,
+        version: _version,
+        notes: notes,
+        prerelease: prerelease,
+        publishedAt: publishedAt,
+        assets: assets,
+        iosRevision: revision,
+        iosBuild: build,
+        iosOnly: iosOnly,
+      );
+  int compareTo(AppUpdateRelease other) {
+    final order = _version.compareTo(other._version);
+    if (order != 0) return order;
+    final buildOrder = (iosBuild ?? 0).compareTo(other.iosBuild ?? 0);
+    return buildOrder != 0
+        ? buildOrder
+        : (iosRevision ?? 0).compareTo(other.iosRevision ?? 0);
+  }
+
   int? compareVersionTo(AppUpdateInfo installed) {
     final current = _AppUpdateVersion.parse(installed.version);
     return current == null ? null : _version.compareVersion(current);
   }
 
   bool isNewerThan(AppUpdateInfo installed) {
+    if (iosOnly && installed.platform != 'ios') return false;
     final current = _AppUpdateVersion.parse(installed.version);
     if (current == null) return false;
     final order = _version.compareVersion(current);
     if (order < 0) return false;
+    if (installed.platform == 'ios') {
+      if (iosBuild == null || iosRevision == null) return false;
+      return iosBuild! > installed.versionCode ||
+          (order == 0 &&
+              iosBuild == installed.versionCode &&
+              iosRevision! > installed.iosRevision);
+    }
     if (installed.platform == 'windows' && order == 0 && windowsBuild != null) {
       return windowsBuild! > installed.versionCode ||
           (windowsBuild == installed.versionCode &&
@@ -334,9 +380,17 @@ class AppUpdateRelease {
         continue;
       }
       final tag = item['tag_name'] as String;
-      final version = _AppUpdateVersion.parse(tag);
-      if (version == null) continue;
-      if (!identities.add(version.identity) ||
+      final iosTag = RegExp(
+        r'^v?(\d+\.\d+\.\d+)-ios\.([1-9]\d{0,4})(?:-r([1-9]\d{0,4}))?$',
+      ).firstMatch(tag);
+      final version = _AppUpdateVersion.parse(iosTag?[1] ?? tag);
+      if (version == null ||
+          (iosTag != null &&
+              (int.parse(iosTag[2]!) > 65535 ||
+                  int.parse(iosTag[3] ?? '0') > 65535))) {
+        continue;
+      }
+      if (!identities.add(iosTag == null ? version.identity : tag) ||
           (version.build != null && !codes.add(version.build!))) {
         throw const FormatException('发布版本的身份或构建号重复');
       }
@@ -352,6 +406,8 @@ class AppUpdateRelease {
           'triomi-windows.zip',
           'triomi-windows.msi',
           'triomi-windows.update.json',
+          'Triomi-iOS-Unsigned.ipa',
+          'triomi-ios.update.json',
           'SHA256SUMS.txt',
         }.contains(name)) {
           continue;
@@ -400,6 +456,9 @@ class AppUpdateRelease {
               ? item['published_at'] as String
               : '',
           assets: Map.unmodifiable(assets),
+          iosOnly: iosTag != null,
+          iosRevision: iosTag == null ? null : int.parse(iosTag[3] ?? '0'),
+          iosBuild: iosTag == null ? null : int.parse(iosTag[2]!),
         ),
       );
     }
@@ -417,6 +476,7 @@ AppUpdateRelease? newestAppUpdateRelease(
   final asset = switch (installed.platform) {
     'android' => 'triomi-android.apk',
     'windows' => 'triomi-windows.zip',
+    'ios' => 'Triomi-iOS-Unsigned.ipa',
     _ => null,
   };
   if (asset == null) return null;
@@ -425,6 +485,8 @@ AppUpdateRelease? newestAppUpdateRelease(
     if (!release.isNewerThan(installed) ||
         !release.assets.containsKey(asset) ||
         !release.assets.containsKey('SHA256SUMS.txt') ||
+        (installed.platform == 'ios' &&
+            !release.assets.containsKey('triomi-ios.update.json')) ||
         (installed.platform == 'windows' &&
             !release.assets.containsKey('triomi-windows.update.json'))) {
       continue;
@@ -473,7 +535,7 @@ checkStartupAppUpdate(
       return null;
     }
     cancellation.check();
-    final releasesForPlatform = await service.resolveWindowsRevisions(
+    final releasesForPlatform = await service.resolvePlatformRevisions(
       current,
       releases as List<AppUpdateRelease>,
       cancellation,
@@ -563,6 +625,9 @@ Future<String> stageAppUpdateBytes(
       size += bytes.length;
       if (size > appUpdateMaxBytes) {
         throw const FormatException('更新文件超过 512 MiB');
+      }
+      if (expectedBytes != null && size > expectedBytes) {
+        throw const FormatException('更新文件超过发布声明大小');
       }
       output.add(bytes);
       await output.flush();
@@ -678,6 +743,13 @@ class AppUpdateService {
   }
 
   Future<void> beginDownloadForeground() async {
+    if (Platform.isIOS) {
+      await const MethodChannel('triomi/platform').invokeMethod<bool>(
+        'downloadWake',
+        {'owner': 'app-update', 'active': true},
+      );
+      return;
+    }
     if (Platform.isWindows) {
       await const MethodChannel('triomi/platform')
           .invokeMethod<bool>('beginAppUpdate');
@@ -715,6 +787,13 @@ class AppUpdateService {
   }
 
   Future<void> endDownloadForeground() async {
+    if (Platform.isIOS) {
+      await const MethodChannel('triomi/platform').invokeMethod<bool>(
+        'downloadWake',
+        {'owner': 'app-update', 'active': false},
+      );
+      return;
+    }
     if (Platform.isWindows) {
       await const MethodChannel('triomi/platform')
           .invokeMethod<bool>('endAppUpdate');
@@ -731,7 +810,7 @@ class AppUpdateService {
   }
 
   Future<AppUpdateInfo> current() async {
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.isIOS) {
       return AppUpdateInfo.fromMap(
         (await _native.invokeMethod<Map<Object?, Object?>>('current'))!,
       );
@@ -883,6 +962,143 @@ class AppUpdateService {
         ),
       );
 
+  Future<List<AppUpdateRelease>> resolvePlatformRevisions(
+    AppUpdateInfo current,
+    List<AppUpdateRelease> releases,
+    AppUpdateCancellation token,
+  ) async {
+    if (current.platform != 'ios') {
+      return resolveWindowsRevisions(
+        current,
+        releases.where((release) => !release.iosOnly).toList(),
+        token,
+      );
+    }
+    final result = <AppUpdateRelease>[];
+    for (final release in releases) {
+      token.check();
+      if (!release.iosOnly ||
+          !release.assets.containsKey('Triomi-iOS-Unsigned.ipa') ||
+          !release.assets.containsKey('triomi-ios.update.json') ||
+          !release.assets.containsKey('SHA256SUMS.txt')) {
+        continue;
+      }
+      final manifest = await _iosManifest(release, token);
+      result.add(
+        release.withIosManifest(
+          manifest['iosRevision'] as int,
+          manifest['versionCode'] as int,
+        ),
+      );
+    }
+    result.sort((a, b) => b.compareTo(a));
+    return result;
+  }
+
+  Future<AppUpdateCandidate> _downloadIos(
+    AppUpdateRelease release,
+    AppUpdateReleaseAsset asset,
+    String hash,
+    AppUpdateCancellation token,
+  ) async {
+    final manifest = await _iosManifest(release, token);
+    if (manifest['sha256'] != hash) {
+      throw const FormatException('iOS 发布在检查期间发生变化，请重新检查');
+    }
+    token.check();
+    final path = (await _native.invokeMethod<String>('beginIosStage'))!;
+    final file = File(path);
+    final marker = File(p.join(file.parent.path, 'cancel'));
+    token._marker = marker;
+    var retained = false;
+    try {
+      token.check();
+      final body = await _request(asset.url, token, officialAsset: true);
+      await stageAppUpdateBytes(
+        body.stream,
+        file,
+        cancellation: token,
+        expectedHash: hash,
+        expectedBytes: asset.bytes,
+        onProgress: onProgress,
+        phase: 'download',
+      );
+      token.check();
+      onProgress?.call(const AppUpdateProgress('ipa', 0));
+      final markerPath = marker.path;
+      final plist = await Isolate.run(
+        () => inspectIosUpdateZip(path, markerPath),
+      );
+      token.check();
+      final raw = (await _native.invokeMethod<Map<Object?, Object?>>(
+        'inspectIos',
+        {'path': path, 'sha256': hash, 'manifest': manifest, 'plist': plist},
+      ))!;
+      token.check();
+      final offered = AppUpdateInfo.fromMap(raw);
+      final installed = await current();
+      token.check();
+      final decision = appUpdateDecision(
+        installed,
+        offered,
+        signatureVerified: false,
+      );
+      if (decision != 'upgrade') {
+        throw const FormatException('此 iOS 版本、构建或修订已安装或更旧，不能更新');
+      }
+      final candidate = AppUpdateCandidate(
+        current: installed,
+        offered: offered,
+        path: path,
+        bytes: asset.bytes,
+        source: '官方 GitHub $appUpdateRepository · ${release.tag}',
+        decision: decision,
+        signatureVerified: false,
+      );
+      retained = true;
+      onProgress?.call(AppUpdateProgress('verified', asset.bytes, asset.bytes));
+      return candidate;
+    } finally {
+      token._marker = null;
+      if (!retained) {
+        await _native.invokeMethod<bool>('discardIos', {'path': path});
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>> _iosManifest(
+    AppUpdateRelease release,
+    AppUpdateCancellation token,
+  ) async {
+    if (!release.iosOnly) throw const FormatException('仅接受官方独立 iOS 发布');
+    final asset = release.assets['triomi-ios.update.json'];
+    final ipa = release.assets['Triomi-iOS-Unsigned.ipa'];
+    if (asset == null ||
+        ipa == null ||
+        !release.assets.containsKey('SHA256SUMS.txt')) {
+      throw const FormatException('iOS 发布缺少 IPA、修订清单或 SHA256SUMS');
+    }
+    final checksums = await releaseChecksums(release, token);
+    final bytes = await _readBounded(asset.url, token, 64 * 1024, asset: asset);
+    final raw = jsonDecode(utf8.decode(bytes));
+    if (checksums[asset.name] != sha256.convert(bytes).toString() ||
+        raw is! Map<String, dynamic> ||
+        raw['platform'] != 'ios' ||
+        raw['packageName'] != 'io.github.hyperionhxh.triomi' ||
+        raw['version'] is! String ||
+        !release.matchesPackage(raw['version'] as String, raw['versionCode']) ||
+        raw['iosRevision'] is! int ||
+        (raw['iosRevision'] as int) < 0 ||
+        (raw['iosRevision'] as int) > 65535 ||
+        (release.iosOnly && raw['iosRevision'] != release.iosRevision) ||
+        raw['sha256'] is! String ||
+        !_hashPattern.hasMatch(raw['sha256'] as String) ||
+        raw['sha256'] != checksums[ipa.name]) {
+      throw const FormatException('iOS 修订清单与官方发布或 SHA-256 不符');
+    }
+    return raw;
+  }
+
   /// Fetch only the small, digest-verified desktop manifest for same-version
   /// servicing releases. Startup never downloads the ZIP or executes a file.
   Future<List<AppUpdateRelease>> resolveWindowsRevisions(
@@ -992,12 +1208,17 @@ class AppUpdateService {
     AppUpdateRelease release,
     AppUpdateCancellation token,
   ) async {
-    final android = Platform.isAndroid;
-    if (!android && !Platform.isWindows) {
-      throw UnsupportedError('仅支持 Android 和 Windows 更新');
+    final platform = (await current()).platform;
+    final android = platform == 'android';
+    if (!{'android', 'windows', 'ios'}.contains(platform)) {
+      throw UnsupportedError('当前平台没有受支持的应用更新流程');
     }
     final asset =
-        release.assets[android ? 'triomi-android.apk' : 'triomi-windows.zip'];
+        release.assets[platform == 'ios'
+            ? 'Triomi-iOS-Unsigned.ipa'
+            : android
+            ? 'triomi-android.apk'
+            : 'triomi-windows.zip'];
     if (asset == null) throw const FormatException('此版本没有当前平台的完整更新包');
     onProgress?.call(const AppUpdateProgress('metadata', 0));
     final checksums = await releaseChecksums(release, token);
@@ -1008,6 +1229,7 @@ class AppUpdateService {
     }
 
     final hash = expected(asset);
+    if (platform == 'ios') return _downloadIos(release, asset, hash, token);
     if (android) {
       return _downloadApk(release, asset, hash, token);
     }
@@ -1313,6 +1535,17 @@ class AppUpdateService {
   }
 
   Future<void> launchInstaller(AppUpdateCandidate candidate) async {
+    if (candidate.offered.platform == 'ios') {
+      if (!candidate.canInstall || (await current()).platform != 'ios') {
+        throw StateError('只能交接已核验的新版本 iOS IPA');
+      }
+      await _native.invokeMethod<Object?>('handoffIos', {
+        'path': candidate.path,
+        'sha256': candidate.offered.sha256,
+        'consent': true,
+      });
+      return;
+    }
     if (!candidate.canInstall ||
         !candidate.signatureVerified ||
         candidate.offered.platform != 'android') {
@@ -1338,7 +1571,14 @@ class AppUpdateService {
   }
 
   Future<void> discard(AppUpdateCandidate candidate) async {
-    if (candidate.offered.platform == 'android') {
+    if (candidate.offered.platform == 'ios') {
+      if (await _native.invokeMethod<bool>('discardIos', {
+            'path': candidate.path,
+          }) !=
+          true) {
+        throw const FileSystemException('iOS 更新文件正在交接或无法清理');
+      }
+    } else if (candidate.offered.platform == 'android') {
       if ((await _native.invokeMethod<Map<Object?, Object?>>('discard', {
             'path': candidate.path,
           }))?['removed'] !=
@@ -1605,6 +1845,16 @@ Future<File> _regular(String path) async {
   for (var part = absolute; ; part = p.dirname(part)) {
     if (await FileSystemEntity.type(part, followLinks: false) ==
         FileSystemEntityType.link) {
+      // iOS exposes its system /var -> /private/var alias even after
+      // Foundation URL canonicalization. Permit only that exact prefix and
+      // unchanged suffix; user-created or updater-child links still fail.
+      if (Platform.isIOS &&
+          part == '/var' &&
+          absolute.startsWith('/var/') &&
+          await Directory('/var').resolveSymbolicLinks() == '/private/var' &&
+          await File(absolute).resolveSymbolicLinks() == '/private$absolute') {
+        continue;
+      }
       throw const FormatException('更新输入不允许符号链接');
     }
     if (p.dirname(part) == part) break;
@@ -1614,6 +1864,236 @@ Future<File> _regular(String path) async {
     throw const FormatException('必须选择现存普通文件');
   }
   return File(await File(absolute).resolveSymbolicLinks());
+}
+
+/// Inspects only the bounded root plist; no IPA content is extracted to disk.
+/// The payload SHA-256 is checked before this inspection. Native then parses
+/// binary/XML plist and compares it with the manifest and installed bundle.
+Future<Uint8List> inspectIosUpdateZip(String path, String markerPath) async {
+  void check() {
+    if (File(markerPath).existsSync()) throw const AppUpdateCancelled();
+  }
+
+  void checkExtra(Uint8List bytes) {
+    final data = ByteData.sublistView(bytes);
+    var offset = 0;
+    while (offset < bytes.length) {
+      if (offset + 4 > bytes.length) {
+        throw const FormatException('IPA ZIP 扩展字段被截断');
+      }
+      final id = data.getUint16(offset, Endian.little);
+      final size = data.getUint16(offset + 2, Endian.little);
+      // No ZIP64 size/offset override or alternate Unicode member pathname.
+      if (id == 0x0001 || id == 0x7075 || offset + 4 + size > bytes.length) {
+        throw const FormatException('IPA ZIP64 或替代路径扩展不受支持');
+      }
+      offset += 4 + size;
+    }
+  }
+
+  check();
+  final file = await _regular(path);
+  final length = await file.length();
+  if (length < 22 || length > appUpdateMaxBytes) {
+    throw const FormatException('IPA 大小无效');
+  }
+  final handle = await file.open();
+  Future<Uint8List> readAt(int offset, int count) async {
+    check();
+    if (offset < 0 || count < 0 || offset + count > length) {
+      throw const FormatException('IPA ZIP 字段超出文件范围');
+    }
+    await handle.setPosition(offset);
+    final bytes = Uint8List(count);
+    var position = 0;
+    while (position < count) {
+      final read = await handle.readInto(bytes, position, count);
+      check();
+      if (read == 0) throw const FormatException('IPA ZIP 被截断');
+      position += read;
+    }
+    return bytes;
+  }
+
+  try {
+    final start = length > 65557 ? length - 65557 : 0;
+    final tail = await readAt(start, length - start);
+    final endData = ByteData.sublistView(tail);
+    var end = -1;
+    for (var i = 0; i + 22 <= tail.length; i++) {
+      if (endData.getUint32(i, Endian.little) == 0x06054b50 &&
+          i + 22 + endData.getUint16(i + 20, Endian.little) == tail.length) {
+        if (end != -1) throw const FormatException('IPA ZIP 存在多个结束目录');
+        end = i;
+      }
+    }
+    if (end < 0) throw const FormatException('IPA ZIP 缺少有效结束目录');
+    for (var i = end + 22; i + 4 <= tail.length; i++) {
+      final signature = endData.getUint32(i, Endian.little);
+      if (signature == 0x06054b50 ||
+          signature == 0x06064b50 ||
+          signature == 0x07064b50) {
+        throw const FormatException('IPA ZIP 注释中存在替代目录或 ZIP64 元数据');
+      }
+    }
+    final declaredEntries = endData.getUint16(end + 10, Endian.little);
+    final directorySize = endData.getUint32(end + 12, Endian.little);
+    final directoryOffset = endData.getUint32(end + 16, Endian.little);
+    final directoryEnd = start + end;
+    if (endData.getUint16(end + 4, Endian.little) != 0 ||
+        endData.getUint16(end + 6, Endian.little) != 0 ||
+        endData.getUint16(end + 8, Endian.little) != declaredEntries ||
+        declaredEntries > 10000 ||
+        directorySize > 8 * 1024 * 1024 ||
+        directoryOffset + directorySize != directoryEnd ||
+        (end >= 20 &&
+            endData.getUint32(end - 20, Endian.little) == 0x07064b50)) {
+      throw const FormatException('IPA ZIP 目录无效、分卷、ZIP64 或超限');
+    }
+    // Never ask an archive reader to rediscover EOCD or apply ZIP64 overrides.
+    // Parse only the validated directory range, enforcing the actual entry cap
+    // before reading each header, independently of EOCD's claimed count.
+    final names = <String>{}, apps = <String>{}, executables = <String>{};
+    ({int offset, int compressedSize, int size, int method, int crc})? plist;
+    var cursor = directoryOffset, actualEntries = 0, total = 0;
+    while (cursor < directoryEnd) {
+      check();
+      if (actualEntries >= 10000) {
+        throw const FormatException('IPA ZIP 实际成员超过 10000 限制');
+      }
+      if (cursor + 46 > directoryEnd) {
+        throw const FormatException('IPA ZIP 中央目录被截断');
+      }
+      final central = ByteData.sublistView(await readAt(cursor, 46));
+      if (central.getUint32(0, Endian.little) != 0x02014b50 ||
+          central.getUint16(6, Endian.little) > 20 ||
+          central.getUint16(34, Endian.little) != 0) {
+        throw const FormatException('IPA ZIP 中央目录签名、ZIP64 或分卷成员无效');
+      }
+      final flags = central.getUint16(8, Endian.little);
+      final method = central.getUint16(10, Endian.little);
+      final crc = central.getUint32(16, Endian.little);
+      final compressedSize = central.getUint32(20, Endian.little);
+      final size = central.getUint32(24, Endian.little);
+      final nameSize = central.getUint16(28, Endian.little);
+      final extraSize = central.getUint16(30, Endian.little);
+      final commentSize = central.getUint16(32, Endian.little);
+      final mode = (central.getUint32(38, Endian.little) >> 16) & 0xf000;
+      final localOffset = central.getUint32(42, Endian.little);
+      final next = cursor + 46 + nameSize + extraSize + commentSize;
+      if (next > directoryEnd ||
+          nameSize == 0 ||
+          localOffset + 30 > directoryOffset ||
+          compressedSize == 0xffffffff ||
+          size == 0xffffffff ||
+          (flags & 1) != 0 ||
+          ![0, 8].contains(method)) {
+        throw const FormatException('IPA ZIP 成员范围、加密或压缩方式无效');
+      }
+      final rawName = await readAt(cursor + 46, nameSize);
+      final name = (flags & 0x800) != 0
+          ? utf8.decode(rawName)
+          : latin1.decode(rawName);
+      checkExtra(await readAt(cursor + 46 + nameSize, extraSize));
+      if (!names.add(name.toLowerCase()) ||
+          name.startsWith('/') ||
+          name.contains('\\') ||
+          name.contains(':') ||
+          name.contains('//') ||
+          RegExp(r'[\x00-\x1f]').hasMatch(name) ||
+          name.split('/').any((part) => part == '.' || part == '..') ||
+          (mode != 0 && mode != 0x8000 && mode != 0x4000)) {
+        throw const FormatException('IPA 存在重复、路径别名、符号链接或非法成员');
+      }
+      total += size;
+      if (total > 2 * 1024 * 1024 * 1024) {
+        throw const FormatException('IPA 展开声明超过限制');
+      }
+      final local = ByteData.sublistView(await readAt(localOffset, 30));
+      final localNameSize = local.getUint16(26, Endian.little);
+      final localExtraSize = local.getUint16(28, Endian.little);
+      final dataOffset = localOffset + 30 + localNameSize + localExtraSize;
+      if (local.getUint32(0, Endian.little) != 0x04034b50 ||
+          local.getUint16(4, Endian.little) > 20 ||
+          local.getUint16(6, Endian.little) != flags ||
+          local.getUint16(8, Endian.little) != method ||
+          localNameSize != nameSize ||
+          dataOffset + compressedSize > directoryOffset ||
+          local.getUint32(18, Endian.little) == 0xffffffff ||
+          local.getUint32(22, Endian.little) == 0xffffffff ||
+          ((flags & 8) == 0 &&
+              (local.getUint32(14, Endian.little) != crc ||
+                  local.getUint32(18, Endian.little) != compressedSize ||
+                  local.getUint32(22, Endian.little) != size))) {
+        throw const FormatException('IPA ZIP 本地成员与中央目录不一致');
+      }
+      final localName = await readAt(localOffset + 30, localNameSize);
+      for (var i = 0; i < rawName.length; i++) {
+        if (localName[i] != rawName[i]) {
+          throw const FormatException('IPA ZIP 本地路径与中央目录不一致');
+        }
+      }
+      checkExtra(
+        await readAt(localOffset + 30 + localNameSize, localExtraSize),
+      );
+      final parts = name.split('/');
+      if (parts.length >= 3 &&
+          parts[0] == 'Payload' &&
+          parts[1].endsWith('.app')) {
+        apps.add(parts[1]);
+        if (parts.length == 3 && parts[2] == 'Info.plist') {
+          plist = (
+            offset: dataOffset,
+            compressedSize: compressedSize,
+            size: size,
+            method: method,
+            crc: crc,
+          );
+        }
+        if (parts.length == 3 && parts[2] == 'Runner' && size > 0) {
+          executables.add(parts[1]);
+        }
+      }
+      actualEntries++;
+      cursor = next;
+    }
+    if (actualEntries != declaredEntries) {
+      throw const FormatException('IPA ZIP 实际成员数与目录声明不符');
+    }
+    if (apps.length != 1 ||
+        plist == null ||
+        plist.size < 1 ||
+        plist.size > 1024 * 1024 ||
+        !executables.contains(apps.single)) {
+      throw const FormatException('IPA 必须包含唯一完整 Runner.app 与有限 Info.plist');
+    }
+    final member = plist;
+    final compressed = file.openRead(
+      member.offset,
+      member.offset + member.compressedSize,
+    );
+    final decoded = member.method == 8
+        ? ZLibDecoder(raw: true).bind(compressed)
+        : compressed;
+    final result = BytesBuilder(copy: false);
+    var crc = 0;
+    await for (final chunk in decoded) {
+      check();
+      if (result.length + chunk.length > member.size ||
+          result.length + chunk.length > 1024 * 1024) {
+        throw const FormatException('IPA Info.plist 实际展开超过限制');
+      }
+      crc = getCrc32(chunk, crc);
+      result.add(chunk);
+    }
+    if (result.length != member.size || crc != member.crc) {
+      throw const FormatException('IPA Info.plist 长度或 CRC 不符');
+    }
+    check();
+    return result.takeBytes();
+  } finally {
+    await handle.close();
+  }
 }
 
 /// Bounded member verification. Optional extraction is only into a fresh,

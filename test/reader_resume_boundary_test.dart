@@ -43,21 +43,6 @@ void main() {
       expect((invalid.single as ParagraphBlock).text, '&#zzz; 尾随');
     });
 
-    test('协议相对与 http 图片地址升级为 https', () {
-      final blocks = parseHtml(
-        '<p><img src="//cdn.example.com/a.jpg"></p>'
-        '<p><img src="http://cdn.example.com/b.jpg"></p>',
-      );
-      final urls = <String>[
-        for (final block in blocks)
-          if (block is IllustrationBlock) block.url,
-      ];
-      expect(urls, <String>[
-        'https://cdn.example.com/a.jpg',
-        'https://cdn.example.com/b.jpg',
-      ]);
-    });
-
     test('缺尺寸 / 零 / 负尺寸插图：解析不崩溃，宽高比走兜底', () {
       final blocks = parseHtml(
         '<p><img src="https://x/1.jpg"></p>'

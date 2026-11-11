@@ -87,8 +87,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   late bool _animeSourceSearch;
   bool get _animeMetadata =>
       widget.type == MediaType.anime && !_animeSourceSearch;
-  List<String> get _searchTags =>
-      widget.type == MediaType.anime && _animeSourceSearch ? const [] : _tags;
+  List<String> get _searchTags => _tags;
   String get _historyKey => 'search.history.${widget.type.name}';
 
   SourceEntry _publicMetadataEntry() {
@@ -173,7 +172,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           if (_animeMetadata) return entry.descriptor.id == 'bangumi-anime';
           if (entry.descriptor.id == 'bangumi-anime') return false;
         }
-        if (_scopeId != null && entry.descriptor.id != _scopeId) return false;
+        if (!_animeMetadata &&
+            _scopeId != null &&
+            entry.descriptor.id != _scopeId) {
+          return false;
+        }
         return true;
       }).toList();
       if (widget.initialSourceId != null) {
@@ -219,6 +222,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final page = previous == null ? 1 : previous.page + 1;
     final session = (_sourceGeneration[id] ?? 0) + 1;
     _sourceGeneration[id] = session;
+    final tags = List<String>.unmodifiable(_searchTags);
     if (mounted) {
       setState(
         () => _rows[id] = _SearchRow(
@@ -248,18 +252,18 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               return provider.searchFiltered(
                 query,
                 page: page,
-                filter: AnimePublicFilter(tags: List.of(_searchTags)),
+                filter: AnimePublicFilter(tags: tags),
               );
             }
-            if (_searchTags.isNotEmpty && provider is TagSearchProvider) {
+            if (tags.isNotEmpty && provider is TagSearchProvider) {
               return (provider as TagSearchProvider).searchTagged(
                 query,
-                tags: _searchTags,
+                tags: tags,
                 page: page,
               );
             }
             return provider.search(
-              [..._searchTags, if (query.isNotEmpty) query].join(' '),
+              [...tags, if (query.isNotEmpty) query].join(' '),
               page: page,
             );
           })

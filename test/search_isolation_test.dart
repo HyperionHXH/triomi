@@ -121,7 +121,7 @@ void main({Future<void> Function(String name)? capture}) {
     return close;
   }
 
-  for (final type in [MediaType.manga, MediaType.novel]) {
+  for (final type in [MediaType.manga, MediaType.novel, MediaType.anime]) {
     testWidgets(
       '${type.name} tag-only online search revokes late results when cleared',
       (tester) async {

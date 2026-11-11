@@ -12,9 +12,15 @@ import UniformTypeIdentifiers
 final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
   private static let backupNameLock = NSLock()
   private static var lastBackupStamp: UInt64 = 0
+  private static let updateCleanupLock = NSLock()
+  private static var updateCleanupStarted = false
   private let channel: FlutterMethodChannel
   private let cacheChannel: FlutterMethodChannel
   private let backupDocumentsChannel: FlutterMethodChannel
+  private let updateChannel: FlutterMethodChannel
+  // Accessed only on worker. A presented share sheet pins its input file.
+  private var updateStages: [String: [String: Any]] = [:]
+  private var updateHandoffPath: String?
   private let backupDocuments = IosBackupDocuments()
   private let files = FileManager.default
   private let worker = DispatchQueue(label: "triomi.ios.files", qos: .userInitiated)
@@ -35,6 +41,7 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
     channel = FlutterMethodChannel(name: channelName, binaryMessenger: messenger)
     cacheChannel = FlutterMethodChannel(name: channelName == "triomi/platform" ? "triomi/cache-management" : channelName + "/cache-management", binaryMessenger: messenger)
     backupDocumentsChannel = FlutterMethodChannel(name: channelName == "triomi/platform" ? "triomi/backupDocuments" : channelName + "/backupDocuments", binaryMessenger: messenger)
+    updateChannel = FlutterMethodChannel(name: channelName == "triomi/platform" ? "triomi/app-update" : channelName + "/app-update", binaryMessenger: messenger)
     super.init()
     channel.setMethodCallHandler { [weak self] call, result in
       self?.handle(call, result: result)
@@ -47,12 +54,29 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
     backupDocumentsChannel.setMethodCallHandler { [weak self] call, result in
       self?.handleBackupDocuments(call, result: result)
     }
+    updateChannel.setMethodCallHandler { [weak self] call, result in
+      self?.handleAppUpdate(call, result: result)
+    }
+    worker.async {
+      Self.updateCleanupLock.lock()
+      let shouldClean = !Self.updateCleanupStarted
+      Self.updateCleanupStarted = true
+      Self.updateCleanupLock.unlock()
+      guard shouldClean else { return }
+      // Only updater-owned process-abandoned stages are eligible for cleanup.
+      if let root = try? self.updateRoot(), let entries = try? self.files.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) {
+        for entry in entries where entry.lastPathComponent.hasPrefix("stage-") {
+          try? self.files.removeItem(at: entry)
+        }
+      }
+    }
   }
 
   deinit {
     channel.setMethodCallHandler(nil)
     cacheChannel.setMethodCallHandler(nil)
     backupDocumentsChannel.setMethodCallHandler(nil)
+    updateChannel.setMethodCallHandler(nil)
     IosBackupArtifactRegistry.releaseOwner(artifactOwner)
   }
 
@@ -106,6 +130,160 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
     default: result(FlutterMethodNotImplemented)
     }
   }
+  private func updateRoot() throws -> URL {
+    let root = try cacheRoot().appendingPathComponent("app-update-ios", isDirectory: true)
+    try files.createDirectory(at: root, withIntermediateDirectories: true)
+    let values = try root.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+    guard values.isDirectory == true, values.isSymbolicLink != true,
+          root.standardizedFileURL.path == root.resolvingSymlinksInPath().path else {
+      throw Self.error("Invalid updater-owned directory")
+    }
+    return root
+  }
+
+  private func updateFile(_ path: String) throws -> URL {
+    guard updateStages[path] != nil else { throw Self.error("Unknown update stage") }
+    let url = URL(fileURLWithPath: path).standardizedFileURL
+    let root = try updateRoot()
+    guard url.lastPathComponent == "Triomi-iOS-Unsigned.ipa",
+          url.deletingLastPathComponent().deletingLastPathComponent() == root,
+          url.path == url.resolvingSymlinksInPath().path else {
+      throw Self.error("Invalid update stage path")
+    }
+    return url
+  }
+
+  private func updateHash(_ url: URL) throws -> String {
+    let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+    guard values.isRegularFile == true, values.isSymbolicLink != true,
+          let size = values.fileSize, size > 0, size <= 512 * 1024 * 1024 else {
+      throw Self.error("Invalid update file size or type")
+    }
+    let input = try FileHandle(forReadingFrom: url)
+    defer { try? input.close() }
+    var hash = SHA256()
+    while true {
+      if url.pathExtension == "ipa", files.fileExists(atPath: url.deletingLastPathComponent().appendingPathComponent("cancel").path) {
+        throw Self.error("Update cancelled")
+      }
+      let data = try input.read(upToCount: 256 * 1024) ?? Data()
+      if data.isEmpty { break }
+      hash.update(data: data)
+    }
+    return hash.finalize().map { String(format: "%02x", $0) }.joined()
+  }
+
+  private func iosUpdateIdentity(_ plist: [String: Any], hash: String) throws -> [String: Any] {
+    guard let package = plist["CFBundleIdentifier"] as? String,
+          package == Bundle.main.bundleIdentifier,
+          let version = plist["CFBundleShortVersionString"] as? String,
+          version.range(of: #"^\d+\.\d+\.\d+$"#, options: .regularExpression) != nil,
+          version.split(separator: ".").allSatisfy({ part in
+            guard let number = Int(part) else { return false }
+            return number >= 0 && number <= 65535
+          }),
+          let buildText = plist["CFBundleVersion"] as? String,
+          let build = Int(buildText), String(build) == buildText, build > 0, build <= 65535 else {
+      throw Self.error("IPA bundle identifier, version or build is invalid")
+    }
+    let rawRevision = plist["TriomiIosRevision"]
+    let revision: Int
+    if rawRevision == nil { revision = 0 }
+    else if let number = rawRevision as? NSNumber,
+            CFGetTypeID(number) != CFBooleanGetTypeID(),
+            number.doubleValue == Double(number.intValue) { revision = number.intValue }
+    else { throw Self.error("IPA revision must be an integer") }
+    guard revision >= 0, revision <= 65535 else { throw Self.error("IPA revision is out of range") }
+    return ["platform": "ios", "packageName": package, "version": version,
+            "versionCode": build, "iosRevision": revision, "sha256": hash]
+  }
+
+  func handleAppUpdate(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    let args = call.arguments as? [String: Any] ?? [:]
+    worker.async {
+      do {
+        let value: Any?
+        switch call.method {
+        case "current":
+          guard let executable = Bundle.main.executableURL, let plist = Bundle.main.infoDictionary else {
+            throw Self.error("Installed bundle identity is unavailable")
+          }
+          value = try self.iosUpdateIdentity(plist, hash: self.updateHash(executable))
+        case "beginIosStage":
+          let root = try self.updateRoot().appendingPathComponent("stage-" + UUID().uuidString, isDirectory: true)
+          try self.files.createDirectory(at: root, withIntermediateDirectories: false)
+          let path = root.appendingPathComponent("Triomi-iOS-Unsigned.ipa").path
+          self.updateStages[path] = [:]
+          value = path
+        case "inspectIos":
+          guard let path = args["path"] as? String, let hash = args["sha256"] as? String,
+                let data = args["plist"] as? FlutterStandardTypedData, data.data.count <= 1024 * 1024,
+                let manifest = args["manifest"] as? [String: Any] else { throw Self.error("IPA inspection arguments are invalid") }
+          let url = try self.updateFile(path)
+          guard try self.updateHash(url) == hash,
+                let plist = try PropertyListSerialization.propertyList(from: data.data, options: [], format: nil) as? [String: Any],
+                plist["CFBundleExecutable"] as? String == "Runner",
+                plist["CFBundlePackageType"] as? String == "APPL" else {
+            throw Self.error("IPA integrity or application plist is invalid")
+          }
+          let identity = try self.iosUpdateIdentity(plist, hash: hash)
+          for key in ["platform", "packageName", "version", "versionCode", "iosRevision", "sha256"] {
+            guard let expected = manifest[key] as? NSObject, let actual = identity[key] as? NSObject,
+                  expected == actual else { throw Self.error("IPA identity differs from the verified release manifest") }
+          }
+          self.updateStages[path] = identity
+          value = identity
+        case "discardIos":
+          guard let path = args["path"] as? String else { throw Self.error("A stage path is required") }
+          let url = try self.updateFile(path)
+          if self.updateHandoffPath == path { value = false }
+          else {
+            try self.files.removeItem(at: url.deletingLastPathComponent())
+            self.updateStages.removeValue(forKey: path)
+            value = true
+          }
+        case "handoffIos":
+          guard args["consent"] as? Bool == true,
+                let path = args["path"] as? String, let hash = args["sha256"] as? String,
+                self.updateHandoffPath == nil,
+                let identity = self.updateStages[path], identity["sha256"] as? String == hash,
+                let installedPlist = Bundle.main.infoDictionary else { throw Self.error("Confirm a verified IPA before opening it") }
+          let url = try self.updateFile(path)
+          guard try self.updateHash(url) == hash else { throw Self.error("IPA changed after verification") }
+          let installed = try self.iosUpdateIdentity(installedPlist, hash: hash)
+          let offeredVersion = (identity["version"] as! String).split(separator: ".").map { Int($0)! }
+          let currentVersion = (installed["version"] as! String).split(separator: ".").map { Int($0)! }
+          let offeredBuild = identity["versionCode"] as! Int, currentBuild = installed["versionCode"] as! Int
+          let sameVersion = offeredVersion == currentVersion
+          guard offeredBuild >= currentBuild,
+                !offeredVersion.lexicographicallyPrecedes(currentVersion),
+                offeredBuild > currentBuild || (sameVersion &&
+                  (identity["iosRevision"] as! Int) > (installed["iosRevision"] as! Int)) else {
+            throw Self.error("Installed iOS version, build or revision is already current or newer")
+          }
+          self.updateHandoffPath = path
+          DispatchQueue.main.async {
+            guard let presenter = Self.presenter(), UIApplication.shared.applicationState == .active else {
+              self.worker.async { self.updateHandoffPath = nil }
+              result(FlutterError(code: "activity_inactive", message: "Return to Triomi before opening the verified IPA", details: nil)); return
+            }
+            let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+            sheet.popoverPresentationController?.sourceView = presenter.view
+            sheet.popoverPresentationController?.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
+            sheet.completionWithItemsHandler = { _, _, _, _ in
+              self.worker.async { self.updateHandoffPath = nil }
+            }
+            presenter.present(sheet, animated: true) { result(true) }
+          }
+          return
+        default:
+          DispatchQueue.main.async { result(FlutterMethodNotImplemented) }; return
+        }
+        DispatchQueue.main.async { result(value) }
+      } catch { DispatchQueue.main.async { result(Self.failure("ios_update_failed", error)) } }
+    }
+  }
+
   func handleBackupDocuments(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     if call.method == "pickDirectory" || call.method == "pickBackup" {
       presentPicker(call.method == "pickDirectory" ? "backupDirectory" : "backupDocument", directory: false, result: result)

@@ -91,12 +91,24 @@ jobs:
           version, build = info['CFBundleShortVersionString'], info['CFBundleVersion']
           if not re.fullmatch(r'\d+\.\d+\.\d+', version) or not re.fullmatch(r'\d+', build):
               raise ValueError('Release requires an exact numeric version/build')
-          tag = f'v{version}-ios.{build}'
+          revision = info.get('TriomiIosRevision', 0)
+          if type(revision) is not int or not 0 <= revision <= 65535:
+              raise ValueError('iOS servicing revision must be an integer 0..65535')
+          tag = f'v{version}-ios.{build}' + (f'-r{revision}' if revision else '')
           digest = hashlib.sha256(ipa.read_bytes()).hexdigest()
-          (root / 'SHA256SUMS.txt').write_text(f'{digest}  {ipa.name}\n')
+          (root / 'triomi-ios.update.json').write_text(json.dumps({
+              'platform': 'ios', 'packageName': info['CFBundleIdentifier'],
+              'version': version, 'versionCode': int(build), 'iosRevision': revision,
+              'sha256': digest,
+          }, indent=2) + '\n')
+          manifest = root / 'triomi-ios.update.json'
+          manifest_digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+          (root / 'SHA256SUMS.txt').write_text(
+              f'{digest}  {ipa.name}\n{manifest_digest}  {manifest.name}\n')
           (root / 'release-metadata.json').write_text(json.dumps({
               'tag': tag, 'sha': os.environ['GITHUB_SHA'], 'sha256': digest,
               'bytes': ipa.stat().st_size, 'version': version, 'build': build,
+              'iosRevision': revision,
               'route': 'local-acceptance-cloud-build-only',
           }, indent=2) + '\n')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
@@ -109,6 +121,7 @@ jobs:
             build/ios/ipa/Triomi-iOS-Unsigned.ipa
             build/ios/ipa/SHA256SUMS.txt
             build/ios/ipa/release-metadata.json
+            build/ios/ipa/triomi-ios.update.json
           if-no-files-found: error
 
   publish:
@@ -134,10 +147,16 @@ jobs:
             const name = 'Triomi-iOS-Unsigned.ipa';
             const data = fs.readFileSync(`artifacts/${name}`);
             const digest = crypto.createHash('sha256').update(data).digest('hex');
+            const revision = meta.iosRevision ?? 0;
+            const expectedTag = `v${meta.version}-ios.${meta.build}${revision ? `-r${revision}` : ''}`;
+            const update = JSON.parse(fs.readFileSync('artifacts/triomi-ios.update.json', 'utf8'));
             if (meta.sha !== context.sha || meta.sha256 !== digest || meta.bytes !== data.length ||
-                meta.tag !== `v${meta.version}-ios.${meta.build}` ||
-                !/^v\d+\.\d+\.\d+-ios\.\d+$/.test(meta.tag)) {
-              throw new Error('Build identity, version or IPA integrity differs');
+                !Number.isInteger(revision) || revision < 0 || revision > 65535 ||
+                meta.tag !== expectedTag || !/^v\d+\.\d+\.\d+-ios\.\d+(?:-r[1-9]\d*)?$/.test(meta.tag) ||
+                update.platform !== 'ios' || update.packageName !== 'io.github.hyperionhxh.triomi' ||
+                update.version !== meta.version || update.versionCode !== Number(meta.build) ||
+                update.iosRevision !== revision || update.sha256 !== digest) {
+              throw new Error('Build identity, revision or IPA integrity differs');
             }
             try {
               const ref = (await github.rest.git.getRef({ owner, repo, ref: `tags/${meta.tag}` })).data;
@@ -154,13 +173,13 @@ jobs:
               if (error.status !== 404) throw error;
               release = (await github.rest.repos.createRelease({
                 owner, repo, tag_name: meta.tag, target_commitish: context.sha,
-                name: `Triomi ${meta.version} · iOS ${meta.build}`,
+                name: `Triomi ${meta.version} · iOS ${meta.build}${revision ? ` · 修订 ${revision}` : ''}`,
                 body: `Local Mac/USB acceptance followed by GitHub production compilation.\n\nSource: ${context.sha}\nBuild: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}\n\nDownload Triomi-iOS-Unsigned.ipa and sign it before installation (iOS 15+). Cloud simulator tests, visual tours and live-source audits are not run by this workflow; see docs/CURRENT_STATUS.md for measured local coverage and limits.`,
                 prerelease: false, make_latest: 'false',
               })).data;
             }
             const assets = await github.paginate(github.rest.repos.listReleaseAssets, { owner, repo, release_id: release.id, per_page: 100 });
-            for (const filename of [name, 'SHA256SUMS.txt', 'release-metadata.json']) {
+            for (const filename of [name, 'SHA256SUMS.txt', 'release-metadata.json', 'triomi-ios.update.json']) {
               const bytes = fs.readFileSync(`artifacts/${filename}`);
               const expected = `sha256:${crypto.createHash('sha256').update(bytes).digest('hex')}`;
               const existing = assets.find(asset => asset.name === filename);

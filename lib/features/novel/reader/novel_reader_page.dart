@@ -65,6 +65,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   bool _locked = false;
 
   List<ReaderBlock> _blocks = const <ReaderBlock>[];
+  Map<String, String> _imageHeaders = const {};
 
   /// 来源下发的正文必需字体（轻书架 B7）：有它就必须用它渲染，否则字形是错的。
   String? _sourceFont;
@@ -226,10 +227,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   Future<void> _reconvert() async {
     final raw = _rawContent;
     if (raw == null) return;
+    final seq = _requestSeq;
     _zh ??= await ZhConverter.instance();
+    if (!mounted || seq != _requestSeq) return;
     final blocks = ReaderContentParser.parse(
       bodyHtml: _localized(raw.html),
       bodyText: _localized(raw.text),
+      baseUrl: _chapter.url ?? _item.url,
     );
     if (mounted) setState(() => _blocks = blocks);
   }
@@ -247,6 +251,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       _error = null;
       _locked = chapter.locked;
       _blocks = const <ReaderBlock>[];
+      _imageHeaders = const {};
       _pages = const <ReaderPage>[];
       _layoutKey = null;
       _rawContent = null;
@@ -301,7 +306,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           local != null) {
         throw StateError('旧下载缺少章节专用字体，请联网重新下载后阅读');
       }
-      _sourceFont = content.fontData == null
+      final sourceFont = content.fontData == null
           ? content.fontFamily
           : await ChapterFont.register(content.fontData!);
       _zh ??= await ZhConverter.instance();
@@ -309,10 +314,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       final blocks = ReaderContentParser.parse(
         bodyHtml: _localized(raw.html),
         bodyText: _localized(raw.text),
+        baseUrl: chapter.url ?? _item.url,
       );
       if (mounted) {
         setState(() {
           _blocks = blocks;
+          _sourceFont = sourceFont;
+          _imageHeaders = Map.unmodifiable(content.imageHeaders);
           _resumePosition = saved ?? 0;
           _loading = false;
         });
@@ -906,7 +914,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   Widget _pageContent(int index) => _PageContent(
     page: _pages[index],
     settings: _settings,
-    sourceId: _item.sourceId,
+    sourceId: _chapter.sourceId,
+    imageHeaders: _imageHeaders,
     sourceFont: _sourceFont,
   );
 
@@ -953,7 +962,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           itemBuilder: (context, index) => _BlockView(
             block: _blocks[index],
             settings: _settings,
-            sourceId: _item.sourceId,
+            sourceId: _chapter.sourceId,
+            imageHeaders: _imageHeaders,
             sourceFont: _sourceFont,
           ),
         ),
@@ -1192,11 +1202,13 @@ class _PageContent extends ConsumerWidget {
     required this.page,
     required this.settings,
     required this.sourceId,
+    required this.imageHeaders,
     this.sourceFont,
   });
   final ReaderPage page;
   final NovelReaderSettings settings;
   final String sourceId;
+  final Map<String, String> imageHeaders;
 
   /// 来源要求的正文字体（轻书架 B7），有值时优先于用户设置。
   final String? sourceFont;
@@ -1235,43 +1247,27 @@ class _PageContent extends ConsumerWidget {
                     context,
                     imageUrl: block.url,
                     sourceId: sourceId,
+                    imageHeaders: imageHeaders,
                   ),
                 ),
                 child: SizedBox(
                   width: double.infinity,
                   height: heightPx,
-                  child: Image(
+                  child: RetryableImage(
                     image: SourceNetworkImage(
                       block.url,
                       http: http,
                       sourceId: sourceId,
+                      headers: imageHeaders,
                     ),
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stack) => Container(
-                      color: settings.theme.background.withValues(alpha: 0.5),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '插图加载失败',
-                        style: TextStyle(
-                          color: settings.theme.foreground.withValues(
-                            alpha: 0.5,
-                          ),
-                          fontSize: 13,
-                        ),
-                      ),
+                    errorLabel: '插图加载失败',
+                    errorBackgroundColor: settings.theme.background.withValues(
+                      alpha: 0.5,
                     ),
-                    loadingBuilder: (context, child, progress) =>
-                        progress == null
-                        ? child
-                        : Container(
-                            alignment: Alignment.center,
-                            height: heightPx,
-                            child: const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          ),
+                    errorColor: settings.theme.foreground.withValues(
+                      alpha: 0.5,
+                    ),
                   ),
                 ),
               ),
@@ -1295,12 +1291,14 @@ class _BlockView extends ConsumerWidget {
     required this.block,
     required this.settings,
     required this.sourceId,
+    required this.imageHeaders,
     this.sourceFont,
   });
 
   final ReaderBlock block;
   final NovelReaderSettings settings;
   final String sourceId;
+  final Map<String, String> imageHeaders;
 
   /// 来源要求的正文字体（轻书架 B7），有值时优先于用户设置。
   final String? sourceFont;
@@ -1324,28 +1322,28 @@ class _BlockView extends ConsumerWidget {
         borderRadius: const BorderRadius.all(Radius.circular(8)),
         child: GestureDetector(
           onTap: () => unawaited(
-            showImageViewer(context, imageUrl: url, sourceId: sourceId),
+            showImageViewer(
+              context,
+              imageUrl: url,
+              sourceId: sourceId,
+              imageHeaders: imageHeaders,
+            ),
           ),
           child: AspectRatio(
             aspectRatio: aspectRatio,
-            child: Image(
+            child: RetryableImage(
               image: SourceNetworkImage(
                 url,
                 http: ref.watch(sourceHttpClientProvider),
                 sourceId: sourceId,
+                headers: imageHeaders,
               ),
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stack) => Container(
-                color: settings.theme.background.withValues(alpha: 0.5),
-                alignment: Alignment.center,
-                child: Text(
-                  '插图加载失败',
-                  style: TextStyle(
-                    color: settings.theme.foreground.withValues(alpha: 0.5),
-                    fontSize: 13,
-                  ),
-                ),
+              errorLabel: '插图加载失败',
+              errorBackgroundColor: settings.theme.background.withValues(
+                alpha: 0.5,
               ),
+              errorColor: settings.theme.foreground.withValues(alpha: 0.5),
             ),
           ),
         ),

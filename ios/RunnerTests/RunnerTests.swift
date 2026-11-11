@@ -32,6 +32,139 @@ final class RunnerTests: XCTestCase {
     return value
   }
 
+  private func invokeUpdate(_ bridge: IosPlatformBridge, _ method: String, _ arguments: [String: Any] = [:]) -> Any? {
+    let done = expectation(description: "app-update/" + method)
+    var value: Any?
+    bridge.handleAppUpdate(FlutterMethodCall(methodName: method, arguments: arguments)) {
+      value = $0; done.fulfill()
+    }
+    wait(for: [done], timeout: 15)
+    return value
+  }
+
+  private func updatePlist(revision: Int = 2) throws -> [String: Any] {
+    var plist = try XCTUnwrap(Bundle.main.infoDictionary)
+    plist["CFBundleExecutable"] = "Runner"
+    plist["CFBundlePackageType"] = "APPL"
+    plist["TriomiIosRevision"] = revision
+    return plist
+  }
+
+  private func inspectUpdate(_ bridge: IosPlatformBridge, path: String,
+                             plist: [String: Any], format: PropertyListSerialization.PropertyListFormat = .binary,
+                             manifestChange: [String: Any] = [:]) throws -> Any? {
+    let payload = try Data(contentsOf: URL(fileURLWithPath: path))
+    let hash = SHA256.hash(data: payload).map { String(format: "%02x", $0) }.joined()
+    var manifest: [String: Any] = ["platform": "ios", "packageName": Bundle.main.bundleIdentifier!,
+      "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")!,
+      "versionCode": Int(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as! String)!,
+      "iosRevision": 2, "sha256": hash]
+    manifest.merge(manifestChange) { _, new in new }
+    let data = try PropertyListSerialization.data(fromPropertyList: plist, format: format, options: 0)
+    return invokeUpdate(bridge, "inspectIos", ["path": path, "sha256": hash,
+      "manifest": manifest, "plist": FlutterStandardTypedData(bytes: data)])
+  }
+
+  func testIosUpdaterReadsInstalledBundleRatherThanDownloadedRevision() throws {
+    let bridge = try makeBridge()
+    let current = try XCTUnwrap(invokeUpdate(bridge, "current") as? [String: Any])
+    XCTAssertEqual(current["packageName"] as? String, Bundle.main.bundleIdentifier)
+    XCTAssertEqual(current["version"] as? String, "0.15.4")
+    XCTAssertEqual(current["versionCode"] as? Int, 198)
+    XCTAssertEqual(current["iosRevision"] as? Int, 1)
+    XCTAssertEqual((current["sha256"] as? String)?.count, 64)
+  }
+
+  func testIosUpdaterParsesBinaryAndXmlPlistAndMatchesExactIdentity() throws {
+    let bridge = try makeBridge()
+    let path = try XCTUnwrap(invokeUpdate(bridge, "beginIosStage") as? String)
+    defer { _ = invokeUpdate(bridge, "discardIos", ["path": path]) }
+    // Archive structure is validated by Dart before invoking native inspection.
+    try Data("private integrity fixture".utf8).write(to: URL(fileURLWithPath: path))
+    for format in [PropertyListSerialization.PropertyListFormat.binary, .xml] {
+      let identity = try XCTUnwrap(try inspectUpdate(bridge, path: path, plist: updatePlist(), format: format) as? [String: Any])
+      XCTAssertEqual(identity["iosRevision"] as? Int, 2)
+      XCTAssertEqual(identity["versionCode"] as? Int, 198)
+      XCTAssertEqual(identity["platform"] as? String, "ios")
+    }
+    let changes: [[String: Any]] = [
+      ["CFBundleIdentifier": "org.other.application"],
+      ["CFBundleShortVersionString": "0.15.3"],
+      ["CFBundleVersion": "197"],
+      ["CFBundleExecutable": "Other"],
+      ["TriomiIosRevision": 3],
+      ["TriomiIosRevision": true],
+      ["TriomiIosRevision": "2"],
+      ["TriomiIosRevision": 2.5],
+      ["CFBundleShortVersionString": "999999999999999999999.0.0"],
+    ]
+    for change in changes {
+      var plist = try updatePlist()
+      plist.merge(change) { _, new in new }
+      XCTAssertTrue(try inspectUpdate(bridge, path: path, plist: plist) is FlutterError)
+    }
+    XCTAssertTrue(try inspectUpdate(bridge, path: path, plist: updatePlist(),
+      manifestChange: ["iosRevision": 9]) is FlutterError)
+  }
+
+  func testIosUpdaterRejectsChangedPayloadAndSameRevisionBeforePresentingHandoff() throws {
+    let bridge = try makeBridge()
+    let path = try XCTUnwrap(invokeUpdate(bridge, "beginIosStage") as? String)
+    let url = URL(fileURLWithPath: path)
+    defer { _ = invokeUpdate(bridge, "discardIos", ["path": path]) }
+    try Data("original verified fixture".utf8).write(to: url)
+    let offered = try XCTUnwrap(try inspectUpdate(bridge, path: path, plist: updatePlist()) as? [String: Any])
+    let hash = try XCTUnwrap(offered["sha256"] as? String)
+    XCTAssertTrue(invokeUpdate(bridge, "handoffIos", ["path": path, "sha256": hash, "consent": false]) is FlutterError)
+    try Data("changed after inspection".utf8).write(to: url)
+    XCTAssertTrue(invokeUpdate(bridge, "handoffIos", ["path": path, "sha256": hash, "consent": true]) is FlutterError)
+    let installedRevision = (Bundle.main.object(forInfoDictionaryKey: "TriomiIosRevision") as? NSNumber)?.intValue ?? 0
+    let same = try XCTUnwrap(try inspectUpdate(bridge, path: path,
+      plist: updatePlist(revision: installedRevision), manifestChange: ["iosRevision": installedRevision]) as? [String: Any])
+    XCTAssertTrue(invokeUpdate(bridge, "handoffIos", ["path": path, "sha256": same["sha256"]!, "consent": true]) is FlutterError)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+  }
+
+  func testIosUpdaterPinsIpaUntilCancelledShareCompletion() throws {
+    let bridge = try makeBridge()
+    let path = try XCTUnwrap(invokeUpdate(bridge, "beginIosStage") as? String)
+    let url = URL(fileURLWithPath: path)
+    var activeSheet: UIActivityViewController?
+    defer {
+      activeSheet?.completionWithItemsHandler?(nil, false, nil, nil)
+      activeSheet?.dismiss(animated: false)
+      _ = invokeUpdate(bridge, "discardIos", ["path": path])
+    }
+    try Data("verified share lease fixture".utf8).write(to: url)
+    let identity = try XCTUnwrap(try inspectUpdate(bridge, path: path, plist: updatePlist()) as? [String: Any])
+    XCTAssertEqual(invokeUpdate(bridge, "handoffIos", ["path": path,
+      "sha256": identity["sha256"]!, "consent": true]) as? Bool, true)
+    let sheet = try XCTUnwrap(IosPlatformBridge.presenter() as? UIActivityViewController)
+    activeSheet = sheet
+    XCTAssertEqual(invokeUpdate(bridge, "discardIos", ["path": path]) as? Bool, false)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+    let cancelled = expectation(description: "cancelled IPA share sheet")
+    sheet.dismiss(animated: false) {
+      // Drive UIKit's cancellation boundary without selecting an external app.
+      sheet.completionWithItemsHandler?(nil, false, nil, nil)
+      cancelled.fulfill()
+    }
+    wait(for: [cancelled], timeout: 15)
+    activeSheet = nil
+    XCTAssertEqual(invokeUpdate(bridge, "discardIos", ["path": path]) as? Bool, true)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: path))
+  }
+
+  func testIosUpdaterNeverDiscardsForeignFiles() throws {
+    let bridge = try makeBridge()
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("foreign-update-" + UUID().uuidString + ".ipa")
+    let data = Data("preserve original document".utf8)
+    try data.write(to: url)
+    defer { try? FileManager.default.removeItem(at: url) }
+    XCTAssertTrue(invokeUpdate(bridge, "discardIos", ["path": url.path]) is FlutterError)
+    XCTAssertEqual(try Data(contentsOf: url), data)
+  }
+
   func testRetiringPlayerCannotReclaimOrClearReplacementNowPlaying() throws {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent("media-owner-\(UUID().uuidString).wav")
     var wave = Data()

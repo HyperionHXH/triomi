@@ -175,7 +175,15 @@ class JsSource
     return [
       for (final row in raw)
         if (row is Map && row['id'] is String && row['label'] is String)
-          SearchTag(id: row['id'] as String, label: row['label'] as String),
+          SearchTag(
+            id: row['id'] as String,
+            label: row['label'] as String,
+            aliases: [
+              if (row['aliases'] is List)
+                for (final alias in row['aliases'] as List)
+                  if (alias is String) alias,
+            ],
+          ),
     ];
   }
 
@@ -187,11 +195,14 @@ class JsSource
   }) async {
     await initialize();
     if (await runtime.hasFunction('searchTagged')) {
+      final selected = tags.isEmpty
+          ? const <String>[]
+          : resolveSearchTagIds(tags, await searchTags());
       return _toItems(
         await _invoke('searchTagged', [
           keyword,
           page,
-          tags,
+          selected,
           if (requestOptions != null) requestOptions!(),
         ]),
       );

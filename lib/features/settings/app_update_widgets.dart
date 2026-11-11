@@ -16,6 +16,7 @@ class AppUpdateTransferView extends StatelessWidget {
     required this.onCancel,
     this.cancelling = false,
     this.continuesInBackground = false,
+    this.suspendsInBackground = false,
   });
 
   final String versionLabel;
@@ -24,6 +25,7 @@ class AppUpdateTransferView extends StatelessWidget {
   final VoidCallback? onCancel;
   final bool cancelling;
   final bool continuesInBackground;
+  final bool suspendsInBackground;
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +45,11 @@ class AppUpdateTransferView extends StatelessWidget {
         '读取发布清单与文件摘要。',
       ),
       'verify' => ('正在核验更新文件', Icons.fact_check_outlined, '检查完整性与应用信息。'),
+      'ipa' => (
+        '正在核验 iOS 更新包',
+        Icons.fact_check_outlined,
+        '核对 IPA 应用标识、版本、构建与修订。',
+      ),
       'signature' => ('正在核验 APK 签名', Icons.fact_check_outlined, '核对签名、包名与版本。'),
       'bundle' => (
         '正在核验 Windows 更新包',
@@ -94,7 +101,11 @@ class AppUpdateTransferView extends StatelessWidget {
           Text(cancelling ? '正在停止操作并清理本次暂存文件，请稍候。' : hint),
           if (continuesInBackground && !cancelling) ...[
             const SizedBox(height: AppSpacing.sm),
-            const Text('可离开此页或切换模块，下载与核验会继续；返回查看进度。完成后仍需手动确认安装。强行停止应用会中断下载。'),
+            Text(
+              suspendsInBackground
+                  ? '可离开此页或切换模块，下载仍由应用管理。请保持 Triomi 在前台；切到后台可能被 iOS 暂停，返回后失败可重试。强行停止应用会中断下载。完成后仍需手动交给安装工具。'
+                  : '可离开此页或切换模块，下载与核验会继续；返回查看进度。完成后仍需手动确认安装。强行停止应用会中断下载。',
+            ),
           ],
           const SizedBox(height: AppSpacing.md),
           OutlinedButton.icon(
@@ -130,6 +141,7 @@ class AppUpdateReadyView extends StatelessWidget {
   Widget build(BuildContext context) {
     final android = _canInstallAndroid(candidate);
     final windows = _canRevealWindows(candidate);
+    final ios = _canHandoffIos(candidate);
     return _UpdateCard(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -143,7 +155,7 @@ class AppUpdateReadyView extends StatelessWidget {
             spacing: AppSpacing.sm,
             runSpacing: AppSpacing.xs,
             children: [
-              if (android || windows)
+              if (android || windows || ios)
                 FilledButton.icon(
                   key: const ValueKey('app-update-ready-install'),
                   style: FilledButton.styleFrom(minimumSize: _actionSize),
@@ -153,7 +165,7 @@ class AppUpdateReadyView extends StatelessWidget {
                         ? Icons.install_desktop_outlined
                         : Icons.install_mobile_outlined,
                   ),
-                  label: const Text('立即安装'),
+                  label: Text(ios ? '分享 IPA / 交给安装工具' : '立即安装'),
                 ),
               if (windows)
                 OutlinedButton.icon(
@@ -182,9 +194,11 @@ class AppUpdateHandoffView extends StatelessWidget {
     super.key,
     required this.windows,
     required this.onRefreshCurrent,
+    this.ios = false,
   });
 
   final bool windows;
+  final bool ios;
   final VoidCallback? onRefreshCurrent;
 
   @override
@@ -195,11 +209,19 @@ class AppUpdateHandoffView extends StatelessWidget {
       children: [
         _StatusHeading(
           icon: windows ? Icons.folder_open_outlined : Icons.open_in_new,
-          title: windows ? '更新程序已就绪' : '已交给系统安装器',
+          title: ios
+              ? 'IPA 分享已打开'
+              : windows
+              ? '更新程序已就绪'
+              : '已交给系统安装器',
           subtitle: '尚未确认安装完成',
         ),
         const SizedBox(height: AppSpacing.md),
-        if (windows) ...[
+        if (ios) ...[
+          const Text(
+            '请在分享面板中选择 TrollStore 或原签名工具；若未列出，可存储到“文件”后从该工具导入。这里只交接已核验 IPA，未确认安装，也不会自动安装。请勿卸载原应用，以保留数据；安装仍受设备支持、签名与工具确认限制。',
+          ),
+        ] else if (windows) ...[
           const Text('Triomi 退出后将替换已核验的应用文件并重启。失败时回滚；个人数据不在替换范围内。'),
         ] else
           const Text('请在系统安装器中确认。返回后可重新读取当前版本。'),
@@ -222,9 +244,10 @@ Future<bool?> showAppUpdateReadyDialog(
   required bool windows,
   bool downloaded = false,
 }) {
-  final actionable = windows
-      ? _canRevealWindows(candidate)
-      : _canInstallAndroid(candidate);
+  final ios = _canHandoffIos(candidate);
+  final actionable =
+      ios ||
+      (windows ? _canRevealWindows(candidate) : _canInstallAndroid(candidate));
   return showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
@@ -233,7 +256,13 @@ Future<bool?> showAppUpdateReadyDialog(
       constraints: const BoxConstraints(maxWidth: 560),
       title: Text(
         actionable
-            ? (downloaded ? '下载完成' : (windows ? '使用更新包' : '安装更新'))
+            ? (downloaded
+                  ? '下载完成'
+                  : (ios
+                        ? '交接 iOS 更新包'
+                        : windows
+                        ? '使用更新包'
+                        : '安装更新'))
             : '此文件不能用于更新',
       ),
       content: SizedBox(
@@ -246,7 +275,9 @@ Future<bool?> showAppUpdateReadyDialog(
             const SizedBox(height: AppSpacing.md),
             if (actionable)
               Text(
-                windows
+                ios
+                    ? '重新核验后分享已下载的 IPA，请选择 TrollStore 或原签名工具，或存储到“文件”后手动导入。未检测安装工具，未自动安装；签名、设备兼容性与安装由该工具确认。请勿卸载原应用。'
+                    : windows
                     ? '确认后关闭 Triomi，安装已核验的文件并自动重启。替换失败会回滚，个人数据保留。安装目录无写入权限时可改用手动安装包。'
                     : '重新核验后打开系统安装器，由你确认安装；保留应用数据。',
               ),
@@ -267,7 +298,13 @@ Future<bool?> showAppUpdateReadyDialog(
             key: const ValueKey('app-update-ready-confirm'),
             style: FilledButton.styleFrom(minimumSize: _actionSize),
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(windows ? '安装并重启' : '立即安装'),
+            child: Text(
+              ios
+                  ? '分享 IPA'
+                  : windows
+                  ? '安装并重启'
+                  : '立即安装',
+            ),
           ),
       ],
     ),
@@ -323,7 +360,11 @@ Future<bool?> showStartupUpdateDialog(
             ),
             const SizedBox(height: 16),
             Text(
-              '${windows ? 'Windows' : 'Android'} 更新已发布，可查看详情并下载。',
+              '${release.iosOnly
+                  ? 'iOS'
+                  : windows
+                  ? 'Windows'
+                  : 'Android'} 更新已发布，可查看详情并下载。',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             if (release.notes.trim().isNotEmpty) ...[
@@ -417,10 +458,16 @@ bool _canRevealWindows(AppUpdateCandidate candidate) =>
     candidate.current.platform == 'windows' &&
     candidate.manifestPath != null;
 
+bool _canHandoffIos(AppUpdateCandidate candidate) =>
+    candidate.canInstall &&
+    candidate.offered.platform == 'ios' &&
+    candidate.current.platform == 'ios';
+
 String _mib(int bytes) => '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MiB';
 String _version(AppUpdateInfo info) =>
     '${info.version}（构建 ${info.versionCode}）'
-    '${info.platform == 'windows' ? ' · Windows 修订 ${info.windowsRevision}' : ''}';
+    '${info.platform == 'windows' ? ' · Windows 修订 ${info.windowsRevision}' : ''}'
+    '${info.platform == 'ios' ? ' · iOS 修订 ${info.iosRevision}' : ''}';
 
 String _candidateExplanation(AppUpdateCandidate candidate) =>
     switch (candidate.decision) {
@@ -433,6 +480,8 @@ String _candidateExplanation(AppUpdateCandidate candidate) =>
         'APK 签名、包名与版本核验已通过，等待你确认安装。',
       'upgrade' when _canRevealWindows(candidate) =>
         'ZIP、成员清单与程序版本已核验。Windows 包未签名，完整性校验不等同于发布者签名。',
+      'upgrade' when _canHandoffIos(candidate) =>
+        'IPA 的 SHA-256、应用标识、版本、构建与修订已核验。安装工具与系统负责签名及安装确认；不是已安装。',
       'upgrade' => '此文件尚不具备可用的安装或交接条件，不能继续更新。',
       _ => '无法确认此文件可用于更新，未开放安装。',
     };
@@ -443,7 +492,10 @@ class _CandidateSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final valid = _canInstallAndroid(candidate) || _canRevealWindows(candidate);
+    final valid =
+        _canInstallAndroid(candidate) ||
+        _canRevealWindows(candidate) ||
+        _canHandoffIos(candidate);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -475,6 +527,8 @@ class _CandidateSummary extends StatelessWidget {
                   ? 'Windows ZIP'
                   : candidate.offered.platform == 'android'
                   ? 'Android APK'
+                  : candidate.offered.platform == 'ios'
+                  ? 'iOS IPA'
                   : '更新文件',
             ),
             Text(_mib(candidate.bytes)),
@@ -510,7 +564,9 @@ class _CandidateDetails extends StatelessWidget {
       _IdentityDetails(label: '更新文件', info: candidate.offered),
       _Detail(
         label: '签名验证',
-        value: candidate.offered.platform == 'windows'
+        value: candidate.offered.platform == 'ios'
+            ? '未验证 Apple 发布者签名；由 TrollStore / 原签名工具及系统确认安装'
+            : candidate.offered.platform == 'windows'
             ? '未验证发布者签名；Windows 包未签名'
             : candidate.signatureVerified
             ? 'APK 签名已验证'

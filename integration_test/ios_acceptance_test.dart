@@ -1,4 +1,7 @@
+import '../test/novel_illustration_retry_test.dart' as illustration_retry;
 import '../test/search_isolation_test.dart' as search_parity;
+import '../test/tag_rule_update_test.dart' as tag_rule_updates;
+import '../test/tag_search_route_test.dart' as tag_routes;
 import 'fixtures/ios_test_binding.dart';
 import 'ios_anime_metadata_search_test.dart' as anime_search;
 import 'ios_chinese_rules_test.dart' as chinese_rules;
@@ -9,6 +12,7 @@ import 'ios_reader_ports_test.dart' as reader_ports;
 import 'ios_reader_state_test.dart' as reader_state;
 import 'ios_source_recovery_test.dart' as source_recovery;
 import 'ios_storage_live_test.dart' as storage;
+import 'ios_update_live_test.dart' as update_native;
 import 'ios_video_live_test.dart' as video;
 
 /// One simulator launch, all existing real-runtime scenarios. Keep individual
@@ -25,4 +29,8 @@ void main() {
   storage.main();
   video.main();
   search_parity.main(capture: captureIosDeviceEvidence);
+  illustration_retry.main(capture: captureIosDeviceEvidence);
+  tag_routes.main(capture: captureIosDeviceEvidence);
+  update_native.main();
+  tag_rule_updates.main();
 }

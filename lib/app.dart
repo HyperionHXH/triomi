@@ -27,6 +27,10 @@ class TriomiApp extends ConsumerStatefulWidget {
 
 class _TriomiAppState extends ConsumerState<TriomiApp>
     with WidgetsBindingObserver {
+  bool _startupComplete = false;
+  bool _updateCheckRunning = false;
+  DateTime? _lastUpdateCheck;
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +46,14 @@ class _TriomiAppState extends ConsumerState<TriomiApp>
     final sync = ref.read(libraryAutoSyncProvider.notifier);
     if (lifecycle == AppLifecycleState.resumed) {
       sync.onResumed();
+      if (_startupComplete &&
+          !kIsWeb &&
+          defaultTargetPlatform == TargetPlatform.iOS &&
+          (_lastUpdateCheck == null ||
+              DateTime.now().difference(_lastUpdateCheck!) >=
+                  const Duration(minutes: 15))) {
+        unawaited(_checkForStartupUpdate());
+      }
     } else if (lifecycle == AppLifecycleState.paused ||
         lifecycle == AppLifecycleState.detached ||
         lifecycle == AppLifecycleState.hidden) {
@@ -70,6 +82,7 @@ class _TriomiAppState extends ConsumerState<TriomiApp>
     ref.read(libraryAutoSyncProvider.notifier).onResumed();
     ref.read(windowsContentUpdatesProvider);
     await _checkForStartupUpdate();
+    _startupComplete = true;
   }
 
   Future<void> _checkForStartupUpdate() async {
@@ -78,10 +91,13 @@ class _TriomiAppState extends ConsumerState<TriomiApp>
         !{
           TargetPlatform.android,
           TargetPlatform.windows,
+          TargetPlatform.iOS,
         }.contains(defaultTargetPlatform)) {
       return;
     }
-    if (!mounted) return;
+    if (!mounted || _updateCheckRunning) return;
+    _updateCheckRunning = true;
+    _lastUpdateCheck = DateTime.now();
 
     try {
       final preferences = ref.read(preferencesProvider);
@@ -122,6 +138,8 @@ class _TriomiAppState extends ConsumerState<TriomiApp>
       }
     } catch (_) {
       // A startup network failure must not block or interrupt the home screen.
+    } finally {
+      _updateCheckRunning = false;
     }
   }
 
