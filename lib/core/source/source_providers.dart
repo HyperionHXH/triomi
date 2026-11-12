@@ -19,6 +19,7 @@ import 'bangumi_public_client.dart';
 import 'bangumi_route_policy.dart';
 import 'copymanga/copymanga_js_source.dart';
 import 'copymanga/copymanga_preferences.dart';
+import 'ehentai/ehentai_source.dart';
 import 'http_client.dart';
 import 'jmcomic/jmcomic_js_source.dart';
 import 'js/js_runtime.dart';
@@ -194,6 +195,13 @@ final sourceRegistryProvider = Provider<SourceRegistry>((ref) {
             preferences: PicacomicPreferences(preferences), secureStore: secureStore)
         : rule.descriptor.id == 'jmcomic'
         ? JmcomicJsSource(rule: rule, runtime: runtime, http: http)
+        : supportsEhentaiNative(rule)
+        ? EhentaiSource(rule: rule, runtime: runtime, http: http,
+            preferences: preferences, secureStore: secureStore,
+            proxyClientFactory: (proxy) => DioSourceHttpClient(
+              proxy: proxy,
+              bangumiRoutes: const BangumiRoutePolicy(mirrorEnabled: false),
+            ))
         : JsSource(rule: rule, runtime: runtime, http: http, requestOptions: requestOptions),
     builtinAdapters: <String, ContentSource>{
       LkSource.id: LkSource(

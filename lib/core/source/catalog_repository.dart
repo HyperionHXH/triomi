@@ -79,6 +79,25 @@ class CatalogRepositoriesController extends Notifier<List<CatalogRepository>> {
   Future<void> remove(String id) =>
       _save(state.where((repository) => repository.id != id).toList());
 
+  /// Changes a repository address in place, keeping its position and
+  /// enablement. Installed rules, shelves and history never depend on it.
+  Future<void> replace(String id, String input) async {
+    final url = CatalogRepository.normalizeUrl(input);
+    if (!state.any((repository) => repository.id == id)) {
+      throw StateError('仓库已被移除，请重新添加');
+    }
+    if (url != id && state.any((repository) => repository.url == url)) {
+      throw const FormatException('此仓库已添加，可在列表中启用或刷新');
+    }
+    await _save([
+      for (final repository in state)
+        if (repository.id == id)
+          CatalogRepository(url: url, enabled: repository.enabled)
+        else
+          repository,
+    ]);
+  }
+
   Future<void> _save(List<CatalogRepository> repositories) async {
     // Publish synchronously so consecutive user actions cannot lose each other.
     final previous = state;

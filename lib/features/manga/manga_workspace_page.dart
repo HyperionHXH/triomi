@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -182,18 +181,11 @@ class _MangaSourcesState extends ConsumerState<_MangaSources> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS)
-              FilledButton.tonalIcon(
-                onPressed: _extensions,
-                icon: const Icon(Icons.extension_outlined),
-                label: const Text('插件与来源管理'),
-              )
-            else
-              TextButton.icon(
-                onPressed: _extensions,
-                icon: const Icon(Icons.settings_outlined),
-                label: const Text('JS / API 漫画来源目录'),
-              ),
+            FilledButton.tonalIcon(
+              onPressed: _extensions,
+              icon: const Icon(Icons.extension_outlined),
+              label: const Text('插件与来源管理'),
+            ),
           ],
         ),
       ),

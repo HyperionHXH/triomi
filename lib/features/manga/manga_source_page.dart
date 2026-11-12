@@ -10,6 +10,7 @@ import '../../core/db/app_database.dart' hide MediaItemRow;
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/router/app_router.dart';
+import '../../core/source/catalogue_filters.dart';
 import '../../core/source/http_client.dart';
 import '../../core/source/mihon_source.dart';
 import '../../core/source/source_api.dart';
@@ -254,7 +255,8 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
             if (source == null) {
               throw StateError('来源已停用或移除，配置保留。请检查来源信任及平台支持。');
             }
-            final defaults = source is MihonSource && filters.isNotEmpty
+            final defaults =
+                source is FilterCatalogueProvider && filters.isNotEmpty
                 ? await source.searchFilters()
                 : <Map<String, Object?>>[];
             if (!mounted ||
@@ -328,7 +330,9 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
         _more = result.hasMore;
         // Legacy adapters may return a fixed snapshot for every page. Stop only
         // that adapter on a repeated page, never override native hasNextPage.
-        if (source is! MihonSource && nextPage > 1 && added.isEmpty) {
+        if (source is! FilterCatalogueProvider &&
+            nextPage > 1 &&
+            added.isEmpty) {
           _more = false;
         }
       });
@@ -429,7 +433,7 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
 
   Future<void> _editFilters(SourceEntry entry) async {
     final source = entry.source;
-    if (source is! MihonSource) return;
+    if (source is! FilterCatalogueProvider) return;
     final sourceId = widget.sourceId, epoch = _epoch;
     final editEpoch = ++_filterEditEpoch;
     _filterRequest?.cancel('已重新打开筛选');
@@ -511,8 +515,8 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
     }
     if (_listing != 'search') return;
     try {
-      // Validate against the current APK shape before persisting a snapshot.
-      if (entry.source case final MihonSource source) {
+      // Validate against the current filter shape before persisting a snapshot.
+      if (entry.source case final FilterCatalogueProvider source) {
         if (_filters.isNotEmpty) {
           restoreMangaFilters(await source.searchFilters(), _filters);
         }
@@ -861,7 +865,8 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
                     maxLines: 2,
                   ),
                 ),
-                if (source is MihonSource && entry?.enabled == true)
+                if (source is FilterCatalogueProvider &&
+                    entry?.enabled == true)
                   TextButton.icon(
                     onPressed: () => _editFilters(entry!),
                     icon: const Icon(Icons.filter_list),
@@ -942,7 +947,7 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
                                   onPressed: () => _load(reset: _items.isEmpty),
                                   child: const Text('重试当前来源'),
                                 ),
-                                if (source is MihonSource)
+                                if (source is FilterCatalogueProvider)
                                   TextButton(
                                     onPressed: () => _editFilters(entry!),
                                     child: const Text('重新选择筛选'),

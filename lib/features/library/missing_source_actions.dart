@@ -45,7 +45,7 @@ class _MissingSourceInfo {
         defaultTargetPlatform == TargetPlatform.iOS &&
         sourceId.startsWith('mihon:')) {
       return 'iOS 不执行 Mihon APK/DEX；如果备份中保留了扩展文件，也不能在这里启用。'
-          '请从应用内 JS/API 来源目录安装兼容规则，或搜索其他来源；不会安装外部应用。';
+          '请在插件库中安装兼容的 JS / API 规则插件，或搜索其他来源；不会安装外部应用。';
     }
     return switch (state) {
       _SourceState.disabled => '原来源已安装或保留在本机，但当前停用。请到来源管理中核对后手动启用，或选择其他来源。',
@@ -271,11 +271,7 @@ Future<bool> showMissingSourceAction(
           key: const ValueKey('missing-source-manage'),
           onPressed: () => Navigator.pop(dialogContext, 'manage'),
           child: Text(
-            info.sourceId.startsWith('mihon:') &&
-                    !kIsWeb &&
-                    defaultTargetPlatform == TargetPlatform.iOS
-                ? '打开 JS / API 来源目录'
-                : info.sourceId.startsWith('mihon:')
+            info.sourceId.startsWith('mihon:')
                 ? '打开插件库 / 管理'
                 : '打开来源管理 / 插件库',
           ),
@@ -292,16 +288,14 @@ Future<bool> showMissingSourceAction(
   if (action == 'manage') {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            info.sourceId.startsWith('mihon:') &&
-                (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS)
-            ? MangaExtensionsPage(initialQuery: info.packageName ?? info.name)
-            : SourcesPage(
-                initialType: item.type,
-                initialQuery: info.sourceId.startsWith('mihon:')
-                    ? null
-                    : info.name,
-              ),
+        builder: (_) => info.sourceId.startsWith('mihon:')
+            ? MangaExtensionsPage(
+                initialQuery:
+                    !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+                    ? info.name
+                    : info.packageName ?? info.name,
+              )
+            : SourcesPage(initialType: item.type, initialQuery: info.name),
       ),
     );
     if (!context.mounted) return true;

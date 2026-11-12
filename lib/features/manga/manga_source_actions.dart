@@ -6,12 +6,14 @@ import '../../core/models/media_type.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/platform/platform_channel.dart';
 import '../../core/source/copymanga/copymanga_js_source.dart';
+import '../../core/source/ehentai/ehentai_source.dart';
 import '../../core/source/kazumi_source.dart';
 import '../../core/source/mihon_source.dart';
 import '../../core/source/source_registry.dart';
 import '../../core/source/source_website.dart';
 import '../../core/source/windows_source_session.dart';
 import '../sources/copymanga_settings_sheet.dart';
+import '../sources/ehentai_settings_sheet.dart';
 import '../sources/sources_page.dart';
 import 'windows_mihon_settings_page.dart';
 
@@ -40,6 +42,10 @@ Future<void> performMangaSourceAction(
     final source = entry.source;
     if (action == MangaSourceAction.settings && source is CopyMangaJsSource) {
       await showCopyMangaSettingsSheet(context, source);
+      return;
+    }
+    if (action == MangaSourceAction.settings && source is EhentaiSource) {
+      await showEhentaiSettingsSheet(context, source);
       return;
     }
     if (action == MangaSourceAction.settings && source is! MihonSource) {
@@ -73,6 +79,8 @@ Future<void> performMangaSourceAction(
         ? await source.websiteUri()
         : publicSourceWebsiteUri(source is CopyMangaJsSource
             ? source.websiteUrl(entry.descriptor.baseUrl ?? '')
+            : source is EhentaiSource
+            ? source.baseUrl
             : entry.descriptor.baseUrl ?? '');
     if (action == MangaSourceAction.browser) {
       final opened = await platformChannel.launchExternalUrl(uri.toString());

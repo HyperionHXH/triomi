@@ -8,7 +8,7 @@ import '../../core/db/app_database.dart';
 import '../../core/db/database_provider.dart';
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
-import '../../core/source/mihon_source.dart';
+import '../../core/source/catalogue_filters.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_registry.dart';
 import '../manga/manga_filter_snapshot.dart';
@@ -178,7 +178,7 @@ class MangaFeedRepository {
         .firstOrNull;
     if (entry == null) throw StateError('来源已停用或移除，配置已保留。请在来源/扩展管理中检查信任及平台支持。');
     final source = entry.source;
-    if (source is MihonSource) {
+    if (source is FilterCatalogueProvider) {
       if (listing == 'latest' && !source.supportsLatest) {
         throw StateError('此来源不支持最近更新，请选择热门');
       }

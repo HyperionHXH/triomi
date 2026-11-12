@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:triomi/core/source/ehentai/ehentai_source.dart';
 import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/widgets/image_viewer.dart';
@@ -61,7 +62,9 @@ void main() {
           if (temp.existsSync()) await temp.delete(recursive: true);
         });
         final source = await harness.source(id);
-        if (source is AccountProvider) {
+        // E-Hentai's account is three cookies in settings (no password login);
+        // the synthetic public gallery needs no authenticated path.
+        if (source is AccountProvider && source is! EhentaiSource) {
           await (source as AccountProvider).login('fixture', 'fixture');
         }
         final item = await source.detail(harness.item(id));

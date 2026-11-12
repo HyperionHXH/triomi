@@ -17,6 +17,7 @@ import 'core/source/source_catalog.dart';
 import 'core/source/windows_mihon_host.dart';
 import 'core/storage/preferences.dart';
 import 'core/storage/secure_store.dart';
+import 'features/library/data/ehentai_chapter_migration.dart';
 import 'features/library/data/manga_update_background.dart';
 import 'features/library/data/windows_content_updates.dart';
 import 'features/schedule/data/background_update_check.dart';
@@ -90,6 +91,8 @@ Future<void> main([List<String> args = const []]) async {
     return;
   }
   await initializeOnboarding(preferences, database);
+  // Idempotent: only rows that still carry the legacy split-chapter suffix.
+  await migrateLegacyEhentaiChapters(database);
   if (Platform.isWindows) {
     await WindowsMihonHost.instance.configureProxy(
       preferences.get<String>('network.sourceProxy') ?? '',

@@ -46,25 +46,185 @@ class CatalogSheet extends ConsumerStatefulWidget {
   ConsumerState<CatalogSheet> createState() => _CatalogSheetState();
 }
 
-enum _InstallState { idle, installing, installed, failed }
+enum CatalogInstallState { idle, installing, installed, failed }
 
-class _CatalogOffer {
-  const _CatalogOffer(this.entry, this.repositoryId, this.repositoryName);
+/// One installable rule as published by the bundled catalog or a repository.
+class CatalogOffer {
+  const CatalogOffer(this.entry, this.repositoryId, this.repositoryName);
   final SourceCatalogEntry entry;
   final String repositoryId;
   final String repositoryName;
   String get key => '$repositoryId|${entry.id}';
 }
 
-class _CatalogSheetState extends ConsumerState<CatalogSheet> {
-  List<SourceCatalogEntry>? _entries;
-  Object? _loadError;
-  final Map<String, _InstallState> _installStates = <String, _InstallState>{};
-  final Map<String, String> _installErrors = <String, String>{};
-  final Map<String, CatalogRepositoryResult> _repositories = {};
-  final Set<String> _loadingRepositories = {};
+/// Bundled and repository offers plus the single install/update path shared by
+/// every catalog surface. Each repository settles independently; one failure
+/// never masks another repository or the bundled offline catalog. Installs go
+/// through [CatalogInstaller], so a failed update keeps the installed version.
+mixin CatalogOffersState<T extends ConsumerStatefulWidget> on ConsumerState<T> {
+  List<SourceCatalogEntry>? catalogEntries;
+  Object? catalogLoadError;
+  final Map<String, CatalogRepositoryResult> catalogRepositoryResults = {};
+  final Set<String> loadingRepositories = {};
+  final Map<String, CatalogInstallState> _installStates = {};
+  final Map<String, String> _installErrors = {};
   final Set<String> _installingIds = {};
   int _loadGeneration = 0;
+
+  Future<void> loadCatalog() async {
+    final generation = ++_loadGeneration;
+    final repositories = ref
+        .read(catalogRepositoriesProvider)
+        .where((repository) => repository.enabled)
+        .toList();
+    setState(() {
+      catalogLoadError = null;
+      catalogEntries = null;
+      catalogRepositoryResults.clear();
+      _installStates.removeWhere(
+        (_, state) => state != CatalogInstallState.installing,
+      );
+      _installErrors.clear();
+      loadingRepositories
+        ..clear()
+        ..addAll(repositories.map((repository) => repository.id));
+    });
+    for (final repository in repositories) {
+      unawaited(() async {
+        final result = await ref
+            .read(catalogRepositoryLoaderProvider)
+            .load(repository);
+        if (!mounted || generation != _loadGeneration) return;
+        setState(() {
+          catalogRepositoryResults[repository.id] = result;
+          loadingRepositories.remove(repository.id);
+        });
+      }());
+    }
+    try {
+      final entries = await ref.read(sourceCatalogLoaderProvider)();
+      if (!mounted || generation != _loadGeneration) return;
+      setState(
+        () => catalogEntries = entries
+            .where((entry) => entry.id != SourceRepository.internalMetadataId)
+            .toList(),
+      );
+    } catch (error) {
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        catalogEntries = [];
+        catalogLoadError = error;
+      });
+    }
+  }
+
+  List<CatalogOffer> get catalogOffers => [
+    for (final entry in catalogEntries ?? const <SourceCatalogEntry>[])
+      if (developmentSourcesEnabled || !developmentSourceIds.contains(entry.id))
+        CatalogOffer(entry, 'builtin', '内置离线目录'),
+    for (final repository in ref.read(catalogRepositoriesProvider))
+      for (final entry
+          in catalogRepositoryResults[repository.id]?.entries ??
+              const <SourceCatalogEntry>[])
+        if (developmentSourcesEnabled ||
+            !developmentSourceIds.contains(entry.id))
+          CatalogOffer(
+            entry,
+            repository.id,
+            catalogRepositoryResults[repository.id]!.name,
+          ),
+  ];
+
+  CatalogInstallState installStateOf(CatalogOffer offer) =>
+      _installingIds.contains(offer.entry.id)
+      ? CatalogInstallState.installing
+      : _installStates[offer.key] ?? CatalogInstallState.idle;
+
+  String? installErrorOf(CatalogOffer offer) => _installErrors[offer.key];
+
+  /// True while any repository's copy of [sourceId] is being installed.
+  bool isInstallingSource(String sourceId) => _installingIds.contains(sourceId);
+
+  Future<void> installOffer(CatalogOffer offer) async {
+    final entry = offer.entry;
+    if (_installingIds.contains(entry.id)) return;
+    if (catalogOffers
+            .where((candidate) => candidate.entry.id == entry.id)
+            .length >
+        1) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('确认同 ID 来源的仓库'),
+          content: SingleChildScrollView(
+            child: Text(
+              '多个仓库提供 ${entry.id}。本次仅从以下仓库安装或更新，不会自动选择其他仓库：'
+              '\n${offer.repositoryName}\n${offer.repositoryId}\n规则：${entry.url}',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('从此仓库安装'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true || _installingIds.contains(entry.id)) {
+        return;
+      }
+    }
+    final update = ref
+        .read(installedCatalogVersionsProvider)
+        .containsKey(entry.id);
+    setState(() {
+      _installingIds.add(entry.id);
+      _installStates[offer.key] = CatalogInstallState.installing;
+      _installErrors.remove(offer.key);
+    });
+    try {
+      final descriptor = await CatalogInstaller(
+        ref.read(sourceRegistryProvider),
+      ).install(entry);
+      unawaited(ref.read(sourcesProvider.notifier).refresh());
+      if (!mounted) return;
+      setState(() => _installStates[offer.key] = CatalogInstallState.installed);
+      showCatalogMessage(
+        update
+            ? '已更新「${descriptor.name}」至 v${entry.version}'
+            : '已安装「${descriptor.name}」；请在来源列表确认启用状态',
+      );
+    } on SourceException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _installStates[offer.key] = CatalogInstallState.failed;
+        _installErrors[offer.key] = error.userMessage;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _installStates[offer.key] = CatalogInstallState.failed;
+        _installErrors[offer.key] = '$error';
+      });
+    } finally {
+      if (mounted) setState(() => _installingIds.remove(entry.id));
+    }
+  }
+
+  void showCatalogMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _CatalogSheetState extends ConsumerState<CatalogSheet>
+    with CatalogOffersState<CatalogSheet> {
   late SourceFilters _filters;
 
   void _setFilters(SourceFilters value) {
@@ -95,74 +255,8 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
           ),
     );
     if (widget.type != null) _filters = _filters.copyWith(type: widget.type);
-    _load();
+    loadCatalog();
   }
-
-  Future<void> _load() async {
-    final generation = ++_loadGeneration;
-    final repositories = ref
-        .read(catalogRepositoriesProvider)
-        .where((repository) => repository.enabled)
-        .toList();
-    setState(() {
-      _loadError = null;
-      _entries = null;
-      _repositories.clear();
-      _installStates.removeWhere(
-        (_, state) => state != _InstallState.installing,
-      );
-      _installErrors.clear();
-      _loadingRepositories
-        ..clear()
-        ..addAll(repositories.map((repository) => repository.id));
-    });
-    // Each repository settles independently. One failure never masks another
-    // repository or the bundled offline catalog.
-    for (final repository in repositories) {
-      unawaited(() async {
-        final result = await ref
-            .read(catalogRepositoryLoaderProvider)
-            .load(repository);
-        if (!mounted || generation != _loadGeneration) return;
-        setState(() {
-          _repositories[repository.id] = result;
-          _loadingRepositories.remove(repository.id);
-        });
-      }());
-    }
-    try {
-      final entries = await ref.read(sourceCatalogLoaderProvider)();
-      if (!mounted || generation != _loadGeneration) return;
-      setState(
-        () => _entries = entries
-            .where((entry) => entry.id != SourceRepository.internalMetadataId)
-            .toList(),
-      );
-    } catch (error) {
-      if (!mounted || generation != _loadGeneration) return;
-      setState(() {
-        _entries = [];
-        _loadError = error;
-      });
-    }
-  }
-
-  List<_CatalogOffer> get _offers => [
-    for (final entry in _entries ?? const <SourceCatalogEntry>[])
-      if (developmentSourcesEnabled || !developmentSourceIds.contains(entry.id))
-        _CatalogOffer(entry, 'builtin', '内置离线目录'),
-    for (final repository in ref.read(catalogRepositoriesProvider))
-      for (final entry
-          in _repositories[repository.id]?.entries ??
-              const <SourceCatalogEntry>[])
-        if (developmentSourcesEnabled ||
-            !developmentSourceIds.contains(entry.id))
-          _CatalogOffer(
-            entry,
-            repository.id,
-            _repositories[repository.id]!.name,
-          ),
-  ];
 
   Future<void> _manageRepositories() async {
     await showModalBottomSheet<void>(
@@ -173,84 +267,11 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
     );
   }
 
-  Future<void> _install(_CatalogOffer offer) async {
-    final entry = offer.entry;
-    if (_installingIds.contains(entry.id)) return;
-    if (_offers.where((candidate) => candidate.entry.id == entry.id).length >
-        1) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('确认同 ID 来源的仓库'),
-          content: SingleChildScrollView(
-            child: Text(
-              '多个仓库提供 ${entry.id}。本次仅从以下仓库安装或更新，不会自动选择其他仓库：'
-              '\n${offer.repositoryName}\n${offer.repositoryId}\n规则：${entry.url}',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('从此仓库安装'),
-            ),
-          ],
-        ),
-      );
-      if (!mounted || confirmed != true || _installingIds.contains(entry.id)) {
-        return;
-      }
-    }
-    setState(() {
-      _installingIds.add(entry.id);
-      _installStates[offer.key] = _InstallState.installing;
-      _installErrors.remove(offer.key);
-    });
-    try {
-      final descriptor = await CatalogInstaller(
-        ref.read(sourceRegistryProvider),
-      ).install(entry);
-      unawaited(ref.read(sourcesProvider.notifier).refresh());
-      if (!mounted) return;
-      setState(() => _installStates[offer.key] = _InstallState.installed);
-      _toast('已安装「${descriptor.name}」；请在来源列表确认启用状态');
-    } on SourceException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _installStates[offer.key] = _InstallState.failed;
-        _installErrors[offer.key] = error.userMessage;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _installStates[offer.key] = _InstallState.failed;
-        _installErrors[offer.key] = '$error';
-      });
-    } finally {
-      if (mounted) setState(() => _installingIds.remove(entry.id));
-    }
-  }
-
-  void _toast(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  _InstallState _stateOf(_CatalogOffer offer) =>
-      _installingIds.contains(offer.entry.id)
-      ? _InstallState.installing
-      : _installStates[offer.key] ?? _InstallState.idle;
-
   @override
   Widget build(BuildContext context) {
-    ref.listen(catalogRepositoriesProvider, (_, _) => unawaited(_load()));
+    ref.listen(catalogRepositoriesProvider, (_, _) => unawaited(loadCatalog()));
     final repositories = ref.watch(catalogRepositoriesProvider);
-    final offers = _offers;
+    final offers = catalogOffers;
     final entries = offers.map((offer) => offer.entry).toList();
     final visible = offers.where((offer) {
       final entry = offer.entry;
@@ -293,7 +314,7 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
                 ),
                 IconButton(
                   tooltip: '刷新目录',
-                  onPressed: _load,
+                  onPressed: loadCatalog,
                   icon: const Icon(Icons.refresh, size: 20),
                 ),
               ],
@@ -334,8 +355,11 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
                       Text(
                         '${totalIds.length} 个来源 · ${typeEntries.length} 条仓库条目（同 ID 只安装一次）',
                       ),
-                    if (_loadError != null)
-                      _CatalogErrorView(error: '$_loadError', onRetry: _load),
+                    if (catalogLoadError != null)
+                      _CatalogErrorView(
+                        error: '$catalogLoadError',
+                        onRetry: loadCatalog,
+                      ),
                     for (final repository in repositories)
                       Padding(
                         padding: const EdgeInsets.symmetric(
@@ -345,18 +369,19 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              _repositories[repository.id]?.name ??
+                              catalogRepositoryResults[repository.id]?.name ??
                                   repository.label,
                               style: Theme.of(context).textTheme.titleSmall,
                             ),
                             Text(repository.url),
                             if (!repository.enabled)
                               const Text('仓库已停用 · 已安装来源不受影响')
-                            else if (_loadingRepositories.contains(
+                            else if (loadingRepositories.contains(
                               repository.id,
                             ))
                               const Text('正在加载仓库…')
-                            else if (_repositories[repository.id]?.error
+                            else if (catalogRepositoryResults[repository.id]
+                                    ?.error
                                 case final error?)
                               Text(
                                 '仓库加载失败：$error',
@@ -366,25 +391,27 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
                               )
                             else
                               Text(
-                                '${_repositories[repository.id]?.entries.length ?? 0} 个兼容来源',
+                                '${catalogRepositoryResults[repository.id]?.entries.length ?? 0} 个兼容来源',
                               ),
                             if (repository.enabled &&
-                                _repositories[repository.id]?.error != null)
+                                catalogRepositoryResults[repository.id]
+                                        ?.error !=
+                                    null)
                               TextButton(
-                                onPressed: _load,
+                                onPressed: loadCatalog,
                                 child: const Text('重试仓库'),
                               ),
                           ],
                         ),
                       ),
-                    if (_entries == null)
+                    if (catalogEntries == null)
                       const Padding(
                         padding: EdgeInsets.all(AppSpacing.xl),
                         child: Center(child: CircularProgressIndicator()),
                       )
                     else if (entries.isEmpty &&
-                        _loadError == null &&
-                        _loadingRepositories.isEmpty)
+                        catalogLoadError == null &&
+                        loadingRepositories.isEmpty)
                       const Padding(
                         padding: EdgeInsets.all(AppSpacing.xl),
                         child: Center(child: Text('目录是空的：仓库还没有登记任何来源')),
@@ -398,10 +425,12 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
                       _EntryList(
                         offers: visible,
                         idCounts: idCounts,
-                        installedIds: ref.watch(_installedIdsProvider),
-                        stateOf: _stateOf,
-                        errorOf: (key) => _installErrors[key],
-                        onInstall: (offer) => unawaited(_install(offer)),
+                        installedIds: ref.watch(
+                          installedCatalogVersionsProvider,
+                        ),
+                        stateOf: installStateOf,
+                        errorOf: installErrorOf,
+                        onInstall: (offer) => unawaited(installOffer(offer)),
                       ),
                   ],
                 ),
@@ -414,8 +443,9 @@ class _CatalogSheetState extends ConsumerState<CatalogSheet> {
   }
 }
 
-/// 已安装来源 id 集合（跟随来源快照变化）。
-final _installedIdsProvider = Provider<Map<String, String?>>((ref) {
+/// Installed rule versions keyed by source id (follows the source snapshot).
+/// Only installed rule rows and non-removable builtins are listed.
+final installedCatalogVersionsProvider = Provider<Map<String, String?>>((ref) {
   final snapshot = ref.watch(sourcesProvider).value;
   return <String, String?>{
     for (final entry in snapshot?.entries ?? const <SourceEntry>[])
@@ -434,18 +464,18 @@ class _EntryList extends StatelessWidget {
     required this.onInstall,
   });
 
-  final List<_CatalogOffer> offers;
+  final List<CatalogOffer> offers;
   final Map<String, int> idCounts;
   final Map<String, String?> installedIds;
-  final _InstallState Function(_CatalogOffer offer) stateOf;
-  final String? Function(String key) errorOf;
-  final void Function(_CatalogOffer offer) onInstall;
+  final CatalogInstallState Function(CatalogOffer offer) stateOf;
+  final String? Function(CatalogOffer offer) errorOf;
+  final void Function(CatalogOffer offer) onInstall;
 
   @override
   Widget build(BuildContext context) {
-    final byType = <MediaType, List<_CatalogOffer>>{};
+    final byType = <MediaType, List<CatalogOffer>>{};
     for (final offer in offers) {
-      byType.putIfAbsent(offer.entry.type, () => <_CatalogOffer>[]).add(offer);
+      byType.putIfAbsent(offer.entry.type, () => <CatalogOffer>[]).add(offer);
     }
     final types = MediaType.values.where(byType.containsKey).toList();
 
@@ -476,7 +506,7 @@ class _EntryList extends StatelessWidget {
                   repositoryUrl: offer.repositoryId,
                   conflict: (idCounts[offer.entry.id] ?? 0) > 1,
                   state: stateOf(offer),
-                  error: errorOf(offer.key),
+                  error: errorOf(offer),
                   installed: installedIds.containsKey(offer.entry.id),
                   installedVersion: installedIds[offer.entry.id],
                   onInstall: () => onInstall(offer),
@@ -506,7 +536,7 @@ class _EntryCard extends StatelessWidget {
   final String repositoryName;
   final String repositoryUrl;
   final bool conflict;
-  final _InstallState state;
+  final CatalogInstallState state;
   final String? error;
   final bool installed;
   final String? installedVersion;
@@ -514,10 +544,11 @@ class _EntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final installing = state == _InstallState.installing;
+    final installing = state == CatalogInstallState.installing;
     final old = CatalogVersion.tryParse(installedVersion ?? '');
     final update = installed && old != null && entry.version.isNewerThan(old);
-    final done = (installed && !update) || state == _InstallState.installed;
+    final done =
+        (installed && !update) || state == CatalogInstallState.installed;
     final requiredHost = SourceHostFeatures.requiredFor(
       entry.id,
       entry.requiresHost,

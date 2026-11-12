@@ -9,6 +9,7 @@ import '../../core/db/database_provider.dart';
 import '../../core/models/media_type.dart';
 import '../../core/source/bangumi_route_policy.dart';
 import '../../core/source/copymanga/copymanga_js_source.dart';
+import '../../core/source/ehentai/ehentai_source.dart';
 import '../../core/source/http_client.dart';
 import '../../core/source/js/js_source.dart';
 import '../../core/source/kazumi_repository.dart';
@@ -32,6 +33,7 @@ import '../manga/manga_extensions_page.dart';
 import '../manga/windows_mihon_settings_page.dart';
 import 'catalog_sheet.dart';
 import 'copymanga_settings_sheet.dart';
+import 'ehentai_settings_sheet.dart';
 import 'kazumi_repositories_sheet.dart';
 import 'picacomic_settings_sheet.dart';
 import 'source_filter_controls.dart';
@@ -455,7 +457,12 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                                 entry.descriptor.name,
                               )
                             : null,
-                        onAccount: entry.source is AccountProvider
+                        onAccount: entry.source is EhentaiSource
+                            ? () => showEhentaiSettingsSheet(
+                                context,
+                                entry.source as EhentaiSource,
+                              )
+                            : entry.source is AccountProvider
                             ? () => _showAccountSheet(entry)
                             : null,
                         onWebSession:
@@ -496,6 +503,11 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                             ? () => showCopyMangaSettingsSheet(
                                 context,
                                 entry.source as CopyMangaJsSource,
+                              )
+                            : entry.enabled && entry.source is EhentaiSource
+                            ? () => showEhentaiSettingsSheet(
+                                context,
+                                entry.source as EhentaiSource,
                               )
                             : entry.enabled &&
                                   entry.source is JsSource &&
@@ -565,21 +577,15 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.pop(context, 'kazumi'),
                 ),
-              if (_type == MediaType.manga &&
-                  !kIsWeb &&
-                  defaultTargetPlatform == TargetPlatform.iOS)
-                ListTile(
-                  leading: const Icon(Icons.storefront_outlined),
-                  title: const Text('JS / API 漫画来源目录'),
-                  subtitle: const Text('应用内浏览与安装兼容规则 · 无需另装 APK 或开启 JIT'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.pop(context, 'catalog'),
-                )
-              else if (_type == MediaType.manga)
+              if (_type == MediaType.manga)
                 ListTile(
                   leading: const Icon(Icons.extension_outlined),
                   title: const Text('漫画扩展与仓库'),
-                  subtitle: const Text('Mihon / Komikku'),
+                  subtitle: Text(
+                    !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+                        ? 'JS / API 规则插件 · iOS 不执行 APK / DEX'
+                        : 'Mihon / Komikku',
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.pop(context, 'mihon'),
                 ),
@@ -589,16 +595,13 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
                   title: Text('内置小说站点'),
                   subtitle: Text('轻之国度、轻书架 · 管理账号'),
                 ),
-              if (_type != MediaType.manga ||
-                  kIsWeb ||
-                  defaultTargetPlatform != TargetPlatform.iOS)
-                ListTile(
-                  leading: const Icon(Icons.storefront_outlined),
-                  title: Text('${_type.label}规则目录'),
-                  subtitle: const Text('只查看当前分类的兼容规则与版本'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.pop(context, 'catalog'),
-                ),
+              ListTile(
+                leading: const Icon(Icons.storefront_outlined),
+                title: Text('${_type.label}规则目录'),
+                subtitle: const Text('只查看当前分类的兼容规则与版本'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.pop(context, 'catalog'),
+              ),
               ListTile(
                 leading: const Icon(Icons.code),
                 title: const Text('手动导入规则'),

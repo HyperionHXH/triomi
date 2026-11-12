@@ -13,6 +13,7 @@ import '../models/source_descriptor.dart';
 import '../models/source_exception.dart';
 import '../models/source_metadata.dart';
 import '../platform/platform_channel.dart';
+import 'catalogue_filters.dart';
 import 'http_client.dart';
 import 'mihon_image_bridge.dart';
 import 'source_api.dart';
@@ -25,6 +26,7 @@ import 'tag_search.dart';
 /// identity and the structured values returned by the host.
 class MihonSource
     implements
+        FilterCatalogueProvider,
         DiscoverProvider,
         SearchProvider,
         TagSearchProvider,
@@ -70,6 +72,7 @@ class MihonSource
   final int? versionCode;
   final String? signerSha256;
   final bool enabled;
+  @override
   final bool supportsLatest;
   final bool? isConfigurable;
   final SourceDescriptor _descriptor;
@@ -134,6 +137,7 @@ class MihonSource
     return _mangas(response);
   }
 
+  @override
   Future<List<Map<String, Object?>>> searchFilters() async {
     final response = await _request(operation: 'filters');
     return [
@@ -252,6 +256,7 @@ class MihonSource
     );
   }
 
+  @override
   Future<({List<MediaItem> items, bool hasMore})> cataloguePage({
     required String operation,
     String query = '',

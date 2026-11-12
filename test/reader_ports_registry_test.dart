@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/source_descriptor.dart';
 import 'package:triomi/core/source/catalog_installer.dart';
+import 'package:triomi/core/source/ehentai/ehentai_source.dart';
 import 'package:triomi/core/source/jmcomic/jmcomic_js_source.dart';
 import 'package:triomi/core/source/js/js_source.dart';
 import 'package:triomi/core/source/picacomic/picacomic_js_source.dart';
@@ -74,8 +75,8 @@ void main() {
     expect(sources['jmcomic'], isNot(isA<AccountProvider>()));
     expect(sources['wnacg'], isA<JsSource>());
     expect(sources['wnacg'], isNot(isA<AccountProvider>()));
-    expect(sources['ehentai'], isA<JsSource>());
-    expect(sources['ehentai'], isNot(isA<AccountProvider>()));
+    expect(sources['ehentai'], isA<EhentaiSource>());
+    expect(sources['ehentai'], isA<AccountProvider>());
     for (final id in ['picacomic', 'wnacg', 'jmcomic', 'ehentai']) {
       final entry = snapshot.entries.singleWhere((e) => e.descriptor.id == id);
       expect(entry.descriptor.nsfw, true);

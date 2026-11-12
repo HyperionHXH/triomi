@@ -1,5 +1,15 @@
 # Triomi 主线执行清单
 
+## 当前请求：E-Hentai 对齐安卓 1.6.36 与漫画插件管理
+
+- [x] 以 v0.15.4 Windows 运行时 + 原生 JAR 实测安卓基准；生成对照清单 `docs/delivery/EHENTAI_ANDROID_PARITY.md`。
+- [x] E-Hentai 改为 Dart 原生来源（规则 1.2.0 声明 `ehentai.native.v1`）：单章节 Full Gallery、完整页数、ExHentai/三 Cookie、收藏夹/关注流、21 项筛选、原图/重试/请求间隔；SOCKS 代理与无限重试为已记录的 iOS 差异。
+- [x] 旧“Pages a-b”分段章节启动迁移到单章节绝对页位置；仅全部分段已读才标记整本已读。
+- [x] iOS 插件库（已安装/添加/仓库/更新/卸载保留书架），账号入口改为 Cookie 设置。
+- [x] Mac analyze 零问题；定向测试全过；全量 2528 通过 / 27 平台跳过，3 项阅读切章测试在并行负载下超时、单独重跑 12/12 通过；iOS Release 编译成功。
+- [x] USB iPhone 独立身份实网对照 11/11 通过，截图在 `build/ehentai-parity/`。
+- [ ] 发布：先发布应用，再发布 1.2.0 规则（旧版应用不认识 `ehentai.native.v1`）。
+
 ## 当前请求：WN/JM实网标签故障
 
 - [x] WN1.0.3分离分类菜单与详情标签名称空间，重复漢化不再导致映射歧义；Mac行为回归与USB分类/标签双页、原始/显式标签等价通过。

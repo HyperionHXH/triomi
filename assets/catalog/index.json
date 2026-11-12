@@ -36,7 +36,7 @@
       "type": "manga",
       "lang": "all",
       "nsfw": true,
-      "version": "1.0.1",
+      "version": "1.2.0",
       "url": "asset://assets/rules/ehentai-js.json",
       "capabilities": [
         "discover",
@@ -44,7 +44,10 @@
         "detail",
         "content"
       ],
-      "license": "Triomi 公开网页协议适配 / 内容权利归各自权利人"
+      "license": "Triomi 公开网页协议适配 / 内容权利归各自权利人",
+      "requiresHost": [
+        "ehentai.native.v1"
+      ]
     },
     {
       "id": "wnacg",

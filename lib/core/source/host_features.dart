@@ -3,6 +3,7 @@
 /// compatibility. Version these IDs when the native contract changes.
 abstract final class SourceHostFeatures {
   static const supported = <String>{
+    'ehentai.native.v1',
     'jmcomic.api.v1',
     'jmcomic.image.v1',
     'picacomic.account.v1',

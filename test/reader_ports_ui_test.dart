@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/app.dart';
 import 'package:triomi/core/router/app_router.dart';
+import 'package:triomi/core/source/ehentai/ehentai_source.dart';
 import 'package:triomi/core/source/picacomic/picacomic_js_source.dart';
 import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/features/reader/manga_page_image.dart';
@@ -113,7 +114,8 @@ void main() {
 
       for (final id in readerPortIds) {
         final source = (await tester.runAsync(() => harness.source(id)))!;
-        if (source is AccountProvider) {
+        // E-Hentai's account is cookies in settings, not a password login.
+        if (source is AccountProvider && source is! EhentaiSource) {
           // Only the synthetic adapter sees these fixture strings. No real account.
           await tester.runAsync(
             () => (source as AccountProvider).login('fixture', 'fixture'),

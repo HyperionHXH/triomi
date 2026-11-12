@@ -732,7 +732,7 @@ void main() {
         '漫画来源管理独立显示已安装 JS 规则',
       );
       await tapText('添加漫画来源');
-      await tapText('JS / API 漫画来源目录');
+      await tapText('漫画规则目录');
       expect(find.text('漫画来源目录'), findsOneWidget);
       expect(find.text('MangaDex 漫画（开放 API）'), findsOneWidget);
       final mangaDexOffer = find.byKey(
@@ -780,7 +780,7 @@ void main() {
       // Add the Android repository URL through production UI; its explicit
       // marker leads to a hashed compatible catalog, not APK execution.
       await tapText('添加漫画来源');
-      await tapText('JS / API 漫画来源目录');
+      await tapText('漫画规则目录');
       await tapKey('catalog-manage-repositories');
       await tester.enterText(
         find.byKey(const ValueKey('catalog-repository-url')),

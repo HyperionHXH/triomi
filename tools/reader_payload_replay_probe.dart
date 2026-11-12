@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/core/models/chapter.dart';
 import 'package:triomi/core/source/ehentai/ehentai_image.dart';
+import 'package:triomi/core/source/ehentai/ehentai_network.dart';
 import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/js/js_source.dart';
 import 'package:triomi/core/source/rule_schema.dart';
@@ -64,7 +65,10 @@ void main() {
               SourceResponse(statusCode: 200, body: await file.readAsString()),
         );
         final result = Uri.parse(
-          await resolveEhentaiImage(http, 'https://e-hentai.org/s/abcd/101-1'),
+          await resolveEhentaiImage(
+            EhentaiNetwork(http: http),
+            'https://e-hentai.org/s/abcd/101-1',
+          ),
         );
         expect(result.scheme, 'https');
         expect(result.host.endsWith('.hath.network'), true);

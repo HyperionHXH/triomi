@@ -330,29 +330,19 @@ class WorkspaceSettingsPage extends ConsumerWidget {
           ],
           if (type == MediaType.manga) ...[
             SettingsGroup(
-              title: !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
-                  ? '漫画来源管理'
-                  : '扩展与来源',
+              title: '扩展与来源',
               children: [
-                if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS)
-                  page(
-                    Icons.extension_outlined,
-                    '漫画扩展',
-                    const MangaExtensionsPage(),
-                    refreshSources: true,
-                  ),
+                page(
+                  Icons.extension_outlined,
+                  '漫画扩展',
+                  const MangaExtensionsPage(),
+                  refreshSources: true,
+                ),
                 route(
-                  !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
-                      ? Icons.storefront_outlined
-                      : Icons.language_outlined,
-                  !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
-                      ? 'JS / API 漫画来源目录'
-                      : '漫画规则与来源',
+                  Icons.language_outlined,
+                  '漫画规则与来源',
                   '${AppRoutes.sources}?type=manga',
-                  subtitle:
-                      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
-                      ? '应用内安装兼容规则，不需另装 APK / DEX 扩展'
-                      : '来源登录与偏好在各漫画来源中管理',
+                  subtitle: '来源登录与偏好在各漫画来源中管理',
                 ),
                 route(
                   Icons.sync_outlined,

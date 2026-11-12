@@ -8,6 +8,7 @@ import '../models/media_type.dart';
 import '../models/source_exception.dart';
 import 'bangumi_route_policy.dart';
 import 'ehentai/ehentai_image.dart';
+import 'ehentai/ehentai_network.dart';
 import 'github_public_delivery.dart';
 import 'http_adapter_stub.dart' if (dart.library.io) 'http_adapter_io.dart';
 import 'jmcomic/jmcomic_image.dart';
@@ -630,21 +631,23 @@ class DioSourceHttpClient
         }
         return await WindowsMihonHost.instance.coverBytes(url, sourceId);
       }
-      final ehPage = sourceId == 'ehentai' && isEhentaiImagePage(url);
-      if (ehPage && method != 'GET') {
-        throw const FormatException('E-Hentai 图片页只支持读取');
+      if (sourceId == 'ehentai' && isEhentaiImagePage(url)) {
+        if (method != 'GET') {
+          throw const FormatException('E-Hentai 图片页只支持读取');
+        }
+        // Caller headers are ignored: the native network adds the configured
+        // UA, viewer Referer and login cookies (site hosts only).
+        return await fetchEhentaiImageBytes(
+          EhentaiNetwork.forImages(this),
+          url,
+        );
       }
-      final requestUrl = ehPage ? await resolveEhentaiImage(this, url) : url;
       final response = await _dio.request<List<int>>(
-        requestUrl,
+        url,
         options: Options(
           method: method,
-          headers: _requestHeaders(ehPage ? {
-            'Referer': url,
-            'User-Agent': 'Mozilla/5.0',
-          } : headers),
+          headers: _requestHeaders(headers),
           responseType: ResponseType.bytes,
-          followRedirects: ehPage ? false : null,
           connectTimeout: timeout,
           sendTimeout: timeout,
           receiveTimeout: timeout,
@@ -653,7 +656,7 @@ class DioSourceHttpClient
         onReceiveProgress: _receiveProgress(),
       );
       final status = response.statusCode ?? 0;
-      if (status < 200 || status >= (ehPage ? 300 : 400)) {
+      if (status < 200 || status >= 400) {
         throw SourceException(
           sourceId: sourceId,
           type: _classifyStatus(status),
