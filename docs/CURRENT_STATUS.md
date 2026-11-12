@@ -8,6 +8,8 @@ iOS「插件与来源管理」改为插件库：已安装规则插件（图标/�
 
 验证：Mac analyze 零问题；全量 2528 通过 / 27 平台跳过，3 项阅读切章测试仅在并行负载下超时，单独重跑 12/12 通过；iOS Release 编译成功。USB iPhone（iOS 15.8.3，独立 `.acceptance` 身份，测完卸载，正式 Triomi 未动）实网对照 11/11 通过，详见 [对照清单 G 节](delivery/EHENTAI_ANDROID_PARITY.md)。未在真机覆盖：ExHentai/收藏夹/关注流（需用户 Cookie）、图片重试换节点、旧章节迁移与插件库界面（均有 Mac 测试）。发布顺序：先应用 0.15.5+199（`TriomiIosRevision` 重置为 0），再规则 1.2.0；旧版应用遇到新规则会提示更新应用。
 
+已发布核验：[v0.15.5-ios.199](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.5-ios.199)，源码 `925712b`，[仅编译发布 43138210176](https://github.com/HyperionHXH/triomi/actions/runs/43138210176) 成功；IPA **14,262,891 字节 / SHA256 `6b8d8fb08d016e5131cf5d6b8e1ca39170d8ef41b3c9d7502253d811378b518d`**，内部 `io.github.hyperionhxh.triomi` 0.15.5+199 / 修订 0 / iOS15，内置 E-Hentai 规则 1.2.0；匿名完整下载、manifest、SHA256SUMS、release-metadata 与 GitHub digest 一致，旧 `v0.15.4-ios.198-r1` 4 个资产保持。兼容仓库 `ec40801` 公开 E-Hentai 1.2.0（Security / Triomi catalog 两个 CI 成功，公开字节与 hash 匹配）。手机上的正式 Triomi 未被替换，仍为 0.15.4+198 修订1。
+
 ## 当前请求：手机来源实网标签复验与WN/JM规则修复
 
 已在普通Triomi数据库中明确升级来源，并逐15个已安装来源实网检查；MangaDex Action、Copy愛情、Bangumi恋爱、轻之国度恋爱两页/抽查详情一致。哔咔/轻书架游客授权限制、播放源及部分漫画的关键词回退不计标签通过。沿用生产来源HTTP代理实际由手机发请求，不声称全局VPN成功；临时代理设置恢复，非来源业务表完整内容及来源启停保持。
