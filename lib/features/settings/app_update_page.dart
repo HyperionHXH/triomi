@@ -239,6 +239,8 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
       _reportFailure(error.message, retry);
     } on HttpException catch (error) {
       _reportFailure(error.message, retry);
+    } on FileSystemException catch (error) {
+      _reportFailure(error.message, retry);
     } catch (_) {
       _reportFailure('更新操作未完成。请检查网络、文件及可用空间；未安装或覆盖现有应用。', retry);
     } finally {

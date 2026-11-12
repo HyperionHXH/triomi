@@ -113,6 +113,8 @@ class AppUpdateTask extends ChangeNotifier {
       error = failure.message;
     } on HttpException catch (failure) {
       error = failure.message;
+    } on FileSystemException catch (failure) {
+      error = failure.message;
     } catch (_) {
       if (cancellation.cancelled) {
         cancelled = true;

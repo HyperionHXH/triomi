@@ -1,5 +1,11 @@
 # Triomi 主线执行清单
 
+## 当前请求：iOS 应用内更新修复（0.15.5+199 修订1）
+
+- [x] USB 独立身份实测：检查更新/修订清单正常，暂存写入因 `/var`→`/private/var` 系统别名被拒；页面把 FileSystemException 显示为通用失败。
+- [x] 仅放行 iOS 系统 `/var` 别名；任务/页面显示文件系统错误原文；设备测试改走生产写入函数。Mac analyze 零问题，更新相关 118 通过 / 18 平台跳过。
+- [ ] 发布修订1，手机实测应用内下载核验并升级，核对数据保留。
+
 ## 当前请求：E-Hentai 对齐安卓 1.6.36 与漫画插件管理
 
 - [x] 以 v0.15.4 Windows 运行时 + 原生 JAR 实测安卓基准；生成对照清单 `docs/delivery/EHENTAI_ANDROID_PARITY.md`。

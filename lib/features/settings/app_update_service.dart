@@ -607,8 +607,10 @@ Future<String> stageAppUpdateBytes(
   );
   if (await FileSystemEntity.type(parent.path, followLinks: false) !=
           FileSystemEntityType.directory ||
-      p.normalize(await parent.resolveSymbolicLinks()) !=
-          p.normalize(parent.absolute.path) ||
+      !await _sameOrSystemVarAlias(
+        p.normalize(parent.absolute.path),
+        p.normalize(await parent.resolveSymbolicLinks()),
+      ) ||
       (type != FileSystemEntityType.notFound &&
           type != FileSystemEntityType.file)) {
     throw const FileSystemException('更新暂存只允许无路径别名的普通文件');
@@ -1839,6 +1841,15 @@ class AppUpdateService {
     }
   }
 }
+
+/// iOS containers live under `/var`, a system link to `/private/var`.
+/// Accept exactly that alias with an unchanged suffix; any other link differs.
+Future<bool> _sameOrSystemVarAlias(String absolute, String resolved) async =>
+    resolved == absolute ||
+    (Platform.isIOS &&
+        absolute.startsWith('/var/') &&
+        resolved == '/private$absolute' &&
+        await Directory('/var').resolveSymbolicLinks() == '/private/var');
 
 Future<File> _regular(String path) async {
   final absolute = p.absolute(path);

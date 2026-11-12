@@ -22,10 +22,9 @@ void main() {
         'current',
       ))!;
       expect(current['platform'], 'ios');
-      expect(current['version'], '0.15.4');
-      expect(current['versionCode'], 198);
-      expect(current['iosRevision'], 1);
       final bundle = current['packageName'] as String;
+      final version = current['version'] as String;
+      final build = current['versionCode'] as int;
       final revision = current['iosRevision'] as int;
       final paths = <String>[];
       addTearDown(() async {
@@ -36,8 +35,8 @@ void main() {
       final xml = utf8.encode('''<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>$bundle</string>
-<key>CFBundleShortVersionString</key><string>0.15.4</string>
-<key>CFBundleVersion</key><string>198</string>
+<key>CFBundleShortVersionString</key><string>$version</string>
+<key>CFBundleVersion</key><string>$build</string>
 <key>CFBundleExecutable</key><string>Runner</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>TriomiIosRevision</key><integer>${revision + 1}</integer>
@@ -48,8 +47,15 @@ void main() {
       final bytes = ZipEncoder().encode(archive);
       final path = (await channel.invokeMethod<String>('beginIosStage'))!;
       paths.add(path);
-      await File(path).writeAsBytes(bytes, flush: true);
-      final digest = sha256.convert(bytes).toString();
+      // The production writer, not a test shortcut: the stage lives under the
+      // /var -> /private/var container alias on every real iOS device.
+      final digest = await stageAppUpdateBytes(
+        Stream.value(bytes),
+        File(path),
+        cancellation: AppUpdateCancellation(),
+        expectedBytes: bytes.length,
+      );
+      expect(digest, sha256.convert(bytes).toString());
       final plist = await inspectIosUpdateZip(
         path,
         '${File(path).parent.path}/cancel',
@@ -57,8 +63,8 @@ void main() {
       final manifest = {
         'platform': 'ios',
         'packageName': bundle,
-        'version': '0.15.4',
-        'versionCode': 198,
+        'version': version,
+        'versionCode': build,
         'iosRevision': revision + 1,
         'sha256': digest,
       };

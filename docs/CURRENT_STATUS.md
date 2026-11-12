@@ -1,5 +1,9 @@
 # Triomi 当前状态
 
+## 当前请求：iOS 0.15.5+199 修订1（应用内更新下载修复）
+
+手机应用内更新在“下载更新”后报“更新操作未完成”。USB 实测根因：iOS 应用容器位于 `/var/...`，而 `/var` 是系统指向 `/private/var` 的链接；`stageAppUpdateBytes` 把父目录真实路径与绝对路径逐字比较，判定为“路径别名”并拒绝写入 IPA（FileSystemException 又被页面兜底成通用提示）。修复只放行这一个系统别名（后缀完全相同、`/var` 实际解析为 `/private/var`），其他链接仍拒绝；下载任务与页面现在直接显示文件系统错误原文。原设备测试用 `File.writeAsBytes` 绕过了生产写入函数，现改为调用 `stageAppUpdateBytes`，并按已安装版本动态构造清单。版本保持 0.15.5+199，`TriomiIosRevision=1`，发布 tag `v0.15.5-ios.199-r1`。
+
 ## 当前请求：iOS 0.15.5+199（E-Hentai 对齐安卓 1.6.36、漫画插件库）
 
 E-Hentai 由 JS 规则改为 Dart 原生来源（规则 1.2.0，`requiresHost: ehentai.native.v1`），行为对齐主线安卓实际执行的 E-Hentai 1.6.36 插件：热门单页、最新首页游标分页、21 项筛选（收藏夹/关注标签/排行榜/分类/评分/语言/页数/高级）、图库 URL 直达、单章节 “Full Gallery”、按缩略图分页取完整页数、原图（需登录）、Android 退避重试与 `nl()` 换节点、ExHentai 及三 Cookie（仅存系统安全存储、只发往站点主机）。与安卓差异：SOCKS 代理不支持（iOS Dart HttpClient 只支持 HTTP CONNECT），图片重试上限 8 次。启动时一次性迁移旧 “Pages a-b” 分段章节到单章节绝对页位置；仅全部分段已读才标记整本已读，下载文件保留旧身份可继续离线阅读。
