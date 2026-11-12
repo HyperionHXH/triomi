@@ -4,7 +4,7 @@
 
 - [x] USB 独立身份实测：检查更新/修订清单正常，暂存写入因 `/var`→`/private/var` 系统别名被拒；页面把 FileSystemException 显示为通用失败。
 - [x] 仅放行 iOS 系统 `/var` 别名；任务/页面显示文件系统错误原文；设备测试改走生产写入函数。Mac analyze 零问题，更新相关 118 通过 / 18 平台跳过。
-- [ ] 发布修订1，手机实测应用内下载核验并升级，核对数据保留。
+- [x] 发布 [v0.15.5-ios.199-r1](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.5-ios.199-r1)（ba48ca6 / 43146901542），IPA 14,261,085 字节 / SHA256 `04eec067273ae073f1279790d6a4f7ac054323da4c1628e8f03416a6658d3102`，内部 0.15.5+199 修订1，匿名下载/manifest/SHA256SUMS/GitHub digest 一致。USB 独立身份实跑 `ios_update_live_test`（生产写入函数 + 原生核验/交接拒绝）通过。手机按原 AppSync 身份覆盖安装修订1，未卸载；业务表数量不变，仅 E-Hentai 174 条旧分段章节缓存按迁移删除、6 条历史改为整本身份。
 
 ## 当前请求：E-Hentai 对齐安卓 1.6.36 与漫画插件管理
 
