@@ -19,7 +19,7 @@ import 'package:triomi/features/library/data/library_providers.dart';
 import 'package:triomi/features/library/data/merged_manga_repository.dart';
 import 'package:triomi/features/novel/reader/novel_reader_page.dart';
 import 'package:triomi/features/reader/manga_reader_page.dart';
-import 'package:triomi/features/reader/reader_work_settings.dart';
+import 'package:triomi/features/reader/manga_reader_settings.dart';
 
 import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
@@ -197,19 +197,18 @@ void main() {
         expect(indicator(), before);
         expect(tester.takeException(), isNull);
         if (type == MediaType.manga) {
-          const work = (sourceId: 'restart', remoteId: 'book');
-          await container.read(readerWorkOverridesProvider(work).future);
+          await container.read(mangaReaderValuesProvider.future);
           await container
-              .read(readerWorkSettingsRepositoryProvider)
-              .set(work, 'mode', 'webtoon');
+              .read(mangaReaderPreferencesProvider)
+              .set('mode', 'webtoon');
           await settle(tester);
           expect(indicator(), before, reason: '切条漫不能写回第一页');
           await container
-              .read(readerWorkSettingsRepositoryProvider)
-              .set(work, 'mode', 'ltr');
+              .read(mangaReaderPreferencesProvider)
+              .set('mode', 'ltr');
           await container
-              .read(readerWorkSettingsRepositoryProvider)
-              .set(work, 'doublePage', true);
+              .read(mangaReaderPreferencesProvider)
+              .set('doublePage', true);
           await settle(tester);
           expect(indicator(), '7/12', reason: '双页显示包含原第8页的第7/8页组合，不退回第一页');
           expect(
@@ -223,8 +222,8 @@ void main() {
             expect(find.byKey(ValueKey(url)).hitTestable(), findsOneWidget);
           }
           await container
-              .read(readerWorkSettingsRepositoryProvider)
-              .reset(work);
+              .read(mangaReaderPreferencesProvider)
+              .reset();
           await settle(tester);
         }
         if (type == MediaType.manga) {

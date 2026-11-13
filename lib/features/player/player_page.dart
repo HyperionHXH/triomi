@@ -646,7 +646,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           .invokeMethod<void>('videoPolicy', {
             'owner': _resolverOwner,
             'active': true,
-            'pip': true,
+            'pip': _settings.autoPip,
             'backgroundAudio': _settings.backgroundAudio,
           });
     } else {

@@ -1,0 +1,39 @@
+{
+  "version": "0.15.6+200",
+  "status": "local-validation-passed-normal-builds-in-progress",
+  "scope": ["Issue #9 Android automatic PiP preference", "All manga reader controls are persistent global preferences"],
+  "issue": "https://github.com/HyperionHXH/triomi/issues/9",
+  "implementation": {
+    "automaticPip": "player.controls.autoPip, consumed by videoPolicy.pip; default preserves existing behavior; manual entry independent",
+    "mangaBase": ["reader.mode", "reader.fit", "reader.background"],
+    "mangaAdvanced": "reader.manga",
+    "removed": "Per-work settings API, family providers and per-work settings sheet",
+    "legacy": "Old reader.work records are preserved but no longer consulted; no arbitrary per-work preference is promoted to global. Existing basic global settings are retained; choose old work-specific options once in the new global panel.",
+    "novel": "Manga changes do not write novel settings"
+  },
+  "localVerification": {
+    "fullFlutterPassed": 1981,
+    "fullFlutterSkipped": 5,
+    "initialRelevantConsumerTestsPassed": 75,
+    "diskTest": "All 12 settings restored after actual Hive box closure and fresh provider container",
+    "readerSurface": "Production MangaReaderPage settings changed through controls; next chapter, same chapter reentry and another work use vertical/contain layout",
+    "playerSurface": "Production PlayerPage menu updates actual policy channel and persists automatic PiP independently of manual PiP",
+    "actualAndroid": {
+      "serial": "emulator-5556",
+      "avd": "triomi_r174_network_volume_storage",
+      "entrypoint": "Temporary isolated scenario using production reader/player widgets and real native Media3; not normal release entrypoint",
+      "manga": "Generated local PNG, real Hive and database; next/same chapter and separate work after Hive closure retain settings",
+      "automaticPipDisabledHomePinned": false,
+      "automaticPipEnabledHomePinned": true,
+      "playerReentryRetainedDisabled": true,
+      "passed": true,
+      "dataSafety": "Explicit install -r only, no connected test runner, no uninstall or data clear, temporary media removed",
+      "visualLimit": "Runtime controls/layout and Android pinned state verified; no new human pixel-visual claim"
+    },
+    "temporaryScenario": "Removed before normal production build",
+    "textEncodingErrors": 0,
+    "documentationDriftErrors": 0,
+    "initialFailures": ["Test fixture used non-exported HiveImpl; corrected to public Hive API", "Runtime fixture repeated identical manifest filename, rejected by existing media validation; unique filenames then passed", "Initial analyze found import ordering and unused throwaway import; final analyze pending normal build"]
+  },
+  "publication": {"published": false, "issueClosed": false, "iosWorkspaceUntouched": true}
+}

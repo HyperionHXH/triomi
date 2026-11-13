@@ -1,5 +1,9 @@
 # Triomi 主线执行清单
 
+## 当前增量：R193 自动小窗开关与漫画全局阅读设置（0.15.6+200，验收中）
+
+处理[#9](https://github.com/HyperionHXH/triomi/issues/9)：Android播放偏好加入持久自动画中画开关，仅控制Home自动进入，手动画中画保留。漫画设置从每作品覆盖改为统一全局偏好；基础三项沿用既有全局键，其余保存到`reader.manga`，旧作品覆盖不再盖回。消费者验证覆盖换章/重进/另一作品、真实Hive关闭重开与原生播放器策略，具体运行和发布门槛见[当前状态](CURRENT_STATUS.md)。本轮Android/Windows发布，不改独立iOS工作区。
+
 ## 当前增量：R192 桌面播放完整修复（Windows修订2，已发布核验，#8已解决）
 
 COM根因改用包含上游WASAPI MTA租约修复的SHA256固定解码库，已撤掉独立Dart UI线程临时措施；原生入口导航按当前NavigationId和文档完成串行，修no-referrer及无后缀HLS逐媒体解复用。普通Release真实AGE切集、7sefun原53集暂停/跳过/独立重启恢复、DM84芙莉莲持续4:04/26:00及全屏还原均已观察。MXdm同机代理CDN403而直连200、独立浏览器媒体失败的路线边界保留。用户明确授权最终验证通过后只发布Windows修订2并解决#8，不改Android/iOS或原标签；检查与公开交付结果统一见[当前状态](CURRENT_STATUS.md)。

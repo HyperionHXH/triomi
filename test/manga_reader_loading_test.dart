@@ -13,8 +13,8 @@ import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/downloads/data/download_providers.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/reader/manga_reader_page.dart';
+import 'package:triomi/features/reader/manga_reader_settings.dart';
 import 'package:triomi/features/reader/reader_settings.dart';
-import 'package:triomi/features/reader/reader_work_settings.dart';
 
 import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
@@ -88,8 +88,7 @@ void main() {
     await tester.tap(find.byTooltip('阅读设置'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    const work = (sourceId: 'reader', remoteId: 'book');
-    final oldMode = container.read(readerWorkSettingsProvider(work)).base.mode;
+    final oldMode = container.read(mangaViewSettingsProvider).base.mode;
     final targetMode = oldMode == ReadingMode.ltr
         ? ReadingMode.rtl
         : ReadingMode.ltr;
@@ -102,12 +101,12 @@ void main() {
     await tester.runAsync(
       () async => Future<void>.delayed(const Duration(milliseconds: 20)),
     );
-    container.invalidate(readerWorkOverridesProvider(work));
+    container.invalidate(mangaReaderValuesProvider);
     expect(
-      container.read(readerWorkSettingsProvider(work)).base.mode,
+      container.read(mangaViewSettingsProvider).base.mode,
       targetMode,
     );
-    expect(container.read(readerSettingsProvider).mode, oldMode);
+    expect(container.read(readerSettingsProvider).mode, targetMode);
     Navigator.of(tester.element(find.text(targetMode.label))).pop();
     await tester.pump(const Duration(milliseconds: 400));
 

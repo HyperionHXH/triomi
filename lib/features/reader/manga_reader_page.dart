@@ -28,10 +28,10 @@ import '../library/data/merged_manga_repository.dart';
 import '../novel/reader/novel_reader_settings.dart';
 import '../tracking/data/tracking_providers.dart';
 import 'manga_page_image.dart';
+import 'manga_reader_settings.dart';
+import 'manga_reader_settings_sheet.dart';
 import 'manga_reading_order.dart';
 import 'reader_settings.dart';
-import 'reader_work_settings.dart';
-import 'reader_work_settings_sheet.dart';
 
 /// 打开阅读器所需的上下文。
 class MangaReaderArgs {
@@ -79,10 +79,8 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   Timer? _autoScrollTimer;
   bool _foreground = true;
   late final int _previousCacheBytes;
-  ReaderWorkKey get _workKey =>
-      (sourceId: _item.sourceId, remoteId: _item.remoteId);
   MangaViewSettings get _viewSettings =>
-      ref.read(readerWorkSettingsProvider(_workKey));
+      ref.read(mangaViewSettingsProvider);
   bool get _doublePage =>
       _viewSettings.doublePage &&
       MediaQuery.sizeOf(context).width >= 600 &&
@@ -154,9 +152,8 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     // 屏幕常亮与屏幕方向（B4），退出时恢复。
     final readerPrefs = NovelReaderSettings.load(ref.read(preferencesProvider));
     _keepScreenOn = readerPrefs.keepScreenOn;
-    _volumeKeyTurn = readerPrefs.volumeKeyTurn;
     final view = _viewSettings;
-    _volumeKeyTurn = view.hasOverrides ? view.volumeKeys : _volumeKeyTurn;
+    _volumeKeyTurn = view.volumeKeys;
     _previousCacheBytes = PaintingBinding.instance.imageCache.maximumSizeBytes;
     PaintingBinding.instance.imageCache.maximumSizeBytes =
         view.cacheMiB * 1024 * 1024;
@@ -186,7 +183,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     }
     unawaited(
       _applyOrientation(
-        view.hasOverrides ? view.orientation : readerPrefs.orientation,
+        view.orientation,
       ),
     );
     unawaited(_load());
@@ -936,9 +933,9 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
   @override
   Widget build(BuildContext context) {
-    final view = ref.watch(readerWorkSettingsProvider(_workKey));
+    final view = ref.watch(mangaViewSettingsProvider);
     final settings = view.base;
-    ref.listen(readerWorkSettingsProvider(_workKey), (previous, next) {
+    ref.listen(mangaViewSettingsProvider, (previous, next) {
       PaintingBinding.instance.imageCache.maximumSizeBytes =
           next.cacheMiB * 1024 * 1024;
       _volumeKeyTurn = next.volumeKeys;
@@ -1352,7 +1349,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
         context: context,
         isScrollControlled: true,
         showDragHandle: true,
-        builder: (_) => ReaderWorkSettingsSheet(workKey: _workKey),
+        builder: (_) => const MangaReaderSettingsSheet(),
       );
 
   Future<void> _showChapterList() async {

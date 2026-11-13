@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/features/player/data/player_settings.dart';
 import 'package:triomi/features/player/player_menu.dart';
+import 'fixtures/fake_preferences.dart';
 
 class _MenuHarness extends StatefulWidget {
   const _MenuHarness({
@@ -111,6 +112,22 @@ Future<void> _tap(WidgetTester tester, String id) async {
 }
 
 void main() {
+  testWidgets('automatic PiP preference persists without disabling manual PiP', (tester) async {
+    final preferences = memoryPreferences();
+    final key = GlobalKey<_MenuHarnessState>();
+    await tester.pumpWidget(_MenuHarness(key: key, onSave: (settings) => settings.save(preferences)));
+    await _open(tester);
+    await _tap(tester, 'preferences');
+    await _tap(tester, 'auto-pip');
+    expect(PlayerSettings.load(preferences).autoPip, isFalse);
+    await _tap(tester, 'back');
+    await _tap(tester, 'action-pip');
+    expect(key.currentState!.actions, [PlayerMenuAction.pip]);
+    await PlayerSettings.load(preferences).copyWith(speed: 1.5).save(preferences);
+    expect(PlayerSettings.load(preferences).autoPip, isFalse);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+  });
   testWidgets(
     'desktop volume keeps continuous app gain through normal settings callback',
     (tester) async {

@@ -79,6 +79,7 @@ void main() {
       final channels = <MethodChannel>[];
       final opens = <Map<Object?, Object?>>[];
       final nativeCalls = <MethodCall>[];
+      final policies = <Map<Object?, Object?>>[];
       Completer<void>? pendingPause;
       messenger.setMockMethodCallHandler(SystemChannels.platform_views, (
         call,
@@ -100,7 +101,10 @@ void main() {
       });
       messenger.setMockMethodCallHandler(
         const MethodChannel('triomi/platform'),
-        (_) async => null,
+        (call) async {
+          if (call.method == 'videoPolicy') policies.add(Map<Object?, Object?>.from(call.arguments as Map));
+          return null;
+        },
       );
       Future<void> settle() async {
         for (var i = 0; i < 15; i++) {
@@ -280,6 +284,9 @@ void main() {
       await menuTap('back');
       await menuTap('preferences');
       await menuTap('auto-next');
+      await menuTap('auto-pip');
+      expect(policies.last['pip'], isFalse);
+      expect(PlayerSettings.load(container.read(preferencesProvider)).autoPip, isFalse);
       await menuTap('background-audio');
       expect(
         (nativeCalls
@@ -317,6 +324,8 @@ void main() {
       await settleRoute();
       await menuTap('preferences');
       await menuTap('auto-next');
+      await menuTap('auto-pip');
+      expect(policies.last['pip'], isTrue);
       await menuTap('background-audio');
       final pauses = nativeCalls.where((call) => call.method == 'pause').length;
       await tester.tapAt(const Offset(12, 80));

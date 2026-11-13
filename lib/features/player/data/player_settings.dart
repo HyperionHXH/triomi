@@ -20,11 +20,12 @@ class PlayerSettings {
     this.autoNext = true,
     this.aspectRatio = VideoAspectRatio.original,
     this.backgroundAudio = false,
+    this.autoPip = true,
     this.volume = 1,
     this.skipSeconds = 80,
   });
   final double speed, holdSpeed, volume;
-  final bool autoNext, backgroundAudio;
+  final bool autoNext, backgroundAudio, autoPip;
   final VideoAspectRatio aspectRatio;
   final int skipSeconds;
   static const key = 'player.controls';
@@ -44,6 +45,7 @@ class PlayerSettings {
       skipSeconds: number('skipSeconds', 80, 1, 3600).round(),
       autoNext: raw['autoNext'] != false,
       backgroundAudio: raw['backgroundAudio'] == true,
+      autoPip: raw['autoPip'] != false,
       aspectRatio: VideoAspectRatio.values
           .where((value) => value.name == raw['aspectRatio'])
           .firstOrNull ?? VideoAspectRatio.original,
@@ -56,6 +58,7 @@ class PlayerSettings {
     double? volume,
     bool? autoNext,
     bool? backgroundAudio,
+    bool? autoPip,
     VideoAspectRatio? aspectRatio,
     int? skipSeconds,
   }) => PlayerSettings(
@@ -64,6 +67,7 @@ class PlayerSettings {
     volume: volume ?? this.volume,
     autoNext: autoNext ?? this.autoNext,
     backgroundAudio: backgroundAudio ?? this.backgroundAudio,
+    autoPip: autoPip ?? this.autoPip,
     aspectRatio: aspectRatio ?? this.aspectRatio,
     skipSeconds: skipSeconds ?? this.skipSeconds,
   );
@@ -73,6 +77,7 @@ class PlayerSettings {
     'volume': volume,
     'autoNext': autoNext,
     'backgroundAudio': backgroundAudio,
+    'autoPip': autoPip,
     'aspectRatio': aspectRatio.name,
     'skipSeconds': skipSeconds,
   });

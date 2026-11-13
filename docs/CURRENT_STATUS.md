@@ -1,5 +1,13 @@
 # Triomi 当前状态
 
+## 当前请求：R193 新issue与漫画全局阅读体验（0.15.6+200，验收中）
+
+最新[#9](https://github.com/HyperionHXH/triomi/issues/9)要求Android按Home不必强制弹小窗。播放设置的「播放偏好」新增“离开应用自动画中画”，默认保留旧行为；关闭写入既有`player.controls`，后续进入/设置修改仍保留，`videoPolicy.pip`消费真实保存值。手动画中画独立保留；关闭自动小窗且后台音频未启用时，继续按已有原生生命周期暂停。
+
+漫画阅读器原入口写每作品覆盖，现阅读模式/图片适配/背景统一写既有全局`reader.mode/fit/background`，其他方向/触摸区/裁边/双页/音量键/滤镜/自动滚动/预载/缓存统一写`reader.manga`；所有章节/作品读取同一提供者。移除生产每作品API和覆盖入口，旧`reader.work.*`记录不再读取、也不自动猜哪部作品代表全局。用户可能需在新全局面板重新选择一次旧作品专用偏好，此后不随换书还原；旧数据未清理，小说与界面外观设置不被改写。
+
+本机完整Flutter1981项通过/5平台条件跳过；首轮相关75项、增补全局换章/重进/另一作品和原生播放器策略断言通过，真实Hive关闭重开验证全部12项设置通过。助手独立API35 AVD `triomi_r174_network_volume_storage`上，生产MangaReaderPage真实本地PNG/磁盘Hive场景和生产PlayerPage实际Media3解码后菜单修改通过：关闭自动PiP按Home无pinned，重新进入仍关闭；开启再Home确有pinned。全程显式`install -r`，未运行connected任务/卸载/清数据；临时入口和媒体已移除。此为隔离真实运行，不冒称普通发布包或像素目视已验。最终正常构建、签名、公开下载与issue状态完成后补录，见[R193证据](delivery/evidence/R193-global-reader-pip.json)。
+
 ## 当前请求：R192 完整修复桌面播放后再解决issue（Windows修订2，已发布并核验，#8已解决）
 
 本轮不把网站错误直接排除：原生与独立Chromium、相同播放页/媒体、直连与现有系统代理分层对照，另以普通主程序真实画面验证。客户端已定位并修复四项根因：

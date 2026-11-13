@@ -1,5 +1,7 @@
 # 来源能力矩阵与生产/夹具边界（D75）
 
+> R193漫画全局阅读与自动PiP：仅改客户端偏好作用域/持久化和Android自动小窗策略，不扩展网站登录、图片/视频可达性或插件兼容承诺；旧每作品覆盖不再应用。实际平台验收和0.15.6+200发布状态见[CURRENT_STATUS](CURRENT_STATUS.md)。
+
 > R192本机桌面实播：修COM所有权、入口导航竞争、no-referrer和逐媒体HLS解复用后，普通Release已看到AGE《境界触发者》1/2集、7sefun原第53集、DM84《芙莉莲》真实画面和时间推进，含重启续播/全屏。MXdm同机CDN直连200、既有代理403且独立Chromium也未就绪，属于该路线样本限制，不宣称整站失效或全部来源通过。修订2最终发布与证据统一见[CURRENT_STATUS](CURRENT_STATUS.md)。
 
 > R191：Windows网页解析器按来源目录复用环境、独立controller取消，保留具体初始化stage/HRESULT；同目录Windows扩展路径不换Cookie存储、不依赖磁盘短名。只修客户端生命周期，不扩大来源网站、网络、验证码或登录可用性承诺；#8原机器的旧版原始失败码不可追溯，详见[CURRENT_STATUS](CURRENT_STATUS.md)。
