@@ -1,6 +1,6 @@
 {
   "version": "0.15.6+200",
-  "status": "local-validation-passed-normal-builds-in-progress",
+  "status": "local-normal-builds-and-runtime-verified-ready-for-publication",
   "scope": ["Issue #9 Android automatic PiP preference", "All manga reader controls are persistent global preferences"],
   "issue": "https://github.com/HyperionHXH/triomi/issues/9",
   "implementation": {
@@ -33,7 +33,8 @@
     "temporaryScenario": "Removed before normal production build",
     "textEncodingErrors": 0,
     "documentationDriftErrors": 0,
-    "initialFailures": ["Test fixture used non-exported HiveImpl; corrected to public Hive API", "Runtime fixture repeated identical manifest filename, rejected by existing media validation; unique filenames then passed", "Initial analyze found import ordering and unused throwaway import; final analyze pending normal build"]
+    "initialFailures": ["Test fixture used non-exported HiveImpl; corrected to public Hive API", "Runtime fixture repeated identical manifest filename, rejected by existing media validation; unique filenames then passed", "Import order and unused temporary import corrected; final analyze has no issues", "Android --no-pub retained integration-test registrant; normal Flutter release build regenerated production registration and passed"]
   },
-  "publication": {"published": false, "issueClosed": false, "iosWorkspaceUntouched": true}
+  "normalBuilds": {"windowsRelease": "passed", "androidAcceptanceRelease": "passed after Flutter release-mode plugin regeneration (no --no-pub)", "analyze": "No issues found", "mihonAbiDescriptorsPassed": 128, "androidInstall": "emulator-5556 install -r and normal main startup", "privacy": {"sourceFiles": 1506, "sourceCredentialHits": 0, "apkMembers": 626, "apkCredentialHits": 0, "privateOrDebugNames": 0}},
+  "publication": {"published": false, "issueClosed": false, "iosWorkspaceUntouched": true, "sourceCommit": "50fc035d08f04c94ef827d4d30f70b50212270b0", "validationRun": 43721426058, "validationConclusion": "success", "firstReleaseRun": 43721427382, "firstReleaseFailure": "Windows native WebView2 controller-create 0x800700AA; Android signed build passed; publication skipped", "workflowCorrection": "Reuse existing canonical RUNNER_TEMP/triomi-test-temp convention; keep immutable v0.15.6 source and native tests unchanged"}
 }

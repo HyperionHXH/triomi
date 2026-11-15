@@ -8,6 +8,10 @@
 
 本机完整Flutter1981项通过/5平台条件跳过；首轮相关75项、增补全局换章/重进/另一作品和原生播放器策略断言通过，真实Hive关闭重开验证全部12项设置通过。助手独立API35 AVD `triomi_r174_network_volume_storage`上，生产MangaReaderPage真实本地PNG/磁盘Hive场景和生产PlayerPage实际Media3解码后菜单修改通过：关闭自动PiP按Home无pinned，重新进入仍关闭；开启再Home确有pinned。全程显式`install -r`，未运行connected任务/卸载/清数据；临时入口和媒体已移除。此为隔离真实运行，不冒称普通发布包或像素目视已验。最终正常构建、签名、公开下载与issue状态完成后补录，见[R193证据](delivery/evidence/R193-global-reader-pip.json)。
 
+正常Windows Release及Android验收Release已构建，最终analyze零问题、Mihon release ABI128项通过；验收APK实读0.15.6/200并在5556保数据覆盖安装、普通主入口启动。此前`--no-pub`继承了临时integration_test生成注册项，正常Flutter release模式重生成后已通过，不手改生产插件列表。源码1506文件及APK626成员的现有账号值/编码扫描零命中，无私钥/debug名称；本机没有正式私钥，正式签名将由既有远端Secrets产生并核对原证书。
+
+源码`50fc035`和`v0.15.6`已推送；常规CI43721426058全部通过，首轮正式发布43721427382的Android成功，但Windows原生WebView2首次controller-create返回`0x800700AA`，发布门槛正确阻止上传。双端release流程遗漏了既有release-windows/常规测试使用的短临时目录，现复用相同`RUNNER_TEMP/triomi-test-temp`配置，再执行原测试；不移动版本标签、不修改已冻结源码、不跳过原生回归。此错误码本身不唯一证明路径原因，修后远端结果仍须确认。
+
 ## 当前请求：R192 完整修复桌面播放后再解决issue（Windows修订2，已发布并核验，#8已解决）
 
 本轮不把网站错误直接排除：原生与独立Chromium、相同播放页/媒体、直连与现有系统代理分层对照，另以普通主程序真实画面验证。客户端已定位并修复四项根因：
