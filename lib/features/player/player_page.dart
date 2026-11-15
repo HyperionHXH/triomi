@@ -696,6 +696,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
     if (!mounted) return;
     _updateDanmakuClock();
     _updateSystemMedia();
+    if (_isIOS) await _iosVideoController.setAutoPip(_settings.autoPip);
     if (_useNativeVideo) {
       await _activeNativeController.setRate(_speed);
       await _activeNativeController.setAspectRatio(_settings.aspectRatio.ratio);
@@ -707,7 +708,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           .invokeMethod<void>('videoPolicy', {
             'owner': _resolverOwner,
             'active': true,
-            'pip': true,
+            'pip': _settings.autoPip,
             'backgroundAudio': _settings.backgroundAudio,
           });
     } else {
@@ -822,6 +823,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
           _onNativeVideoError('视频准备超时，请重试或更换播放来源');
         }
       });
+      if (_isIOS) await _iosVideoController.setAutoPip(_settings.autoPip);
       await _activeNativeController.setUrl(
         url,
         headers: headers,
@@ -2109,7 +2111,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
         .invokeMethod<void>('videoPolicy', {
           'owner': _resolverOwner,
           'active': true,
-          'pip': true,
+          'pip': _settings.autoPip,
           'backgroundAudio': _settings.backgroundAudio,
           'brightness': _brightness,
         });

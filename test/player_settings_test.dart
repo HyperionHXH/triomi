@@ -4,6 +4,22 @@ import 'package:triomi/features/player/data/player_settings.dart';
 import 'fixtures/fake_preferences.dart';
 
 void main() {
+  test('automatic PiP defaults on for missing and legacy preferences', () async {
+    final preferences = memoryPreferences();
+    expect(const PlayerSettings().autoPip, isTrue);
+    expect(PlayerSettings.load(preferences).autoPip, isTrue);
+    await preferences.set(PlayerSettings.key, {'backgroundAudio': true});
+    expect(PlayerSettings.load(preferences).autoPip, isTrue);
+    await PlayerSettings.load(preferences)
+        .copyWith(autoPip: false)
+        .save(preferences);
+    final restored = PlayerSettings.load(preferences);
+    expect(restored.autoPip, isFalse);
+    expect(restored.backgroundAudio, isTrue);
+    await restored.copyWith(speed: 1.5).save(preferences);
+    expect(PlayerSettings.load(preferences).autoPip, isFalse);
+  });
+
   test('legacy scale preferences preserve playback settings when choosing a real ratio', () async {
     final preferences = memoryPreferences();
     await preferences.set(PlayerSettings.key, {

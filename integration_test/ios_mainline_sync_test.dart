@@ -23,8 +23,8 @@ import 'package:triomi/features/downloads/data/download_service.dart';
 import 'package:triomi/features/downloads/data/video_downloader.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/reader/manga_page_image.dart';
+import 'package:triomi/features/reader/manga_reader_settings.dart';
 import 'package:triomi/features/reader/reader_settings.dart';
-import 'package:triomi/features/reader/reader_work_settings.dart';
 
 import '../test/fixtures/fake_preferences.dart';
 import '../test/fixtures/png_image.dart';

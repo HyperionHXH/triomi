@@ -1,5 +1,13 @@
 # Triomi 当前状态
 
+## 当前请求：主线 f83e590 同步 iOS（同步中，待验收）
+
+本轮从已同步主线 `f3f08bb` 推进至 `f83e590`，保留 iOS 0.15.5+199 修订1与全部历史证据。同步漫画全局阅读设置持久化：基础设置沿用 `reader.mode/fit/background`，其余漫画设置统一使用 `reader.manga`，不再读取每作品覆盖；同步“离开应用自动画中画”持久开关，iOS 自动 PiP 与手动 PiP、后台音频及 AVPlayer 生命周期分别处理，不将 Android Home 行为直接当作 iOS 实现或验收。
+
+本轮 Mac 编译/分析/回归和 iOS 真机验收均待完成，尤其需核对跨章节/重进/换作品/重启的全局设置保持，以及自动 PiP 关闭、开启与手动 PiP 的真实系统行为。主线 R193 的 Android/Windows 测试及公开发布仅为原平台证据，不算本轮 iOS 验证；本轮 iOS 现已完成上述范围验证，但不得扩大为 Home 后系统 PiP 自动弹出已验证。
+本轮当前证据：`build/sync200/final-device-report.json`（USB独立身份，2项生产Widget/原生场景全通过）、`sync200-manga-global-settings.png`、`sync200-manga-restored-reader.png`、`sync200-auto-pip-enabled.png`、`sync200-auto-pip-disabled.png`。正常IPA内部0.15.6+200/修订0/iOS15，未发布、未覆盖正式手机。首次把桌面debug-only测试放入Release验收导致15项FlutterError，已保留失败证据并改为设备适用场景；第二轮通过。
+下列 iOS199 修订1及主线 R193 发布记录均保留各自历史边界。
+
 ## 当前请求：iOS 0.15.5+199 修订1（应用内更新下载修复）
 
 手机应用内更新在“下载更新”后报“更新操作未完成”。USB 实测根因：iOS 应用容器位于 `/var/...`，而 `/var` 是系统指向 `/private/var` 的链接；`stageAppUpdateBytes` 把父目录真实路径与绝对路径逐字比较，判定为“路径别名”并拒绝写入 IPA（FileSystemException 又被页面兜底成通用提示）。修复只放行这一个系统别名（后缀完全相同、`/var` 实际解析为 `/private/var`），其他链接仍拒绝；下载任务与页面现在直接显示文件系统错误原文。原设备测试用 `File.writeAsBytes` 绕过了生产写入函数，现改为调用 `stageAppUpdateBytes`，并按已安装版本动态构造清单。版本保持 0.15.5+199，`TriomiIosRevision=1`，发布 tag `v0.15.5-ios.199-r1`。
@@ -125,6 +133,21 @@ Windows真实程序已通过新增2项文件SQLite/生产路由阅读验收：�
 
 
 
+## 当前请求：R193 新issue与漫画全局阅读体验（0.15.6+200，已发布并核验，#9已解决）
+
+最新[#9](https://github.com/HyperionHXH/triomi/issues/9)要求Android按Home不必强制弹小窗。播放设置的「播放偏好」新增“离开应用自动画中画”，默认保留旧行为；关闭写入既有`player.controls`，后续进入/设置修改仍保留，`videoPolicy.pip`消费真实保存值。手动画中画独立保留；关闭自动小窗且后台音频未启用时，继续按已有原生生命周期暂停。
+
+漫画阅读器原入口写每作品覆盖，现阅读模式/图片适配/背景统一写既有全局`reader.mode/fit/background`，其他方向/触摸区/裁边/双页/音量键/滤镜/自动滚动/预载/缓存统一写`reader.manga`；所有章节/作品读取同一提供者。移除生产每作品API和覆盖入口，旧`reader.work.*`记录不再读取、也不自动猜哪部作品代表全局。用户可能需在新全局面板重新选择一次旧作品专用偏好，此后不随换书还原；旧数据未清理，小说与界面外观设置不被改写。
+
+本机完整Flutter1981项通过/5平台条件跳过；首轮相关75项、增补全局换章/重进/另一作品和原生播放器策略断言通过，真实Hive关闭重开验证全部12项设置通过。助手独立API35 AVD `triomi_r174_network_volume_storage`上，生产MangaReaderPage真实本地PNG/磁盘Hive场景和生产PlayerPage实际Media3解码后菜单修改通过：关闭自动PiP按Home无pinned，重新进入仍关闭；开启再Home确有pinned。全程显式`install -r`，未运行connected任务/卸载/清数据；临时入口和媒体已移除。此为隔离真实运行，不冒称普通发布包或像素目视已验。最终正常构建、签名、公开下载与issue状态完成后补录，见[R193证据](delivery/evidence/R193-global-reader-pip.json)。
+
+正常Windows Release及Android验收Release已构建，最终analyze零问题、Mihon release ABI128项通过；验收APK实读0.15.6/200并在5556保数据覆盖安装、普通主入口启动。此前`--no-pub`继承了临时integration_test生成注册项，正常Flutter release模式重生成后已通过，不手改生产插件列表。源码1506文件及APK626成员的现有账号值/编码扫描零命中，无私钥/debug名称；本机没有正式私钥，正式签名将由既有远端Secrets产生并核对原证书。
+
+源码`50fc035`和`v0.15.6`已推送；常规CI43721426058全部通过，首轮正式发布43721427382的Android成功，但Windows原生WebView2首次controller-create返回`0x800700AA`，发布门槛正确阻止上传。双端release流程遗漏了既有release-windows/常规测试使用的短临时目录，现复用相同`RUNNER_TEMP/triomi-test-temp`配置，再执行原测试；不移动版本标签、不修改已冻结源码、不跳过原生回归。此错误码本身不唯一证明路径原因，修后远端结果仍须确认。
+
+最终[发布43722621727](https://github.com/HyperionHXH/triomi/actions/runs/43722621727)的Android、Windows原生回归/打包和publish全部成功；[v0.15.6](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.6)为正式非草稿版本，冻结源码`50fc035`未移动。五项公开文件已完整下载，大小/GitHub digest/公共SHA256一致，Windows ZIP466成员与清单逐项一致；APK实读0.15.6/200、原生产证书`731ecd30…`验签及Mihon ABI128通过。公开APK162852528字节/SHA256 `0e61fc9acbceb8690bcb300903d218845d86807f48f49c9cc941f977b85a26f9`，ZIP290238811字节/`a42247169e149e3ea9f1941425cc1ef0488d4495dbb9b323fd4ddce4b72f8ac0`，MSI272773144字节/`2b4d1e8b4e2e250d1b26661d8b29156d768e594128e1a7f2db778edf53f2400d`。MSI曾HTTP/2中断，原公开URL以HTTP/1.1续传后摘要通过；不将容器验证冒称MSI安装生命周期。
+
+源码1506文件、公开APK626/ZIP466成员已知账号值/编码扫描零命中，无私钥/debug名称；15个独立iOS发布资产ID/大小/digest逐一保持。完成公开核验后才[回写并关闭#9](https://github.com/HyperionHXH/triomi/issues/9#issuecomment-6896051812)，API已确认closed/completed。实际AndroidUI与正式APK的验证边界均保留在R193证据，不声称所有手机厂商或网站已验收；本次后续证据提交不重打或替换公开资产。
 
 ## 当前请求：R192 完整修复桌面播放后再解决issue（Windows修订2，已发布并核验，#8已解决）
 

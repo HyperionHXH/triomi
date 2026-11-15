@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/widgets/image_viewer.dart';
-import 'reader_work_settings.dart';
+import 'manga_reader_settings.dart';
 
 /// Uniform white/black margins only; never trim a non-uniform edge or >20%.
 List<int> mangaTrimBounds(({Uint8List rgba, int width, int height}) data) {

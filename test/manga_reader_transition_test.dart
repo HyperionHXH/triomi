@@ -18,8 +18,9 @@ import 'package:triomi/features/downloads/data/download_providers.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/library/data/library_providers.dart';
 import 'package:triomi/features/library/data/merged_manga_repository.dart';
+import 'package:triomi/features/reader/manga_page_image.dart';
 import 'package:triomi/features/reader/manga_reader_page.dart';
-import 'package:triomi/features/reader/reader_work_settings.dart';
+import 'package:triomi/features/reader/manga_reader_settings.dart';
 
 import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
@@ -166,6 +167,40 @@ void main() {
     await settle(tester);
   }
 
+  testWidgets('reader setting changes apply to next chapter, reopened chapter and another work', (tester) async {
+    final fixture = await open(tester);
+    await tester.tap(find.byTooltip('阅读设置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('上下翻页'));
+    await tester.pump();
+    await tester.tap(find.text('完整显示'));
+    await tester.pump();
+    Navigator.of(tester.element(find.text('完整显示'))).pop();
+    await settle(tester);
+    void expectGlobalLayout() {
+      expect(tester.widget<PageView>(find.byType(PageView)).scrollDirection, Axis.vertical);
+      expect(tester.widgetList<MangaPageImage>(find.byType(MangaPageImage)).every((image) => image.fit == BoxFit.contain), isTrue);
+    }
+    expectGlobalLayout();
+    await tester.tap(find.byTooltip('下一章'));
+    await settle(tester);
+    await tester.tap(find.text('继续阅读'));
+    await settle(tester);
+    expect(fixture.downloads.requests.last, 'local-comic/2');
+    expectGlobalLayout();
+    await closeReader(tester);
+    Future<void> reopen(MediaItem work, int index) async {
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: fixture.container,
+        child: MaterialApp(home: MangaReaderPage(args: MangaReaderArgs(item: work, chapters: catalog(), initialIndex: index))),
+      ));
+      await settle(tester);
+      expectGlobalLayout();
+      await closeReader(tester);
+    }
+    await reopen(item, 1);
+    await reopen(const MediaItem(sourceId: 'local-comic', remoteId: 'another', title: 'Another work', type: MediaType.manga), 2);
+  });
   for (final doublePage in [false, true]) {
     testWidgets(
       'dispose persists the last rendered spread (doublePage: $doublePage)',
@@ -177,9 +212,8 @@ void main() {
         final fixture = await open(tester);
         await tester.runAsync(
           () => fixture.container
-              .read(readerWorkSettingsRepositoryProvider)
+              .read(mangaReaderPreferencesProvider)
               .set(
-                (sourceId: item.sourceId, remoteId: item.remoteId),
                 'doublePage',
                 doublePage,
               ),

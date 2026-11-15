@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/features/reader/manga_page_image.dart';
+import 'package:triomi/features/reader/manga_reader_settings.dart';
 import 'package:triomi/features/reader/reader_settings.dart';
-import 'package:triomi/features/reader/reader_work_settings.dart';
 
 class _ImageStream extends ImageStreamCompleter {
   void image(ui.Image image) => setImage(ImageInfo(image: image));

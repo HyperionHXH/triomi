@@ -40,6 +40,7 @@ class NativeVideoState {
     required this.bufferedPosition,
     required this.playing,
     this.mediaVolume,
+    this.autoPip,
   });
 
   final Duration position;
@@ -47,6 +48,9 @@ class NativeVideoState {
   final Duration bufferedPosition;
   final bool playing;
   final MediaVolumeState? mediaVolume;
+
+  /// Actual iOS inline PiP policy; null when no PiP controller is available.
+  final bool? autoPip;
 }
 
 /// Common Dart seam for native video implementations.
@@ -100,6 +104,7 @@ class IosVideoController implements VideoPlatformController {
   String? _pendingUrl;
   String? _pendingMimeType;
   bool _pendingOmitCookies = false;
+  bool _autoPip = true;
   Map<String, String> _pendingHeaders = const <String, String>{};
   Duration _pendingStartPosition = Duration.zero;
   String _pendingTitle = 'Triomi';
@@ -184,6 +189,7 @@ class IosVideoController implements VideoPlatformController {
       mediaVolume: args.containsKey('mediaVolume')
           ? MediaVolumeState.fromMap(args)
           : null,
+      autoPip: args['autoPip'] as bool?,
     );
   }
 
@@ -211,6 +217,7 @@ class IosVideoController implements VideoPlatformController {
       'headers': headers,
       'mimeType': ?mimeType,
       'omitCookies': omitCookies,
+      'autoPip': _autoPip,
       'startMs': startPosition.inMilliseconds,
       'title': title,
       'mediaId': _mediaId,
@@ -250,6 +257,12 @@ class IosVideoController implements VideoPlatformController {
   @override
   Future<void> setBackgroundAudio(bool enabled) =>
       _invoke('setBackgroundAudio', <String, Object?>{'enabled': enabled});
+
+  /// Only controls automatic inline PiP; manual PiP and audio stay independent.
+  Future<void> setAutoPip(bool enabled) async {
+    _autoPip = enabled;
+    await _invoke('setAutoPip', <String, Object?>{'enabled': enabled});
+  }
 
   @override
   Future<List<Map<Object?, Object?>>> subtitleTracks() async {

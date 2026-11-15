@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:triomi/features/player/data/player_settings.dart';
 import 'package:triomi/features/player/player_menu.dart';
+import 'fixtures/fake_preferences.dart';
 
 class _MenuHarness extends StatefulWidget {
   const _MenuHarness({
@@ -134,6 +135,46 @@ void main() {
       await tester.pump();
       debugDefaultTargetPlatformOverride = null;
     });
+
+    testWidgets(
+      '$platform automatic PiP persists independently of manual PiP and audio',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = platform;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        final preferences = memoryPreferences();
+        final key = GlobalKey<_MenuHarnessState>();
+        await tester.pumpWidget(
+          _MenuHarness(
+            key: key,
+            onSave: (settings) => settings.save(preferences),
+          ),
+        );
+        await _open(tester);
+        await _tap(tester, 'preferences');
+        expect(key.currentState!.settings.autoPip, isTrue);
+        await _tap(tester, 'auto-pip');
+        expect(PlayerSettings.load(preferences).autoPip, isFalse);
+        expect(PlayerSettings.load(preferences).backgroundAudio, isFalse);
+        await _tap(tester, 'background-audio');
+        expect(PlayerSettings.load(preferences).backgroundAudio, isTrue);
+        expect(PlayerSettings.load(preferences).autoPip, isFalse);
+        await _tap(tester, 'back');
+        await _tap(tester, 'action-pip');
+        expect(key.currentState!.actions, [PlayerMenuAction.pip]);
+        await PlayerSettings.load(preferences)
+            .copyWith(speed: 1.5)
+            .save(preferences);
+        expect(PlayerSettings.load(preferences).autoPip, isFalse);
+        await _open(tester);
+        await _tap(tester, 'preferences');
+        await _tap(tester, 'auto-pip');
+        expect(PlayerSettings.load(preferences).autoPip, isTrue);
+        expect(PlayerSettings.load(preferences).backgroundAudio, isTrue);
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpAndSettle();
+        debugDefaultTargetPlatformOverride = null;
+      },
+    );
   }
 
   testWidgets(

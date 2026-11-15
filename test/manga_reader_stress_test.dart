@@ -25,8 +25,8 @@ import 'package:triomi/features/downloads/data/image_download_checkpoint.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/reader/manga_page_image.dart';
 import 'package:triomi/features/reader/manga_reader_page.dart';
+import 'package:triomi/features/reader/manga_reader_settings.dart';
 import 'package:triomi/features/reader/reader_settings.dart';
-import 'package:triomi/features/reader/reader_work_settings.dart';
 
 import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
@@ -657,9 +657,8 @@ void main() {
     await settle(tester);
     expect(indicator(tester), '4/7');
     await container
-        .read(readerWorkSettingsRepositoryProvider)
+        .read(mangaReaderPreferencesProvider)
         .set(
-          (sourceId: item.sourceId, remoteId: item.remoteId),
           'doublePage',
           true,
         );

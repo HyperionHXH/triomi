@@ -139,6 +139,7 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
         try IosVideoAudioSession.acquire(viewId)
         mediaId = (args["mediaId"] as? NSNumber)?.intValue ?? 0
         mediaTitle = args["title"] as? String ?? "Triomi"
+        pipController?.canStartPictureInPictureAutomaticallyFromInline = args["autoPip"] as? Bool != false
         systemMediaEnabled = false
         clearNowPlaying()
         open(url, headers: args["headers"] as? [String: String] ?? [:],
@@ -196,6 +197,9 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     case "setBackgroundAudio":
       backgroundAudio = args["enabled"] as? Bool == true
       updateLayer(); applyPlaybackIntent(); result(nil)
+    case "setAutoPip":
+      pipController?.canStartPictureInPictureAutomaticallyFromInline = args["enabled"] as? Bool == true
+      emitState(); result(nil)
     case "setSystemMedia":
       guard (args["mediaId"] as? NSNumber)?.intValue == mediaId else { result(nil); return }
       let enabled = args["enabled"] as? Bool == true
@@ -442,6 +446,7 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     result["durationMs"] = item?.duration.triomiMilliseconds ?? 0
     result["bufferedPositionMs"] = buffered.triomiMilliseconds
     result["playing"] = player.rate > 0
+    result["autoPip"] = pipController?.canStartPictureInPictureAutomaticallyFromInline
     return result
   }
   private func emitState() {

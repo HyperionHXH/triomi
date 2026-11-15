@@ -420,6 +420,14 @@ class _PlayerMenuState extends State<PlayerMenu> {
             _settings.autoNext,
             () => _change(_settings.copyWith(autoNext: !_settings.autoNext)),
           ),
+          if (widget.nativeVideo)
+            _choice(
+              'auto-pip',
+              '离开应用自动画中画',
+              _settings.autoPip,
+              () => _change(_settings.copyWith(autoPip: !_settings.autoPip)),
+              detail: '关闭后按Home不弹小窗；仍可手动进入画中画',
+            ),
           _choice(
             'background-audio',
             '后台音频',
