@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-## 当前请求：R193 新issue与漫画全局阅读体验（0.15.6+200，验收中）
+## 当前请求：R193 新issue与漫画全局阅读体验（0.15.6+200，已发布并核验，#9已解决）
 
 最新[#9](https://github.com/HyperionHXH/triomi/issues/9)要求Android按Home不必强制弹小窗。播放设置的「播放偏好」新增“离开应用自动画中画”，默认保留旧行为；关闭写入既有`player.controls`，后续进入/设置修改仍保留，`videoPolicy.pip`消费真实保存值。手动画中画独立保留；关闭自动小窗且后台音频未启用时，继续按已有原生生命周期暂停。
 
@@ -11,6 +11,10 @@
 正常Windows Release及Android验收Release已构建，最终analyze零问题、Mihon release ABI128项通过；验收APK实读0.15.6/200并在5556保数据覆盖安装、普通主入口启动。此前`--no-pub`继承了临时integration_test生成注册项，正常Flutter release模式重生成后已通过，不手改生产插件列表。源码1506文件及APK626成员的现有账号值/编码扫描零命中，无私钥/debug名称；本机没有正式私钥，正式签名将由既有远端Secrets产生并核对原证书。
 
 源码`50fc035`和`v0.15.6`已推送；常规CI43721426058全部通过，首轮正式发布43721427382的Android成功，但Windows原生WebView2首次controller-create返回`0x800700AA`，发布门槛正确阻止上传。双端release流程遗漏了既有release-windows/常规测试使用的短临时目录，现复用相同`RUNNER_TEMP/triomi-test-temp`配置，再执行原测试；不移动版本标签、不修改已冻结源码、不跳过原生回归。此错误码本身不唯一证明路径原因，修后远端结果仍须确认。
+
+最终[发布43722621727](https://github.com/HyperionHXH/triomi/actions/runs/43722621727)的Android、Windows原生回归/打包和publish全部成功；[v0.15.6](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.6)为正式非草稿版本，冻结源码`50fc035`未移动。五项公开文件已完整下载，大小/GitHub digest/公共SHA256一致，Windows ZIP466成员与清单逐项一致；APK实读0.15.6/200、原生产证书`731ecd30…`验签及Mihon ABI128通过。公开APK162852528字节/SHA256 `0e61fc9acbceb8690bcb300903d218845d86807f48f49c9cc941f977b85a26f9`，ZIP290238811字节/`a42247169e149e3ea9f1941425cc1ef0488d4495dbb9b323fd4ddce4b72f8ac0`，MSI272773144字节/`2b4d1e8b4e2e250d1b26661d8b29156d768e594128e1a7f2db778edf53f2400d`。MSI曾HTTP/2中断，原公开URL以HTTP/1.1续传后摘要通过；不将容器验证冒称MSI安装生命周期。
+
+源码1506文件、公开APK626/ZIP466成员已知账号值/编码扫描零命中，无私钥/debug名称；15个独立iOS发布资产ID/大小/digest逐一保持。完成公开核验后才[回写并关闭#9](https://github.com/HyperionHXH/triomi/issues/9#issuecomment-6896051812)，API已确认closed/completed。实际AndroidUI与正式APK的验证边界均保留在R193证据，不声称所有手机厂商或网站已验收；本次后续证据提交不重打或替换公开资产。
 
 ## 当前请求：R192 完整修复桌面播放后再解决issue（Windows修订2，已发布并核验，#8已解决）
 
