@@ -49,7 +49,7 @@ class NativeVideoState {
   final bool playing;
   final MediaVolumeState? mediaVolume;
 
-  /// Actual iOS inline PiP policy; null when no PiP controller is available.
+  /// Actual inline PiP policy; false without a controller, null on older hosts.
   final bool? autoPip;
 }
 

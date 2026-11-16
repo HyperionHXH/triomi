@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -28,6 +29,7 @@ void main() {
       NativeVideoState? state;
       String? failure;
       var prepared = 0;
+      var pipStarted = false;
       final controller = IosVideoController(
         onState: (value) => state = value,
         onMediaVolume: (_) {},
@@ -37,7 +39,7 @@ void main() {
         },
         onError: (value) => failure = value,
         onCompleted: () {},
-        onPip: (_) {},
+        onPip: (enabled) => pipStarted = enabled,
         onMediaCommand: (_) async {},
       );
       Future<void> until(bool Function() predicate, String reason) async {
@@ -85,6 +87,18 @@ void main() {
         expect(state!.autoPip, isFalse);
         actual.add(state!.autoPip);
         await captureIosDeviceEvidence('sync200-auto-pip-disabled');
+        await controller.play();
+        await until(
+          () => state?.playing == true && state!.position.inMilliseconds > 500,
+          'Replacement source must actually play before requesting manual PiP',
+        );
+        // Opt-out retires the automatic controller; explicit PiP must still
+        // create a ready controller and preserve the disabled preference.
+        bool? manualResult;
+        unawaited(controller.enterPip().then((value) => manualResult = value));
+        await until(() => pipStarted && manualResult == true,
+            'Manual PiP starts with automatic entry disabled');
+        expect(state!.autoPip, isFalse);
         // ignore: avoid_print
         print(
           'IOS_AUTO_PIP_NATIVE: actual AVPictureInPictureController inline '

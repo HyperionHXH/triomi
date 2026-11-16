@@ -57,7 +57,9 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
   private var pipController: AVPictureInPictureController?
   private var pipResult: FlutterResult?
   private var pipDeadline: DispatchWorkItem?
+  private var pipPossibleObservation: NSKeyValueObservation?
   private var pipStarting = false
+  private var automaticPip = true
   private var backgroundAudio = false
   private var desiredPlaying = false
   private var interruptionPaused = false
@@ -93,11 +95,7 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     volumeView.isUserInteractionEnabled = false
     volumeView.accessibilityElementsHidden = true
     container.addSubview(volumeView)
-    if AVPictureInPictureController.isPictureInPictureSupported() {
-      pipController = AVPictureInPictureController(playerLayer: playerLayer)
-      pipController?.delegate = self
-      pipController?.canStartPictureInPictureAutomaticallyFromInline = true
-    }
+    configurePipController()
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { result(FlutterError(code: "disposed", message: "Video view is disposed", details: nil)); return }
       self.handle(call, result: result)
@@ -139,7 +137,8 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
         try IosVideoAudioSession.acquire(viewId)
         mediaId = (args["mediaId"] as? NSNumber)?.intValue ?? 0
         mediaTitle = args["title"] as? String ?? "Triomi"
-        pipController?.canStartPictureInPictureAutomaticallyFromInline = args["autoPip"] as? Bool != false
+        automaticPip = args["autoPip"] as? Bool != false
+        configurePipController()
         systemMediaEnabled = false
         clearNowPlaying()
         open(url, headers: args["headers"] as? [String: String] ?? [:],
@@ -148,8 +147,12 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
         result(nil)
       } catch { result(FlutterError(code: "audio_session", message: error.localizedDescription, details: nil)) }
     case "play":
-      desiredPlaying = true
-      applyPlaybackIntent(); result(nil)
+      do {
+        try IosVideoAudioSession.acquire(viewId)
+        interruptionPaused = false
+        desiredPlaying = true
+        applyPlaybackIntent(); result(nil)
+      } catch { result(FlutterError(code: "audio_session", message: error.localizedDescription, details: nil)) }
     case "pause":
       desiredPlaying = false
       player.pause(); emitState(); result(nil)
@@ -198,7 +201,8 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
       backgroundAudio = args["enabled"] as? Bool == true
       updateLayer(); applyPlaybackIntent(); result(nil)
     case "setAutoPip":
-      pipController?.canStartPictureInPictureAutomaticallyFromInline = args["enabled"] as? Bool == true
+      automaticPip = args["enabled"] as? Bool == true
+      configurePipController()
       emitState(); result(nil)
     case "setSystemMedia":
       guard (args["mediaId"] as? NSNumber)?.intValue == mediaId else { result(nil); return }
@@ -297,8 +301,36 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     emitState()
   }
 
+  private func configurePipController(manual: Bool = false) {
+    if !automaticPip && !manual && !pipActive {
+      detachPipSource()
+      return
+    }
+    guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
+    if pipController == nil {
+      pipController = AVPictureInPictureController(contentSource: .init(playerLayer: playerLayer))
+      pipController?.delegate = self
+    } else if pipController?.contentSource == nil {
+      pipController?.contentSource = .init(playerLayer: playerLayer)
+    }
+    pipController?.canStartPictureInPictureAutomaticallyFromInline = automaticPip
+  }
+
+  private func detachPipSource() {
+    guard let controller = pipController else { return }
+    controller.canStartPictureInPictureAutomaticallyFromInline = false
+    controller.contentSource = nil
+    // Keep one controller: rapid replacement controllers can leave AVKit's
+    // previous session owning the layer and prevent later manual PiP starts.
+  }
+
   private func updateLayer() {
-    let visible = UIApplication.shared.applicationState != .background || pipActive
+    let applicationState = UIApplication.shared.applicationState
+    // iOS can promote the layer to PiP while resigning active, before the
+    // background notification. Detach an opted-out inline layer at that point;
+    // audio ownership and explicit/manual PiP remain independent.
+    let optedOutWhileLeaving = applicationState == .inactive && !automaticPip
+    let visible = (applicationState != .background && !optedOutWhileLeaving) || pipActive
     playerLayer.player = visible ? player : nil
   }
 
@@ -310,7 +342,8 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
   }
 
   private func enterPip(_ result: @escaping FlutterResult) {
-    guard let pip = pipController, pip.isPictureInPicturePossible else { result(false); return }
+    configurePipController(manual: true)
+    guard let pip = pipController else { result(false); return }
     if pip.isPictureInPictureActive { result(true); return }
     guard pipResult == nil else { result(false); return }
     pipStarting = true; pipResult = result
@@ -318,13 +351,24 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     let deadline = DispatchWorkItem { [weak self] in self?.finishPipRequest(false) }
     pipDeadline = deadline
     DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: deadline)
-    pip.startPictureInPicture()
+    if pip.isPictureInPicturePossible { pip.startPictureInPicture() }
+    else {
+      pipPossibleObservation = pip.observe(\.isPictureInPicturePossible, options: [.initial, .new]) { [weak self] pip, _ in
+        DispatchQueue.main.async {
+          guard let self = self, self.pipResult != nil, pip.isPictureInPicturePossible else { return }
+          self.pipPossibleObservation?.invalidate(); self.pipPossibleObservation = nil
+          pip.startPictureInPicture()
+        }
+      }
+    }
   }
 
   private func finishPipRequest(_ success: Bool) {
     pipDeadline?.cancel(); pipDeadline = nil
+    pipPossibleObservation?.invalidate(); pipPossibleObservation = nil
     let callback = pipResult; pipResult = nil; pipStarting = false
     updateLayer(); applyPlaybackIntent()
+    if !success { configurePipController() }
     callback?(success)
   }
 
@@ -390,9 +434,24 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
 
   private func installNotifications() {
     let center = NotificationCenter.default
-    for name in [UIApplication.didEnterBackgroundNotification, UIApplication.didBecomeActiveNotification] {
+    for name in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification, UIApplication.didBecomeActiveNotification] {
       notificationTokens.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-        self?.updateLayer(); self?.applyPlaybackIntent()
+        guard let self = self else { return }
+        if name == UIApplication.didEnterBackgroundNotification,
+           self.automaticPip, self.desiredPlaying, self.prepared, !self.pipActive {
+          // Keep the shared layer/player leased until the actual PiP delegate
+          // resolves; otherwise background handling pauses it before PiP starts.
+          self.enterPip { _ in }
+        }
+        if name == UIApplication.willResignActiveNotification,
+           !self.automaticPip, !self.pipActive {
+          self.detachPipSource()
+          self.playerLayer.player = nil
+        } else {
+          if name == UIApplication.didBecomeActiveNotification { self.configurePipController() }
+          self.updateLayer()
+        }
+        self.applyPlaybackIntent()
       })
     }
     notificationTokens.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
@@ -446,7 +505,8 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     result["durationMs"] = item?.duration.triomiMilliseconds ?? 0
     result["bufferedPositionMs"] = buffered.triomiMilliseconds
     result["playing"] = player.rate > 0
-    result["autoPip"] = pipController?.canStartPictureInPictureAutomaticallyFromInline
+    // No controller means no automatic entry, not an unknown policy.
+    result["autoPip"] = pipController?.canStartPictureInPictureAutomaticallyFromInline ?? false
     return result
   }
   private func emitState() {
@@ -454,6 +514,11 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
       publishNowPlaying()
       channel.invokeMethod("state", arguments: state())
     }
+  }
+
+  func pictureInPictureControllerWillStartPictureInPicture(_ controller: AVPictureInPictureController) {
+    pipStarting = true
+    updateLayer()
   }
 
   func pictureInPictureControllerDidStartPictureInPicture(_ controller: AVPictureInPictureController) {
@@ -477,6 +542,7 @@ final class IosVideoPlatformView: NSObject, FlutterPlatformView, AVPictureInPict
     remoteTargets.removeAll()
     disposed = true; generation += 1
     pipDeadline?.cancel(); pipResult?(false); pipResult = nil
+    pipPossibleObservation?.invalidate(); pipPossibleObservation = nil
     pipController?.delegate = nil; pipController?.stopPictureInPicture(); pipController = nil
     statusObservation?.invalidate(); timeControlObservation?.invalidate(); volumeObservation?.invalidate()
     if let token = timeObserver { player.removeTimeObserver(token); timeObserver = nil }
