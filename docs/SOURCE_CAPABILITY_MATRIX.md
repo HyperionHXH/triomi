@@ -1,6 +1,6 @@
 # 来源能力矩阵与生产/夹具边界（D75）
 
-> iOS 主线 f83e590（自 f3f08bb）：漫画设置统一全局持久化、旧每作品覆盖不再读取；自动 PiP 持久开关接入 AVPlayer并保持手动PiP/后台音频独立。已本地Mac编译回归、USB真实Home关闭/开启和关闭自动后的手动PiP验收，详见[当前状态](CURRENT_STATUS.md)。尚未推送或发布，不扩大来源可达性与账号验证范围；主线R193的Android/Windows证据不混作iOS证据，下列为历史。
+> iOS 主线 f83e590（自 f3f08bb）：漫画设置统一全局持久化、旧每作品覆盖不再读取；自动 PiP 持久开关接入 AVPlayer并保持手动PiP/后台音频独立。已本地Mac编译回归、USB真实Home关闭/开启和关闭自动后的手动PiP验收，并发布[v0.15.6-ios.200](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.6-ios.200)，仅编译发布43792814271和匿名公开IPA核验通过，详见[当前状态](CURRENT_STATUS.md)。不扩大来源可达性与账号验证范围；主线R193的Android/Windows证据不混作iOS证据，下列为历史。
 
 > iOS198：固定合并主线f3f08bb，番剧Bangumi资料与播放源双模式搜索、匿名封面持久化及共享播放/下载契约已接入；iOS保留WebKit/AVPlayer/Keychain，不执行APK/JVM或Windows后台/安装器。Now Playing按原生媒体代次、当前页面/PiP和准备状态授权，旧页面不能抢回会话。本地USB410场景/五张实际屏幕图、Mac2484/27明确跳过通过；原云端原生21（1跳过）/JSC3通过，综合新增搜索布局失败与已修helper保留，不冒称完整云端通过。用户改用本地验收后仅GitHub编译发布路线，旧全验收workflow保留可选；来源实网/账号/锁屏PiP硬件边界不扩大。以下183等为历史证据。
 

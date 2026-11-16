@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-## 当前请求：主线 f83e590 同步 iOS（本地手机验收通过，未发布）
+## 当前请求：主线 f83e590 同步 iOS（0.15.6+200 已发布）
 
 本轮从已同步主线 `f3f08bb` 推进至 `f83e590`，保留 iOS 0.15.5+199 修订1与全部历史证据。同步漫画全局阅读设置持久化：基础设置沿用 `reader.mode/fit/background`，其余漫画设置统一使用 `reader.manga`，不再读取每作品覆盖；同步“离开应用自动画中画”持久开关，iOS 自动 PiP 与手动 PiP、后台音频及 AVPlayer 生命周期分别处理，不将 Android Home 行为直接当作 iOS 实现或验收。
 
@@ -8,6 +8,8 @@
 最终普通 Release 测试 App 使用生产 IosVideoController/AVPlayer，XCTest 在 USB iPhone 上实际按 Home：关闭时进入后台且无 PiP 事件，开启时真实 PiP 启动且桌面小窗播放，关闭自动后手动进入 PiP 成功；最终 XCTest 1/1 passed（37.030秒），三个原生事件报告与系统截图保存在 `build/sync200-home/autonomous-*`。连续切换开关、后台音频与换源后手动 PiP 的永久原生回归也已真机通过（runId `98bc9bb48caf4340b40533c840d3d6bd`）。这不是属性回显或合成后台事件。Mac 最终 analyze 零问题、播放器相关25项通过，正常 main.dart Release/IPA校验通过：0.15.6+200/修订0/iOS15，SHA256 `871ce6d4b18e2b228978c0e65010d30dacea489718f5c7461b27404a1dc23570`。修复在本次手机验收后才补充提交；不推送、不发布、不覆盖正式手机。
 本轮当前证据：`build/sync200/final-device-report.json`（USB独立身份，2项生产Widget/原生场景全通过）、`sync200-manga-global-settings.png`、`sync200-manga-restored-reader.png`、`sync200-auto-pip-enabled.png`、`sync200-auto-pip-disabled.png`。正常IPA内部0.15.6+200/修订0/iOS15，未发布、未覆盖正式手机。首次把桌面debug-only测试放入Release验收导致15项FlutterError，已保留失败证据并改为设备适用场景；第二轮通过。
 下列 iOS199 修订1及主线 R193 发布记录均保留各自历史边界。
+
+发布核验：[v0.15.6-ios.200](https://github.com/HyperionHXH/triomi/releases/tag/v0.15.6-ios.200)，源码 `86e2fb0015cf1c575efffd08e0266c896ac744eb`，[仅编译发布 43792814271](https://github.com/HyperionHXH/triomi/actions/runs/43792814271) 的 build/publish 均成功。公开 IPA **14,260,972 字节 / SHA256 `18afa12cf01a80557b36cb1d2bfcc08ae49783c42567d64ca470a6458a96c052`**；匿名完整下载、ZIP CRC、内部 Bundle / 0.15.6+200 / 修订0 / iOS15、更新清单及其 SHA256SUMS、GitHub digest、release-metadata 源码和 tag 精确指向均一致。发布前已有51个Release的208个资产ID/大小/摘要保持不变。以上未发布记录是本地验收阶段历史；用户随后明确授权推送编译发布，现已完成，未覆盖安装手机正式App。
 
 ## 当前请求：iOS 0.15.5+199 修订1（应用内更新下载修复）
 
