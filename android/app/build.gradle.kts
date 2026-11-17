@@ -10,6 +10,8 @@ plugins {
 // Release signing is explicit and fail-closed. The acceptance flag is only
 // for updating existing debug-signed test devices without deleting their data.
 val acceptanceSigning = providers.gradleProperty("triomiAcceptanceSigning").orNull == "true"
+// Local opt-in only: install alongside production while phone gesture feedback is pending.
+val readerTrial = providers.gradleProperty("triomiReaderTrial").orNull == "true"
 val signingPath = providers.environmentVariable("TRIOMI_SIGNING_PROPERTIES").orNull
 val releaseSigning = Properties()
 if (signingPath != null) {
@@ -92,6 +94,11 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        if (readerTrial) {
+            applicationIdSuffix = ".readertrial"
+            versionNameSuffix = "-reader-trial"
+        }
+        manifestPlaceholders["triomiAppLabel"] = if (readerTrial) "Triomi 缩放试用" else "Triomi"
     }
 
     signingConfigs {

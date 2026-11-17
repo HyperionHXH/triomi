@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 /// 缩放边界：平移不得露出底色，只允许在放大后可移动范围内拖动。
@@ -42,10 +44,26 @@ enum ZoomDurationPreset {
   final int milliseconds;
 }
 
+/// 第二指按下立即认领，不再和翻页 DragGestureRecognizer 竞争阈值。
+/// 单指超过 5dp 才开始移动，点击/双击/长按仍由各自识别器处理。
+class _ReaderScaleRecognizer extends ScaleGestureRecognizer {
+  _ReaderScaleRecognizer() {
+    gestureSettings = const DeviceGestureSettings(touchSlop: 2.5);
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    super.handleEvent(event);
+    if (event is PointerDownEvent && pointerCount >= 2) {
+      resolve(GestureDisposition.accepted);
+    }
+  }
+}
+
 /// 每张页面自己的缩放层：捏合、双击、放大后单指拖动。
 ///
-/// 与阅读器翻页的协作：放大状态下父级 PageView 使用不可滚动物理，
-/// 因此单指拖动只平移图片，不会误翻页；回到 1 倍后翻页恢复。
+/// 父级只负责布局与滚动物理，触摸由这一层独占仲裁：单指在原始大小时
+/// 驱动真实 ScrollPosition；第二指落下立即中止翻页并锁定整个触摸序列。
 class MangaZoomView extends StatefulWidget {
   const MangaZoomView({
     super.key,
@@ -58,6 +76,7 @@ class MangaZoomView extends StatefulWidget {
     this.onTapUp,
     this.onZoomChanged,
     this.onLongPress,
+    this.scrollPosition,
   });
 
   final Widget child;
@@ -72,6 +91,9 @@ class MangaZoomView extends StatefulWidget {
   final ValueChanged<bool>? onZoomChanged;
   final VoidCallback? onLongPress;
 
+  /// 条漫缩放包在整个列表外，滚动位置由已构建的列表项提供。
+  final ScrollPosition? Function()? scrollPosition;
+
   static const double maxScale = 5;
 
   @override
@@ -85,6 +107,7 @@ class MangaZoomViewState extends State<MangaZoomView>
   double _scale = 1;
   Offset _offset = Offset.zero;
   double _startScale = 1;
+  double _gestureScaleBase = 1;
   Offset _startOffset = Offset.zero;
   Offset _startFocal = Offset.zero;
   Size _size = Size.zero;
@@ -92,6 +115,12 @@ class MangaZoomViewState extends State<MangaZoomView>
   (double, Offset) _from = (1, Offset.zero);
   (double, Offset) _to = (1, Offset.zero);
   bool _reportedZoomed = false;
+  ScrollPosition? _scroll;
+  ScrollHoldController? _hold;
+  Drag? _drag;
+  double _scrollOrigin = 0;
+  bool _pinched = false;
+  final Set<int> _touches = {};
 
   bool get zoomed => _scale > 1.005;
 
@@ -107,6 +136,8 @@ class MangaZoomViewState extends State<MangaZoomView>
 
   @override
   void dispose() {
+    _drag?.cancel();
+    _hold?.cancel();
     _animation.dispose();
     super.dispose();
   }
@@ -173,20 +204,77 @@ class MangaZoomViewState extends State<MangaZoomView>
   Offset _relative(Offset local) =>
       local - Offset(_size.width / 2, _size.height / 2);
 
+  void _onPointerDown(PointerDownEvent event) {
+    if (_touches.isEmpty) {
+      _pinched = false;
+      _animation.stop();
+      _scroll =
+          widget.scrollPosition?.call() ??
+          Scrollable.maybeOf(context)?.position;
+      _scrollOrigin = _scroll?.pixels ?? 0;
+      _hold = _scroll?.hold(() => _hold = null);
+    }
+    _touches.add(event.pointer);
+  }
+
+  void _onPointerUp(PointerEvent event) {
+    _touches.remove(event.pointer);
+    if (_touches.isEmpty) {
+      // 先处理最终 UP（包括 fling），再释放点击的 hold。
+      scheduleMicrotask(() {
+        if (!mounted || _touches.isNotEmpty) return;
+        _hold?.cancel();
+        _hold = null;
+      });
+    }
+  }
+
   void _onScaleStart(ScaleStartDetails details) {
-    if (!widget.enabled) return;
     _animation.stop();
     _startScale = _scale;
+    _gestureScaleBase = 1;
     _startOffset = _offset;
     _startFocal = _relative(details.localFocalPoint);
+    if (details.pointerCount >= 2 && !_pinched) {
+      _pinched = true;
+      // 第一指先动也可转成捏合；撤销页偏移，不把相邻页拖出来。
+      _drag?.cancel();
+      _drag = null;
+      _scroll?.jumpTo(_scrollOrigin);
+    }
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
+    if (!_pinched && !zoomed && details.pointerCount == 1) {
+      final scroll = _scroll;
+      if (scroll == null) return;
+      _drag ??= scroll.drag(
+        DragStartDetails(
+          globalPosition: details.focalPoint,
+          localPosition: details.localFocalPoint,
+          sourceTimeStamp: details.sourceTimeStamp,
+        ),
+        () => _drag = null,
+      );
+      final vertical =
+          axisDirectionToAxis(scroll.axisDirection) == Axis.vertical;
+      final delta = vertical
+          ? details.focalPointDelta.dy
+          : details.focalPointDelta.dx;
+      _drag?.update(
+        DragUpdateDetails(
+          delta: vertical ? Offset(0, delta) : Offset(delta, 0),
+          primaryDelta: delta,
+          globalPosition: details.focalPoint,
+          localPosition: details.localFocalPoint,
+          sourceTimeStamp: details.sourceTimeStamp,
+        ),
+      );
+      return;
+    }
     if (!widget.enabled) return;
-    // 1 倍时单指拖动交给 PageView 翻页；只有双指或已放大才吃手势。
-    if (details.pointerCount < 2 && _startScale <= 1.005) return;
     final focal = _relative(details.localFocalPoint);
-    final target = (_startScale * details.scale).clamp(
+    final target = (_startScale * details.scale / _gestureScaleBase).clamp(
       1.0,
       MangaZoomView.maxScale,
     );
@@ -197,16 +285,40 @@ class MangaZoomViewState extends State<MangaZoomView>
       toScale: target,
     );
     setState(() => _apply(target, offset));
-    _notify();
+    if (target == 1 && details.pointerCount >= 2) {
+      // 触及最小值后重设基准，反向张开立即放大，无需补回收缩过量。
+      _startScale = 1;
+      _gestureScaleBase = details.scale;
+      _startOffset = _offset;
+      _startFocal = focal;
+    }
+    _syncZoom();
   }
 
   void _onScaleEnd(ScaleEndDetails details) {
-    if (!widget.enabled) return;
+    if (details.pointerCount != 0) return;
+    if (!_pinched) {
+      final velocity = details.velocity.pixelsPerSecond;
+      final vertical =
+          _scroll != null &&
+          axisDirectionToAxis(_scroll!.axisDirection) == Axis.vertical;
+      _drag?.end(
+        DragEndDetails(
+          velocity: Velocity(
+            pixelsPerSecond: vertical
+                ? Offset(0, velocity.dy)
+                : Offset(velocity.dx, 0),
+          ),
+          primaryVelocity: vertical ? velocity.dy : velocity.dx,
+        ),
+      );
+      _drag = null;
+    }
     if (_scale < 1.02) {
       _animateTo(1, Offset.zero);
     } else {
       setState(() => _apply(_scale, _offset));
-      _notify();
+      _syncZoom();
     }
   }
 
@@ -252,26 +364,41 @@ class MangaZoomViewState extends State<MangaZoomView>
           _size = size;
           _offset = mangaClampOffset(_offset, _scale, _size);
         }
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onScaleStart: widget.enabled ? _onScaleStart : null,
-          onScaleUpdate: widget.enabled ? _onScaleUpdate : null,
-          onScaleEnd: widget.enabled ? _onScaleEnd : null,
-          onDoubleTapDown: widget.enabled && widget.doubleTapZoom
-              ? (details) => _doubleTapPosition = details.localPosition
-              : null,
-          onDoubleTap: widget.enabled && widget.doubleTapZoom
-              ? _onDoubleTap
-              : null,
-          onTapUp: widget.onTapUp,
-          onLongPress: widget.onLongPress,
-          child: ClipRect(
-            child: Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.identity()
-                ..translateByDouble(_offset.dx, _offset.dy, 0, 1)
-                ..scaleByDouble(_scale, _scale, 1, 1),
-              child: widget.child,
+        return Listener(
+          onPointerDown: _onPointerDown,
+          onPointerUp: _onPointerUp,
+          onPointerCancel: _onPointerUp,
+          child: RawGestureDetector(
+            behavior: HitTestBehavior.opaque,
+            gestures: {
+              _ReaderScaleRecognizer:
+                  GestureRecognizerFactoryWithHandlers<_ReaderScaleRecognizer>(
+                    _ReaderScaleRecognizer.new,
+                    (recognizer) => recognizer
+                      ..onStart = _onScaleStart
+                      ..onUpdate = _onScaleUpdate
+                      ..onEnd = _onScaleEnd,
+                  ),
+            },
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onDoubleTapDown: widget.enabled && widget.doubleTapZoom
+                  ? (details) => _doubleTapPosition = details.localPosition
+                  : null,
+              onDoubleTap: widget.enabled && widget.doubleTapZoom
+                  ? _onDoubleTap
+                  : null,
+              onTapUp: widget.onTapUp,
+              onLongPress: widget.onLongPress,
+              child: ClipRect(
+                child: Transform(
+                  alignment: Alignment.center,
+                  transform: Matrix4.identity()
+                    ..translateByDouble(_offset.dx, _offset.dy, 0, 1)
+                    ..scaleByDouble(_scale, _scale, 1, 1),
+                  child: widget.child,
+                ),
+              ),
             ),
           ),
         );

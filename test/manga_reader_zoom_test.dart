@@ -65,7 +65,12 @@ void main() {
     }
   }
 
-  Future<void> open(WidgetTester tester, {ProviderContainer? reuse}) async {
+  Future<void> open(
+    WidgetTester tester, {
+    String mode = 'ltr',
+    bool spread = false,
+    bool zoom = true,
+  }) async {
     final directory = Directory.systemTemp.createTempSync('triomi_zoom_');
     final bytes = base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
@@ -83,20 +88,19 @@ void main() {
     final db = openTestDatabase();
     final prefs = memoryPreferences();
     // 默认是日漫从右到左；这里显式用左到右，让右侧点击固定表示「下一页」。
-    await prefs.set('reader.mode', 'ltr');
-    final container =
-        reuse ??
-        ProviderContainer(
-          overrides: [
-            databaseProvider.overrideWithValue(db),
-            downloadRepositoryProvider.overrideWithValue(
-              _Downloads(db, directory.path),
-            ),
-            preferencesProvider.overrideWithValue(prefs),
-            secureStoreProvider.overrideWithValue(MemorySecureStore()),
-            sourcesProvider.overrideWith(_EmptySources.new),
-          ],
-        );
+    await prefs.set('reader.mode', mode);
+    await prefs.set('reader.manga', {'doublePage': spread, 'zoom': zoom});
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        downloadRepositoryProvider.overrideWithValue(
+          _Downloads(db, directory.path),
+        ),
+        preferencesProvider.overrideWithValue(prefs),
+        secureStoreProvider.overrideWithValue(MemorySecureStore()),
+        sourcesProvider.overrideWith(_EmptySources.new),
+      ],
+    );
     const platform = MethodChannel('triomi/platform');
     const paths = MethodChannel('plugins.flutter.io/path_provider');
     final messenger =
@@ -106,7 +110,7 @@ void main() {
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox());
       await settle(tester);
-      if (reuse == null) container.dispose();
+      container.dispose();
       await tester.runAsync(
         () => db.close().timeout(const Duration(seconds: 5)),
       );
@@ -146,17 +150,136 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   }
 
-  ScrollPhysics physics(WidgetTester tester) =>
-      tester.widget<PageView>(find.byType(PageView)).physics!;
+  for (final mode in ['ltr', 'rtl', 'vertical', 'webtoon']) {
+    testWidgets('$mode：先动一指再加入第二指，缩至1倍后剩余指头也不翻页', (tester) async {
+      await open(tester, mode: mode);
+      final center = tester.getCenter(find.byType(MangaZoomView).first);
+      final horizontal = mode == 'ltr' || mode == 'rtl';
+      final delta = horizontal ? const Offset(1, 0) : const Offset(0, 1);
+      final first = await tester.startGesture(center - delta * 60, pointer: 11);
+      await first.moveBy(-delta * 15);
+      await tester.pump();
+      final second = await tester.startGesture(
+        center + delta * 60,
+        pointer: 12,
+      );
+      await tester.pump();
+      await first.moveBy(-delta * 45);
+      await second.moveBy(delta * 60);
+      await tester.pump();
+      expect(zoomState(tester).debugScale, greaterThan(1.5));
+      expect(find.text('1/2'), findsOneWidget);
+      if (mode != 'webtoon') {
+        final pager = tester
+            .widget<PageView>(find.byType(PageView))
+            .controller!;
+        expect(pager.offset, closeTo(0, .01));
+      }
+      // 缩回最小值，再向外张开一点，应立刻响应而不是存在收缩死区。
+      await first.moveTo(center - delta * 10);
+      await second.moveTo(center + delta * 10);
+      await tester.pump();
+      expect(zoomState(tester).debugScale, 1);
+      await first.moveBy(-delta * 6);
+      await tester.pump();
+      expect(zoomState(tester).debugScale, greaterThan(1));
+      await first.moveTo(center - delta * 10);
+      await tester.pump();
+      await second.up();
+      await first.moveBy(-delta * 220);
+      await tester.pump();
+      expect(find.text('1/2'), findsOneWidget);
+      await first.cancel();
+      await tester.pump(const Duration(milliseconds: 400));
+      // 全部离开后，全新单指滑动依然能正常翻页/滚动。
+      final forward = mode == 'rtl'
+          ? const Offset(550, 0)
+          : horizontal
+          ? const Offset(-550, 0)
+          : Offset(0, mode == 'webtoon' ? -950 : -550);
+      await tester.drag(find.byType(MangaZoomView).first, forward);
+      await tester.pump(const Duration(milliseconds: 600));
+      if (mode == 'webtoon') {
+        final position = tester
+            .state<ScrollableState>(find.byType(Scrollable))
+            .position;
+        expect(position.pixels, greaterThan(500), reason: '条漫恢复连续滚动，不强行按页吸附');
+      } else {
+        expect(find.text('2/2'), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('关闭缩放仍能单指翻页，不产生双指缩放', (tester) async {
+    await open(tester, zoom: false);
+    await tester.drag(find.byType(MangaZoomView).first, const Offset(-550, 0));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('2/2'), findsOneWidget);
+    expect(zoomState(tester).debugScale, 1);
+  });
+
+  testWidgets('宽屏双页两根手指落在不同图片上仍属于同一缩放', (tester) async {
+    tester.view.physicalSize = const Size(1000, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await open(tester, spread: true);
+    final center = tester.getCenter(find.byType(PageView));
+    final first = await tester.startGesture(
+      center - const Offset(80, 0),
+      pointer: 21,
+    );
+    final second = await tester.startGesture(
+      center + const Offset(80, 0),
+      pointer: 22,
+    );
+    await first.moveBy(const Offset(-50, 0));
+    await second.moveBy(const Offset(50, 0));
+    await tester.pump();
+    expect(zoomState(tester).debugScale, greaterThan(1.5));
+    expect(find.text('1/2'), findsOneWidget);
+    await first.up();
+    await second.up();
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets('从原始大小双指横向捏合：移动第一指时不得拖出相邻页', (tester) async {
+    await open(tester);
+    final viewport = find.byType(PageView);
+    final center = tester.getCenter(viewport);
+    final pager = tester.widget<PageView>(viewport).controller!;
+    final first = await tester.startGesture(
+      center - const Offset(60, 0),
+      pointer: 1,
+    );
+    await tester.pump(const Duration(milliseconds: 60));
+    final second = await tester.startGesture(
+      center + const Offset(60, 0),
+      pointer: 2,
+    );
+    await tester.pump();
+    // 真实触摸事件是逐指到达，不是两指坐标同时更新。
+    await first.moveBy(const Offset(-30, 0));
+    await tester.pump();
+    await first.moveBy(const Offset(-30, 0));
+    await tester.pump();
+    expect(pager.offset, closeTo(0, .01), reason: '第二指已落下，翻页不得抢走当前触摸序列');
+    await second.moveBy(const Offset(60, 0));
+    await tester.pump();
+    expect(zoomState(tester).debugScale, greaterThan(1.5));
+    await second.up();
+    await first.up();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('1/2'), findsOneWidget);
+  });
 
   testWidgets('双击放大后拖动只平移图片，不会误翻页；再双击回到原始大小', (tester) async {
     await open(tester);
-    expect(physics(tester), isA<PageScrollPhysics>());
 
     await doubleTap(tester);
     expect(zoomState(tester).debugScale, 2);
     // 放大期间翻页手势让位，避免把画面拖走。
-    expect(physics(tester), isA<NeverScrollableScrollPhysics>());
 
     await tester.drag(find.byType(MangaZoomView).first, const Offset(-160, 0));
     await tester.pump(const Duration(milliseconds: 400));
@@ -165,7 +288,6 @@ void main() {
 
     await doubleTap(tester);
     expect(zoomState(tester).debugScale, 1);
-    expect(physics(tester), isA<PageScrollPhysics>());
     expect(find.text('1/2'), findsOneWidget);
   });
 
@@ -189,7 +311,6 @@ void main() {
     expect(find.text('2/2'), findsOneWidget);
     // 新页不再带着上一页的放大。
     expect(zoomState(tester).debugScale, 1);
-    expect(physics(tester), isA<PageScrollPhysics>());
   });
 
   testWidgets('夜间模式遮罩只在开启时出现，可压得比设备最暗更暗并完全关闭', (tester) async {

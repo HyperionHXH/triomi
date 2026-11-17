@@ -1,5 +1,17 @@
 # Triomi 当前状态
 
+## 当前请求：R195 双指缩放仲裁修复（0.16.1，用户手机确认通过，准备正式发布）
+
+用户确认夜间模式可用，本轮不修改其实现；用户报告0.16.0首次双指捏合仍容易拖出相邻页，优先级高于R194验收结论。新增真实两指逐次移动回归后，旧实现失败（比例仍为1倍）；原测试偏重双击后平移，没有覆盖从1倍开始的手势竞争。
+
+详细对照Komikku锁定的[SSIV 66e0db195d源码](https://github.com/tachiyomiorg/subsampling-scale-image-view/blob/66e0db195d/library/src/main/java/com/davemorrissey/labs/subscaleview/SubsamplingScaleImageView.java)：按下时`requestDisallowInterceptTouchEvent(true)`，双指中心/跨度变化超过5屏幕像素进入缩放，单指平移阈值`density*5`（5dp），第二指抬起后转为剩余指平移。Triomi改为可见视口外侧唯一手势仲裁层（跨左右双页/条漫图片共享），单指5dp识别后代理真实`ScrollPosition.drag`和原生ballistic，不与父级drag竞争；第二指按下立即独占，中止并撤回先前轻微翻页偏移；缩至1倍也保持当前序列为图片操作，直至最后一指离开；最小缩放基准动态重设，避免收缩过量后的反向张开死区。仲裁层放在Scrollable外侧，避免Flutter `DragScrollActivity.shouldIgnorePointer`阻止第二指命中。
+
+验证：相关76项回归通过，reader及新增测试analyze零问题；包含LTR/RTL/上下翻页/条漫、第一指先动第二指后落、缩小到1倍后的剩余指、取消与恢复单指、跨双页。原API35 AVD安装独立试用包、普通入口打开MangaDex第1话，独立原生Instrumentation注入两指事件，已观察截图放大与还原，原图/还原页码均1/23，剩余指拖动不翻页；新单指滑动正常到2/23。不是用户手机手感验收，仍等反馈。
+
+电脑文件`D:/noval_and_manga/Triomi-manga-pinch-trial.apk`，162937612字节，SHA256 `4dee94ac7beaf4111b7602ef035b519f104456baa585de064d393f6d255537ed`。版本`0.16.0-reader-trial`/202，独立ID `io.github.hyperionhxh.triomi.readertrial`、桌面名「Triomi 缩放试用」，使用本地debug证书（SHA256 `0b70a330…`）签名，v2验签及Mihon ABI128通过。本机没有生产私钥，不借远端发布任务取得签名；故独立包与正式版共存，不覆盖/清除正式数据。`triomiReaderTrial=true`为显式构建参数，普通构建ID/名称不变。没有提交、推送、建标签或发布，pubspec正式版本不变；用户确认后再走正式构建发布。
+
+用户已安装上述试用APK并明确反馈「这个手感对了」，授权编译、推送、发布。本次保留手机验证通过的手势源码和夜间模式，不再调参数；Android/Windows共用修复，以点版本`0.16.1`（内部构建203）正式发布。正式任务不传`triomiReaderTrial`/`triomiAcceptanceSigning`，继续原包名、名称和生产证书；试用包保留不删除，独立iOS发布不改。以下新增正式检查与产物核验结果完成后补录。
+
 ## 当前请求：R194 漫画缩放手势与夜间亮度（0.16.0+201，已发布并核验）
 
 按用户反馈重做阅读内缩放：原先只有 `InteractiveViewer`，与翻页抢手势，双击无法放大、放大后拖动会把整页滑走、也不好缩回。现改为每页独立缩放层（`MangaZoomView`），对齐 Komikku 的操作——双击放大到设定倍数、再双击回到原始大小，捏合保持手指焦点缩放，上限 5 倍，平移被限制在图片边界内不露底色。放大期间翻页手势明确让位（`PageView`/条漫列表改用不可滚动约束），单指拖动只平移图片；点按左右区域先平移，到边界才翻页，翻页后放大状态自动复位，不会把倍数带到下一页。设置面板新增「缩放与双击」：允许放大、双击开关、1.5–4 倍、无/快/标准/慢四档动画。
