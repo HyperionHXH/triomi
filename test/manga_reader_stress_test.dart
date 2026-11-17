@@ -26,6 +26,7 @@ import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/reader/manga_page_image.dart';
 import 'package:triomi/features/reader/manga_reader_page.dart';
 import 'package:triomi/features/reader/manga_reader_settings.dart';
+import 'package:triomi/features/reader/manga_zoom_view.dart';
 import 'package:triomi/features/reader/reader_settings.dart';
 
 import 'fixtures/fake_preferences.dart';
@@ -1080,7 +1081,7 @@ void main() {
       );
       await waitUntil(
         tester,
-        () => find.byType(InteractiveViewer).evaluate().isNotEmpty,
+        () => find.byType(MangaZoomView).evaluate().isNotEmpty,
         'the verified long-path page actually decodes',
       );
       final image = tester.widget<MangaPageImage>(find.byType(MangaPageImage));

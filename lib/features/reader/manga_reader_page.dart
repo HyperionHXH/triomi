@@ -31,6 +31,7 @@ import 'manga_page_image.dart';
 import 'manga_reader_settings.dart';
 import 'manga_reader_settings_sheet.dart';
 import 'manga_reading_order.dart';
+import 'manga_zoom_view.dart';
 import 'reader_settings.dart';
 
 /// 打开阅读器所需的上下文。
@@ -79,8 +80,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   Timer? _autoScrollTimer;
   bool _foreground = true;
   late final int _previousCacheBytes;
-  MangaViewSettings get _viewSettings =>
-      ref.read(mangaViewSettingsProvider);
+  MangaViewSettings get _viewSettings => ref.read(mangaViewSettingsProvider);
   bool get _doublePage =>
       _viewSettings.doublePage &&
       MediaQuery.sizeOf(context).width >= 600 &&
@@ -111,6 +111,11 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   bool _openingNextChapter = false;
   final Set<String> _knownPageCounts = {};
   final Set<String> _completedChapters = {};
+
+  /// 放大状态由当前页自己维护；翻页/换章后复位，避免把放大带到下一页。
+  bool _zoomed = false;
+  int _zoomResetToken = 0;
+  final Map<int, GlobalKey<MangaZoomViewState>> _zoomKeys = {};
 
   int _initialChapterIndex() {
     if (_chapters.isEmpty) return 0;
@@ -181,11 +186,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     if (_keepScreenOn) {
       unawaited(platformChannel.setKeepScreenOn(true, owner: _screenOwner));
     }
-    unawaited(
-      _applyOrientation(
-        view.orientation,
-      ),
-    );
+    unawaited(_applyOrientation(view.orientation));
     unawaited(_load());
   }
 
@@ -694,7 +695,14 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     final page = (index * _spreadSize).clamp(0, _images.length - 1);
     if (_page == page) return;
     _pendingLocalPage = null;
-    setState(() => _page = page);
+    if (_zoomed) {
+      setState(() {
+        _page = page;
+        _resetZoom();
+      });
+    } else {
+      setState(() => _page = page);
+    }
     unawaited(_persistProgress());
   }
 
@@ -716,6 +724,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       return;
     }
     _pendingLocalPage = null;
+    _resetZoom();
     setState(() => _page = index);
     unawaited(_persistProgress());
   }
@@ -824,6 +833,8 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       initialPage: _page ~/ _spreadSize,
       keepPage: false,
     );
+    _zoomKeys.clear();
+    _resetZoom();
     WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
   }
 
@@ -840,11 +851,16 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
   void _handleTap(TapUpDetails details) {
     final width = MediaQuery.sizeOf(context).width;
-    final x = details.localPosition.dx;
+    // 全局坐标：缩放层在页内，局部坐标不能代表整屏分区。
+    final x = details.globalPosition.dx;
     final zones = _viewSettings.tapZones;
     if (zones == ReaderTapZones.centerOnly) {
       setState(() => _chromeVisible = !_chromeVisible);
       return;
+    }
+    // 放大后先平移看画面，只有到边界才继续翻页。
+    if (_zoomed && (x < width * .3 || x > width * .7)) {
+      if (_panCurrentPage(x > width * .7)) return;
     }
     if (zones == ReaderTapZones.nextBoth &&
         (x < width * .3 || x > width * .7)) {
@@ -979,15 +995,25 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                       _pendingLocalPage = null;
                       return;
                     }
+                    if (_zoomed && _panCurrentPage(event.scrollDelta.dy > 0)) {
+                      return;
+                    }
                     event.scrollDelta.dy > 0 ? _nextPage() : _previousPage();
                   },
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTapUp: _handleTap,
-                    child: _buildBody(settings),
-                  ),
+                  child: _buildBody(settings),
                 ),
               ),
+              if (view.night.scrimAlpha > 0)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    key: const ValueKey('manga-night-scrim'),
+                    child: ColoredBox(
+                      color: Colors.black.withValues(
+                        alpha: view.night.scrimAlpha,
+                      ),
+                    ),
+                  ),
+                ),
               if (_transitionOrigin == null) _buildChrome(settings),
             ],
           ),
@@ -1037,8 +1063,12 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           if (notification.dragDetails != null) _pendingLocalPage = null;
           return false;
         },
+        // 放大后关掉列表滚动：单指拖动只平移这一页，不再连带滚走整条漫画。
         child: ScrollablePositionedList.builder(
           key: ValueKey((_chapterIndex, _requestSeq, _layoutRevision)),
+          physics: _zoomed
+              ? const NeverScrollableScrollPhysics()
+              : const ClampingScrollPhysics(),
           itemScrollController: _itemScroll,
           itemPositionsListener: _positions,
           initialScrollIndex: _page,
@@ -1049,7 +1079,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                   height: MediaQuery.sizeOf(context).height,
                   child: const Center(child: Icon(Icons.arrow_downward)),
                 )
-              : _imagePage(index, BoxFit.fitWidth),
+              : _zoomPage(index, BoxFit.fitWidth),
         ),
       );
     }
@@ -1058,6 +1088,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       key: ValueKey((settings.mode, _layoutRevision)),
       controller: _pageController,
       reverse: settings.mode == ReadingMode.rtl,
+      // 放大时关掉翻页手势：拖动只平移图片，不会把页面一起拖走。
+      physics: _zoomed
+          ? const NeverScrollableScrollPhysics()
+          : const PageScrollPhysics(),
       scrollDirection: settings.mode == ReadingMode.vertical
           ? Axis.vertical
           : Axis.horizontal,
@@ -1069,12 +1103,12 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
         if (first >= _images.length) {
           return const Center(child: Icon(Icons.navigate_next));
         }
-        if (!_doublePage) return _imagePage(first, settings.fit.boxFit);
+        if (!_doublePage) return _zoomPage(first, settings.fit.boxFit);
         final pages = [
-          Expanded(child: _imagePage(first, BoxFit.contain)),
+          Expanded(child: _zoomPage(first, BoxFit.contain)),
           Expanded(
             child: first + 1 < _images.length
-                ? _imagePage(first + 1, BoxFit.contain)
+                ? _zoomPage(first + 1, BoxFit.contain)
                 : const SizedBox.shrink(),
           ),
         ];
@@ -1085,6 +1119,39 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
         );
       },
     );
+  }
+
+  /// 每页自己的缩放层：双击放大/还原、捏合、放大后拖动。
+  Widget _zoomPage(int index, BoxFit fit) {
+    final settings = _viewSettings;
+    final key = _zoomKeys.putIfAbsent(index, GlobalKey<MangaZoomViewState>.new);
+    return MangaZoomView(
+      key: key,
+      enabled: settings.zoom,
+      doubleTapZoom: settings.doubleTapZoom,
+      doubleTapScale: settings.doubleTapScale,
+      duration: settings.zoomDuration,
+      resetToken: _zoomResetToken,
+      onTapUp: _handleTap,
+      onZoomChanged: (zoomed) {
+        if (!mounted || zoomed == _zoomed) return;
+        setState(() => _zoomed = zoomed);
+      },
+      child: _imagePage(index, fit),
+    );
+  }
+
+  /// 放大状态不跨页：翻页或换章时复位，避免下一页带着旧倍数和偏移。
+  void _resetZoom() {
+    _zoomResetToken++;
+    if (_zoomed) _zoomed = false;
+  }
+
+  /// 放大时滚轮/音量先平移；到边界才翻页。
+  bool _panCurrentPage(bool forward) {
+    final state = _zoomKeys[_page]?.currentState;
+    if (state == null || !state.zoomed) return false;
+    return state.panBy(forward ? -120 : 120);
   }
 
   Widget _buildChapterTransition(ReaderSettings settings) {

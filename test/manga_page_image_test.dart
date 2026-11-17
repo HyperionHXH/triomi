@@ -138,7 +138,8 @@ void main() {
       source.second.complete(ImageInfo(image: image));
       await tester.pump();
       expect(find.byType(CircularProgressIndicator), findsNothing);
-      expect(find.byType(InteractiveViewer), findsOneWidget);
+      // 页面已可绘制：占位与重试按钮都不在了，内容确实被布局出来。
+      expect(find.byType(FittedBox), findsWidgets);
       expect(find.text('重新加载'), findsNothing);
       expect(source.loads, 2);
       expect(tester.takeException(), isNull);

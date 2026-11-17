@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../novel/reader/novel_reader_settings.dart';
 import 'manga_reader_settings.dart';
+import 'manga_zoom_view.dart';
 import 'reader_settings.dart';
 
 class MangaReaderSettingsSheet extends ConsumerWidget {
@@ -11,7 +12,8 @@ class MangaReaderSettingsSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(mangaViewSettingsProvider);
     final repository = ref.read(mangaReaderPreferencesProvider);
-    Future<void> set(String field, Object value) => repository.set(field, value);
+    Future<void> set(String field, Object value) =>
+        repository.set(field, value);
     return SafeArea(
       child: SizedBox(
         height: MediaQuery.sizeOf(context).height * .85,
@@ -131,6 +133,74 @@ class MangaReaderSettingsSheet extends ConsumerWidget {
                 if (value != null) set('filter', value.name);
               },
             ),
+            const Divider(height: 32),
+            Text('缩放与双击', style: Theme.of(context).textTheme.titleSmall),
+            SwitchListTile(
+              title: const Text('允许放大'),
+              subtitle: const Text('捏合缩放；放大后单指拖动平移，不会带动翻页'),
+              value: settings.zoom,
+              onChanged: (value) => set('zoom', value),
+            ),
+            if (settings.zoom) ...[
+              SwitchListTile(
+                title: const Text('双击放大'),
+                subtitle: const Text('双击放大到设定倍数，再双击回到原始大小'),
+                value: settings.doubleTapZoom,
+                onChanged: (value) => set('doubleTapZoom', value),
+              ),
+              if (settings.doubleTapZoom) ...[
+                Text(
+                  '双击放大到 ${settings.doubleTapScale.toStringAsFixed(1)} 倍（上限 5 倍）',
+                ),
+                Slider(
+                  value: settings.doubleTapScale,
+                  min: 1.5,
+                  max: 4,
+                  divisions: 5,
+                  onChanged: (value) => set('doubleTapScale', value),
+                ),
+              ],
+              DropdownButtonFormField<ZoomDurationPreset>(
+                initialValue: settings.zoomDuration,
+                decoration: const InputDecoration(labelText: '缩放动画'),
+                items: [
+                  for (final preset in ZoomDurationPreset.values)
+                    DropdownMenuItem(value: preset, child: Text(preset.label)),
+                ],
+                onChanged: (value) {
+                  if (value != null) set('zoomDuration', value.name);
+                },
+              ),
+            ],
+            const Divider(height: 32),
+            Text('夜间模式', style: Theme.of(context).textTheme.titleSmall),
+            SwitchListTile(
+              title: const Text('夜间模式'),
+              subtitle: const Text('只压暗阅读画面，不改变系统亮度，退出阅读后不残留'),
+              value: settings.night.enabled,
+              onChanged: (value) => set('nightMode', value),
+            ),
+            if (settings.night.enabled) ...[
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final preset in MangaNightMode.presets)
+                    ChoiceChip(
+                      label: Text('$preset%'),
+                      selected: settings.night.brightness == preset,
+                      onSelected: (_) => set('nightBrightness', preset),
+                    ),
+                ],
+              ),
+              Text('画面亮度 ${settings.night.brightness}%（可低于设备最暗亮度，5% 仍保留可辨识度）'),
+              Slider(
+                value: settings.night.brightness.toDouble(),
+                min: 5,
+                max: 100,
+                divisions: 19,
+                onChanged: (value) => set('nightBrightness', value.round()),
+              ),
+            ],
             Text('条漫自动滚动 ${settings.autoScroll.round()} px/s；控制条显示或应用后台时暂停'),
             Slider(
               value: settings.autoScroll,
