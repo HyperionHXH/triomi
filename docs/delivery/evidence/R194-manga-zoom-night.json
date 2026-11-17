@@ -42,12 +42,11 @@
     "install": "install -r only; existing data preserved",
     "doubleTapZoom": "Real MangaDex chapter page 1/23: double tap expanded the rendered page band from 432-1966 to 151-2399 of 2400 px",
     "panNotPageTurn": "Drag while zoomed shifted the page band from 151-2399 to 0-2309 while the indicator stayed 1/23",
-    "doubleTapRestore": "Second double tap returned the page to original size; the reset capture is noisier than the pure 1x capture and is not claimed as pixel-exact",
+    "doubleTapRestore": "Deterministic cycle with the reader chrome hidden at the same 20 percent night setting: 1x page band 432-1965, after the first double tap the page is magnified, after the second double tap the band returns to exactly 432-1965",
     "edgeTap": "At 1x, left edge advanced 1/23 to 2/23 in the default right-to-left mode",
     "nightDimming": "Matched captures at the same page and position: off mean luminance 154.6, 20 percent 30.9 (ratio 0.20 matching an 80 percent black scrim)",
     "deviceBrightnessUnchanged": "settings get system screen_brightness stayed 102 across enabling, using and closing night mode",
     "settingsPersistAfterRestart": "force-stop and relaunch kept night mode enabled with the 20 percent preset; nightly value is a user choice, the test left the emulator in the state it verified",
-    "doubleTapRestore": "Deterministic cycle with the reader chrome hidden at the same 20 percent night setting: 1x page band 432-1965, after the first double tap the page is magnified, after the second double tap the band returns to exactly 432-1965",
     "visualLimit": "Measurements come from decoded screenshots and accessibility nodes; no human pixel-visual claim, and captures were taken at 20 percent reader brightness only"
   },
   "versionPolicy": {
@@ -55,5 +54,73 @@
     "current": "0.16.0+201",
     "rule": "Cross-platform Android and Windows updates publish the dotted version only; only single-platform follow-ups append +N",
     "buildNumber": "pubspec still carries a monotonically increasing build number for Android/Windows installer comparison"
+  },
+  "publication": {
+    "passed": true,
+    "version": "0.16.0+201",
+    "sourceCommit": "dfdd23bbd8c9e641b72830ff0a12338ec7c56aba",
+    "run": "43998450696",
+    "releaseUrl": "https://github.com/HyperionHXH/triomi/releases/tag/v0.16.0",
+    "assets": [
+      {
+        "name": "SHA256SUMS.txt",
+        "bytes": 348,
+        "sha256": "2b153134aa328fe0af9ffd267ac8a6d4ce2e6b56def9f7d3f67b4dc415962c21",
+        "id": 757232036
+      },
+      {
+        "name": "triomi-android.apk",
+        "bytes": 162950828,
+        "sha256": "25ae9f8c90637b5cfbf625ef4fd3f1016ed520970e3725fdaa02bdb515f2f92a",
+        "id": 757232031
+      },
+      {
+        "name": "triomi-windows.msi",
+        "bytes": 272756760,
+        "sha256": "3312df51238d562696c4a58afd9ade1f77c18b3477de7cc5a30a16de5eaeff23",
+        "id": 757232038
+      },
+      {
+        "name": "triomi-windows.update.json",
+        "bytes": 81260,
+        "sha256": "7db28f8e6a7ff1290af6a816f0d801a6f46eafacc2f631955da460471a4a0682",
+        "id": 757232033
+      },
+      {
+        "name": "triomi-windows.zip",
+        "bytes": 290246135,
+        "sha256": "cee104fa98378439a54746aae2b55098922a28ea111ca72aa0f5fae92de93b82",
+        "id": 757232034
+      }
+    ],
+    "windowsMembersVerified": 466,
+    "productionCertificate": "731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309",
+    "androidIdentity": "package: name='io.github.hyperionhxh.triomi' versionCode='201' versionName='0.16.0' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+    "abi": "Mihon ABI OK: 128 descriptors across 1 DEX files (5671 public/protected classes, 47138 visible members).",
+    "protectedIosReleasesUnchanged": 15,
+    "published": true,
+    "privacy": {
+      "sourceFilesScanned": 1511,
+      "sourceCredentialHits": 0,
+      "artifacts": [
+        {
+          "name": "triomi-android.apk",
+          "members": 626,
+          "credentialHits": 0,
+          "privateOrDebugNames": 0
+        },
+        {
+          "name": "triomi-windows.zip",
+          "members": 466,
+          "credentialHits": 0,
+          "privateOrDebugNames": 0
+        }
+      ],
+      "scope": "Known local account values and encodings; no local production private key available; not a full security audit.",
+      "passed": true
+    },
+    "releaseTitle": "Triomi 0.16.0 · 漫画缩放手势与夜间模式",
+    "msiBoundary": "Full public container size and SHA verified; MSI installation lifecycle not exercised",
+    "workflowNote": "Release workflow regenerated notes after publish; the curated Chinese notes and title were applied afterwards with gh release edit, artifacts unchanged"
   }
 }
