@@ -21,5 +21,6 @@
     "phoneAcceptance": "User personally installed the same trial APK and approved its feel"
   },
   "productionContract": {"androidPackage": "io.github.hyperionhxh.triomi", "androidLabel": "Triomi", "productionCertificateSha256": "731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309", "trialFlag": false, "acceptanceSigning": false, "targets": ["android", "windows"], "independentIosUntouched": true},
+  "prepublicationVerification": {"fullFlutterPassed": 2009, "fullFlutterSkipped": 5, "analyze": "No issues found", "encodingErrors": 0, "uiDocErrors": 0, "deliveryConsistencyErrors": 0, "deliveryHistoricalWarnings": 35, "sourceCredentialHits": 0},
   "publication": {"published": false, "verificationComplete": false}
 }
