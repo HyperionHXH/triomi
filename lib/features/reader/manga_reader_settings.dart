@@ -2,12 +2,31 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/storage/preferences.dart';
 import '../novel/reader/novel_reader_settings.dart';
+import 'manga_zoom_view.dart';
 import 'reader_settings.dart';
 
 enum ReaderTapZones { directional, nextBoth, centerOnly }
 
 enum ReaderImageFilter { none, grayscale, invert, warm }
 
+/// 夜间模式只压低阅读画面亮度，不动设备亮度，也不做蓝光色偏。
+///
+/// 用覆盖层实现：设备已到最暗时仍能继续压暗，退出阅读时随界面一起消失，
+/// 因此不需要也不应该恢复系统亮度。
+class MangaNightMode {
+  const MangaNightMode({this.enabled = false, this.brightness = 60});
+
+  final bool enabled;
+
+  /// 阅读画面亮度百分比：5 = 很暗，100 = 不压暗。
+  final int brightness;
+
+  static const presets = <int>[100, 80, 60, 40, 20, 10];
+
+  /// 覆盖层黑色不透明度。开启时最暗仍保留 5% 内容可辨识度。
+  double get scrimAlpha =>
+      enabled ? ((100 - brightness.clamp(5, 100)) / 100).clamp(0, .95) : 0;
+}
 class MangaViewSettings {
   const MangaViewSettings({
     required this.base,
@@ -20,12 +39,21 @@ class MangaViewSettings {
     this.preload = 3,
     this.cacheMiB = 96,
     this.volumeKeys = false,
+    this.zoom = true,
+    this.doubleTapZoom = true,
+    this.doubleTapScale = 2,
+    this.zoomDuration = ZoomDurationPreset.normal,
+    this.night = const MangaNightMode(),
   });
   final ReaderSettings base;
   final ReaderOrientation orientation;
   final ReaderTapZones tapZones;
   final ReaderImageFilter filter;
   final bool trim, doublePage, volumeKeys;
+  final bool zoom, doubleTapZoom;
+  final double doubleTapScale;
+  final ZoomDurationPreset zoomDuration;
+  final MangaNightMode night;
   final double autoScroll;
   final int preload, cacheMiB;
   static T pick<T extends Enum>(List<T> values, Object? name, T fallback) =>
@@ -53,6 +81,24 @@ class MangaViewSettings {
     trim: values['trim'] == true,
     doublePage: values['doublePage'] == true,
     volumeKeys: values['volumeKeys'] == true,
+    zoom: values['zoom'] != false,
+    doubleTapZoom: values['doubleTapZoom'] != false,
+    doubleTapScale: ((values['doubleTapScale'] as num?)?.toDouble() ?? 2).clamp(
+      1.5,
+      4,
+    ),
+    zoomDuration: pick(
+      ZoomDurationPreset.values,
+      values['zoomDuration'],
+      ZoomDurationPreset.normal,
+    ),
+    night: MangaNightMode(
+      enabled: values['nightMode'] == true,
+      brightness: ((values['nightBrightness'] as num?)?.toInt() ?? 60).clamp(
+        5,
+        100,
+      ),
+    ),
     autoScroll: ((values['autoScroll'] as num?)?.toDouble() ?? 0).clamp(0, 120),
     preload: ((values['preload'] as num?)?.toInt() ?? 3).clamp(0, 8),
     cacheMiB: ((values['cacheMiB'] as num?)?.toInt() ?? 96).clamp(24, 256),
@@ -82,7 +128,9 @@ class MangaReaderPreferences {
   Future<void> set(String field, Object value) => switch (field) {
     'mode' => base.setMode(ReadingMode.values.byName(value as String)),
     'fit' => base.setFit(ImageFit.values.byName(value as String)),
-    'background' => base.setBackground(ReaderBackground.values.byName(value as String)),
+    'background' => base.setBackground(
+      ReaderBackground.values.byName(value as String),
+    ),
     _ => prefs.set(key, {...load(), field: value}),
   };
 
@@ -93,7 +141,10 @@ class MangaReaderPreferences {
 }
 
 final mangaReaderPreferencesProvider = Provider(
-  (ref) => MangaReaderPreferences(ref.watch(preferencesProvider), ref.read(readerSettingsProvider.notifier)),
+  (ref) => MangaReaderPreferences(
+    ref.watch(preferencesProvider),
+    ref.read(readerSettingsProvider.notifier),
+  ),
 );
 final mangaReaderValuesProvider = StreamProvider<Map<String, Object?>>(
   (ref) => ref.watch(mangaReaderPreferencesProvider).watch(),
@@ -101,6 +152,7 @@ final mangaReaderValuesProvider = StreamProvider<Map<String, Object?>>(
 final mangaViewSettingsProvider = Provider<MangaViewSettings>(
   (ref) => MangaViewSettings.from(
     ref.watch(readerSettingsProvider),
-    ref.watch(mangaReaderValuesProvider).asData?.value ?? ref.read(mangaReaderPreferencesProvider).load(),
+    ref.watch(mangaReaderValuesProvider).asData?.value ??
+        ref.read(mangaReaderPreferencesProvider).load(),
   ),
 );

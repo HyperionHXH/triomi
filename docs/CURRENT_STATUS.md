@@ -1,5 +1,17 @@
 # Triomi 当前状态
 
+## 当前请求：主线 9132fd7 同步 iOS（0.16.1 / 构建203，真机验收通过，待发布）
+
+同步主线漫画缩放、全局夜间模式与双指优先仲裁，保留iOS原生视频/Keychain/安全暂存。更新问题以USB手机实测为准：旧正式0.15.5/199r1的API版本列表200（匿名余量57/56），但github.com清单请求20秒接收超时或12秒连接超时；系统代理返回DIRECT。旧更新器仅Windows接入系统代理，且检查时串行抓所有历史iOS清单，旧资产失败即可阻断当前检查，错误统一显示“GitHub可能限流”无法区分真正原因。新客户端接入显式应用HTTP代理/系统代理、只核验最新可更新候选、显示受限/超时的具体阶段，同时保留官方host、SHA256和Bundle/版本检查。
+
+本轮新增IPA“用其他应用打开”及分享/保存文件备选，原生交接期间保留已核验文件，仍由TrollStore/原签名工具确认安装；不绕过签名或Touch ID。所有编译、更新实际下载/交接、漫画手势真机验收完成前不提交/推送/发布。既有docs/IOS_ADAPTATION.md用户未提交修改保留，不清手机数据。
+
+本地进度：Mac analyze零问题；定向首轮229通过/19平台跳过/1个新增UI夹具失败，修复合法iOS标签及重进后文件身份断言后，该UI文件37项通过；正常main.dart Release/IPA校验通过（0.16.1/203/修订0/iOS15，SHA256 `6d6d8b81c02a35e4e9ba58efa80bcfc091c2d5e66775fe089498b6d09db57795`）。USB独立身份实跑缩放/双指优先/夜间Hive重开和原生更新身份拒绝场景均成功，报告runId `b97d45ddeb8e4aaa84d0ebb7e89c4d4e`，证据在`build/sync-next/`。
+
+首次实际生产Bundle验收被Enable UI Automation的Touch ID挡住，用户暂不方便授权时已停止并恢复正式App；用户随后确认可继续，授权生效后XCTest已真正操作更新页面：系统路线本轮5.578秒、显式HTTP代理3.117秒均发现公开iOS200，完整下载14,260,972字节IPA，SHA256 `18afa12cf01a80557b36cb1d2bfcc08ae49783c42567d64ca470a6458a96c052`与官方清单一致。OpenIn列表实际包含TrollStore，选择后TrollStore解析出Triomi/0.15.6/原Bundle并显示安装确认；未点击安装，正常取消后返回。OpenIn取消再开、分享取消、保存文件取消及实际保存、最后显式移除暂存均通过，最终XCTest 1/1 passed（94.094秒）。实际从“文件”保存到本机后再通过USB取回，字节大小/SHA256与下载的公开原IPA精确一致，不把仅显示菜单冒称交接成功。
+
+本轮验收使用临时普通Release入口（编译标记明确固定为旧版本以接收真实升级，未打开用户DB/Hive），随后恢复正常main.dart的0.16.1/203修订0，同原AppSync身份覆盖、未卸载。17张业务表逐行内容与验收前相同，Hive虽重写文件但46项设置值逐项相同，Keychain访问组不变。临时UI runner已删除，截图/报告位于`build/sync-next/ui/evidence`及`final-update-verification.json`；全部验证完成后才提交推送发布。
+
 ## 当前请求：主线 f83e590 同步 iOS（0.15.6+200 已发布）
 
 本轮从已同步主线 `f3f08bb` 推进至 `f83e590`，保留 iOS 0.15.5+199 修订1与全部历史证据。同步漫画全局阅读设置持久化：基础设置沿用 `reader.mode/fit/background`，其余漫画设置统一使用 `reader.manga`，不再读取每作品覆盖；同步“离开应用自动画中画”持久开关，iOS 自动 PiP 与手动 PiP、后台音频及 AVPlayer 生命周期分别处理，不将 Android Home 行为直接当作 iOS 实现或验收。
@@ -134,6 +146,30 @@ Windows真实程序已通过新增2项文件SQLite/生产路由阅读验收：�
 196/648e405的42468991179已通过所有原生准备/设备打包/桥/JSC/综合验收，官方API预取三个架构闭合下载故障。主巡检仍在恢复输入断言失败，但新严格输出已证明第二个EditableText是来源网址SelectableText内部的readOnly控件，不是先前判断的新旧路由；该判断纠正。197限定为TextFormField内部编辑控件。补本地夹具baseUrl使同一SelectableText真实出现，先红精确复现Too many elements、改定位后4项生产UI回归全通过且analyze零问题；生产页面/数据/网络不改。保留87图和严格唯一断言，不用first绕过。
 
 
+## 当前请求：R195 双指缩放仲裁修复（0.16.1，用户手机确认通过，准备正式发布）
+
+用户确认夜间模式可用，本轮不修改其实现；用户报告0.16.0首次双指捏合仍容易拖出相邻页，优先级高于R194验收结论。新增真实两指逐次移动回归后，旧实现失败（比例仍为1倍）；原测试偏重双击后平移，没有覆盖从1倍开始的手势竞争。
+
+详细对照Komikku锁定的[SSIV 66e0db195d源码](https://github.com/tachiyomiorg/subsampling-scale-image-view/blob/66e0db195d/library/src/main/java/com/davemorrissey/labs/subscaleview/SubsamplingScaleImageView.java)：按下时`requestDisallowInterceptTouchEvent(true)`，双指中心/跨度变化超过5屏幕像素进入缩放，单指平移阈值`density*5`（5dp），第二指抬起后转为剩余指平移。Triomi改为可见视口外侧唯一手势仲裁层（跨左右双页/条漫图片共享），单指5dp识别后代理真实`ScrollPosition.drag`和原生ballistic，不与父级drag竞争；第二指按下立即独占，中止并撤回先前轻微翻页偏移；缩至1倍也保持当前序列为图片操作，直至最后一指离开；最小缩放基准动态重设，避免收缩过量后的反向张开死区。仲裁层放在Scrollable外侧，避免Flutter `DragScrollActivity.shouldIgnorePointer`阻止第二指命中。
+
+验证：相关76项回归通过，reader及新增测试analyze零问题；包含LTR/RTL/上下翻页/条漫、第一指先动第二指后落、缩小到1倍后的剩余指、取消与恢复单指、跨双页。原API35 AVD安装独立试用包、普通入口打开MangaDex第1话，独立原生Instrumentation注入两指事件，已观察截图放大与还原，原图/还原页码均1/23，剩余指拖动不翻页；新单指滑动正常到2/23。不是用户手机手感验收，仍等反馈。
+
+电脑文件`D:/noval_and_manga/Triomi-manga-pinch-trial.apk`，162937612字节，SHA256 `4dee94ac7beaf4111b7602ef035b519f104456baa585de064d393f6d255537ed`。版本`0.16.0-reader-trial`/202，独立ID `io.github.hyperionhxh.triomi.readertrial`、桌面名「Triomi 缩放试用」，使用本地debug证书（SHA256 `0b70a330…`）签名，v2验签及Mihon ABI128通过。本机没有生产私钥，不借远端发布任务取得签名；故独立包与正式版共存，不覆盖/清除正式数据。`triomiReaderTrial=true`为显式构建参数，普通构建ID/名称不变。没有提交、推送、建标签或发布，pubspec正式版本不变；用户确认后再走正式构建发布。
+
+用户已安装上述试用APK并明确反馈「这个手感对了」，授权编译、推送、发布。本次保留手机验证通过的手势源码和夜间模式，不再调参数；Android/Windows共用修复，以点版本`0.16.1`（内部构建203）正式发布。正式任务不传`triomiReaderTrial`/`triomiAcceptanceSigning`，继续原包名、名称和生产证书；试用包保留不删除，独立iOS发布不改。以下新增正式检查与产物核验结果完成后补录。
+
+正式发布前全量2009项通过、5项平台条件跳过，analyze零问题；文本编码、UI文档漂移和交付一致性检查均零错误（交付一致性保留35项历史模板警告）。源码1512文件及原试用APK已知账号值/编码扫描零命中。已冻结经用户确认的两份手势源码SHA256，正式发布只变版本与生产身份，不变阅读操作。
+
+## 当前请求：R194 漫画缩放手势与夜间亮度（0.16.0+201，已发布并核验）
+
+按用户反馈重做阅读内缩放：原先只有 `InteractiveViewer`，与翻页抢手势，双击无法放大、放大后拖动会把整页滑走、也不好缩回。现改为每页独立缩放层（`MangaZoomView`），对齐 Komikku 的操作——双击放大到设定倍数、再双击回到原始大小，捏合保持手指焦点缩放，上限 5 倍，平移被限制在图片边界内不露底色。放大期间翻页手势明确让位（`PageView`/条漫列表改用不可滚动约束），单指拖动只平移图片；点按左右区域先平移，到边界才翻页，翻页后放大状态自动复位，不会把倍数带到下一页。设置面板新增「缩放与双击」：允许放大、双击开关、1.5–4 倍、无/快/标准/慢四档动画。
+
+新增全局漫画夜间模式：开关 + 100/80/60/40/20/10% 预设与 5–100% 滑块，全部写入既有全局 `reader.manga`。实现方式是阅读画面上方的黑色遮罩，因此可以压到低于设备最暗亮度仍保留可辨识度，且**完全不修改系统亮度**——退出阅读不需要恢复，也不会残留；不做蓝光色偏，与图像滤镜互不影响。
+
+版本策略调整为：跨 Android 与 Windows 的更新只用点版本（本轮 `0.16.0`）；只有单端单独改进才追加 `+N` 构建号，`pubspec` 仍保留单调递增的构建号供 Android/Windows 安装器比较。
+真实设备（`triomi_r174_network_volume_storage`，`install -r` 保数据）已在正式入口验证：MangaDex 第1话第1/23页双击放大，隐藏控制条后页面band由432–1965变为放大后可移动范围，再双击回到完全相同的432–1965；放大后拖动使页面band移动而页码仍停在1/23（没有误翻页）；默认从右到左模式下，未放大时点左边缘由1/23到2/23。夜间模式20%把同一页同一位置的画面均值由154.6压到30.9（比率0.20，与80%黑色遮罩一致），而 `settings get system screen_brightness` 全程保持102；`force-stop` 后重启仍保留夜间模式与20%预设。测量来自截图解码与无障碍节点，不冒充人眼像素验收，也不声称其它页面/来源同结论。证据见[R194 JSON](delivery/evidence/R194-manga-zoom-night.json)。
+
+[发布43998450696](https://github.com/HyperionHXH/triomi/actions/runs/43998450696)的 Android、Windows 与 publish 全部成功，[v0.16.0](https://github.com/HyperionHXH/triomi/releases/tag/v0.16.0) 为正式非草稿版本，冻结源码 `dfdd23b` 未移动（附注标签已解析回该提交再核对）。五项公开文件完整回下载，大小/GitHub digest/公共 SHA256 三方一致，Windows ZIP 466 成员与清单逐项一致；APK 实读 `0.16.0`/构建 201、原生产证书 `731ecd30…` 验签及 Mihon ABI 128 通过，15 个独立 iOS 发布资产逐一保持。公开 APK 162,950,828 字节/`25ae9f8c`，ZIP 290,246,135 字节/`cee104fa`，MSI 272,756,760 字节/`3312df51`。已知账号值与编码扫描：源码 1511 文件、APK 626 成员、ZIP 466 成员零命中。MSI 仅验证容器字节，未执行安装生命周期。
 
 
 ## 当前请求：R193 新issue与漫画全局阅读体验（0.15.6+200，已发布并核验，#9已解决）

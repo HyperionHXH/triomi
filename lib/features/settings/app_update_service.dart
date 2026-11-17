@@ -11,6 +11,8 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/source/network_proxy.dart';
+import '../../core/source/system_proxy.dart';
 import '../../core/source/system_proxy_adapter.dart';
 import '../../core/storage/preferences.dart';
 import 'windows_update_storage.dart';
@@ -504,7 +506,11 @@ checkStartupAppUpdate(
   AppUpdateService Function()? createService,
 }) async {
   if (!preferences.automaticAppUpdateCheckEnabled) return null;
-  final service = (createService ?? AppUpdateService.new)();
+  final service = createService?.call() ??
+      AppUpdateService(
+        proxyResolver: () =>
+            preferences.get<String>(SourceProxyController.key) ?? '',
+      );
   final cancellation = AppUpdateCancellation();
   final disabled = Completer<void>();
   final subscription = preferences
@@ -665,6 +671,7 @@ Future<String> stageAppUpdateBytes(
 class AppUpdateService {
   AppUpdateService({
     Dio? dio,
+    this.proxyResolver,
     this.windowsUpdateRoot,
     Future<void> Function(List<String>)? launchExplorer,
   }) : _launchExplorer = launchExplorer ?? _startExplorer,
@@ -685,14 +692,27 @@ class AppUpdateService {
     _dio.options.extra.clear();
     _dio.options.connectTimeout = const Duration(seconds: 20);
     _dio.options.receiveTimeout = const Duration(seconds: 40);
-    if (dio == null && Platform.isWindows) {
+    if (dio == null) {
       _dio.httpClientAdapter = SystemProxyHttpClientAdapter(
         createClient: HttpClient.new,
+        resolve: _resolveProxy,
       );
     }
   }
   static const _native = MethodChannel('triomi/app-update');
   final Dio _dio;
+  /// Resolve the current setting per URL, including each trusted CDN redirect.
+  /// Empty follows the OS route; explicit settings never fall back to direct.
+  String Function()? proxyResolver;
+
+  Future<String> _resolveProxy(Uri uri) async {
+    final proxy = normalizeSourceProxy(proxyResolver?.call() ?? '');
+    if (proxy.isEmpty) return systemProxyForUri(uri);
+    final target = Uri.parse(proxy);
+    final host = target.host.contains(':') ? '[${target.host}]' : target.host;
+    return 'PROXY $host:${target.port}';
+  }
+
   final Future<void> Function(List<String>) _launchExplorer;
   static Future<void> _startExplorer(List<String> arguments) async {
     await Process.start('explorer.exe', arguments);
@@ -976,24 +996,21 @@ class AppUpdateService {
         token,
       );
     }
-    final result = <AppUpdateRelease>[];
-    for (final release in releases) {
-      token.check();
-      if (!release.iosOnly ||
-          !release.assets.containsKey('Triomi-iOS-Unsigned.ipa') ||
-          !release.assets.containsKey('triomi-ios.update.json') ||
-          !release.assets.containsKey('SHA256SUMS.txt')) {
-        continue;
-      }
-      final manifest = await _iosManifest(release, token);
-      result.add(
-        release.withIosManifest(
-          manifest['iosRevision'] as int,
-          manifest['versionCode'] as int,
-        ),
+    // Tags already declare the exact iOS build/revision. Verify the newest
+    // installable candidate, not every historical asset: an obsolete release's
+    // unavailable manifest must not make a current update undiscoverable.
+    // Do not fall back on failure: a broken newest manifest remains an error.
+    final result = releases.where((release) => release.iosOnly).toList()
+      ..sort((a, b) => b.compareTo(a));
+    final newest = newestAppUpdateRelease(current, result);
+    token.check();
+    if (newest != null) {
+      final manifest = await _iosManifest(newest, token);
+      result[result.indexOf(newest)] = newest.withIosManifest(
+        manifest['iosRevision'] as int,
+        manifest['versionCode'] as int,
       );
     }
-    result.sort((a, b) => b.compareTo(a));
     return result;
   }
 
@@ -1166,9 +1183,9 @@ class AppUpdateService {
         }
         bytes.addAll(chunk);
       }
-    } on DioException {
+    } on DioException catch (failure) {
       token.check();
-      throw const HttpException('更新元数据传输失败；请重试');
+      throw HttpException(_requestFailure(failure, uri));
     }
     token.check();
     if (asset != null &&
@@ -1328,6 +1345,36 @@ class AppUpdateService {
     await _launchExplorer(['/select,', file.path]);
   }
 
+  String _requestFailure(DioException failure, Uri uri) {
+    final response = failure.response;
+    final status = response?.statusCode;
+    final host = uri.host;
+    final githubApi = host == 'api.github.com';
+    if (githubApi &&
+        (status == 429 ||
+            (status == 403 &&
+                (response!.headers.value('x-ratelimit-remaining') == '0' ||
+                    response.headers.value('retry-after') != null)))) {
+      final retry = int.tryParse(response!.headers.value('retry-after') ?? '');
+      final delay = retry != null && retry > 0 && retry <= 86400
+          ? '请在 $retry 秒后重试。'
+          : '请稍后重试。';
+      return 'GitHub 匿名更新 API（$host）请求已限流（HTTP $status）。$delay';
+    }
+    if (status != null) {
+      return '更新 ${githubApi ? 'GitHub API' : '官方资产'}（$host）请求被拒绝（HTTP $status）；请稍后重试。';
+    }
+    return switch (failure.type) {
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.receiveTimeout =>
+        '更新 HTTPS（$host）请求超时；请检查系统网络与代理设置后重试。',
+      DioExceptionType.badCertificate =>
+        '更新 HTTPS（$host）证书验证失败；未绕过安全验证，请检查系统时间与网络。',
+      _ => '更新 HTTPS（$host）连接失败；请检查系统网络与代理设置后重试。',
+    };
+  }
+
   Future<ResponseBody> _request(
     Uri uri,
     AppUpdateCancellation token, {
@@ -1398,11 +1445,12 @@ class AppUpdateService {
           throw const FormatException('拒绝不安全的 GitHub 下载重定向');
         }
         uri = next;
-      } on DioException {
+      } on DioException catch (failure) {
         abortRequest();
         token.check();
-        // Never expose signed CDN queries, source credentials or headers.
-        throw const HttpException('更新 HTTPS 请求失败、超时或被拒绝；请稍后重试（GitHub 可能限流）');
+        // Only bounded, allowlisted diagnostics; never response bodies, signed
+        // CDN queries, source credentials, proxy addresses or arbitrary headers.
+        throw HttpException(_requestFailure(failure, uri));
       }
     }
   }
@@ -1548,6 +1596,7 @@ class AppUpdateService {
       });
       return;
     }
+
     if (!candidate.canInstall ||
         !candidate.signatureVerified ||
         candidate.offered.platform != 'android') {
@@ -1557,6 +1606,21 @@ class AppUpdateService {
       'path': candidate.path,
       'sha256': candidate.offered.sha256,
       'consent': true,
+    });
+  }
+  /// Shares a verified iOS IPA through the native document/share flow. The
+  /// native side rechecks the staged path and digest before presenting it.
+  Future<void> shareIos(AppUpdateCandidate candidate) async {
+    if (!candidate.canInstall ||
+        candidate.offered.platform != 'ios' ||
+        (await current()).platform != 'ios') {
+      throw StateError('只能分享已核验的新版本 iOS IPA');
+    }
+    await _native.invokeMethod<Object?>('handoffIos', {
+      'path': candidate.path,
+      'sha256': candidate.offered.sha256,
+      'consent': true,
+      'mode': 'share',
     });
   }
 

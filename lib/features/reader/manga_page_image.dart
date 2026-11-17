@@ -277,11 +277,9 @@ class _MangaPageImageState extends State<MangaPageImage> {
               child: FittedBox(fit: BoxFit.contain, child: content),
             ),
     );
-    return InteractiveViewer(
-      key: ValueKey((widget.sourceId, widget.url, widget.fit)),
-      minScale: 1,
-      maxScale: 4,
-      child: GestureDetector(
+    // 缩放由阅读器按页统一接管：只有那里能同时控制翻页手势的让位。
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
         onLongPress: () => saveImageWithFeedback(
           context,
           imageUrl: widget.url,
@@ -289,7 +287,6 @@ class _MangaPageImageState extends State<MangaPageImage> {
           imageHeaders: widget.imageHeaders,
         ),
         child: Center(child: fitted),
-      ),
     );
   }
 

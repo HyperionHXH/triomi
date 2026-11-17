@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 
 /// Application-owned integrations. File providers are read through coordinated,
 /// security-scoped URLs; Dart receives canonical private snapshots, never grants.
-final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
+final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate, UIDocumentInteractionControllerDelegate {
   private static let backupNameLock = NSLock()
   private static var lastBackupStamp: UInt64 = 0
   private static let updateCleanupLock = NSLock()
@@ -18,9 +18,13 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
   private let cacheChannel: FlutterMethodChannel
   private let backupDocumentsChannel: FlutterMethodChannel
   private let updateChannel: FlutterMethodChannel
-  // Accessed only on worker. A presented share sheet pins its input file.
-  private var updateStages: [String: [String: Any]] = [:]
+  // A presented exporter pins its input file until the complete UIKit handoff ends.
+  private var updateActivityController: UIActivityViewController?
+  private(set) var updateDocumentInteractionController: UIDocumentInteractionController?
+  private var updateDocumentInteractionSending = false
   private var updateHandoffPath: String?
+  // Stage ownership and file leases are accessed only on worker.
+  private var updateStages: [String: [String: Any]] = [:]
   private let backupDocuments = IosBackupDocuments()
   private let files = FileManager.default
   private let worker = DispatchQueue(label: "triomi.ios.files", qos: .userInitiated)
@@ -261,19 +265,40 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
                   (identity["iosRevision"] as! Int) > (installed["iosRevision"] as! Int)) else {
             throw Self.error("Installed iOS version, build or revision is already current or newer")
           }
+          let mode = args["mode"] as? String ?? "openIn"
+          guard mode == "openIn" || mode == "share" else { throw Self.error("Unsupported IPA handoff mode") }
           self.updateHandoffPath = path
           DispatchQueue.main.async {
             guard let presenter = Self.presenter(), UIApplication.shared.applicationState == .active else {
               self.worker.async { self.updateHandoffPath = nil }
               result(FlutterError(code: "activity_inactive", message: "Return to Triomi before opening the verified IPA", details: nil)); return
             }
-            let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-            sheet.popoverPresentationController?.sourceView = presenter.view
-            sheet.popoverPresentationController?.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
-            sheet.completionWithItemsHandler = { _, _, _, _ in
-              self.worker.async { self.updateHandoffPath = nil }
+            if mode == "share" {
+              let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+              self.updateActivityController = sheet
+              sheet.popoverPresentationController?.sourceView = presenter.view
+              sheet.popoverPresentationController?.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
+              sheet.completionWithItemsHandler = { [weak self] _, _, _, _ in
+                guard let self else { return }
+                self.updateActivityController = nil
+                self.worker.async {
+                  if self.updateHandoffPath == path { self.updateHandoffPath = nil }
+                }
+              }
+              presenter.present(sheet, animated: true) { result(true) }
+            } else {
+              let controller = UIDocumentInteractionController(url: url)
+              controller.uti = "com.apple.itunes.ipa"
+              controller.delegate = self
+              self.updateDocumentInteractionController = controller
+              self.updateDocumentInteractionSending = false
+              guard controller.presentOpenInMenu(from: presenter.view.bounds, in: presenter.view, animated: true) else {
+                self.updateDocumentInteractionController = nil
+                self.worker.async { self.updateHandoffPath = nil }
+                result(FlutterError(code: "open_in_unavailable", message: "没有可用于打开 IPA 的其他 App", details: nil)); return
+              }
+              result(true)
             }
-            presenter.present(sheet, animated: true) { result(true) }
           }
           return
         default:
@@ -281,6 +306,37 @@ final class IosPlatformBridge: NSObject, UIDocumentPickerDelegate {
         }
         DispatchQueue.main.async { result(value) }
       } catch { DispatchQueue.main.async { result(Self.failure("ios_update_failed", error)) } }
+    }
+  }
+
+  func documentInteractionController(_ controller: UIDocumentInteractionController,
+                                     willBeginSendingToApplication application: String?) {
+    guard controller === updateDocumentInteractionController else { return }
+    updateDocumentInteractionSending = true
+  }
+
+  func documentInteractionControllerDidDismissOpenInMenu(_ controller: UIDocumentInteractionController) {
+    // Defer cancellation cleanup until UIKit has delivered the app-selection
+    // callbacks from this menu event. Dismissing the menu is not export completion.
+    DispatchQueue.main.async {
+      guard controller === self.updateDocumentInteractionController,
+            !self.updateDocumentInteractionSending else { return }
+      self.finishUpdateDocumentInteraction(controller)
+    }
+  }
+
+  func documentInteractionController(_ controller: UIDocumentInteractionController,
+                                     didEndSendingToApplication application: String?) {
+    finishUpdateDocumentInteraction(controller)
+  }
+
+  private func finishUpdateDocumentInteraction(_ controller: UIDocumentInteractionController) {
+    guard controller === updateDocumentInteractionController else { return }
+    let path = controller.url?.path
+    updateDocumentInteractionController = nil
+    updateDocumentInteractionSending = false
+    worker.async {
+      if self.updateHandoffPath == path { self.updateHandoffPath = nil }
     }
   }
 

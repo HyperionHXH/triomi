@@ -128,6 +128,7 @@ class AppUpdateReadyView extends StatelessWidget {
     required this.busy,
     this.onInstall,
     this.onRevealWindows,
+    this.onShareIos,
     this.onDiscard,
   });
 
@@ -135,6 +136,7 @@ class AppUpdateReadyView extends StatelessWidget {
   final bool busy;
   final VoidCallback? onInstall;
   final VoidCallback? onRevealWindows;
+  final VoidCallback? onShareIos;
   final VoidCallback? onDiscard;
 
   @override
@@ -165,7 +167,15 @@ class AppUpdateReadyView extends StatelessWidget {
                         ? Icons.install_desktop_outlined
                         : Icons.install_mobile_outlined,
                   ),
-                  label: Text(ios ? '分享 IPA / 交给安装工具' : '立即安装'),
+                  label: Text(ios ? '用其他 App 打开 IPA' : '立即安装'),
+                ),
+              if (ios)
+                OutlinedButton.icon(
+                  key: const ValueKey('app-update-ready-share-ios'),
+                  style: OutlinedButton.styleFrom(minimumSize: _actionSize),
+                  onPressed: busy ? null : onShareIos,
+                  icon: const Icon(Icons.ios_share),
+                  label: const Text('分享 / 存储到文件'),
                 ),
               if (windows)
                 OutlinedButton.icon(
@@ -210,7 +220,7 @@ class AppUpdateHandoffView extends StatelessWidget {
         _StatusHeading(
           icon: windows ? Icons.folder_open_outlined : Icons.open_in_new,
           title: ios
-              ? 'IPA 分享已打开'
+              ? 'IPA 交接面板已打开'
               : windows
               ? '更新程序已就绪'
               : '已交给系统安装器',
@@ -219,7 +229,7 @@ class AppUpdateHandoffView extends StatelessWidget {
         const SizedBox(height: AppSpacing.md),
         if (ios) ...[
           const Text(
-            '请在分享面板中选择 TrollStore 或原签名工具；若未列出，可存储到“文件”后从该工具导入。这里只交接已核验 IPA，未确认安装，也不会自动安装。请勿卸载原应用，以保留数据；安装仍受设备支持、签名与工具确认限制。',
+            '在“用其他 App 打开”中选择 TrollStore 或原签名 / 自动续签工具。列表由 iOS 和已安装工具决定，Triomi 不保证某工具会出现。若列表为空，可改用“分享 / 存储到文件”，再从工具导入。取消或返回后 IPA 仍保留，可重新确认后重试或移除。这里只交接文件，未确认安装，也不会自动安装；请勿卸载原应用，以保留数据。签名、设备支持与安装仍由工具及系统确认。',
           ),
         ] else if (windows) ...[
           const Text('Triomi 退出后将替换已核验的应用文件并重启。失败时回滚；个人数据不在替换范围内。'),
@@ -243,6 +253,7 @@ Future<bool?> showAppUpdateReadyDialog(
   required AppUpdateCandidate candidate,
   required bool windows,
   bool downloaded = false,
+  bool shareIos = false,
 }) {
   final ios = _canHandoffIos(candidate);
   final actionable =
@@ -276,7 +287,9 @@ Future<bool?> showAppUpdateReadyDialog(
             if (actionable)
               Text(
                 ios
-                    ? '重新核验后分享已下载的 IPA，请选择 TrollStore 或原签名工具，或存储到“文件”后手动导入。未检测安装工具，未自动安装；签名、设备兼容性与安装由该工具确认。请勿卸载原应用。'
+                    ? (shareIos
+                          ? '重新核验后打开分享面板，可存储到“文件”或分享给支持 IPA 的工具，再由你手动导入。不自动安装，也不代表已安装；签名、设备兼容性与安装由该工具确认。请勿卸载原应用。'
+                          : '重新核验后显示“用其他 App 打开”，请选择 TrollStore 或原签名 / 自动续签工具。可用列表由 iOS 决定；若为空，可取消后改用“分享 / 存储到文件”。取消后保留 IPA 供重试，不自动安装；签名、兼容性与安装由工具及系统确认。请勿卸载原应用。')
                     : windows
                     ? '确认后关闭 Triomi，安装已核验的文件并自动重启。替换失败会回滚，个人数据保留。安装目录无写入权限时可改用手动安装包。'
                     : '重新核验后打开系统安装器，由你确认安装；保留应用数据。',
@@ -291,7 +304,7 @@ Future<bool?> showAppUpdateReadyDialog(
           key: const ValueKey('app-update-ready-later'),
           style: TextButton.styleFrom(minimumSize: _actionSize),
           onPressed: () => Navigator.of(context).pop(false),
-          child: Text(actionable ? '稍后安装' : '关闭'),
+          child: Text(actionable ? (ios ? '暂不交接' : '稍后安装') : '关闭'),
         ),
         if (actionable)
           FilledButton(
@@ -300,7 +313,7 @@ Future<bool?> showAppUpdateReadyDialog(
             onPressed: () => Navigator.of(context).pop(true),
             child: Text(
               ios
-                  ? '分享 IPA'
+                  ? (shareIos ? '打开分享面板' : '用其他 App 打开')
                   : windows
                   ? '安装并重启'
                   : '立即安装',

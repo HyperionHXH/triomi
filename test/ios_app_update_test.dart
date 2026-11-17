@@ -89,6 +89,8 @@ class _Transport implements HttpClientAdapter {
   String tag;
   int revision, build;
   bool corruptPayload = false, corruptManifest = false;
+  List<Map<String, Object?>> historicalReleases = [];
+  final unavailableTags = <String>{};
   final requests = <Uri>[];
   final payload = _ipa();
   StreamController<Uint8List>? pendingPayload;
@@ -133,7 +135,13 @@ class _Transport implements HttpClientAdapter {
   ) async {
     requests.add(options.uri);
     if (options.uri.toString() == appUpdateReleasesApi) {
-      return ResponseBody.fromString(jsonEncode([release]), 200);
+      return ResponseBody.fromString(
+        jsonEncode([release, ...historicalReleases]),
+        200,
+      );
+    }
+    if (options.uri.pathSegments.any(unavailableTags.contains)) {
+      return ResponseBody.fromString('obsolete asset unavailable', 404);
     }
     final name = options.uri.pathSegments.last;
     if (name == 'SHA256SUMS.txt') return ResponseBody.fromBytes(sums, 200);
@@ -185,6 +193,7 @@ void main() {
   late _Service service;
   final stages = <String>{};
   var handoffs = 0;
+  Map<String, Object?>? lastHandoff;
   var sharePinned = false;
 
   setUp(() async {
@@ -194,6 +203,7 @@ void main() {
     stages.clear();
     handoffs = 0;
     sharePinned = false;
+    lastHandoff = null;
     messenger.setMockMethodCallHandler(channel, (call) async {
       final args = (call.arguments as Map?)?.cast<String, Object?>();
       switch (call.method) {
@@ -214,6 +224,7 @@ void main() {
           return true;
         case 'handoffIos':
           handoffs++;
+          lastHandoff = args;
           sharePinned = true;
           return true;
         default:
@@ -248,6 +259,62 @@ void main() {
       expect(handoffs, 0);
     },
   );
+
+  test('startup verifies only the newest candidate and ignores unavailable history', () async {
+    final historical = _Transport()
+      ..tag = 'v0.15.4-ios.198-r1'
+      ..revision = 1;
+    transport.historicalReleases = [historical.release];
+    transport.unavailableTags.add(historical.tag);
+    final offered = await checkStartupAppUpdate(
+      memoryPreferences(),
+      createService: () => service,
+    );
+    expect(offered?.release.tag, transport.tag);
+    expect(
+      transport.requests.where((uri) => uri.host == 'github.com').length,
+      2,
+    );
+    expect(
+      transport.requests.any((uri) => uri.pathSegments.contains(historical.tag)),
+      isFalse,
+    );
+    expect(stages, isEmpty);
+  });
+
+  test('a broken newest candidate fails startup instead of silently offering older history', () async {
+    final historical = _Transport()
+      ..tag = 'v0.15.4-ios.198-r1'
+      ..revision = 1;
+    transport.historicalReleases = [historical.release];
+    transport.corruptManifest = true;
+    await expectLater(
+      checkStartupAppUpdate(
+        memoryPreferences(),
+        createService: () => service,
+      ),
+      throwsFormatException,
+    );
+    expect(
+      transport.requests.any((uri) => uri.pathSegments.contains(historical.tag)),
+      isFalse,
+    );
+    expect(stages, isEmpty);
+  });
+
+  test('installed iOS tags require no historical manifest network requests', () async {
+    transport.revision = 1;
+    transport.tag = 'v0.15.4-ios.198-r1';
+    transport.unavailableTags.add(transport.tag);
+    expect(
+      await checkStartupAppUpdate(
+        memoryPreferences(),
+        createService: () => service,
+      ),
+      isNull,
+    );
+    expect(transport.requests.map((uri) => uri.toString()), [appUpdateReleasesApi]);
+  });
 
   test('same bundled revision, older build, and mismatched tag metadata never offer reinstall', () async {
     final token = AppUpdateCancellation();
@@ -365,6 +432,37 @@ void main() {
     task.removeListener(consumer);
   });
 
+  test('verified iOS service supports default open-in and explicit share handoffs', () async {
+    final token = AppUpdateCancellation();
+    final release = (await service.releases(token)).single;
+    final candidate = await service.downloadRelease(release, token);
+    await service.launchInstaller(candidate);
+    expect(lastHandoff, {
+      'path': candidate.path,
+      'sha256': candidate.offered.sha256,
+      'consent': true,
+    });
+    await service.shareIos(candidate);
+    expect(lastHandoff, {
+      'path': candidate.path,
+      'sha256': candidate.offered.sha256,
+      'consent': true,
+      'mode': 'share',
+    });
+    expect(handoffs, 2);
+    final rejected = AppUpdateCandidate(
+      current: candidate.current,
+      offered: candidate.offered,
+      path: candidate.path,
+      bytes: candidate.bytes,
+      source: candidate.source,
+      decision: 'alreadyInstalled',
+      signatureVerified: false,
+    );
+    await expectLater(service.shareIos(rejected), throwsStateError);
+    expect(handoffs, 2);
+  });
+
   testWidgets(
     'iOS share cancellation retains a removable IPA across route reopening and active share refuses deletion',
     (tester) async {
@@ -396,7 +494,8 @@ void main() {
       );
       await tester.tap(find.text('updates'));
       await tester.pumpAndSettle();
-      expect(find.text('分享 IPA / 交给安装工具'), findsOneWidget);
+      expect(find.text('用其他 App 打开 IPA'), findsOneWidget);
+      expect(find.byKey(const ValueKey('app-update-ready-share-ios')), findsOneWidget);
       expect(find.text('选择本地 APK'), findsNothing);
       key.currentState!.pop();
       await tester.pumpAndSettle();
@@ -407,11 +506,20 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('app-update-ready-install')));
       await tester.pumpAndSettle();
       expect(handoffs, 0);
-      expect(find.text('分享 IPA'), findsOneWidget);
+      expect(find.text('用其他 App 打开'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('app-update-ready-confirm')));
       await tester.pumpAndSettle();
       expect(handoffs, 1);
-      expect(find.text('IPA 分享已打开'), findsOneWidget);
+      expect(find.text('IPA 交接面板已打开'), findsOneWidget);
+      expect(lastHandoff?['mode'], isNull);
+      await tester.ensureVisible(find.byKey(const ValueKey('app-update-handoff-share-ios')));
+      await tester.tap(find.byKey(const ValueKey('app-update-handoff-share-ios')));
+      await tester.pumpAndSettle();
+      expect(find.text('打开分享面板'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('app-update-ready-confirm')));
+      await tester.pumpAndSettle();
+      expect(handoffs, 2);
+      expect(lastHandoff?['mode'], 'share');
       expect(find.text('已交给系统安装器'), findsNothing);
       final discard = find.byKey(const ValueKey('app-update-handoff-discard'));
       await tester.ensureVisible(discard);
@@ -427,14 +535,14 @@ void main() {
       await tester.tap(find.text('updates'));
       await tester.pumpAndSettle();
       expect(task.candidate, isNotNull);
-      expect(find.text('IPA 分享已打开'), findsOneWidget);
+      expect(find.text('IPA 交接面板已打开'), findsOneWidget);
       await tester.ensureVisible(discard);
       await tester.tap(discard);
       await tester.pumpAndSettle();
       expect(task.candidate, isNull);
       expect(task.handedOff, isFalse);
       expect(stages, isEmpty);
-      expect(find.text('IPA 分享已打开'), findsNothing);
+      expect(find.text('IPA 交接面板已打开'), findsNothing);
     },
   );
   test('IPA rejects EOCD-shaped comment and ZIP64 override before directory materialization', () async {

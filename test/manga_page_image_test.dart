@@ -142,7 +142,8 @@ void main() {
       source.second.complete(ImageInfo(image: image));
       await tester.pump();
       expect(find.byType(CircularProgressIndicator), findsNothing);
-      expect(find.byType(InteractiveViewer), findsOneWidget);
+      // 页面已可绘制：占位与重试按钮都不在了，内容确实被布局出来。
+      expect(find.byType(FittedBox), findsWidgets);
       expect(find.text('重新加载'), findsNothing);
       expect(source.loads, 2);
       expect(tester.takeException(), isNull);
@@ -161,11 +162,11 @@ void main() {
       picture.dispose();
       old.image.complete(ImageInfo(image: image));
       await tester.pump();
-      expect(find.byType(InteractiveViewer), findsOneWidget);
+      expect(find.byType(FittedBox), findsOneWidget);
 
       final replacement = _ControlledImage();
       await tester.pumpWidget(page(replacement));
-      expect(find.byType(InteractiveViewer), findsNothing);
+      expect(find.byType(FittedBox), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       replacement.image.completeError(StateError('replacement unavailable'));
       await tester.pump();
@@ -175,7 +176,7 @@ void main() {
     },
   );
 
-  testWidgets('source identity and fit changes reset the zoom transform', (
+  testWidgets('source and fit changes keep image layout under reader-owned zoom', (
     tester,
   ) async {
     final provider = _ControlledImage();
@@ -187,17 +188,18 @@ void main() {
     picture.dispose();
     provider.image.complete(ImageInfo(image: image));
     await tester.pump();
-    final original = tester.state(find.byType(InteractiveViewer));
+    expect(find.byType(InteractiveViewer), findsNothing);
 
     await tester.pumpWidget(page(provider, sourceId: 'another-source'));
     await tester.pump();
-    final changedSource = tester.state(find.byType(InteractiveViewer));
-    expect(identical(original, changedSource), false);
+    expect(tester.widget<MangaPageImage>(find.byType(MangaPageImage)).sourceId,
+        'another-source');
+    expect(find.byType(FittedBox), findsOneWidget);
     await tester.pumpWidget(
       page(provider, sourceId: 'another-source', fit: BoxFit.contain),
     );
-    final changedFit = tester.state(find.byType(InteractiveViewer));
-    expect(identical(changedSource, changedFit), false);
+    expect(tester.widget<FittedBox>(find.byType(FittedBox)).fit, BoxFit.contain);
+    expect(find.byType(InteractiveViewer), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

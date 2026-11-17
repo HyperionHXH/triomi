@@ -35,7 +35,9 @@ List<AppUpdateRelease> _releases(
     jsonEncode([
       for (final code in codes)
         {
-          'tag_name': stableVersion == null
+          'tag_name': platform == 'ios'
+              ? 'v${stableVersion ?? '0.11.0'}-ios.$code-r1'
+              : stableVersion == null
               ? 'v0.11.0-test.$code'
               : 'v$stableVersion',
           'name': 'Triomi $code',
@@ -48,6 +50,12 @@ List<AppUpdateRelease> _releases(
               for (final name
                   in platform == 'android'
                       ? ['triomi-android.apk']
+                      : platform == 'ios'
+                      ? [
+                          'Triomi-iOS-Unsigned.ipa',
+                          'triomi-ios.update.json',
+                          'SHA256SUMS.txt',
+                        ]
                       : ['triomi-windows.zip', 'triomi-windows.update.json'])
                 {
                   'name': name,
@@ -55,7 +63,7 @@ List<AppUpdateRelease> _releases(
                   'size': 1024,
                   'digest': 'sha256:$_hash',
                   'browser_download_url':
-                      'https://github.com/HyperionHXH/triomi/releases/download/${stableVersion == null ? 'v0.11.0-test.$code' : 'v$stableVersion'}/$name',
+                      'https://github.com/HyperionHXH/triomi/releases/download/${platform == 'ios' ? 'v${stableVersion ?? '0.11.0'}-ios.$code-r1' : stableVersion == null ? 'v0.11.0-test.$code' : 'v$stableVersion'}/$name',
                 },
           ],
         },
@@ -72,6 +80,7 @@ class _UpdateService extends AppUpdateService {
   Future<AppUpdateInfo>? currentResult;
   Future<bool>? permissionResult;
   Future<void>? launchResult;
+  Object? launchError;
   Future<void>? foregroundResult;
   Future<void>? foregroundEndResult;
   void Function()? onForegroundEnd;
@@ -81,6 +90,7 @@ class _UpdateService extends AppUpdateService {
   final downloaded = <int>[];
   final discarded = <AppUpdateCandidate>[];
   final handedOff = <AppUpdateCandidate>[];
+  final sharedIos = <AppUpdateCandidate>[];
   final tokens = <AppUpdateCancellation>[];
   int checks = 0,
       currentReads = 0,
@@ -146,6 +156,21 @@ class _UpdateService extends AppUpdateService {
   ) async => releases;
 
   @override
+  Future<List<AppUpdateRelease>> resolvePlatformRevisions(
+    AppUpdateInfo current,
+    List<AppUpdateRelease> releases,
+    AppUpdateCancellation token,
+  ) async {
+    if (current.platform == 'ios') {
+      token.check();
+      // This UI service supplies already-resolved releases; manifest/network
+      // validation belongs to the real-service tests in ios_app_update_test.dart.
+      return releases.where((release) => release.iosOnly).toList();
+    }
+    return super.resolvePlatformRevisions(current, releases, token);
+  }
+
+  @override
   Future<AppUpdateCandidate> downloadRelease(
     AppUpdateRelease release,
     AppUpdateCancellation token,
@@ -183,6 +208,13 @@ class _UpdateService extends AppUpdateService {
   @override
   Future<void> launchInstaller(AppUpdateCandidate candidate) async {
     handedOff.add(candidate);
+    if (launchError != null) throw launchError!;
+    if (launchResult != null) await launchResult;
+  }
+
+  @override
+  Future<void> shareIos(AppUpdateCandidate candidate) async {
+    sharedIos.add(candidate);
     if (launchResult != null) await launchResult;
   }
 
@@ -849,6 +881,58 @@ void main() {
       );
       await tester.pumpWidget(const SizedBox.shrink());
       expect(service.discarded, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'iOS Open In unavailable retains IPA and both retry and fallback require fresh consent',
+    (tester) async {
+      final service = _UpdateService(
+        platform: 'ios',
+        available: _releases([163], platform: 'ios'),
+      );
+      await _open(tester, service);
+      await _tap(tester, 'app-update-check');
+      await _download(tester);
+      expect(find.text('用其他 App 打开'), findsOneWidget);
+      expect(service.handedOff, isEmpty);
+      await _tap(tester, 'app-update-ready-later');
+      expect(service.handedOff, isEmpty);
+      await _tap(tester, 'app-update-ready-share-ios');
+      expect(find.text('打开分享面板'), findsOneWidget);
+      await _tap(tester, 'app-update-ready-later');
+      expect(service.sharedIos, isEmpty);
+      await _tap(tester, 'app-update-ready-install');
+      service.launchError = PlatformException(code: 'open_in_unavailable');
+      await _tap(tester, 'app-update-ready-confirm');
+      expect(service.handedOff, hasLength(1));
+      expect(service.discarded, isEmpty);
+      expect(find.byType(AppUpdateReadyView), findsOneWidget);
+      expect(find.textContaining('iOS 未找到可打开 IPA'), findsOneWidget);
+      service.launchError = null;
+      await _tap(tester, 'app-update-retry');
+      expect(service.handedOff, hasLength(1));
+      await _tap(tester, 'app-update-ready-confirm');
+      expect(service.handedOff, hasLength(2));
+      expect(service.downloaded, [163]);
+      expect(service.permissionReads, 0);
+      expect(find.text('尚未确认安装完成'), findsOneWidget);
+      await _tap(tester, 'app-update-handoff-reopen');
+      await _tap(tester, 'app-update-ready-later');
+      expect(service.handedOff, hasLength(2));
+      await _tap(tester, 'app-update-handoff-share-ios');
+      expect(service.sharedIos, isEmpty);
+      await _tap(tester, 'app-update-ready-confirm');
+      expect(service.sharedIos.single, same(service.handedOff.first));
+      expect(service.discarded, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(service.discarded, isEmpty);
+      await _open(tester, service);
+      expect(find.byType(AppUpdateHandoffView), findsOneWidget);
+      await _tap(tester, 'app-update-handoff-discard');
+      expect(service.discarded.single.path, service.sharedIos.single.path);
+      expect(service.discarded.single.offered.sha256, service.sharedIos.single.offered.sha256);
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 

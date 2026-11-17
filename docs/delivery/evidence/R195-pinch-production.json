@@ -1,0 +1,26 @@
+{
+  "version": "0.16.1",
+  "build": 203,
+  "status": "user-phone-approved-preparing-production-release",
+  "userApproval": {"feedback": "我试了一下，这个手感对了，你可以编译推送发布了", "trialFile": "Triomi-manga-pinch-trial.apk", "trialSha256": "4dee94ac7beaf4111b7602ef035b519f104456baa585de064d393f6d255537ed"},
+  "approvedSourceSha256": {
+    "lib/features/reader/manga_zoom_view.dart": "ccb102665a6f1cc7c32e6dfc59bef6d801f54c41506eaef680c660ddf40ddc3f",
+    "lib/features/reader/manga_reader_page.dart": "f78db9934765091e12d2348b9de99536c5484db3748d8e6322398c63bfd1b9da"
+  },
+  "rootCause": "The old page-level scale recognizer competed with the parent's drag until zoom exceeded 1x. Native ScrollDragActivity also suppresses child hit testing, preventing a late second pointer from reaching the child recognizer.",
+  "upstreamReference": "https://github.com/tachiyomiorg/subsampling-scale-image-view/blob/66e0db195d/library/src/main/java/com/davemorrissey/labs/subscaleview/SubsamplingScaleImageView.java",
+  "implementation": ["One outer viewport gesture owner; second pointer immediately claims the sequence", "Proxy one-finger motion to native ScrollPosition drag and ballistic, not a competing parent recognizer", "Hold pinch ownership until all pointers leave, even at minimum scale", "Rebase at minimum scale to avoid an inward overshoot dead zone", "Shared visible viewport for double-page and webtoon", "Night-mode implementation unchanged"],
+  "trialVerification": {
+    "readerRegressionPassed": 76,
+    "analyze": "No issues found",
+    "device": "Existing API35 triomi_r174_network_volume_storage, emulator-5554",
+    "normalEntrypoint": true,
+    "nativeTouchSequence": "First pointer drift, second pointer down, spread, recontract, second pointer up, remaining-finger drag, final up",
+    "observed": "Screenshots show magnification then restoration on MangaDex chapter page 1/23; page stayed 1/23 through remaining-finger drag; fresh single-finger swipe reached 2/23",
+    "install": "Independent trial ID installed with install -r; original production app and data preserved",
+    "phoneAcceptance": "User personally installed the same trial APK and approved its feel"
+  },
+  "productionContract": {"androidPackage": "io.github.hyperionhxh.triomi", "androidLabel": "Triomi", "productionCertificateSha256": "731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309", "trialFlag": false, "acceptanceSigning": false, "targets": ["android", "windows"], "independentIosUntouched": true},
+  "prepublicationVerification": {"fullFlutterPassed": 2009, "fullFlutterSkipped": 5, "analyze": "No issues found", "encodingErrors": 0, "uiDocErrors": 0, "deliveryConsistencyErrors": 0, "deliveryHistoricalWarnings": 35, "sourceCredentialHits": 0},
+  "publication": {"published": false, "verificationComplete": false}
+}

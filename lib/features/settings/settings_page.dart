@@ -204,7 +204,7 @@ class SettingsPage extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  '用于公开番剧资料、评论、来源规则与轻之国度等 HTTP 请求。填写时优先使用此代理；清空后，Windows/Android/iOS 跟随系统已配置的代理，系统未配置则直连。轻书架专用连接与原生视频不使用此设置。',
+                  '用于应用更新检查/安装包下载、公开番剧资料、评论、来源规则与轻之国度等 HTTP 请求。填写时优先使用此代理；清空后，Windows/Android/iOS 跟随系统已配置的代理，系统未配置则直连。更新连接独立，不携带来源账号或 Cookie。轻书架专用连接与原生视频不使用此设置。',
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextField(

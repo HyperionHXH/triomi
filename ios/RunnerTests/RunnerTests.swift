@@ -125,7 +125,7 @@ final class RunnerTests: XCTestCase {
     XCTAssertTrue(FileManager.default.fileExists(atPath: path))
   }
 
-  func testIosUpdaterPinsIpaUntilCancelledShareCompletion() throws {
+  func testIosUpdaterPinsIpaUntilCancelledFallbackShareCompletion() throws {
     let bridge = try makeBridge()
     let path = try XCTUnwrap(invokeUpdate(bridge, "beginIosStage") as? String)
     let url = URL(fileURLWithPath: path)
@@ -138,7 +138,7 @@ final class RunnerTests: XCTestCase {
     try Data("verified share lease fixture".utf8).write(to: url)
     let identity = try XCTUnwrap(try inspectUpdate(bridge, path: path, plist: updatePlist()) as? [String: Any])
     XCTAssertEqual(invokeUpdate(bridge, "handoffIos", ["path": path,
-      "sha256": identity["sha256"]!, "consent": true]) as? Bool, true)
+      "sha256": identity["sha256"]!, "consent": true, "mode": "share"]) as? Bool, true)
     let sheet = try XCTUnwrap(IosPlatformBridge.presenter() as? UIActivityViewController)
     activeSheet = sheet
     XCTAssertEqual(invokeUpdate(bridge, "discardIos", ["path": path]) as? Bool, false)
@@ -153,6 +153,59 @@ final class RunnerTests: XCTestCase {
     activeSheet = nil
     XCTAssertEqual(invokeUpdate(bridge, "discardIos", ["path": path]) as? Bool, true)
     XCTAssertFalse(FileManager.default.fileExists(atPath: path))
+  }
+
+  func testIosUpdaterOpenInCancellationAndSendingKeepDistinctLeaseBoundaries() throws {
+    let bridge = try makeBridge()
+    for sending in [false, true] {
+      let path = try XCTUnwrap(invokeUpdate(bridge, "beginIosStage") as? String)
+      let url = URL(fileURLWithPath: path)
+      defer {
+        if let controller = bridge.updateDocumentInteractionController {
+          controller.dismissMenu(animated: false)
+          bridge.documentInteractionController(controller, didEndSendingToApplication: nil)
+        }
+        _ = invokeUpdate(bridge, "discardIos", ["path": path])
+      }
+      try Data("verified Open In lease fixture".utf8).write(to: url)
+      let identity = try XCTUnwrap(try inspectUpdate(bridge, path: path, plist: updatePlist()) as? [String: Any])
+      let args: [String: Any] = ["path": path, "sha256": identity["sha256"]!, "consent": true]
+      let result = invokeUpdate(bridge, "handoffIos", args)
+      if let unavailable = result as? FlutterError {
+        // The simulator or a device without an IPA consumer must retain a retryable file.
+        XCTAssertEqual(unavailable.code, "open_in_unavailable")
+        XCTAssertNil(bridge.updateDocumentInteractionController)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+        XCTAssertEqual(invokeUpdate(bridge, "discardIos", ["path": path]) as? Bool, true)
+        continue
+      }
+      XCTAssertEqual(result as? Bool, true)
+      let controller = try XCTUnwrap(bridge.updateDocumentInteractionController)
+      XCTAssertEqual(controller.url, url)
+      XCTAssertEqual(controller.uti, "com.apple.itunes.ipa")
+      XCTAssertTrue(controller.delegate === bridge)
+      XCTAssertEqual(invokeUpdate(bridge, "discardIos", ["path": path]) as? Bool, false)
+      controller.dismissMenu(animated: false)
+      bridge.documentInteractionControllerDidDismissOpenInMenu(controller)
+      if sending {
+        // App-selection callbacks from the same menu event may follow dismissal.
+        // Drive the export boundary without launching a third-party installation.
+        bridge.documentInteractionController(controller, willBeginSendingToApplication: "test.ipa-consumer")
+      }
+      let menuCallbacks = expectation(description: "Open In menu callback boundary")
+      DispatchQueue.main.async { menuCallbacks.fulfill() }
+      wait(for: [menuCallbacks], timeout: 15)
+      if sending {
+        XCTAssertTrue(bridge.updateDocumentInteractionController === controller)
+        XCTAssertEqual(invokeUpdate(bridge, "discardIos", ["path": path]) as? Bool, false)
+        XCTAssertTrue(invokeUpdate(bridge, "handoffIos", args) is FlutterError)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+        bridge.documentInteractionController(controller, didEndSendingToApplication: "test.ipa-consumer")
+      }
+      XCTAssertNil(bridge.updateDocumentInteractionController)
+      XCTAssertEqual(invokeUpdate(bridge, "discardIos", ["path": path]) as? Bool, true)
+      XCTAssertFalse(FileManager.default.fileExists(atPath: path))
+    }
   }
 
   func testIosUpdaterNeverDiscardsForeignFiles() throws {

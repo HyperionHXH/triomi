@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -61,6 +62,8 @@ Map<String, Object?> _taggedRelease(
     ],
   };
 }
+
+class _UpdaterNetworkOverrides extends HttpOverrides {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -442,6 +445,145 @@ void main() {
       }
     }
   });
+  test('anonymous API rate limits preserve safe status and retry diagnostics', () async {
+    for (final status in [403, 429]) {
+      final adapter = _Adapter(
+        (options, _) => ResponseBody.fromString(
+          'private-response-body-and-token',
+          status,
+          headers: {
+            'x-ratelimit-remaining': ['0'],
+            'retry-after': ['60'],
+            'x-private': ['private-header-token'],
+          },
+        ),
+      );
+      final service = AppUpdateService(dio: Dio()..httpClientAdapter = adapter);
+      try {
+        await expectLater(
+          service.releases(AppUpdateCancellation()),
+          throwsA(isA<HttpException>()
+              .having((error) => error.message, 'status', contains('HTTP $status'))
+              .having((error) => error.message, 'host', contains('api.github.com'))
+              .having((error) => error.message, 'limit', contains('限流'))
+              .having((error) => error.message, 'retry', contains('60 秒'))
+              .having((error) => error.message, 'privacy', isNot(contains('private')))),
+        );
+        expect(adapter.requests.length, 1);
+      } finally {
+        service.close();
+      }
+    }
+  });
+
+  test('HTTP rejection, timeouts, certificates and connection failures stay distinct and private', () async {
+    for (final type in [
+      DioExceptionType.badResponse,
+      DioExceptionType.connectionTimeout,
+      DioExceptionType.receiveTimeout,
+      DioExceptionType.badCertificate,
+      DioExceptionType.connectionError,
+    ]) {
+      final adapter = _Adapter((options, _) {
+        throw DioException(
+          requestOptions: options,
+          type: type,
+          error: 'https://user:private@host.invalid/?token=private',
+          response: type == DioExceptionType.badResponse
+              ? Response(requestOptions: options, statusCode: 403)
+              : null,
+        );
+      });
+      final service = AppUpdateService(dio: Dio()..httpClientAdapter = adapter);
+      try {
+        final expected = switch (type) {
+          DioExceptionType.badResponse => 'HTTP 403',
+          DioExceptionType.connectionTimeout ||
+          DioExceptionType.receiveTimeout => '超时',
+          DioExceptionType.badCertificate => '证书验证失败',
+          _ => '连接失败',
+        };
+        await expectLater(
+          service.releases(AppUpdateCancellation()),
+          throwsA(isA<HttpException>()
+              .having((error) => error.message, 'category', contains(expected))
+              .having((error) => error.message, 'host', contains('api.github.com'))
+              .having((error) => error.message, 'not a false rate limit', isNot(contains('限流')))
+              .having((error) => error.message, 'privacy', isNot(contains('private')))),
+        );
+      } finally {
+        service.close();
+      }
+    }
+  });
+
+  test('production updater applies changed explicit HTTP proxies without credentials or direct fallback', () async {
+    await HttpOverrides.runWithHttpOverrides(() async {
+      final first = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final second = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final received = <String>[];
+      Future<void> rejectTunnel(HttpRequest request, String route) async {
+        received.add('$route:${request.method}:${request.uri}');
+        expect(request.method, 'CONNECT');
+        expect(request.headers.value('cookie'), isNull);
+        expect(request.headers.value('authorization'), isNull);
+        expect(request.headers.value('proxy-authorization'), isNull);
+        await request.drain<void>();
+        request.response.statusCode = HttpStatus.badGateway;
+        request.response.persistentConnection = false;
+        await request.response.close();
+      }
+      final firstSubscription = first.listen((request) => rejectTunnel(request, 'first'));
+      final secondSubscription = second.listen((request) => rejectTunnel(request, 'second'));
+      var port = first.port;
+      final service = AppUpdateService(
+        proxyResolver: () => 'http://127.0.0.1:$port',
+      );
+      try {
+        await expectLater(service.releases(AppUpdateCancellation()), throwsA(isA<HttpException>()));
+        port = second.port;
+        await expectLater(service.releases(AppUpdateCancellation()), throwsA(isA<HttpException>()));
+        expect(received, [
+          'first:CONNECT:api.github.com:443',
+          'second:CONNECT:api.github.com:443',
+        ]);
+      } finally {
+        service.close();
+        await firstSubscription.cancel();
+        await secondSubscription.cancel();
+        await first.close(force: true);
+        await second.close(force: true);
+      }
+    }, _UpdaterNetworkOverrides());
+  });
+
+  test('production updater uses the system proxy bridge and cancellation stops pending resolution', () async {
+    if (!(Platform.isWindows || Platform.isAndroid || Platform.isIOS)) return;
+    const channel = MethodChannel('triomi/platform');
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final routing = Completer<Map<String, Object?>>();
+    final started = Completer<void>();
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'resolveSystemProxy');
+      expect(call.arguments, {'url': appUpdateReleasesApi});
+      if (!started.isCompleted) started.complete();
+      return routing.future;
+    });
+    final service = AppUpdateService();
+    final token = AppUpdateCancellation();
+    try {
+      final checking = service.releases(token);
+      final expectation = expectLater(checking, throwsA(isA<AppUpdateCancelled>()));
+      await started.future;
+      token.cancel();
+      await expectation;
+    } finally {
+      service.close();
+      if (!routing.isCompleted) routing.complete({'direct': true});
+      messenger.setMockMethodCallHandler(channel, null);
+    }
+  });
+
   test('official assets without legacy checksums still require valid GitHub SHA-256', () async {
     final adapter = _Adapter(
       (options, _) => throw StateError('no metadata request expected'),

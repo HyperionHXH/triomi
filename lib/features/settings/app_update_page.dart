@@ -232,6 +232,8 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
       _reportFailure(
         error.code == 'cancelled'
             ? '系统已取消本次操作，未安装更新。'
+            : error.code == 'open_in_unavailable'
+            ? 'iOS 未找到可打开 IPA 的其他 App。已保留核验文件；请安装支持 IPA 的工具后重试，或选择“分享 / 存储到文件”再手动导入。'
             : error.message ?? '系统未能完成更新操作，尚未安装。',
         retry,
       );
@@ -552,7 +554,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
               : 'Android APK'}。'
           '核验大小、SHA-256 与版本，最多 512 MiB。安装需另行确认。\n\n'
           '${_ios
-              ? '请保持应用前台；离开此页仍继续，切到后台可能被 iOS 暂停。核验后仅分享 IPA 给 TrollStore / 原签名工具；不会绕过签名或自动安装。'
+              ? '请保持应用前台；离开此页仍继续，切到后台可能被 iOS 暂停。核验后可用其他 App 打开 IPA，或分享 / 存储到文件；不会绕过签名或自动安装。'
               : _windows
               ? 'Windows 包未签名：完整性校验不等同发布者签名。'
               : 'Android 还需通过系统验签，并匹配当前实际安装证书。'}',
@@ -608,7 +610,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     }
   }
 
-  Future<void> _offerReady({bool downloaded = false}) async {
+  Future<void> _offerReady({bool downloaded = false, bool shareIos = false}) async {
     final candidate = _candidate;
     if (candidate == null || !candidate.canInstall || _locked) return;
     final consent = await _prompt(
@@ -617,6 +619,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         candidate: candidate,
         windows: candidate.offered.platform == 'windows',
         downloaded: downloaded,
+        shareIos: shareIos,
       ),
     );
     if (consent != true || !mounted || !identical(candidate, _candidate)) {
@@ -629,7 +632,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     } else if (candidate.offered.platform == 'windows') {
       await _handoff(candidate, windows: true);
     } else if (candidate.offered.platform == 'ios') {
-      await _handoff(candidate, windows: false);
+      await _handoff(candidate, windows: false, shareIos: shareIos);
     }
   }
 
@@ -681,13 +684,14 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
   Future<void> _handoff(
     AppUpdateCandidate candidate, {
     required bool windows,
+    bool shareIos = false,
   }) async {
     final alreadyHandedOff = _handedOff;
     await _run(
       windows
           ? '正在准备安装并重启'
           : _ios
-          ? '正在分享已核验的 IPA'
+          ? (shareIos ? '正在分享已核验的 IPA' : '正在用其他 App 打开已核验的 IPA')
           : '正在打开系统安装器',
       (token) async {
         _handoffInFlight = candidate;
@@ -695,6 +699,8 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         try {
           if (windows) {
             await _service.installWindowsBundle(candidate, token);
+          } else if (shareIos) {
+            await _service.shareIos(candidate);
           } else {
             await _service.launchInstaller(candidate);
           }
@@ -725,7 +731,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
       },
       targetLabel:
           '${candidate.offered.version} · 构建 ${candidate.offered.versionCode}',
-      retry: _offerReady,
+      retry: () => _offerReady(shareIos: shareIos),
       cancellable: false,
     );
   }
@@ -1026,6 +1032,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                       candidate: candidate,
                       busy: _locked,
                       onInstall: _supported ? _offerReady : null,
+                      onShareIos: _ios ? () => _offerReady(shareIos: true) : null,
                       onRevealWindows: _windows
                           ? () => _run(
                               '正在打开更新包位置',
@@ -1061,7 +1068,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                         ),
                         label: Text(
                           _ios
-                              ? '再次分享已核验的 IPA'
+                              ? '再次用其他 App 打开 IPA'
                               : _handoffWindows
                               ? '再次打开更新包位置'
                               : '需要时再次打开安装器',
@@ -1069,6 +1076,18 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                       )
                     else
                       const Text('此更新包已不再适用于当前安装版本，无需再次交接。'),
+                    if (_ios && candidate?.canInstall == true)
+                      OutlinedButton.icon(
+                        key: const ValueKey('app-update-handoff-share-ios'),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(48, 48),
+                        ),
+                        onPressed: _locked
+                            ? null
+                            : () => _offerReady(shareIos: true),
+                        icon: const Icon(Icons.ios_share),
+                        label: const Text('分享 / 存储到文件'),
+                      ),
                     if (_ios && candidate != null)
                       OutlinedButton.icon(
                         key: const ValueKey('app-update-handoff-discard'),

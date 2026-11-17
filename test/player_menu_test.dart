@@ -176,7 +176,6 @@ void main() {
       },
     );
   }
-
   testWidgets(
     'desktop volume keeps continuous app gain through normal settings callback',
     (tester) async {
