@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-## 当前请求：主线 9132fd7 同步 iOS（0.16.1 / 构建203，真机验收通过，待发布）
+## 当前请求：主线 9132fd7 同步 iOS（0.16.1 / 构建203，已发布并公开核验）
 
 同步主线漫画缩放、全局夜间模式与双指优先仲裁，保留iOS原生视频/Keychain/安全暂存。更新问题以USB手机实测为准：旧正式0.15.5/199r1的API版本列表200（匿名余量57/56），但github.com清单请求20秒接收超时或12秒连接超时；系统代理返回DIRECT。旧更新器仅Windows接入系统代理，且检查时串行抓所有历史iOS清单，旧资产失败即可阻断当前检查，错误统一显示“GitHub可能限流”无法区分真正原因。新客户端接入显式应用HTTP代理/系统代理、只核验最新可更新候选、显示受限/超时的具体阶段，同时保留官方host、SHA256和Bundle/版本检查。
 
@@ -11,6 +11,12 @@
 首次实际生产Bundle验收被Enable UI Automation的Touch ID挡住，用户暂不方便授权时已停止并恢复正式App；用户随后确认可继续，授权生效后XCTest已真正操作更新页面：系统路线本轮5.578秒、显式HTTP代理3.117秒均发现公开iOS200，完整下载14,260,972字节IPA，SHA256 `18afa12cf01a80557b36cb1d2bfcc08ae49783c42567d64ca470a6458a96c052`与官方清单一致。OpenIn列表实际包含TrollStore，选择后TrollStore解析出Triomi/0.15.6/原Bundle并显示安装确认；未点击安装，正常取消后返回。OpenIn取消再开、分享取消、保存文件取消及实际保存、最后显式移除暂存均通过，最终XCTest 1/1 passed（94.094秒）。实际从“文件”保存到本机后再通过USB取回，字节大小/SHA256与下载的公开原IPA精确一致，不把仅显示菜单冒称交接成功。
 
 本轮验收使用临时普通Release入口（编译标记明确固定为旧版本以接收真实升级，未打开用户DB/Hive），随后恢复正常main.dart的0.16.1/203修订0，同原AppSync身份覆盖、未卸载。17张业务表逐行内容与验收前相同，Hive虽重写文件但46项设置值逐项相同，Keychain访问组不变。临时UI runner已删除，截图/报告位于`build/sync-next/ui/evidence`及`final-update-verification.json`；全部验证完成后才提交推送发布。
+
+发布源码`24bd67de6ab3f59631d75e92303afb97727949c7`；仅编译发布[44068384696](https://github.com/HyperionHXH/triomi/actions/runs/44068384696)的build/publish均成功，未重复云端模拟器/旅程/实网测试。正式[v0.16.1-ios.203](https://github.com/HyperionHXH/triomi/releases/tag/v0.16.1-ios.203)四项公开资产已逐个下载回读：IPA 14,285,388字节，SHA256 `2e7cbfdcfce56b0e7ed1b3496cd919eb97b27a33da1ba5e4afcb4b0f1b5a4795`，manifest/校验和/metadata/包内Bundle、0.16.1/203/修订0/iOS15一致；54个原Release的资产ID/大小/摘要均保持。
+
+精确公开IPA取回后按原AppSync身份重签覆盖手机，正常main入口0.16.1/203/修订0已启动并截图；不是通过TrollStore完成最终安装。17张业务表逐行相同，46项设置语义相同（Hive文件因重写字节不同），原entitlements完全一致；Documents仅余原有covers/fonts/Hive/SQLite，测试报告、导出IPA及UI runner均清理。原未提交IOS_ADAPTATION文档保持未纳入发布提交。
+
+收尾已通过guest正常shutdown，宿主`vmrun list`确认运行虚拟机0台。临时测试代理已停止，私有设备快照仅留本地build目录，不提交或上传。
 
 ## 当前请求：主线 f83e590 同步 iOS（0.15.6+200 已发布）
 
