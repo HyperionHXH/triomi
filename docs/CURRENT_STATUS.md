@@ -1,6 +1,6 @@
 # Triomi 当前状态
 
-## 当前请求：R197 阅读与聚合搜索精简（0.18.0，发布候选已构建）
+## 当前请求：R197 阅读与聚合搜索精简（0.18.0 已发布并完成公开文件核验）
 
 对照用户两张截图及本地 Komikku `ReaderSettingsDialog`、`HttpPageLoader`、`ReaderViewModel`、`MangaScreen` 和 `SearchScreenModel`：阅读器改为紧凑的「阅读模式／通用／滤镜」三页签；漫画不再设置屏幕方向或固定预读张数。打开正文立即自动逐页预读后续章节，随换章推进，48 MiB 会话图片预算，保留靠前页，取消旧任务；不写进度，不替代离线下载。小说底栏仅保留前后章操作图标，目录与文字样式通过右上角菜单进入。
 
@@ -11,6 +11,10 @@
 本机 analyze 零问题、全量 **2027 通过／5 跳过**（含真实路由栈预览再添加、两章顺序预读且切章复用数据）；Android 验收构建保数据覆盖原 API35，MangaDex 实搜《烙印勇士》，详情实见「连载中」，打开 1/88 并切换三个阅读设置页签。Windows Release 本机构建成功；当前会话无专用桌面接口，不将构建或 widget 回归记为 Windows 实点验收。正式双端构建及公开核验另记。
 
 版本 `0.18.0+205` 的 Android 验收 APK 在原 API35 上 `install -r` 成功，安装文件与本机包 SHA256 均为 `ed7f37f5aa6df1f620b594935fa6ce6dfff18b98d5f58cd50711155fbb6dee99`，不是生产签名发布包。Windows 对应构建 `triomi.exe` SHA256 `f4c710c32d0e2378ff72994356d98619e3e97eab27d4722427b8ebb71e7c0395`。按授权走现有 Android/Windows 发布工作流，不改 iOS 标签或资产。
+
+[0.18.0 公开发布](https://github.com/HyperionHXH/triomi/releases/tag/v0.18.0)，冻结源码 `aa98ac020c683b6e6f39839204c8b25bb9c2654c`。标签 CI [44248941174](https://github.com/HyperionHXH/triomi/actions/runs/44248941174) 全部成功，**2031 通过／1 跳过**、analyze 无问题；正式发布 [44248944500](https://github.com/HyperionHXH/triomi/actions/runs/44248944500) 的 Android、Windows 原生播放回归和发布均通过。40 个独立 iOS 资产的 ID、大小及摘要未变。
+
+五个公开文件均已完整回下载，原发布传输较慢时改用校验 `Content-Range` 的官方 CDN 分段续传；按原始字节计算 SHA-256，全部与 GitHub 摘要及 `SHA256SUMS.txt` 一致。Android APK **163475556 字节**／`81dc032f3d938feb94d8258fa42230b49eb5f0cd8e7f5d5574f374d5a73ff993`，实读包名 `io.github.hyperionhxh.triomi`、版本 `0.18.0`／205、原单一 RSA4096 生产证书 `731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309`、v2 签名及 Mihon ABI 128 项通过。Windows ZIP **290327367 字节**／`7f41539f80e7d5f5b1f6500a99c99b7256f6696fc2e8660561a61181e7381ba8`，466 成员大小与摘要逐一符合更新清单；MSI **272826392 字节**／`204048c410faa1e916e1060aff90f3f125243420ab8b0800275655d7d2b4269b`，只读验证产品版本 `0.18.205` 和原升级标识，未执行安装。APK 626 成员及 ZIP 466 成员的已知凭据值、私钥文件名与调试文件名均零命中。最终 API35 验收包上，《烙印勇士》标题和 `Adventure` 标签均实际发起聚合关键词搜索并返回作品；「资料筛选」只在番剧搜索中打开。此处不把 Windows 原生播放回归记为本轮桌面 UI 实点验收。
 
 ## 当前请求：R196 全局漫画阅读、补完路线、来源诊断与弹幕优化（0.17.0 已发布并完成公开核验）
 
