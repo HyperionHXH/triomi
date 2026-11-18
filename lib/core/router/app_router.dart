@@ -30,7 +30,6 @@ import '../../features/reader/manga_reader_page.dart';
 import '../../features/search/search_page.dart';
 import '../../features/settings/settings_page.dart';
 import '../../features/shell/adaptive_shell.dart';
-import '../../features/sources/diagnostics/source_diagnostics_page.dart';
 import '../../features/sources/sources_page.dart';
 import '../../features/tracking/tracking_page.dart';
 import '../models/media_item.dart';
@@ -55,14 +54,12 @@ abstract final class AppRoutes {
     MediaType type, {
     String? sourceId,
     String? query,
-    bool sourceOnly = false,
     Iterable<String> tags = const [],
   }) => Uri(
     path: '/${type.name}/search',
     queryParameters: {
       'source': ?sourceId,
       'q': ?query,
-      if (sourceOnly) 'sourceOnly': 'true',
       if (tags.isNotEmpty) 'tag': tags.toList(growable: false),
     },
   ).toString();
@@ -96,7 +93,6 @@ abstract final class AppRoutes {
   static const String tracking = '/tracking';
   static const String danmakuSettings = '/danmaku-settings';
   static const String completionRoutes = '/completion-routes';
-  static const String sourceDiagnostics = '/source-diagnostics';
 }
 
 abstract final class AppRouter {
@@ -154,12 +150,7 @@ abstract final class AppRouter {
           GoRoute(
             path: AppRoutes.completionRoutes,
             parentNavigatorKey: _rootNavigatorKey,
-            builder: (context, state) => CompletionRoutesPage(initialItem: state.extra is MediaItem ? state.extra as MediaItem : null),
-          ),
-          GoRoute(
-            path: AppRoutes.sourceDiagnostics,
-            parentNavigatorKey: _rootNavigatorKey,
-            builder: (context, state) => SourceDiagnosticsPage(initialSourceId: state.uri.queryParameters['source']),
+            builder: (context, state) => const CompletionRoutesPage(),
           ),
           GoRoute(
             path: AppRoutes.settings,
@@ -338,7 +329,6 @@ abstract final class AppRouter {
         type: type,
         initialSourceId: state.uri.queryParameters['source'],
         initialQuery: state.uri.queryParameters['q'] ?? '',
-        sourceOnly: state.uri.queryParameters['sourceOnly'] == 'true',
         initialTags: state.uri.queryParametersAll['tag'] ?? const [],
       ),
     ),

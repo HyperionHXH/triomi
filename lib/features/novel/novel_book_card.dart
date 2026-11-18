@@ -41,8 +41,7 @@ class NovelBookCard extends StatelessWidget {
       context,
       type: item.type,
       sourceId: item.sourceId,
-      tags: [tag],
-      sourceOnly: true,
+      query: tag,
     );
     final summary = item.description
         ?.replaceAll(RegExp(r'<[^>]*>'), ' ')
@@ -96,13 +95,13 @@ class NovelBookCard extends StatelessWidget {
                             ),
                           ),
                         ],
-                        const SizedBox(height: AppSpacing.xxs),
-                        Text(
-                          sourceLabel,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.primary,
+                        if (sourceLabel.isNotEmpty)
+                          Text(
+                            sourceLabel,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
                           ),
-                        ),
                         if (item.status?.isNotEmpty == true)
                           Text(
                             item.status!,

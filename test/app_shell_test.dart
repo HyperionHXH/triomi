@@ -19,6 +19,7 @@ import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/core/theme/app_theme.dart';
+import 'package:triomi/features/completion_routes/completion_routes_providers.dart';
 import 'package:triomi/features/detail/detail_page.dart';
 import 'package:triomi/features/history/history_page.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
@@ -560,7 +561,8 @@ void main() {
           find.byType(MangaSourcePage),
         );
         expect(sourcePage.sourceId, _RouteMangaSource.first.sourceId);
-        expect(sourcePage.initialTags, ['Adventure']);
+        expect(sourcePage.query, 'Adventure');
+        expect(sourcePage.initialTags, isEmpty);
         router.pop();
         await advance(tester);
         await tester.pumpAndSettle();
@@ -602,6 +604,77 @@ void main() {
       }
     },
   );
+
+  testWidgets('route search previews an unseen work and adds only via plus', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    container.dispose();
+    container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        preferencesProvider.overrideWithValue(memoryPreferences()),
+        sourcesProvider.overrideWith(_RouteSourceRegistry.new),
+      ],
+    );
+    final repo = container.read(completionRoutesRepositoryProvider);
+    final route = await repo.createRoute('路线夹具');
+    final router = AppRouter.create(
+      initialLocation: AppRoutes.completionRoutes,
+    );
+    try {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(
+            theme: AppTheme.light(),
+            routerConfig: router,
+          ),
+        ),
+      );
+      await advance(tester);
+      await tester.tap(find.text('路线夹具'));
+      await advance(tester);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FloatingActionButton));
+      await advance(tester);
+      await tester.tap(find.widgetWithText(ListTile, '漫画'));
+      await advance(tester);
+      await tester.enterText(find.byType(TextField), 'Adventure');
+      await tester.tap(find.byTooltip('搜索'));
+      await advance(tester);
+      await tester.tap(find.text(_RouteMangaSource.second.title));
+      await advance(tester);
+      expect(
+        tester.widget<DetailPage>(find.byType(DetailPage)).item.remoteId,
+        'second',
+      );
+      expect(repo.read().routeById(route.id)!.items, isEmpty);
+      router.pop();
+      await advance(tester);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'Adventure',
+      );
+      await tester.tap(find.byTooltip('添加 ${_RouteMangaSource.second.title}'));
+      await advance(tester);
+      expect(repo.read().routeById(route.id)!.items.single.remoteId, 'second');
+      expect(
+        await LibraryRepository(db).isInLibrary('route-manga', 'second'),
+        isFalse,
+      );
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.runAsync(() async {
+        router.dispose();
+        container.dispose();
+        await db.close();
+      });
+    }
+  });
 
   testWidgets(
     'cold detail routes reject another module and rehydrate changed composite keys',

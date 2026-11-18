@@ -202,7 +202,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('真正的第二话'), findsNothing);
         expect(find.text('第三话'), findsOneWidget);
-        await tester.tap(find.widgetWithText(ListTile,'第一话'));
+        await tester.tap(find.widgetWithText(ListTile, '第一话'));
         await settle(tester);
         await tester.tap(find.byTooltip('下一章'));
         await settle(tester);
@@ -225,11 +225,14 @@ void main() {
       await tester.pump();
       await tester.tap(find.text('完整显示'));
       await tester.pump();
+      await tester.pumpAndSettle();
       Navigator.of(tester.element(find.text('完整显示'))).pop();
       await settle(tester);
       void expectGlobalLayout() {
         expect(
-          tester.widget<PageView>(find.byType(PageView)).scrollDirection,
+          tester
+              .widget<PageView>(find.byType(PageView).hitTestable())
+              .scrollDirection,
           Axis.vertical,
         );
         expect(

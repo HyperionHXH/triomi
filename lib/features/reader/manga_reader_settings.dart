@@ -32,14 +32,12 @@ class MangaNightMode {
 class MangaViewSettings {
   const MangaViewSettings({
     required this.base,
-    this.orientation = ReaderOrientation.system,
     this.tapZones = ReaderTapZones.directional,
     this.trim = false,
     this.doublePage = false,
     this.soloCover = false,
     this.filter = ReaderImageFilter.none,
     this.autoScroll = 0,
-    this.preload = 3,
     this.cacheMiB = 96,
     this.volumeKeys = false,
     this.zoom = true,
@@ -50,7 +48,6 @@ class MangaViewSettings {
     this.options = const MangaReaderOptions(),
   });
   final ReaderSettings base;
-  final ReaderOrientation orientation;
   final ReaderTapZones tapZones;
   final ReaderImageFilter filter;
   final bool trim, doublePage, volumeKeys;
@@ -61,7 +58,7 @@ class MangaViewSettings {
   final MangaNightMode night;
   final MangaReaderOptions options;
   final double autoScroll;
-  final int preload, cacheMiB;
+  final int cacheMiB;
   static T pick<T extends Enum>(List<T> values, Object? name, T fallback) =>
       values.where((v) => v.name == name).firstOrNull ?? fallback;
   factory MangaViewSettings.from(
@@ -69,11 +66,6 @@ class MangaViewSettings {
     Map<String, Object?> values,
   ) => MangaViewSettings(
     base: base,
-    orientation: pick(
-      ReaderOrientation.values,
-      values['orientation'],
-      ReaderOrientation.system,
-    ),
     tapZones: pick(
       ReaderTapZones.values,
       values['tapZones'],
@@ -108,7 +100,6 @@ class MangaViewSettings {
     ),
     options: MangaReaderOptions(values),
     autoScroll: ((values['autoScroll'] as num?)?.toDouble() ?? 0).clamp(0, 120),
-    preload: ((values['preload'] as num?)?.toInt() ?? 3).clamp(0, 8),
     cacheMiB: ((values['cacheMiB'] as num?)?.toInt() ?? 96).clamp(24, 256),
   );
 }
@@ -125,10 +116,11 @@ class MangaReaderPreferences {
     final raw = prefs.get<Object?>(key);
     final legacy = NovelReaderSettings.load(prefs);
     return {
-      'orientation': legacy.orientation.name,
-      'volumeKeys': legacy.volumeKeyTurn,
-      if (raw is Map) ...Map<String, Object?>.from(raw),
-    };
+        'volumeKeys': legacy.volumeKeyTurn,
+        if (raw is Map) ...Map<String, Object?>.from(raw),
+      }
+      ..remove('orientation')
+      ..remove('preload');
   }
 
   Stream<Map<String, Object?>> watch() => prefs.watch(key).map((_) => load());

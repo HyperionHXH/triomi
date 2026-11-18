@@ -21,14 +21,12 @@ void main() {
         'mode': 'vertical',
         'fit': 'contain',
         'background': 'sepia',
-        'orientation': 'landscape',
         'tapZones': 'nextBoth',
         'trim': true,
         'doublePage': true,
         'volumeKeys': true,
         'filter': 'warm',
         'autoScroll': 30.0,
-        'preload': 6,
         'cacheMiB': 128,
         'splitWide': true,
         'reverseSplit': true,
@@ -49,14 +47,12 @@ void main() {
       expect(restored.base.mode, ReadingMode.vertical);
       expect(restored.base.fit, ImageFit.contain);
       expect(restored.base.background, ReaderBackground.sepia);
-      expect(restored.orientation.name, 'landscape');
       expect(restored.tapZones, ReaderTapZones.nextBoth);
       expect(restored.trim, isTrue);
       expect(restored.doublePage, isTrue);
       expect(restored.volumeKeys, isTrue);
       expect(restored.filter, ReaderImageFilter.warm);
       expect(restored.autoScroll, 30);
-      expect(restored.preload, 6);
       expect(restored.cacheMiB, 128);
       expect(restored.options.flag('splitWide'), isTrue);
       expect(restored.options.flag('reverseSplit'), isTrue);

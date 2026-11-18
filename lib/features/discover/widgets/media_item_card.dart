@@ -221,6 +221,7 @@ class MediaItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final palette = context.palette;
+    final status = item.statusLabel;
 
     return InkWell(
       onTap: onTap,
@@ -275,15 +276,14 @@ class MediaItemCard extends StatelessWidget {
               ),
             ),
           ),
-          if (showMetadata) ...[
+          if (showMetadata && (sourceName.isNotEmpty || status != null)) ...[
             const SizedBox(height: 2),
             SizedBox(
               height: MediaQuery.textScalerOf(context).scale(11) * 1.4 + 2,
               child: Text(
                 <String>[
                   if (sourceName.isNotEmpty) sourceName,
-                  if (item.status != null && item.status!.isNotEmpty)
-                    item.status!,
+                  ?status,
                 ].join(' · '),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -324,6 +324,7 @@ class MediaItemRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final palette = context.palette;
+    final status = item.statusLabel;
 
     final appearance = CoverAppearance.of(context);
     return InkWell(
@@ -361,21 +362,23 @@ class MediaItemRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium,
                   ),
-                  if (showMetadata)
-                  Text(
-                    <String>[
-                      if (sourceName.isNotEmpty) sourceName,
-                      if (item.author != null && item.author!.isNotEmpty)
-                        item.author!,
-                      if (item.status != null && item.status!.isNotEmpty)
-                        item.status!,
-                    ].join(' · '),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: palette.mutedForeground,
+                  if (showMetadata &&
+                      (sourceName.isNotEmpty ||
+                          item.author?.isNotEmpty == true ||
+                          status != null))
+                    Text(
+                      <String>[
+                        if (sourceName.isNotEmpty) sourceName,
+                        if (item.author != null && item.author!.isNotEmpty)
+                          item.author!,
+                        ?status,
+                      ].join(' · '),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: palette.mutedForeground,
+                      ),
                     ),
-                  ),
                   if (badge != null) _MediaBadge(text: badge!),
                 ],
               ),
@@ -411,7 +414,12 @@ class _MediaBadge extends StatelessWidget {
 
 /// 封面图：地址缺失或加载失败时落回占位底色，不允许破图撑坏布局。
 class MediaCover extends ConsumerStatefulWidget {
-  const MediaCover({super.key, required this.url, this.sourceId = 'images', this.fit = BoxFit.cover});
+  const MediaCover({
+    super.key,
+    required this.url,
+    this.sourceId = 'images',
+    this.fit = BoxFit.cover,
+  });
 
   final String? url;
   final String sourceId;

@@ -13,15 +13,70 @@ import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../library/data/library_providers.dart';
 import '../library/data/library_repository.dart';
+import '../search/search_page.dart';
 import 'completion_routes_models.dart';
 import 'completion_routes_providers.dart';
 
-/// 跨媒体补完路线列表。详情页可通过 [initialItem] 直接把当前作品加入
-/// 一条已有路线或新建路线；该操作不会把作品加入书架。
-class CompletionRoutesPage extends ConsumerStatefulWidget {
-  const CompletionRoutesPage({super.key, this.initialItem});
+Future<void> showAddToCompletionRoute(
+  BuildContext context,
+  WidgetRef ref,
+  MediaItem item,
+) async {
+  final repository = ref.read(completionRoutesRepositoryProvider);
+  final library = ref.read(libraryRepositoryProvider);
+  CompletionRoute? created;
+  try {
+    final selection = await showDialog<_RouteSelection>(
+      context: context,
+      builder: (_) => _AddToRouteDialog(
+        routes: repository.read().routes,
+        itemTitle: item.title,
+      ),
+    );
+    if (selection == null || !context.mounted) return;
+    await _cacheRouteItem(library, item);
+    var routeId = selection.routeId;
+    if (routeId == null) {
+      created = await repository.createRoute(selection.newRouteName ?? '');
+      routeId = created.id;
+    }
+    await repository.addItem(routeId, item, note: selection.note);
+    if (context.mounted) {
+      ref.invalidate(completionRouteMediaProvider(completionRouteKey(item)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('已加入路线')));
+    }
+  } catch (error) {
+    if (created != null) {
+      try {
+        await repository.deleteRoute(created.id);
+      } catch (_) {
+        /* Report the original failure. */
+      }
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is CompletionRoutesException ? error.toString() : '未能加入路线',
+          ),
+        ),
+      );
+    }
+  }
+}
 
-  final MediaItem? initialItem;
+Future<void> _cacheRouteItem(LibraryRepository library, MediaItem item) async {
+  final existing = await library.itemByKey(item.sourceId, item.remoteId);
+  if (existing == null) {
+    await library.cacheItem(item);
+  } else if (existing.type != item.type) {
+    throw StateError('作品身份与本地缓存不一致');
+  }
+}
+
+class CompletionRoutesPage extends ConsumerStatefulWidget {
+  const CompletionRoutesPage({super.key});
 
   @override
   ConsumerState<CompletionRoutesPage> createState() =>
@@ -29,98 +84,6 @@ class CompletionRoutesPage extends ConsumerStatefulWidget {
 }
 
 class _CompletionRoutesPageState extends ConsumerState<CompletionRoutesPage> {
-  bool _preparingInitial = false;
-  bool _initialPrepared = false;
-  bool _initialPrompted = false;
-  String? _initialError;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.initialItem != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_prepareInitialItem());
-      });
-    }
-  }
-
-  Future<void> _prepareInitialItem() async {
-    final item = widget.initialItem;
-    if (item == null || _preparingInitial || _initialPrepared) return;
-    setState(() {
-      _preparingInitial = true;
-      _initialError = null;
-    });
-    try {
-      final library = ref.read(libraryRepositoryProvider);
-      final existing = await library.itemByKey(item.sourceId, item.remoteId);
-      if (existing == null) {
-        // 缓存作品快照，但不写 library_entries：详情页带来的作品可以不在书架。
-        await library.cacheItem(item);
-      } else if (existing.type != item.type) {
-        throw StateError('作品身份与本地缓存不一致');
-      }
-      if (!mounted) return;
-      setState(() {
-        _preparingInitial = false;
-        _initialPrepared = true;
-      });
-      ref.invalidate(
-        completionRouteMediaProvider((
-          sourceId: item.sourceId,
-          remoteId: item.remoteId,
-          type: item.type,
-        )),
-      );
-      if (!_initialPrompted) {
-        _initialPrompted = true;
-        await _addInitialToRoute();
-      }
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _preparingInitial = false;
-        _initialError = '$error';
-      });
-    }
-  }
-
-  Future<void> _addInitialToRoute() async {
-    final item = widget.initialItem;
-    if (item == null) return;
-    final snapshot = await ref.read(completionRoutesProvider.future);
-    if (!mounted) return;
-    final selection = await showDialog<_RouteSelection>(
-      context: context,
-      builder: (_) => _AddToRouteDialog(
-        routes: snapshot.routes,
-        itemTitle: item.title,
-      ),
-    );
-    if (selection == null || !mounted) return;
-    final repository = ref.read(completionRoutesRepositoryProvider);
-    CompletionRoute? created;
-    try {
-      var routeId = selection.routeId;
-      if (routeId == null) {
-        created = await repository.createRoute(selection.newRouteName ?? '');
-        routeId = created.id;
-      }
-      await repository.addItem(routeId, item, note: selection.note);
-      if (!mounted) return;
-      _message('已将「${item.title}」加入补完路线');
-    } catch (error) {
-      if (created != null) {
-        try {
-          await repository.deleteRoute(created.id);
-        } catch (_) {
-          // 清理失败不影响向用户报告原始错误。
-        }
-      }
-      if (mounted) _message('加入失败：$error');
-    }
-  }
-
   Future<void> _createRoute() async {
     final name = await showDialog<String>(
       context: context,
@@ -132,12 +95,9 @@ class _CompletionRoutesPageState extends ConsumerState<CompletionRoutesPage> {
       ),
     );
     if (name == null || !mounted) return;
-    await _run(
-      () async {
-        await ref.read(completionRoutesRepositoryProvider).createRoute(name);
-      },
-      success: '已创建「$name」',
-    );
+    await _run(() async {
+      await ref.read(completionRoutesRepositoryProvider).createRoute(name);
+    }, success: '已创建「$name」');
   }
 
   Future<void> _renameRoute(CompletionRoute route) async {
@@ -151,27 +111,19 @@ class _CompletionRoutesPageState extends ConsumerState<CompletionRoutesPage> {
       ),
     );
     if (name == null || !mounted || name == route.name) return;
-    await _run(
-      () async {
-        await ref
-            .read(completionRoutesRepositoryProvider)
-            .renameRoute(route.id, name);
-      },
-      success: '已重命名',
-    );
+    await _run(() async {
+      await ref
+          .read(completionRoutesRepositoryProvider)
+          .renameRoute(route.id, name);
+    }, success: '已重命名');
   }
 
   Future<void> _deleteRoute(CompletionRoute route) async {
     if (!await _confirmDeleteRoute(context, route)) return;
     if (!mounted) return;
-    await _run(
-      () async {
-        await ref
-            .read(completionRoutesRepositoryProvider)
-            .deleteRoute(route.id);
-      },
-      success: '已删除「${route.name}」',
-    );
+    await _run(() async {
+      await ref.read(completionRoutesRepositoryProvider).deleteRoute(route.id);
+    }, success: '已删除「${route.name}」');
   }
 
   void _openRoute(CompletionRoute route) {
@@ -259,64 +211,7 @@ class _CompletionRoutesPageState extends ConsumerState<CompletionRoutesPage> {
   }
 
   void _message(String text) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(text)));
-  }
-
-  Widget _initialBanner(BuildContext context) {
-    final item = widget.initialItem!;
-    final colorScheme = Theme.of(context).colorScheme;
-    return AppCard(
-      margin: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Icon(Icons.bookmark_add_outlined, color: colorScheme.primary),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text('来自详情页', style: _mutedStyle(context)),
-                Text(
-                  item.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: AppSpacing.xxs),
-                if (_initialError != null)
-                  Text(
-                    '缓存失败：$_initialError',
-                    style: TextStyle(color: colorScheme.error),
-                  )
-                else if (_preparingInitial)
-                  Text('正在缓存作品信息…', style: _mutedStyle(context))
-                else
-                  Text(
-                    '加入路线只记录顺序，不会修改书架或阅读进度。',
-                    style: _mutedStyle(context),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          FilledButton(
-            onPressed: _preparingInitial
-                ? null
-                : () {
-                    unawaited(
-                      _initialPrepared
-                          ? _addInitialToRoute()
-                          : _prepareInitialItem(),
-                    );
-                  },
-            child: Text(_initialPrepared ? '加入路线' : '重试缓存'),
-          ),
-        ],
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   @override
@@ -362,16 +257,12 @@ class _CompletionRoutesPageState extends ConsumerState<CompletionRoutesPage> {
             96,
           ),
           children: <Widget>[
-            if (widget.initialItem != null) _initialBanner(context),
             if (snapshot.routes.isEmpty)
               SizedBox(
                 height: 340,
                 child: EmptyStateView(
                   icon: Icons.route_outlined,
                   title: '还没有补完路线',
-                  message:
-                      '把番剧、漫画和小说按顺序排进一条路线，逐项补完。'
-                      '路线不会修改书架、媒体缓存或原生阅读进度。',
                   action: FilledButton.icon(
                     onPressed: () {
                       unawaited(_createRoute());
@@ -431,23 +322,45 @@ class CompletionRouteDetailPage extends ConsumerStatefulWidget {
 class _CompletionRouteDetailPageState
     extends ConsumerState<CompletionRouteDetailPage> {
   Future<void> _addWorks(CompletionRoute route) async {
-    final item = await showModalBottomSheet<MediaItem>(
+    final type = await showModalBottomSheet<MediaType>(
       context: context,
-      isScrollControlled: true,
-      builder: (_) => _AddWorkSheet(
-        existingKeys: <CompletionRouteKey>{
-          for (final routeItem in route.items) routeItem.key,
-        },
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(title: Text('添加作品')),
+            for (final type in MediaType.values)
+              ListTile(
+                leading: Icon(_typeIcon(type)),
+                title: Text(type == MediaType.anime ? '追番' : type.label),
+                onTap: () => Navigator.pop(context, type),
+              ),
+          ],
+        ),
       ),
     );
-    if (item == null || !mounted) return;
-    await _run(
-      () async {
-        await ref
-            .read(completionRoutesRepositoryProvider)
-            .addItem(route.id, item);
+    if (type == null || !mounted) return;
+    final library = ref.read(libraryRepositoryProvider);
+    final repository = ref.read(completionRoutesRepositoryProvider);
+    await SearchPage.open(
+      context,
+      type: type,
+      isAdded: (item) =>
+          repository
+              .read()
+              .routeById(route.id)
+              ?.items
+              .any((entry) => entry.key == completionRouteKey(item)) ??
+          false,
+      onAddItem: (item) async {
+        await _cacheRouteItem(library, item);
+        await repository.addItem(route.id, item);
+        if (mounted) {
+          ref.invalidate(
+            completionRouteMediaProvider(completionRouteKey(item)),
+          );
+        }
       },
-      success: '已添加「${item.title}」',
     );
   }
 
@@ -462,23 +375,18 @@ class _CompletionRouteDetailPageState
       ),
     );
     if (name == null || !mounted || name == route.name) return;
-    await _run(
-      () async {
-        await ref
-            .read(completionRoutesRepositoryProvider)
-            .renameRoute(route.id, name);
-      },
-      success: '已重命名',
-    );
+    await _run(() async {
+      await ref
+          .read(completionRoutesRepositoryProvider)
+          .renameRoute(route.id, name);
+    }, success: '已重命名');
   }
 
   Future<void> _deleteRoute(CompletionRoute route) async {
     if (!await _confirmDeleteRoute(context, route)) return;
     if (!mounted) return;
     try {
-      await ref
-          .read(completionRoutesRepositoryProvider)
-          .deleteRoute(route.id);
+      await ref.read(completionRoutesRepositoryProvider).deleteRoute(route.id);
       if (mounted) unawaited(Navigator.of(context).maybePop());
     } catch (error) {
       if (mounted) _message('$error');
@@ -502,14 +410,11 @@ class _CompletionRouteDetailPageState
       ),
     );
     if (note == null || !mounted) return;
-    await _run(
-      () async {
-        await ref
-            .read(completionRoutesRepositoryProvider)
-            .setItemNote(route.id, item.id, note);
-      },
-      success: '备注已保存',
-    );
+    await _run(() async {
+      await ref
+          .read(completionRoutesRepositoryProvider)
+          .setItemNote(route.id, item.id, note);
+    }, success: '备注已保存');
   }
 
   Future<void> _removeItem(
@@ -518,14 +423,11 @@ class _CompletionRouteDetailPageState
   ) async {
     if (!await _confirmRemoveItem(context, item)) return;
     if (!mounted) return;
-    await _run(
-      () async {
-        await ref
-            .read(completionRoutesRepositoryProvider)
-            .removeItem(route.id, item.id);
-      },
-      success: '已从路线移除',
-    );
+    await _run(() async {
+      await ref
+          .read(completionRoutesRepositoryProvider)
+          .removeItem(route.id, item.id);
+    }, success: '已从路线移除');
   }
 
   Future<void> _setCompleted(
@@ -563,9 +465,7 @@ class _CompletionRouteDetailPageState
   }
 
   void _message(String text) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(text)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   @override
@@ -671,16 +571,12 @@ class _CompletionRouteDetailPageState
                             onMoveUp: index == 0
                                 ? null
                                 : () {
-                                    unawaited(
-                                      _moveTo(route, index, index - 1),
-                                    );
+                                    unawaited(_moveTo(route, index, index - 1));
                                   },
                             onMoveDown: index == route.items.length - 1
                                 ? null
                                 : () {
-                                    unawaited(
-                                      _moveTo(route, index, index + 1),
-                                    );
+                                    unawaited(_moveTo(route, index, index + 1));
                                   },
                             onEditNote: () {
                               unawaited(_editNote(route, item));
@@ -817,12 +713,7 @@ class _NextIncompleteAction extends ConsumerWidget {
           children: <Widget>[
             const Icon(Icons.check_circle_outline),
             const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(
-                '这条路线已全部完成。完成标记只属于路线，不会改写书架进度。',
-                style: _mutedStyle(context),
-              ),
-            ),
+            Expanded(child: Text('路线已完成', style: _mutedStyle(context))),
           ],
         ),
       );
@@ -1043,183 +934,6 @@ class _RouteItemTile extends ConsumerWidget {
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AddWorkSheet extends ConsumerStatefulWidget {
-  const _AddWorkSheet({required this.existingKeys});
-
-  final Set<CompletionRouteKey> existingKeys;
-
-  @override
-  ConsumerState<_AddWorkSheet> createState() => _AddWorkSheetState();
-}
-
-class _AddWorkSheetState extends ConsumerState<_AddWorkSheet> {
-  late Future<List<_WorkChoice>> _future;
-  String _query = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _future = _load();
-  }
-
-  Future<List<_WorkChoice>> _load() async {
-    final library = ref.read(libraryRepositoryProvider);
-    final choices = <CompletionRouteKey, _WorkChoice>{};
-    for (final type in MediaType.values) {
-      final views = await library.listLibrary(
-        type: type,
-        revealHidden: true,
-      );
-      for (final view in views) {
-        final item = view.item;
-        choices.putIfAbsent(
-          completionRouteKey(item),
-          () => _WorkChoice(item: item, origin: '书架'),
-        );
-      }
-    }
-    final history = await library.recentHistory(limit: 100);
-    for (final entry in history) {
-      final item = entry.item;
-      if (item == null) continue;
-      choices.putIfAbsent(
-        completionRouteKey(item),
-        () => _WorkChoice(item: item, origin: '最近'),
-      );
-    }
-    return choices.values.toList(growable: false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * 0.8,
-          child: Column(
-            children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.md,
-                  AppSpacing.sm,
-                  AppSpacing.xs,
-                ),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Text(
-                        '添加作品到补完路线',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: '关闭',
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.lg,
-                ),
-                child: TextField(
-                  onChanged: (value) => setState(() => _query = value),
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    hintText: '搜索书架与最近作品',
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Expanded(
-                child: FutureBuilder<List<_WorkChoice>>(
-                  future: _future,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      return EmptyStateView(
-                        icon: Icons.error_outline,
-                        title: '作品列表加载失败',
-                        message: '${snapshot.error}',
-                      );
-                    }
-                    final query = _query.trim().toLowerCase();
-                    final choices =
-                        (snapshot.data ?? const <_WorkChoice>[])
-                            .where((choice) {
-                              if (query.isEmpty) return true;
-                              final item = choice.item;
-                              return item.title.toLowerCase().contains(query) ||
-                                  (item.author ?? '').toLowerCase().contains(
-                                    query,
-                                  ) ||
-                                  item.sourceId.toLowerCase().contains(query);
-                            })
-                            .toList(growable: false);
-                    if (choices.isEmpty) {
-                      return const EmptyStateView(
-                        icon: Icons.inbox_outlined,
-                        title: '没有可添加的作品',
-                        message: '书架和最近阅读中的作品会出现在这里。',
-                      );
-                    }
-                    return ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.lg,
-                        0,
-                        AppSpacing.lg,
-                        AppSpacing.lg,
-                      ),
-                      itemCount: choices.length,
-                      itemBuilder: (context, index) {
-                        final choice = choices[index];
-                        final item = choice.item;
-                        final existing = widget.existingKeys.contains(
-                          completionRouteKey(item),
-                        );
-                        final author = item.author;
-                        return ListTile(
-                          enabled: !existing,
-                          leading: Icon(_typeIcon(item.type)),
-                          title: Text(
-                            item.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            '${item.type.label} · ${choice.origin}'
-                            '${author == null || author.isEmpty ? '' : ' · $author'}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: existing
-                              ? const Text('已在路线中')
-                              : const Icon(Icons.add),
-                          onTap: existing
-                              ? null
-                              : () => Navigator.of(context).pop(item),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -1482,10 +1196,7 @@ class _ImportRoutesDialogState extends ConsumerState<_ImportRoutesDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Text(
-              '粘贴导出的 JSON。预览会列出本地冲突，确认后才写入。',
-              style: _mutedStyle(context),
-            ),
+            Text('粘贴导出的 JSON。预览会列出本地冲突，确认后才写入。', style: _mutedStyle(context)),
             const SizedBox(height: AppSpacing.sm),
             TextField(
               controller: _controller,
@@ -1599,13 +1310,6 @@ class _RouteSelection {
   final String? note;
 }
 
-class _WorkChoice {
-  const _WorkChoice({required this.item, required this.origin});
-
-  final MediaItem item;
-  final String origin;
-}
-
 Map<CompletionRouteKey, LibraryItemView> _watchLibraryViews(WidgetRef ref) {
   final result = <CompletionRouteKey, LibraryItemView>{};
   for (final type in MediaType.values) {
@@ -1613,10 +1317,11 @@ Map<CompletionRouteKey, LibraryItemView> _watchLibraryViews(WidgetRef ref) {
     if (views == null) continue;
     for (final view in views) {
       result[(
-        sourceId: view.item.sourceId,
-        remoteId: view.item.remoteId,
-        type: type,
-      )] = view;
+            sourceId: view.item.sourceId,
+            remoteId: view.item.remoteId,
+            type: type,
+          )] =
+          view;
     }
   }
   return result;
@@ -1664,9 +1369,8 @@ IconData _typeIcon(MediaType type) => switch (type) {
 };
 
 TextStyle? _mutedStyle(BuildContext context) =>
-    Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-    );
+    Theme.of(context).textTheme.bodySmall
+        ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
 
 Future<bool> _confirmDeleteRoute(
   BuildContext context,
@@ -1676,9 +1380,7 @@ Future<bool> _confirmDeleteRoute(
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: Text('删除路线「${route.name}」？'),
-      content: const Text(
-        '只删除补完路线、排序与完成标记。书架、媒体缓存、阅读进度、历史与下载全部保留。',
-      ),
+      content: const Text('只删除补完路线、排序与完成标记。书架、媒体缓存、阅读进度、历史与下载全部保留。'),
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.pop(dialogContext, false),
@@ -1702,9 +1404,7 @@ Future<bool> _confirmRemoveItem(
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: Text('从路线移除「${item.title}」？'),
-      content: const Text(
-        '只从补完路线移除这一项。书架、媒体缓存、阅读进度、历史与下载全部保留。',
-      ),
+      content: const Text('只从补完路线移除这一项。书架、媒体缓存、阅读进度、历史与下载全部保留。'),
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.pop(dialogContext, false),

@@ -35,9 +35,7 @@ void main() {
       final repository = container.read(mangaReaderPreferencesProvider);
       await repository.set('mode', 'ltr');
       await repository.set('trim', true);
-      await repository.set('preload', 0);
       await repository.set('volumeKeys', true);
-      await repository.set('orientation', 'landscape');
       await Future<void>.delayed(Duration.zero);
       expect(
         container.read(mangaViewSettingsProvider).base.mode,
@@ -53,9 +51,7 @@ void main() {
       final restored = reopened.read(mangaViewSettingsProvider);
       expect(restored.base.mode, ReadingMode.ltr);
       expect(restored.trim, isTrue);
-      expect(restored.preload, 0);
       expect(restored.volumeKeys, isTrue);
-      expect(restored.orientation.name, 'landscape');
       await reopened.read(mangaReaderPreferencesProvider).reset();
       reopened.invalidate(mangaReaderValuesProvider);
       expect(reopened.read(mangaViewSettingsProvider).trim, isFalse);

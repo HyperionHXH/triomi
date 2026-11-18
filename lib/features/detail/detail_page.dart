@@ -23,6 +23,7 @@ import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../anime/anime_collection_button.dart';
+import '../completion_routes/completion_routes_page.dart';
 import '../discover/widgets/media_item_card.dart';
 import '../downloads/data/download_providers.dart';
 import '../downloads/data/download_repository.dart';
@@ -44,8 +45,6 @@ import '../reader/manga_reader_page.dart';
 import '../reader/manga_reading_order.dart';
 import '../search/search_page.dart';
 import '../tracking/bind_sheet.dart';
-import '../tracking/data/tracking_models.dart';
-import '../tracking/tracking_sync_page.dart';
 import 'anime_info_repository.dart';
 import 'anime_info_sheet.dart';
 import 'anime_source_sheet.dart';
@@ -837,7 +836,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               onProgress: (completed, total) {},
               directoryUri: directoryUri,
               writeToTree: (uri, fileName, bytes) async {
-                if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+                if (!kIsWeb &&
+                    defaultTargetPlatform == TargetPlatform.windows) {
                   return NovelExportService.writeToLocalDirectory(
                     uri,
                     fileName,
@@ -864,7 +864,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               onProgress: (completed, total) {},
               directoryUri: directoryUri,
               writeToTree: (uri, fileName, bytes) async {
-                if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+                if (!kIsWeb &&
+                    defaultTargetPlatform == TargetPlatform.windows) {
                   return NovelExportService.writeToLocalDirectory(
                     uri,
                     fileName,
@@ -882,7 +883,10 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             );
       if (!mounted) return;
       navigator.pop();
-      final directoryLabel = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows ? '所选目录' : '授权目录';
+      final directoryLabel =
+          !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
+          ? '所选目录'
+          : '授权目录';
       final location = result.savedToAuthorizedDirectory
           ? '已保存到$directoryLabel'
           : (directoryUri == null
@@ -1050,10 +1054,6 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           tooltip: '更多',
           onSelected: (value) {
             switch (value) {
-              case 'completionRoute':
-                context.push(AppRoutes.completionRoutes, extra: item);
-              case 'editManga':
-                unawaited(showMangaMetadataEditor(context, ref, item));
               case 'epub':
                 unawaited(_export(epub: true));
               case 'txt':
@@ -1080,24 +1080,9 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                   showDragHandle: true,
                   builder: (_) => AnimeInfoSheet(id: item.remoteId),
                 );
-              default:
-                final kind = TrackingServiceKind.values
-                    .where((kind) => 'sync:${kind.name}' == value)
-                    .firstOrNull;
-                if (kind != null) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => TrackingSyncPage(item: item, kind: kind),
-                    ),
-                  );
-                }
             }
           },
           itemBuilder: (_) => [
-            const PopupMenuItem(value: 'completionRoute', child: Text('加入补完路线')),
-            if (item.type == MediaType.manga)
-              const PopupMenuItem(value: 'editManga', child: Text('编辑漫画资料')),
             if (item.sourceId == 'bangumi-anime')
               const PopupMenuItem(value: 'info', child: Text('完整番剧资料')),
             if (item.type == MediaType.novel) ...[
@@ -1113,7 +1098,6 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             ],
             if (item.type == MediaType.manga) ...[
               const PopupMenuItem(value: 'merge', child: Text('多来源合并')),
-              const PopupMenuItem(value: 'copy', child: Text('复制到其他来源')),
             ],
             if (item.type == MediaType.novel)
               const PopupMenuItem(value: 'copy', child: Text('更换来源')),
@@ -1121,14 +1105,6 @@ class _DetailPageState extends ConsumerState<DetailPage> {
               const PopupMenuItem(value: 'tracking', child: Text('阅读追踪')),
             if ((_playback?.item ?? item).sourceId.startsWith('kazumi:'))
               const PopupMenuItem(value: 'site', child: Text('打开站点人工验证')),
-            if (item.type != MediaType.novel) ...[
-              const PopupMenuItem(value: 'tracking', child: Text('追踪绑定')),
-              for (final kind in TrackingServiceKind.values)
-                PopupMenuItem(
-                  value: 'sync:${kind.name}',
-                  child: Text('${kind.label}同步预览'),
-                ),
-            ],
           ],
         ),
       ],
@@ -1175,9 +1151,6 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                             ),
                           if (association?.isLoading != true) ...[
                             const SizedBox(height: 12),
-                            const Text(
-                              '在 Bangumi 搜索并打开正确季度的动画条目，再通过「选择来源」选择本站作品，即可保存关联。',
-                            ),
                             TextButton.icon(
                               onPressed: () => SearchPage.open(
                                 context,
@@ -1537,7 +1510,7 @@ class _ChapterSection extends StatelessWidget {
                     }, style: theme.textTheme.titleSmall),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
-                      '当前来源暂未提供这部作品的章节，可以搜索同来源的其他作品。',
+                      '暂未取得章节。',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: palette.mutedForeground,
                       ),
@@ -1550,7 +1523,6 @@ class _ChapterSection extends StatelessWidget {
                           context,
                           type: item!.type,
                           sourceId: item!.sourceId,
-                          sourceOnly: true,
                         ),
                         icon: const Icon(Icons.search, size: 18),
                         label: const Text('搜索其他作品'),

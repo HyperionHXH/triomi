@@ -69,7 +69,6 @@ class _AnimeFilterDialogState extends State<AnimeFilterDialog> {
           children: [
             ListTile(
               title: const Text('番剧筛选'),
-              subtitle: Text('已选 ${_tags.length} 个题材'),
               trailing: IconButton(
                 tooltip: '关闭',
                 icon: const Icon(Icons.close),
@@ -174,7 +173,7 @@ class _AnimeFilterDialogState extends State<AnimeFilterDialog> {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  const _GroupTitle('本机追番状态（本地应用，不发送至资料站）'),
+                  const _GroupTitle('本机追番状态'),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('仅在看'),
@@ -208,8 +207,6 @@ class _AnimeFilterDialogState extends State<AnimeFilterDialog> {
                     onChanged: (value) =>
                         setState(() => _sort = value ?? 'heat'),
                   ),
-                  const SizedBox(height: 20),
-                  const Text('题材同时满足：选择的标签全部提交至公开资料接口。追番状态仅按本机收藏应用，不伪称服务端筛选。'),
                 ],
               ),
             ),

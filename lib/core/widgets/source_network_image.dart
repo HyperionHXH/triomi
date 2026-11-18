@@ -21,12 +21,14 @@ class SourceNetworkImage extends ImageProvider<SourceNetworkImage> {
     required this.http,
     this.sourceId = 'images',
     this.scale = 1,
+    this.prefetchedBytes,
   });
 
   final String url;
   final SourceHttpClient http;
   final String sourceId;
   final double scale;
+  final Uint8List? Function()? prefetchedBytes;
 
   @override
   Future<SourceNetworkImage> obtainKey(ImageConfiguration configuration) =>
@@ -40,6 +42,16 @@ class SourceNetworkImage extends ImageProvider<SourceNetworkImage> {
 
   Future<ui.Codec> _load(ImageDecoderCallback decode) async {
     try {
+      final prefetched = prefetchedBytes?.call();
+      if (prefetched != null) {
+        try {
+          return await decode(
+            await ui.ImmutableBuffer.fromUint8List(prefetched),
+          );
+        } catch (_) {
+          // Use the normal request if speculative bytes were not an image.
+        }
+      }
       CoverStore? store;
       if (const BangumiRoutePolicy().isPublicCover(url)) {
         try {

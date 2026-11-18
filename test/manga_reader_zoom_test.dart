@@ -401,10 +401,9 @@ void main() {
     Future<void> configure(String? preset) async {
       await tester.tap(find.byTooltip('阅读设置'));
       await tester.pumpAndSettle();
-      final sheet = find.byType(ListView).last;
-      final toggle = find.widgetWithText(SwitchListTile, '夜间模式');
-      await tester.dragUntilVisible(toggle, sheet, const Offset(0, -300));
+      await tester.tap(find.text('滤镜'));
       await tester.pumpAndSettle();
+      final toggle = find.widgetWithText(SwitchListTile, '夜间模式');
       await tester.tap(toggle);
       await tester.pumpAndSettle();
       if (preset != null) {

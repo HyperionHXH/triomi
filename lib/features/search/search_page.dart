@@ -9,7 +9,6 @@ import '../../core/models/media_type.dart';
 import '../../core/models/source_descriptor.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/router/app_router.dart';
-import '../../core/source/bangumi_public_client.dart';
 import '../../core/source/bangumi_source.dart';
 import '../../core/source/http_client.dart';
 import '../../core/source/kazumi_source.dart';
@@ -17,10 +16,12 @@ import '../../core/source/mihon_source.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
-import '../../core/source/tag_search.dart';
 import '../../core/storage/preferences.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../detail/anime_filter_dialog.dart';
+import '../detail/anime_info_repository.dart';
 import '../discover/widgets/media_item_card.dart';
+import '../library/data/library_providers.dart';
 import '../manga/manga_item_actions.dart';
 import '../manga/manga_source_page.dart';
 import '../novel/novel_book_card.dart';
@@ -33,8 +34,9 @@ class SearchPage extends ConsumerStatefulWidget {
     required this.type,
     this.initialSourceId,
     this.initialQuery = '',
-    this.sourceOnly = false,
     this.initialTags = const [],
+    this.onAddItem,
+    this.isAdded,
   });
 
   /// Search launched from a detail/modal stays above its caller instead of
@@ -44,8 +46,9 @@ class SearchPage extends ConsumerStatefulWidget {
     required MediaType type,
     String? sourceId,
     String query = '',
-    bool sourceOnly = false,
     List<String> tags = const [],
+    Future<void> Function(MediaItem item)? onAddItem,
+    bool Function(MediaItem item)? isAdded,
   }) {
     FocusManager.instance.primaryFocus?.unfocus();
     return Navigator.of(context, rootNavigator: true).push<void>(
@@ -54,8 +57,9 @@ class SearchPage extends ConsumerStatefulWidget {
           type: type,
           initialSourceId: sourceId,
           initialQuery: query,
-          sourceOnly: sourceOnly,
           initialTags: tags,
+          onAddItem: onAddItem,
+          isAdded: isAdded,
         ),
       ),
     );
@@ -64,47 +68,71 @@ class SearchPage extends ConsumerStatefulWidget {
   final MediaType type;
   final String? initialSourceId;
   final String initialQuery;
-  final bool sourceOnly;
   final List<String> initialTags;
+  final Future<void> Function(MediaItem item)? onAddItem;
+  final bool Function(MediaItem item)? isAdded;
 
   @override
   ConsumerState<SearchPage> createState() => _SearchPageState();
 }
 
 class _SearchPageState extends ConsumerState<SearchPage> {
-  late final _controller = TextEditingController(text: widget.initialQuery);
+  late final _controller = TextEditingController(
+    text: widget.initialQuery.isEmpty && widget.type != MediaType.anime
+        ? widget.initialTags.join(' ')
+        : widget.initialQuery,
+  );
   final _rows = <String, _SearchRow>{};
   final _sourceGeneration = <String, int>{};
   final _requests = <String, SourceRequestCancellation>{};
   int _generation = 0;
   String _query = '';
   bool _starting = false;
-  String? _scopeId;
   String? _error;
-  late List<String> _tags = List.of(widget.initialTags);
+  late AnimeFilter _animeFilter = _initialAnimeFilter();
+  bool _onlyResults = false;
+  final _adding = <(String, String, MediaType)>{};
   bool _submitted = false;
-  bool _tagBusy = false;
-  late bool _animeSourceSearch;
-  bool get _animeMetadata =>
-      widget.type == MediaType.anime && !_animeSourceSearch;
-  List<String> get _searchTags =>
-      widget.type == MediaType.anime && _animeSourceSearch ? const [] : _tags;
   String get _historyKey => 'search.history.${widget.type.name}';
 
   @override
   void initState() {
     super.initState();
-    _animeSourceSearch =
-        widget.type == MediaType.anime &&
-        widget.sourceOnly &&
-        widget.initialSourceId != null &&
-        widget.initialSourceId != 'bangumi-anime';
-    _scopeId = widget.sourceOnly && widget.initialSourceId != 'bangumi-anime'
-        ? widget.initialSourceId
-        : null;
-    if (widget.initialQuery.trim().isNotEmpty || _tags.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _submit());
+    if (_controller.text.trim().isNotEmpty ||
+        (widget.type == MediaType.anime && widget.initialTags.isNotEmpty)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_submit());
+      });
     }
+  }
+
+  AnimeFilter _initialAnimeFilter() {
+    if (widget.type != MediaType.anime) return const AnimeFilter();
+    final prefs = ref.read(preferencesProvider);
+    final saved = AnimeFilter.fromJson(
+      prefs.get<Object?>('anime.search.filter') ??
+          prefs.get<Object?>('anime.recommendations.filter'),
+    );
+    return widget.initialTags.isEmpty
+        ? saved
+        : saved.withTags(widget.initialTags);
+  }
+
+  bool get _canBrowseAnime =>
+      widget.type == MediaType.anime && _animeFilter.active;
+
+  Future<void> _editAnimeFilter() async {
+    final value = await showModalBottomSheet<AnimeFilter>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => AnimeFilterDialog(initial: _animeFilter),
+    );
+    if (!mounted || value == null) return;
+    setState(() => _animeFilter = value);
+    await ref
+        .read(preferencesProvider)
+        .set('anime.search.filter', value.toJson());
+    if (mounted) await _submit();
   }
 
   @override
@@ -124,7 +152,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   Future<void> _submit() async {
     final query = _controller.text.trim();
-    final hasCriteria = query.isNotEmpty || _searchTags.isNotEmpty;
+    final hasCriteria = query.isNotEmpty || _canBrowseAnime;
     final generation = ++_generation;
     _cancelRequests();
     setState(() {
@@ -156,12 +184,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         entry,
       ) {
         if (entry.descriptor.type != widget.type) return false;
-        if (widget.type == MediaType.anime) {
-          if (_animeMetadata) return entry.descriptor.id == 'bangumi-anime';
-          if (entry.descriptor.id == 'bangumi-anime') return false;
-        }
-        if (_scopeId != null && entry.descriptor.id != _scopeId) return false;
-        return true;
+        return query.isNotEmpty || entry.descriptor.id == 'bangumi-anime';
       }).toList();
       if (widget.initialSourceId != null) {
         sources.sort(
@@ -228,26 +251,26 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         throw StateError('来源已停用或不支持搜索');
       }
       final provider = active.source as SearchProvider;
+      bool? hasMore;
       final items = await owner
-          .run(() {
+          .run(() async {
             if (provider is BangumiSource) {
               return provider.searchFiltered(
                 query,
                 page: page,
-                filter: AnimePublicFilter(tags: List.of(_searchTags)),
+                filter: _animeFilter.publicFilter,
               );
             }
-            if (_searchTags.isNotEmpty && provider is TagSearchProvider) {
-              return (provider as TagSearchProvider).searchTagged(
-                query,
-                tags: _searchTags,
+            if (provider is MihonSource) {
+              final result = await provider.cataloguePage(
+                operation: 'search',
+                query: query,
                 page: page,
               );
+              hasMore = result.hasMore;
+              return result.items;
             }
-            return provider.search(
-              [..._searchTags, if (query.isNotEmpty) query].join(' '),
-              page: page,
-            );
+            return provider.search(query, page: page);
           })
           .timeout(
             active.source is MihonSource
@@ -279,7 +302,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           pending: false,
           items: unique.values.toList(),
           page: page,
-          hasMore: unique.length > before,
+          hasMore: hasMore ?? unique.length > before,
         ),
       );
     } catch (error) {
@@ -307,326 +330,216 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     }
   }
 
-  Future<void> _editTags() async {
-    if (_tagBusy) return;
-    setState(() => _tagBusy = true);
-    try {
-      final snapshot = await ref.read(sourcesProvider.future);
-      if (!mounted) return;
-      final candidates = snapshot
-          .enabledWith(SourceCapability.search)
-          .where(
-            (e) =>
-                e.descriptor.type == widget.type &&
-                e.source is TagSearchProvider &&
-                (_scopeId == null || e.descriptor.id == _scopeId),
-          )
-          .toList();
-      SourceEntry? entry;
-      if (candidates.length == 1) {
-        entry = candidates.single;
-      } else if (candidates.isNotEmpty) {
-        entry = await showModalBottomSheet<SourceEntry>(
-          context: context,
-          useSafeArea: true,
-          isScrollControlled: true,
-          builder: (context) => SafeArea(
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                const ListTile(title: Text('选择来源题材')),
-                for (final source in candidates)
-                  ListTile(
-                    title: Text(source.descriptor.name),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.pop(context, source),
-                  ),
-              ],
-            ),
-          ),
-        );
-      }
-      if (!mounted || entry == null) return;
-      final source = entry.source as TagSearchProvider;
-      final taxonomy = await source.searchTags().timeout(
-        source is MihonSource
-            ? const Duration(seconds: 150)
-            : const Duration(seconds: 60),
-      );
-      if (!mounted) return;
-      if (taxonomy.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('此来源未提供题材列表，请使用关键词或来源自己的筛选')),
-        );
-        return;
-      }
-      var selected = _tags.firstOrNull;
-      final result = await showModalBottomSheet<List<String>>(
-        context: context,
-        useSafeArea: true,
-        isScrollControlled: true,
-        constraints: const BoxConstraints(maxWidth: 680),
-        builder: (context) => StatefulBuilder(
-          builder: (context, update) => SizedBox(
-            height: MediaQuery.sizeOf(context).height * .7,
-            child: Column(
-              children: [
-                ListTile(
-                  title: Text('${entry!.descriptor.name} · 题材'),
-                  trailing: TextButton(
-                    onPressed: () => Navigator.pop(
-                      context,
-                      selected == null ? <String>[] : [selected!],
-                    ),
-                    child: const Text('搜索'),
-                  ),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        FilterChip(
-                          label: const Text('不限'),
-                          selected: selected == null,
-                          onSelected: (_) => update(() => selected = null),
-                        ),
-                        for (final tag in taxonomy)
-                          FilterChip(
-                            label: Text(tag.label),
-                            selected:
-                                selected == tag.label || selected == tag.id,
-                            onSelected: (value) =>
-                                update(() => selected = value ? tag.id : null),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-      if (!mounted || result == null) return;
-      setState(() {
-        _scopeId = entry!.descriptor.id;
-        _tags = result;
-      });
-      await _submit();
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('加载来源题材失败：$error')));
-      }
-    } finally {
-      if (mounted) setState(() => _tagBusy = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final rows = _rows.values.toList();
-    final searchable =
-        ref
-            .watch(sourcesProvider)
-            .asData
-            ?.value
-            .enabledWith(SourceCapability.search)
-            .where(
-              (entry) =>
-                  entry.descriptor.type == widget.type &&
-                  (widget.type != MediaType.anime ||
-                      entry.descriptor.id != 'bangumi-anime'),
-            )
-            .toList() ??
-        <SourceEntry>[];
-    final finished = rows.where((row) => !row.pending).length;
+    final visibleRows = rows
+        .where(
+          (row) =>
+              !_onlyResults || row.pending || _visibleItems(row).isNotEmpty,
+        )
+        .toList();
     final history =
         ref.watch(preferencesProvider).get<List<Object?>>(_historyKey) ?? [];
-    return PageScaffold(
-      title: '搜索${widget.type.label}',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: TextField(
-              controller: _controller,
-              autofocus: widget.initialQuery.isEmpty,
-              textInputAction: TextInputAction.search,
-              onSubmitted: (_) => unawaited(_submit()),
-              decoration: InputDecoration(
-                hintText: widget.type == MediaType.novel
-                    ? '书名 / 作者 / 关键词'
-                    : '搜索${widget.type.label}',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: IconButton(
-                  tooltip: '搜索',
-                  onPressed: () => unawaited(_submit()),
-                  icon: const Icon(Icons.arrow_forward),
-                ),
-              ),
+    final compact = widget.type != MediaType.novel;
+    final input = TextField(
+      controller: _controller,
+      autofocus: _controller.text.isEmpty,
+      textInputAction: TextInputAction.search,
+      onSubmitted: (_) => unawaited(_submit()),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: compact ? '搜索${widget.type.label}' : '书名 / 作者 / 关键词',
+        border: compact ? InputBorder.none : null,
+        prefixIcon: compact ? null : const Icon(Icons.search),
+        suffixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: '清空搜索',
+              icon: const Icon(Icons.close),
+              onPressed: () {
+                _controller.clear();
+                unawaited(_submit());
+              },
             ),
-          ),
-          if (widget.type == MediaType.anime)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text('Bangumi资料')),
-                  ButtonSegment(value: true, label: Text('播放源检索')),
-                ],
-                selected: {_animeSourceSearch},
-                onSelectionChanged: (value) {
-                  setState(() => _animeSourceSearch = value.single);
-                  unawaited(_submit());
-                },
-              ),
+            IconButton(
+              tooltip: '搜索',
+              onPressed: () => unawaited(_submit()),
+              icon: const Icon(Icons.arrow_forward),
             ),
-          if (_searchTags.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final tag in _searchTags)
-                    InputChip(
-                      label: Text(tag),
-                      deleteButtonTooltipMessage: '移除标签 $tag',
-                      onDeleted: () {
-                        setState(() {
-                          _tags = _tags.where((t) => t != tag).toList();
-                        });
-                        unawaited(_submit());
-                      },
-                    ),
-                ],
-              ),
-            ),
-          if (widget.type != MediaType.anime)
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                icon: const Icon(Icons.tune),
-                label: const Text('题材标签'),
-                onPressed: _tagBusy ? null : _editTags,
-              ),
-            ),
-          if (!_animeMetadata)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: PopupMenuButton<String>(
-                tooltip: '搜索来源范围',
-                initialValue: _scopeId ?? '',
-                onSelected: (id) {
-                  setState(() => _scopeId = id.isEmpty ? null : id);
-                  if (_submitted) unawaited(_submit());
-                },
-                itemBuilder: (_) => [
-                  const PopupMenuItem(value: '', child: Text('全部可搜索来源')),
-                  for (final entry in searchable)
-                    PopupMenuItem(
-                      value: entry.descriptor.id,
-                      child: Text(entry.descriptor.name),
-                    ),
-                ],
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    _scopeId == null
-                        ? '范围：全部来源 ▾'
-                        : '范围：${searchable.where((e) => e.descriptor.id == _scopeId).firstOrNull?.descriptor.name ?? _scopeId} ▾',
-                  ),
-                ),
-              ),
-            ),
-          if (_submitted)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Text(
-                _starting ? '正在准备来源…' : '已完成 $finished / ${rows.length} 个来源',
-              ),
-            ),
-          if (_starting || rows.any((row) => row.pending))
-            const LinearProgressIndicator(minHeight: 2),
-          const Divider(height: 1),
-          Expanded(
-            child: !_submitted
-                ? ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      if (history.isNotEmpty) ...[
-                        const Text('最近搜索'),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final keyword in history)
-                              ActionChip(
-                                label: Text('$keyword'),
-                                onPressed: () {
-                                  _controller.text = '$keyword';
-                                  unawaited(_submit());
-                                },
-                              ),
-                          ],
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                            await ref
-                                .read(preferencesProvider)
-                                .set(_historyKey, <String>[]);
-                            if (mounted) setState(() {});
-                          },
-                          child: const Text('清除搜索历史'),
-                        ),
-                      ],
-                    ],
-                  )
-                : _error != null
-                ? EmptyStateView(
-                    icon: Icons.error_outline,
-                    title: _error!,
-                    action: TextButton(
-                      onPressed: () => unawaited(_submit()),
-                      child: const Text('重试'),
-                    ),
-                  )
-                : !_starting && rows.isEmpty
-                ? EmptyStateView(
-                    icon: Icons.extension_outlined,
-                    title: '没有可搜索的${widget.type.label}来源',
-                    message: '请在当前模块启用来源。',
-                  )
-                : _animeMetadata && rows.isNotEmpty
-                ? _animeResults(rows.single)
-                : ListView.separated(
-                    itemCount: rows.length,
-                    separatorBuilder: (_, _) => const Divider(height: 24),
-                    itemBuilder: (_, index) => _resultSection(rows[index]),
-                  ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!compact)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+            child: input,
+          ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ChoiceChip(
+                label: const Text('全部'),
+                selected: !_onlyResults,
+                onSelected: (_) => setState(() => _onlyResults = false),
+              ),
+              ChoiceChip(
+                label: const Text('有结果'),
+                selected: _onlyResults,
+                onSelected: (_) => setState(() => _onlyResults = true),
+              ),
+              if (widget.type == MediaType.anime)
+                FilterChip(
+                  label: const Text('资料筛选'),
+                  avatar: const Icon(Icons.tune, size: 18),
+                  selected: _animeFilter.active,
+                  onSelected: (_) => unawaited(_editAnimeFilter()),
+                ),
+            ],
+          ),
+        ),
+        if (_starting || rows.any((row) => row.pending))
+          const LinearProgressIndicator(minHeight: 2),
+        const Divider(height: 1),
+        Expanded(
+          child: !_submitted
+              ? ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (history.isNotEmpty) ...[
+                      const Text('最近搜索'),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final keyword in history)
+                            ActionChip(
+                              label: Text('$keyword'),
+                              onPressed: () {
+                                _controller.text = '$keyword';
+                                unawaited(_submit());
+                              },
+                            ),
+                        ],
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          await ref
+                              .read(preferencesProvider)
+                              .set(_historyKey, <String>[]);
+                          if (mounted) setState(() {});
+                        },
+                        child: const Text('清除搜索历史'),
+                      ),
+                    ],
+                  ],
+                )
+              : _error != null
+              ? EmptyStateView(
+                  icon: Icons.error_outline,
+                  title: _error!,
+                  action: TextButton(
+                    onPressed: () => unawaited(_submit()),
+                    child: const Text('重试'),
+                  ),
+                )
+              : !_starting && rows.isEmpty
+              ? EmptyStateView(
+                  icon: Icons.extension_outlined,
+                  title: '没有可搜索的${widget.type.label}来源',
+                  message: '请在当前模块启用来源。',
+                )
+              : visibleRows.isEmpty && !_starting
+              ? EmptyStateView(
+                  icon: Icons.search_off,
+                  title: '没有可显示的结果',
+                  action: TextButton(
+                    onPressed: () => setState(() => _onlyResults = false),
+                    child: const Text('显示全部'),
+                  ),
+                )
+              : visibleRows.length == 1 &&
+                    visibleRows.single.entry.descriptor.id == 'bangumi-anime' &&
+                    widget.onAddItem == null
+              ? _metadataGrid(visibleRows.single)
+              : ListView.separated(
+                  itemCount: visibleRows.length,
+                  separatorBuilder: (_, _) => const Divider(height: 16),
+                  itemBuilder: (_, index) => _resultSection(visibleRows[index]),
+                ),
+        ),
+      ],
+    );
+    return compact
+        ? Scaffold(
+            appBar: AppBar(titleSpacing: 8, title: input),
+            body: SafeArea(top: false, child: body),
+          )
+        : PageScaffold(title: '搜索小说', child: body);
   }
 
-  Widget _animeResults(_SearchRow row) {
-    return MediaItemCollection(
-      items: row.items,
-      sourceName: row.entry.descriptor.name,
-      preferGrid: true,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      header: _resultHeader(row),
-      footer: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [_resultStatus(row), _resultPagination(row)],
-      ),
+  Widget _metadataGrid(_SearchRow row) => MediaItemCollection(
+    items: _visibleItems(row),
+    sourceName: '',
+    showMetadata: false,
+    preferGrid: true,
+    padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+    footer: Column(children: [_resultStatus(row), _resultPagination(row)]),
+  );
+
+  List<MediaItem> _visibleItems(_SearchRow row) {
+    if (row.entry.descriptor.id != 'bangumi-anime' ||
+        !(_animeFilter.onlyWatching ||
+            _animeFilter.hideCompleted ||
+            _animeFilter.hideDropped)) {
+      return row.items;
+    }
+    final statuses = {
+      for (final view in ref.watch(animeFollowsProvider).asData?.value ?? [])
+        (view.item.sourceId, view.item.remoteId): view.entry.status,
+    };
+    return row.items
+        .where((item) {
+          final status = statuses[(item.sourceId, item.remoteId)];
+          return (!_animeFilter.onlyWatching || status == 'doing') &&
+              (!_animeFilter.hideCompleted || status != 'done') &&
+              (!_animeFilter.hideDropped || status != 'dropped');
+        })
+        .toList(growable: false);
+  }
+
+  Widget? _addAction(MediaItem item) {
+    final add = widget.onAddItem;
+    if (add == null) return null;
+    final key = (item.sourceId, item.remoteId, item.type);
+    final added = widget.isAdded?.call(item) ?? false;
+    return IconButton.filledTonal(
+      tooltip: added ? '已加入路线' : '添加 ${item.title}',
+      icon: Icon(added ? Icons.check : Icons.add),
+      onPressed: added || _adding.contains(key)
+          ? null
+          : () async {
+              setState(() => _adding.add(key));
+              try {
+                await add(item);
+              } catch (_) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(const SnackBar(content: Text('未能添加作品')));
+                }
+              } finally {
+                if (mounted) setState(() => _adding.remove(key));
+              }
+            },
     );
   }
 
@@ -640,21 +553,16 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             sourceId: descriptor.id,
             listing: 'search',
             query: _query,
-            initialTags: _tags,
+            initialTags: const [],
           ),
         ),
       );
     }
 
     return ListTile(
+      dense: true,
       title: Text(descriptor.name),
-      subtitle: Text(
-        '${descriptor.lang}${row.pending
-            ? ' · 搜索中'
-            : row.error == null
-            ? ' · ${row.items.length} 条'
-            : ''}',
-      ),
+      subtitle: descriptor.lang.isEmpty ? null : Text(descriptor.lang),
       trailing: isManga ? const Icon(Icons.chevron_right) : null,
       onTap: isManga ? openSource : null,
     );
@@ -729,72 +637,80 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   Widget _resultSection(_SearchRow row) {
     final descriptor = row.entry.descriptor;
+    final items = _visibleItems(row);
     final isManga = widget.type == MediaType.manga;
+    final isNovel = widget.type == MediaType.novel;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _resultHeader(row),
+        if (descriptor.id != 'bangumi-anime') _resultHeader(row),
         _resultStatus(row),
-        if (row.items.isNotEmpty && isManga)
+        if (items.isNotEmpty && !isNovel)
           SizedBox(
-            height: MediaQuery.textScalerOf(context).scale(13) * 3 + 190,
+            height: 160 + MediaQuery.textScalerOf(context).scale(13) * 3,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: row.items.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: items.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
               itemBuilder: (_, index) {
-                final raw = row.items[index];
-                final metadata = ref.watch(
-                  mangaItemMetadataProvider((raw.sourceId, raw.remoteId)),
-                );
-                final item = raw.withMangaMetadata(
-                  metadata.asData?.value ?? raw.localMangaMetadata,
-                );
+                final raw = items[index];
+                final item = isManga
+                    ? raw.withMangaMetadata(
+                        ref
+                                .watch(
+                                  mangaItemMetadataProvider((
+                                    raw.sourceId,
+                                    raw.remoteId,
+                                  )),
+                                )
+                                .asData
+                                ?.value ??
+                            raw.localMangaMetadata,
+                      )
+                    : raw;
+                final action = _addAction(item);
                 return SizedBox(
-                  width: 124,
-                  child: MediaItemCard(
-                    item: item,
-                    sourceName: '',
-                    onTap: () =>
-                        context.push(AppRoutes.detailFor(item), extra: item),
-                    onLongPress: () => showMangaItemActions(context, ref, item),
+                  width: 108,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: MediaItemCard(
+                          item: item,
+                          sourceName: '',
+                          showMetadata: false,
+                          onTap: () => context.push(
+                            AppRoutes.detailFor(item),
+                            extra: item,
+                          ),
+                          onLongPress: isManga && widget.onAddItem == null
+                              ? () => showMangaItemActions(context, ref, item)
+                              : null,
+                        ),
+                      ),
+                      if (action != null)
+                        Positioned(right: 4, top: 4, child: action),
+                    ],
                   ),
                 );
               },
             ),
           ),
-        if (row.items.isNotEmpty && widget.type == MediaType.anime)
+        if (items.isNotEmpty && isNovel)
           SizedBox(
-            height: MediaQuery.textScalerOf(context).scale(13) * 3 + 190,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: row.items.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 12),
-              itemBuilder: (_, index) => SizedBox(
-                width: 124,
-                child: MediaItemCard(
-                  item: row.items[index],
-                  sourceName: descriptor.name,
-                  onTap: () => context.push(
-                    AppRoutes.detailFor(row.items[index]),
-                    extra: row.items[index],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        if (row.items.isNotEmpty && widget.type == MediaType.novel)
-          SizedBox(
-            height: 380,
+            height: 330,
             child: ListView.builder(
-              itemCount: row.items.length,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemBuilder: (_, index) => NovelBookCard(
-                item: row.items[index],
-                sourceLabel: descriptor.name,
-              ),
+              itemCount: items.length,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemBuilder: (_, index) {
+                final item = items[index];
+                final action = _addAction(item);
+                return NovelBookCard(
+                  item: item,
+                  sourceLabel: '',
+                  actions: [?action],
+                );
+              },
             ),
           ),
         _resultPagination(row),
@@ -803,10 +719,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 
   Widget _resultPagination(_SearchRow row) {
-    if (widget.type == MediaType.manga ||
-        row.page <= 0 ||
-        !row.hasMore ||
-        row.error != null) {
+    if (row.page <= 0 || !row.hasMore || row.error != null) {
       return const SizedBox.shrink();
     }
     return TextButton(

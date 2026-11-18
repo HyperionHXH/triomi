@@ -28,7 +28,6 @@ class ProfilePage extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.route_outlined),
               title: const Text('跨媒体补完路线'),
-              subtitle: const Text('按你的顺序补番、读漫画和小说，各自进度独立'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push(AppRoutes.completionRoutes),
             ),
@@ -52,7 +51,6 @@ class ProfilePage extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.settings_backup_restore_outlined),
               title: const Text('备份与恢复'),
-              subtitle: const Text('全应用本地数据与封面，不含账号凭据'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push(AppRoutes.backup),
             ),
@@ -73,7 +71,6 @@ class ProfilePage extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.cloud_outlined),
               title: const Text('WebDAV 应用备份'),
-              subtitle: const Text('上传或合并完整备份；与收藏和历史同步分开'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push(AppRoutes.webdavBackup),
             ),
@@ -83,16 +80,8 @@ class ProfilePage extends StatelessWidget {
           title: '应用',
           children: [
             ListTile(
-              leading: const Icon(Icons.health_and_safety_outlined),
-              title: const Text('来源诊断中心'),
-              subtitle: const Text('手动测试、错误说明与脱敏反馈包'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.push(AppRoutes.sourceDiagnostics),
-            ),
-            ListTile(
               leading: const Icon(Icons.settings_outlined),
               title: const Text('通用设置'),
-              subtitle: const Text('外观、网络、存储与应用更新'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push(AppRoutes.settings),
             ),

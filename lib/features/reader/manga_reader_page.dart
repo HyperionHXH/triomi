@@ -13,6 +13,7 @@ import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/platform/platform_channel.dart';
+import '../../core/source/http_client.dart';
 import '../../core/source/mihon_source.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
@@ -24,9 +25,9 @@ import '../downloads/data/download_repository.dart';
 import '../library/data/library_providers.dart';
 import '../library/data/library_repository.dart';
 import '../library/data/merged_manga_repository.dart';
-import '../novel/reader/novel_reader_settings.dart';
 import '../tracking/data/tracking_providers.dart';
 import 'manga_layout.dart';
+import 'manga_page_buffer.dart';
 import 'manga_page_image.dart';
 import 'manga_reader_options.dart';
 import 'manga_reader_settings.dart';
@@ -144,6 +145,9 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   bool _chromeVisible = true;
   int _page = 0;
   int _requestSeq = 0;
+  SourceRequestCancellation? _warmup;
+  final _pageBuffer = MangaPageBuffer();
+  final _warmedContents = <String, (ContentProvider, ChapterContent)>{};
   Future<void>? _chapterCacheFuture;
   int? _transitionOrigin;
   bool _openingNextChapter = false;
@@ -252,27 +256,13 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     if (_keepScreenOn) {
       unawaited(platformChannel.setKeepScreenOn(true, owner: _screenOwner));
     }
-    unawaited(_applyOrientation(view.orientation));
     unawaited(_load());
-  }
-
-  /// 应用屏幕方向（B4）；空列表 = 跟随系统。
-  Future<void> _applyOrientation(ReaderOrientation orientation) async {
-    await SystemChrome.setPreferredOrientations(switch (orientation) {
-      ReaderOrientation.system => <DeviceOrientation>[],
-      ReaderOrientation.portrait => <DeviceOrientation>[
-        DeviceOrientation.portraitUp,
-        DeviceOrientation.portraitDown,
-      ],
-      ReaderOrientation.landscape => <DeviceOrientation>[
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ],
-    });
   }
 
   @override
   void dispose() {
+    _warmup?.cancel();
+    _pageBuffer.retain({});
     _autoScrollTimer?.cancel();
     _menuTimer?.cancel();
     _introTimer?.cancel();
@@ -288,13 +278,17 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     if (_keepScreenOn) {
       unawaited(platformChannel.setKeepScreenOn(false, owner: _screenOwner));
     }
-    unawaited(SystemChrome.setPreferredOrientations(<DeviceOrientation>[]));
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
+    if (!_foreground) {
+      _warmup?.cancel();
+    } else if (!_loading && _images.isNotEmpty) {
+      unawaited(_preloadNeighbour());
+    }
     if (Platform.isWindows && _keepScreenOn) {
       final visible =
           state == AppLifecycleState.resumed ||
@@ -308,6 +302,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
   Future<void> _load() async {
     final seq = ++_requestSeq;
+    _warmup?.cancel();
     _geometry.clear();
     _geometryRevision++;
     _geometryPending = false;
@@ -386,6 +381,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                 }
               });
         }
+        unawaited(_preloadNeighbour());
         return;
       }
       if (chapter.sourceId == 'local-comic') {
@@ -428,9 +424,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
         );
       }
 
-      final content = provider is MihonSource
-          ? await provider.content(chapter, item: _owner(chapter))
-          : await provider.content(chapter);
+      final warmed = _warmedContents.remove(mangaChapterKey(chapter));
+      final content = warmed != null && identical(warmed.$1, provider)
+          ? warmed.$2
+          : await _chapterContent(provider, chapter);
       if (!mounted || seq != _requestSeq) return;
 
       if (content.images.isEmpty) {
@@ -696,68 +693,81 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     });
   }
 
-  /// 预取下一章的前几张图，翻到下一章时不至于白屏。
+  Future<ChapterContent> _chapterContent(
+    ContentProvider provider,
+    Chapter chapter,
+  ) => provider is MihonSource
+      ? provider.content(chapter, item: _owner(chapter))
+      : provider.content(chapter);
+
+  /// Warm a rolling window of upcoming chapters as soon as the reader opens.
+  /// Sequential transfers leave the visible page's decoder and cache alone.
   Future<void> _preloadNeighbour() async {
-    final next = _chapterIndex + 1;
-    if (_item.sourceId == 'local-comic') return;
-    final seq = _requestSeq;
-    final count = _viewSettings.preload;
-    if (count == 0 || !mounted) return;
-    if (next >= _chapters.length) return;
+    if (!mounted || !_foreground || _item.sourceId == 'local-comic') return;
+    final upcoming = <Chapter>[];
+    var index = _chapterIndex;
+    for (var step = 0; step < 2; step++) {
+      index = _nextChapter(index, 1);
+      if (index >= _chapters.length || _chapters[index].locked) break;
+      upcoming.add(_chapters[index]);
+    }
+    final keep = {for (final chapter in upcoming) mangaChapterKey(chapter)};
+    _warmedContents.removeWhere((key, _) => !keep.contains(key));
+    _pageBuffer.retain({
+      for (final url in _images) (_chapter.sourceId, url),
+      for (final chapter in upcoming)
+        for (final url
+            in _warmedContents[mangaChapterKey(chapter)]?.$2.images ??
+                const <String>[])
+          (chapter.sourceId, url),
+    });
+    if (upcoming.isEmpty) return;
+    _warmup?.cancel();
+    final owner = _warmup = SourceRequestCancellation();
+    bool active() => mounted && _foreground && !owner.cancelled;
     try {
-      final snapshot = widget.args.chapterOwners.isEmpty
-          ? await ref.read(sourcesProvider.future)
-          : await ref.read(sourceRegistryProvider).load();
-      final entry = snapshot.entries
-          .where(
-            (candidate) =>
-                candidate.descriptor.id == _chapters[next].sourceId &&
-                candidate.enabled,
-          )
-          .firstOrNull;
-      final provider = entry?.source;
-      if (provider is! ContentProvider ||
-          _chapters[next].locked ||
-          seq != _requestSeq ||
-          !mounted) {
-        return;
-      }
-      final content = provider is MihonSource
-          ? await provider.content(
-              _chapters[next],
-              item: _owner(_chapters[next]),
-            )
-          : await provider.content(_chapters[next]);
-      if (seq != _requestSeq || !mounted) return;
-      for (final url in content.images.take(count)) {
-        if (!mounted) return;
-        // 本地文件（file://）不走 NetworkImage 且加载即时，无需预取；
-        // 对它发起 NetworkImage 只会产生必然失败的请求。
-        if (url.startsWith('file://') ||
-            (!url.contains('://') && url.length > 1)) {
-          continue;
+      final snapshot = await ref.read(sourcesProvider.future);
+      if (!active()) return;
+      final http = ref.read(sourceHttpClientProvider);
+      for (final chapter in upcoming) {
+        if (!active()) return;
+        try {
+          if (await _localImagesOf(chapter) != null || !active()) continue;
+          final source = snapshot.enabledEntries
+              .where((entry) => entry.descriptor.id == chapter.sourceId)
+              .firstOrNull
+              ?.source;
+          if (source is! ContentProvider || chapter.url?.isNotEmpty != true) {
+            continue;
+          }
+          final key = mangaChapterKey(chapter);
+          final warmed = _warmedContents[key];
+          final content = warmed != null && identical(warmed.$1, source)
+              ? warmed.$2
+              : await owner.run(() => _chapterContent(source, chapter));
+          if (!active()) return;
+          if (content.images.isEmpty) continue;
+          _warmedContents[key] = (source, content);
+          for (final url in content.images) {
+            if (!active() ||
+                !await _pageBuffer.preload(
+                  http,
+                  chapter.sourceId,
+                  url,
+                  owner,
+                )) {
+              return;
+            }
+          }
+        } catch (_) {
+          // Retry through the normal reader if this chapter is opened.
+          return;
         }
-        final width =
-            (MediaQuery.sizeOf(context).width *
-                    MediaQuery.devicePixelRatioOf(context))
-                .round()
-                .clamp(480, 2400);
-        await precacheImage(
-          ResizeImage(
-            SourceNetworkImage(
-              url,
-              http: ref.read(sourceHttpClientProvider),
-              sourceId: _chapters[next].sourceId,
-            ),
-            width: width,
-            height: 8192,
-            policy: ResizeImagePolicy.fit,
-          ),
-          context,
-        ).catchError((Object _) {});
       }
     } catch (_) {
-      // 预取失败无所谓，真正翻页时会再试一次
+      // A registry load failure is not a foreground chapter failure.
+    } finally {
+      if (identical(_warmup, owner)) _warmup = null;
     }
   }
 
@@ -1193,9 +1203,6 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           next.options.flag('fullscreen')) {
         unawaited(_setImmersive(immersive: next.options.flag('fullscreen')));
       }
-      if (previous?.orientation != next.orientation) {
-        unawaited(_applyOrientation(next.orientation));
-      }
     });
     _layout;
     if (_renderedLayoutKey != _cachedLayoutKey) {
@@ -1254,7 +1261,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                     ),
                   ),
                 ),
-              if (_transitionOrigin == null) _buildChrome(settings),
+              if (_transitionOrigin == null) _buildChrome(),
               if (_verticalSeek && _chromeVisible && _images.isNotEmpty)
                 Positioned(
                   left: _options.flag('leftSeekbar') ? 0 : null,
@@ -1745,29 +1752,43 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     );
   }
 
-  Widget _imagePage(int index, BoxFit fit, {int part = 0, int turns = 0}) {
-    final imageSeq = _requestSeq;
-    final url = _images[index];
+  ImageProvider _pageProvider(
+    String url,
+    String sourceId,
+    SourceHttpClient http,
+  ) {
+    final buffer = _pageBuffer;
     final ImageProvider provider = url.startsWith('file://')
         ? FileImage(File(storageFilePath(Uri.parse(url).toFilePath())))
         : !url.contains('://')
         ? FileImage(File(storageFilePath(url)))
         : SourceNetworkImage(
             url,
-            http: ref.watch(sourceHttpClientProvider),
-            sourceId: _chapter.sourceId,
+            http: http,
+            sourceId: sourceId,
+            prefetchedBytes: () => buffer.get(http, sourceId, url),
           );
     final width =
         (MediaQuery.sizeOf(context).width *
                 MediaQuery.devicePixelRatioOf(context))
             .round();
+    return ResizeImage(
+      provider,
+      width: width.clamp(480, 2400),
+      height: 8192,
+      policy: ResizeImagePolicy.fit,
+    );
+  }
+
+  Widget _imagePage(int index, BoxFit fit, {int part = 0, int turns = 0}) {
+    final imageSeq = _requestSeq;
+    final url = _images[index];
     return MangaPageImage(
       key: ValueKey((url, part, turns)),
-      provider: ResizeImage(
-        provider,
-        width: width.clamp(480, 2400),
-        height: 8192,
-        policy: ResizeImagePolicy.fit,
+      provider: _pageProvider(
+        url,
+        _chapter.sourceId,
+        ref.watch(sourceHttpClientProvider),
       ),
       url: url,
       sourceId: _chapter.sourceId,
@@ -1780,7 +1801,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     );
   }
 
-  Widget _buildChrome(ReaderSettings settings) {
+  Widget _buildChrome() {
     final theme = Theme.of(context);
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 160),
@@ -1836,7 +1857,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                     ),
                     IconButton(
                       tooltip: '阅读设置',
-                      onPressed: () => _showSettings(settings),
+                      onPressed: _showSettings,
                       icon: const Icon(Icons.tune, color: Colors.white),
                     ),
                   ],
@@ -1907,13 +1928,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     );
   }
 
-  Future<void> _showSettings(ReaderSettings settings) =>
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (_) => const MangaReaderSettingsSheet(),
-      );
+  Future<void> _showSettings() => showDialog<void>(
+    context: context,
+    builder: (_) => const MangaReaderSettingsSheet(),
+  );
 
   Future<void> _showChapterList() async {
     await showModalBottomSheet<void>(

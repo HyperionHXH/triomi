@@ -13,6 +13,7 @@ import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_descriptor.dart';
 import 'package:triomi/core/models/source_exception.dart';
+import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_api.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
@@ -29,6 +30,7 @@ import 'package:triomi/features/reader/manga_reader_settings.dart';
 import 'package:triomi/features/reader/manga_zoom_view.dart';
 import 'package:triomi/features/reader/reader_settings.dart';
 
+import 'fixtures/fake_http_client.dart';
 import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
 
@@ -134,6 +136,7 @@ void main() {
     Future<void> Function(LibraryRepository repository)? seed,
     ReadingMode mode = ReadingMode.ltr,
     DownloadRepository Function(AppDatabase db)? downloads,
+    SourceHttpClient? http,
   }) async {
     final db = openTestDatabase();
     final repository = LibraryRepository(db);
@@ -151,6 +154,7 @@ void main() {
         secureStoreProvider.overrideWithValue(MemorySecureStore()),
         downloadRepositoryProvider.overrideWithValue(downloadRepository),
         sourcesProvider.overrideWith(() => _StubSources(source)),
+        if (http != null) sourceHttpClientProvider.overrideWithValue(http),
       ],
     );
     // Keep keyboard semantics explicit while exercising each supported mode.
@@ -223,6 +227,75 @@ void main() {
   ) async {
     await tester.runAsync(() => action().timeout(const Duration(seconds: 5)));
   }
+
+  testWidgets(
+    'opening a chapter prepares consecutive chapters, in order, without advancing reading history',
+    (tester) async {
+      final dir = Directory.systemTemp.createTempSync('triomi_warmup_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final first = fileImages(dir, 'current', 2);
+      final second = List.generate(
+        5,
+        (i) => 'https://example.test/next-$i.png',
+      );
+      final third = ['https://example.test/following.png'];
+      final bytes = base64Decode(_pngBase64);
+      final gate = Completer<SourceResponse>();
+      final http = FakeHttpClient((request) async {
+        if (request.url == second.first) return gate.future;
+        return SourceResponse(statusCode: 200, body: '', bodyBytes: bytes);
+      });
+      final source = _ScriptedSource()
+        ..behaviors['c1'] = [() => instant(first)]
+        ..behaviors['c2'] = [() => instant(second)]
+        ..behaviors['c3'] = [() => instant(third)];
+      final (_, library) = await pumpReader(
+        tester,
+        source: source,
+        chapters: [c1, c2, c3],
+        http: http,
+      );
+      await waitUntil(
+        tester,
+        () => http.requests.isNotEmpty,
+        'preload starts before any page turn',
+      );
+      expect(http.requests.map((request) => request.url), [second.first]);
+      expect(indicator(tester), '1/2');
+      gate.complete(
+        SourceResponse(statusCode: 200, body: '', bodyBytes: bytes),
+      );
+      await waitUntil(
+        tester,
+        () => http.requests.length == 6,
+        'second and third chapters are prepared sequentially',
+      );
+      expect(http.requests.map((request) => request.url), [
+        ...second,
+        ...third,
+      ]);
+      expect(
+        await tester.runAsync(
+          () => library.chapterPositionOf('stress-src', 'book', 'c2'),
+        ),
+        isNull,
+      );
+      await tester.tap(find.byTooltip('下一章'));
+      await tester.pump();
+      await tester.tap(find.text('继续阅读'));
+      await waitUntil(
+        tester,
+        () => find.text('1/5').evaluate().isNotEmpty,
+        'ready chapter opens',
+      );
+      await settle(tester);
+      expect(source.requests, ['c1', 'c2', 'c3']);
+      expect(http.requests.map((request) => request.url), [
+        ...second,
+        ...third,
+      ]);
+    },
+  );
 
   testWidgets('换章慢响应：加载期无滑杆无 0/0，完成后显示新章页码', (tester) async {
     final dir = Directory.systemTemp.createTempSync('triomi_d97_slow_');
@@ -758,8 +831,8 @@ void main() {
         expect(find.text('已读完：'), findsNothing);
         expect(
           source.requests,
-          isEmpty,
-          reason: 'Partial EOF must not open the next chapter',
+          ['c2'],
+          reason: 'Partial EOF keeps the reader in this chapter while speculative preparation runs',
         );
         await tester.tap(find.byTooltip('下一章'));
         await waitUntil(
@@ -834,8 +907,8 @@ void main() {
         );
         expect(
           source.requests,
-          isEmpty,
-          reason: 'offline prefix precedes provider lookup and prefetch',
+          ['c2'],
+          reason: 'the local prefix replaces the current chapter request, not the next chapter warmup',
         );
         expect(indicator(tester), '1/2');
         tester.widget<Slider>(find.byType(Slider)).onChanged!(2);
@@ -846,11 +919,9 @@ void main() {
         await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
         await tester.pump();
         expect(find.text('已到已下载页面，等待后续下载'), findsOneWidget);
-        expect(
-          source.requests,
-          isEmpty,
-          reason: 'a partial boundary is not chapter end',
-        );
+        expect(source.requests, [
+          'c2',
+        ], reason: 'a partial boundary cannot commit the following chapter');
         await realIo(
           tester,
           () => DownloadManifest.write(
@@ -881,7 +952,7 @@ void main() {
           () => repository.chapterPositionOf('stress-src', 'book', 'c1'),
         );
         expect(saved, 2);
-        expect(source.requests, isEmpty);
+        expect(source.requests, ['c2']);
         final manifestPath =
             '${dir.path}${Platform.pathSeparator}${DownloadManifest.fileName}';
         late final String oldSnapshot;
@@ -931,11 +1002,9 @@ void main() {
         await tester.pump();
         expect(find.text('已读完：'), findsOneWidget);
         expect(find.text('第二话'), findsOneWidget);
-        expect(
-          source.requests,
-          isEmpty,
-          reason: 'A complete EOF first presents the actual next chapter',
-        );
+        expect(source.requests, [
+          c2.remoteId,
+        ], reason: 'A complete EOF first presents the actual next chapter');
         await tester.tap(find.text('继续阅读'));
         await waitUntil(
           tester,
@@ -944,7 +1013,7 @@ void main() {
         );
         expect(find.text('第二话'), findsOneWidget);
         expect(indicator(tester), '1/1');
-        expect(source.requests, [c2.remoteId]);
+        expect(source.requests, [c2.remoteId, c2.remoteId]);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
         await settle(tester);

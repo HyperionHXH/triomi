@@ -54,6 +54,30 @@ class MediaItem {
   /// 连载中 / 已完结 / 未知（原样保留来源文案）。
   final String? status;
 
+  /// Keep the raw status for extension round trips; render publication labels.
+  String? get statusLabel {
+    final value = status?.trim();
+    if (value == null || value.isEmpty) return null;
+    if (type != MediaType.manga) return value;
+    if (!sourceId.startsWith('mihon:') && num.tryParse(value) != null) return null;
+    return switch (value.toLowerCase()) {
+      '0' || 'unknown' || '未知' => null,
+      '1' || 'ongoing' || '连载中' || '連載中' || '更新中' => '连载中',
+      '2' ||
+      'completed' ||
+      'complete' ||
+      '已完结' ||
+      '已完結' ||
+      '完结' ||
+      '完結' => '已完结',
+      '3' || 'licensed' => '已获授权',
+      '4' || 'publishing_finished' || 'publication_finished' => '已出版完毕',
+      '5' || 'cancelled' || 'canceled' => '已取消',
+      '6' || 'on_hiatus' || 'hiatus' => '暂停连载',
+      _ => num.tryParse(value) == null ? value : null,
+    };
+  }
+
   Map<String, Object?> toJson() => <String, Object?>{
     'sourceId': sourceId,
     'remoteId': remoteId,
