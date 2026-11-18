@@ -1,6 +1,6 @@
 {
   "iteration": "R196",
-  "status": "android-windows-actual-acceptance-passed-preparing-release",
+  "status": "published-public-bytes-signature-and-manifest-verified",
   "scope": [
     "global-manga-reader-settings-and-layout",
     "completion-routes",
@@ -161,16 +161,92 @@
   },
   "remaining": [
     "No claim of all hardware, every source, or exhaustive mode combination coverage",
-    "Production remote signing/build/publication and public artifact verification are next"
+    "MSI installation lifecycle and exhaustive hardware/source coverage are outside this observed verification"
   ],
   "publication": {
-    "committed": false,
-    "pushed": false,
-    "tagged": false,
-    "released": false,
+    "committed": true,
+    "pushed": true,
+    "tagged": true,
+    "released": true,
+    "sourceCommit": "534c11f43a2b520e112b1f07916604b15a100d71",
+    "tag": "v0.17.0",
+    "releaseRun": 44225846344,
+    "ciRun": 44225844010,
     "reason": "Requested Android and Windows actual feature journeys observed; proceeding under user's prior conditional publication authorization",
     "targetVersion": "0.17.0",
     "targetBuild": 204,
     "existingRelease": "v0.16.1 retained unchanged"
+    ,"publicVerification": {
+  "passed": true,
+  "version": "0.17.0",
+  "build": 204,
+  "sourceCommit": "534c11f43a2b520e112b1f07916604b15a100d71",
+  "releaseUrl": "https://github.com/HyperionHXH/triomi/releases/tag/v0.17.0",
+  "releaseRun": 44225846344,
+  "releaseConclusion": "success",
+  "ciRun": 44225844010,
+  "ciConclusion": "success",
+  "ciTestsPassed": 2045,
+  "ciTestsSkipped": 1,
+  "analyze": "No issues found",
+  "assets": [
+    {
+      "name": "SHA256SUMS.txt",
+      "bytes": 348,
+      "sha256": "03adf6747a2672a721abea88e49d4163b0441efb46f91364f648e6073b6f0219",
+      "id": 761633012
+    },
+    {
+      "name": "triomi-android.apk",
+      "bytes": 163836448,
+      "sha256": "05f6941b47672132902a1d8e763080962e8903420fa63bf3553f01418d954f81",
+      "id": 761633011
+    },
+    {
+      "name": "triomi-windows.msi",
+      "bytes": 272883736,
+      "sha256": "cd9e4aeda39c4b0996025cbca275281afd0dd47101d11e4fefe47e6f7bc60b48",
+      "id": 761633013
+    },
+    {
+      "name": "triomi-windows.update.json",
+      "bytes": 81260,
+      "sha256": "b3844e02272951a792f22b4dbc920f3ee0e8f7ddab5be81d8f9cd8e23140c602",
+      "id": 761633010
+    },
+    {
+      "name": "triomi-windows.zip",
+      "bytes": 290370856,
+      "sha256": "eee5957b7da04d36f2d604fe79be851cc06e09c72a2e571a9c0134293366f1d3",
+      "id": 761633009
+    }
+  ],
+  "publicDigestAndChecksumsMatch": true,
+  "windowsMembersVerified": 466,
+  "productionCertificateSha256": "731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309",
+  "androidIdentity": "io.github.hyperionhxh.triomi",
+  "androidLabel": "Triomi",
+  "mihonAbiDescriptorsPassed": 128,
+  "knownAccountPublicScan": [
+    {
+      "name": "triomi-android.apk",
+      "members": 626,
+      "credentialHits": 0,
+      "privateMaterialNames": 0,
+      "debugFiles": 0
+    },
+    {
+      "name": "triomi-windows.zip",
+      "members": 466,
+      "credentialHits": 0,
+      "privateMaterialNames": 0,
+      "debugFiles": 0
+    }
+  ],
+  "protectedIosAssetCountUnchanged": 38,
+  "downloadBoundary": "Initial gh release download timed out after 1800s; existing partial bytes retained, remaining official CDN ranges validated by Content-Range and final full hashes",
+  "msiBoundary": "Full public container bytes and SHA256 verified; installation lifecycle not executed",
+  "localAndroidCopy": "D:\\noval_and_manga\\Triomi-0.17.0-android.apk"
+}
   }
 }
