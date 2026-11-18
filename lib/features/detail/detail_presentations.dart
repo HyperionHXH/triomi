@@ -4,11 +4,9 @@ class _AnimeHero extends StatelessWidget {
   const _AnimeHero({
     required this.item,
     required this.onPlay,
-    required this.onComments,
   });
   final MediaItem item;
   final VoidCallback onPlay;
-  final VoidCallback? onComments;
 
   @override
   Widget build(BuildContext context) {
@@ -71,11 +69,6 @@ class _AnimeHero extends StatelessWidget {
                         label: const Text('开始 / 继续观看'),
                       ),
                       AnimeCollectionButton(item: item),
-                      OutlinedButton.icon(
-                        onPressed: onComments,
-                        icon: const Icon(Icons.chat_bubble_outline),
-                        label: const Text('评论 / 吐槽'),
-                      ),
                       _AddRouteButton(item: item),
                     ],
                   ),

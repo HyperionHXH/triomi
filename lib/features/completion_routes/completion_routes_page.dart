@@ -7,15 +7,18 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
+import '../../core/models/source_exception.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import '../library/data/library_providers.dart';
 import '../library/data/library_repository.dart';
+import '../profile/data/sync_providers.dart';
 import '../search/search_page.dart';
 import 'completion_routes_models.dart';
 import 'completion_routes_providers.dart';
+import 'completion_routes_webdav.dart';
 
 Future<void> showAddToCompletionRoute(
   BuildContext context,
@@ -84,6 +87,42 @@ class CompletionRoutesPage extends ConsumerStatefulWidget {
 }
 
 class _CompletionRoutesPageState extends ConsumerState<CompletionRoutesPage> {
+  bool _syncing = false;
+
+  Future<void> _syncRoutes() async {
+    if (_syncing) return;
+    if (!ref.read(webDavConfigProvider).isConfigured) {
+      await context.push(AppRoutes.webdav);
+      return;
+    }
+    setState(() => _syncing = true);
+    try {
+      final service = CompletionRoutesWebDav(
+        ref.read(completionRoutesRepositoryProvider),
+        ref.read(webDavClientProvider),
+        () => ref.read(webDavConfigProvider),
+      );
+      final count = await service.sync((preview) async {
+        if (!mounted) return false;
+        return await showDialog<bool>(
+          context: context,
+          builder: (_) => _ImportPreviewDialog(preview: preview, sync: true),
+        ) == true;
+      });
+      if (mounted && count != null) _message('已同步 $count 条路线');
+    } catch (error) {
+      final reason = switch (error) {
+        CompletionRoutesException(:final message) => message,
+        SourceException(:final userMessage) => userMessage,
+        FormatException() => '路线文件无效或设置不受支持',
+        _ => '请检查 WebDAV 设置后重试',
+      };
+      if (mounted) _message('同步失败：$reason');
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
+  }
+
   Future<void> _createRoute() async {
     final name = await showDialog<String>(
       context: context,
@@ -142,20 +181,9 @@ class _CompletionRoutesPageState extends ConsumerState<CompletionRoutesPage> {
         title: const Text('导出补完路线'),
         content: SizedBox(
           width: 560,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Text(
-                '仅导出作品身份、显示标题、备注与完成状态；不包含 URL、封面、简介或登录凭据。',
-                style: _mutedStyle(context),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 360),
-                child: SingleChildScrollView(child: SelectableText(text)),
-              ),
-            ],
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 360),
+            child: SingleChildScrollView(child: SelectableText(text)),
           ),
         ),
         actions: <Widget>[
@@ -220,6 +248,17 @@ class _CompletionRoutesPageState extends ConsumerState<CompletionRoutesPage> {
     return PageScaffold(
       title: '补完路线',
       actions: <Widget>[
+        if (_syncing)
+          const Padding(
+            padding: EdgeInsets.all(14),
+            child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2, semanticsLabel: '正在同步路线')),
+          )
+        else
+          IconButton(
+            tooltip: 'WebDAV 同步路线',
+            onPressed: _syncRoutes,
+            icon: const Icon(Icons.cloud_sync_outlined),
+          ),
         IconButton(
           tooltip: '导入路线',
           onPressed: () {
@@ -258,26 +297,11 @@ class _CompletionRoutesPageState extends ConsumerState<CompletionRoutesPage> {
           ),
           children: <Widget>[
             if (snapshot.routes.isEmpty)
-              SizedBox(
+              const SizedBox(
                 height: 340,
-                child: EmptyStateView(
-                  icon: Icons.route_outlined,
-                  title: '还没有补完路线',
-                  action: FilledButton.icon(
-                    onPressed: () {
-                      unawaited(_createRoute());
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text('新建路线'),
-                  ),
-                ),
+                child: EmptyStateView(icon: Icons.route_outlined, title: '还没有补完路线'),
               )
             else ...<Widget>[
-              Text(
-                '${snapshot.routes.length} 条路线 · ${snapshot.entryCount} 个作品',
-                style: _mutedStyle(context),
-              ),
-              const SizedBox(height: AppSpacing.sm),
               for (final route in snapshot.routes) ...<Widget>[
                 _RouteCard(
                   route: route,
@@ -292,15 +316,6 @@ class _CompletionRoutesPageState extends ConsumerState<CompletionRoutesPage> {
                 const SizedBox(height: AppSpacing.sm),
               ],
             ],
-            if (snapshot.tombstones.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.md),
-                child: Text(
-                  '已删除 ${snapshot.tombstones.length} 条路线。删除记录只用于阻止'
-                  '旧备份或旧导出复活路线，不包含作品内容。',
-                  style: _mutedStyle(context),
-                ),
-              ),
           ],
         ),
       ),
@@ -492,7 +507,6 @@ class _CompletionRouteDetailPageState
             child: EmptyStateView(
               icon: Icons.delete_outline,
               title: '路线已删除',
-              message: '返回补完路线列表继续管理其他路线。',
               action: FilledButton(
                 onPressed: () {
                   unawaited(Navigator.of(context).maybePop());
@@ -502,7 +516,6 @@ class _CompletionRouteDetailPageState
             ),
           );
         }
-        final libraryViews = _watchLibraryViews(ref);
         return PageScaffold(
           title: route.name,
           actions: <Widget>[
@@ -530,21 +543,16 @@ class _CompletionRouteDetailPageState
           ),
           child: Column(
             children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.md,
-                  AppSpacing.lg,
-                  AppSpacing.sm,
+              if (route.items.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+                  child: _NextIncompleteAction(route: route),
                 ),
-                child: _NextIncompleteAction(route: route),
-              ),
               Expanded(
                 child: route.items.isEmpty
                     ? const EmptyStateView(
                         icon: Icons.playlist_add,
                         title: '路线里还没有作品',
-                        message: '从书架或最近记录添加番剧、漫画或小说，再按顺序补完。',
                       )
                     : ReorderableListView.builder(
                         padding: const EdgeInsets.fromLTRB(
@@ -564,7 +572,6 @@ class _CompletionRouteDetailPageState
                             key: ValueKey(item.id),
                             item: item,
                             index: index,
-                            libraryView: libraryViews[item.key],
                             onCompletedChanged: (completed) {
                               unawaited(_setCompleted(route, item, completed));
                             },
@@ -620,7 +627,7 @@ class _RouteCard extends ConsumerWidget {
         ? 0.0
         : route.completedCount / route.items.length;
     final nextText = next == null
-        ? '全部完成'
+        ? (route.items.isEmpty ? '暂无作品' : '全部完成')
         : nextAsync!.isLoading
         ? '正在解析下一项…'
         : nextMedia == null
@@ -691,22 +698,7 @@ class _NextIncompleteAction extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final next = route.nextIncomplete;
-    if (route.items.isEmpty) {
-      return AppCard(
-        child: Row(
-          children: <Widget>[
-            const Icon(Icons.playlist_add),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(
-                '添加作品后，这里会显示路线中的第一个未完成项。',
-                style: _mutedStyle(context),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    if (route.items.isEmpty) return const SizedBox.shrink();
     if (next == null) {
       return AppCard(
         child: Row(
@@ -721,13 +713,14 @@ class _NextIncompleteAction extends ConsumerWidget {
     final mediaAsync = ref.watch(completionRouteMediaProvider(next.key));
     final media = mediaAsync.asData?.value;
     final loading = mediaAsync.isLoading;
-    final libraryView = _watchLibraryViews(ref)[next.key];
     VoidCallback? openAction;
     if (media != null) {
       final resolved = media;
       openAction = () {
         unawaited(context.push(AppRoutes.detailFor(resolved), extra: resolved));
       };
+    } else if (!loading) {
+      openAction = () => unawaited(SearchPage.open(context, type: next.type, sourceId: next.sourceId, query: next.title));
     }
     return AppCard(
       child: Column(
@@ -749,22 +742,6 @@ class _NextIncompleteAction extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
-                    if (next.hasNote)
-                      Text(
-                        '备注：${next.note}',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: _mutedStyle(context),
-                      ),
-                    Text(
-                      _libraryStatusText(
-                        libraryView,
-                        next.type,
-                        hasCache: media != null,
-                        resolving: loading,
-                      ),
-                      style: _mutedStyle(context),
-                    ),
                   ],
                 ),
               ),
@@ -773,26 +750,17 @@ class _NextIncompleteAction extends ConsumerWidget {
           const SizedBox(height: AppSpacing.sm),
           FilledButton.icon(
             onPressed: openAction,
-            icon: Icon(media == null ? Icons.link_off : Icons.play_arrow),
+            icon: Icon(media == null ? Icons.search : Icons.play_arrow),
             label: Text(
               loading
                   ? '正在解析本地缓存…'
                   : media == null
-                  ? '本地缓存缺失，无法打开'
-                  : '继续补完 · ${media.title}',
+                  ? '搜索作品'
+                  : '继续补完',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (!loading && media == null)
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.xs),
-              child: Text(
-                '这个作品不在本地缓存中。可标记完成或从路线移除；'
-                '不会伪造详情页，也不会修改任何进度。',
-                style: _mutedStyle(context),
-              ),
-            ),
         ],
       ),
     );
@@ -804,7 +772,6 @@ class _RouteItemTile extends ConsumerWidget {
     super.key,
     required this.item,
     required this.index,
-    required this.libraryView,
     required this.onCompletedChanged,
     required this.onMoveUp,
     required this.onMoveDown,
@@ -814,7 +781,6 @@ class _RouteItemTile extends ConsumerWidget {
 
   final CompletionRouteItem item;
   final int index;
-  final LibraryItemView? libraryView;
   final ValueChanged<bool> onCompletedChanged;
   final VoidCallback? onMoveUp;
   final VoidCallback? onMoveDown;
@@ -825,7 +791,6 @@ class _RouteItemTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final mediaAsync = ref.watch(completionRouteMediaProvider(item.key));
     final media = mediaAsync.asData?.value;
-    final resolving = mediaAsync.isLoading;
     final title = media?.title ?? item.title;
     final colorScheme = Theme.of(context).colorScheme;
     return Card(
@@ -874,21 +839,6 @@ class _RouteItemTile extends ConsumerWidget {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: _mutedStyle(context),
-                        ),
-                      Text(
-                        _libraryStatusText(
-                          libraryView,
-                          item.type,
-                          hasCache: media != null,
-                          resolving: resolving,
-                        ),
-                        style: _mutedStyle(context),
-                      ),
-                      if (!resolving && media == null)
-                        Text(
-                          '本地缓存缺失：保留作品身份与显示标题，无法打开详情。'
-                          '可手动移除此项，不影响其他数据。',
-                          style: TextStyle(color: colorScheme.error),
                         ),
                     ],
                   ),
@@ -1196,14 +1146,12 @@ class _ImportRoutesDialogState extends ConsumerState<_ImportRoutesDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Text('粘贴导出的 JSON。预览会列出本地冲突，确认后才写入。', style: _mutedStyle(context)),
-            const SizedBox(height: AppSpacing.sm),
             TextField(
               controller: _controller,
               minLines: 6,
               maxLines: 12,
               decoration: InputDecoration(
-                hintText: '{"version": 1, "routes": [...]}',
+                hintText: '粘贴路线 JSON',
                 errorText: _error,
               ),
             ),
@@ -1232,15 +1180,15 @@ class _ImportRoutesDialogState extends ConsumerState<_ImportRoutesDialog> {
 }
 
 class _ImportPreviewDialog extends StatelessWidget {
-  const _ImportPreviewDialog({required this.preview});
+  const _ImportPreviewDialog({required this.preview, this.sync = false});
 
   final CompletionRoutesImportPreview preview;
+  final bool sync;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return AlertDialog(
-      title: const Text('导入预览'),
+      title: Text(sync ? '云端同步路线' : '导入预览'),
       content: SizedBox(
         width: 560,
         child: SingleChildScrollView(
@@ -1248,40 +1196,13 @@ class _ImportPreviewDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Text(
-                '导入 ${preview.imported.routes.length} 条路线 · '
-                '${preview.imported.entryCount} 个作品',
-              ),
-              Text(
-                '本地 ${preview.local.routes.length} 条路线 · '
-                '${preview.local.entryCount} 个作品',
-                style: _mutedStyle(context),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(preview.summary, style: _mutedStyle(context)),
-              if (preview.snapshotOlder)
-                Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.xs),
-                  child: Text(
-                    '导入快照早于本地快照；本地较新的路线会保留。',
-                    style: TextStyle(color: colorScheme.error),
-                  ),
-                ),
-              const Divider(height: AppSpacing.lg),
-              if (preview.conflicts.isEmpty)
-                const Text('没有冲突，将直接合并。')
-              else ...<Widget>[
-                Text(
-                  '冲突与处理（${preview.conflicts.length}）',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                for (final conflict in preview.conflicts)
+              Text(sync ? '同步至 WebDAV · ${preview.merged.routes.length} 条路线' : preview.summary),
+              for (final conflict in preview.conflicts)
+                if (conflict.kind != CompletionRoutesConflictKind.snapshotOlder)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.xxs),
-                    child: Text('• ${conflict.message}'),
+                    padding: const EdgeInsets.only(top: AppSpacing.xs),
+                    child: Text(conflict.message, style: _mutedStyle(context)),
                   ),
-              ],
             ],
           ),
         ),
@@ -1293,7 +1214,7 @@ class _ImportPreviewDialog extends StatelessWidget {
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('确认导入'),
+          child: Text(sync ? '同步' : '确认导入'),
         ),
       ],
     );
@@ -1310,57 +1231,6 @@ class _RouteSelection {
   final String? note;
 }
 
-Map<CompletionRouteKey, LibraryItemView> _watchLibraryViews(WidgetRef ref) {
-  final result = <CompletionRouteKey, LibraryItemView>{};
-  for (final type in MediaType.values) {
-    final views = ref.watch(libraryByTypeProvider(type)).asData?.value;
-    if (views == null) continue;
-    for (final view in views) {
-      result[(
-            sourceId: view.item.sourceId,
-            remoteId: view.item.remoteId,
-            type: type,
-          )] =
-          view;
-    }
-  }
-  return result;
-}
-
-String _libraryStatusText(
-  LibraryItemView? view,
-  MediaType type, {
-  required bool hasCache,
-  required bool resolving,
-}) {
-  if (view == null) {
-    if (resolving) return '正在解析本地缓存…';
-    return hasCache ? '已缓存 · 未加入书架' : '本地缓存缺失';
-  }
-  final entry = view.entry;
-  final status = switch (entry.status) {
-    'doing' => type == MediaType.anime ? '在看' : '在读',
-    'want' => '想看',
-    'done' => '已完成',
-    'paused' => '搁置',
-    'dropped' => '抛弃',
-    _ => entry.status,
-  };
-  final unit = switch (type) {
-    MediaType.anime => '集',
-    MediaType.manga => '话',
-    MediaType.novel => '章',
-  };
-  final progress = entry.progress > 0
-      ? ' · 第 ${_formatProgress(entry.progress)} $unit'
-      : '';
-  final unread = entry.unreadCount > 0 ? ' · ${entry.unreadCount} 未读' : '';
-  return '书架：$status$progress$unread';
-}
-
-String _formatProgress(double value) => value == value.roundToDouble()
-    ? value.round().toString()
-    : value.toStringAsFixed(1);
 
 IconData _typeIcon(MediaType type) => switch (type) {
   MediaType.anime => Icons.live_tv_outlined,
@@ -1380,7 +1250,7 @@ Future<bool> _confirmDeleteRoute(
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: Text('删除路线「${route.name}」？'),
-      content: const Text('只删除补完路线、排序与完成标记。书架、媒体缓存、阅读进度、历史与下载全部保留。'),
+      content: const Text('路线内的排序、备注与完成标记将删除。'),
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.pop(dialogContext, false),
@@ -1404,7 +1274,6 @@ Future<bool> _confirmRemoveItem(
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: Text('从路线移除「${item.title}」？'),
-      content: const Text('只从补完路线移除这一项。书架、媒体缓存、阅读进度、历史与下载全部保留。'),
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.pop(dialogContext, false),

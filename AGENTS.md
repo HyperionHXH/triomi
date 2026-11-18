@@ -1,4 +1,8 @@
 # Triomi repository instructions
+Keep UI copy short. New features should not add explanatory filler or repeat
+labels and actions already present. Keep actionable errors and confirmation
+text when deletion, overwrite, permissions, costs, or privacy are at stake.
+
 
 Preserve existing uncommitted work. Do not reset, clean, switch branches, or
 commit automatically. Keep reference repositories read-only. Specify the ADB
