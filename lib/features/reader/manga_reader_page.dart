@@ -16,7 +16,6 @@ import '../../core/platform/platform_channel.dart';
 import '../../core/source/mihon_source.dart';
 import '../../core/source/source_api.dart';
 import '../../core/source/source_providers.dart';
-import '../../core/storage/preferences.dart';
 import '../../core/storage/storage_paths.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/source_network_image.dart';
@@ -27,7 +26,9 @@ import '../library/data/library_repository.dart';
 import '../library/data/merged_manga_repository.dart';
 import '../novel/reader/novel_reader_settings.dart';
 import '../tracking/data/tracking_providers.dart';
+import 'manga_layout.dart';
 import 'manga_page_image.dart';
+import 'manga_reader_options.dart';
 import 'manga_reader_settings.dart';
 import 'manga_reader_settings_sheet.dart';
 import 'manga_reading_order.dart';
@@ -81,17 +82,54 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   bool _foreground = true;
   late final int _previousCacheBytes;
   MangaViewSettings get _viewSettings => ref.read(mangaViewSettingsProvider);
+  MangaReaderOptions get _options => _viewSettings.options;
   bool get _doublePage =>
       _viewSettings.doublePage &&
       MediaQuery.sizeOf(context).width >= 600 &&
-      _mode != ReadingMode.webtoon;
-  int get _spreadSize => _doublePage ? 2 : 1;
-  // Last rendered spread also remains safe to use while persisting in dispose.
-  int _layoutSpreadSize = 1;
-  ReadingMode? _layoutMode;
+      _isPaged &&
+      (_options.choice('pageLayout', ['width', 'landscape']) != 'landscape' ||
+          MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height);
+  MangaLayout? _cachedLayout;
+  Object? _cachedLayoutKey, _renderedLayoutKey;
+  final Map<int, Size> _geometry = {};
+  int _geometryRevision = 0;
+  bool _geometryPending = false;
+  bool _geometryDeferred = false;
+  int _part = 0;
+  MangaLayout get _layout {
+    final key = (
+      _requestSeq,
+      _images.length,
+      _geometryRevision,
+      _doublePage,
+      _mode,
+      _viewSettings.soloCover,
+      _options.flag(_isPaged ? 'splitWide' : 'splitWebtoon'),
+      _options.flag('reverseSplit'),
+      _options.flag(_isPaged ? 'rotateWide' : 'rotateWebtoon'),
+      _options.flag('rotateCounterclockwise'),
+    );
+    if (_cachedLayoutKey != key) {
+      _cachedLayoutKey = key;
+      _cachedLayout = MangaLayout(
+        _images.length,
+        doublePage: _doublePage,
+        soloCover: _viewSettings.soloCover,
+        splitWide: _options.flag(_isPaged ? 'splitWide' : 'splitWebtoon'),
+        reverseSplit: _options.flag('reverseSplit'),
+        rtl: _mode == ReadingMode.rtl,
+        rotateWide: _options.flag(_isPaged ? 'rotateWide' : 'rotateWebtoon'),
+        rotateCounterclockwise: _options.flag('rotateCounterclockwise'),
+        geometry: _geometry,
+      );
+    }
+    return _cachedLayout!;
+  }
+
+  int get _screen => _layout.screenOf(_page, _part);
   int _layoutRevision = 0;
   Future<void> _saveQueue = Future<void>.value();
-  ({String chapter, double page})? _lastQueuedProgress;
+  ({String chapter, double page, int part})? _lastQueuedProgress;
   bool _restoring = true;
   final FocusNode _focusNode = FocusNode();
 
@@ -111,6 +149,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   bool _openingNextChapter = false;
   final Set<String> _knownPageCounts = {};
   final Set<String> _completedChapters = {};
+  final Set<String> _alreadyRead = {};
 
   /// 放大状态由当前页自己维护；翻页/换章后复位，避免把放大带到下一页。
   bool _zoomed = false;
@@ -143,7 +182,20 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   ProgressReporter? _trackingReporter;
   bool _keepScreenOn = false;
   final _screenOwner = 'manga-${UniqueKey()}';
+  bool get _verticalSeek =>
+      _options.flag('verticalSeekbar') &&
+      MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height;
   bool _volumeKeyTurn = false;
+  MangaReaderOptions _lastOptions = const MangaReaderOptions();
+  Timer? _menuTimer, _introTimer, _flashTimer;
+  bool _showIntro = false, _flash = false;
+  int _turns = 0;
+  String get _pageLabel =>
+      '${_page + 1}/${_images.length}${_part == 0
+          ? ''
+          : _part == 1
+          ? ' · 左半'
+          : ' · 右半'}';
 
   @override
   void initState() {
@@ -154,11 +206,16 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       _trackingReporter = ref.read(progressReporterProvider);
     }
     _positions.itemPositions.addListener(_onScroll);
-    unawaited(_setImmersive(immersive: true));
-    // 屏幕常亮与屏幕方向（B4），退出时恢复。
-    final readerPrefs = NovelReaderSettings.load(ref.read(preferencesProvider));
-    _keepScreenOn = readerPrefs.keepScreenOn;
     final view = _viewSettings;
+    _lastOptions = view.options;
+    _keepScreenOn = view.options.flag('keepScreenOn');
+    unawaited(_setImmersive(immersive: view.options.flag('fullscreen')));
+    _showIntro =
+        view.options.flag('showReadingMode') ||
+        view.options.flag('showTapZones');
+    _introTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _showIntro = false);
+    });
     _volumeKeyTurn = view.volumeKeys;
     _previousCacheBytes = PaintingBinding.instance.imageCache.maximumSizeBytes;
     PaintingBinding.instance.imageCache.maximumSizeBytes =
@@ -174,14 +231,22 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
         return;
       }
       final settings = _viewSettings;
-      if (settings.base.mode == ReadingMode.webtoon &&
-          settings.autoScroll > 0) {
-        unawaited(
-          _scrollOffset.animateScroll(
-            offset: settings.autoScroll * .3,
-            duration: const Duration(milliseconds: 300),
-          ),
-        );
+      if (_mode == ReadingMode.webtoon && settings.autoScroll > 0 && !_zoomed) {
+        if (_options.flag('smoothAutoScroll')) {
+          unawaited(
+            _scrollOffset.animateScroll(
+              offset: settings.autoScroll * .3,
+              duration: const Duration(milliseconds: 300),
+            ),
+          );
+        } else {
+          _webtoonScroll?.jumpTo(
+            (_webtoonScroll!.pixels + settings.autoScroll * .3).clamp(
+              _webtoonScroll!.minScrollExtent,
+              _webtoonScroll!.maxScrollExtent,
+            ),
+          );
+        }
       }
     });
     if (_keepScreenOn) {
@@ -209,6 +274,9 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   @override
   void dispose() {
     _autoScrollTimer?.cancel();
+    _menuTimer?.cancel();
+    _introTimer?.cancel();
+    _flashTimer?.cancel();
     unawaited(_localImagesSubscription?.cancel());
     PaintingBinding.instance.imageCache.maximumSizeBytes = _previousCacheBytes;
     WidgetsBinding.instance.removeObserver(this);
@@ -240,6 +308,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
   Future<void> _load() async {
     final seq = ++_requestSeq;
+    _geometry.clear();
+    _geometryRevision++;
+    _geometryPending = false;
+    _part = 0;
     unawaited(_localImagesSubscription?.cancel());
     _localImagesSubscription = null;
     _localComplete = true;
@@ -262,6 +334,17 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       }
       await _saveQueue;
       await _cacheChapters();
+      _alreadyRead.clear();
+      for (final owner in {_item, ...widget.args.chapterOwners.values}) {
+        final states = await _libraryRepository
+            .watchMangaChapterStates(owner.sourceId, owner.remoteId)
+            .first;
+        for (final state in states.where((s) => s.isRead)) {
+          _alreadyRead.add(
+            '${state.chapterSourceId}\u0000${state.chapterRemoteId}',
+          );
+        }
+      }
       if (!mounted || seq != _requestSeq) return;
       final saved = await _libraryRepository.chapterPositionOf(
         _owner(chapter).sourceId,
@@ -269,6 +352,13 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
         chapter.remoteId,
       );
       if (!mounted || seq != _requestSeq) return;
+      final savedPart = await _libraryRepository.chapterMangaPartOf(
+        _owner(chapter).sourceId,
+        _owner(chapter).remoteId,
+        chapter.remoteId,
+      );
+      if (!mounted || seq != _requestSeq) return;
+      _part = savedPart;
       // 离线优先：下载过的章节直接读本地图片目录。
       final local = await _localImagesOf(chapter);
       if (!mounted || seq != _requestSeq) return;
@@ -383,7 +473,14 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   void _restorePage(int seq) {
     final revision = ++_layoutRevision;
     _restoring = true;
-    if (_isPaged) _page = _page ~/ _spreadSize * _spreadSize;
+    // Keep the original image and half anchor while geometry is still loading.
+    if (_layout.count > 0 &&
+        (_geometry.containsKey(_page) ||
+            !_options.flag(_isPaged ? 'splitWide' : 'splitWebtoon'))) {
+      final leaf = _layout.firstAt(_screen);
+      _page = leaf.source;
+      _part = leaf.part;
+    }
     _resetPageController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || seq != _requestSeq || revision != _layoutRevision) return;
@@ -505,7 +602,12 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     final chapter = _chapter;
     _queueChapterState(chapter);
     final page = _page.toDouble();
-    final progress = (chapter: mangaChapterKey(chapter), page: page);
+    final part = _part;
+    final progress = (
+      chapter: mangaChapterKey(chapter),
+      page: page,
+      part: part,
+    );
     if (_lastQueuedProgress == progress) return _saveQueue;
     _lastQueuedProgress = progress;
     final chapterNumber =
@@ -527,6 +629,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           remoteId: _owner(chapter).remoteId,
           chapter: chapter,
           position: page,
+          mangaPart: part,
         );
         // 进度上报（追踪服务）：尽力而为，失败不影响阅读。
         unawaited(
@@ -557,9 +660,16 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     final key = mangaChapterKey(chapter);
     final count = _images.length;
     final countKey = '$key:$count';
+    final layout = _cachedLayout;
+    if ((_lastOptions.flag('splitWide') || _lastOptions.flag('splitWebtoon')) &&
+        !_geometry.containsKey(_page)) {
+      return;
+    }
     final recordCount = _knownPageCounts.add(countKey);
     final markRead =
-        _page + _layoutSpreadSize >= count && _completedChapters.add(key);
+        layout != null &&
+        layout.finishesChapter(layout.screenOf(_page, _part)) &&
+        _completedChapters.add(key);
     if (!recordCount && !markRead) return;
     _saveQueue = _saveQueue.then((_) async {
       try {
@@ -674,59 +784,90 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           ..sort((a, b) => a.index.compareTo(b.index));
     if (visible.isEmpty) return;
     final index = visible.first.index;
-    if (index == _images.length && _localComplete) {
-      _page = (_images.length - 1) ~/ _spreadSize * _spreadSize;
+    if (index == _layout.count && _localComplete) {
       _showChapterTransition();
       return;
     }
-    if (index < 0 || index >= _images.length) return;
-    if (index != _page) {
-      setState(() => _page = index);
+    if (index < 0 || index >= _layout.count) return;
+    final leaf = _layout.firstAt(index);
+    if (leaf.source != _page || leaf.part != _part) {
+      setState(() {
+        _page = leaf.source;
+        _part = leaf.part;
+      });
+      _pageTurnFeedback();
       unawaited(_persistProgress());
     }
   }
 
   void _onPageChanged(int index) {
     if (!mounted || _restoring || _loading || _images.isEmpty) return;
-    if (index * _spreadSize >= _images.length && _localComplete) {
-      _page = (_images.length - 1) ~/ _spreadSize * _spreadSize;
+    if (index >= _layout.count && _localComplete) {
       _showChapterTransition();
       return;
     }
-    final page = (index * _spreadSize).clamp(0, _images.length - 1);
-    if (_page == page) return;
+    if (index >= _layout.count) return;
+    final leaf = _layout.firstAt(index);
+    if (_page == leaf.source && _part == leaf.part) return;
     _pendingLocalPage = null;
-    if (_zoomed) {
-      setState(() {
-        _page = page;
-        _resetZoom();
-      });
-    } else {
-      setState(() => _page = page);
-    }
+    setState(() {
+      _page = leaf.source;
+      _part = leaf.part;
+      _resetZoom();
+    });
+    _pageTurnFeedback();
     unawaited(_persistProgress());
+  }
+
+  void _pageTurnFeedback() {
+    _turns++;
+    if (!_options.flag('flashPage') ||
+        _turns % _options.number('flashInterval', 1, 1, 10).round() != 0) {
+      return;
+    }
+    _flashTimer?.cancel();
+    setState(() => _flash = true);
+    _flashTimer = Timer(
+      Duration(
+        milliseconds: _options.number('flashDuration', 100, 100, 1000).round(),
+      ),
+      () {
+        if (mounted) setState(() => _flash = false);
+      },
+    );
   }
 
   void _goToPage(int index) {
     if (!_canTurnPage) return;
     if (index < 0 || index >= _images.length) return;
-    if (_isPaged) index = index ~/ _spreadSize * _spreadSize;
-    if (_page == index) return;
+    _goToScreen(_layout.screenOf(index));
+  }
+
+  void _goToScreen(int screen) {
+    if (!_canTurnPage || screen < 0 || screen >= _layout.count) return;
+    final leaf = _layout.firstAt(screen);
     if (_isPaged) {
       if (!_pageController.hasClients) return;
-      _pageController.animateToPage(
-        index ~/ _spreadSize,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-      );
+      if (_options.flag('pageAnimation')) {
+        _pageController.animateToPage(
+          screen,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+        );
+      } else {
+        _pageController.jumpToPage(screen);
+      }
     } else if (_itemScroll.isAttached) {
-      _itemScroll.jumpTo(index: index);
+      _itemScroll.jumpTo(index: screen);
     } else {
       return;
     }
     _pendingLocalPage = null;
     _resetZoom();
-    setState(() => _page = index);
+    setState(() {
+      _page = leaf.source;
+      _part = leaf.part;
+    });
     unawaited(_persistProgress());
   }
 
@@ -739,8 +880,8 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       return;
     }
     if (!_canTurnPage) return;
-    if (_page + _spreadSize < _images.length) {
-      _goToPage(_page + _spreadSize);
+    if (_screen + 1 < _layout.count) {
+      _goToScreen(_screen + 1);
     } else if (!_localComplete) {
       _toast('已到已下载页面，等待后续下载');
     } else {
@@ -754,8 +895,8 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       return;
     }
     if (!_canTurnPage) return;
-    if (_page > 0) {
-      _goToPage((_page - _spreadSize).clamp(0, _images.length - 1));
+    if (_screen > 0) {
+      _goToScreen(_screen - 1);
     } else {
       _switchChapter(-1);
     }
@@ -785,6 +926,36 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     unawaited(_load());
   }
 
+  bool _chapterRead(Chapter chapter) =>
+      _alreadyRead.contains('${chapter.sourceId}\u0000${chapter.remoteId}') ||
+      _completedChapters.contains(mangaChapterKey(chapter));
+
+  bool _chapterFiltered(Chapter chapter, MangaReaderOptions options) =>
+      switch (options.choice('chapterFilter', ['all', 'unread', 'read'])) {
+        'unread' => _chapterRead(chapter),
+        'read' => !_chapterRead(chapter),
+        _ => false,
+      };
+
+  int _nextChapter(int origin, int delta) {
+    final previousNumber = _chapters[origin].number;
+    var target = origin + delta;
+    while (target >= 0 && target < _chapters.length) {
+      final candidate = _chapters[target];
+      final read = _chapterRead(candidate);
+      final filtered = _chapterFiltered(candidate, _options);
+      final duplicate =
+          previousNumber != null && candidate.number == previousNumber;
+      if (!(_options.flag('skipRead') && read) &&
+          !(_options.flag('skipDuplicates') && duplicate) &&
+          !(_options.flag('skipFiltered') && filtered)) {
+        break;
+      }
+      target += delta;
+    }
+    return target;
+  }
+
   void _showChapterTransition() {
     if (!_canTurnPage || !_localComplete || _transitionOrigin != null) return;
     unawaited(_persistProgress());
@@ -792,12 +963,16 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       _transitionOrigin = _chapterIndex;
       _chromeVisible = false;
     });
+    if (!_options.flag('chapterTransition') &&
+        _nextChapter(_chapterIndex, 1) < _chapters.length) {
+      _continueChapter();
+    }
   }
 
   void _continueChapter() {
     final origin = _transitionOrigin;
     if (origin == null || _loading && _openingNextChapter) return;
-    final target = origin + 1;
+    final target = _nextChapter(origin, 1);
     if (target >= _chapters.length || _chapters[target].locked) return;
     setState(() {
       _chapterIndex = target;
@@ -830,10 +1005,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   /// 旧的控制器要等本帧渲染完再释放：立即 dispose 会被仍在树上的 PageView 引用。
   void _resetPageController() {
     final old = _pageController;
-    _pageController = PageController(
-      initialPage: _page ~/ _spreadSize,
-      keepPage: false,
-    );
+    _pageController = PageController(initialPage: _screen, keepPage: false);
     _zoomKeys.clear();
     _resetZoom();
     WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
@@ -841,7 +1013,19 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
   bool get _isPaged => _mode != ReadingMode.webtoon;
 
-  ReadingMode get _mode => _viewSettings.base.mode;
+  ReadingMode get _mode {
+    if (_options.flag('autoWebtoon') &&
+        _item.tags.any(
+          (tag) => const {
+            'webtoon',
+            'long strip',
+            '条漫',
+          }.contains(tag.toLowerCase().trim()),
+        )) {
+      return ReadingMode.webtoon;
+    }
+    return _viewSettings.base.mode;
+  }
 
   void _toast(String message) {
     if (!mounted) return;
@@ -850,40 +1034,81 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     );
   }
 
+  void _toggleChrome() {
+    setState(() => _chromeVisible = !_chromeVisible);
+    _menuTimer?.cancel();
+    final seconds = _options.number('menuHideSeconds', 0, 0, 15).round();
+    if (_chromeVisible && seconds > 0) {
+      _menuTimer = Timer(Duration(seconds: seconds), () {
+        if (mounted) setState(() => _chromeVisible = false);
+      });
+    }
+  }
+
   void _handleTap(TapUpDetails details) {
-    final width = MediaQuery.sizeOf(context).width;
-    // 全局坐标：缩放层在页内，局部坐标不能代表整屏分区。
-    final x = details.globalPosition.dx;
+    final size = MediaQuery.sizeOf(context);
+    var x = details.globalPosition.dx / size.width;
+    var y = details.globalPosition.dy / size.height;
+    final invert = _options.choice('tapInvert', [
+      'none',
+      'horizontal',
+      'vertical',
+      'both',
+    ]);
+    if (invert == 'horizontal' || invert == 'both') x = 1 - x;
+    if (invert == 'vertical' || invert == 'both') y = 1 - y;
+    final edge = _options.flag('smallerTapZones') ? .25 : .3;
+    final layout = _options.choice('tapLayout', [
+      'existing',
+      'l',
+      'kindle',
+      'edge',
+      'disabled',
+    ]);
     final zones = _viewSettings.tapZones;
-    if (zones == ReaderTapZones.centerOnly) {
-      setState(() => _chromeVisible = !_chromeVisible);
+    if (zones == ReaderTapZones.centerOnly || layout == 'disabled') {
+      _toggleChrome();
       return;
     }
-    // 放大后先平移看画面，只有到边界才继续翻页。
-    if (_zoomed && (x < width * .3 || x > width * .7)) {
-      if (_panCurrentPage(x > width * .7)) return;
-    }
-    if (zones == ReaderTapZones.nextBoth &&
-        (x < width * .3 || x > width * .7)) {
-      _nextPage();
-      return;
-    }
-    if (x < width * 0.3) {
-      // 左三分之一：RTL 下是「上一页」的反面
-      if (_mode == ReadingMode.rtl) {
-        _nextPage();
-      } else {
-        _previousPage();
-      }
-    } else if (x > width * 0.7) {
-      if (_mode == ReadingMode.rtl) {
-        _previousPage();
-      } else {
-        _nextPage();
-      }
+    int action = 0;
+    if (layout == 'l') {
+      action = x < edge
+          ? -1
+          : y > 1 - edge
+          ? 1
+          : 0;
+    } else if (layout == 'kindle') {
+      action = y < edge
+          ? 0
+          : x < edge
+          ? -1
+          : 1;
+    } else if (layout == 'edge') {
+      action = x < edge || x > 1 - edge
+          ? 1
+          : y > 1 - edge
+          ? -1
+          : 0;
     } else {
-      setState(() => _chromeVisible = !_chromeVisible);
+      action = x < edge
+          ? -1
+          : x > 1 - edge
+          ? 1
+          : 0;
+      if (zones == ReaderTapZones.nextBoth && action != 0) {
+        action = 1;
+      } else if (_mode == ReadingMode.rtl) {
+        action = -action;
+      }
     }
+    if (action == 0) {
+      _toggleChrome();
+      return;
+    }
+    if (_zoomed && _options.flag('navigatePan') && _panCurrentPage(x > .5)) {
+      return;
+    }
+    action > 0 ? _nextPage() : _previousPage();
   }
 
   KeyEventResult _handleKey(KeyEvent event) {
@@ -900,11 +1125,11 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     // 音量键翻页（默认关，防误触；设置与小说阅读器共用）。
     if (_volumeKeyTurn) {
       if (key == LogicalKeyboardKey.audioVolumeDown) {
-        _nextPage();
+        _options.flag('invertVolume') ? _previousPage() : _nextPage();
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.audioVolumeUp) {
-        _previousPage();
+        _options.flag('invertVolume') ? _nextPage() : _previousPage();
         return KeyEventResult.handled;
       }
     }
@@ -951,19 +1176,31 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   @override
   Widget build(BuildContext context) {
     final view = ref.watch(mangaViewSettingsProvider);
+    _lastOptions = view.options;
     final settings = view.base;
     ref.listen(mangaViewSettingsProvider, (previous, next) {
       PaintingBinding.instance.imageCache.maximumSizeBytes =
           next.cacheMiB * 1024 * 1024;
       _volumeKeyTurn = next.volumeKeys;
+      if (previous?.options.flag('keepScreenOn') !=
+          next.options.flag('keepScreenOn')) {
+        _keepScreenOn = next.options.flag('keepScreenOn');
+        unawaited(
+          platformChannel.setKeepScreenOn(_keepScreenOn, owner: _screenOwner),
+        );
+      }
+      if (previous?.options.flag('fullscreen') !=
+          next.options.flag('fullscreen')) {
+        unawaited(_setImmersive(immersive: next.options.flag('fullscreen')));
+      }
       if (previous?.orientation != next.orientation) {
         unawaited(_applyOrientation(next.orientation));
       }
     });
-    if (_layoutMode != settings.mode || _layoutSpreadSize != _spreadSize) {
-      final initialized = _layoutMode != null;
-      _layoutMode = settings.mode;
-      _layoutSpreadSize = _spreadSize;
+    _layout;
+    if (_renderedLayoutKey != _cachedLayoutKey) {
+      final initialized = _renderedLayoutKey != null;
+      _renderedLayoutKey = _cachedLayoutKey;
       if (initialized && !_loading && _images.isNotEmpty) {
         _restorePage(_requestSeq);
       }
@@ -1001,7 +1238,9 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                     }
                     event.scrollDelta.dy > 0 ? _nextPage() : _previousPage();
                   },
-                  child: _buildBody(settings),
+                  child: _options.flag('cutout')
+                      ? _buildBody(settings)
+                      : SafeArea(child: _buildBody(settings)),
                 ),
               ),
               if (view.night.scrimAlpha > 0)
@@ -1016,6 +1255,83 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                   ),
                 ),
               if (_transitionOrigin == null) _buildChrome(settings),
+              if (_verticalSeek && _chromeVisible && _images.isNotEmpty)
+                Positioned(
+                  left: _options.flag('leftSeekbar') ? 0 : null,
+                  right: _options.flag('leftSeekbar') ? null : 0,
+                  top: 100,
+                  bottom: 90,
+                  child: RotatedBox(
+                    quarterTurns: 3,
+                    child: SizedBox(
+                      height: 48,
+                      child: Slider(
+                        value: (_page + 1).clamp(1, _images.length).toDouble(),
+                        min: 1,
+                        max: _images.length.toDouble(),
+                        divisions: _images.length > 1
+                            ? _images.length - 1
+                            : null,
+                        label: _pageLabel,
+                        onChanged: (v) => _goToPage(v.round() - 1),
+                      ),
+                    ),
+                  ),
+                ),
+              if (!_chromeVisible &&
+                  _options.flag('showPageNumber') &&
+                  _images.isNotEmpty)
+                Positioned(
+                  bottom: 12,
+                  right: 16,
+                  child: IgnorePointer(
+                    child: Text(
+                      _pageLabel,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        backgroundColor: Colors.black54,
+                      ),
+                    ),
+                  ),
+                ),
+              if (_showIntro)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Center(
+                      child: Text(
+                        '${_options.flag('showReadingMode') ? _mode.label : ''}${_options.flag('showTapZones') ? '\n点按导航：${MangaReaderOptions.choices['tapLayout']!.$2[_options.choice('tapLayout', ['existing', 'l', 'kindle', 'edge', 'disabled'])]}\n中间呼出菜单；双击放大/还原' : ''}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          backgroundColor: Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (_flash)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: ColoredBox(
+                      color:
+                          _options.choice('flashColor', [
+                                    'black',
+                                    'white',
+                                    'alternate',
+                                  ]) ==
+                                  'white' ||
+                              (_options.choice('flashColor', [
+                                        'black',
+                                        'white',
+                                        'alternate',
+                                      ]) ==
+                                      'alternate' &&
+                                  _turns.isOdd)
+                          ? Colors.white
+                          : Colors.black,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -1023,7 +1339,28 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     );
   }
 
+  double _webtoonWidth(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final ratio = switch (_options.choice('webtoonWidth', [
+      'fit',
+      '4:3',
+      '3:2',
+      '16:9',
+      '20:9',
+    ])) {
+      '4:3' => 3 / 4,
+      '3:2' => 2 / 3,
+      '16:9' => 9 / 16,
+      '20:9' => 9 / 20,
+      _ => 0.0,
+    };
+    return ratio == 0
+        ? size.width
+        : (size.height * ratio).clamp(1, size.width).toDouble();
+  }
+
   Widget _buildBody(ReaderSettings settings) {
+    final layout = _layout;
     if (_transitionOrigin != null) return _buildChapterTransition(settings);
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
@@ -1064,6 +1401,19 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
         NotificationListener<ScrollUpdateNotification>(
           onNotification: (notification) {
             if (notification.dragDetails != null) _pendingLocalPage = null;
+            if (notification.dragDetails != null &&
+                _chromeVisible &&
+                _options.choice('hideOnScroll', ['off', 'high', 'low']) !=
+                    'off' &&
+                (notification.scrollDelta?.abs() ?? 0) >
+                    (_options.choice('hideOnScroll', ['off', 'high', 'low']) ==
+                            'high'
+                        ? 5
+                        : 31)) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) setState(() => _chromeVisible = false);
+              });
+            }
             return false;
           },
           child: ScrollablePositionedList.builder(
@@ -1071,18 +1421,39 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
             physics: const NeverScrollableScrollPhysics(),
             itemScrollController: _itemScroll,
             itemPositionsListener: _positions,
-            initialScrollIndex: _page,
-            itemCount: _images.length + (_localComplete ? 1 : 0),
+            initialScrollIndex: _screen,
+            itemCount: layout.count + (_localComplete ? 1 : 0),
             scrollOffsetController: _scrollOffset,
             itemBuilder: (context, index) => Builder(
               builder: (itemContext) {
                 _webtoonScroll = Scrollable.of(itemContext).position;
-                return index == _images.length
+                return index == layout.count
                     ? SizedBox(
                         height: MediaQuery.sizeOf(itemContext).height,
                         child: const Center(child: Icon(Icons.arrow_downward)),
                       )
-                    : _imagePage(index, BoxFit.fitWidth);
+                    : Padding(
+                        padding:
+                            EdgeInsets.symmetric(
+                              horizontal:
+                                  MediaQuery.sizeOf(itemContext).width *
+                                  _options.number('webtoonPadding', 0, 0, 25) /
+                                  100,
+                            ).copyWith(
+                              bottom: _options.number('webtoonGap', 0, 0, 48),
+                            ),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: _webtoonWidth(itemContext),
+                            ),
+                            child: _renderLeaf(
+                              layout.firstAt(index),
+                              BoxFit.fitWidth,
+                            ),
+                          ),
+                        ),
+                      );
               },
             ),
           ),
@@ -1102,26 +1473,38 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
             ? Axis.vertical
             : Axis.horizontal,
         onPageChanged: _onPageChanged,
-        itemCount:
-            (_images.length / _spreadSize).ceil() + (_localComplete ? 1 : 0),
+        itemCount: layout.count + (_localComplete ? 1 : 0),
         itemBuilder: (context, index) {
-          final first = index * _spreadSize;
-          if (first >= _images.length) {
+          if (index >= layout.count) {
             return const Center(child: Icon(Icons.navigate_next));
           }
-          if (!_doublePage) return _imagePage(first, settings.fit.boxFit);
+          final leaves = layout.screens[index];
+          if (leaves.length == 1) {
+            return _renderLeaf(leaves.first, settings.fit.boxFit);
+          }
           final pages = [
-            Expanded(child: _imagePage(first, BoxFit.contain)),
-            Expanded(
-              child: first + 1 < _images.length
-                  ? _imagePage(first + 1, BoxFit.contain)
-                  : const SizedBox.shrink(),
-            ),
+            for (final leaf in leaves)
+              Expanded(child: _renderLeaf(leaf, BoxFit.contain)),
           ];
+          final reverse =
+              (settings.mode == ReadingMode.rtl) !=
+              _options.flag('invertDoublePages');
+          final gap = switch (_options.choice('centerMargin', [
+            'none',
+            'small',
+            'large',
+          ])) {
+            'small' => 8.0,
+            'large' => 24.0,
+            _ => 0.0,
+          };
+          final ordered = reverse ? pages.reversed.toList() : pages;
           return Row(
-            children: settings.mode == ReadingMode.rtl
-                ? pages.reversed.toList()
-                : pages,
+            children: [
+              ordered.first,
+              if (gap > 0) SizedBox(width: gap),
+              ordered.last,
+            ],
           );
         },
       ),
@@ -1134,11 +1517,19 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     final key = _zoomKeys.putIfAbsent(index, GlobalKey<MangaZoomViewState>.new);
     return MangaZoomView(
       key: key,
-      enabled: settings.zoom,
-      doubleTapZoom: settings.doubleTapZoom,
+      enabled: settings.zoom && (_isPaged || _options.flag('webtoonZoom')),
+      doubleTapZoom:
+          settings.doubleTapZoom &&
+          (_isPaged || _options.flag('webtoonDoubleTap')),
       doubleTapScale: settings.doubleTapScale,
       duration: settings.zoomDuration,
       resetToken: _zoomResetToken,
+      zoomStart: _options.choice('zoomStart', [
+        'auto',
+        'left',
+        'right',
+        'center',
+      ]),
       scrollPosition: () => index == -1
           ? _webtoonScroll
           : _pageController.hasClients
@@ -1148,7 +1539,9 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       onZoomChanged: (zoomed) {
         if (!mounted || zoomed == _zoomed) return;
         setState(() => _zoomed = zoomed);
+        if (!zoomed) _flushDeferredGeometry();
       },
+      onPointersReleased: _flushDeferredGeometry,
       child: child,
     );
   }
@@ -1161,6 +1554,7 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
 
   /// 放大时滚轮/音量先平移；到边界才翻页。
   bool _panCurrentPage(bool forward) {
+    if (!_options.flag('navigatePan')) return false;
     final state = _zoomKeys[_isPaged ? 0 : -1]?.currentState;
     if (state == null || !state.zoomed) return false;
     return state.panBy(forward ? -120 : 120);
@@ -1169,7 +1563,8 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
   Widget _buildChapterTransition(ReaderSettings settings) {
     final origin = _transitionOrigin!;
     final current = _chapters[origin];
-    final next = origin + 1 < _chapters.length ? _chapters[origin + 1] : null;
+    final nextIndex = _nextChapter(origin, 1);
+    final next = nextIndex < _chapters.length ? _chapters[nextIndex] : null;
     final completed = _completedChapters.contains(mangaChapterKey(current));
     final loading = _openingNextChapter && _loading;
     final error = _openingNextChapter ? _error : null;
@@ -1268,7 +1663,90 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     );
   }
 
-  Widget _imagePage(int index, BoxFit fit) {
+  Widget _renderLeaf(MangaLeaf leaf, BoxFit fit) =>
+      _imagePage(leaf.source, fit, part: leaf.part, turns: leaf.turns);
+
+  bool get _pointersActive =>
+      _zoomKeys.values.any((key) => key.currentState?.hasPointers ?? false);
+
+  void _flushDeferredGeometry() {
+    if (!_geometryDeferred || _zoomed || _pointersActive) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_geometryDeferred || _zoomed || _pointersActive) return;
+      setState(() {
+        _geometryDeferred = false;
+        _geometryRevision++;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeZoomWide());
+    });
+  }
+
+  void _geometryOf(int index, Size size, int seq) {
+    if (!mounted || seq != _requestSeq || _geometry[index] == size) return;
+    final wasWide =
+        _geometry[index] != null &&
+        _geometry[index]!.width > _geometry[index]!.height;
+    _geometry[index] = size;
+    final layoutChanges =
+        wasWide != (size.width > size.height) &&
+        (_doublePage ||
+            _options.flag(_isPaged ? 'splitWide' : 'splitWebtoon') ||
+            _options.flag(_isPaged ? 'rotateWide' : 'rotateWebtoon'));
+    if (!layoutChanges) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeZoomWide());
+      return;
+    }
+    if (_geometryPending) return;
+    _geometryPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || seq != _requestSeq) return;
+      _geometryPending = false;
+      if (_zoomed || _pointersActive) {
+        _geometryDeferred = true;
+        return;
+      }
+      setState(() => _geometryRevision++);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeZoomWide());
+    });
+  }
+
+  void _maybeZoomWide() {
+    if (!mounted ||
+        !_isPaged ||
+        !_options.flag('landscapeZoom') ||
+        _part != 0) {
+      return;
+    }
+    final size = _geometry[_page];
+    if (size == null ||
+        size.width <= size.height ||
+        _options.flag('splitWide') ||
+        _options.flag('rotateWide')) {
+      return;
+    }
+    final state = _zoomKeys[0]?.currentState;
+    if (state == null || state.zoomed) return;
+    final view = MediaQuery.sizeOf(context);
+    final scale =
+        _options.choice('wideZoomType', ['double', 'height']) == 'height'
+        ? view.height / (view.width * size.height / size.width)
+        : 2.0;
+    final start = _options.choice('zoomStart', [
+      'auto',
+      'left',
+      'right',
+      'center',
+    ]);
+    state.zoomTo(
+      scale,
+      start: start == 'auto'
+          ? (_mode == ReadingMode.rtl ? 'right' : 'left')
+          : start,
+    );
+  }
+
+  Widget _imagePage(int index, BoxFit fit, {int part = 0, int turns = 0}) {
+    final imageSeq = _requestSeq;
     final url = _images[index];
     final ImageProvider provider = url.startsWith('file://')
         ? FileImage(File(storageFilePath(Uri.parse(url).toFilePath())))
@@ -1281,11 +1759,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
           );
     final width =
         (MediaQuery.sizeOf(context).width *
-                MediaQuery.devicePixelRatioOf(context) /
-                _spreadSize)
+                MediaQuery.devicePixelRatioOf(context))
             .round();
     return MangaPageImage(
-      key: ValueKey(url),
+      key: ValueKey((url, part, turns)),
       provider: ResizeImage(
         provider,
         width: width.clamp(480, 2400),
@@ -1296,6 +1773,10 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
       sourceId: _chapter.sourceId,
       fit: fit,
       settings: _viewSettings,
+      part: part,
+      turns: turns,
+      trimOverride: _isPaged ? null : _options.flag('trimWebtoon'),
+      onGeometry: (size) => _geometryOf(index, size, imageSeq),
     );
   }
 
@@ -1383,21 +1864,24 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
                     ),
                     if (!_loading && _error == null && _images.isNotEmpty) ...[
                       Expanded(
-                        child: Slider(
-                          value: (_page + 1)
-                              .clamp(1, _images.length)
-                              .toDouble(),
-                          min: 1,
-                          max: _images.length.toDouble(),
-                          divisions: _images.length > 1
-                              ? _images.length - 1
-                              : null,
-                          label: '${_page + 1}/${_images.length}',
-                          onChanged: (value) => _goToPage(value.round() - 1),
-                        ),
+                        child: _verticalSeek
+                            ? const SizedBox.shrink()
+                            : Slider(
+                                value: (_page + 1)
+                                    .clamp(1, _images.length)
+                                    .toDouble(),
+                                min: 1,
+                                max: _images.length.toDouble(),
+                                divisions: _images.length > 1
+                                    ? _images.length - 1
+                                    : null,
+                                label: _pageLabel,
+                                onChanged: (value) =>
+                                    _goToPage(value.round() - 1),
+                              ),
                       ),
                       Text(
-                        '${_page + 1}/${_images.length}',
+                        _pageLabel,
                         style: const TextStyle(color: Colors.white70),
                       ),
                     ] else
@@ -1435,39 +1919,81 @@ class _MangaReaderPageState extends ConsumerState<MangaReaderPage>
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) => SafeArea(
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: _chapters.length,
-          itemBuilder: (context, index) {
-            final chapter = _chapters[index];
-            final selected = index == _chapterIndex;
-            return ListTile(
-              dense: true,
-              selected: selected,
-              title: Text(chapter.title),
-              subtitle: chapter.volumeTitle == null
-                  ? null
-                  : Text(chapter.volumeTitle!),
-              trailing: chapter.locked
-                  ? const Icon(Icons.lock_outline, size: 18)
-                  : null,
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                if (index == _chapterIndex) return;
-                unawaited(_persistProgress());
-                _transitionOrigin = null;
-                _openingNextChapter = false;
-                setState(() {
-                  _chapterIndex = index;
-                  _page = 0;
-                });
-                _resetPageController();
-                unawaited(_load());
-              },
-            );
-          },
-        ),
+      builder: (sheetContext) => Consumer(
+        builder: (context, sheetRef, _) {
+          final options = sheetRef.watch(mangaViewSettingsProvider).options;
+          final indices = [
+            for (var i = 0; i < _chapters.length; i++)
+              if (!_chapterFiltered(_chapters[i], options)) i,
+          ];
+          return SafeArea(
+            child: SizedBox(
+              height: MediaQuery.sizeOf(context).height * .75,
+              child: ListView.builder(
+                itemCount: indices.length + 1,
+                itemBuilder: (context, slot) {
+                  if (slot == 0) {
+                    return Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: DropdownButtonFormField<String>(
+                        initialValue: options.choice('chapterFilter', [
+                          'all',
+                          'unread',
+                          'read',
+                        ]),
+                        decoration: const InputDecoration(labelText: '章节目录筛选'),
+                        items: const [
+                          DropdownMenuItem(value: 'all', child: Text('全部章节')),
+                          DropdownMenuItem(
+                            value: 'unread',
+                            child: Text('仅未读章节'),
+                          ),
+                          DropdownMenuItem(value: 'read', child: Text('仅已读章节')),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            unawaited(
+                              sheetRef
+                                  .read(mangaReaderPreferencesProvider)
+                                  .set('chapterFilter', value),
+                            );
+                          }
+                        },
+                      ),
+                    );
+                  }
+                  final index = indices[slot - 1];
+                  final chapter = _chapters[index];
+                  final selected = index == _chapterIndex;
+                  return ListTile(
+                    dense: true,
+                    selected: selected,
+                    title: Text(chapter.title),
+                    subtitle: chapter.volumeTitle == null
+                        ? null
+                        : Text(chapter.volumeTitle!),
+                    trailing: chapter.locked
+                        ? const Icon(Icons.lock_outline, size: 18)
+                        : null,
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      if (index == _chapterIndex) return;
+                      unawaited(_persistProgress());
+                      _transitionOrigin = null;
+                      _openingNextChapter = false;
+                      setState(() {
+                        _chapterIndex = index;
+                        _page = 0;
+                      });
+                      _resetPageController();
+                      unawaited(_load());
+                    },
+                  );
+                },
+              ),
+            ),
+          );
+        },
       ),
     );
   }

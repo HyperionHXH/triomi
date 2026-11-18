@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/storage/preferences.dart';
 import '../novel/reader/novel_reader_settings.dart';
+import 'manga_reader_options.dart';
 import 'manga_zoom_view.dart';
 import 'reader_settings.dart';
 
@@ -35,6 +36,7 @@ class MangaViewSettings {
     this.tapZones = ReaderTapZones.directional,
     this.trim = false,
     this.doublePage = false,
+    this.soloCover = false,
     this.filter = ReaderImageFilter.none,
     this.autoScroll = 0,
     this.preload = 3,
@@ -45,16 +47,19 @@ class MangaViewSettings {
     this.doubleTapScale = 2,
     this.zoomDuration = ZoomDurationPreset.normal,
     this.night = const MangaNightMode(),
+    this.options = const MangaReaderOptions(),
   });
   final ReaderSettings base;
   final ReaderOrientation orientation;
   final ReaderTapZones tapZones;
   final ReaderImageFilter filter;
   final bool trim, doublePage, volumeKeys;
+  final bool soloCover;
   final bool zoom, doubleTapZoom;
   final double doubleTapScale;
   final ZoomDurationPreset zoomDuration;
   final MangaNightMode night;
+  final MangaReaderOptions options;
   final double autoScroll;
   final int preload, cacheMiB;
   static T pick<T extends Enum>(List<T> values, Object? name, T fallback) =>
@@ -81,6 +86,7 @@ class MangaViewSettings {
     ),
     trim: values['trim'] == true,
     doublePage: values['doublePage'] == true,
+    soloCover: values['soloCover'] == true,
     volumeKeys: values['volumeKeys'] == true,
     zoom: values['zoom'] != false,
     doubleTapZoom: values['doubleTapZoom'] != false,
@@ -100,6 +106,7 @@ class MangaViewSettings {
         100,
       ),
     ),
+    options: MangaReaderOptions(values),
     autoScroll: ((values['autoScroll'] as num?)?.toDouble() ?? 0).clamp(0, 120),
     preload: ((values['preload'] as num?)?.toInt() ?? 3).clamp(0, 8),
     cacheMiB: ((values['cacheMiB'] as num?)?.toInt() ?? 96).clamp(24, 256),

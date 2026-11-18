@@ -780,16 +780,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
             (int.tryParse(subject?.remoteId ?? '') ?? 0) > 0
         ? subject!.remoteId
         : null;
-    final unique =
-        _chapter.number != null &&
-        _chapters
-                .where(
-                  (chapter) =>
-                      chapter.number == _chapter.number &&
-                      !DanmakuSession.specialChapter(chapter),
-                )
-                .length ==
-            1;
+    final unique = DanmakuSession.canMatchAutomatically(_chapter, _chapters);
     _danmakuSession.configure(
       item: _item,
       chapter: _chapter,
@@ -1537,6 +1528,14 @@ class _PlayerPageState extends ConsumerState<PlayerPage>
                           builder: (context, toggle) =>
                               button('播放设置', Icons.tune_rounded, toggle),
                         ),
+                        if (danmakuFeatureEnabled)
+                          button(
+                            '弹幕来源与匹配',
+                            Icons.manage_search_rounded,
+                            () => unawaited(
+                              _runMenuAction(PlayerMenuAction.danmakuSources),
+                            ),
+                          ),
                         if (danmakuFeatureEnabled)
                           button(
                             _danmakuOn ? '关闭弹幕' : '开启弹幕',

@@ -1050,6 +1050,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           tooltip: '更多',
           onSelected: (value) {
             switch (value) {
+              case 'completionRoute':
+                context.push(AppRoutes.completionRoutes, extra: item);
               case 'editManga':
                 unawaited(showMangaMetadataEditor(context, ref, item));
               case 'epub':
@@ -1093,6 +1095,7 @@ class _DetailPageState extends ConsumerState<DetailPage> {
             }
           },
           itemBuilder: (_) => [
+            const PopupMenuItem(value: 'completionRoute', child: Text('加入补完路线')),
             if (item.type == MediaType.manga)
               const PopupMenuItem(value: 'editManga', child: Text('编辑漫画资料')),
             if (item.sourceId == 'bangumi-anime')

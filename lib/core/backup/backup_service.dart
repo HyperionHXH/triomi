@@ -655,6 +655,7 @@ class BackupService {
               'chapterSourceId': row.chapterSourceId,
               'chapterRemoteId': row.chapterRemoteId,
               'position': row.position,
+              'mangaPart': row.mangaPart,
               'device': row.device,
               'visitedAt': row.visitedAt.toIso8601String(),
             },
@@ -1339,6 +1340,7 @@ class BackupService {
                       position: Value(
                         (row['position'] as num?)?.toDouble() ?? 0,
                       ),
+                      mangaPart: Value(_mangaPart(row['mangaPart'])),
                       device: Value(row['device'] as String?),
                       visitedAt: visitedAt,
                     ),
@@ -1350,6 +1352,7 @@ class BackupService {
               )..where((table) => table.id.equals(existing.id))).write(
                 HistoriesCompanion(
                   position: Value((row['position'] as num?)?.toDouble() ?? 0),
+                  mangaPart: Value(_mangaPart(row['mangaPart'])),
                   device: Value(row['device'] as String?),
                   visitedAt: Value(visitedAt),
                 ),
@@ -2182,6 +2185,14 @@ class BackupService {
         for (final entry in (raw as List?) ?? const <Object?>[])
           if (entry is Map) entry.cast<String, Object?>(),
       ];
+
+  static int _mangaPart(Object? value) {
+    if (value == null) return 0;
+    if (value is! int || value < 0 || value > 2) {
+      throw const FormatException('漫画区域锚点无效');
+    }
+    return value;
+  }
 
   static DateTime? _dateOf(Object? raw) =>
       raw == null ? null : DateTime.tryParse(raw.toString());

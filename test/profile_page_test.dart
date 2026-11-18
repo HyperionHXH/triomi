@@ -180,6 +180,7 @@ void main() {
         expect(find.text('账号与设置'), findsNothing);
         final settings = find.widgetWithText(ListTile, '通用设置');
         await tester.ensureVisible(settings);
+        await tester.pumpAndSettle();
         await tester.tap(settings);
         await _advance(tester);
         expect(find.byType(SettingsPage), findsOneWidget);

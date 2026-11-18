@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../novel/reader/novel_reader_settings.dart';
+import 'manga_reader_options.dart';
 import 'manga_reader_settings.dart';
 import 'manga_zoom_view.dart';
 import 'reader_settings.dart';
@@ -112,6 +113,13 @@ class MangaReaderSettingsSheet extends ConsumerWidget {
               value: settings.doublePage,
               onChanged: (value) => set('doublePage', value),
             ),
+            if (settings.doublePage)
+              SwitchListTile(
+                title: const Text('首张单独显示（双页校正）'),
+                subtitle: const Text('对所有漫画生效；封面单独一屏，后续页面重新配对'),
+                value: settings.soloCover,
+                onChanged: (value) => set('soloCover', value),
+              ),
             SwitchListTile(
               title: const Text('音量键翻页'),
               value: settings.volumeKeys,
@@ -225,6 +233,7 @@ class MangaReaderSettingsSheet extends ConsumerWidget {
               divisions: 29,
               onChanged: (value) => set('cacheMiB', value.round()),
             ),
+            MangaReaderOptionsSection(options: settings.options, save: set),
             TextButton(
               onPressed: repository.reset,
               child: const Text('恢复全局漫画阅读默认设置'),

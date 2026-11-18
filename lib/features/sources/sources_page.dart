@@ -4,9 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/db/database_provider.dart';
 import '../../core/models/media_type.dart';
+import '../../core/router/app_router.dart';
 import '../../core/source/bangumi_route_policy.dart';
 import '../../core/source/http_client.dart';
 import '../../core/source/js/js_source.dart';
@@ -247,6 +249,8 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
           ? '来源管理'
           : '${_type.label}来源',
       actions: <Widget>[
+        IconButton(tooltip: '来源诊断中心', icon: const Icon(Icons.health_and_safety_outlined),
+          onPressed: () => context.push(AppRoutes.sourceDiagnostics)),
         if (_busy)
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
@@ -1131,6 +1135,8 @@ class _SourceTile extends StatelessWidget {
                     tooltip: '${descriptor.name}更多操作',
                     onSelected: (value) {
                       switch (value) {
+                        case 'diagnostics':
+                          context.push(Uri(path: AppRoutes.sourceDiagnostics, queryParameters: {'source': descriptor.id}).toString());
                         case 'session':
                           onWebSession?.call();
                         case 'settings':
@@ -1142,6 +1148,7 @@ class _SourceTile extends StatelessWidget {
                       }
                     },
                     itemBuilder: (_) => [
+                      const PopupMenuItem(value: 'diagnostics', child: Text('测试与诊断')),
                       if (onSettings != null)
                         const PopupMenuItem(
                           value: 'settings',

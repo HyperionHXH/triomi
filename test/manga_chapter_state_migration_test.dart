@@ -81,6 +81,7 @@ void main() {
     final old = sqlite3.sqlite3.open(file.path);
     try {
       old.execute('DROP TABLE manga_chapter_states');
+      old.execute('ALTER TABLE histories DROP COLUMN manga_part');
       old.execute('PRAGMA user_version = 13');
       old.execute(
         'UPDATE chapters SET content_json = ? WHERE source_id = ? AND remote_id = ?',
@@ -224,7 +225,7 @@ void main() {
     }
     final reopened = sqlite3.sqlite3.open(file.path);
     try {
-      expect(reopened.select('PRAGMA user_version').single['user_version'], 14);
+      expect(reopened.select('PRAGMA user_version').single['user_version'], 15);
     } finally {
       reopened.close();
     }

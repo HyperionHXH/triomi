@@ -148,6 +148,7 @@ void main() {
   test('version 2 upgrade creates journal and preserves existing library data', () async {
     await service(preferences).importFromBytes(_backup());
     await db.customStatement('DROP TABLE backup_import_journals');
+    await db.customStatement('ALTER TABLE histories DROP COLUMN manga_part');
     await db.customStatement('ALTER TABLE categories DROP COLUMN hidden');
     await db.customStatement('ALTER TABLE categories DROP COLUMN rules_json');
     await db.customStatement('ALTER TABLE categories DROP COLUMN module');

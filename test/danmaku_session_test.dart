@@ -249,6 +249,118 @@ void main() {
     );
   });
 
+  test('multiple playback lists do not block unique current-list matching, true duplicates still do', () async {
+    const current = Chapter(
+      sourceId: 'playback',
+      remoteId: 'list4-1',
+      title: '第01集',
+      volumeTitle: '播放列表 4',
+    );
+    const otherList = Chapter(
+      sourceId: 'playback',
+      remoteId: 'list2-1',
+      title: '第01集',
+      volumeTitle: '播放列表 2',
+    );
+    const duplicate = Chapter(
+      sourceId: 'playback',
+      remoteId: 'list4-alt1',
+      title: '第01集',
+      volumeTitle: '播放列表 4',
+    );
+    final session = DanmakuSession(
+      client: _Client(),
+      preferences: memoryPreferences(),
+    )..setEnabled(true);
+    addTearDown(session.dispose);
+    session.configure(
+      item: item,
+      chapter: current,
+      canonicalSubjectId: '400602',
+      allowAutomatic: DanmakuSession.canMatchAutomatically(current, [
+        otherList,
+        current,
+      ]),
+    );
+    await settleSession();
+    expect(
+      session.source(DanmakuProviderKind.animeko).selected?.id,
+      'animeko-1',
+    );
+    expect(session.comments.map((value) => value.text), contains('animeko-1'));
+    session.configure(
+      item: item,
+      chapter: current,
+      canonicalSubjectId: '400602',
+      allowAutomatic: DanmakuSession.canMatchAutomatically(current, [
+        otherList,
+        current,
+        duplicate,
+      ]),
+    );
+    await settleSession();
+    expect(session.source(DanmakuProviderKind.animeko).selected, isNull);
+    expect(session.comments, isEmpty);
+  });
+
+  test('whole episode labels can match without numeric metadata but never guess season or special titles', () async {
+    final client = _Client();
+    final session = DanmakuSession(
+      client: client,
+      preferences: memoryPreferences(),
+    )..setEnabled(true);
+    addTearDown(session.dispose);
+    for (final title in ['第 02 集', 'EP02', 'Episode 2', '02']) {
+      session.configure(
+        item: item,
+        chapter: Chapter(sourceId: 'playback', remoteId: title, title: title),
+        canonicalSubjectId: '400602',
+      );
+      await settleSession();
+      expect(
+        session.source(DanmakuProviderKind.animeko).selected?.id,
+        'animeko-2',
+      );
+      expect(
+        session.comments.map((comment) => comment.text),
+        contains('animeko-2'),
+      );
+    }
+    for (final title in [
+      'Season 2',
+      '第2季',
+      'OVA 2',
+      '第2集 特别篇',
+      '2026-02',
+      '2 · 标题',
+    ]) {
+      session.configure(
+        item: item,
+        chapter: Chapter(sourceId: 'playback', remoteId: title, title: title),
+        canonicalSubjectId: '400602',
+      );
+      await settleSession();
+      expect(session.source(DanmakuProviderKind.animeko).selected, isNull);
+      expect(session.comments, isEmpty);
+    }
+    session.configure(
+      item: item,
+      chapter: const Chapter(
+        sourceId: 'playback',
+        remoteId: 'ambiguous',
+        title: 'EP02',
+      ),
+      canonicalSubjectId: '400602',
+      allowAutomatic: false,
+    );
+    await settleSession();
+    expect(
+      session.comments,
+      isEmpty,
+      reason: 'duplicate chapter labels still require explicit selection',
+    );
+  });
+
   test(
     'sources arrive progressively, a failed source cannot discard the other',
     () async {

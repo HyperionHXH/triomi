@@ -8,6 +8,7 @@ import '../../../core/models/media_item.dart';
 import '../../../core/models/source_exception.dart';
 import '../../../core/source/http_client.dart';
 import '../../../core/storage/preferences.dart';
+import '../episode_selector.dart';
 import 'hybrid_danmaku_client.dart';
 import 'hybrid_danmaku_models.dart';
 
@@ -80,14 +81,43 @@ class DanmakuSession extends ChangeNotifier {
     caseSensitive: false,
   ).hasMatch(chapter.title);
 
+  static final _episodeTitle = RegExp(
+    r'^(?:第\s*(\d+)\s*[集话話]|(?:EP(?:ISODE)?\s*)?(\d+))$',
+    caseSensitive: false,
+  );
+
+  /// Only a complete episode label is a fallback, never a title substring,
+  /// array position, season number, or playback-site remote ID.
+  static double? episodeNumber(Chapter chapter) {
+    if (specialChapter(chapter)) return null;
+    final number = chapter.number;
+    if (number != null) return number.isFinite && number > 0 ? number : null;
+    final match = _episodeTitle.firstMatch(chapter.title.trim());
+    final parsed = double.tryParse(match?.group(1) ?? match?.group(2) ?? '');
+    return parsed != null && parsed.isFinite && parsed > 0 ? parsed : null;
+  }
+
+  static bool canMatchAutomatically(Chapter current, List<Chapter> chapters) {
+    final number = episodeNumber(current);
+    if (number == null) return false;
+    final list = playbackListOf(current);
+    var matches = 0;
+    for (final chapter in chapters) {
+      if (chapter.sourceId == current.sourceId &&
+          playbackListOf(chapter) == list &&
+          episodeNumber(chapter) == number) {
+        if (++matches > 1) return false;
+      }
+    }
+    return matches == 1;
+  }
+
   static DanmakuEpisodeChoice? automaticEpisode(
     Chapter chapter,
     List<DanmakuEpisodeChoice> episodes,
   ) {
-    final number = chapter.number;
-    if (number == null || !number.isFinite || specialChapter(chapter)) {
-      return null;
-    }
+    final number = episodeNumber(chapter);
+    if (number == null) return null;
     final matches = episodes
         .where((episode) => !episode.special && episode.number == number)
         .toList();

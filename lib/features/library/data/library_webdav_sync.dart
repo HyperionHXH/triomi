@@ -417,6 +417,7 @@ class LibraryWebDavSync {
           row.position,
           row.visitedAt,
           item.item.type,
+          row.mangaPart,
         ),
       );
     }
@@ -941,6 +942,7 @@ class LibraryWebDavSync {
                 chapterSourceId: row.chapterSourceId,
                 chapterRemoteId: row.chapterRemoteId,
                 position: Value(row.position),
+                mangaPart: Value(row.mangaPart),
                 visitedAt: row.visitedAt,
               ),
             );
@@ -950,6 +952,7 @@ class LibraryWebDavSync {
         )..where((history) => history.id.equals(existing.id))).write(
           HistoriesCompanion(
             position: Value(row.position),
+            mangaPart: Value(row.mangaPart),
             visitedAt: Value(row.visitedAt),
             incognito: const Value(false),
           ),
@@ -1125,7 +1128,7 @@ class _SyncDocument {
           'historyClears',
           'chapterResets',
         }) ||
-        value['version'] != 1 ||
+        !const {1, 2}.contains(value['version']) ||
         value['favorites'] is! List ||
         value['items'] is! List ||
         value['histories'] is! List ||
@@ -1241,7 +1244,7 @@ class _SyncDocument {
 
   List<int> encode() => utf8.encode(
     jsonEncode({
-      'version': 1,
+      'version': histories.any((row) => row.mangaPart != 0) ? 2 : 1,
       'favorites': [for (final row in favorites) row.toJson()],
       'items': [for (final row in items.values) row.toJson()],
       'histories': [for (final row in histories) row.toJson()],
@@ -1663,10 +1666,12 @@ class _History {
     this.chapterRemoteId,
     this.position,
     this.visitedAt,
-    this.type,
-  );
+    this.type, [
+    this.mangaPart = 0,
+  ]);
   final String sourceId, remoteId, chapterSourceId, chapterRemoteId;
   final double position;
+  final int mangaPart;
   final DateTime visitedAt;
   final MediaType type;
   (String, String, String, String) get key =>
@@ -1681,11 +1686,16 @@ class _History {
           'position',
           'visitedAt',
           'type',
+          'mangaPart',
         })) {
       throw const FormatException('History fields are invalid');
     }
     final type = MediaType.tryParse(raw['type'] as String?);
     final position = raw['position'];
+    final part = raw['mangaPart'] ?? 0;
+    if (part is! int || part < 0 || part > 2) {
+      throw const FormatException('Invalid manga region');
+    }
     if (type == null ||
         !{MediaType.manga, MediaType.anime}.contains(type) ||
         position is! num ||
@@ -1701,6 +1711,7 @@ class _History {
       position.toDouble(),
       _date(raw['visitedAt'], 'history date'),
       type,
+      part,
     );
   }
   Map<String, Object?> toJson() => {
@@ -1709,6 +1720,7 @@ class _History {
     'chapterSourceId': chapterSourceId,
     'chapterRemoteId': chapterRemoteId,
     'position': position,
+    if (mangaPart != 0) 'mangaPart': mangaPart,
     'visitedAt': visitedAt.toUtc().toIso8601String(),
     'type': type.name,
   };

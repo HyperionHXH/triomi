@@ -43,7 +43,7 @@ class AppDatabase extends _$AppDatabase {
   /// **改表约定**：改表 → 版本号 +1 → `onUpgrade` 增量迁移。
   /// `test/database_migration_test.dart` 用历史库验证数据保留与新功能可用。
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -125,6 +125,9 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(mangaChapterStates);
           await customStatement('PRAGMA user_version = 14');
         });
+      }
+      if (from < 15) {
+        await m.addColumn(histories, histories.mangaPart);
       }
     },
   );

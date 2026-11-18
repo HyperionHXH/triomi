@@ -26,6 +26,13 @@ class ProfilePage extends StatelessWidget {
           title: '记录与下载',
           children: [
             ListTile(
+              leading: const Icon(Icons.route_outlined),
+              title: const Text('跨媒体补完路线'),
+              subtitle: const Text('按你的顺序补番、读漫画和小说，各自进度独立'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push(AppRoutes.completionRoutes),
+            ),
+            ListTile(
               leading: const Icon(Icons.history),
               title: const Text('观看与阅读历史'),
               trailing: const Icon(Icons.chevron_right),
@@ -75,6 +82,13 @@ class ProfilePage extends StatelessWidget {
         SettingsGroup(
           title: '应用',
           children: [
+            ListTile(
+              leading: const Icon(Icons.health_and_safety_outlined),
+              title: const Text('来源诊断中心'),
+              subtitle: const Text('手动测试、错误说明与脱敏反馈包'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push(AppRoutes.sourceDiagnostics),
+            ),
             ListTile(
               leading: const Icon(Icons.settings_outlined),
               title: const Text('通用设置'),

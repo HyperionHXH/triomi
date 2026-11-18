@@ -18,6 +18,7 @@ import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/library/data/library_providers.dart';
 import 'package:triomi/features/library/data/merged_manga_repository.dart';
 import 'package:triomi/features/novel/reader/novel_reader_page.dart';
+import 'package:triomi/features/reader/manga_page_image.dart';
 import 'package:triomi/features/reader/manga_reader_page.dart';
 import 'package:triomi/features/reader/manga_reader_settings.dart';
 
@@ -219,11 +220,16 @@ void main() {
             final url = Uri.file(
               '${dir.path}/page-${page.toString().padLeft(2, '0')}.png',
             ).toString();
-            expect(find.byKey(ValueKey(url)).hitTestable(), findsOneWidget);
+            expect(
+              find
+                  .byWidgetPredicate(
+                    (widget) => widget is MangaPageImage && widget.url == url,
+                  )
+                  .hitTestable(),
+              findsOneWidget,
+            );
           }
-          await container
-              .read(mangaReaderPreferencesProvider)
-              .reset();
+          await container.read(mangaReaderPreferencesProvider).reset();
           await settle(tester);
         }
         if (type == MediaType.manga) {

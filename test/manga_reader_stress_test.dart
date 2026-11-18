@@ -314,7 +314,9 @@ void main() {
     await settle(tester);
     await waitUntil(
       tester,
-      () => source.requests.contains(c3.remoteId) && find.text('1/2').evaluate().isNotEmpty,
+      () =>
+          source.requests.contains(c3.remoteId) &&
+          find.text('1/2').evaluate().isNotEmpty,
       'selecting the actual third chapter completes its load',
     );
     expect(indicator(tester), '1/2');
@@ -659,10 +661,7 @@ void main() {
     expect(indicator(tester), '4/7');
     await container
         .read(mangaReaderPreferencesProvider)
-        .set(
-          'doublePage',
-          true,
-        );
+        .set('doublePage', true);
     await settle(tester);
     tester.view.physicalSize = const Size(1000, 700);
     await tester.pump();
@@ -673,16 +672,21 @@ void main() {
       reason: 'spread starts on the visible pair first page',
     );
     expect(tester.widget<PageView>(find.byType(PageView)).controller!.page, 1);
-    expect(find.byKey(ValueKey(images[2])).hitTestable(), findsOneWidget);
-    expect(find.byKey(ValueKey(images[3])).hitTestable(), findsOneWidget);
-    expect(find.byKey(ValueKey(images[6])).hitTestable(), findsNothing);
+    Finder visibleImage(String url) => find
+        .byWidgetPredicate(
+          (widget) => widget is MangaPageImage && widget.url == url,
+        )
+        .hitTestable();
+    expect(visibleImage(images[2]), findsOneWidget);
+    expect(visibleImage(images[3]), findsOneWidget);
+    expect(visibleImage(images[6]), findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
     await settle(tester);
     expect(tester.widget<PageView>(find.byType(PageView)).controller!.page, 2);
-    expect(find.byKey(ValueKey(images[4])).hitTestable(), findsOneWidget);
-    expect(find.byKey(ValueKey(images[5])).hitTestable(), findsOneWidget);
+    expect(visibleImage(images[4]), findsOneWidget);
+    expect(visibleImage(images[5]), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
@@ -716,7 +720,8 @@ void main() {
         await realIo(tester, () async {
           final checkpoint = await ImageDownloadCheckpoint.load(dir);
           for (final name in ['0001.png', '0002.png']) {
-            await File('${dir.path}/$name').writeAsBytes(base64Decode(_pngBase64));
+            await File('${dir.path}/$name')
+                .writeAsBytes(base64Decode(_pngBase64));
             await checkpoint.record(name, 'https://example.test/$name');
           }
           await DownloadManifest.write(
@@ -751,24 +756,38 @@ void main() {
         expect(indicator(tester), '2/2');
         expect(find.text('已到已下载页面，等待后续下载'), findsOneWidget);
         expect(find.text('已读完：'), findsNothing);
-        expect(source.requests, isEmpty, reason: 'Partial EOF must not open the next chapter');
+        expect(
+          source.requests,
+          isEmpty,
+          reason: 'Partial EOF must not open the next chapter',
+        );
         await tester.tap(find.byTooltip('下一章'));
         await waitUntil(
           tester,
-          () => source.requests.contains('c2') && find.text('1/2').evaluate().isNotEmpty,
+          () =>
+              source.requests.contains('c2') &&
+              find.text('1/2').evaluate().isNotEmpty,
           'explicit chapter skip opens the next chapter',
         );
         await settle(tester);
         expect(source.requests, ['c2']);
         expect(find.text('已读完：'), findsNothing);
-        expect(await tester.runAsync(
-          () => repository.chapterPositionOf('stress-src', 'book', 'c1'),
-        ), 1, reason: 'Skipping retains the last downloaded page as resume position');
+        expect(
+          await tester.runAsync(
+            () => repository.chapterPositionOf('stress-src', 'book', 'c1'),
+          ),
+          1,
+          reason:
+              'Skipping retains the last downloaded page as resume position',
+        );
         final states = await tester.runAsync(
           () => repository.watchMangaChapterStates('stress-src', 'book').first,
         );
-        expect(states!.where((state) => state.chapterRemoteId == 'c1'), isEmpty,
-            reason: 'An incomplete chapter must gain neither completion nor a false page count');
+        expect(
+          states!.where((state) => state.chapterRemoteId == 'c1'),
+          isEmpty,
+          reason: 'An incomplete chapter must gain neither completion nor a false page count',
+        );
         await tester.pumpWidget(const SizedBox());
         await settle(tester);
         await realIo(tester, () async => downloads.changes.close());
@@ -912,8 +931,11 @@ void main() {
         await tester.pump();
         expect(find.text('已读完：'), findsOneWidget);
         expect(find.text('第二话'), findsOneWidget);
-        expect(source.requests, isEmpty,
-            reason: 'A complete EOF first presents the actual next chapter');
+        expect(
+          source.requests,
+          isEmpty,
+          reason: 'A complete EOF first presents the actual next chapter',
+        );
         await tester.tap(find.text('继续阅读'));
         await waitUntil(
           tester,

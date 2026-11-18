@@ -1,0 +1,176 @@
+{
+  "iteration": "R196",
+  "status": "android-windows-actual-acceptance-passed-preparing-release",
+  "scope": [
+    "global-manga-reader-settings-and-layout",
+    "completion-routes",
+    "source-diagnostics",
+    "read-only-danmaku-matching-and-toolbar"
+  ],
+  "verification": {
+    "fullSuite": {
+      "passed": 2040,
+      "skipped": 5,
+      "failed": 0,
+      "log": "D:/noval_and_manga/_tools/R196-full-corrected.log"
+      ,"scope": "Before final current-playlist matching fix; subsequent narrow consumer verification recorded separately"
+    },
+    "analyze": "No issues found",
+    "regressions": {
+      "danmaku": 84,
+      "halfPageSyncAndMigration": 24,
+      "directoryFilter": 2,
+      "migrationAndGestureRepair": 32,
+      "profileNavigation": 5
+      ,"playlistMatchingAndPlayerResume": 16
+    },
+    "previousFailure": {
+      "passed": 2023,
+      "skipped": 5,
+      "failed": 17,
+      "causes": [
+        "historical fixtures retained current histories column or omitted histories table",
+        "late image geometry rebuilt zoom while fingers were down",
+        "profile test tapped before scrolling settled"
+      ],
+      "retainedLog": "D:/noval_and_manga/_tools/R196-full-regression.log"
+    }
+  },
+  "finalPlaylistRepair": {
+    "cause": "All playback lists were counted as duplicate episode numbers; actual 7sefun catalog has two independent 28-episode lists",
+    "fix": "Require unique normal episode within current source and playbackListOf(current); keep same-list duplicate refusal",
+    "verification": "16 consumer tests passed; changed-files analyze No issues found; Android and Windows rebuilt",
+    "actualEpisode1": {"source": "7sefun list 4", "episode": 1, "resumedAt": "6:05 / 25:59", "bilibiliComments": 7408, "animekoComments": 83},
+    "actualEpisode2": {"episode": 2, "bilibiliComments": 5700, "animekoComments": 30},
+    "gamer": "request timeout retained independently; did not block media or other pools",
+    "independentToggle": "Bilibili off retained Animeko 83; Bilibili reenabled and original all-source selection restored",
+    "toolbar": "Portrait button and fullscreen right sidebar opened on actual playing remote video; close returned to ongoing playback",
+    "pixels": "Actual remote video and multiple colored danmaku strings visually inspected; no fixture stream used",
+    "exit": "Player exited to detail; normal portrait orientation restored"
+  },
+  "android": {
+    "serial": "emulator-5554",
+    "avd": "triomi_r174_network_volume_storage",
+    "package": "io.github.hyperionhxh.triomi",
+    "artifact": "D:/noval_and_manga/_tools/Triomi-R196-playlist-verified-acceptance.apk",
+    "bytes": 163823196,
+    "sha256": "ff6495710def1679375875cb3a53e8ea51a144f6a2f476c661e0309654e866d7",
+    "installedSha256Matches": true,
+    "install": "install -r; no uninstall or clear",
+    "signature": {
+      "v2": true,
+      "signers": 1,
+      "kind": "debug acceptance only, not production",
+      "certificateSha256": "0b70a33046b49ce49e6d43c68efa6d9c80b1c56cc88e7aec113fa737ee72afa6"
+    },
+    "observed": {
+      "existingManga": "ordinary history/detail/continue shows original artwork; RTL swipe 1/23 to 2/23",
+      "nativePinch": "instrumentation injected two pointers and remaining-finger drag; enlarged screenshot captured; returned to 1/23",
+      "globalSplit": "enabled in real settings; independent force-stop restart switch remained enabled; restored false",
+      "localWideFixture": "system file picker import 1 chapter / 2 original PNGs; portrait then 2/2 right half then 2/2 left half; distinct RIGHT HALF / LEFT HALF pixels inspected; independent force-stop shelf continue restored 2/2 left half",
+      "completionRoute": "created R196-check, added existing unshelved cached manga, toggled explicit checkbox; independent force-stop list retained 1/1 completed; temporary route deleted",
+      "diagnosticSearch": {
+        "source": "Bangumi anime",
+        "explicitSearches": 1,
+        "resultCount": 2,
+        "latencyMs": 687,
+        "exportKeywordAbsent": true,
+        "temporaryHistoryCleared": true
+      }
+    },
+    "cleanup": {
+      "temporaryLocalImportRemovedThroughUI": true,
+      "temporaryCbzRemovedOnHostAndDevice": true,
+      "originalSplitPreferenceRestored": true,
+      "nightModeUnchanged": true
+    }
+  },
+  "windows": {
+    "build": "success after serial retry",
+    "executable": "D:\\noval_and_manga\\triomi-main\\build\\windows\\x64\\runner\\Release\\triomi.exe",
+    "bytes": 485376,
+    "sha256": "6f7be3e8828c3ca080803d536e4b9de8807c1dee8610a35d9fd36b091272dd04",
+    "aotAppSoBytes": 17597320,
+    "aotAppSoSha256": "d759b8d6bc97f856bb3f331a19bea1a99871f786ba6b0cd2de9de77d4576ac3f",
+    "previousBuildFailure": "concurrent full-suite process held build/native_assets/windows/sqlite3.dll; build succeeded after suite exited",
+    "actualUi": "Completed through restored dedicated computer interface on latest Release; original desktop data retained",
+    "selectedAcceptanceMethod": "Dedicated desktop control restored by user; actual app screenshots, AX and native input used",
+    "diagnostics": {"source":"7sefun","resultCount":2,"latencyMs":433,"exportKeywordAbsent":true,"testHistoryCleared":true},
+    "routes": "Created temporary route, added existing anime and manga, moved manga first, marked it complete, next item became anime; normal close/reopen retained order and 1/2 complete; next action opened exact anime detail; temporary route removed",
+    "reader": "Imported labeled four-PNG CBZ through real importer; actual LEFT HALF then RIGHT HALF pixels with original page 2/4; new process continue restored RIGHT HALF; dual-page showed original portrait 3 and 4 together; unsplit wide image occupied one screen",
+    "cleanup": "Temporary local import removed through UI and source CBZ deleted; split, dual-page and cover-offset options restored; night mode unchanged",
+    "video": "Actual DM84 resume and canonical-linked 7sefun episode 1 played real frames; colored danmaku visually present; new toolbar opened right sidebar",
+    "pools": {"bilibili":7412,"animeko":83,"gamer":3001},
+    "sourceToggle": "Bilibili disabled independently; Animeko83 and Gamer3001 retained; all-source selection restored",
+    "desktopControl": "Background pointer calls did not affect Flutter; used human-approved takeover after screenshot evidence; AX controls used when available; grant released and app closed",
+    "windowObservation": "One target window disappeared during initial restart/shelf journey; cause not established; app reopened and exact half-page restore succeeded",
+    "pictures": {"diagnostic":"R196-windows-diagnostic.png","routesRestart":"R196-windows-routesRestart.png","splitLeft":"R196-windows-splitLeft.png","splitRight":"R196-windows-splitRight.png","splitRestart":"R196-windows-splitRestart.png","dualPage":"R196-windows-dualPage.png","playerSources":"R196-windows-playerSources.png","realVideo":"R196-windows-realVideo.png"}
+  },
+  "diagnosticExportObserved": {
+    "schema": "triomi.source-diagnostics",
+    "version": 1,
+    "exportedAt": "2026-11-18T01:28:17.936156Z",
+    "sources": [
+      {
+        "source": "sha256:c44b47f2670eac21",
+        "label": "Bangumi 番剧资料",
+        "lastSuccess": {
+          "at": "2026-11-18T01:27:34.668Z",
+          "outcome": "success",
+          "category": "success",
+          "latencyMs": 687,
+          "resultCount": 2,
+          "appVersion": "0.16.1+203",
+          "pluginVersion": "1.0.0"
+        },
+        "runs": [
+          {
+            "at": "2026-11-18T01:27:34.668Z",
+            "outcome": "success",
+            "category": "success",
+            "latencyMs": 687,
+            "resultCount": 2,
+            "appVersion": "0.16.1+203",
+            "pluginVersion": "1.0.0"
+          }
+        ]
+      }
+    ]
+  },
+  "knownAccountScan": {
+    "scope": "Known account values and encodings; production signing secrets unavailable locally",
+    "sourceFiles": 1377,
+    "sourceHits": 0,
+    "apkMembers": 626,
+    "apkHits": 0,
+    "windowsFiles": 467,
+    "windowsHits": 0
+  },
+  "pictures": {
+    "splitRight": "R196-offline-first-half.png",
+    "splitLeft": "R196-offline-second-half.png",
+    "splitRestart": "R196-offline-half-restarted.png",
+    "globalSplitRestart": "R196-global-split-restarted.png",
+    "nativePinchEnlarged": "R196-native-pinch-zoomed.png"
+    ,"realVideo": "R196-danmaku-real-player.png",
+    "fullscreen": "R196-fullscreen-playing.png",
+    "fullscreenSidebar": "R196-fullscreen-source-sidebar.png",
+    "autoEpisode1": "R196-playlist-auto-matched.png",
+    "autoVideo": "R196-real-auto-danmaku-video.png",
+    "autoEpisode2": "R196-playlist-auto-episode2.png"
+  },
+  "remaining": [
+    "No claim of all hardware, every source, or exhaustive mode combination coverage",
+    "Production remote signing/build/publication and public artifact verification are next"
+  ],
+  "publication": {
+    "committed": false,
+    "pushed": false,
+    "tagged": false,
+    "released": false,
+    "reason": "Requested Android and Windows actual feature journeys observed; proceeding under user's prior conditional publication authorization",
+    "targetVersion": "0.17.0",
+    "targetBuild": 204,
+    "existingRelease": "v0.16.1 retained unchanged"
+  }
+}

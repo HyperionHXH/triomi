@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/anime/anime_workspace_page.dart';
+import '../../features/completion_routes/completion_routes_page.dart';
 import '../../features/detail/detail_page.dart';
 import '../../features/downloads/downloads_page.dart';
 import '../../features/history/history_page.dart';
@@ -29,6 +30,7 @@ import '../../features/reader/manga_reader_page.dart';
 import '../../features/search/search_page.dart';
 import '../../features/settings/settings_page.dart';
 import '../../features/shell/adaptive_shell.dart';
+import '../../features/sources/diagnostics/source_diagnostics_page.dart';
 import '../../features/sources/sources_page.dart';
 import '../../features/tracking/tracking_page.dart';
 import '../models/media_item.dart';
@@ -93,6 +95,8 @@ abstract final class AppRoutes {
   static const String webdav = '/webdav';
   static const String tracking = '/tracking';
   static const String danmakuSettings = '/danmaku-settings';
+  static const String completionRoutes = '/completion-routes';
+  static const String sourceDiagnostics = '/source-diagnostics';
 }
 
 abstract final class AppRouter {
@@ -146,6 +150,16 @@ abstract final class AppRouter {
                 ],
               ),
             ],
+          ),
+          GoRoute(
+            path: AppRoutes.completionRoutes,
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => CompletionRoutesPage(initialItem: state.extra is MediaItem ? state.extra as MediaItem : null),
+          ),
+          GoRoute(
+            path: AppRoutes.sourceDiagnostics,
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => SourceDiagnosticsPage(initialSourceId: state.uri.queryParameters['source']),
           ),
           GoRoute(
             path: AppRoutes.settings,
