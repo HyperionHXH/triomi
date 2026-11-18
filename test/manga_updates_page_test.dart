@@ -77,7 +77,9 @@ void main() {
     await tester.pumpWidget(UncontrolledProviderScope(container: container,
       child: const MaterialApp(home: MangaUpdatesPage())));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithIcon(IconButton, Icons.refresh));
+    await tester.drag(find.byType(ListView), const Offset(0, 350));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
     for (var attempt = 0; attempt < 100 && !source.started.isCompleted; attempt++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
       await tester.pump();
@@ -85,7 +87,6 @@ void main() {
     expect(source.started.isCompleted, isTrue, reason: 'refresh must reach the source directory request');
     await tester.pump();
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
-    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.refresh)).onPressed, isNull);
     source.pending.complete(const [
       Chapter(sourceId: 'updates-source', remoteId: 'c0', title: 'Chapter 0'),
       Chapter(sourceId: 'updates-source', remoteId: 'c1', title: 'Chapter 1', sortIndex: 1),
@@ -98,7 +99,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(find.text('Owned title'), findsOneWidget);
-    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.refresh)).onPressed, isNotNull);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.runAsync(() async {
       container.dispose();

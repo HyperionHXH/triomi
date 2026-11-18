@@ -268,7 +268,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       source.shelfError = StateError('remote unavailable');
-      await tester.tap(find.byTooltip('刷新'));
+      await tester.drag(find.byType(ListView), const Offset(0, 350));
       await tester.pumpAndSettle();
       expect(source.shelfCalls, 2);
       expect(find.text('书架加载失败'), findsOneWidget);
