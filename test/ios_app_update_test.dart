@@ -89,6 +89,10 @@ class _Transport implements HttpClientAdapter {
   String tag;
   int revision, build;
   bool corruptPayload = false, corruptManifest = false;
+  int apiStatus = 200;
+  bool rateLimitHeaders = true;
+  String? atom;
+  Map<String, Object?> metadataOverrides = {};
   List<Map<String, Object?>> historicalReleases = [];
   final unavailableTags = <String>{};
   final requests = <Uri>[];
@@ -135,15 +139,39 @@ class _Transport implements HttpClientAdapter {
   ) async {
     requests.add(options.uri);
     if (options.uri.toString() == appUpdateReleasesApi) {
+      if (apiStatus != 200) {
+        return ResponseBody.fromString('', apiStatus, headers: {
+          if (rateLimitHeaders) 'x-ratelimit-remaining': ['0'],
+        });
+      }
       return ResponseBody.fromString(
         jsonEncode([release, ...historicalReleases]),
         200,
       );
     }
+    if (options.uri.toString() == appUpdateReleasesFeed) {
+      return ResponseBody.fromString(atom ?? '''
+<feed xmlns="http://www.w3.org/2005/Atom">
+<entry><link rel="alternate" href="https://github.com/$appUpdateRepository/releases/tag/v0.15.4-ios.198-r1"/></entry>
+<entry><link rel="alternate" href="https://github.com/other/repo/releases/tag/v9.9.9-ios.999"/></entry>
+<entry><link rel="alternate" href="https://github.com/$appUpdateRepository/releases/tag/$tag"/></entry>
+</feed>''', 200);
+    }
     if (options.uri.pathSegments.any(unavailableTags.contains)) {
       return ResponseBody.fromString('obsolete asset unavailable', 404);
     }
     final name = options.uri.pathSegments.last;
+    if (name == 'release-metadata.json') {
+      return ResponseBody.fromString(jsonEncode({
+        'tag': tag,
+        'version': manifest['version'],
+        'build': '$build',
+        'iosRevision': revision,
+        'bytes': payload.length,
+        'sha256': hash,
+        ...metadataOverrides,
+      }), 200);
+    }
     if (name == 'SHA256SUMS.txt') return ResponseBody.fromBytes(sums, 200);
     if (name == 'triomi-ios.update.json') {
       return ResponseBody.fromBytes(
@@ -239,6 +267,53 @@ void main() {
     service.close();
     await root.delete(recursive: true);
   });
+
+  for (final status in [403, 429]) {
+    test('iOS API $status uses the official feed and verifies the offered IPA', () async {
+      transport.apiStatus = status;
+      transport.rateLimitHeaders = status == 403;
+      final token = AppUpdateCancellation();
+      final releases = await service.checkReleases(_installed, token);
+      final release = newestAppUpdateRelease(_installed, releases)!;
+      expect(release.tag, transport.tag);
+      expect(release.iosRevision, 2);
+      expect(transport.requests.where((uri) => uri.path.endsWith('.ipa')), isEmpty);
+      final candidate = await service.downloadRelease(release, token);
+      expect(candidate.offered.sha256, transport.hash);
+      expect(candidate.bytes, transport.payload.length);
+      await service.discard(candidate);
+    });
+  }
+
+  test('permission-related 403 does not trigger the iOS feed', () async {
+    transport.apiStatus = 403;
+    transport.rateLimitHeaders = false;
+    await expectLater(service.checkReleases(_installed, AppUpdateCancellation()),
+        throwsA(isA<HttpException>().having((error) => error.message, 'message',
+            allOf(contains('HTTP 403'), isNot(contains('限流'))))));
+    expect(transport.requests.map((uri) => uri.toString()), [appUpdateReleasesApi]);
+  });
+
+  test('missing iOS feed entries do not report that the app is current', () async {
+    transport.apiStatus = 403;
+    transport.atom = '<feed xmlns="http://www.w3.org/2005/Atom"/>';
+    await expectLater(service.checkReleases(_installed, AppUpdateCancellation()),
+        throwsA(isA<HttpException>().having((error) => error.message, 'message',
+            contains('暂不能确认'))));
+  });
+
+  for (final failure in ['length', 'digest', 'manifest']) {
+    test('iOS fallback refuses inconsistent $failure before download', () async {
+      transport.apiStatus = 403;
+      if (failure == 'length') transport.metadataOverrides['bytes'] = appUpdateMaxBytes + 1;
+      if (failure == 'digest') transport.metadataOverrides['sha256'] = _hash;
+      if (failure == 'manifest') transport.corruptManifest = true;
+      await expectLater(service.checkReleases(_installed, AppUpdateCancellation()),
+          throwsFormatException);
+      expect(transport.requests.where((uri) => uri.path.endsWith('.ipa')), isEmpty);
+      expect(stages, isEmpty);
+    });
+  }
 
   test(
     'startup resolves bundled servicing revisions without downloading IPA',
@@ -462,6 +537,29 @@ void main() {
     await expectLater(service.shareIos(rejected), throwsStateError);
     expect(handoffs, 2);
   });
+
+  for (final newer in [true, false]) {
+    testWidgets('iOS rate limit fallback reports ${newer ? 'an update' : 'a limited result'}', (tester) async {
+      transport.apiStatus = 403;
+      if (!newer) {
+        transport.tag = 'v0.15.4-ios.198-r1';
+        transport.revision = 1;
+      }
+      await tester.pumpWidget(
+        MaterialApp(theme: AppTheme.light(), home: AppUpdatePage(service: service)),
+      );
+      await tester.pumpAndSettle();
+      final check = find.byKey(const ValueKey('app-update-check'));
+      await tester.ensureVisible(check);
+      await tester.tap(check);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('当前使用官方发布订阅'), findsOneWidget);
+      expect(find.text(newer ? '有新版本等你体验' : '官方订阅近期未发现更新'), findsOneWidget);
+      expect(find.text('当前已是最新构建'), findsNothing);
+      expect(transport.payloadRequested.isCompleted, isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 
   testWidgets(
     'iOS share cancellation retains a removable IPA across route reopening and active share refuses deletion',

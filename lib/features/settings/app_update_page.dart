@@ -367,11 +367,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         if (!_supported) {
           return;
         }
-        final releases = await _service.resolvePlatformRevisions(
-          current,
-          await _service.releases(token),
-          token,
-        );
+        final releases = await _service.checkReleases(current, token);
         token.check();
         if (mounted) {
           setState(() {
@@ -942,11 +938,13 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         : current == null
         ? (_failed ? '当前版本暂时无法读取' : '正在了解当前版本')
         : _releases == null
-        ? '尚未检查更新'
+        ? (_failed ? '未能确认是否有更新' : '尚未检查更新')
         : latest == null
         ? '暂时没有发布版本'
         : hasUpdate
         ? '有新版本等你体验'
+        : latest.fromIosFeed
+        ? '官方订阅近期未发现更新'
         : '当前已是最新构建';
     final issue = selected == null ? null : _releaseIssue(selected);
     return PopScope(
@@ -1141,7 +1139,8 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                                         ? '此平台不支持应用内更新'
                                         : current == null
                                         ? '正在读取已安装版本…'
-                                        : '${current.version} · 构建 ${current.versionCode}',
+                                        : '${current.version} · 构建 ${current.versionCode}'
+                                          '${current.iosRevision > 0 ? ' · 修订 ${current.iosRevision}' : ''}',
                                     key: const ValueKey(
                                       'app-update-installed-version',
                                     ),
@@ -1181,6 +1180,8 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                         Text(
                           _unsupportedPlatform
                               ? '请通过当前平台的发布渠道更新。'
+                              : latest?.fromIosFeed == true
+                              ? 'GitHub API 已限流，当前使用官方发布订阅，仅显示近期最新的 iOS 发布。'
                               : '匿名查询官方 GitHub 发布，含测试版；不发送账号、Cookie 或令牌。',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
@@ -1259,7 +1260,9 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                             ],
                           ),
                           Text(
-                            '${selected.advertisedBuild == null ? '正式版' : '构建 ${selected.advertisedBuild}'} · ${_releaseDate(selected.publishedAt)}',
+                            '${selected.advertisedBuild == null ? '正式版' : '构建 ${selected.advertisedBuild}'}'
+                            '${_ios && (selected.iosRevision ?? 0) > 0 ? ' · 修订 ${selected.iosRevision}' : ''}'
+                            '${selected.publishedAt.isEmpty && selected.fromIosFeed ? '' : ' · ${_releaseDate(selected.publishedAt)}'}',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),

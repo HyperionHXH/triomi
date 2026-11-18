@@ -10,6 +10,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:xml/xml.dart';
 
 import '../../core/source/network_proxy.dart';
 import '../../core/source/system_proxy.dart';
@@ -207,6 +208,14 @@ Uri _updateHttps(String value) {
 const appUpdateRepository = 'HyperionHXH/triomi';
 const appUpdateReleasesApi =
     'https://api.github.com/repos/$appUpdateRepository/releases?per_page=30';
+const _githubReleaseOrigin = 'https://github.com';
+const appUpdateReleasesFeed =
+    '$_githubReleaseOrigin/$appUpdateRepository/releases.atom';
+const _iosMetadataLimit = 64 * 1024;
+
+class _UpdateApiRateLimited extends HttpException {
+  const _UpdateApiRateLimited(super.message);
+}
 
 /// Stable tags advertise a semantic version, never an invented package build.
 /// Historical test tags additionally advertise the exact Android/Windows build.
@@ -254,6 +263,19 @@ class _AppUpdateVersion {
   }
 }
 
+final _iosReleaseTagPattern = RegExp(
+  r'^v?(\d+\.\d+\.\d+)-ios\.([1-9]\d{0,4})(?:-r([1-9]\d{0,4}))?$',
+);
+
+RegExpMatch? _iosReleaseTag(String tag) {
+  final match = _iosReleaseTagPattern.firstMatch(tag);
+  if (match == null || match.end != tag.length) return null;
+  if (int.parse(match[2]!) > 65535 || int.parse(match[3] ?? '0') > 65535) {
+    return null;
+  }
+  return match;
+}
+
 class AppUpdateReleaseAsset {
   const AppUpdateReleaseAsset._(this.name, this.url, this.bytes, this.digest);
   final String name;
@@ -276,6 +298,7 @@ class AppUpdateRelease {
     this.iosRevision,
     this.iosBuild,
     this.iosOnly = false,
+    this.fromIosFeed = false,
   });
   final String tag, name, notes, publishedAt;
   final _AppUpdateVersion _version;
@@ -287,6 +310,7 @@ class AppUpdateRelease {
   final int? windowsRevision, windowsBuild;
   final int? iosRevision, iosBuild;
   final bool iosOnly;
+  final bool fromIosFeed;
   String get versionLabel =>
       '$version${advertisedBuild == null ? '' : ' · 构建 $advertisedBuild'}'
       '${windowsRevision == null ? '' : ' · Windows 修订 $windowsRevision'}'
@@ -382,14 +406,9 @@ class AppUpdateRelease {
         continue;
       }
       final tag = item['tag_name'] as String;
-      final iosTag = RegExp(
-        r'^v?(\d+\.\d+\.\d+)-ios\.([1-9]\d{0,4})(?:-r([1-9]\d{0,4}))?$',
-      ).firstMatch(tag);
+      final iosTag = _iosReleaseTag(tag);
       final version = _AppUpdateVersion.parse(iosTag?[1] ?? tag);
-      if (version == null ||
-          (iosTag != null &&
-              (int.parse(iosTag[2]!) > 65535 ||
-                  int.parse(iosTag[3] ?? '0') > 65535))) {
+      if (version == null) {
         continue;
       }
       if (!identities.add(iosTag == null ? version.identity : tag) ||
@@ -532,7 +551,7 @@ checkStartupAppUpdate(
       return null;
     }
     final releases = await Future.any<Object?>([
-      service.releases(cancellation),
+      service.checkReleases(current, cancellation),
       disabled.future.then<Object?>((_) => null),
     ]);
     if (!preferences.automaticAppUpdateCheckEnabled ||
@@ -541,12 +560,10 @@ checkStartupAppUpdate(
       return null;
     }
     cancellation.check();
-    final releasesForPlatform = await service.resolvePlatformRevisions(
+    final release = newestAppUpdateRelease(
       current,
       releases as List<AppUpdateRelease>,
-      cancellation,
     );
-    final release = newestAppUpdateRelease(current, releasesForPlatform);
     if (!preferences.automaticAppUpdateCheckEnabled) return null;
     return release == null ? null : (current: current, release: release);
   } on AppUpdateCancelled {
@@ -984,6 +1001,147 @@ class AppUpdateService {
         ),
       );
 
+  Future<List<AppUpdateRelease>> checkReleases(
+    AppUpdateInfo current,
+    AppUpdateCancellation token,
+  ) async {
+    final List<AppUpdateRelease> listed;
+    try {
+      listed = await releases(token);
+    } on _UpdateApiRateLimited {
+      if (current.platform != 'ios') rethrow;
+      return _latestIosFeedRelease(token);
+    }
+    return resolvePlatformRevisions(current, listed, token);
+  }
+
+  Future<List<AppUpdateRelease>> _latestIosFeedRelease(
+    AppUpdateCancellation token,
+  ) async {
+    final feed = await _readBounded(
+      Uri.parse(appUpdateReleasesFeed),
+      token,
+      4 * 1024 * 1024,
+    );
+    const atom = 'http://www.w3.org/2005/Atom';
+    const tagPrefix =
+        '$_githubReleaseOrigin/$appUpdateRepository/releases/tag/';
+    final XmlElement? root;
+    try {
+      root = XmlDocument.parse(utf8.decode(feed)).childElements.firstOrNull;
+    } on Exception {
+      throw const FormatException('GitHub 官方发布订阅格式无效');
+    }
+    if (root == null || root.localName != 'feed' || root.namespaceUri != atom) {
+      throw const FormatException('GitHub 官方发布订阅格式无效');
+    }
+
+    AppUpdateRelease? newest;
+    for (final entry in root.findElements('entry', namespaceUri: atom)) {
+      for (final link in entry.findElements('link', namespaceUri: atom)) {
+        final href = link.getAttribute('href');
+        if (link.getAttribute('rel') != 'alternate' ||
+            href == null ||
+            !href.startsWith(tagPrefix)) {
+          continue;
+        }
+        final tag = href.substring(tagPrefix.length);
+        final match = _iosReleaseTag(tag);
+        if (match == null) continue;
+        final version = _AppUpdateVersion.parse(match[1]!);
+        if (version == null) continue;
+        final candidate = AppUpdateRelease._(
+          tag: tag,
+          name: 'Triomi ${version.version} · iOS',
+          version: version,
+          notes: 'GitHub API 限流；此结果来自官方发布订阅，仅显示近期最新的 iOS 发布。',
+          prerelease: false,
+          publishedAt: '',
+          assets: const {},
+          iosOnly: true,
+          iosBuild: int.parse(match[2]!),
+          iosRevision: int.parse(match[3] ?? '0'),
+        );
+        if (newest == null || candidate.compareTo(newest) > 0) {
+          newest = candidate;
+        }
+      }
+    }
+    if (newest == null) {
+      throw const HttpException(
+        'GitHub API 已限流，官方订阅的近期记录中未找到 iOS 发布；暂不能确认是否有更新。',
+      );
+    }
+
+    // The feed carries tags, not assets. Cross-check the bounded IPA length
+    // metadata with the official manifest and SHA256SUMS before offering it.
+    final release = newest;
+    Uri url(String name) => Uri.parse(
+      '$_githubReleaseOrigin/$appUpdateRepository/releases/download/${release.tag}/$name',
+    );
+    Future<List<int>> smallAsset(String name) => _readBounded(
+      url(name),
+      token,
+      _iosMetadataLimit,
+      officialAsset: true,
+    );
+
+    const sumsName = 'SHA256SUMS.txt';
+    const manifestName = 'triomi-ios.update.json';
+    const ipaName = 'Triomi-iOS-Unsigned.ipa';
+    final metadata = _decodeIosJson(await smallAsset('release-metadata.json'));
+    final length = metadata['bytes'];
+    final digest = metadata['sha256'];
+    if (metadata['tag'] != release.tag ||
+        metadata['version'] != release.version ||
+        metadata['build'] != '${release.iosBuild}' ||
+        metadata['iosRevision'] is! int ||
+        metadata['iosRevision'] != release.iosRevision ||
+        length is! int ||
+        length < 1 ||
+        length > appUpdateMaxBytes ||
+        digest is! String ||
+        !_hashPattern.hasMatch(digest)) {
+      throw const FormatException('iOS 官方订阅对应的发布元数据无效');
+    }
+    final sums = await smallAsset(sumsName);
+    final checksums = appUpdateChecksums(sums);
+    if (checksums[ipaName] != digest) {
+      throw const FormatException('iOS 发布元数据与 SHA256SUMS 不符');
+    }
+    final manifest = await smallAsset(manifestName);
+    _validateIosManifest(release, manifest, checksums);
+    return [
+      AppUpdateRelease._(
+        tag: release.tag,
+        name: release.name,
+        version: release._version,
+        notes: release.notes,
+        prerelease: release.prerelease,
+        publishedAt: release.publishedAt,
+        iosOnly: true,
+        iosBuild: release.iosBuild,
+        iosRevision: release.iosRevision,
+        fromIosFeed: true,
+        assets: Map.unmodifiable({
+          ipaName: AppUpdateReleaseAsset._(ipaName, url(ipaName), length, digest),
+          sumsName: AppUpdateReleaseAsset._(
+            sumsName,
+            url(sumsName),
+            sums.length,
+            sha256.convert(sums).toString(),
+          ),
+          manifestName: AppUpdateReleaseAsset._(
+            manifestName,
+            url(manifestName),
+            manifest.length,
+            checksums[manifestName],
+          ),
+        }),
+      ),
+    ];
+  }
+
   Future<List<AppUpdateRelease>> resolvePlatformRevisions(
     AppUpdateInfo current,
     List<AppUpdateRelease> releases,
@@ -1098,10 +1256,29 @@ class AppUpdateService {
       throw const FormatException('iOS 发布缺少 IPA、修订清单或 SHA256SUMS');
     }
     final checksums = await releaseChecksums(release, token);
-    final bytes = await _readBounded(asset.url, token, 64 * 1024, asset: asset);
-    final raw = jsonDecode(utf8.decode(bytes));
-    if (checksums[asset.name] != sha256.convert(bytes).toString() ||
-        raw is! Map<String, dynamic> ||
+    final bytes = await _readBounded(
+      asset.url, token, _iosMetadataLimit, asset: asset,
+    );
+    return _validateIosManifest(release, bytes, checksums);
+  }
+
+  Map<String, dynamic> _decodeIosJson(List<int> bytes) {
+    try {
+      final value = jsonDecode(utf8.decode(bytes));
+      if (value is Map<String, dynamic>) return value;
+    } on FormatException {
+      // A network error page must not be exposed as diagnostics.
+    }
+    throw const FormatException('iOS 官方发布清单不是有效的 JSON 对象');
+  }
+
+  Map<String, dynamic> _validateIosManifest(
+    AppUpdateRelease release,
+    List<int> bytes,
+    Map<String, String> checksums,
+  ) {
+    final raw = _decodeIosJson(bytes);
+    if (checksums['triomi-ios.update.json'] != sha256.convert(bytes).toString() ||
         raw['platform'] != 'ios' ||
         raw['packageName'] != 'io.github.hyperionhxh.triomi' ||
         raw['version'] is! String ||
@@ -1112,7 +1289,7 @@ class AppUpdateService {
         (release.iosOnly && raw['iosRevision'] != release.iosRevision) ||
         raw['sha256'] is! String ||
         !_hashPattern.hasMatch(raw['sha256'] as String) ||
-        raw['sha256'] != checksums[ipa.name]) {
+        raw['sha256'] != checksums['Triomi-iOS-Unsigned.ipa']) {
       throw const FormatException('iOS 修订清单与官方发布或 SHA-256 不符');
     }
     return raw;
@@ -1172,8 +1349,9 @@ class AppUpdateService {
     AppUpdateCancellation token,
     int limit, {
     AppUpdateReleaseAsset? asset,
+    bool officialAsset = false,
   }) async {
-    final body = await _request(uri, token, officialAsset: asset != null);
+    final body = await _request(uri, token, officialAsset: officialAsset || asset != null);
     final bytes = <int>[];
     try {
       await for (final chunk in body.stream) {
@@ -1345,16 +1523,21 @@ class AppUpdateService {
     await _launchExplorer(['/select,', file.path]);
   }
 
+  bool _isApiRateLimited(DioException failure, Uri uri) {
+    if (uri.toString() != appUpdateReleasesApi) return false;
+    final response = failure.response;
+    return response?.statusCode == 429 ||
+        (response?.statusCode == 403 &&
+            (response!.headers.value('x-ratelimit-remaining') == '0' ||
+                response.headers.value('retry-after') != null));
+  }
+
   String _requestFailure(DioException failure, Uri uri) {
     final response = failure.response;
     final status = response?.statusCode;
     final host = uri.host;
     final githubApi = host == 'api.github.com';
-    if (githubApi &&
-        (status == 429 ||
-            (status == 403 &&
-                (response!.headers.value('x-ratelimit-remaining') == '0' ||
-                    response.headers.value('retry-after') != null)))) {
+    if (_isApiRateLimited(failure, uri)) {
       final retry = int.tryParse(response!.headers.value('retry-after') ?? '');
       final delay = retry != null && retry > 0 && retry <= 86400
           ? '请在 $retry 秒后重试。'
@@ -1402,10 +1585,13 @@ class AppUpdateService {
             validateStatus: (status) =>
                 status == 200 ||
                 (officialAsset && [301, 302, 303, 307, 308].contains(status)),
-            headers: const {
+            headers: {
               'Accept-Encoding': 'identity',
-              'Accept': 'application/vnd.github+json',
-              'X-GitHub-Api-Version': '2022-11-28',
+              'Accept': uri.toString() == appUpdateReleasesFeed
+                  ? 'application/atom+xml'
+                  : 'application/vnd.github+json',
+              if (uri.host == 'api.github.com')
+                'X-GitHub-Api-Version': '2022-11-28',
               'User-Agent': 'Triomi-App-Updater',
             },
           ),
@@ -1450,7 +1636,11 @@ class AppUpdateService {
         token.check();
         // Only bounded, allowlisted diagnostics; never response bodies, signed
         // CDN queries, source credentials, proxy addresses or arbitrary headers.
-        throw HttpException(_requestFailure(failure, uri));
+        final message = _requestFailure(failure, uri);
+        if (_isApiRateLimited(failure, uri)) {
+          throw _UpdateApiRateLimited(message);
+        }
+        throw HttpException(message);
       }
     }
   }
