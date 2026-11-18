@@ -269,11 +269,13 @@ class _NovelBookHeader extends StatelessWidget {
     required this.historyRevision,
     required this.onReturned,
     required this.directoryLoading,
+    required this.onDownload,
   });
   final _DetailData data;
   final int historyRevision;
   final VoidCallback onReturned;
   final bool directoryLoading;
+  final VoidCallback? onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -286,82 +288,70 @@ class _NovelBookHeader extends StatelessWidget {
     }.length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: SizedBox(
-                  width: 96,
-                  height: 144,
-                  child: MediaCover(url: item.coverUrl),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              width: (MediaQuery.sizeOf(context).width * .29)
+                  .clamp(82, 144)
+                  .toDouble(),
+              height:
+                  (MediaQuery.sizeOf(context).width * .29)
+                      .clamp(82, 144)
+                      .toDouble() *
+                  1.42,
+              child: MediaCover(url: item.coverUrl, sourceId: item.sourceId),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(item.title, style: theme.textTheme.titleLarge),
+                if (item.author?.isNotEmpty == true) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    item.author!,
+                    style: TextStyle(color: theme.colorScheme.primary),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Text(
+                  [
+                    data.sourceName.isEmpty ? item.sourceId : data.sourceName,
+                    if (data.chapters.isNotEmpty && volumes > 0) '$volumes 卷',
+                    if (data.chapters.isNotEmpty) '${data.chapters.length} 章',
+                    ?item.statusLabel,
+                  ].join(' · '),
+                  style: theme.textTheme.bodySmall,
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: 8),
+                _ReadContinueButton(
+                  data: data,
+                  loading: directoryLoading,
+                  historyRevision: historyRevision,
+                  onReturned: onReturned,
+                ),
+                NovelCollectionButton(item: item),
+                Wrap(
+                  spacing: 4,
                   children: [
-                    Text(item.title, style: theme.textTheme.titleLarge),
-                    if (item.author?.isNotEmpty == true) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        item.author!,
-                        style: TextStyle(color: theme.colorScheme.primary),
+                    _AddRouteButton(item: item, iconOnly: true),
+                    if (onDownload != null)
+                      IconButton.outlined(
+                        key: const ValueKey('detail-chapter-download'),
+                        tooltip: '批量下载',
+                        onPressed: onDownload,
+                        icon: const Icon(Icons.download_outlined),
                       ),
-                    ],
-                    const SizedBox(height: 8),
-                    Text(
-                      '来源 · ${data.sourceName.isEmpty ? item.sourceId : data.sourceName}',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    if (item.status?.isNotEmpty == true)
-                      Text(item.status!, style: theme.textTheme.bodySmall),
-                    if (data.chapters.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        '${volumes == 0 ? '' : '$volumes 卷 · '}${data.chapters.length} 章',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ],
                   ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _ReadContinueButton(
-                data: data,
-                loading: directoryLoading,
-                historyRevision: historyRevision,
-                onReturned: onReturned,
-              ),
-              NovelCollectionButton(item: item),
-              _AddRouteButton(item: item),
-            ],
-          ),
-          _DetailTags(item: item),
-          if (item.description?.isNotEmpty == true) ...[
-            const SizedBox(height: 12),
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('内容简介', style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  _ExpandableSynopsis(text: item.description!),
-                ],
-              ),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -500,15 +490,25 @@ class _DetailTags extends StatelessWidget {
 }
 
 class _AddRouteButton extends ConsumerWidget {
-  const _AddRouteButton({required this.item});
+  const _AddRouteButton({required this.item, this.iconOnly = false});
   final MediaItem item;
+  final bool iconOnly;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => OutlinedButton.icon(
-    onPressed: () => showAddToCompletionRoute(context, ref, item),
-    icon: const Icon(Icons.playlist_add),
-    label: const Text('加入路线'),
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    void add() => showAddToCompletionRoute(context, ref, item);
+    return iconOnly
+        ? IconButton.outlined(
+            tooltip: '加入路线',
+            onPressed: add,
+            icon: const Icon(Icons.playlist_add),
+          )
+        : OutlinedButton.icon(
+            onPressed: add,
+            icon: const Icon(Icons.playlist_add),
+            label: const Text('加入路线'),
+          );
+  }
 }
 
 class _MangaSearchLink extends StatelessWidget {

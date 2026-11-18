@@ -47,9 +47,14 @@ class _MergedMangaPageState extends ConsumerState<MergedMangaPage> {
     );
   }
 
-  void _refresh() {
+  Future<void> _refresh() async {
     final next = _load();
     setState(() => _directory = next);
+    try {
+      await next;
+    } catch (_) {
+      // The FutureBuilder presents the error and retry action.
+    }
   }
 
   Future<void> _chooseMembers() async {
@@ -117,7 +122,7 @@ class _MergedMangaPageState extends ConsumerState<MergedMangaPage> {
         members: members,
         chapterGroups: _groups,
       );
-      if (mounted) _refresh();
+      if (mounted) await _refresh();
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
     }
@@ -164,7 +169,7 @@ class _MergedMangaPageState extends ConsumerState<MergedMangaPage> {
         members: members,
         chapterGroups: _groups,
       );
-      if (mounted) _refresh();
+      if (mounted) await _refresh();
     }
   }
 
@@ -244,19 +249,12 @@ class _MergedMangaPageState extends ConsumerState<MergedMangaPage> {
       members: _members,
       chapterGroups: groups,
     );
-    if (mounted) _refresh();
+    if (mounted) await _refresh();
   }
 
   @override
   Widget build(BuildContext context) => PageScaffold(
     title: '多来源合并',
-    actions: [
-      IconButton(
-        tooltip: '刷新合并目录',
-        onPressed: _refresh,
-        icon: const Icon(Icons.refresh),
-      ),
-    ],
     child: Column(
       children: [
         Wrap(
@@ -268,7 +266,7 @@ class _MergedMangaPageState extends ConsumerState<MergedMangaPage> {
             TextButton(
               onPressed: () async {
                 await _repository.remove(widget.anchor);
-                if (mounted) _refresh();
+                if (mounted) await _refresh();
               },
               child: const Text('解除合并（保留原数据）'),
             ),
@@ -283,50 +281,59 @@ class _MergedMangaPageState extends ConsumerState<MergedMangaPage> {
                 return const Center(child: CircularProgressIndicator());
               }
               if (snapshot.hasError) {
-                return Center(child: Text('${snapshot.error}'));
+                return Center(
+                  child: TextButton(
+                    onPressed: _refresh,
+                    child: Text('${snapshot.error} · 重试'),
+                  ),
+                );
               }
               final directory = snapshot.data;
               if (directory == null) {
                 return const Center(child: Text('先选择至少两个已确认版本；原收藏、目录和进度不移动。'));
               }
-              return ListView(
-                children: [
-                  for (final failure in directory.failures)
-                    ListTile(
-                      leading: const Icon(Icons.warning_amber),
-                      title: Text(failure),
-                    ),
-                  if (_groups.isNotEmpty)
-                    TextButton(
-                      onPressed: () async {
-                        await _repository.save(
-                          anchor: widget.anchor,
-                          members: _members,
-                        );
-                        if (mounted) _refresh();
-                      },
-                      child: const Text('撤销全部等价映射（恢复所有版本章节）'),
-                    ),
-                  for (var i = 0; i < directory.chapters.length; i++)
-                    ListTile(
-                      title: Text(directory.chapters[i].title),
-                      subtitle: Text(directory.chapters[i].sourceId),
-                      trailing: directory.chapters[i].locked
-                          ? const Icon(Icons.lock)
-                          : const Icon(Icons.chevron_right),
-                      onTap: directory.chapters[i].locked
-                          ? null
-                          : () => context.push(
-                              AppRoutes.reader,
-                              extra: MangaReaderArgs(
-                                item: widget.anchor,
-                                chapters: directory.chapters,
-                                initialIndex: i,
-                                chapterOwners: directory.owners,
+              return RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    for (final failure in directory.failures)
+                      ListTile(
+                        leading: const Icon(Icons.warning_amber),
+                        title: Text(failure),
+                      ),
+                    if (_groups.isNotEmpty)
+                      TextButton(
+                        onPressed: () async {
+                          await _repository.save(
+                            anchor: widget.anchor,
+                            members: _members,
+                          );
+                          if (mounted) await _refresh();
+                        },
+                        child: const Text('撤销全部等价映射（恢复所有版本章节）'),
+                      ),
+                    for (var i = 0; i < directory.chapters.length; i++)
+                      ListTile(
+                        title: Text(directory.chapters[i].title),
+                        subtitle: Text(directory.chapters[i].sourceId),
+                        trailing: directory.chapters[i].locked
+                            ? const Icon(Icons.lock)
+                            : const Icon(Icons.chevron_right),
+                        onTap: directory.chapters[i].locked
+                            ? null
+                            : () => context.push(
+                                AppRoutes.reader,
+                                extra: MangaReaderArgs(
+                                  item: widget.anchor,
+                                  chapters: directory.chapters,
+                                  initialIndex: i,
+                                  chapterOwners: directory.owners,
+                                ),
                               ),
-                            ),
-                    ),
-                ],
+                      ),
+                  ],
+                ),
               );
             },
           ),

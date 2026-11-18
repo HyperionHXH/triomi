@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:triomi/core/db/app_database.dart';
 import 'package:triomi/core/db/database_provider.dart';
 import 'package:triomi/core/models/chapter.dart';
@@ -14,6 +15,7 @@ import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/theme/app_theme.dart';
+import 'package:triomi/features/detail/detail_page.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/novel/novel_book_card.dart';
@@ -228,6 +230,7 @@ void main() {
   Future<void> pumpShelf(
     WidgetTester tester, {
     List<_NovelSource>? sources,
+    GoRouter? router,
   }) async {
     tester.view.physicalSize = const Size(1000, 1400);
     tester.view.devicePixelRatio = 1;
@@ -243,7 +246,9 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: shelfContainer!,
-        child: const MaterialApp(home: Scaffold(body: NovelShelfView())),
+        child: router == null
+            ? const MaterialApp(home: Scaffold(body: NovelShelfView()))
+            : MaterialApp.router(routerConfig: router),
       ),
     );
     await tester.pumpAndSettle();
@@ -333,8 +338,6 @@ void main() {
       await pumpShelf(tester);
       expect(find.text('离线小说'), findsOneWidget);
       expect(find.text('不属于小说的漫画'), findsNothing);
-      expect(find.textContaining('部分下载 1/2'), findsOneWidget);
-      expect(find.textContaining('缺少有效专用字体'), findsOneWidget);
       await tester.tap(find.text('已下载'));
       await tester.pumpAndSettle();
       expect(find.text('离线小说'), findsOneWidget);
@@ -402,12 +405,11 @@ void main() {
       expect(lk.remoteWrites + lns.remoteWrites + loggedOut.remoteWrites, 0);
       await tester.ensureVisible(remoteBookCard());
       expect(remoteBookCard(), findsOneWidget);
-      expect(find.textContaining('尚未加入本机收藏'), findsOneWidget);
       lk.shelfError = StateError('shelf unavailable');
       await pullRefresh(tester);
       await tester.pumpAndSettle();
       expect(remoteBookCard(), findsOneWidget);
-      expect(find.textContaining('上次成功快照（本次刷新失败）'), findsOneWidget);
+      expect(find.textContaining('保留上次成功结果'), findsOneWidget);
       lk.shelfError = null;
       lk.books = [];
       await pullRefresh(tester);
@@ -563,61 +565,111 @@ void main() {
     },
   );
 
-  shelfTest(
-    'remote-only removal uses account service and preserves local downloads and history',
-    (tester) async {
-      final book = _book('lk', 'remote', '站点小说');
-      await repository.cacheItem(book);
-      const chapter = Chapter(
-        sourceId: 'lk',
-        remoteId: 'cached',
-        title: '离线章节',
-        content: ChapterContent(text: '保留离线正文'),
-      );
-      await repository.saveChapters(
-        itemSourceId: 'lk',
-        itemRemoteId: 'remote',
-        chapters: [chapter],
-      );
-      await DownloadRepository(db).saveChapterContent(chapter);
-      await repository.recordHistory(
-        sourceId: 'lk',
-        remoteId: 'remote',
-        chapter: chapter,
-        position: 4,
-      );
-      final source = _NovelSource('lk', books: [book]);
-      await pumpShelf(tester, sources: [source]);
-      await tester.tap(find.text('移出站点收藏'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('取消'));
-      await tester.pumpAndSettle();
-      expect(source.remoteWrites, 0);
-      source.writeError = StateError('write unavailable');
-      await tester.tap(find.text('移出站点收藏'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('移除'));
-      await tester.pumpAndSettle();
-      expect(remoteBookCard(), findsOneWidget);
-      expect(find.textContaining('write unavailable'), findsOneWidget);
-      source.writeError = null;
-      await tester.tap(find.text('移出站点收藏'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('移除'));
-      await tester.pumpAndSettle();
-      expect(source.remoteWrites, 2);
-      expect(remoteBookCard(), findsNothing);
-      expect(await repository.isInLibrary('lk', 'remote'), false);
-      expect((await repository.lastReadOf('lk', 'remote'))!.position, 4);
-      expect(
-        (await repository.loadChapters('lk', 'remote')).single.content!.text,
-        '保留离线正文',
-      );
-      await tester.tap(find.text('已下载'));
-      await tester.pumpAndSettle();
-      expect(remoteBookCard(), findsOneWidget);
-    },
-  );
+  shelfTest('novel shelf previews open details before offering book actions', (
+    tester,
+  ) async {
+    final book = _book(
+      'lk',
+      'remote',
+      '站点小说',
+      tags: ['奇幻'],
+    ).copyWith(description: '保留的书籍简介');
+    await repository.cacheItem(book);
+    const chapter = Chapter(
+      sourceId: 'lk',
+      remoteId: 'cached',
+      title: '离线章节',
+      content: ChapterContent(text: '保留离线正文'),
+    );
+    await repository.saveChapters(
+      itemSourceId: 'lk',
+      itemRemoteId: 'remote',
+      chapters: [chapter],
+    );
+    await DownloadRepository(db).saveChapterContent(chapter);
+    await repository.recordHistory(
+      sourceId: 'lk',
+      remoteId: 'remote',
+      chapter: chapter,
+      position: 4,
+    );
+    final source = _NovelSource('lk', books: [book]);
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => const Scaffold(body: NovelShelfView()),
+        ),
+        GoRoute(
+          path: '/novel/detail',
+          builder: (_, state) => DetailPage(item: state.extra! as MediaItem),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await pumpShelf(tester, sources: [source], router: router);
+    final card = remoteBookCard();
+    expect(
+      find.descendant(of: card, matching: find.text('保留的书籍简介')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: card, matching: find.text('#奇幻')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: card, matching: find.textContaining('部分下载')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: card, matching: find.text('继续阅读')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: card, matching: find.text('目录 / 下载 / 导出')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: card, matching: find.text('移出站点收藏')),
+      findsNothing,
+    );
+    await tester.tap(find.descendant(of: card, matching: find.text('站点小说')));
+    await tester.pumpAndSettle();
+    final opened = tester.widget<DetailPage>(find.byType(DetailPage)).item;
+    expect((opened.sourceId, opened.remoteId), (book.sourceId, book.remoteId));
+    final remove = find.text('已在站点收藏 · 移除');
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(source.remoteWrites, 0);
+    source.writeError = StateError('write unavailable');
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('移除'));
+    await tester.pumpAndSettle();
+    expect(remove, findsOneWidget);
+    expect(find.text('站点收藏修改未确认。'), findsOneWidget);
+    source.writeError = null;
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('移除'));
+    await tester.pumpAndSettle();
+    expect(source.remoteWrites, 2);
+    expect(find.text('加入站点收藏'), findsOneWidget);
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(remoteBookCard(), findsNothing);
+    expect(await repository.isInLibrary('lk', 'remote'), false);
+    expect((await repository.lastReadOf('lk', 'remote'))!.position, 4);
+    expect(
+      (await repository.loadChapters('lk', 'remote')).single.content!.text,
+      '保留离线正文',
+    );
+    await tester.tap(find.text('已下载'));
+    await tester.pumpAndSettle();
+    expect(remoteBookCard(), findsOneWidget);
+  });
 
   shelfTest('revoked sessions discard late remote shelf results', (
     tester,
@@ -679,8 +731,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(lk.listingCalls, ['hot/1']);
-      await tester.ensureVisible(find.text('加载更多'));
-      await tester.tap(find.text('加载更多'));
+      await tester.drag(find.byType(ListView).last, const Offset(0, -240));
       await tester.pumpAndSettle();
       expect(lk.listingCalls, ['hot/1', 'hot/2']);
       expect(find.text('lk hot book'), findsOneWidget);

@@ -162,16 +162,21 @@ class _LkDmConversationsPageState extends ConsumerState<LkDmConversationsPage> {
       );
     }
     if (_items.isEmpty) {
-      return const EmptyStateView(
-        icon: Icons.forum_outlined,
-        title: '还没有私信会话',
-        message: '站点返回为空时这里不显示占位假数据。',
+      return RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            EmptyStateView(icon: Icons.forum_outlined, title: '还没有私信会话'),
+          ],
+        ),
       );
     }
 
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
         itemCount: _items.length,
         separatorBuilder: (context, index) =>
@@ -312,13 +317,6 @@ class _LkDmThreadPageState extends ConsumerState<LkDmThreadPage> {
     final name = widget.peerName;
     return PageScaffold(
       title: name == null || name.isEmpty ? '私信' : name,
-      actions: <Widget>[
-        IconButton(
-          tooltip: '刷新',
-          onPressed: _loading ? null : () => unawaited(_load()),
-          icon: const Icon(Icons.refresh),
-        ),
-      ],
       child: _buildBody(),
     );
   }
@@ -344,18 +342,19 @@ class _LkDmThreadPageState extends ConsumerState<LkDmThreadPage> {
         ),
       );
     }
-    if (_items.isEmpty) {
-      return const EmptyStateView(
-        icon: Icons.forum_outlined,
-        title: '没有可显示的消息',
-        message: '站点没有返回这个会话的消息内容。',
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      itemCount: _items.length,
-      itemBuilder: (context, index) => _bubble(_items[index]),
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        itemCount: _items.isEmpty ? 1 : _items.length,
+        itemBuilder: (context, index) => _items.isEmpty
+            ? const EmptyStateView(
+                icon: Icons.forum_outlined,
+                title: '没有可显示的消息',
+              )
+            : _bubble(_items[index]),
+      ),
     );
   }
 

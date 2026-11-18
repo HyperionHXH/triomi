@@ -377,9 +377,7 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
-                      _novel
-                          ? '分卷与章节 · ${_volumes.length} 卷'
-                          : '章节 · ${widget.chapters.length}',
+                      _novel ? '分卷与章节' : '章节 · ${widget.chapters.length}',
                       style: theme.textTheme.titleMedium,
                     ),
                     if (widget.onDownload != null)
@@ -407,34 +405,28 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                child: AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ListTile(
-                        key: ValueKey('detail-volume:${volume.key}'),
-                        title: Text(volume.key.isEmpty ? '未分卷' : volume.key),
-                        subtitle: Text('${volume.value.length} 章'),
-                        leading: Icon(
+                child: Material(
+                  borderRadius: BorderRadius.circular(10),
+                  color: theme.colorScheme.surfaceContainerHigh,
+                  clipBehavior: Clip.antiAlias,
+                  child: ListTile(
+                    key: ValueKey('detail-volume:${volume.key}'),
+                    title: Text(volume.key.isEmpty ? '未分卷' : volume.key),
+                    subtitle: Text('${volume.value.length} 章'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ?_volumeDownload(volume, entries),
+                        Icon(
                           _volume == volume.key
                               ? Icons.expand_less
                               : Icons.expand_more,
                         ),
-                        onTap: () => setState(
-                          () => _volume = _volume == volume.key
-                              ? null
-                              : volume.key,
-                        ),
-                      ),
-                      if (widget.onDownloadSelection != null)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: _volumeDownload(volume, entries),
-                          ),
-                        ),
-                    ],
+                      ],
+                    ),
+                    onTap: () => setState(
+                      () => _volume = _volume == volume.key ? null : volume.key,
+                    ),
                   ),
                 ),
               ),
@@ -476,7 +468,7 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
               entries[id]?.status != DownloadStatus.running,
         )
         .toSet();
-    return TextButton.icon(
+    return IconButton(
       key: ValueKey('detail-volume-download:${volume.key}'),
       onPressed: targets.isEmpty
           ? null
@@ -488,15 +480,13 @@ class _ChapterCatalogState extends ConsumerState<_ChapterCatalog> {
             ? Icons.downloading
             : Icons.download_outlined,
       ),
-      label: Text(
-        ids.isNotEmpty && done == ids.length
-            ? '本卷已下载'
-            : targets.isEmpty && pending > 0
-            ? '本卷下载中'
-            : done + pending > 0
-            ? '继续下载本卷'
-            : '下载本卷',
-      ),
+      tooltip: ids.isNotEmpty && done == ids.length
+          ? '本卷已下载'
+          : targets.isEmpty && pending > 0
+          ? '本卷下载中'
+          : done + pending > 0
+          ? '继续下载本卷'
+          : '下载本卷',
     );
   }
 }

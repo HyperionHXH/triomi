@@ -942,9 +942,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('已选 1 章'), findsOneWidget);
       site.catalog = [_chapters[1], _chapters[2]];
-      final refresh = find.byTooltip('刷新资料和目录');
-      await tester.ensureVisible(refresh);
-      await tester.tap(refresh);
+      final scroll = find.byType(CustomScrollView).first;
+      tester.widget<CustomScrollView>(scroll).controller!.jumpTo(0);
+      await tester.pump();
+      await tester.drag(scroll, const Offset(0, 420));
       await settle(tester);
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsNothing);

@@ -17,6 +17,7 @@ import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
 import '../../core/source/tag_search.dart';
 import '../../core/storage/preferences.dart';
+import '../../core/widgets/scroll_pagination.dart';
 import '../discover/manga_feed_repository.dart';
 import '../discover/widgets/media_item_card.dart';
 import '../library/batch_collection_page.dart';
@@ -138,7 +139,6 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
             : MangaSourceLayout.comfortable);
     _restoreFilters(snapshot: widget.filtersJson);
     if (widget.filtersJson != null && _filters.isNotEmpty) _listing = 'search';
-    _scroll.addListener(_onScroll);
     if (!_searchOnly ||
         _query.isNotEmpty ||
         _tags.isNotEmpty ||
@@ -183,16 +183,6 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
     _search.dispose();
     _scroll.dispose();
     super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scroll.hasClients &&
-        _scroll.position.extentAfter < 400 &&
-        !_busy &&
-        _more &&
-        _error == null) {
-      unawaited(_load());
-    }
   }
 
   void _toast(String message) {
@@ -922,157 +912,159 @@ class _MangaSourcePageState extends ConsumerState<MangaSourcePage> {
           Expanded(
             child: RefreshIndicator(
               onRefresh: () => _load(reset: true),
-              child: CustomScrollView(
-                key: PageStorageKey('manga-source:${widget.sourceId}'),
-                controller: _scroll,
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  if (_error != null)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            Text(_error!),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 12,
-                              children: [
-                                TextButton(
-                                  onPressed: () => _load(reset: _items.isEmpty),
-                                  child: const Text('重试当前来源'),
-                                ),
-                                if (source is MihonSource)
+              child: LoadMoreOnScroll(
+                onLoadMore: () {
+                  if (_error == null && _page > 0) unawaited(_load());
+                },
+                child: CustomScrollView(
+                  key: PageStorageKey('manga-source:${widget.sourceId}'),
+                  controller: _scroll,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    if (_error != null)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            children: [
+                              Text(_error!),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 12,
+                                children: [
                                   TextButton(
-                                    onPressed: () => _editFilters(entry!),
-                                    child: const Text('重新选择筛选'),
+                                    onPressed: () =>
+                                        _load(reset: _items.isEmpty),
+                                    child: const Text('重试当前来源'),
                                   ),
-                                TextButton(
-                                  onPressed: () => _action('manage', entry),
-                                  child: const Text('来源管理'),
-                                ),
-                              ],
-                            ),
-                          ],
+                                  if (source is MihonSource)
+                                    TextButton(
+                                      onPressed: () => _editFilters(entry!),
+                                      child: const Text('重新选择筛选'),
+                                    ),
+                                  TextButton(
+                                    onPressed: () => _action('manage', entry),
+                                    child: const Text('来源管理'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  if (_items.isEmpty && !_busy && _error == null)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(
-                        child: Text(_submitted ? '此来源没有返回作品' : '输入关键词，搜索当前来源'),
+                    if (_items.isEmpty && !_busy && _error == null)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(
+                          child: Text(
+                            _submitted ? '此来源没有返回作品' : '输入关键词，搜索当前来源',
+                          ),
+                        ),
                       ),
-                    ),
-                  if (_layout == MangaSourceLayout.list)
-                    SliverList.builder(
-                      itemCount: _items.length,
-                      itemBuilder: (context, index) {
-                        final raw = _items[index];
-                        final item = raw.withMangaMetadata(
-                          ref
-                                  .watch(
-                                    mangaItemMetadataProvider((
-                                      raw.sourceId,
-                                      raw.remoteId,
-                                    )),
-                                  )
-                                  .asData
-                                  ?.value ??
-                              raw.localMangaMetadata,
-                        );
-                        return MediaItemRow(
-                          item: item,
-                          sourceName: entry?.descriptor.name ?? '',
-                          onLongPress: () => unawaited(
-                            showMangaItemActions(context, ref, item),
-                          ),
-                          onTap: () => context.push(
-                            AppRoutes.detailFor(item),
-                            extra: item,
-                          ),
-                        );
-                      },
-                    )
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.all(12),
-                      sliver: SliverLayoutBuilder(
-                        builder: (context, constraints) {
-                          final scale =
-                              MediaQuery.textScalerOf(context).scale(14) / 14;
-                          final width = constraints.crossAxisExtent;
-                          final columns = width < 600
-                              ? (width < 280 || scale > 1.8 ? 1 : 2)
-                              : ((width + 12) /
-                                        (160 * scale.clamp(1.0, 1.6) + 12))
-                                    .floor()
-                                    .clamp(2, 8);
-                          final cardWidth =
-                              (width - 12 * (columns - 1)) / columns;
-                          return SliverGrid(
-                            delegate: SliverChildBuilderDelegate((
-                              context,
-                              index,
-                            ) {
-                              final raw = _items[index];
-                              final item = raw.withMangaMetadata(
-                                ref
-                                        .watch(
-                                          mangaItemMetadataProvider((
-                                            raw.sourceId,
-                                            raw.remoteId,
-                                          )),
-                                        )
-                                        .asData
-                                        ?.value ??
-                                    raw.localMangaMetadata,
-                              );
-                              return MangaSourceCard(
-                                key: ValueKey((item.sourceId, item.remoteId)),
-                                item: item,
-                                layout: _layout,
-                                onTap: () => context.push(
-                                  AppRoutes.detailFor(item),
-                                  extra: item,
-                                ),
-                                onLongPress: () => unawaited(
-                                  showMangaItemActions(context, ref, item),
-                                ),
-                              );
-                            }, childCount: _items.length),
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: columns,
-                                  crossAxisSpacing: 12,
-                                  mainAxisSpacing: 12,
-                                  mainAxisExtent:
-                                      cardWidth * 1.5 +
-                                      (_layout == MangaSourceLayout.compact
-                                          ? 0
-                                          : MediaQuery.textScalerOf(context)
-                                                        .scale(13) *
-                                                    2.8 +
-                                                8),
-                                ),
+                    if (_layout == MangaSourceLayout.list)
+                      SliverList.builder(
+                        itemCount: _items.length,
+                        itemBuilder: (context, index) {
+                          final raw = _items[index];
+                          final item = raw.withMangaMetadata(
+                            ref
+                                    .watch(
+                                      mangaItemMetadataProvider((
+                                        raw.sourceId,
+                                        raw.remoteId,
+                                      )),
+                                    )
+                                    .asData
+                                    ?.value ??
+                                raw.localMangaMetadata,
+                          );
+                          return MediaItemRow(
+                            item: item,
+                            sourceName: entry?.descriptor.name ?? '',
+                            onLongPress: () => unawaited(
+                              showMangaItemActions(context, ref, item),
+                            ),
+                            onTap: () => context.push(
+                              AppRoutes.detailFor(item),
+                              extra: item,
+                            ),
                           );
                         },
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.all(12),
+                        sliver: SliverLayoutBuilder(
+                          builder: (context, constraints) {
+                            final scale =
+                                MediaQuery.textScalerOf(context).scale(14) / 14;
+                            final width = constraints.crossAxisExtent;
+                            final columns = width < 600
+                                ? (width < 280 || scale > 1.8 ? 1 : 2)
+                                : ((width + 12) /
+                                          (160 * scale.clamp(1.0, 1.6) + 12))
+                                      .floor()
+                                      .clamp(2, 8);
+                            final cardWidth =
+                                (width - 12 * (columns - 1)) / columns;
+                            return SliverGrid(
+                              delegate: SliverChildBuilderDelegate((
+                                context,
+                                index,
+                              ) {
+                                final raw = _items[index];
+                                final item = raw.withMangaMetadata(
+                                  ref
+                                          .watch(
+                                            mangaItemMetadataProvider((
+                                              raw.sourceId,
+                                              raw.remoteId,
+                                            )),
+                                          )
+                                          .asData
+                                          ?.value ??
+                                      raw.localMangaMetadata,
+                                );
+                                return MangaSourceCard(
+                                  key: ValueKey((item.sourceId, item.remoteId)),
+                                  item: item,
+                                  layout: _layout,
+                                  onTap: () => context.push(
+                                    AppRoutes.detailFor(item),
+                                    extra: item,
+                                  ),
+                                  onLongPress: () => unawaited(
+                                    showMangaItemActions(context, ref, item),
+                                  ),
+                                );
+                              }, childCount: _items.length),
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: columns,
+                                    crossAxisSpacing: 12,
+                                    mainAxisSpacing: 12,
+                                    mainAxisExtent:
+                                        cardWidth * 1.5 +
+                                        (_layout == MangaSourceLayout.compact
+                                            ? 0
+                                            : MediaQuery.textScalerOf(context)
+                                                          .scale(13) *
+                                                      2.8 +
+                                                  8),
+                                  ),
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Center(
-                        child: _more
-                            ? TextButton(
-                                onPressed: _busy ? null : _load,
-                                child: const Text('加载下一页'),
-                              )
-                            : const Text('已到目录末尾'),
+                    if (_error == null)
+                      SliverToBoxAdapter(
+                        child: PageTail(
+                          loading: _busy && _items.isNotEmpty,
+                          ended: !_more && _items.isNotEmpty,
+                        ),
                       ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

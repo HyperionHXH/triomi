@@ -731,20 +731,20 @@ void main() {
           container: container,
           child: const MaterialApp(
             home: Scaffold(
-              body: SingleChildScrollView(
-                child: AnimeInfoSheet(
-                  id: '42',
-                  item: subject,
-                  initialSection: 'comments',
-                  embedded: true,
-                ),
+              body: AnimeInfoSheet(
+                id: '42',
+                item: subject,
+                initialSection: 'comments',
               ),
             ),
           ),
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('anime-info-more:comments')));
+      await tester.drag(
+        find.byType(SingleChildScrollView).first,
+        const Offset(0, -240),
+      );
       await tester.pumpAndSettle();
       expect(find.text('首页正文'), findsOneWidget);
       expect(find.text('末页正文'), findsNothing);
@@ -753,10 +753,7 @@ void main() {
       expect(offsets, ['0', '1', '1']);
       expect(find.text('首页正文'), findsOneWidget);
       expect(find.text('末页正文'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('anime-info-more:comments')),
-        findsNothing,
-      );
+      expect(find.text('已经到底了'), findsOneWidget);
     },
   );
 

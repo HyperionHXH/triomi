@@ -29,6 +29,7 @@ class MediaItemCollection extends StatelessWidget {
     this.onLongPressItem,
     this.badgeOf,
     this.header,
+    this.actionOf,
     this.footer,
     this.controller,
     this.preferGrid = false,
@@ -57,6 +58,7 @@ class MediaItemCollection extends StatelessWidget {
 
   /// 右上角角标文案（书架用它显示阅读进度）。
   final String? Function(MediaItem item)? badgeOf;
+  final Widget? Function(MediaItem item)? actionOf;
 
   @override
   Widget build(BuildContext context) {
@@ -95,6 +97,7 @@ class MediaItemCollection extends StatelessWidget {
     if (useList) {
       return ListView.builder(
         controller: controller,
+        physics: const AlwaysScrollableScrollPhysics(),
         key: PageStorageKey('media/list/$sourceName'),
         padding: padding,
         itemCount: items.length + extra,
@@ -107,8 +110,8 @@ class MediaItemCollection extends StatelessWidget {
           final itemIndex = index - leading;
           if (footer != null && itemIndex == items.length) return footer!;
           final item = items[itemIndex];
-          return MediaItemRow(
-            key: ValueKey((item.sourceId, item.remoteId, item.type)),
+          final action = actionOf?.call(item);
+          final row = MediaItemRow(
             item: item,
             sourceName: sourceNameOf?.call(item) ?? sourceName,
             showMetadata: showMetadata,
@@ -117,6 +120,17 @@ class MediaItemCollection extends StatelessWidget {
             onLongPress: onLongPressItem == null
                 ? null
                 : () => onLongPressItem!(item),
+          );
+          return KeyedSubtree(
+            key: ValueKey((item.sourceId, item.remoteId, item.type)),
+            child: action == null
+                ? row
+                : Row(
+                    children: [
+                      Expanded(child: row),
+                      action,
+                    ],
+                  ),
           );
         },
       );
@@ -167,9 +181,9 @@ class MediaItemCollection extends StatelessWidget {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final item = items[index];
-                    return MediaItemCard(
+                    final action = actionOf?.call(item);
+                    final card = MediaItemCard(
                       item: item,
-                      key: ValueKey((item.sourceId, item.remoteId, item.type)),
                       sourceName: sourceNameOf?.call(item) ?? sourceName,
                       showMetadata: showMetadata,
                       badge: badgeOf?.call(item),
@@ -177,6 +191,17 @@ class MediaItemCollection extends StatelessWidget {
                       onLongPress: onLongPressItem == null
                           ? null
                           : () => onLongPressItem!(item),
+                    );
+                    return KeyedSubtree(
+                      key: ValueKey((item.sourceId, item.remoteId, item.type)),
+                      child: action == null
+                          ? card
+                          : Stack(
+                              children: [
+                                Positioned.fill(child: card),
+                                Positioned(top: 2, right: 2, child: action),
+                              ],
+                            ),
                     );
                   },
                   childCount: items.length,

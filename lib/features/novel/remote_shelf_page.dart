@@ -63,8 +63,7 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
     }
     try {
       final books = await provider.remoteShelf();
-      bool current() =>
-          mounted && seq == _requestSeq && provider.isLoggedIn;
+      bool current() => mounted && seq == _requestSeq && provider.isLoggedIn;
       if (!current()) {
         return _ShelfResult(needsLogin: mounted && seq == _requestSeq);
       }
@@ -99,10 +98,14 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
       }
       final keys = <(String, String)>{};
       return _ShelfResult(
-        books: books.where((book) =>
-            book.type == MediaType.novel &&
-            book.sourceId == entry.descriptor.id &&
-            keys.add((book.sourceId, book.remoteId))).toList(),
+        books: books
+            .where(
+              (book) =>
+                  book.type == MediaType.novel &&
+                  book.sourceId == entry.descriptor.id &&
+                  keys.add((book.sourceId, book.remoteId)),
+            )
+            .toList(),
         warning: warning,
       );
     } catch (error) {
@@ -111,7 +114,8 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
           : '${entry.descriptor.name}：${SourceException.sanitizeMessage('$error')}';
       return _ShelfResult(
         error: message,
-        needsLogin: error is SourceException && error.type == SourceErrorType.auth,
+        needsLogin:
+            error is SourceException && error.type == SourceErrorType.auth,
       );
     }
   }
@@ -142,16 +146,6 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
 
     return PageScaffold(
       title: '远端书架',
-      actions: <Widget>[
-        IconButton(
-          tooltip: '刷新',
-          onPressed: sourcesAsync.asData == null ||
-                  remoteShelfEntries(sourcesAsync.asData!.value).isEmpty
-              ? null
-              : _reloadCurrent,
-          icon: const Icon(Icons.refresh),
-        ),
-      ],
       child: sourcesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => EmptyStateView(
@@ -248,14 +242,18 @@ class _RemoteShelfPageState extends ConsumerState<RemoteShelfPage> {
                 );
               }
               if (result.books.isEmpty) {
-                return EmptyStateView(
-                  icon: Icons.bookmarks_outlined,
-                  title: '远端书架是空的',
-                  message: [
-                    '在${entry.descriptor.name}把书加入书架后，这里会同步显示。',
-                    if (result.warning != null)
-                      '未读刷新失败：${result.warning}（保留原值）',
-                  ].join('\n'),
+                return RefreshIndicator(
+                  onRefresh: _reloadCurrent,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      EmptyStateView(
+                        icon: Icons.bookmarks_outlined,
+                        title: '远端书架是空的',
+                        message: result.warning,
+                      ),
+                    ],
+                  ),
                 );
               }
               return Column(
@@ -373,4 +371,3 @@ class _SourceChipBar extends StatelessWidget {
     );
   }
 }
-

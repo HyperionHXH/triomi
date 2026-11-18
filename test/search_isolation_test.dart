@@ -264,9 +264,7 @@ void main() {
           lessThanOrEqualTo(tester.getBottomRight(collection).dy),
           reason: 'The final row must fit inside the visible result viewport.',
         );
-        final nextPage = find.widgetWithText(TextButton, '加载本站下一页');
-        await reach(nextPage);
-        await tester.tap(nextPage);
+        await tester.drag(scrollable, const Offset(0, -220));
         await advance(tester);
         expect(pages, [1, 2]);
         final retry = find.widgetWithText(TextButton, '重试本站');
@@ -282,11 +280,9 @@ void main() {
         for (var index = 60; index < 65; index++) {
           await reach(result(index));
         }
-        await reach(nextPage);
-        await tester.tap(nextPage);
+        await tester.drag(scrollable, const Offset(0, -220));
         await advance(tester);
         expect(pages, [1, 2, 2, 3]);
-        expect(nextPage, findsNothing);
         expect(result(64).hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
         await close();
@@ -317,55 +313,60 @@ void main() {
         }, id: 'paged-site'),
       ], sourceId: 'paged-site');
       await search(tester, 'name');
-      final next = find.widgetWithText(TextButton, '加载本站下一页');
-      await tester.ensureVisible(next);
+      expect(pages, [1]);
+      await tester.tap(find.widgetWithText(ListTile, 'paged-site'));
       await advance(tester);
-      await tester.tap(next);
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -220));
       await advance(tester);
       expect(pages, [1, 2]);
-      expect(find.text('page 1'), findsOneWidget);
+      expect(find.text('page 1').hitTestable(), findsOneWidget);
       final retry = find.widgetWithText(TextButton, '重试本站');
       await tester.ensureVisible(retry);
       await advance(tester);
       await tester.tap(retry);
       await advance(tester);
       expect(pages, [1, 2, 2]);
-      expect(find.text('page 1'), findsOneWidget);
+      expect(find.text('page 1').hitTestable(), findsOneWidget);
       expect(find.text('page 2'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await close();
     },
   );
 
-  testWidgets(
-    'anime search includes metadata and all enabled playback sources',
-    (tester) async {
-      tester.view.physicalSize = const Size(800, 1200);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final calls = <String>[];
-      final close = await render(tester, MediaType.anime, [
-        for (final id in ['bangumi-anime', 'chosen-site', 'other-site'])
-          _SearchSource(id, MediaType.anime, (query) async {
-            calls.add(id);
-            return [
-              MediaItem(
-                sourceId: id,
-                remoteId: 'same-id',
-                type: MediaType.anime,
-                title: '$id result',
-              ),
-            ];
-          }),
-      ], sourceId: 'chosen-site');
-      await search(tester, 'unlisted');
-      expect(calls.toSet(), {'chosen-site', 'other-site', 'bangumi-anime'});
-      expect(find.text('chosen-site result'), findsOneWidget);
-      expect(find.text('other-site result'), findsOneWidget);
-      expect(find.text('bangumi-anime result'), findsOneWidget);
-      await close();
-    },
-  );
+  testWidgets('anime modes isolate metadata and all enabled playback sources', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final calls = <String>[];
+    final close = await render(tester, MediaType.anime, [
+      for (final id in ['bangumi-anime', 'chosen-site', 'other-site'])
+        _SearchSource(id, MediaType.anime, (query) async {
+          calls.add(id);
+          return [
+            MediaItem(
+              sourceId: id,
+              remoteId: 'same-id',
+              type: MediaType.anime,
+              title: '$id result',
+            ),
+          ];
+        }),
+    ], sourceId: 'chosen-site');
+    await search(tester, 'unlisted');
+    expect(calls.toSet(), {'chosen-site', 'other-site'});
+    expect(find.text('chosen-site result'), findsOneWidget);
+    expect(find.text('other-site result'), findsOneWidget);
+    expect(find.text('资料筛选'), findsNothing);
+    await tester.tap(find.text('Bangumi 搜索'));
+    await advance(tester);
+    expect(calls.last, 'bangumi-anime');
+    expect(find.text('chosen-site result'), findsNothing);
+    expect(find.text('有结果'), findsNothing);
+    expect(find.text('bangumi-anime result'), findsOneWidget);
+    await close();
+  });
 
   testWidgets('only-results view does not interrupt pending sources', (
     tester,
@@ -405,11 +406,13 @@ void main() {
         (_) async => throw StateError('must not search novels'),
       ),
     ]);
+    await tester.tap(find.text('聚合搜索'));
+    await advance(tester);
     await search(tester, '未被Bangumi收录的作品');
-    expect(metadataCalls, 1);
+    expect(metadataCalls, 0);
     await tester.tap(find.text('有结果'));
     await advance(tester);
-    expect(metadataCalls, 1);
+    expect(metadataCalls, 0);
     expect(find.text('broken-site'), findsNothing);
     final card = find.byWidgetPredicate(
       (widget) =>
@@ -433,7 +436,7 @@ void main() {
     await advance(tester);
     expect(find.text('late-result'), findsNothing);
     expect(card, findsNothing);
-    expect(metadataCalls, 1);
+    expect(metadataCalls, 0);
     await close();
   });
 
@@ -453,7 +456,7 @@ void main() {
                 'name': 'Metadata result',
               },
             ],
-            'total': 100,
+            'total': 2,
           }),
         ),
       );
@@ -475,36 +478,27 @@ void main() {
       expect(http.requests, hasLength(1));
       final body = jsonDecode(http.requests.single.body!) as Map;
       expect(body['keyword'], 'keyword');
-      expect(playbackCalls, 1);
+      expect(playbackCalls, 0);
       expect(find.text('Metadata result'), findsOneWidget);
       final filter = body['filter'] as Map;
       expect(filter.containsKey('tag'), isFalse);
       expect(filter.containsKey('air_date'), isFalse);
       expect(filter.containsKey('rating'), isFalse);
       expect(find.text('资料筛选'), findsOneWidget);
-      await tester.tap(find.text('有结果'));
-      await advance(tester);
-      final nextPage = find.widgetWithText(TextButton, '加载本站下一页');
-      await tester.scrollUntilVisible(
-        nextPage,
-        200,
-        scrollable: find.descendant(
-          of: find.byType(MediaItemCollection),
-          matching: find.byType(Scrollable),
-        ),
-      );
-      await tester.ensureVisible(nextPage);
-      await advance(tester);
-      await tester.tap(nextPage);
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -220));
       await advance(tester);
       final next = http.requests.last;
-      expect(Uri.parse(next.url).queryParameters['offset'], '24');
+      expect(Uri.parse(next.url).queryParameters['offset'], '1');
       expect((jsonDecode(next.body!) as Map)['filter'], filter);
       expect((jsonDecode(next.body!) as Map)['keyword'], 'keyword');
       final collection = tester.widget<MediaItemCollection>(
         find.byType(MediaItemCollection),
       );
       expect(collection.items.map((item) => item.remoteId), ['42', '43']);
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -220));
+      await advance(tester);
+      expect(http.requests, hasLength(2));
+      expect(find.text('已经到底了'), findsOneWidget);
       await close();
     },
   );

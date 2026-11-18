@@ -133,11 +133,6 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
       title: '轻之国度',
       actions: <Widget>[
         IconButton(
-          tooltip: '刷新',
-          onPressed: _loading ? null : _load,
-          icon: const Icon(Icons.refresh),
-        ),
-        IconButton(
           tooltip: '账号登录与退出',
           onPressed: _manageAccount,
           icon: const Icon(Icons.manage_accounts_outlined),
@@ -178,6 +173,7 @@ class _LkAccountPageState extends ConsumerState<LkAccountPage> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: AppSpacing.xl),
         children: <Widget>[
           if (_error != null)

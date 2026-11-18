@@ -16,6 +16,7 @@ import '../../core/source/source_registry.dart';
 import '../../core/storage/preferences.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../../core/widgets/scroll_pagination.dart';
 import '../sources/source_account_entries.dart';
 import 'novel_book_card.dart';
 
@@ -316,16 +317,13 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
         Expanded(
           child: RefreshIndicator(
             onRefresh: () => _load(entry, feed, channel, reset: true),
-            child: NotificationListener<ScrollNotification>(
-              onNotification: (notification) {
-                if (notification.depth == 0 &&
-                    notification.metrics.extentAfter < 400 &&
-                    channel.error == null &&
+            child: LoadMoreOnScroll(
+              onLoadMore: () {
+                if (channel.error == null &&
                     !channel.loading &&
                     !channel.ended) {
-                  _load(entry, feed, channel);
+                  unawaited(_load(entry, feed, channel));
                 }
-                return false;
               },
               child: ListView.separated(
                 key: PageStorageKey('novel-discovery-$sourceId-${feed.id}'),
@@ -384,12 +382,7 @@ class _NovelDiscoveryViewState extends ConsumerState<NovelDiscoveryView> {
                             ],
                           ),
                         ] else if (channel.ended)
-                          Text(channel.items.isEmpty ? '当前频道暂无书籍' : '已经到底了')
-                        else
-                          OutlinedButton(
-                            onPressed: () => _load(entry, feed, channel),
-                            child: const Text('加载更多'),
-                          ),
+                          Text(channel.items.isEmpty ? '当前频道暂无书籍' : '已经到底了'),
                       ],
                     ),
                   );

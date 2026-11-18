@@ -7,6 +7,7 @@ import '../../core/models/media_item.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/source/bangumi_public_client.dart';
 import '../../core/source/http_client.dart';
+import '../../core/widgets/scroll_pagination.dart';
 import '../detail/anime_info_repository.dart';
 import 'widgets/media_item_card.dart';
 
@@ -166,14 +167,9 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
     }
     return RefreshIndicator(
       onRefresh: () => _load(refresh: true),
-      child: NotificationListener<ScrollNotification>(
-        onNotification: (notice) {
-          if (notice.depth == 0 &&
-              notice.metrics.extentAfter < 500 &&
-              _error == null) {
-            unawaited(_load());
-          }
-          return false;
+      child: LoadMoreOnScroll(
+        onLoadMore: () {
+          if (_error == null) unawaited(_load());
         },
         child: MediaItemCollection(
           items: _items,
@@ -184,18 +180,14 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
           badgeOf: (item) => item.rating == null || item.rating == 0
               ? null
               : item.rating!.toStringAsFixed(1),
-          footer: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Center(
-              child: _busy
-                  ? const CircularProgressIndicator()
-                  : _error != null
-                  ? TextButton(onPressed: _load, child: Text('$_error\n点击继续加载'))
-                  : _more
-                  ? TextButton(onPressed: _load, child: const Text('加载更多'))
-                  : const Text('本次结果已看完，可下拉刷新'),
-            ),
-          ),
+          footer: _error == null
+              ? PageTail(loading: _busy, ended: !_more && _items.isNotEmpty)
+              : Center(
+                  child: TextButton(
+                    onPressed: _load,
+                    child: Text('$_error · 重试'),
+                  ),
+                ),
         ),
       ),
     );

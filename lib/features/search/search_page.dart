@@ -18,6 +18,7 @@ import '../../core/source/source_providers.dart';
 import '../../core/source/source_registry.dart';
 import '../../core/storage/preferences.dart';
 import '../../core/widgets/page_scaffold.dart';
+import '../../core/widgets/scroll_pagination.dart';
 import '../detail/anime_filter_dialog.dart';
 import '../detail/anime_info_repository.dart';
 import '../discover/widgets/media_item_card.dart';
@@ -37,7 +38,16 @@ class SearchPage extends ConsumerStatefulWidget {
     this.initialTags = const [],
     this.onAddItem,
     this.isAdded,
-  });
+  }) : _site = null;
+
+  const SearchPage._source({
+    required this.type,
+    required this.initialQuery,
+    required this._site,
+    this.onAddItem,
+    this.isAdded,
+  }) : initialSourceId = null,
+       initialTags = const [];
 
   /// Search launched from a detail/modal stays above its caller instead of
   /// pushing another instance of the stateful workspace shell.
@@ -71,6 +81,7 @@ class SearchPage extends ConsumerStatefulWidget {
   final List<String> initialTags;
   final Future<void> Function(MediaItem item)? onAddItem;
   final bool Function(MediaItem item)? isAdded;
+  final _SearchRow? _site;
 
   @override
   ConsumerState<SearchPage> createState() => _SearchPageState();
@@ -90,6 +101,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   bool _starting = false;
   String? _error;
   late AnimeFilter _animeFilter = _initialAnimeFilter();
+  late bool _bangumi =
+      widget.type == MediaType.anime &&
+      widget._site == null &&
+      (widget.initialSourceId == null ||
+          widget.initialSourceId == 'bangumi-anime' ||
+          widget.initialTags.isNotEmpty);
+  bool get _singleSource => _bangumi || widget._site != null;
   bool _onlyResults = false;
   final _adding = <(String, String, MediaType)>{};
   bool _submitted = false;
@@ -98,6 +116,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   @override
   void initState() {
     super.initState();
+    if (widget._site case final site?) {
+      _query = widget.initialQuery;
+      _rows[site.entry.descriptor.id] = site;
+      _submitted = true;
+      return;
+    }
     if (_controller.text.trim().isNotEmpty ||
         (widget.type == MediaType.anime && widget.initialTags.isNotEmpty)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -118,8 +142,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         : saved.withTags(widget.initialTags);
   }
 
-  bool get _canBrowseAnime =>
-      widget.type == MediaType.anime && _animeFilter.active;
+  bool get _canBrowseAnime => _bangumi && _animeFilter.active;
 
   Future<void> _editAnimeFilter() async {
     final value = await showModalBottomSheet<AnimeFilter>(
@@ -184,7 +207,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         entry,
       ) {
         if (entry.descriptor.type != widget.type) return false;
-        return query.isNotEmpty || entry.descriptor.id == 'bangumi-anime';
+        if (widget._site case final site?) {
+          return entry.descriptor.id == site.entry.descriptor.id;
+        }
+        if (widget.type == MediaType.anime) {
+          return (entry.descriptor.id == 'bangumi-anime') == _bangumi;
+        }
+        return true;
       }).toList();
       if (widget.initialSourceId != null) {
         sources.sort(
@@ -235,6 +264,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           entry,
           items: previous?.items ?? const [],
           page: previous?.page ?? 0,
+          nextOffset: previous?.nextOffset ?? 0,
         ),
       );
     }
@@ -252,14 +282,18 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       }
       final provider = active.source as SearchProvider;
       bool? hasMore;
+      var nextOffset = previous?.nextOffset ?? 0;
       final items = await owner
           .run(() async {
             if (provider is BangumiSource) {
-              return provider.searchFiltered(
+              final result = await provider.searchPage(
                 query,
-                page: page,
+                offset: nextOffset,
                 filter: _animeFilter.publicFilter,
               );
+              hasMore = result.hasMore && result.nextOffset > nextOffset;
+              nextOffset = result.nextOffset;
+              return result.items;
             }
             if (provider is MihonSource) {
               final result = await provider.cataloguePage(
@@ -303,6 +337,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           items: unique.values.toList(),
           page: page,
           hasMore: hasMore ?? unique.length > before,
+          nextOffset: nextOffset,
         ),
       );
     } catch (error) {
@@ -318,6 +353,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           failure: error,
           items: previous?.items ?? const [],
           page: previous?.page ?? 0,
+          nextOffset: previous?.nextOffset ?? 0,
           error: error is SourceException
               ? SourceRegistry.describeError(error, entry.descriptor.name)
               : error is TimeoutException
@@ -380,32 +416,57 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
             child: input,
           ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Wrap(
-            spacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              ChoiceChip(
-                label: const Text('全部'),
-                selected: !_onlyResults,
-                onSelected: (_) => setState(() => _onlyResults = false),
-              ),
-              ChoiceChip(
-                label: const Text('有结果'),
-                selected: _onlyResults,
-                onSelected: (_) => setState(() => _onlyResults = true),
-              ),
-              if (widget.type == MediaType.anime)
-                FilterChip(
-                  label: const Text('资料筛选'),
-                  avatar: const Icon(Icons.tune, size: 18),
-                  selected: _animeFilter.active,
-                  onSelected: (_) => unawaited(_editAnimeFilter()),
-                ),
-            ],
+        if (widget._site case final site? when compact)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+            child: Text(
+              site.entry.descriptor.name,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
           ),
-        ),
+        if (widget.type == MediaType.anime && widget._site == null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+            child: SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: true, label: Text('Bangumi 搜索')),
+                ButtonSegment(value: false, label: Text('聚合搜索')),
+              ],
+              selected: {_bangumi},
+              onSelectionChanged: (value) {
+                setState(() => _bangumi = value.single);
+                unawaited(_submit());
+              },
+            ),
+          ),
+        if (widget._site == null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                if (_bangumi)
+                  FilterChip(
+                    label: const Text('资料筛选'),
+                    avatar: const Icon(Icons.tune, size: 18),
+                    selected: _animeFilter.active,
+                    onSelected: (_) => unawaited(_editAnimeFilter()),
+                  )
+                else ...[
+                  ChoiceChip(
+                    label: const Text('全部'),
+                    selected: !_onlyResults,
+                    onSelected: (_) => setState(() => _onlyResults = false),
+                  ),
+                  ChoiceChip(
+                    label: const Text('有结果'),
+                    selected: _onlyResults,
+                    onSelected: (_) => setState(() => _onlyResults = true),
+                  ),
+                ],
+              ],
+            ),
+          ),
         if (_starting || rows.any((row) => row.pending))
           const LinearProgressIndicator(minHeight: 2),
         const Divider(height: 1),
@@ -467,14 +528,18 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                     child: const Text('显示全部'),
                   ),
                 )
-              : visibleRows.length == 1 &&
-                    visibleRows.single.entry.descriptor.id == 'bangumi-anime' &&
-                    widget.onAddItem == null
-              ? _metadataGrid(visibleRows.single)
-              : ListView.separated(
-                  itemCount: visibleRows.length,
-                  separatorBuilder: (_, _) => const Divider(height: 16),
-                  itemBuilder: (_, index) => _resultSection(visibleRows[index]),
+              : _singleSource && rows.length == 1
+              ? _fullResults(rows.single)
+              : RefreshIndicator(
+                  onRefresh: _submit,
+                  child: ListView.separated(
+                    key: ValueKey(_generation),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    itemCount: visibleRows.length,
+                    separatorBuilder: (_, _) => const Divider(height: 16),
+                    itemBuilder: (_, index) =>
+                        _resultSection(visibleRows[index]),
+                  ),
                 ),
         ),
       ],
@@ -484,17 +549,58 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             appBar: AppBar(titleSpacing: 8, title: input),
             body: SafeArea(top: false, child: body),
           )
-        : PageScaffold(title: '搜索小说', child: body);
+        : PageScaffold(
+            title: widget._site?.entry.descriptor.name ?? '搜索小说',
+            child: body,
+          );
   }
 
-  Widget _metadataGrid(_SearchRow row) => MediaItemCollection(
-    items: _visibleItems(row),
-    sourceName: '',
-    showMetadata: false,
-    preferGrid: true,
-    padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-    footer: Column(children: [_resultStatus(row), _resultPagination(row)]),
-  );
+  Widget _fullResults(_SearchRow row) {
+    final items = _visibleItems(row);
+    return RefreshIndicator(
+      onRefresh: _submit,
+      child: LoadMoreOnScroll(
+        onLoadMore: () {
+          final current = _rows[row.entry.descriptor.id];
+          if (current == null ||
+              current.pending ||
+              !current.hasMore ||
+              current.error != null) {
+            return;
+          }
+          unawaited(
+            _searchOne(current.entry, _query, _generation, append: true),
+          );
+        },
+        child: MediaItemCollection(
+          key: ValueKey(_generation),
+          items: items,
+          sourceName: '',
+          showMetadata: false,
+          preferGrid: widget.type != MediaType.novel,
+          actionOf: widget.onAddItem == null ? null : _addAction,
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          footer: Column(
+            children: [
+              _resultStatus(row),
+              if (!row.pending &&
+                  row.error == null &&
+                  items.isEmpty &&
+                  row.items.isNotEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('没有符合筛选条件的作品'),
+                ),
+              PageTail(
+                loading: row.pending,
+                ended: !row.hasMore && row.error == null && items.isNotEmpty,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   List<MediaItem> _visibleItems(_SearchRow row) {
     if (row.entry.descriptor.id != 'bangumi-anime' ||
@@ -545,26 +651,39 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   Widget _resultHeader(_SearchRow row) {
     final descriptor = row.entry.descriptor;
-    final isManga = widget.type == MediaType.manga;
     void openSource() {
-      Navigator.of(context, rootNavigator: true).push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) => MangaSourcePage(
-            sourceId: descriptor.id,
-            listing: 'search',
-            query: _query,
-            initialTags: const [],
-          ),
-        ),
-      );
+      Navigator.of(context, rootNavigator: true)
+          .push<void>(
+            MaterialPageRoute<void>(
+              builder: (_) =>
+                  widget.type == MediaType.manga && widget.onAddItem == null
+                  ? MangaSourcePage(
+                      sourceId: descriptor.id,
+                      listing: 'search',
+                      query: _query,
+                    )
+                  : SearchPage._source(
+                      type: widget.type,
+                      initialQuery: _query,
+                      site: row,
+                      onAddItem: widget.onAddItem,
+                      isAdded: widget.isAdded,
+                    ),
+            ),
+          )
+          .then((_) {
+            if (mounted && widget.onAddItem != null) setState(() {});
+          });
     }
 
     return ListTile(
       dense: true,
       title: Text(descriptor.name),
       subtitle: descriptor.lang.isEmpty ? null : Text(descriptor.lang),
-      trailing: isManga ? const Icon(Icons.chevron_right) : null,
-      onTap: isManga ? openSource : null,
+      trailing: !row.pending && row.items.isNotEmpty
+          ? const Icon(Icons.chevron_right)
+          : null,
+      onTap: !row.pending && row.items.isNotEmpty ? openSource : null,
     );
   }
 
@@ -594,7 +713,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                           row.entry,
                           _query,
                           _generation,
-                          append: row.items.isNotEmpty,
+                          append: row.page > 0,
                         ),
                       ),
                       child: const Text('重试本站'),
@@ -636,14 +755,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 
   Widget _resultSection(_SearchRow row) {
-    final descriptor = row.entry.descriptor;
-    final items = _visibleItems(row);
+    final items = row.items;
     final isManga = widget.type == MediaType.manga;
     final isNovel = widget.type == MediaType.novel;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (descriptor.id != 'bangumi-anime') _resultHeader(row),
+        _resultHeader(row),
         _resultStatus(row),
         if (items.isNotEmpty && !isNovel)
           SizedBox(
@@ -651,7 +769,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: items.length,
+              itemCount: items.length.clamp(0, 6),
               separatorBuilder: (_, _) => const SizedBox(width: 10),
               itemBuilder: (_, index) {
                 final raw = items[index];
@@ -700,7 +818,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           SizedBox(
             height: 330,
             child: ListView.builder(
-              itemCount: items.length,
+              itemCount: items.length.clamp(0, 4),
               padding: const EdgeInsets.symmetric(horizontal: 12),
               itemBuilder: (_, index) {
                 final item = items[index];
@@ -713,22 +831,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               },
             ),
           ),
-        _resultPagination(row),
       ],
-    );
-  }
-
-  Widget _resultPagination(_SearchRow row) {
-    if (row.page <= 0 || !row.hasMore || row.error != null) {
-      return const SizedBox.shrink();
-    }
-    return TextButton(
-      onPressed: row.pending
-          ? null
-          : () => unawaited(
-              _searchOne(row.entry, _query, _generation, append: true),
-            ),
-      child: Text(row.pending ? '正在加载本站下一页…' : '加载本站下一页'),
     );
   }
 }
@@ -742,6 +845,7 @@ class _SearchRow {
     this.failure,
     this.page = 0,
     this.hasMore = true,
+    this.nextOffset = 0,
   });
   final SourceEntry entry;
   final bool pending;
@@ -750,4 +854,5 @@ class _SearchRow {
   final Object? failure;
   final int page;
   final bool hasMore;
+  final int nextOffset;
 }

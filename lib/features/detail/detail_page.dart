@@ -82,6 +82,8 @@ class _DetailPageState extends ConsumerState<DetailPage> {
   String? _metadataError, _directoryError;
   Map<String, Object?>? _animeOverview;
   String _animeSection = 'info';
+  int _novelSection = 2;
+  int _refreshRevision = 0;
   final _scrollController = ScrollController();
   bool _downloadBusy = false;
   ContentSource? _readerCatalogSource;
@@ -311,6 +313,22 @@ class _DetailPageState extends ConsumerState<DetailPage> {
         () => (entry.source as DetailProvider).chapters(item.sourceSnapshot),
       );
       if (!mounted || generation != _generation) return;
+      // An empty upstream response must not remove locally downloaded text.
+      if (item.type == MediaType.novel &&
+          chapters.isEmpty &&
+          _data.chapters.any((chapter) => chapter.content != null)) {
+        setState(() {
+          _directoryError = '站点返回空目录，已保留本地章节';
+          _data = _DetailData(
+            item: _data.item,
+            sourceName: entry.descriptor.name,
+            chapters: _data.chapters,
+            offline: true,
+            supportsContent: _data.supportsContent,
+          );
+        });
+        return;
+      }
       _readerCatalogSource = entry.source;
       _publish(
         _DetailData(
@@ -992,16 +1010,19 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     );
   }
 
-  void _refreshDetails() {
+  Future<void> _refreshDetails() async {
+    if (_metadataBusy || _directoryBusy) return;
     final refreshed = _load(refresh: true);
     setState(() {
       _future = refreshed;
+      _refreshRevision++;
     });
     if (widget.item.type == MediaType.anime && _playback?.item != null) {
       unawaited(
         _loadPlayback(_playback!.item!, preferredChapterId: _selectedEpisodeId),
       );
     }
+    await refreshed;
   }
 
   void _refreshReadHistory() {
@@ -1045,11 +1066,6 @@ class _DetailPageState extends ConsumerState<DetailPage> {
     return PageScaffold(
       title: item.title,
       actions: [
-        IconButton(
-          tooltip: '刷新资料和目录',
-          onPressed: _metadataBusy || _directoryBusy ? null : _refreshDetails,
-          icon: const Icon(Icons.refresh),
-        ),
         PopupMenuButton<String>(
           tooltip: '更多',
           onSelected: (value) {
@@ -1108,256 +1124,313 @@ class _DetailPageState extends ConsumerState<DetailPage> {
           ],
         ),
       ],
-      child: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
-          if (item.type == MediaType.anime)
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _AnimeDetailTabs(
-                context: context,
-                section: _animeSection,
-                onSelected: _selectAnimeSection,
-              ),
-            ),
-          if (item.type == MediaType.anime && _animeSection != 'info')
-            SliverToBoxAdapter(
-              child: commentSubject != null
-                  ? AnimeInfoSheet(
-                      key: ValueKey('anime-section:${commentSubject.remoteId}'),
-                      id: commentSubject.remoteId,
-                      item: commentSubject,
-                      embedded: true,
-                      showSectionSelector: false,
-                      initialSection: _animeSection,
+      child: RefreshIndicator(
+        onRefresh: _refreshDetails,
+        child: ScrollNotificationObserver(
+          child: CustomScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              if (item.type == MediaType.anime)
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _AnimeDetailTabs(
+                    context: context,
+                    section: _animeSection,
+                    onSelected: _selectAnimeSection,
+                  ),
+                ),
+              if (item.type == MediaType.anime && _animeSection != 'info')
+                SliverToBoxAdapter(
+                  child: commentSubject != null
+                      ? AnimeInfoSheet(
+                          key: ValueKey(
+                            'anime-section:${commentSubject.remoteId}',
+                          ),
+                          id: commentSubject.remoteId,
+                          item: commentSubject,
+                          embedded: true,
+                          showSectionSelector: false,
+                          initialSection: _animeSection,
+                          refreshRevision: _refreshRevision,
+                        )
+                      : Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                association?.isLoading == true
+                                    ? '正在读取 Bangumi 条目关联…'
+                                    : association?.hasError == true
+                                    ? 'Bangumi 条目关联读取失败，请重试。'
+                                    : '尚未关联 Bangumi 动画条目，不能确定这部作品的评论与评分。',
+                              ),
+                              if (association?.hasError == true)
+                                TextButton(
+                                  onPressed: () => ref.invalidate(
+                                    animeSubjectProvider(item),
+                                  ),
+                                  child: const Text('重试条目关联'),
+                                ),
+                              if (association?.isLoading != true) ...[
+                                const SizedBox(height: 12),
+                                TextButton.icon(
+                                  onPressed: () => SearchPage.open(
+                                    context,
+                                    type: MediaType.anime,
+                                    sourceId: 'bangumi-anime',
+                                    query: item.title,
+                                  ),
+                                  icon: const Icon(Icons.search),
+                                  label: const Text('查找 Bangumi 动画条目'),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                ),
+              if (item.type != MediaType.anime || _animeSection == 'info') ...[
+                for (final section in <Widget>[
+                  if (item.type == MediaType.anime)
+                    _AnimeHero(
+                      item: item,
+                      onPlay: _continueAnime,
+                      onComments: () => _selectAnimeSection('comments'),
                     )
-                  : Padding(
-                      padding: const EdgeInsets.all(24),
+                  else if (item.type == MediaType.manga)
+                    _MangaHeader(
+                      data: data,
+                      directoryLoading: _directoryBusy,
+                      historyRevision: _readRevision,
+                      onReturned: _refreshReadHistory,
+                    )
+                  else
+                    _NovelBookHeader(
+                      data: data,
+                      directoryLoading: _directoryBusy,
+                      historyRevision: _readRevision,
+                      onReturned: _refreshReadHistory,
+                      onDownload:
+                          data.supportsContent && data.chapters.isNotEmpty
+                          ? _downloadOffline
+                          : null,
+                    ),
+                  if (item.type == MediaType.novel)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                      child: DefaultTabController(
+                        length: 3,
+                        initialIndex: _novelSection,
+                        child: TabBar(
+                          onTap: (index) =>
+                              setState(() => _novelSection = index),
+                          tabs: const [
+                            Tab(text: '简介'),
+                            Tab(text: '评论'),
+                            Tab(text: '章节'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (item.type == MediaType.novel && _novelSection == 0)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          _DetailTags(item: item),
+                          const SizedBox(height: 12),
                           Text(
-                            association?.isLoading == true
-                                ? '正在读取 Bangumi 条目关联…'
-                                : association?.hasError == true
-                                ? 'Bangumi 条目关联读取失败，请重试。'
-                                : '尚未关联 Bangumi 动画条目，不能确定这部作品的评论与评分。',
+                            item.description?.trim().isNotEmpty == true
+                                ? item.description!
+                                : '暂无简介',
                           ),
-                          if (association?.hasError == true)
-                            TextButton(
-                              onPressed: () =>
-                                  ref.invalidate(animeSubjectProvider(item)),
-                              child: const Text('重试条目关联'),
-                            ),
-                          if (association?.isLoading != true) ...[
-                            const SizedBox(height: 12),
-                            TextButton.icon(
-                              onPressed: () => SearchPage.open(
-                                context,
-                                type: MediaType.anime,
-                                sourceId: 'bangumi-anime',
-                                query: item.title,
-                              ),
-                              icon: const Icon(Icons.search),
-                              label: const Text('查找 Bangumi 动画条目'),
-                            ),
-                          ],
                         ],
                       ),
                     ),
-            ),
-          if (item.type != MediaType.anime || _animeSection == 'info') ...[
-            for (final section in <Widget>[
-              if (item.type == MediaType.anime)
-                _AnimeHero(
-                  item: item,
-                  onPlay: _continueAnime,
-                  onComments: () => _selectAnimeSection('comments'),
-                )
-              else if (item.type == MediaType.manga)
-                _MangaHeader(
-                  data: data,
-                  directoryLoading: _directoryBusy,
-                  historyRevision: _readRevision,
-                  onReturned: _refreshReadHistory,
-                )
-              else
-                _NovelBookHeader(
-                  data: data,
-                  directoryLoading: _directoryBusy,
-                  historyRevision: _readRevision,
-                  onReturned: _refreshReadHistory,
-                ),
-              if ((item.type == MediaType.manga && _metadataError != null) ||
-                  (item.type == MediaType.anime &&
-                      _directoryError != null &&
-                      _playback?.item?.sourceId == item.sourceId))
-                MissingSourceNotice(
-                  key: ValueKey((
-                    'missing-source',
-                    item.sourceId,
-                    item.remoteId,
-                  )),
-                  item: item,
-                  onSourceChanged: _refreshDetails,
-                ),
-              if (_playback?.item case final playbackItem?
-                  when _directoryError != null &&
-                      (playbackItem.sourceId != item.sourceId ||
-                          playbackItem.remoteId != item.remoteId))
-                MissingSourceNotice(
-                  key: ValueKey((
-                    'missing-playback-source',
-                    playbackItem.sourceId,
-                    playbackItem.remoteId,
-                  )),
-                  item: playbackItem,
-                  onSourceChanged: _refreshDetails,
-                ),
-              if (_metadataBusy && item.type != MediaType.manga)
-                const ListTile(
-                  leading: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  title: Text('补全资料'),
-                ),
-              if (_metadataError != null && item.type != MediaType.manga)
-                _DetailLoadFailure(
-                  title: '资料暂不可用',
-                  error: _metadataError!,
-                  retryLabel: '重试资料',
-                  onRetry: () {
-                    final refreshed = _load(refresh: true);
-                    setState(() {
-                      _future = refreshed;
-                    });
-                  },
-                ),
-              if (item.type == MediaType.anime) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: AppCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          '播放来源',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _playback == null
-                              ? '尚未选择播放来源'
-                              : _playback!.sourceName.isNotEmpty
-                              ? _playback!.sourceName
-                              : '已选择播放来源',
-                        ),
-                        if (_playback?.item != null)
-                          Text(_playback!.item!.title),
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: OutlinedButton.icon(
-                            onPressed: _chooseSource,
-                            icon: const Icon(Icons.video_library_outlined),
-                            label: Text(_playback == null ? '选择来源' : '更换来源'),
-                          ),
-                        ),
-                      ],
+                  if (item.type == MediaType.novel && _novelSection == 1)
+                    BookCommentsSection(
+                      item: item,
+                      refreshRevision: _refreshRevision,
                     ),
+                  if ((item.type == MediaType.manga &&
+                          _metadataError != null) ||
+                      (item.type == MediaType.anime &&
+                          _directoryError != null &&
+                          _playback?.item?.sourceId == item.sourceId))
+                    MissingSourceNotice(
+                      key: ValueKey((
+                        'missing-source',
+                        item.sourceId,
+                        item.remoteId,
+                      )),
+                      item: item,
+                      onSourceChanged: _refreshDetails,
+                    ),
+                  if (_playback?.item case final playbackItem?
+                      when _directoryError != null &&
+                          (playbackItem.sourceId != item.sourceId ||
+                              playbackItem.remoteId != item.remoteId))
+                    MissingSourceNotice(
+                      key: ValueKey((
+                        'missing-playback-source',
+                        playbackItem.sourceId,
+                        playbackItem.remoteId,
+                      )),
+                      item: playbackItem,
+                      onSourceChanged: _refreshDetails,
+                    ),
+                  if (_metadataBusy && item.type != MediaType.manga)
+                    const ListTile(
+                      leading: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      title: Text('补全资料'),
+                    ),
+                  if (_metadataError != null && item.type != MediaType.manga)
+                    _DetailLoadFailure(
+                      title: '资料暂不可用',
+                      error: _metadataError!,
+                      retryLabel: '重试资料',
+                      onRetry: () {
+                        final refreshed = _load(refresh: true);
+                        setState(() {
+                          _future = refreshed;
+                        });
+                      },
+                    ),
+                  if (item.type == MediaType.anime) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: AppCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              '播放来源',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _playback == null
+                                  ? '尚未选择播放来源'
+                                  : _playback!.sourceName.isNotEmpty
+                                  ? _playback!.sourceName
+                                  : '已选择播放来源',
+                            ),
+                            if (_playback?.item != null)
+                              Text(_playback!.item!.title),
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: OutlinedButton.icon(
+                                onPressed: _chooseSource,
+                                icon: const Icon(Icons.video_library_outlined),
+                                label: Text(
+                                  _playback == null ? '选择来源' : '更换来源',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (_directoryBusy &&
+                      (item.type != MediaType.novel || _novelSection == 2))
+                    const ListTile(
+                      leading: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      title: Text('获取目录'),
+                    ),
+                  if (_directoryError != null &&
+                      (item.type != MediaType.novel || _novelSection == 2))
+                    _DetailLoadFailure(
+                      title: '目录更新失败',
+                      error: _directoryError!,
+                      retryLabel: '重试目录',
+                      onRetry: () {
+                        if (_playback?.item case final selected?) {
+                          unawaited(_loadPlayback(selected));
+                        } else {
+                          final refreshed = _load(refresh: true);
+                          setState(() {
+                            _future = refreshed;
+                          });
+                        }
+                      },
+                    ),
+                  if (data.offline && !_metadataBusy)
+                    const ListTile(
+                      leading: Icon(Icons.offline_pin_outlined),
+                      title: Text('正在显示本机缓存'),
+                    ),
+                ])
+                  SliverToBoxAdapter(child: section),
+                if (playable != null &&
+                    (item.type != MediaType.novel || _novelSection == 2))
+                  _ChapterSection(
+                    item: playable.item,
+                    chapters: playable.chapters,
+                    supportsContent: playable.supportsContent,
+                    loading: _directoryBusy,
+                    loadError: _directoryError,
+                    selectedChapterId: item.type == MediaType.anime
+                        ? _selectedEpisodeId
+                        : null,
+                    onSelected: item.type == MediaType.anime
+                        ? (id) => setState(() => _selectedEpisodeId = id)
+                        : null,
+                    onDownload:
+                        playable.supportsContent &&
+                            playable.chapters.isNotEmpty &&
+                            item.sourceId != 'local-comic' &&
+                            item.type != MediaType.novel
+                        ? _downloadOffline
+                        : null,
+                    onDownloadSelection:
+                        playable.supportsContent &&
+                            playable.chapters.isNotEmpty &&
+                            item.sourceId != 'local-comic'
+                        ? (ids) => _downloadOffline(
+                            selectedChapterIds: ids,
+                            expectedChapters: playable.chapters,
+                            expectedGeneration: readerCatalogGeneration,
+                          )
+                        : null,
+                    historyRevision: _readRevision,
+                    onReturned: _refreshReadHistory,
                   ),
-                ),
+                for (final section in <Widget>[
+                  if (item.sourceId == 'bangumi-anime')
+                    AnimeInfoSheet(
+                      key: ValueKey('anime-info:${item.remoteId}'),
+                      id: item.remoteId,
+                      item: item,
+                      overview: _animeOverview,
+                      embedded: true,
+                      showSectionSelector: false,
+                      refreshRevision: _refreshRevision,
+                    )
+                  else if (item.type == MediaType.anime &&
+                      item.description?.isNotEmpty == true)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: _ExpandableSynopsis(text: item.description!),
+                    ),
+                ])
+                  SliverToBoxAdapter(child: section),
               ],
-              if (_directoryBusy)
-                const ListTile(
-                  leading: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  title: Text('获取目录'),
-                ),
-              if (_directoryError != null)
-                _DetailLoadFailure(
-                  title: '目录更新失败',
-                  error: _directoryError!,
-                  retryLabel: '重试目录',
-                  onRetry: () {
-                    if (_playback?.item case final selected?) {
-                      unawaited(_loadPlayback(selected));
-                    } else {
-                      final refreshed = _load(refresh: true);
-                      setState(() {
-                        _future = refreshed;
-                      });
-                    }
-                  },
-                ),
-              if (data.offline && !_metadataBusy)
-                const ListTile(
-                  leading: Icon(Icons.offline_pin_outlined),
-                  title: Text('正在显示本机缓存'),
-                ),
-            ])
-              SliverToBoxAdapter(child: section),
-            if (playable != null)
-              _ChapterSection(
-                item: playable.item,
-                chapters: playable.chapters,
-                supportsContent: playable.supportsContent,
-                loading: _directoryBusy,
-                loadError: _directoryError,
-                selectedChapterId: item.type == MediaType.anime
-                    ? _selectedEpisodeId
-                    : null,
-                onSelected: item.type == MediaType.anime
-                    ? (id) => setState(() => _selectedEpisodeId = id)
-                    : null,
-                onDownload:
-                    playable.supportsContent &&
-                        playable.chapters.isNotEmpty &&
-                        item.sourceId != 'local-comic'
-                    ? _downloadOffline
-                    : null,
-                onDownloadSelection:
-                    playable.supportsContent &&
-                        playable.chapters.isNotEmpty &&
-                        item.sourceId != 'local-comic'
-                    ? (ids) => _downloadOffline(
-                        selectedChapterIds: ids,
-                        expectedChapters: playable.chapters,
-                        expectedGeneration: readerCatalogGeneration,
-                      )
-                    : null,
-                historyRevision: _readRevision,
-                onReturned: _refreshReadHistory,
-              ),
-            for (final section in <Widget>[
-              if (item.sourceId == 'bangumi-anime')
-                AnimeInfoSheet(
-                  key: ValueKey('anime-info:${item.remoteId}'),
-                  id: item.remoteId,
-                  item: item,
-                  overview: _animeOverview,
-                  embedded: true,
-                  showSectionSelector: false,
-                )
-              else if (item.type == MediaType.anime &&
-                  item.description?.isNotEmpty == true)
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: _ExpandableSynopsis(text: item.description!),
-                ),
-              if (item.type == MediaType.novel &&
-                  item.sourceId != 'local-comic')
-                BookCommentsSection(item: item),
-            ])
-              SliverToBoxAdapter(child: section),
-          ],
-          const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.xl)),
-        ],
+              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.xl)),
+            ],
+          ),
+        ),
       ),
     );
   }

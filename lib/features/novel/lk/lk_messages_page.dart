@@ -94,17 +94,7 @@ class _LkMessagesPageState extends ConsumerState<LkMessagesPage> {
 
   @override
   Widget build(BuildContext context) {
-    return PageScaffold(
-      title: '消息中心',
-      actions: <Widget>[
-        IconButton(
-          tooltip: '刷新',
-          onPressed: _loading ? null : _load,
-          icon: const Icon(Icons.refresh),
-        ),
-      ],
-      child: _buildBody(),
-    );
+    return PageScaffold(title: '消息中心', child: _buildBody());
   }
 
   Widget _buildBody() {
@@ -139,6 +129,7 @@ class _LkMessagesPageState extends ConsumerState<LkMessagesPage> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: AppSpacing.xl),
         children: <Widget>[
           Padding(

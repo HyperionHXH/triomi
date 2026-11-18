@@ -10,6 +10,7 @@ import '../../core/models/source_exception.dart';
 import '../../core/router/app_router.dart';
 import '../../core/source/http_client.dart';
 import '../../core/theme/app_tokens.dart';
+import '../../core/widgets/scroll_pagination.dart';
 import '../anime/data/anime_collection_service.dart';
 import '../discover/widgets/media_item_card.dart';
 import '../search/search_page.dart';
@@ -48,6 +49,7 @@ class AnimeInfoSheet extends ConsumerStatefulWidget {
     this.embedded = false,
     this.initialSection = 'info',
     this.showSectionSelector = true,
+    this.refreshRevision = 0,
   });
   final String id;
   final MediaItem? item;
@@ -55,6 +57,7 @@ class AnimeInfoSheet extends ConsumerStatefulWidget {
   final bool embedded;
   final String initialSection;
   final bool showSectionSelector;
+  final int refreshRevision;
   @override
   ConsumerState<AnimeInfoSheet> createState() => _AnimeInfoSheetState();
 }
@@ -87,6 +90,7 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
   _InfoPartition get _current =>
       _partitions.putIfAbsent(_section, _InfoPartition.new);
 
+  ScrollNotificationObserverState? _scrollEvents;
   @override
   void initState() {
     super.initState();
@@ -110,6 +114,18 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final observer = widget.embedded
+        ? ScrollNotificationObserver.maybeOf(context)
+        : null;
+    if (observer == _scrollEvents) return;
+    _scrollEvents?.removeListener(_nearEnd);
+    _scrollEvents = observer;
+    observer?.addListener(_nearEnd);
+  }
+
+  @override
   void didUpdateWidget(covariant AnimeInfoSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.id != widget.id) {
@@ -123,6 +139,9 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
       _ownReview = null;
     } else if (oldWidget.initialSection != widget.initialSection) {
       _section = widget.initialSection;
+    } else if (oldWidget.refreshRevision != widget.refreshRevision) {
+      unawaited(_load(reset: true, refresh: true));
+      return;
     } else {
       return;
     }
@@ -133,8 +152,20 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
     }
   }
 
+  void _loadMore() {
+    final current = _current;
+    if (current.more && !current.busy && current.error == null) {
+      unawaited(_load());
+    }
+  }
+
+  void _nearEnd(ScrollNotification notice) {
+    if (approachingScrollEnd(notice)) _loadMore();
+  }
+
   @override
   void dispose() {
+    _scrollEvents?.removeListener(_nearEnd);
     for (final partition in _partitions.values) {
       partition.owner?.cancel();
     }
@@ -744,23 +775,15 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
               ],
             ),
           ),
-        if (partition.loaded && partition.error == null && !partition.busy)
-          TextButton.icon(
-            onPressed: () => _load(reset: true, refresh: true),
-            icon: const Icon(Icons.refresh),
-            label: Text('刷新${sections[_section]}'),
-          ),
-        if (partition.busy)
-          const Padding(
-            padding: EdgeInsets.all(20),
-            child: Center(child: CircularProgressIndicator()),
-          ),
-        if (partition.more && !partition.busy && partition.error == null)
-          TextButton(
-            key: ValueKey('anime-info-more:$_section'),
-            onPressed: _load,
-            child: const Text('加载更多'),
-          ),
+        PageTail(
+          loading: partition.busy,
+          ended:
+              partition.loaded &&
+              !partition.more &&
+              partition.rows.isNotEmpty &&
+              partition.error == null &&
+              _section == 'comments',
+        ),
       ],
     );
     final constrained = Center(
@@ -775,9 +798,16 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
     return SafeArea(
       child: SizedBox(
         height: MediaQuery.sizeOf(context).height * .85,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: constrained,
+        child: RefreshIndicator(
+          onRefresh: () => _load(reset: true, refresh: true),
+          child: LoadMoreOnScroll(
+            onLoadMore: _loadMore,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              child: constrained,
+            ),
+          ),
         ),
       ),
     );

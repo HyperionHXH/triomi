@@ -491,9 +491,17 @@ void main() {
       await advance(tester);
       expect(find.byType(MangaSourcePage), findsOneWidget);
       expect(fast.requests, [('共同查询', 1), ('共同查询', 1)]);
-      await tester.tap(find.widgetWithText(TextButton, '加载下一页'));
+      await tester.drag(
+        find.byType(CustomScrollView).last,
+        const Offset(0, -240),
+      );
       await advance(tester);
-      expect(fast.requests.last, ('共同查询', 2));
+      expect(fast.requests, [
+        ('共同查询', 1),
+        ('共同查询', 1),
+        ('共同查询', 2),
+        ('共同查询', 3),
+      ]);
       expect(slow.requests, [('共同查询', 1)]);
       expect(broken.requests, hasLength(2));
       expect(find.text('结果2'), findsOneWidget);
