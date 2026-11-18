@@ -77,6 +77,8 @@ class MangaZoomView extends StatefulWidget {
     this.onZoomChanged,
     this.onLongPress,
     this.scrollPosition,
+    this.zoomStart = 'tap',
+    this.onPointersReleased,
   });
 
   final Widget child;
@@ -93,6 +95,8 @@ class MangaZoomView extends StatefulWidget {
 
   /// 条漫缩放包在整个列表外，滚动位置由已构建的列表项提供。
   final ScrollPosition? Function()? scrollPosition;
+  final String zoomStart;
+  final VoidCallback? onPointersReleased;
 
   static const double maxScale = 5;
 
@@ -123,6 +127,7 @@ class MangaZoomViewState extends State<MangaZoomView>
   final Set<int> _touches = {};
 
   bool get zoomed => _scale > 1.005;
+  bool get hasPointers => _touches.isNotEmpty;
 
   @override
   void didUpdateWidget(MangaZoomView oldWidget) {
@@ -225,6 +230,7 @@ class MangaZoomViewState extends State<MangaZoomView>
         if (!mounted || _touches.isNotEmpty) return;
         _hold?.cancel();
         _hold = null;
+        widget.onPointersReleased?.call();
       });
     }
   }
@@ -333,7 +339,12 @@ class MangaZoomViewState extends State<MangaZoomView>
       _animateTo(1, Offset.zero);
       return;
     }
-    final anchor = _relative(_doubleTapPosition);
+    final anchor = switch (widget.zoomStart) {
+      'left' => Offset(-_size.width / 2, 0),
+      'right' => Offset(_size.width / 2, 0),
+      'center' => Offset.zero,
+      _ => _relative(_doubleTapPosition),
+    };
     _animateTo(
       target,
       mangaAnchorOffset(
@@ -353,6 +364,19 @@ class MangaZoomViewState extends State<MangaZoomView>
     _animation.stop();
     setState(() => _offset = next);
     return true;
+  }
+
+  void zoomTo(double scale, {String start = 'center'}) {
+    if (!widget.enabled || _size.isEmpty) return;
+    final x = switch (start) {
+      'left' => -_size.width / 2,
+      'right' => _size.width / 2,
+      _ => 0.0,
+    };
+    _animateTo(
+      scale.clamp(1, MangaZoomView.maxScale).toDouble(),
+      Offset(-x * (scale - 1), 0),
+    );
   }
 
   @override

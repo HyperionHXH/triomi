@@ -1107,9 +1107,13 @@ class LibraryRepository {
     required Chapter chapter,
     double position = 0,
     String? device,
+    int mangaPart = 0,
   }) async {
     if (!position.isFinite || position < 0 || chapter.sourceId != sourceId) {
       throw ArgumentError('History position or source identity is invalid');
+    }
+    if (mangaPart < 0 || mangaPart > 2) {
+      throw ArgumentError('Invalid manga region');
     }
     await _db.transaction(() async {
       var visitedAt = DateTime.fromMillisecondsSinceEpoch(
@@ -1213,6 +1217,7 @@ class LibraryRepository {
               chapterSourceId: chapter.sourceId,
               chapterRemoteId: chapter.remoteId,
               position: Value(position),
+              mangaPart: Value(mangaPart),
               device: Value(device),
               visitedAt: visitedAt,
             ),
@@ -1440,6 +1445,23 @@ class LibraryRepository {
       ..orderBy([(t) => OrderingTerm.desc(t.visitedAt)])
       ..limit(1);
     return (await query.getSingleOrNull())?.position;
+  }
+
+  Future<int> chapterMangaPartOf(
+    String sourceId,
+    String remoteId,
+    String chapterRemoteId,
+  ) async {
+    final query = _db.select(_db.histories)
+      ..where(
+        (t) =>
+            t.sourceId.equals(sourceId) &
+            t.remoteId.equals(remoteId) &
+            t.chapterRemoteId.equals(chapterRemoteId),
+      )
+      ..orderBy([(t) => OrderingTerm.desc(t.visitedAt)])
+      ..limit(1);
+    return (await query.getSingleOrNull())?.mangaPart ?? 0;
   }
 
   /// 最近的阅读记录（含作品信息，按时间倒序）。

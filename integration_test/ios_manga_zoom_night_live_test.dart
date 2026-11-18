@@ -188,8 +188,14 @@ void main() {
       expect(scrim, findsNothing);
       await tester.tap(find.byTooltip('阅读设置'));
       await tester.pumpAndSettle();
-      final sheetScroll = find.descendant(of: find.byType(BottomSheet),
-          matching: find.byType(Scrollable)).first;
+      expect(find.text('阅读模式'), findsOneWidget);
+      expect(find.text('通用'), findsOneWidget);
+      await tester.tap(find.text('滤镜'));
+      await tester.pumpAndSettle();
+      final sheetScroll = find.descendant(
+        of: find.byKey(const PageStorageKey<String>('color')),
+        matching: find.byType(Scrollable),
+      );
       final nightSwitch = find.widgetWithText(SwitchListTile, '夜间模式');
       await tester.scrollUntilVisible(nightSwitch, 250, scrollable: sheetScroll);
       await tester.tap(nightSwitch);
@@ -226,8 +232,12 @@ void main() {
 
       await tester.tap(find.byTooltip('阅读设置'));
       await tester.pumpAndSettle();
-      final reopenedScroll = find.descendant(of: find.byType(BottomSheet),
-          matching: find.byType(Scrollable)).first;
+      await tester.tap(find.text('滤镜'));
+      await tester.pumpAndSettle();
+      final reopenedScroll = find.descendant(
+        of: find.byKey(const PageStorageKey<String>('color')),
+        matching: find.byType(Scrollable),
+      );
       await tester.scrollUntilVisible(nightSwitch, 250, scrollable: reopenedScroll);
       await tester.tap(nightSwitch);
       await tester.pumpAndSettle();

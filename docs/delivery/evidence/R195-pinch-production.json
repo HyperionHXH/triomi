@@ -1,7 +1,7 @@
 {
   "version": "0.16.1",
   "build": 203,
-  "status": "user-phone-approved-preparing-production-release",
+  "status": "user-phone-approved-published-public-bytes-signature-verified",
   "userApproval": {"feedback": "我试了一下，这个手感对了，你可以编译推送发布了", "trialFile": "Triomi-manga-pinch-trial.apk", "trialSha256": "4dee94ac7beaf4111b7602ef035b519f104456baa585de064d393f6d255537ed"},
   "approvedSourceSha256": {
     "lib/features/reader/manga_zoom_view.dart": "ccb102665a6f1cc7c32e6dfc59bef6d801f54c41506eaef680c660ddf40ddc3f",
@@ -22,5 +22,78 @@
   },
   "productionContract": {"androidPackage": "io.github.hyperionhxh.triomi", "androidLabel": "Triomi", "productionCertificateSha256": "731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309", "trialFlag": false, "acceptanceSigning": false, "targets": ["android", "windows"], "independentIosUntouched": true},
   "prepublicationVerification": {"fullFlutterPassed": 2009, "fullFlutterSkipped": 5, "analyze": "No issues found", "encodingErrors": 0, "uiDocErrors": 0, "deliveryConsistencyErrors": 0, "deliveryHistoricalWarnings": 35, "sourceCredentialHits": 0},
-  "publication": {"published": false, "verificationComplete": false}
+  "publicAndroidVerification": {"passed": true, "bytes": 162950828, "sha256": "977eb0e64e73caa9c6a6caaa8b44f0d425a50e3b8e2749eff799f675e8cf6f2d", "githubDigestMatched": true, "packageName": "io.github.hyperionhxh.triomi", "versionName": "0.16.1", "versionCode": 203, "productionCertificateMatched": true, "mihonAbiDescriptorsPassed": 128, "credentialHits": 0, "localFile": "D:/noval_and_manga/Triomi-0.16.1-android.apk"},
+  "publication": {
+    "passed": true,
+    "version": "0.16.1",
+    "build": 203,
+    "sourceCommit": "9132fd7d789029ef5ab25ced1865360d237344df",
+    "run": "44018987067",
+    "releaseUrl": "https://github.com/HyperionHXH/triomi/releases/tag/v0.16.1",
+    "assets": [
+      {
+        "name": "SHA256SUMS.txt",
+        "bytes": 348,
+        "sha256": "b4cd45b670b2f0377af6f43fa234abfd9573ffedd0c9476e10cadc72cbe81ce1",
+        "id": 757686099
+      },
+      {
+        "name": "triomi-android.apk",
+        "bytes": 162950828,
+        "sha256": "977eb0e64e73caa9c6a6caaa8b44f0d425a50e3b8e2749eff799f675e8cf6f2d",
+        "id": 757686094
+      },
+      {
+        "name": "triomi-windows.msi",
+        "bytes": 272785432,
+        "sha256": "105728beb768b62e894faec0f07496561a2ea7fd9dd0caebe2d95e69b0239065",
+        "id": 757686098
+      },
+      {
+        "name": "triomi-windows.update.json",
+        "bytes": 81260,
+        "sha256": "1cf71426e4710b8d26e0fb01a9fe4d24cb3abd0bf150fe63c1aaf72de91bf0c9",
+        "id": 757686100
+      },
+      {
+        "name": "triomi-windows.zip",
+        "bytes": 290245903,
+        "sha256": "aee3c6ba9e91456fa919c75e186d6ff974e63c94a897b08621e7a1b867fc87a5",
+        "id": 757686093
+      }
+    ],
+    "windowsMembersVerified": 466,
+    "productionCertificate": "731ecd30238ecc5b58ab739df0022eb9e1d8ed9a8c30b731fc9409baf8adf309",
+    "androidIdentity": "package: name='io.github.hyperionhxh.triomi' versionCode='203' versionName='0.16.1' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+    "androidLabel": "Triomi",
+    "trialIdentityAbsent": true,
+    "abi": "Mihon ABI OK: 128 descriptors across 1 DEX files (5671 public/protected classes, 47138 visible members).",
+    "protectedIosReleasesUnchanged": 16,
+    "msiBoundary": "Full container size and hash verified; installation lifecycle not exercised.",
+    "published": true,
+    "verificationComplete": true,
+    "validationRun": 44018980820,
+    "validationConclusion": "success",
+    "releaseConclusion": "success",
+    "privacy": {
+      "sourceFilesScanned": 1512,
+      "sourceCredentialHits": 0,
+      "artifacts": [
+        {
+          "name": "triomi-android.apk",
+          "members": 626,
+          "credentialHits": 0,
+          "privateOrDebugNames": 0
+        },
+        {
+          "name": "triomi-windows.zip",
+          "members": 466,
+          "credentialHits": 0,
+          "privateOrDebugNames": 0
+        }
+      ],
+      "scope": "Known local account values and encodings; no local production private key available; not a full security audit.",
+      "passed": true
+    }
+  }
 }

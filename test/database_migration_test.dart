@@ -94,6 +94,7 @@ void main() {
   sqlite3.Database openRaw() => sqlite3.sqlite3.open(dbFile.path);
 
   void restoreReleasedDownloadsSchema(sqlite3.Database raw) {
+    raw.execute('ALTER TABLE histories DROP COLUMN manga_part');
     for (final statement in restoreV12SourceMetadataStatements()) {
       raw.execute(statement);
     }

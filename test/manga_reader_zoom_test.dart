@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,7 +16,10 @@ import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/downloads/data/download_providers.dart';
 import 'package:triomi/features/downloads/data/download_repository.dart';
+import 'package:triomi/features/library/data/library_providers.dart';
+import 'package:triomi/features/reader/manga_page_image.dart';
 import 'package:triomi/features/reader/manga_reader_page.dart';
+import 'package:triomi/features/reader/manga_reader_settings.dart';
 import 'package:triomi/features/reader/manga_zoom_view.dart';
 
 import 'fixtures/fake_preferences.dart';
@@ -70,11 +74,32 @@ void main() {
     String mode = 'ltr',
     bool spread = false,
     bool zoom = true,
+    bool splitWide = false,
   }) async {
     final directory = Directory.systemTemp.createTempSync('triomi_zoom_');
-    final bytes = base64Decode(
+    var bytes = base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
     );
+    if (splitWide) {
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      canvas.drawRect(
+        const Rect.fromLTWH(0, 0, 400, 200),
+        Paint()..color = Colors.white,
+      );
+      canvas.drawRect(
+        const Rect.fromLTWH(200, 0, 200, 200),
+        Paint()..color = Colors.black,
+      );
+      final picture = recorder.endRecording();
+      final image = picture.toImageSync(400, 200);
+      final data = await tester.runAsync(
+        () => image.toByteData(format: ui.ImageByteFormat.png),
+      );
+      bytes = data!.buffer.asUint8List();
+      image.dispose();
+      picture.dispose();
+    }
     for (var page = 0; page < 2; page++) {
       File('${directory.path}/$page.png').writeAsBytesSync(bytes);
     }
@@ -89,7 +114,11 @@ void main() {
     final prefs = memoryPreferences();
     // 默认是日漫从右到左；这里显式用左到右，让右侧点击固定表示「下一页」。
     await prefs.set('reader.mode', mode);
-    await prefs.set('reader.manga', {'doublePage': spread, 'zoom': zoom});
+    await prefs.set('reader.manga', {
+      'doublePage': spread,
+      'zoom': zoom,
+      'splitWide': splitWide,
+    });
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
@@ -133,7 +162,7 @@ void main() {
       ),
     );
     await settle(tester);
-    expect(find.text('1/2'), findsOneWidget);
+    expect(find.textContaining('1/2'), findsWidgets);
   }
 
   MangaZoomViewState zoomState(WidgetTester tester) =>
@@ -149,6 +178,56 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
   }
+
+  testWidgets('自动拆分最后原图，两半分别定位且第一半不提前标已读', (tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await open(tester, splitWide: true);
+    await settle(tester);
+    final scope = ProviderScope.containerOf(
+      tester.element(find.byType(MangaReaderPage)),
+    );
+    final repository = scope.read(libraryRepositoryProvider);
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await settle(tester);
+    expect(find.text('2/2 · 左半'), findsOneWidget);
+    expect(
+      tester
+          .widgetList<MangaPageImage>(find.byType(MangaPageImage))
+          .any((p) => p.part == 1),
+      isTrue,
+    );
+    final before = await tester.runAsync(
+      () => repository
+          .watchMangaChapterStates(item.sourceId, item.remoteId)
+          .first,
+    );
+    expect(before!.any((s) => s.isRead), isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    await tester.pump(const Duration(milliseconds: 250));
+    await settle(tester);
+    expect(find.text('2/2 · 右半'), findsOneWidget);
+    final part = await tester.runAsync(
+      () => repository.chapterMangaPartOf(item.sourceId, item.remoteId, '1'),
+    );
+    expect(part, 2);
+    final after = await tester.runAsync(
+      () => repository
+          .watchMangaChapterStates(item.sourceId, item.remoteId)
+          .first,
+    );
+    expect(after!.single.isRead, isTrue);
+    await scope.read(mangaReaderPreferencesProvider).set('splitWide', false);
+    await settle(tester);
+    expect(find.textContaining('2/2'), findsWidgets);
+  });
 
   for (final mode in ['ltr', 'rtl', 'vertical', 'webtoon']) {
     testWidgets('$mode：先动一指再加入第二指，缩至1倍后剩余指头也不翻页', (tester) async {
@@ -322,10 +401,9 @@ void main() {
     Future<void> configure(String? preset) async {
       await tester.tap(find.byTooltip('阅读设置'));
       await tester.pumpAndSettle();
-      final sheet = find.byType(ListView).last;
-      final toggle = find.widgetWithText(SwitchListTile, '夜间模式');
-      await tester.dragUntilVisible(toggle, sheet, const Offset(0, -300));
+      await tester.tap(find.text('滤镜'));
       await tester.pumpAndSettle();
+      final toggle = find.widgetWithText(SwitchListTile, '夜间模式');
       await tester.tap(toggle);
       await tester.pumpAndSettle();
       if (preset != null) {

@@ -176,7 +176,7 @@ void main() {
     expect(source.requests, 2);
   });
 
-  testWidgets('成功空目录允许同源搜索且不伪造章节', (tester) async {
+  testWidgets('成功空目录允许聚合搜索且不伪造章节', (tester) async {
     final db = await pumpDetail(tester, _EmptyCatalogSource());
 
     expect(
@@ -192,7 +192,6 @@ void main() {
     final search = tester.widget<SearchPage>(find.byType(SearchPage));
     expect(search.type, item.type);
     expect(search.initialSourceId, item.sourceId);
-    expect(search.sourceOnly, isTrue);
     expect(search.initialQuery, isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));

@@ -45,16 +45,30 @@ class BangumiSource implements SearchProvider, DetailProvider {
     String keyword, {
     int page = 1,
     AnimePublicFilter filter = const AnimePublicFilter(),
+  }) async => (await searchPage(
+    keyword,
+    offset: (page - 1) * BangumiPublicClient.pageSize,
+    filter: filter,
+  )).items;
+
+  Future<({List<MediaItem> items, int nextOffset, bool hasMore})> searchPage(
+    String keyword, {
+    required int offset,
+    AnimePublicFilter filter = const AnimePublicFilter(),
   }) async {
     final result = await client.search(
       keyword: keyword,
       filter: filter,
-      offset: (page - 1) * BangumiPublicClient.pageSize,
+      offset: offset,
     );
-    return [
-      for (final row in result.rows)
-        if (row['type'] == 2 && row['nsfw'] != true) itemFrom(row),
-    ];
+    return (
+      items: [
+        for (final row in result.rows)
+          if (row['type'] == 2 && row['nsfw'] != true) itemFrom(row),
+      ],
+      nextOffset: result.nextOffset,
+      hasMore: result.hasMore,
+    );
   }
 
   @override

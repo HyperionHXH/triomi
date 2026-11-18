@@ -1053,36 +1053,23 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                             }
                           : null,
                     ),
-                    Wrap(
-                      alignment: WrapAlignment.center,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        TextButton(
+                        IconButton(
+                          tooltip: '上一章',
+                          icon: const Icon(Icons.skip_previous),
                           onPressed: _chapterIndex > 0 && !_loading
                               ? () => unawaited(_switchChapter(-1))
                               : null,
-                          child: const Text('上一章'),
                         ),
-                        TextButton.icon(
-                          onPressed: _showCatalog,
-                          icon: const Icon(Icons.list),
-                          label: const Text('目录'),
-                        ),
-                        TextButton.icon(
-                          onPressed: () => _showSettings(textOnly: true),
-                          icon: const Icon(Icons.text_fields),
-                          label: const Text('文字样式'),
-                        ),
-                        TextButton.icon(
-                          onPressed: _showSettings,
-                          icon: const Icon(Icons.settings_outlined),
-                          label: const Text('阅读设置'),
-                        ),
-                        TextButton(
+                        IconButton(
+                          tooltip: '下一章',
+                          icon: const Icon(Icons.skip_next),
                           onPressed:
                               _chapterIndex < _chapters.length - 1 && !_loading
                               ? () => unawaited(_switchChapter(1))
                               : null,
-                          child: const Text('下一章'),
                         ),
                       ],
                     ),
@@ -1114,15 +1101,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                   ),
                 ),
                 for (final entry in const [
-                  ('catalog', Icons.list, '打开章节目录', '选择其他章节'),
-                  ('text', Icons.text_fields, '文字样式', '字体、字号、行距和页边距'),
-                  ('settings', Icons.settings_outlined, '阅读设置', '翻页方式、阅读背景与屏幕'),
-                  ('reload', Icons.refresh, '重新加载', '重新请求当前章节内容'),
+                  ('catalog', Icons.list, '章节目录'),
+                  ('text', Icons.text_fields, '文字样式'),
+                  ('settings', Icons.settings_outlined, '阅读设置'),
+                  ('reload', Icons.refresh, '重新加载'),
                 ])
                   ListTile(
                     leading: Icon(entry.$2),
                     title: Text(entry.$3),
-                    subtitle: Text(entry.$4),
                     onTap: () => Navigator.pop(context, entry.$1),
                   ),
               ],

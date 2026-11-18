@@ -183,6 +183,8 @@ void main() {
   }
 
   Future<void> mode(WidgetTester tester, String label) async {
+    await tester.tap(find.byTooltip('阅读菜单'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('阅读设置'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ChoiceChip, label));
@@ -198,6 +200,8 @@ void main() {
     await open(tester);
     expect(SystemChrome.latestStyle?.statusBarIconBrightness, Brightness.dark);
     await controls(tester);
+    await tester.tap(find.byTooltip('阅读菜单'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('阅读设置'));
     await tester.pumpAndSettle();
     for (final label in ['上下滚动', '夜间']) {
@@ -240,7 +244,11 @@ void main() {
       await controls(tester);
       expect(indicator(tester), before);
       await controls(tester);
-      await tester.tap(find.text('目录'));
+      expect(find.text('目录'), findsNothing);
+      expect(find.byTooltip('下一章'), findsOneWidget);
+      await tester.tap(find.byTooltip('阅读菜单'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('章节目录'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Second chapter').last);
       await settle(tester);
@@ -270,8 +278,10 @@ void main() {
       expect(indicator(tester), startsWith('1 /'));
       await controls(tester);
       expect(find.textContaining('Book · Second chapter'), findsOneWidget);
-      final next = tester.widget<TextButton>(
-        find.widgetWithText(TextButton, '下一章'),
+      final next = tester.widget<IconButton>(
+        find.byWidgetPredicate(
+          (widget) => widget is IconButton && widget.tooltip == '下一章',
+        ),
       );
       expect(next.onPressed, isNull);
       expect(
@@ -388,7 +398,7 @@ void main() {
         Offset(reader.left + reader.width * fraction, reader.center.dy),
       );
       await tester.pumpAndSettle();
-      expect(find.text('阅读设置'), findsOneWidget);
+      expect(find.byTooltip('阅读菜单'), findsOneWidget);
       expect(indicator(tester), initial);
       await controls(tester);
     }
@@ -397,7 +407,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(indicator(tester), startsWith('2 /'));
-    expect(find.text('阅读设置'), findsNothing);
+    expect(find.byTooltip('阅读菜单'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -434,6 +444,8 @@ void main() {
       expect(firstText().style!.fontFamily, 'source-required');
       final beforeFontChange = firstWord();
       await controls(tester);
+      await tester.tap(find.byTooltip('阅读菜单'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('文字样式'));
       await tester.pumpAndSettle();
       final size = tester
@@ -524,7 +536,9 @@ void main() {
       expect(find.text('Reader landing'), findsOneWidget);
       tester.state<NavigatorState>(find.byType(Navigator)).pushNamed('/reader');
       await settle(tester);
-      await tester.tap(find.text('目录'));
+      await tester.tap(find.byTooltip('阅读菜单'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('章节目录'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Second chapter').last);
       await settle(tester);
@@ -547,6 +561,8 @@ void main() {
           .firstWhere((text) => (text.data ?? '').contains('Paragraph 0'));
       expect(bodyText.textScaler, TextScaler.noScaling);
       await controls(tester);
+      await tester.tap(find.byTooltip('阅读菜单'));
+      await tester.pumpAndSettle();
       final context = tester.element(find.text('阅读设置'));
       expect(MediaQuery.textScalerOf(context).scale(14), 28);
       await tester.tap(find.text('文字样式'));

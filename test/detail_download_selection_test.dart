@@ -1429,7 +1429,7 @@ void main() {
           );
           expect(
             tester
-                .widget<TextButton>(
+                .widget<IconButton>(
                   find.byKey(const ValueKey('detail-volume-download:')),
                 )
                 .onPressed,

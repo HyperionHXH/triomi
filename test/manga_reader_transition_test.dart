@@ -167,40 +167,122 @@ void main() {
     await settle(tester);
   }
 
-  testWidgets('reader setting changes apply to next chapter, reopened chapter and another work', (tester) async {
-    final fixture = await open(tester);
-    await tester.tap(find.byTooltip('阅读设置'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('上下翻页'));
-    await tester.pump();
-    await tester.tap(find.text('完整显示'));
-    await tester.pump();
-    Navigator.of(tester.element(find.text('完整显示'))).pop();
-    await settle(tester);
-    void expectGlobalLayout() {
-      expect(tester.widget<PageView>(find.byType(PageView)).scrollDirection, Axis.vertical);
-      expect(tester.widgetList<MangaPageImage>(find.byType(MangaPageImage)).every((image) => image.fit == BoxFit.contain), isTrue);
-    }
-    expectGlobalLayout();
-    await tester.tap(find.byTooltip('下一章'));
-    await settle(tester);
-    await tester.tap(find.text('继续阅读'));
-    await settle(tester);
-    expect(fixture.downloads.requests.last, 'local-comic/2');
-    expectGlobalLayout();
-    await closeReader(tester);
-    Future<void> reopen(MediaItem work, int index) async {
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: fixture.container,
-        child: MaterialApp(home: MangaReaderPage(args: MangaReaderArgs(item: work, chapters: catalog(), initialIndex: index))),
-      ));
+  for (final skipFiltered in [false, true]) {
+    testWidgets(
+      'directory unread filter preserves real chapter indexes and skipFiltered=$skipFiltered',
+      (tester) async {
+        final fixture = await open(
+          tester,
+          createArgs: (container) async {
+            final library = container.read(libraryRepositoryProvider);
+            await library.cacheItem(item);
+            await library.saveChapters(
+              itemSourceId: item.sourceId,
+              itemRemoteId: item.remoteId,
+              chapters: catalog(),
+            );
+            await library.setChapterRead(
+              sourceId: item.sourceId,
+              itemRemoteId: item.remoteId,
+              chapters: [catalog()[1]],
+              read: true,
+            );
+            final preferences = container.read(mangaReaderPreferencesProvider);
+            await preferences.set('chapterFilter', 'unread');
+            await preferences.set('skipRead', false);
+            await preferences.set('skipFiltered', skipFiltered);
+            return MangaReaderArgs(
+              item: item,
+              chapters: catalog(),
+              initialIndex: 2,
+            );
+          },
+        );
+        await tester.tap(find.byTooltip('目录'));
+        await tester.pumpAndSettle();
+        expect(find.text('真正的第二话'), findsNothing);
+        expect(find.text('第三话'), findsOneWidget);
+        await tester.tap(find.widgetWithText(ListTile, '第一话'));
+        await settle(tester);
+        await tester.tap(find.byTooltip('下一章'));
+        await settle(tester);
+        await tester.tap(find.text('继续阅读'));
+        await settle(tester);
+        expect(
+          fixture.downloads.requests.last,
+          skipFiltered ? 'local-comic/3' : 'local-comic/2',
+        );
+      },
+    );
+  }
+  testWidgets(
+    'reader setting changes apply to next chapter, reopened chapter and another work',
+    (tester) async {
+      final fixture = await open(tester);
+      await tester.tap(find.byTooltip('阅读设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('上下翻页'));
+      await tester.pump();
+      await tester.tap(find.text('完整显示'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+      Navigator.of(tester.element(find.text('完整显示'))).pop();
       await settle(tester);
+      void expectGlobalLayout() {
+        expect(
+          tester
+              .widget<PageView>(find.byType(PageView).hitTestable())
+              .scrollDirection,
+          Axis.vertical,
+        );
+        expect(
+          tester
+              .widgetList<MangaPageImage>(find.byType(MangaPageImage))
+              .every((image) => image.fit == BoxFit.contain),
+          isTrue,
+        );
+      }
+
+      expectGlobalLayout();
+      await tester.tap(find.byTooltip('下一章'));
+      await settle(tester);
+      await tester.tap(find.text('继续阅读'));
+      await settle(tester);
+      expect(fixture.downloads.requests.last, 'local-comic/2');
       expectGlobalLayout();
       await closeReader(tester);
-    }
-    await reopen(item, 1);
-    await reopen(const MediaItem(sourceId: 'local-comic', remoteId: 'another', title: 'Another work', type: MediaType.manga), 2);
-  });
+      Future<void> reopen(MediaItem work, int index) async {
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: fixture.container,
+            child: MaterialApp(
+              home: MangaReaderPage(
+                args: MangaReaderArgs(
+                  item: work,
+                  chapters: catalog(),
+                  initialIndex: index,
+                ),
+              ),
+            ),
+          ),
+        );
+        await settle(tester);
+        expectGlobalLayout();
+        await closeReader(tester);
+      }
+
+      await reopen(item, 1);
+      await reopen(
+        const MediaItem(
+          sourceId: 'local-comic',
+          remoteId: 'another',
+          title: 'Another work',
+          type: MediaType.manga,
+        ),
+        2,
+      );
+    },
+  );
   for (final doublePage in [false, true]) {
     testWidgets(
       'dispose persists the last rendered spread (doublePage: $doublePage)',
@@ -213,10 +295,7 @@ void main() {
         await tester.runAsync(
           () => fixture.container
               .read(mangaReaderPreferencesProvider)
-              .set(
-                'doublePage',
-                doublePage,
-              ),
+              .set('doublePage', doublePage),
         );
         await settle(tester);
         expect(find.text('1/2'), findsOneWidget);

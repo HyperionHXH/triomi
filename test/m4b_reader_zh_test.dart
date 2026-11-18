@@ -156,6 +156,8 @@ void main() {
     // 正文中部唤出控制栏，再打开文字面板。
     await tester.tapAt(tester.getCenter(find.byType(NovelReaderPage)));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('阅读菜单'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('文字样式'));
     await tester.pumpAndSettle();
 

@@ -64,12 +64,19 @@ class MangaPageImage extends StatefulWidget {
     required this.fit,
     required this.settings,
     this.imageHeaders = const {},
+    this.part = 0,
+    this.turns = 0,
+    this.trimOverride,
+    this.onGeometry,
   });
   final ImageProvider provider;
   final String url, sourceId;
   final BoxFit fit;
   final Map<String, String> imageHeaders;
   final MangaViewSettings settings;
+  final int part, turns;
+  final bool? trimOverride;
+  final ValueChanged<Size>? onGeometry;
   @override
   State<MangaPageImage> createState() => _MangaPageImageState();
 }
@@ -94,7 +101,8 @@ class _MangaPageImageState extends State<MangaPageImage> {
         old.url != widget.url || old.sourceId != widget.sourceId;
     if (identityChanged ||
         old.provider != widget.provider ||
-        old.settings.trim != widget.settings.trim) {
+        old.settings.trim != widget.settings.trim ||
+        old.trimOverride != widget.trimOverride) {
       _resolve();
     }
   }
@@ -124,7 +132,8 @@ class _MangaPageImageState extends State<MangaPageImage> {
         );
         _failed = false;
         setState(() {});
-        if (!widget.settings.trim) return;
+        widget.onGeometry?.call(_crop!.size);
+        if (!(widget.trimOverride ?? widget.settings.trim)) return;
         final width = info.image.width, height = info.image.height;
         final pixels = await info.image.toByteData(
           format: ui.ImageByteFormat.rawRgba,
@@ -149,6 +158,7 @@ class _MangaPageImageState extends State<MangaPageImage> {
             bounds[3].toDouble(),
           ),
         );
+        widget.onGeometry?.call(_crop!.size);
       },
       onError: (_, _) {
         if (mounted && generation == _generation) {
@@ -183,9 +193,21 @@ class _MangaPageImageState extends State<MangaPageImage> {
         ),
       );
     }
-    final image = _info?.image, crop = _crop;
+    final image = _info?.image;
+    var crop = _crop;
     if (image == null || crop == null) {
       return _status(child: const CircularProgressIndicator());
+    }
+    if (widget.part == 1) {
+      crop = ui.Rect.fromLTRB(crop.left, crop.top, crop.center.dx, crop.bottom);
+    }
+    if (widget.part == 2) {
+      crop = ui.Rect.fromLTRB(
+        crop.center.dx,
+        crop.top,
+        crop.right,
+        crop.bottom,
+      );
     }
     Widget content = SizedBox(
       width: crop.width,
@@ -267,26 +289,105 @@ class _MangaPageImageState extends State<MangaPageImage> {
         child: content,
       );
     }
+    final options = widget.settings.options;
+    if (options.flag('customColor')) {
+      final mode = switch (options.choice('colorBlend', [
+        'over',
+        'multiply',
+        'screen',
+      ])) {
+        'multiply' => BlendMode.multiply,
+        'screen' => BlendMode.screen,
+        _ => BlendMode.srcOver,
+      };
+      content = ColorFiltered(
+        colorFilter: ColorFilter.mode(
+          Color.fromRGBO(
+            options.number('colorR', 255, 0, 255).round(),
+            options.number('colorG', 220, 0, 255).round(),
+            options.number('colorB', 170, 0, 255).round(),
+            options.number('colorAlpha', 15, 0, 100) / 100,
+          ),
+          mode,
+        ),
+        child: content,
+      );
+    }
+    final regionSize = crop.size;
+    if (widget.turns != 0) {
+      content = RotatedBox(quarterTurns: widget.turns, child: content);
+    }
     final fitted = LayoutBuilder(
-      builder: (context, constraints) => constraints.hasBoundedHeight
-          ? SizedBox.expand(
-              child: FittedBox(fit: widget.fit, child: content),
-            )
-          : AspectRatio(
-              aspectRatio: crop.width / crop.height,
-              child: FittedBox(fit: BoxFit.contain, child: content),
-            ),
+      builder: (context, constraints) {
+        final ratio = widget.turns.isOdd
+            ? regionSize.height / regionSize.width
+            : regionSize.width / regionSize.height;
+        final scale = options.choice('imageScale', [
+          'base',
+          'stretch',
+          'smart',
+        ]);
+        final fit = switch (scale) {
+          'stretch' => BoxFit.fill,
+          'smart' =>
+            constraints.hasBoundedHeight &&
+                    ratio > constraints.maxWidth / constraints.maxHeight
+                ? BoxFit.fitWidth
+                : BoxFit.contain,
+          _ => widget.fit,
+        };
+        return constraints.hasBoundedHeight
+            ? SizedBox.expand(
+                child: FittedBox(fit: fit, child: content),
+              )
+            : AspectRatio(
+                aspectRatio: ratio,
+                child: FittedBox(fit: BoxFit.contain, child: content),
+              );
+      },
     );
     // 缩放由阅读器按页统一接管：只有那里能同时控制翻页手势的让位。
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-        onLongPress: () => saveImageWithFeedback(
-          context,
-          imageUrl: widget.url,
-          sourceId: widget.sourceId,
-          imageHeaders: widget.imageHeaders,
-        ),
-        child: Center(child: fitted),
+      onLongPress: widget.settings.options.flag('longPressActions')
+          ? () => showModalBottomSheet<void>(
+              context: context,
+              builder: (sheetContext) => SafeArea(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    ListTile(
+                      title: const Text('保存原图'),
+                      leading: const Icon(Icons.save_alt),
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        saveImageWithFeedback(
+                          context,
+                          imageUrl: widget.url,
+                          sourceId: widget.sourceId,
+                          imageHeaders: widget.imageHeaders,
+                        );
+                      },
+                    ),
+                    ListTile(
+                      title: const Text('查看完整图片'),
+                      leading: const Icon(Icons.fullscreen),
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        showImageViewer(
+                          context,
+                          imageUrl: widget.url,
+                          sourceId: widget.sourceId,
+                          imageHeaders: widget.imageHeaders,
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : null,
+      child: Center(child: fitted),
     );
   }
 

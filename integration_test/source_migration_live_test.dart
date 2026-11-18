@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -208,13 +207,26 @@ void main() {
           original.remoteId,
         );
         final downloadsBefore = await db.select(db.downloads).get();
-        unawaited(
-          container
-              .read(routerProvider)
-              .push<void>(AppRoutes.detailFor(original), extra: original),
+        container.read(routerProvider).go(AppRoutes.manga);
+        final shelfTab = find.widgetWithText(Tab, '书库');
+        await waitFor(shelfTab);
+        await tester.tap(shelfTab);
+        final shelfSearch = find.byTooltip('搜索本地书库');
+        await waitFor(shelfSearch);
+        await tester.tap(shelfSearch);
+        final shelfQuery = find.byType(TextField);
+        await waitFor(shelfQuery);
+        await tester.enterText(shelfQuery, original.title);
+        final shelfItem = find.byKey(
+          ValueKey((original.sourceId, original.remoteId, original.type)),
         );
-        await waitFor(find.byTooltip('复制到其他来源'));
-        await tester.tap(find.byTooltip('复制到其他来源'));
+        await waitFor(shelfItem);
+        await tester.longPress(shelfItem);
+        final selectionMenu = find.byTooltip('已选更多');
+        await waitFor(selectionMenu);
+        await tester.tap(selectionMenu);
+        await waitFor(find.text('迁移来源'));
+        await tester.tap(find.text('迁移来源'));
         await waitFor(find.text('搜索目标作品'));
         final sourceDropdown = find
             .byType(DropdownButtonFormField<String>)

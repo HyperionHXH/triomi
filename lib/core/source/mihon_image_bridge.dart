@@ -31,7 +31,7 @@ abstract final class MihonImageBridge {
   /// Downloads run in a cancellable operation zone. Loading registered images
   /// directly preserves that owner across the native/desktop host seam instead
   /// of losing it on the loopback HTTP server's unrelated request zone.
-  static Future<List<int>?> tryLoadBytes(String value) async {
+  static Future<List<int>?> tryLoadBytes(String value, {int? maxBytes}) async {
     final uri = Uri.tryParse(value);
     final server = _server;
     if (server == null ||
@@ -52,7 +52,11 @@ abstract final class MihonImageBridge {
     if (cancellation?.cancelled == true) throw cancellation!.token.cancelError!;
     final path = result['filePath'];
     if (path is! String) throw StateError('Missing plugin image file');
-    final bytes = await File(path).readAsBytes();
+    final file = File(path);
+    if (maxBytes != null && await file.length() > maxBytes) {
+      throw const FormatException('图片超过预读预算');
+    }
+    final bytes = await file.readAsBytes();
     if (cancellation?.cancelled == true) throw cancellation!.token.cancelError!;
     return bytes;
   }

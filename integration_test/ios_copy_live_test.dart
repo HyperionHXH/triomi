@@ -337,7 +337,6 @@ void main() {
           MediaType.manga,
           sourceId: 'copymanga',
           query: '一拳超人',
-          sourceOnly: true,
         ),
       );
       await until(
@@ -495,15 +494,15 @@ void main() {
       );
       await tester.tap(find.byTooltip('阅读设置'));
       await until(
-        () => find.text('本作品阅读设置').evaluate().isNotEmpty,
-        'Production work reader settings open',
+        () => find.text('阅读模式').evaluate().isNotEmpty,
+        'Production global reader settings open',
       );
       await capture(
         '05_copy_reader_settings.png',
         '/reader',
         'Production reading settings on live Copy work',
       );
-      Navigator.of(tester.element(find.text('本作品阅读设置'))).pop();
+      Navigator.of(tester.element(find.text('阅读模式'))).pop();
       await tester.pump(const Duration(milliseconds: 400));
       final following = mainChapters[1];
       final followingContent = await (source as ContentProvider)

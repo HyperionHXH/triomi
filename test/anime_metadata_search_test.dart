@@ -164,7 +164,8 @@ void main() {
       expect(body['keyword'], '公开资料');
       expect((body['filter'] as Map)['type'], [2]);
       expect(find.text('公开资料结果'), findsOneWidget);
-      expect(find.text('已完成 1 / 1 个来源'), findsOneWidget);
+      expect(find.text('资料筛选'), findsOneWidget);
+      expect(find.text('有结果'), findsNothing);
       expect(find.text('没有可搜索的番剧来源'), findsNothing);
     });
   }

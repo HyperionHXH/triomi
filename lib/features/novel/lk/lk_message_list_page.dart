@@ -13,6 +13,7 @@ import '../../../core/source/source_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/widgets/page_scaffold.dart';
+import '../../../core/widgets/scroll_pagination.dart';
 import '../../../core/widgets/source_network_image.dart';
 import '../data/lk/lk_source.dart';
 import 'lk_access.dart';
@@ -82,12 +83,13 @@ class _LkMessageListPageState extends ConsumerState<LkMessageListPage> {
     final source = _source;
     final category = _category;
     if (source == null || category == null) return;
+    if (_loadingMore || (append && _loading)) return;
     setState(() {
+      _error = null;
       if (append) {
         _loadingMore = true;
       } else {
         _loading = true;
-        _error = null;
       }
     });
     try {
@@ -222,34 +224,48 @@ class _LkMessageListPageState extends ConsumerState<LkMessageListPage> {
       );
     }
     if (_items.isEmpty) {
-      return EmptyStateView(
-        icon: Icons.mark_email_read_outlined,
-        title: '这个分类还没有消息',
-        message: '站点返回为空时这里不显示占位假数据。',
+      return RefreshIndicator(
+        onRefresh: () => _loadPage(1),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            EmptyStateView(
+              icon: Icons.mark_email_read_outlined,
+              title: '这个分类还没有消息',
+            ),
+          ],
+        ),
       );
     }
 
     return RefreshIndicator(
       onRefresh: () => _loadPage(1),
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-        itemCount: _items.length + (_hasMore ? 1 : 0),
-        separatorBuilder: (context, index) =>
-            Divider(height: 1, color: context.palette.divider),
-        itemBuilder: (context, index) {
-          if (index >= _items.length) {
-            return Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: _loadingMore
-                    ? null
-                    : () => unawaited(_loadPage(_page + 1, append: true)),
-                child: Text(_loadingMore ? '加载中…' : '加载更多'),
-              ),
-            );
+      child: LoadMoreOnScroll(
+        onLoadMore: () {
+          if (_hasMore && _error == null) {
+            unawaited(_loadPage(_page + 1, append: true));
           }
-          return _notificationTile(_items[index]);
         },
+        child: ListView.separated(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+          itemCount: _items.length + 1,
+          separatorBuilder: (context, index) =>
+              Divider(height: 1, color: context.palette.divider),
+          itemBuilder: (context, index) {
+            if (index < _items.length) return _notificationTile(_items[index]);
+            if (_error != null) {
+              return Center(
+                child: TextButton(
+                  onPressed: () =>
+                      unawaited(_loadPage(_page + 1, append: true)),
+                  child: const Text('重试加载消息'),
+                ),
+              );
+            }
+            return PageTail(loading: _loadingMore, ended: !_hasMore);
+          },
+        ),
       ),
     );
   }

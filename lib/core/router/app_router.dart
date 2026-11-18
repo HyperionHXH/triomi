@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/anime/anime_workspace_page.dart';
+import '../../features/completion_routes/completion_routes_page.dart';
 import '../../features/detail/detail_page.dart';
 import '../../features/downloads/downloads_page.dart';
 import '../../features/history/history_page.dart';
@@ -53,14 +54,12 @@ abstract final class AppRoutes {
     MediaType type, {
     String? sourceId,
     String? query,
-    bool sourceOnly = false,
     Iterable<String> tags = const [],
   }) => Uri(
     path: '/${type.name}/search',
     queryParameters: {
       'source': ?sourceId,
       'q': ?query,
-      if (sourceOnly) 'sourceOnly': 'true',
       if (tags.isNotEmpty) 'tag': tags.toList(growable: false),
     },
   ).toString();
@@ -93,6 +92,7 @@ abstract final class AppRoutes {
   static const String webdav = '/webdav';
   static const String tracking = '/tracking';
   static const String danmakuSettings = '/danmaku-settings';
+  static const String completionRoutes = '/completion-routes';
 }
 
 abstract final class AppRouter {
@@ -146,6 +146,11 @@ abstract final class AppRouter {
                 ],
               ),
             ],
+          ),
+          GoRoute(
+            path: AppRoutes.completionRoutes,
+            parentNavigatorKey: _rootNavigatorKey,
+            builder: (context, state) => const CompletionRoutesPage(),
           ),
           GoRoute(
             path: AppRoutes.settings,
@@ -324,7 +329,6 @@ abstract final class AppRouter {
         type: type,
         initialSourceId: state.uri.queryParameters['source'],
         initialQuery: state.uri.queryParameters['q'] ?? '',
-        sourceOnly: state.uri.queryParameters['sourceOnly'] == 'true',
         initialTags: state.uri.queryParametersAll['tag'] ?? const [],
       ),
     ),

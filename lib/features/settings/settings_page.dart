@@ -44,7 +44,6 @@ class SettingsPage extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.palette_outlined),
                 title: const Text('封面与外观'),
-                subtitle: const Text('主题、图标、封面布局、密度与强调色'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(
                   context,
@@ -56,7 +55,6 @@ class SettingsPage extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.tune_outlined),
                 title: const Text('新手设置'),
-                subtitle: const Text('重新选择主题、备份位置并了解来源与同步'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push<void>(
                   context,
@@ -72,9 +70,7 @@ class SettingsPage extends ConsumerWidget {
                 key: const ValueKey('public-network-acceleration'),
                 secondary: const Icon(Icons.public_rounded),
                 title: const Text('公共网络加速'),
-                subtitle: const Text(
-                  '公开资料、封面和规则库使用镜像；评论使用 ECH。账号与视频不使用镜像，已配置的代理优先。',
-                ),
+                subtitle: const Text('公开资料镜像与评论 ECH'),
                 value: ref.watch(bangumiMirrorEnabledProvider),
                 onChanged: (enabled) async {
                   try {
@@ -109,7 +105,6 @@ class SettingsPage extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.cleaning_services_outlined),
                 title: const Text('缓存与存储'),
-                subtitle: const Text('清理缓存，保留下载和进度'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(
                   context,
@@ -126,14 +121,12 @@ class SettingsPage extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.cloud_sync_outlined),
                 title: const Text('WebDAV 收藏与历史同步'),
-                subtitle: const Text('同步收藏与阅读 / 观看位置'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push(AppRoutes.webdav),
               ),
               ListTile(
                 leading: const Icon(Icons.archive_outlined),
                 title: const Text('WebDAV 完整应用备份'),
-                subtitle: const Text('使用相同 WebDAV 连接'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push(AppRoutes.webdavBackup),
               ),
@@ -323,7 +316,6 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                     Icons.speaker_notes_outlined,
                     '弹幕设置',
                     AppRoutes.danmakuSettings,
-                    subtitle: 'B站、Animeko、Gamer 独立只读弹幕池；匹配与偏移在播放器中设置，不提供发送',
                   ),
               ],
             ),
@@ -342,7 +334,6 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                   Icons.language_outlined,
                   '漫画规则与来源',
                   '${AppRoutes.sources}?type=manga',
-                  subtitle: '来源登录与偏好在各漫画来源中管理',
                 ),
                 route(
                   Icons.sync_outlined,
@@ -382,13 +373,11 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                   Icons.account_circle_outlined,
                   '账号与签到',
                   AppRoutes.lkAccount,
-                  subtitle: '轻之国度独立登录、轻币与关注',
                 ),
                 route(
                   Icons.mark_email_unread_outlined,
                   '消息中心',
                   AppRoutes.lkMessages,
-                  subtitle: '轻之国度回复、点赞与私信',
                 ),
               ],
             ),
@@ -399,7 +388,6 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                   Icons.account_circle_outlined,
                   '账号与签到',
                   AppRoutes.lnsAccount,
-                  subtitle: '轻书架独立登录、轻币与连续签到',
                 ),
               ],
             ),
@@ -410,13 +398,12 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                   Icons.sync_outlined,
                   '小说追踪账号',
                   '${AppRoutes.tracking}?type=novel',
-                  subtitle: 'Bangumi / AniList · 仅显示小说绑定，服务凭据共用',
+                  subtitle: 'Bangumi / AniList',
                 ),
                 route(
                   Icons.bookmarks_outlined,
                   '站点远端书架',
                   AppRoutes.remoteShelf,
-                  subtitle: '轻之国度 / 轻书架，保持各站收藏独立',
                 ),
                 route(Icons.font_download_outlined, '阅读字体', AppRoutes.fonts),
                 page(
@@ -427,7 +414,6 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.ios_share_outlined),
                   title: const Text('导出小说'),
-                  subtitle: const Text('选择书籍后检查章节与站点导出权限'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => showNovelExportChooser(context),
                 ),

@@ -128,7 +128,7 @@ void main({Future<void> Function(String name)? capture}) {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'production manga detail tag reaches MangaDex includedTags, not title search',
+    'manga detail tag searches as text across enabled manga sources',
     (tester) async {
       const tagId = '391b0423-d847-456f-aff0-8b0cfc03066b';
       Map<String, Object?> node(String id) => {
@@ -228,12 +228,13 @@ void main({Future<void> Function(String name)? capture}) {
       );
       expect(searches, hasLength(1));
       final query = Uri.parse(searches.single.url).queryParametersAll;
-      expect(query['includedTags[]'], [tagId]);
-      expect(query['includedTagsMode'], ['AND']);
-      expect(query.containsKey('title'), isFalse);
+      expect(query['title'], ['Action']);
+      expect(query.containsKey('includedTags[]'), isFalse);
       expect(query['offset'], ['0']);
       expect(find.text('Server-selected manga'), findsOneWidget);
-      expect(unrelated.map((source) => source.calls), everyElement(0));
+      expect(unrelated.map((source) => source.calls), [
+        for (final type in MediaType.values) type == MediaType.manga ? 1 : 0,
+      ]);
       expect(metadata.requests, isEmpty);
       expect(tester.takeException(), isNull);
       if (capture != null) await capture('manga-detail-tag-server-results');
@@ -241,22 +242,16 @@ void main({Future<void> Function(String name)? capture}) {
   );
 
   testWidgets(
-    'production anime tag route preserves scope, server paging and metadata mode',
+    'anime tag route isolates Bangumi filters from aggregate playback search',
     (tester) async {
       final http = FakeHttpClient((request) async {
         final uri = Uri.parse(request.url);
-        if (uri.path == '/tags') {
-          return _json([
-            {'id': 'science-fiction', 'label': '科幻'},
-          ]);
-        }
-        if (uri.path == '/tagged') {
-          final page = uri.queryParameters['page'];
-          return _json([
-            {'remoteId': 'page-$page', 'title': 'Server anime $page'},
-          ]);
-        }
-        throw StateError('Title search must not be substituted for tags');
+        expect(uri.path, '/search');
+        expect(uri.queryParameters['keyword'], '科幻');
+        final page = uri.queryParameters['page'];
+        return _json([
+          {'remoteId': 'page-$page', 'title': 'Server anime $page'},
+        ]);
       });
       final source = JsSource(
         rule: SourceRule.parseJson(
@@ -267,13 +262,9 @@ void main({Future<void> Function(String name)? capture}) {
             'engine': 'js',
             'baseUrl': 'https://anime.example',
             'script': '''
-async function search(keyword, page) { throw new Error('Wrong title search'); }
-async function searchTags() {
-  return JSON.parse((await triomi.fetch(triomi.baseUrl + '/tags')).body);
-}
-async function searchTagged(keyword, page, tags) {
-  return JSON.parse((await triomi.fetch(triomi.baseUrl + '/tagged?keyword=' +
-    encodeURIComponent(keyword) + '&page=' + page + '&tag=' + encodeURIComponent(tags[0]))).body);
+async function search(keyword, page) {
+  return JSON.parse((await triomi.fetch(triomi.baseUrl + '/search?keyword=' +
+    encodeURIComponent(keyword) + '&page=' + page)).body);
 }
 ''',
           }),
@@ -294,8 +285,7 @@ async function searchTagged(keyword, page, tags) {
       );
       final location = AppRoutes.searchFor(
         MediaType.anime,
-        sourceId: source.descriptor.id,
-        sourceOnly: true,
+        sourceId: 'bangumi-anime',
         tags: ['科幻'],
       );
       await _mount(
@@ -305,51 +295,29 @@ async function searchTagged(keyword, page, tags) {
         metadata: metadata,
         afterMount: (router) => router.go(location),
       );
-      await _until(
-        tester,
-        () => find.text('Server anime 1').evaluate().isNotEmpty,
-        'Actual WebKit tag request must publish its first server page',
-      );
-      expect(find.text('Server anime 1'), findsOneWidget);
+      await _until(tester, () => find.text('Server metadata result').evaluate().isNotEmpty,
+          'The Bangumi tab must query the seeded tag');
+      expect(http.requests, isEmpty);
       Iterable<SourceRequest> metadataSearches() => metadata.requests.where(
         (request) =>
             request.method == 'POST' &&
             Uri.parse(request.url).path.endsWith('/search/subjects'),
       );
-      expect(metadataSearches(), isEmpty);
-      final next = find.widgetWithText(TextButton, '加载本站下一页');
-      await tester.ensureVisible(next);
+      await tester.tap(find.text('聚合搜索'));
       await _advance(tester);
-      expect(next.hitTestable(), findsOneWidget);
-      await tester.tap(next);
-      await _advance(tester);
-      await _until(
-        tester,
-        () => find.text('Server anime 2').evaluate().isNotEmpty,
-        'The next page must render the second server result',
-      );
-      final tagged = http.requests
-          .map((request) => Uri.parse(request.url))
-          .where((uri) => uri.path == '/tagged')
-          .toList();
-      expect(tagged.map((uri) => uri.queryParameters['page']), ['1', '2']);
-      for (final uri in tagged) {
-        expect(uri.queryParameters['tag'], 'science-fiction');
-        expect(uri.queryParameters['keyword'], isEmpty);
-      }
-      await tester.tap(find.text('Bangumi资料'));
-      await _advance(tester);
-      await _until(
-        tester,
-        () => find.text('Server metadata result').evaluate().isNotEmpty,
-        'Changing modes must publish the independent metadata tag query',
-      );
+      await tester.enterText(find.byType(TextField), '科幻');
+      await tester.tap(find.byTooltip('搜索'));
+      await _until(tester, () => find.text('Server anime 1').evaluate().isNotEmpty,
+          'The WebKit playback source must return a normal keyword result');
+      expect(find.text('资料筛选'), findsNothing);
       expect(metadataSearches(), hasLength(1));
       final body = jsonDecode(metadataSearches().single.body!) as Map;
       expect(body['keyword'], isEmpty);
       expect((body['filter'] as Map)['tag'], ['科幻']);
-      expect(find.text('Server metadata result'), findsOneWidget);
-      expect(unrelated.map((source) => source.calls), everyElement(0));
+      expect(find.text('Server metadata result'), findsNothing);
+      expect(unrelated.map((source) => source.calls), [
+        for (final type in MediaType.values) type == MediaType.anime ? 1 : 0,
+      ]);
       expect(tester.takeException(), isNull);
       if (capture != null) await capture('anime-tag-scope-server-results');
     },

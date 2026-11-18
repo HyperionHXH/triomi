@@ -973,7 +973,6 @@ void main() {
         MediaType.manga,
         sourceId: fixtures.sourceId(MediaType.manga),
         query: '海港',
-        sourceOnly: true,
       );
       await go(searchRoute);
       await until(
@@ -1033,7 +1032,8 @@ void main() {
         () => find.text(TourHttpClient.metadataTitle).evaluate().isNotEmpty,
         'metadata search must show the synthetic subject without a plugin rule',
       );
-      expect(find.text('已完成 1 / 1 个来源'), findsOneWidget);
+      expect(find.text('Bangumi 搜索'), findsOneWidget);
+      expect(find.text('资料筛选'), findsOneWidget);
       expect(fixtures.http.metadataRequests, hasLength(1));
       await screenshot(
         '03_anime_metadata_search.png',
@@ -1267,13 +1267,15 @@ void main() {
       );
       await tester.tap(find.byTooltip('阅读设置'));
       await pumpFor();
-      expect(find.text('本作品阅读设置'), findsOneWidget);
+      expect(find.text('阅读模式'), findsOneWidget);
+      expect(find.text('通用'), findsOneWidget);
+      expect(find.text('滤镜'), findsOneWidget);
       await screenshot(
         '05_manga_reader_controls.png',
         AppRoutes.reader,
         '漫画控制面板真实可见',
       );
-      Navigator.of(tester.element(find.text('本作品阅读设置'))).pop();
+      Navigator.of(tester.element(find.text('阅读模式'))).pop();
       await pumpFor();
       router.pop();
       await pumpFor();

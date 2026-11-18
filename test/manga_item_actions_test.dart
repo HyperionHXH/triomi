@@ -7,11 +7,13 @@ import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/source/source_registry.dart';
+import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/features/detail/detail_page.dart';
 import 'package:triomi/features/library/data/library_providers.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
 import 'package:triomi/features/manga/manga_item_actions.dart';
 
+import 'fixtures/fake_preferences.dart';
 import 'fixtures/test_database.dart';
 
 const _first = MediaItem(
@@ -39,6 +41,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        preferencesProvider.overrideWithValue(memoryPreferences()),
         sourcesProvider.overrideWith(_EmptySources.new),
       ],
     );
@@ -208,7 +211,7 @@ void main() {
     },
   );
   actionTest(
-    'detail more menu exposes editor and reset restores source title',
+    'manga detail keeps one route action and no duplicate editor or sync menu',
     (tester) async {
       await repository.cacheItem(_first);
       await tester.pumpWidget(
@@ -220,25 +223,16 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('更多'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('编辑漫画资料'));
+      expect(find.text('编辑漫画资料'), findsNothing);
+      expect(find.text('追踪绑定'), findsNothing);
+      expect(find.textContaining('同步预览'), findsNothing);
+      expect(find.text('复制到其他来源'), findsNothing);
+      Navigator.of(tester.element(find.text('多来源合并'))).pop();
       await tester.pumpAndSettle();
-      await tester.enterText(find.widgetWithText(TextField, '标题'), '详情自定义名');
-      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await tester.tap(find.text('加入路线'));
       await tester.pumpAndSettle();
-      expect(find.text('详情自定义名'), findsWidgets);
-      expect(
-        (await repository.itemByKey('source-a', 'same'))!.sourceTitle,
-        '第一本',
-      );
-      await tester.tap(find.byTooltip('更多'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('编辑漫画资料'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.widgetWithText(TextField, '标题'), '');
-      await tester.tap(find.widgetWithText(FilledButton, '保存'));
-      await tester.pumpAndSettle();
-      expect(find.text('详情自定义名'), findsNothing);
-      expect(find.text('第一本'), findsWidgets);
+      expect(find.byType(DetailPage), findsOneWidget);
+      expect(find.text('加入补完路线'), findsOneWidget);
     },
   );
   actionTest(

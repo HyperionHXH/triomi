@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/db/database_provider.dart';
-import '../../core/models/chapter.dart';
 import '../../core/models/media_item.dart';
 import '../../core/models/media_type.dart';
 import '../../core/models/source_descriptor.dart';
@@ -22,21 +21,11 @@ import '../library/data/library_repository.dart';
 import 'data/lk/lk_source.dart';
 import 'novel_book_card.dart';
 import 'reader/chapter_font.dart';
-import 'reader/novel_reader_page.dart';
 
 class _LocalNovel {
-  const _LocalNovel(
-    this.item,
-    this.chapters,
-    this.history,
-    this.readableIds,
-    this.missingFonts,
-  );
+  const _LocalNovel(this.item, {this.canReadOffline = false});
   final MediaItem item;
-  final List<Chapter> chapters;
-  final HistoryView? history;
-  final Set<String> readableIds;
-  final int missingFonts;
+  final bool canReadOffline;
 }
 
 /// Local shelf inspection never watches the executable source registry. Chapter
@@ -56,12 +45,7 @@ final _localNovelsProvider = StreamProvider<List<_LocalNovel>>((ref) {
         AND c.content_json IS NOT NULL)
     )
   ''',
-        readsFrom: {
-          db.mediaItems,
-          db.libraryEntries,
-          db.histories,
-          db.chapters,
-        },
+        readsFrom: {db.mediaItems, db.libraryEntries, db.chapters},
       )
       .watch()
       .asyncMap((rows) async {
@@ -73,8 +57,7 @@ final _localNovelsProvider = StreamProvider<List<_LocalNovel>>((ref) {
           final item = await repository.itemByKey(sourceId, remoteId);
           if (item == null || item.type != MediaType.novel) continue;
           final chapters = await repository.loadChapters(sourceId, remoteId);
-          final readable = <String>{};
-          var missingFonts = 0;
+          var canReadOffline = false;
           for (final chapter in chapters) {
             final body = chapter.content;
             if (chapter.locked ||
@@ -94,37 +77,13 @@ final _localNovelsProvider = StreamProvider<List<_LocalNovel>>((ref) {
                       return false;
                     }
                   })) {
-                missingFonts++;
                 continue;
               }
             }
-            readable.add(chapter.remoteId);
+            canReadOffline = true;
+            break;
           }
-          // Keep only directory metadata in a retained workspace. Large chapter
-          // bodies and base64 fonts are reloaded for the chosen book on reader open.
-          final directory = [
-            for (final chapter in chapters)
-              Chapter(
-                sourceId: chapter.sourceId,
-                remoteId: chapter.remoteId,
-                title: chapter.title,
-                url: chapter.url,
-                number: chapter.number,
-                sortIndex: chapter.sortIndex,
-                volumeTitle: chapter.volumeTitle,
-                releaseDate: chapter.releaseDate,
-                locked: chapter.locked,
-              ),
-          ];
-          result.add(
-            _LocalNovel(
-              item,
-              directory,
-              await repository.lastReadOf(sourceId, remoteId),
-              readable,
-              missingFonts,
-            ),
-          );
+          result.add(_LocalNovel(item, canReadOffline: canReadOffline));
         }
         return result;
       });
@@ -150,15 +109,12 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
   // Membership is an authenticated session snapshot, not a local favourite.
   final _remoteShelves = <String, List<MediaItem>>{};
   final _remoteProviders = <String, RemoteShelfProvider>{};
-  final _remoteUnread = <(String, String), int>{};
   final _remoteStale = <String>{};
   final _remoteEpochs = <String, int>{};
-  final _mutatingSources = <String>{};
 
   void _clearRemote(String sourceId) {
     _remoteShelves.remove(sourceId);
     _remoteProviders.remove(sourceId);
-    _remoteUnread.removeWhere((key, _) => key.$1 == sourceId);
     _remoteStale.remove(sourceId);
     _remoteEpochs[sourceId] = (_remoteEpochs[sourceId] ?? 0) + 1;
   }
@@ -240,64 +196,6 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
       ref.read(_localNovelsProvider.future),
       if (!_downloaded) _refreshRemote(),
     ]);
-  }
-
-  Future<void> _removeRemote(MediaItem item) async {
-    final sourceId = item.sourceId;
-    final provider = _remoteProviders[sourceId];
-    if (provider == null ||
-        !provider.isLoggedIn ||
-        _mutatingSources.contains(sourceId)) {
-      return;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('移出站点收藏？'),
-        content: Text('从站点书架移除《${item.title}》，保留本机收藏、进度与下载。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('移除'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true ||
-        !mounted ||
-        !provider.isLoggedIn ||
-        !identical(_remoteProviders[sourceId], provider) ||
-        _mutatingSources.contains(sourceId)) {
-      return;
-    }
-    setState(() => _mutatingSources.add(sourceId));
-    try {
-      await provider.setInRemoteShelf(item, false);
-      if (!mounted || !identical(_remoteProviders[sourceId], provider)) return;
-      setState(() {
-        // A refresh started while the write was pending may still contain the
-        // removed book. Retire it before publishing the confirmed mutation.
-        _refreshGeneration++;
-        _refreshing = false;
-        _remoteShelves[sourceId]?.removeWhere(
-          (book) => book.remoteId == item.remoteId,
-        );
-        _remoteUnread.remove((sourceId, item.remoteId));
-      });
-      await _refreshRemote();
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('移出站点收藏失败：${_describe(error)}')));
-      }
-    } finally {
-      if (mounted) setState(() => _mutatingSources.remove(sourceId));
-    }
   }
 
   Future<void> _refreshRemote() async {
@@ -413,7 +311,6 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
               setState(() {
                 if (authenticationFailed) {
                   _remoteShelves.remove(sourceId);
-                  _remoteUnread.removeWhere((key, _) => key.$1 == sourceId);
                   _remoteSummary[name] = warnings.join('；');
                   _remoteAuthFailures.add(sourceId);
                 } else {
@@ -433,15 +330,6 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
                 sourceId: sourceId,
                 counts: counts,
               );
-              if (!current()) return;
-              setState(() {
-                _remoteUnread.removeWhere((key, _) => key.$1 == sourceId);
-                for (final count in counts.entries) {
-                  if (count.value >= 0) {
-                    _remoteUnread[(sourceId, count.key)] = count.value;
-                  }
-                }
-              });
             } catch (error) {
               warnings.add('站点未读失败：${_describe(error)}（保留原值）');
               authenticationFailed =
@@ -453,7 +341,6 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
                   _remoteAuthFailures.add(sourceId);
                   if (!provider.isLoggedIn) {
                     _remoteShelves.remove(sourceId);
-                    _remoteUnread.removeWhere((key, _) => key.$1 == sourceId);
                   }
                 });
               }
@@ -546,42 +433,6 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
       ? error.userMessage
       : SourceException.sanitizeMessage('$error');
 
-  Future<void> _read(_LocalNovel book) async {
-    final chapters = await ref
-        .read(libraryRepositoryProvider)
-        .loadChapters(book.item.sourceId, book.item.remoteId);
-    final history = await ref
-        .read(libraryRepositoryProvider)
-        .lastReadOf(book.item.sourceId, book.item.remoteId);
-    if (!mounted) return;
-    if (chapters.isEmpty) {
-      await _openDetail(book.item);
-      return;
-    }
-    var index = chapters.indexWhere(
-      (c) => c.remoteId == history?.chapterRemoteId,
-    );
-    if (index < 0) index = 0;
-    if (_downloaded && !book.readableIds.contains(chapters[index].remoteId)) {
-      index = chapters.indexWhere((c) => book.readableIds.contains(c.remoteId));
-    }
-    if (index < 0) return;
-    await context.push(
-      AppRoutes.novelReader,
-      extra: NovelReaderArgs(
-        item: book.item,
-        chapters: chapters,
-        initialIndex: index,
-      ),
-    );
-    if (mounted) await _refresh();
-  }
-
-  Future<void> _openDetail(MediaItem item) async {
-    await context.push(AppRoutes.detailFor(item), extra: item);
-    if (mounted) await _refresh();
-  }
-
   Future<void> _markRead(
     List<_LocalNovel> books,
     Map<(String, String), LibraryItemView> entries,
@@ -646,17 +497,14 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
       for (final item in shelf.value) {
         final key = (item.sourceId, item.remoteId);
         remoteKeys.add(key);
-        combined.putIfAbsent(
-          key,
-          () => _LocalNovel(item, const [], null, const {}, 0),
-        );
+        combined.putIfAbsent(key, () => _LocalNovel(item));
       }
     }
     final filtered = combined.values.where((book) {
       final key = (book.item.sourceId, book.item.remoteId);
       final entry = entries[key];
       if (_downloaded) {
-        return book.readableIds.isNotEmpty &&
+        return book.canReadOffline &&
             (entry == null || categories?.matches(entry) == true);
       }
       // A cached body or reading history is not consent to collect a book.
@@ -778,13 +626,6 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
                   );
                 }
                 final book = filtered[index - 1];
-                final entry =
-                    entries[(book.item.sourceId, book.item.remoteId)]?.entry;
-                final count = book.readableIds.length;
-                final full = count > 0 && count == book.chapters.length;
-                final resumeAvailable = book.readableIds.contains(
-                  book.history?.chapterRemoteId,
-                );
                 return NovelBookCard(
                   item: book.item,
                   onReturn: _refresh,
@@ -795,71 +636,6 @@ class _NovelShelfViewState extends ConsumerState<NovelShelfView> {
                         'light-novel-shelf' => '轻书架',
                         _ => book.item.sourceId,
                       },
-                  status: [
-                    if (entry != null) '本机收藏',
-                    if (remoteKeys.contains((
-                      book.item.sourceId,
-                      book.item.remoteId,
-                    )))
-                      _remoteStale.contains(book.item.sourceId)
-                          ? '站点收藏 · 上次成功快照（本次刷新失败）'
-                          : '站点收藏 · 本次成功刷新',
-                    if (entry == null)
-                      remoteKeys.contains((
-                            book.item.sourceId,
-                            book.item.remoteId,
-                          ))
-                          ? '尚未加入本机收藏'
-                          : '已下载 · 未加入收藏',
-                    if ((entry?.unreadCount ??
-                            _remoteUnread[(
-                              book.item.sourceId,
-                              book.item.remoteId,
-                            )] ??
-                            0) >
-                        0)
-                      '${entry?.unreadCount ?? _remoteUnread[(book.item.sourceId, book.item.remoteId)]} 章未读',
-                    if (book.history != null)
-                      '读至：${book.chapters.where((c) => c.remoteId == book.history!.chapterRemoteId).firstOrNull?.title ?? '已保存章节'} · 已保存文字位置',
-                    if (book.chapters.isNotEmpty)
-                      '本地目录 ${book.chapters.length} 章',
-                    if (count > 0)
-                      '${full ? '完整下载' : '部分下载'} $count/${book.chapters.length} 章 · 正文 / 字体可离线',
-                    if (book.missingFonts > 0)
-                      '${book.missingFonts} 章缺少有效专用字体，不能离线阅读',
-                    if (_downloaded && book.history != null && !resumeAvailable)
-                      '上次阅读章节未离线，将打开首个可用下载章节',
-                  ].join('\n'),
-                  actions: [
-                    FilledButton.tonalIcon(
-                      onPressed: () => _read(book),
-                      icon: const Icon(Icons.auto_stories_outlined),
-                      label: Text(
-                        _downloaded && book.history != null && !resumeAvailable
-                            ? '阅读已下载章节'
-                            : book.history != null
-                            ? '继续阅读'
-                            : '开始阅读',
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => _openDetail(book.item),
-                      child: const Text('目录 / 下载 / 导出'),
-                    ),
-                    if (!_downloaded &&
-                        remoteKeys.contains((
-                          book.item.sourceId,
-                          book.item.remoteId,
-                        )))
-                      TextButton(
-                        onPressed:
-                            _refreshing ||
-                                _mutatingSources.contains(book.item.sourceId)
-                            ? null
-                            : () => _removeRemote(book.item),
-                        child: const Text('移出站点收藏'),
-                      ),
-                  ],
                 );
               },
             ),

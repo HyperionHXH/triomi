@@ -55,14 +55,16 @@ class AnimeFilter {
       hideCompleted ||
       hideDropped;
 
-  Map<String, Object?> get body => AnimePublicFilter(
+  AnimePublicFilter get publicFilter => AnimePublicFilter(
     tags: tags,
     year: year,
     quarter: quarter,
     minScore: minScore,
     maxScore: maxScore,
     sort: sort,
-  ).toBody();
+  );
+
+  Map<String, Object?> get body => publicFilter.toBody();
 
   Map<String, Object?> toJson() => {
     'version': 1,
@@ -157,7 +159,8 @@ class AnimeInfoRepository {
         Future<AnimeInfoPage>
       >{};
 
-  Future<Map<String, Object?>> character(String id) => publicClient.character(id);
+  Future<Map<String, Object?>> character(String id) =>
+      publicClient.character(id);
 
   Future<AnimeInfoPage> section(
     String id,
@@ -166,11 +169,21 @@ class AnimeInfoRepository {
     MediaItem? subject,
     bool refresh = false,
   }) {
-    final key = (id, section, offset, SourceRequestCancellation.current, refresh);
+    final key = (
+      id,
+      section,
+      offset,
+      SourceRequestCancellation.current,
+      refresh,
+    );
     return _inflight.putIfAbsent(key, () async {
       try {
         return await _section(
-          id, section, offset: offset, refresh: refresh, subject: subject,
+          id,
+          section,
+          offset: offset,
+          refresh: refresh,
+          subject: subject,
         );
       } finally {
         unawaited(_inflight.remove(key));
@@ -206,7 +219,11 @@ class AnimeInfoRepository {
         : Map<String, dynamic>.from(jsonDecode(item!.detailJson!) as Map);
     final key = '$section:$offset';
 
-    AnimeInfoPage parse(Object? raw, {bool cached = false, Object? refreshError}) {
+    AnimeInfoPage parse(
+      Object? raw, {
+      bool cached = false,
+      Object? refreshError,
+    }) {
       if (raw is Map && raw['format'] == 'bangumi-public-v1') {
         raw = raw['payload'];
       }
@@ -248,7 +265,9 @@ class AnimeInfoRepository {
     final saved = cache[key];
     if (!refresh && saved is Map && saved['format'] == 'bangumi-public-v1') {
       final updatedAt = DateTime.tryParse('${saved['updatedAt']}');
-      final age = updatedAt == null ? null : DateTime.now().difference(updatedAt);
+      final age = updatedAt == null
+          ? null
+          : DateTime.now().difference(updatedAt);
       if (age != null && !age.isNegative && age < const Duration(minutes: 5)) {
         final result = parse(saved, cached: true);
         if (section == 'info') {

@@ -236,11 +236,6 @@ class _MangaUpdatesPageState extends ConsumerState<MangaUpdatesPage> {
                 onPressed: _running ? null : _settings,
                 icon: const Icon(Icons.settings_outlined),
               ),
-              IconButton(
-                tooltip: '刷新漫画更新',
-                onPressed: _running ? null : _run,
-                icon: const Icon(Icons.refresh),
-              ),
             ],
           ),
         ),

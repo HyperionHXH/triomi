@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,14 +11,18 @@ import 'package:triomi/core/models/media_item.dart';
 import 'package:triomi/core/models/media_type.dart';
 import 'package:triomi/core/models/source_exception.dart';
 import 'package:triomi/core/source/bangumi_public_client.dart';
+import 'package:triomi/core/source/bangumi_source.dart';
 import 'package:triomi/core/source/http_client.dart';
+import 'package:triomi/core/source/rule_schema.dart';
 import 'package:triomi/core/source/source_providers.dart';
+import 'package:triomi/core/source/source_registry.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
 import 'package:triomi/features/detail/anime_info_repository.dart';
 import 'package:triomi/features/detail/detail_page.dart';
 import 'package:triomi/features/discover/anime_recommendations.dart';
 import 'package:triomi/features/library/data/library_repository.dart';
+import 'package:triomi/features/search/search_page.dart';
 
 import 'fixtures/fake_http_client.dart';
 import 'fixtures/fake_preferences.dart';
@@ -297,22 +302,29 @@ void main() {
         body: '{"total":1,"data":[{"id":2,"type":2,"name_cn":"新作品"}]}',
       );
     });
+    final source = BangumiSource(
+      rule: SourceRule.parseJson(
+        File('assets/rules/bangumi-anime.json').readAsStringSync(),
+      ),
+      http: http,
+    );
     final container = ProviderContainer(
       overrides: [
         sourceHttpClientProvider.overrideWithValue(http),
         databaseProvider.overrideWithValue(db),
         preferencesProvider.overrideWithValue(memoryPreferences()),
+        sourcesProvider.overrideWith(() => _FilterSources(source)),
       ],
     );
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: AnimeRecommendations())),
+        child: const MaterialApp(home: SearchPage(type: MediaType.anime)),
       ),
     );
     await tester.pumpAndSettle();
     Future<void> select(String tag) async {
-      await tester.tap(find.text('筛选'));
+      await tester.tap(find.text('资料筛选'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(find.text('重置'));
@@ -343,4 +355,17 @@ void main() {
       await db.close();
     });
   });
+}
+
+class _FilterSources extends SourceRegistryController {
+  _FilterSources(this.source);
+  final BangumiSource source;
+
+  @override
+  Future<SourceRegistrySnapshot> build() async => SourceRegistrySnapshot(
+    entries: [
+      SourceEntry(descriptor: source.descriptor, source: source, enabled: true),
+    ],
+    failures: const [],
+  );
 }

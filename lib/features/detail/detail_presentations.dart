@@ -46,8 +46,6 @@ class _AnimeHero extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('番剧', style: theme.textTheme.labelMedium),
-                            const SizedBox(height: 8),
                             Text(
                               item.title,
                               style: theme.textTheme.headlineSmall,
@@ -55,9 +53,7 @@ class _AnimeHero extends StatelessWidget {
                             if (item.status?.isNotEmpty == true)
                               Text(item.status!),
                             if (item.rating != null)
-                              Text(
-                                '★ ${item.rating!.toStringAsFixed(1)}${item.sourceId == 'bangumi-anime' ? ' · Bangumi' : ''}',
-                              ),
+                              Text('★ ${item.rating!.toStringAsFixed(1)}'),
                           ],
                         ),
                       ),
@@ -80,6 +76,7 @@ class _AnimeHero extends StatelessWidget {
                         icon: const Icon(Icons.chat_bubble_outline),
                         label: const Text('评论 / 吐槽'),
                       ),
+                      _AddRouteButton(item: item),
                     ],
                   ),
                 ],
@@ -209,18 +206,27 @@ class _MangaHeader extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(item.title, style: theme.textTheme.titleLarge),
+                    _MangaSearchLink(
+                      item: item,
+                      query: item.title,
+                      style: theme.textTheme.titleLarge,
+                    ),
                     if (item.author?.isNotEmpty == true) ...[
                       const SizedBox(height: 8),
-                      Text(item.author!, style: theme.textTheme.bodyMedium),
-                    ],
-                    if (item.status?.isNotEmpty == true) ...[
-                      const SizedBox(height: 8),
-                      Text(item.status!, style: theme.textTheme.bodySmall),
+                      _MangaSearchLink(
+                        item: item,
+                        query: item.author!,
+                        style: theme.textTheme.bodyMedium,
+                      ),
                     ],
                     const SizedBox(height: 8),
                     Text(
-                      data.sourceName.isEmpty ? item.sourceId : data.sourceName,
+                      [
+                        data.sourceName.isEmpty
+                            ? item.sourceId
+                            : data.sourceName,
+                        ?item.statusLabel,
+                      ].join(' · '),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: context.palette.mutedForeground,
                       ),
@@ -243,6 +249,7 @@ class _MangaHeader extends StatelessWidget {
                 onReturned: onReturned,
               ),
               _MangaCollectionButton(item: item),
+              _AddRouteButton(item: item),
             ],
           ),
           if (item.description?.isNotEmpty == true) ...[
@@ -262,11 +269,13 @@ class _NovelBookHeader extends StatelessWidget {
     required this.historyRevision,
     required this.onReturned,
     required this.directoryLoading,
+    required this.onDownload,
   });
   final _DetailData data;
   final int historyRevision;
   final VoidCallback onReturned;
   final bool directoryLoading;
+  final VoidCallback? onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -279,78 +288,70 @@ class _NovelBookHeader extends StatelessWidget {
     }.length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: SizedBox(
-                  width: 96,
-                  height: 144,
-                  child: MediaCover(url: item.coverUrl),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              width: (MediaQuery.sizeOf(context).width * .29)
+                  .clamp(82, 144)
+                  .toDouble(),
+              height:
+                  (MediaQuery.sizeOf(context).width * .29)
+                      .clamp(82, 144)
+                      .toDouble() *
+                  1.42,
+              child: MediaCover(url: item.coverUrl, sourceId: item.sourceId),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(item.title, style: theme.textTheme.titleLarge),
+                if (item.author?.isNotEmpty == true) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    item.author!,
+                    style: TextStyle(color: theme.colorScheme.primary),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Text(
+                  [
+                    data.sourceName.isEmpty ? item.sourceId : data.sourceName,
+                    if (data.chapters.isNotEmpty && volumes > 0) '$volumes 卷',
+                    if (data.chapters.isNotEmpty) '${data.chapters.length} 章',
+                    ?item.statusLabel,
+                  ].join(' · '),
+                  style: theme.textTheme.bodySmall,
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: 8),
+                _ReadContinueButton(
+                  data: data,
+                  loading: directoryLoading,
+                  historyRevision: historyRevision,
+                  onReturned: onReturned,
+                ),
+                NovelCollectionButton(item: item),
+                Wrap(
+                  spacing: 4,
                   children: [
-                    Text(item.title, style: theme.textTheme.titleLarge),
-                    if (item.author?.isNotEmpty == true) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        item.author!,
-                        style: TextStyle(color: theme.colorScheme.primary),
+                    _AddRouteButton(item: item, iconOnly: true),
+                    if (onDownload != null)
+                      IconButton.outlined(
+                        key: const ValueKey('detail-chapter-download'),
+                        tooltip: '批量下载',
+                        onPressed: onDownload,
+                        icon: const Icon(Icons.download_outlined),
                       ),
-                    ],
-                    const SizedBox(height: 8),
-                    Text(
-                      '来源 · ${data.sourceName.isEmpty ? item.sourceId : data.sourceName}',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    if (item.status?.isNotEmpty == true)
-                      Text(item.status!, style: theme.textTheme.bodySmall),
-                    if (data.chapters.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        '${volumes == 0 ? '' : '$volumes 卷 · '}${data.chapters.length} 章',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ],
                   ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _ReadContinueButton(
-            data: data,
-            loading: directoryLoading,
-            historyRevision: historyRevision,
-            onReturned: onReturned,
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: NovelCollectionButton(item: item),
-          ),
-          _DetailTags(item: item),
-          if (item.description?.isNotEmpty == true) ...[
-            const SizedBox(height: 12),
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('内容简介', style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  _ExpandableSynopsis(text: item.description!),
-                ],
-              ),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -480,13 +481,58 @@ class _DetailTags extends StatelessWidget {
                     context,
                     type: item.type,
                     sourceId: item.sourceId,
-                    sourceOnly: true,
-                    tags: [tag],
+                    query: tag,
                   ),
                 ),
             ],
           ),
         );
+}
+
+class _AddRouteButton extends ConsumerWidget {
+  const _AddRouteButton({required this.item, this.iconOnly = false});
+  final MediaItem item;
+  final bool iconOnly;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    void add() => showAddToCompletionRoute(context, ref, item);
+    return iconOnly
+        ? IconButton.outlined(
+            tooltip: '加入路线',
+            onPressed: add,
+            icon: const Icon(Icons.playlist_add),
+          )
+        : OutlinedButton.icon(
+            onPressed: add,
+            icon: const Icon(Icons.playlist_add),
+            label: const Text('加入路线'),
+          );
+  }
+}
+
+class _MangaSearchLink extends StatelessWidget {
+  const _MangaSearchLink({required this.item, required this.query, this.style});
+  final MediaItem item;
+  final String query;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: () => SearchPage.open(
+      context,
+      type: MediaType.manga,
+      sourceId: item.sourceId,
+      query: query,
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Text(
+        query,
+        style: style?.copyWith(color: Theme.of(context).colorScheme.primary),
+      ),
+    ),
+  );
 }
 
 class _ExpandableSynopsis extends StatefulWidget {

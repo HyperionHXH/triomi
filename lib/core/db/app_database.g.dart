@@ -3624,6 +3624,18 @@ class $HistoriesTable extends Histories
     requiredDuringInsert: false,
     defaultValue: const Constant<double>(0),
   );
+  static const VerificationMeta _mangaPartMeta = const VerificationMeta(
+    'mangaPart',
+  );
+  @override
+  late final GeneratedColumn<int> mangaPart = GeneratedColumn<int>(
+    'manga_part',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _deviceMeta = const VerificationMeta('device');
   @override
   late final GeneratedColumn<String> device = GeneratedColumn<String>(
@@ -3667,6 +3679,7 @@ class $HistoriesTable extends Histories
     chapterSourceId,
     chapterRemoteId,
     position,
+    mangaPart,
     device,
     visitedAt,
     incognito,
@@ -3730,6 +3743,12 @@ class $HistoriesTable extends Histories
         position.isAcceptableOrUnknown(data['position']!, _positionMeta),
       );
     }
+    if (data.containsKey('manga_part')) {
+      context.handle(
+        _mangaPartMeta,
+        mangaPart.isAcceptableOrUnknown(data['manga_part']!, _mangaPartMeta),
+      );
+    }
     if (data.containsKey('device')) {
       context.handle(
         _deviceMeta,
@@ -3783,6 +3802,10 @@ class $HistoriesTable extends Histories
         DriftSqlType.double,
         data['${effectivePrefix}position'],
       )!,
+      mangaPart: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}manga_part'],
+      )!,
       device: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}device'],
@@ -3814,6 +3837,9 @@ class HistoryRow extends DataClass implements Insertable<HistoryRow> {
   /// 位置：番剧为秒，漫画为页，小说为段落偏移。
   final double position;
 
+  /// Manga display region: 0 = whole image, 1 = left half, 2 = right half.
+  final int mangaPart;
+
   /// 产生该记录的设备标识（多设备同步时用于冲突判断）。
   final String? device;
   final DateTime visitedAt;
@@ -3827,6 +3853,7 @@ class HistoryRow extends DataClass implements Insertable<HistoryRow> {
     required this.chapterSourceId,
     required this.chapterRemoteId,
     required this.position,
+    required this.mangaPart,
     this.device,
     required this.visitedAt,
     required this.incognito,
@@ -3840,6 +3867,7 @@ class HistoryRow extends DataClass implements Insertable<HistoryRow> {
     map['chapter_source_id'] = Variable<String>(chapterSourceId);
     map['chapter_remote_id'] = Variable<String>(chapterRemoteId);
     map['position'] = Variable<double>(position);
+    map['manga_part'] = Variable<int>(mangaPart);
     if (!nullToAbsent || device != null) {
       map['device'] = Variable<String>(device);
     }
@@ -3856,6 +3884,7 @@ class HistoryRow extends DataClass implements Insertable<HistoryRow> {
       chapterSourceId: Value(chapterSourceId),
       chapterRemoteId: Value(chapterRemoteId),
       position: Value(position),
+      mangaPart: Value(mangaPart),
       device: device == null && nullToAbsent
           ? const Value.absent()
           : Value(device),
@@ -3876,6 +3905,7 @@ class HistoryRow extends DataClass implements Insertable<HistoryRow> {
       chapterSourceId: serializer.fromJson<String>(json['chapterSourceId']),
       chapterRemoteId: serializer.fromJson<String>(json['chapterRemoteId']),
       position: serializer.fromJson<double>(json['position']),
+      mangaPart: serializer.fromJson<int>(json['mangaPart']),
       device: serializer.fromJson<String?>(json['device']),
       visitedAt: serializer.fromJson<DateTime>(json['visitedAt']),
       incognito: serializer.fromJson<bool>(json['incognito']),
@@ -3891,6 +3921,7 @@ class HistoryRow extends DataClass implements Insertable<HistoryRow> {
       'chapterSourceId': serializer.toJson<String>(chapterSourceId),
       'chapterRemoteId': serializer.toJson<String>(chapterRemoteId),
       'position': serializer.toJson<double>(position),
+      'mangaPart': serializer.toJson<int>(mangaPart),
       'device': serializer.toJson<String?>(device),
       'visitedAt': serializer.toJson<DateTime>(visitedAt),
       'incognito': serializer.toJson<bool>(incognito),
@@ -3904,6 +3935,7 @@ class HistoryRow extends DataClass implements Insertable<HistoryRow> {
     String? chapterSourceId,
     String? chapterRemoteId,
     double? position,
+    int? mangaPart,
     Value<String?> device = const Value.absent(),
     DateTime? visitedAt,
     bool? incognito,
@@ -3914,6 +3946,7 @@ class HistoryRow extends DataClass implements Insertable<HistoryRow> {
     chapterSourceId: chapterSourceId ?? this.chapterSourceId,
     chapterRemoteId: chapterRemoteId ?? this.chapterRemoteId,
     position: position ?? this.position,
+    mangaPart: mangaPart ?? this.mangaPart,
     device: device.present ? device.value : this.device,
     visitedAt: visitedAt ?? this.visitedAt,
     incognito: incognito ?? this.incognito,
@@ -3930,6 +3963,7 @@ class HistoryRow extends DataClass implements Insertable<HistoryRow> {
           ? data.chapterRemoteId.value
           : this.chapterRemoteId,
       position: data.position.present ? data.position.value : this.position,
+      mangaPart: data.mangaPart.present ? data.mangaPart.value : this.mangaPart,
       device: data.device.present ? data.device.value : this.device,
       visitedAt: data.visitedAt.present ? data.visitedAt.value : this.visitedAt,
       incognito: data.incognito.present ? data.incognito.value : this.incognito,
@@ -3945,6 +3979,7 @@ class HistoryRow extends DataClass implements Insertable<HistoryRow> {
           ..write('chapterSourceId: $chapterSourceId, ')
           ..write('chapterRemoteId: $chapterRemoteId, ')
           ..write('position: $position, ')
+          ..write('mangaPart: $mangaPart, ')
           ..write('device: $device, ')
           ..write('visitedAt: $visitedAt, ')
           ..write('incognito: $incognito')
@@ -3960,6 +3995,7 @@ class HistoryRow extends DataClass implements Insertable<HistoryRow> {
     chapterSourceId,
     chapterRemoteId,
     position,
+    mangaPart,
     device,
     visitedAt,
     incognito,
@@ -3974,6 +4010,7 @@ class HistoryRow extends DataClass implements Insertable<HistoryRow> {
           other.chapterSourceId == this.chapterSourceId &&
           other.chapterRemoteId == this.chapterRemoteId &&
           other.position == this.position &&
+          other.mangaPart == this.mangaPart &&
           other.device == this.device &&
           other.visitedAt == this.visitedAt &&
           other.incognito == this.incognito);
@@ -3986,6 +4023,7 @@ class HistoriesCompanion extends UpdateCompanion<HistoryRow> {
   final Value<String> chapterSourceId;
   final Value<String> chapterRemoteId;
   final Value<double> position;
+  final Value<int> mangaPart;
   final Value<String?> device;
   final Value<DateTime> visitedAt;
   final Value<bool> incognito;
@@ -3996,6 +4034,7 @@ class HistoriesCompanion extends UpdateCompanion<HistoryRow> {
     this.chapterSourceId = const Value.absent(),
     this.chapterRemoteId = const Value.absent(),
     this.position = const Value.absent(),
+    this.mangaPart = const Value.absent(),
     this.device = const Value.absent(),
     this.visitedAt = const Value.absent(),
     this.incognito = const Value.absent(),
@@ -4007,6 +4046,7 @@ class HistoriesCompanion extends UpdateCompanion<HistoryRow> {
     required String chapterSourceId,
     required String chapterRemoteId,
     this.position = const Value.absent(),
+    this.mangaPart = const Value.absent(),
     this.device = const Value.absent(),
     required DateTime visitedAt,
     this.incognito = const Value.absent(),
@@ -4022,6 +4062,7 @@ class HistoriesCompanion extends UpdateCompanion<HistoryRow> {
     Expression<String>? chapterSourceId,
     Expression<String>? chapterRemoteId,
     Expression<double>? position,
+    Expression<int>? mangaPart,
     Expression<String>? device,
     Expression<DateTime>? visitedAt,
     Expression<bool>? incognito,
@@ -4033,6 +4074,7 @@ class HistoriesCompanion extends UpdateCompanion<HistoryRow> {
       if (chapterSourceId != null) 'chapter_source_id': chapterSourceId,
       if (chapterRemoteId != null) 'chapter_remote_id': chapterRemoteId,
       if (position != null) 'position': position,
+      if (mangaPart != null) 'manga_part': mangaPart,
       if (device != null) 'device': device,
       if (visitedAt != null) 'visited_at': visitedAt,
       if (incognito != null) 'incognito': incognito,
@@ -4046,6 +4088,7 @@ class HistoriesCompanion extends UpdateCompanion<HistoryRow> {
     Value<String>? chapterSourceId,
     Value<String>? chapterRemoteId,
     Value<double>? position,
+    Value<int>? mangaPart,
     Value<String?>? device,
     Value<DateTime>? visitedAt,
     Value<bool>? incognito,
@@ -4057,6 +4100,7 @@ class HistoriesCompanion extends UpdateCompanion<HistoryRow> {
       chapterSourceId: chapterSourceId ?? this.chapterSourceId,
       chapterRemoteId: chapterRemoteId ?? this.chapterRemoteId,
       position: position ?? this.position,
+      mangaPart: mangaPart ?? this.mangaPart,
       device: device ?? this.device,
       visitedAt: visitedAt ?? this.visitedAt,
       incognito: incognito ?? this.incognito,
@@ -4084,6 +4128,9 @@ class HistoriesCompanion extends UpdateCompanion<HistoryRow> {
     if (position.present) {
       map['position'] = Variable<double>(position.value);
     }
+    if (mangaPart.present) {
+      map['manga_part'] = Variable<int>(mangaPart.value);
+    }
     if (device.present) {
       map['device'] = Variable<String>(device.value);
     }
@@ -4105,6 +4152,7 @@ class HistoriesCompanion extends UpdateCompanion<HistoryRow> {
           ..write('chapterSourceId: $chapterSourceId, ')
           ..write('chapterRemoteId: $chapterRemoteId, ')
           ..write('position: $position, ')
+          ..write('mangaPart: $mangaPart, ')
           ..write('device: $device, ')
           ..write('visitedAt: $visitedAt, ')
           ..write('incognito: $incognito')
@@ -11084,6 +11132,7 @@ typedef $$HistoriesTableCreateCompanionBuilder = HistoriesCompanion Function({
   required String chapterSourceId,
   required String chapterRemoteId,
   Value<double> position,
+  Value<int> mangaPart,
   Value<String?> device,
   required DateTime visitedAt,
   Value<bool> incognito,
@@ -11095,6 +11144,7 @@ typedef $$HistoriesTableUpdateCompanionBuilder = HistoriesCompanion Function({
   Value<String> chapterSourceId,
   Value<String> chapterRemoteId,
   Value<double> position,
+  Value<int> mangaPart,
   Value<String?> device,
   Value<DateTime> visitedAt,
   Value<bool> incognito,
@@ -11136,6 +11186,11 @@ class $$HistoriesTableFilterComposer
 
   ColumnFilters<double> get position => $composableBuilder(
     column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get mangaPart => $composableBuilder(
+    column: $table.mangaPart,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11194,6 +11249,11 @@ class $$HistoriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get mangaPart => $composableBuilder(
+    column: $table.mangaPart,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get device => $composableBuilder(
     column: $table.device,
     builder: (column) => ColumnOrderings(column),
@@ -11240,6 +11300,9 @@ class $$HistoriesTableAnnotationComposer
 
   GeneratedColumn<double> get position =>
       $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<int> get mangaPart =>
+      $composableBuilder(column: $table.mangaPart, builder: (column) => column);
 
   GeneratedColumn<String> get device =>
       $composableBuilder(column: $table.device, builder: (column) => column);
@@ -11288,6 +11351,7 @@ class $$HistoriesTableTableManager
                 Value<String> chapterSourceId = const Value.absent(),
                 Value<String> chapterRemoteId = const Value.absent(),
                 Value<double> position = const Value.absent(),
+                Value<int> mangaPart = const Value.absent(),
                 Value<String?> device = const Value.absent(),
                 Value<DateTime> visitedAt = const Value.absent(),
                 Value<bool> incognito = const Value.absent(),
@@ -11298,6 +11362,7 @@ class $$HistoriesTableTableManager
                 chapterSourceId: chapterSourceId,
                 chapterRemoteId: chapterRemoteId,
                 position: position,
+                mangaPart: mangaPart,
                 device: device,
                 visitedAt: visitedAt,
                 incognito: incognito,
@@ -11310,6 +11375,7 @@ class $$HistoriesTableTableManager
                 required String chapterSourceId,
                 required String chapterRemoteId,
                 Value<double> position = const Value.absent(),
+                Value<int> mangaPart = const Value.absent(),
                 Value<String?> device = const Value.absent(),
                 required DateTime visitedAt,
                 Value<bool> incognito = const Value.absent(),
@@ -11320,6 +11386,7 @@ class $$HistoriesTableTableManager
                 chapterSourceId: chapterSourceId,
                 chapterRemoteId: chapterRemoteId,
                 position: position,
+                mangaPart: mangaPart,
                 device: device,
                 visitedAt: visitedAt,
                 incognito: incognito,

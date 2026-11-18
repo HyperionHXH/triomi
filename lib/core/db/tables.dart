@@ -208,6 +208,9 @@ class Histories extends Table {
   /// 位置：番剧为秒，漫画为页，小说为段落偏移。
   RealColumn get position => real().withDefault(const Constant<double>(0))();
 
+  /// Manga display region: 0 = whole image, 1 = left half, 2 = right half.
+  IntColumn get mangaPart => integer().withDefault(const Constant(0))();
+
   /// 产生该记录的设备标识（多设备同步时用于冲突判断）。
   TextColumn get device => text().nullable()();
 

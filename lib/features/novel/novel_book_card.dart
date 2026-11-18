@@ -15,7 +15,6 @@ class NovelBookCard extends StatelessWidget {
     super.key,
     required this.item,
     required this.sourceLabel,
-    this.status,
     this.actions = const [],
     this.onLongPress,
     this.onReturn,
@@ -23,7 +22,6 @@ class NovelBookCard extends StatelessWidget {
 
   final MediaItem item;
   final String sourceLabel;
-  final String? status;
   final List<Widget> actions;
   final VoidCallback? onLongPress;
   final Future<void> Function()? onReturn;
@@ -41,8 +39,7 @@ class NovelBookCard extends StatelessWidget {
       context,
       type: item.type,
       sourceId: item.sourceId,
-      tags: [tag],
-      sourceOnly: true,
+      query: tag,
     );
     final summary = item.description
         ?.replaceAll(RegExp(r'<[^>]*>'), ' ')
@@ -96,13 +93,13 @@ class NovelBookCard extends StatelessWidget {
                             ),
                           ),
                         ],
-                        const SizedBox(height: AppSpacing.xxs),
-                        Text(
-                          sourceLabel,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.primary,
+                        if (sourceLabel.isNotEmpty)
+                          Text(
+                            sourceLabel,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
                           ),
-                        ),
                         if (item.status?.isNotEmpty == true)
                           Text(
                             item.status!,
@@ -206,15 +203,6 @@ class NovelBookCard extends StatelessWidget {
                       ],
                     );
                   },
-                ),
-              ],
-              if (status != null) ...[
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  status!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: palette.mutedForeground,
-                  ),
                 ),
               ],
               if (actions.isNotEmpty) ...[

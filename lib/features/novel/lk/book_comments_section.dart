@@ -11,17 +11,22 @@ import '../../../core/source/source_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/scroll_pagination.dart';
 import '../../../core/widgets/source_network_image.dart';
 import 'lk_access.dart';
 
 /// 详情页评论区：列表（最热 / 最新）、分页、星级、发表、点赞。
 ///
-/// 只有实现了 [AccountProfileProvider] 的来源（当前是轻之国度）才会渲染；
-/// 其他来源返回空组件，详情页无需特判。
+/// 不支持评论的来源显示明确空态。
 class BookCommentsSection extends ConsumerStatefulWidget {
-  const BookCommentsSection({super.key, required this.item});
+  const BookCommentsSection({
+    super.key,
+    required this.item,
+    this.refreshRevision = 0,
+  });
 
   final MediaItem item;
+  final int refreshRevision;
 
   @override
   ConsumerState<BookCommentsSection> createState() =>
@@ -30,6 +35,7 @@ class BookCommentsSection extends ConsumerStatefulWidget {
 
 class _BookCommentsSectionState extends ConsumerState<BookCommentsSection> {
   final TextEditingController _controller = TextEditingController();
+  ScrollNotificationObserverState? _scrollEvents;
 
   AccountProfileProvider? _source;
   List<LkComment> _comments = const <LkComment>[];
@@ -55,7 +61,34 @@ class _BookCommentsSectionState extends ConsumerState<BookCommentsSection> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final observer = ScrollNotificationObserver.maybeOf(context);
+    if (observer == _scrollEvents) return;
+    _scrollEvents?.removeListener(_nearEnd);
+    _scrollEvents = observer;
+    observer?.addListener(_nearEnd);
+  }
+
+  @override
+  void didUpdateWidget(covariant BookCommentsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshRevision != widget.refreshRevision &&
+        !_loading &&
+        !_loadingMore) {
+      unawaited(_init());
+    }
+  }
+
+  void _nearEnd(ScrollNotification notice) {
+    if (approachingScrollEnd(notice) && _hasMore && _error == null) {
+      unawaited(_loadPage(_page + 1, append: true));
+    }
+  }
+
+  @override
   void dispose() {
+    _scrollEvents?.removeListener(_nearEnd);
     _controller.dispose();
     super.dispose();
   }
@@ -92,12 +125,13 @@ class _BookCommentsSectionState extends ConsumerState<BookCommentsSection> {
   Future<void> _loadPage(int page, {bool append = false}) async {
     final source = _source;
     if (source == null) return;
+    if (_loadingMore || (append && _loading)) return;
     setState(() {
+      _error = null;
       if (append) {
         _loadingMore = true;
       } else {
         _loading = true;
-        _error = null;
       }
     });
     try {
@@ -298,7 +332,12 @@ class _BookCommentsSectionState extends ConsumerState<BookCommentsSection> {
 
   @override
   Widget build(BuildContext context) {
-    if (_unsupported) return const SizedBox.shrink();
+    if (_unsupported) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('该来源暂不支持评论'),
+      );
+    }
     final theme = Theme.of(context);
 
     return Padding(
@@ -412,18 +451,13 @@ class _BookCommentsSectionState extends ConsumerState<BookCommentsSection> {
             Divider(height: AppSpacing.md, color: context.palette.divider),
           _commentTile(_comments[index]),
         ],
-        if (_hasMore)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: _loadingMore
-                  ? null
-                  : () => unawaited(_loadPage(_page + 1, append: true)),
-              child: Text(_loadingMore ? '加载中…' : '加载更多评论'),
-            ),
+        if (_error != null)
+          TextButton(
+            onPressed: () => _loadPage(_page + 1, append: true),
+            child: const Text('重试加载评论'),
           )
-        else if (_comments.length > 3)
-          Text('没有更多评论了', style: muted),
+        else
+          PageTail(loading: _loadingMore, ended: !_hasMore),
       ],
     );
   }

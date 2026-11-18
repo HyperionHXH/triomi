@@ -349,6 +349,11 @@ void main() {
         old.execute('ALTER TABLE "$table" ADD COLUMN url TEXT NULL');
       }
       old.execute(
+        v1CreateTableStatements.singleWhere(
+          (sql) => sql.startsWith('CREATE TABLE "histories"'),
+        ),
+      );
+      old.execute(
         "INSERT INTO media_items(source_id,remote_id,type,title,url,detail_json) VALUES('s','book','manga','Keep','/work','{\"local\":true}')",
       );
       old.execute(

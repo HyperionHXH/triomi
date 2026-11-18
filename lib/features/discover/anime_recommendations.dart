@@ -7,10 +7,8 @@ import '../../core/models/media_item.dart';
 import '../../core/models/source_exception.dart';
 import '../../core/source/bangumi_public_client.dart';
 import '../../core/source/http_client.dart';
-import '../../core/storage/preferences.dart';
-import '../detail/anime_filter_dialog.dart';
+import '../../core/widgets/scroll_pagination.dart';
 import '../detail/anime_info_repository.dart';
-import '../library/data/library_providers.dart';
 import 'widgets/media_item_card.dart';
 
 class AnimeRecommendationPage {
@@ -77,7 +75,6 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
   int _offset = 0, _generation = 0;
   bool _busy = false, _more = true;
   String? _error;
-  AnimeFilter _filter = const AnimeFilter();
   SourceRequestCancellation? _owner;
   ProviderSubscription<AnimeRecommendationRepository>? _repository;
 
@@ -92,11 +89,6 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
   @override
   void initState() {
     super.initState();
-    _filter = AnimeFilter.fromJson(
-      ref
-          .read(preferencesProvider)
-          .get<Object?>('anime.recommendations.filter'),
-    );
     _repository = ref.listenManual(animeRecommendationRepositoryProvider, (
       previous,
       next,
@@ -120,7 +112,7 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
       final page = await owner.run(
         () => ref
             .read(animeRecommendationRepositoryProvider)
-            .load(refresh ? 0 : _offset, filter: _filter),
+            .load(refresh ? 0 : _offset),
       );
       if (!mounted || owner.cancelled || generation != _generation) return;
       setState(() {
@@ -146,92 +138,15 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                _filter.active
-                    ? '${_filter.year ?? '全部年代'} ${_filter.quarter == null ? '' : '${_filter.quarter}季度'} ${_filter.minScore ?? 0}–${_filter.maxScore ?? 10}分 · ${_filter.sort}${_filter.onlyWatching ? ' · 仅在看（本机）' : ''}${_filter.hideCompleted ? ' · 隐藏看过' : ''}${_filter.hideDropped ? ' · 隐藏抛弃' : ''}'
-                    : '热门推荐',
-              ),
-            ),
-            TextButton.icon(
-              onPressed: _pickFilter,
-              icon: const Icon(Icons.tune),
-              label: const Text('筛选'),
-            ),
-            if (_filter.active)
-              IconButton(
-                tooltip: '清除当前筛选',
-                onPressed: () => _applyFilter(const AnimeFilter()),
-                icon: const Icon(Icons.filter_alt_off_outlined),
-              ),
-          ],
-        ),
+      const Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(padding: EdgeInsets.all(16), child: Text('热门推荐')),
       ),
-      if (_filter.tags.isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Wrap(
-            spacing: 8,
-            children: [
-              for (final tag in _filter.tags)
-                InputChip(
-                  label: Text(tag),
-                  onDeleted: () => _applyFilter(
-                    _filter.withTags(
-                      _filter.tags.where((value) => value != tag).toList(),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
       Expanded(child: _content(context)),
     ],
   );
 
-  Future<void> _pickFilter() async {
-    final selected = await showModalBottomSheet<AnimeFilter>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => AnimeFilterDialog(initial: _filter),
-    );
-    if (!mounted || selected == null) return;
-    _applyFilter(selected);
-  }
-
-  void _applyFilter(AnimeFilter selected) {
-    setState(() {
-      _filter = selected;
-      unawaited(
-        ref
-            .read(preferencesProvider)
-            .set('anime.recommendations.filter', selected.toJson()),
-      );
-      _items.clear();
-      _offset = 0;
-      _more = true;
-    });
-    unawaited(_load(refresh: true));
-  }
-
   Widget _content(BuildContext context) {
-    final statuses = {
-      for (final view in ref.watch(animeFollowsProvider).asData?.value ?? [])
-        '${view.item.sourceId}:${view.item.remoteId}': view.entry.status,
-    };
-    final visible = _items
-        .where((item) {
-          final status = statuses['${item.sourceId}:${item.remoteId}'];
-          if (_filter.onlyWatching && status != 'doing') return false;
-          if (_filter.hideCompleted && status == 'done') return false;
-          if (_filter.hideDropped && status == 'dropped') return false;
-          return true;
-        })
-        .toList(growable: false);
     if (_items.isEmpty && _busy) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -252,17 +167,12 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
     }
     return RefreshIndicator(
       onRefresh: () => _load(refresh: true),
-      child: NotificationListener<ScrollNotification>(
-        onNotification: (notice) {
-          if (notice.depth == 0 &&
-              notice.metrics.extentAfter < 500 &&
-              _error == null) {
-            unawaited(_load());
-          }
-          return false;
+      child: LoadMoreOnScroll(
+        onLoadMore: () {
+          if (_error == null) unawaited(_load());
         },
         child: MediaItemCollection(
-          items: visible,
+          items: _items,
           sourceName: '',
           preferGrid: true,
           showMetadata: false,
@@ -270,23 +180,14 @@ class _AnimeRecommendationsState extends ConsumerState<AnimeRecommendations> {
           badgeOf: (item) => item.rating == null || item.rating == 0
               ? null
               : item.rating!.toStringAsFixed(1),
-          footer: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Center(
-              child: _busy
-                  ? const CircularProgressIndicator()
-                  : _error != null
-                  ? TextButton(onPressed: _load, child: Text('$_error\n点击继续加载'))
-                  : _more
-                  ? TextButton(
-                      onPressed: _load,
-                      child: Text(
-                        '${ref.read(animeRecommendationRepositoryProvider).usesMirror ? 'Kazumi 公开推荐 · ' : ''}加载更多',
-                      ),
-                    )
-                  : const Text('本次结果已看完，可下拉刷新'),
-            ),
-          ),
+          footer: _error == null
+              ? PageTail(loading: _busy, ended: !_more && _items.isNotEmpty)
+              : Center(
+                  child: TextButton(
+                    onPressed: _load,
+                    child: Text('$_error · 重试'),
+                  ),
+                ),
         ),
       ),
     );

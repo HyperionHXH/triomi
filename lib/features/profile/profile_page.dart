@@ -26,6 +26,12 @@ class ProfilePage extends StatelessWidget {
           title: '记录与下载',
           children: [
             ListTile(
+              leading: const Icon(Icons.route_outlined),
+              title: const Text('跨媒体补完路线'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push(AppRoutes.completionRoutes),
+            ),
+            ListTile(
               leading: const Icon(Icons.history),
               title: const Text('观看与阅读历史'),
               trailing: const Icon(Icons.chevron_right),
@@ -45,7 +51,6 @@ class ProfilePage extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.settings_backup_restore_outlined),
               title: const Text('备份与恢复'),
-              subtitle: const Text('全应用本地数据与封面，不含账号凭据'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push(AppRoutes.backup),
             ),
@@ -66,7 +71,6 @@ class ProfilePage extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.cloud_outlined),
               title: const Text('WebDAV 应用备份'),
-              subtitle: const Text('上传或合并完整备份；与收藏和历史同步分开'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push(AppRoutes.webdavBackup),
             ),
@@ -78,7 +82,6 @@ class ProfilePage extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.settings_outlined),
               title: const Text('通用设置'),
-              subtitle: const Text('外观、网络、存储与应用更新'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push(AppRoutes.settings),
             ),

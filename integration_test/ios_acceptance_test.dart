@@ -1,4 +1,5 @@
 import '../test/novel_illustration_retry_test.dart' as illustration_retry;
+import '../test/profile_page_test.dart' as profile_routes;
 import '../test/search_isolation_test.dart' as search_parity;
 import '../test/tag_rule_update_test.dart' as tag_rule_updates;
 import '../test/tag_search_route_test.dart' as tag_routes;
@@ -8,6 +9,7 @@ import 'ios_chinese_rules_test.dart' as chinese_rules;
 import 'ios_ech_http_test.dart' as native_http;
 import 'ios_js_runtime_test.dart' as javascript;
 import 'ios_mainline_sync_test.dart' as mainline_sync;
+import 'ios_manga_zoom_night_live_test.dart' as manga_zoom;
 import 'ios_reader_ports_test.dart' as reader_ports;
 import 'ios_reader_state_test.dart' as reader_state;
 import 'ios_source_recovery_test.dart' as source_recovery;
@@ -26,6 +28,8 @@ void main() {
   anime_search.main();
   mainline_sync.main();
   reader_state.main();
+  manga_zoom.main();
+  profile_routes.main();
   storage.main();
   video.main();
   search_parity.main(capture: captureIosDeviceEvidence);

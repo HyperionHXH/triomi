@@ -176,6 +176,46 @@ void main() {
     currentConfig: current ?? () => value,
   );
 
+  test('half-page anchors survive two-device sync without changing original page index', () async {
+    await one.addToLibrary(manga);
+    await one.saveChapters(
+      itemSourceId: manga.sourceId,
+      itemRemoteId: manga.remoteId,
+      chapters: [comicChapter],
+    );
+    await one.recordHistory(
+      sourceId: manga.sourceId,
+      remoteId: manga.remoteId,
+      chapter: comicChapter,
+      position: 7,
+      mangaPart: 2,
+    );
+    await service(a, one).sync();
+    await service(b, two).sync();
+    expect(
+      await two.chapterPositionOf(
+        manga.sourceId,
+        manga.remoteId,
+        comicChapter.remoteId,
+      ),
+      7,
+    );
+    expect(
+      await two.chapterMangaPartOf(
+        manga.sourceId,
+        manga.remoteId,
+        comicChapter.remoteId,
+      ),
+      2,
+    );
+    final document = dav.payload(service(a, one).document);
+    expect(
+      document['version'],
+      2,
+      reason: 'older clients must reject a protocol with region anchors rather than silently discard them',
+    );
+  });
+
   Future<void> favorite(
     AppDatabase db,
     LibraryRepository library,
