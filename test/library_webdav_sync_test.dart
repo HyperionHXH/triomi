@@ -176,6 +176,38 @@ void main() {
     currentConfig: current ?? () => value,
   );
 
+  test('negative chapter number preserves exact resume across library sync', () async {
+    await one.addToLibrary(manga);
+    await one.updateProgress(
+      sourceId: manga.sourceId,
+      remoteId: manga.remoteId,
+      chapterNumber: -1,
+    );
+    await one.recordHistory(
+      sourceId: manga.sourceId,
+      remoteId: manga.remoteId,
+      chapter: Chapter(
+        sourceId: manga.sourceId,
+        remoteId: 'book/prologue',
+        title: 'Prologue',
+        number: -1,
+      ),
+      position: 4,
+    );
+
+    await service(a, one).sync();
+    await service(b, two).sync();
+    expect(await two.isInLibrary(manga.sourceId, manga.remoteId), isTrue);
+    expect(
+      await two.chapterPositionOf(manga.sourceId, manga.remoteId, 'book/prologue'),
+      4,
+    );
+    expect(
+      (await two.loadChapters(manga.sourceId, manga.remoteId)).single.number,
+      -1,
+    );
+  });
+
   test('half-page anchors survive two-device sync without changing original page index', () async {
     await one.addToLibrary(manga);
     await one.saveChapters(

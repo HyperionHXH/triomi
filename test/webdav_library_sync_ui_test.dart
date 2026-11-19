@@ -6,6 +6,7 @@ import 'package:triomi/core/source/http_client.dart';
 import 'package:triomi/core/source/source_providers.dart';
 import 'package:triomi/core/storage/preferences.dart';
 import 'package:triomi/core/storage/secure_store.dart';
+import 'package:triomi/features/library/data/library_auto_sync.dart';
 import 'package:triomi/features/profile/data/sync_providers.dart';
 import 'package:triomi/features/profile/webdav_page.dart';
 
@@ -100,4 +101,92 @@ void main() {
       await tester.runAsync(db.close);
     },
   );
+
+  testWidgets('shared connection keeps sync and backup targets separate', (
+    tester,
+  ) async {
+    final db = openTestDatabase();
+    final preferences = memoryPreferences();
+    await preferences.set(LibraryAutoSyncController.enabledKey, false);
+    final http = FakeHttpClient((request) async {
+      if (Uri.parse(request.url).path == '/dav/') {
+        return const SourceResponse(
+          statusCode: 207,
+          body: '<multistatus xmlns="DAV:"><response><propstat>'
+              '<prop><resourcetype><collection/></resourcetype></prop>'
+              '<status>HTTP/1.1 200 OK</status></propstat></response></multistatus>',
+        );
+      }
+      return SourceResponse(
+        statusCode: request.method == 'PUT' || request.method == 'MKCOL'
+            ? 201
+            : 404,
+        body: '',
+      );
+    });
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        preferencesProvider.overrideWithValue(preferences),
+        secureStoreProvider.overrideWithValue(MemorySecureStore()),
+        sourceHttpClientProvider.overrideWithValue(http),
+      ],
+    );
+    try {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: WebDavSyncPage()),
+        ),
+      );
+      final fields = find.byType(TextField);
+      await tester.enterText(fields.at(0), 'https://dav.example.org/dav/');
+      await tester.enterText(fields.at(1), 'fixture');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+
+      Future<void> tapAction(String label) async {
+        final action = find.text(label);
+        await tester.scrollUntilVisible(
+          action,
+          180,
+          scrollable: find.descendant(
+            of: find.byType(WebDavSyncPage),
+            matching: find.byType(Scrollable),
+          ).first,
+        );
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(action);
+        await tester.tap(action);
+      }
+
+      await tapAction('保存并连接');
+      await _advance(tester);
+      expect(find.text('连接正常'), findsOneWidget);
+
+      await tapAction('立即同步一次');
+      await _advance(tester);
+      expect(http.uploads.map((upload) => Uri.parse(upload.url).path), [
+        '/dav/triomi/library.v1.json',
+      ]);
+
+      http.requests.clear();
+      await tapAction('上传本机备份');
+      await _advance(tester);
+      expect(find.text('确认首次上传远端备份'), findsOneWidget);
+      expect(http.requests.map((request) => Uri.parse(request.url).path), [
+        '/dav/',
+        '/dav/triomi/backup.zip.manifest.json',
+      ]);
+      await tester.tap(find.text('取消（不上传）'));
+      await _advance(tester);
+      expect(http.uploads.map((upload) => Uri.parse(upload.url).path), [
+        '/dav/triomi/library.v1.json',
+      ]);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.runAsync(db.close);
+    }
+  });
 }

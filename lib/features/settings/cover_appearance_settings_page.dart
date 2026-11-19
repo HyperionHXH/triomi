@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
+import '../../core/widgets/app_card.dart';
 import '../../core/widgets/page_scaffold.dart';
 import 'settings_controller.dart';
 
@@ -15,90 +15,67 @@ class CoverAppearanceSettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appearanceProvider);
     final controller = ref.read(appearanceProvider.notifier);
-    final theme = Theme.of(context);
-    final palette = context.palette;
 
     return PageScaffold(
       title: '封面与外观',
       child: ListView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.sm,
+        ),
         children: <Widget>[
-          Text('界面外观', style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.xs),
-          const Text('界面字号跟随系统设置；阅读器排版独立保存。'),
-          _ThemeModeTile(
-            current: settings.themeMode,
-            onChanged: controller.setThemeMode,
+          SettingsGroup(
+            title: '界面外观',
+            children: [
+              _ThemeModeTile(
+                current: settings.themeMode,
+                onChanged: controller.setThemeMode,
+              ),
+              SwitchListTile(
+                value: settings.usesLargeIcons,
+                onChanged: (value) => controller.setUsesLargeIcons(value: value),
+                title: const Text('大图标'),
+              ),
+            ],
           ),
-          SwitchListTile(
-            value: settings.usesLargeIcons,
-            onChanged: (value) => controller.setUsesLargeIcons(value: value),
-            title: const Text('大图标'),
-            subtitle: const Text('增大导航与列表图标，适合触屏设备'),
-            contentPadding: EdgeInsets.zero,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Text('封面比例', style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            '自动模式按内容类型使用番剧宽封面、漫画和小说竖封面。',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: palette.mutedForeground,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
           _CoverChoiceGroup<CoverShape>(
+            title: '封面比例',
             value: settings.coverAppearance.shape,
             values: CoverShape.values,
             label: (value) => value.label,
             onChanged: controller.setCoverShape,
           ),
-          const SizedBox(height: AppSpacing.lg),
-          Text('集合布局', style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.xs),
           _CoverChoiceGroup<CoverLayout>(
+            title: '集合布局',
             value: settings.coverAppearance.layout,
             values: CoverLayout.values,
             label: (value) => value.label,
             onChanged: controller.setCoverLayout,
           ),
-          const SizedBox(height: AppSpacing.lg),
-          Text('卡片密度', style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.xs),
           _CoverChoiceGroup<CoverDensity>(
+            title: '卡片密度',
             value: settings.coverAppearance.density,
             values: CoverDensity.values,
             label: (value) => value.label,
             onChanged: controller.setCoverDensity,
           ),
-          const SizedBox(height: AppSpacing.lg),
-          Text('强调色', style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            '使用预设颜色，确保浅色和深色主题都有足够对比度。',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: palette.mutedForeground,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
           RadioGroup<AppAccentPalette>(
             groupValue: settings.accentPalette,
             onChanged: (value) {
               if (value != null) controller.setAccentPalette(value);
             },
-            child: Column(
+            child: SettingsGroup(
+              title: '强调色',
               children: [
                 for (final accent in AppAccentPalette.values)
                   RadioListTile<AppAccentPalette>(
                     value: accent,
                     title: Text(accent.label),
                     secondary: _AccentSwatch(accent: accent),
-                    contentPadding: EdgeInsets.zero,
                   ),
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
           Center(
             child: TextButton.icon(
               onPressed: () async {
@@ -120,12 +97,14 @@ class CoverAppearanceSettingsPage extends ConsumerWidget {
 
 class _CoverChoiceGroup<T extends Enum> extends StatelessWidget {
   const _CoverChoiceGroup({
+    required this.title,
     required this.value,
     required this.values,
     required this.label,
     required this.onChanged,
   });
 
+  final String title;
   final T value;
   final List<T> values;
   final String Function(T value) label;
@@ -137,13 +116,13 @@ class _CoverChoiceGroup<T extends Enum> extends StatelessWidget {
     onChanged: (selected) {
       if (selected != null) onChanged(selected);
     },
-    child: Column(
+    child: SettingsGroup(
+      title: title,
       children: <Widget>[
         for (final option in values)
           RadioListTile<T>(
             value: option,
             title: Text(label(option)),
-            contentPadding: EdgeInsets.zero,
           ),
       ],
     ),
@@ -179,7 +158,6 @@ class _ThemeModeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final palette = context.palette;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,20 +183,6 @@ class _ThemeModeTile extends StatelessWidget {
                 : null,
             onTap: () => onChanged(entry.key),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.md,
-            AppSpacing.xs,
-            AppSpacing.md,
-            AppSpacing.sm,
-          ),
-          child: Text(
-            '深色主题下卡片改用明度分层，不再使用投影。',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: palette.mutedForeground,
-            ),
-          ),
-        ),
       ],
     );
   }

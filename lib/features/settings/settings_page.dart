@@ -119,15 +119,9 @@ class SettingsPage extends ConsumerWidget {
             children: <Widget>[
               ListTile(
                 leading: const Icon(Icons.cloud_sync_outlined),
-                title: const Text('WebDAV 收藏与历史同步'),
+                title: const Text('WebDAV 同步与备份'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push(AppRoutes.webdav),
-              ),
-              ListTile(
-                leading: const Icon(Icons.archive_outlined),
-                title: const Text('WebDAV 完整应用备份'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(AppRoutes.webdavBackup),
               ),
             ],
           ),
@@ -291,7 +285,7 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                 ),
                 route(
                   Icons.cloud_sync_outlined,
-                  'WebDAV 收藏与历史同步',
+                  'WebDAV 同步与备份',
                   AppRoutes.webdav,
                 ),
               ],
@@ -336,7 +330,7 @@ class WorkspaceSettingsPage extends ConsumerWidget {
                 ),
                 route(
                   Icons.cloud_sync_outlined,
-                  'WebDAV 收藏与历史同步',
+                  'WebDAV 同步与备份',
                   AppRoutes.webdav,
                 ),
               ],

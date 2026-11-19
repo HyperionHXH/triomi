@@ -16,7 +16,8 @@ String webDavSyncLabel(LibraryAutoSyncState state) {
   if (state.syncing) return '正在同步收藏与进度';
   if (state.error != null) return '同步需要处理';
   if (state.pending) return '本机有待同步的更改';
-  return state.enabled && state.configured ? '自动同步已开启' : '自动同步已暂停';
+  final lastSuccess = state.lastSuccess;
+  return lastSuccess == null ? '尚未同步' : '最近同步 · ${_time(lastSuccess)}';
 }
 
 String _time(DateTime value) {
@@ -26,9 +27,8 @@ String _time(DateTime value) {
 }
 
 class WebDavConnectionStatus extends StatelessWidget {
-  const WebDavConnectionStatus({super.key, required this.state, this.onCheck});
+  const WebDavConnectionStatus({super.key, required this.state});
   final LibraryAutoSyncState state;
-  final VoidCallback? onCheck;
 
   @override
   Widget build(BuildContext context) {
@@ -61,31 +61,14 @@ class WebDavConnectionStatus extends StatelessWidget {
                       ?.copyWith(color: color),
                 ),
               ),
-              IconButton(
-                tooltip: '重新检测连接',
-                onPressed: onCheck,
-                icon: const Icon(Icons.refresh),
-              ),
             ],
           ),
-          Text(
-            state.checkedAt == null
-                ? '保存配置不等于连接成功；将实际验证服务器与账号权限。'
-                : '最近检测 · ${_time(state.checkedAt!)}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            webDavSyncLabel(state),
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          Text(
-            state.lastSuccess == null
-                ? '尚无成功同步记录'
-                : '最近成功同步 · ${_time(state.lastSuccess!)}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          if (state.checking || state.syncing) ...[
+          if (state.checkedAt case final checkedAt?)
+            Text(
+              '最近检测 · ${_time(checkedAt)}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          if (state.checking) ...[
             const SizedBox(height: AppSpacing.sm),
             const LinearProgressIndicator(),
           ],

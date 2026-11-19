@@ -88,15 +88,12 @@ void main() {
             type,
           );
           if (type != MediaType.novel) {
-            final syncEntry = find.widgetWithText(ListTile, 'WebDAV 收藏与历史同步');
+            final syncEntry = find.widgetWithText(ListTile, 'WebDAV 同步与备份');
             await tester.ensureVisible(syncEntry);
             await tester.tap(syncEntry);
             await _advance(tester);
-            final page = tester.widget<WebDavSyncPage>(
-              find.byType(WebDavSyncPage),
-            );
-            expect(page.fullBackup, isFalse);
-            expect(page.animeCollectionOnly, isFalse);
+            expect(find.byType(WebDavSyncPage), findsOneWidget);
+            expect(find.text('服务器地址'), findsOneWidget);
             router.pop();
             await _advance(tester);
           }
@@ -178,6 +175,9 @@ void main() {
         );
         await _advance(tester);
         expect(find.text('账号与设置'), findsNothing);
+        final webDav = find.widgetWithText(ListTile, 'WebDAV 同步与备份');
+        expect(webDav, findsOneWidget);
+        expect(find.text('WebDAV 应用备份'), findsNothing);
         final settings = find.widgetWithText(ListTile, '通用设置');
         await tester.ensureVisible(settings);
         await tester.pumpAndSettle();
@@ -197,7 +197,7 @@ void main() {
   );
 
   testWidgets(
-    'media tracking filters bindings and collection sync excludes application backup',
+    'media tracking filters bindings by workspace',
     (tester) async {
       final db = openTestDatabase();
       final container = ProviderContainer(
@@ -277,16 +277,6 @@ void main() {
         expect(find.text('novel-work'), findsOneWidget);
         expect(find.text('anime-work'), findsNothing);
         expect(find.text('manga-work'), findsNothing);
-        router.go('${AppRoutes.webdav}?type=anime');
-        await _advance(tester);
-        expect(
-          tester
-              .widget<WebDavSyncPage>(find.byType(WebDavSyncPage))
-              .animeCollectionOnly,
-          isTrue,
-        );
-        expect(find.text('上传本机备份'), findsNothing);
-        expect(find.text('拉取远端备份并合并'), findsNothing);
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());
         router.dispose();

@@ -56,23 +56,15 @@ class ProfilePage extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.cloud_sync_outlined),
-              title: const Text('WebDAV 收藏与历史同步'),
+              title: const Text('WebDAV 同步与备份'),
               subtitle: Consumer(
                 builder: (context, ref, _) {
                   final state = ref.watch(libraryAutoSyncProvider);
-                  return Text(
-                    '${webDavConnectionLabel(state)} · ${webDavSyncLabel(state)}',
-                  );
+                  return Text(webDavConnectionLabel(state));
                 },
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push(AppRoutes.webdav),
-            ),
-            ListTile(
-              leading: const Icon(Icons.cloud_outlined),
-              title: const Text('WebDAV 应用备份'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.push(AppRoutes.webdavBackup),
             ),
           ],
         ),

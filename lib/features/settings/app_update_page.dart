@@ -451,21 +451,18 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
     final versionOrder = release.compareVersionTo(current);
     if (versionOrder == null) return '当前安装版本无法识别，请先核对安装包。';
     final build = release.advertisedBuild;
-    if (_windows && versionOrder == 0 && release.windowsBuild != null) {
-      if (release.windowsBuild! < current.versionCode ||
-          (release.windowsBuild == current.versionCode &&
-              (release.windowsRevision ?? 0) < current.windowsRevision)) {
-        return '这是较早的 Windows 修订，不能降级。';
+    if (!release.isNewerThan(current)) {
+      if (_windows && versionOrder == 0 && release.windowsBuild != null) {
+        return release.windowsBuild == current.versionCode &&
+                (release.windowsRevision ?? 0) == current.windowsRevision
+            ? '已安装此 Windows 修订。'
+            : '这是较早的 Windows 修订，不能降级。';
       }
-      if (release.windowsBuild == current.versionCode &&
-          (release.windowsRevision ?? 0) == current.windowsRevision) {
-        return '已安装此 Windows 修订。';
+      if (versionOrder < 0 || (build != null && build < current.versionCode)) {
+        return '这是较早的版本，为保护应用数据不提供降级。';
       }
+      return '已安装此版本，无需下载。';
     }
-    if (versionOrder < 0 || (build != null && build < current.versionCode)) {
-      return '这是较早的版本，为保护应用数据不提供降级。';
-    }
-    if (build == current.versionCode) return '已安装此构建，无需重复安装。';
     if (!release.assets.containsKey(_assetName)) {
       return '此版本尚未提供 ${_windows ? 'Windows 完整 ZIP' : 'Android APK'}，可选择其他发布版本。';
     }
@@ -523,7 +520,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
       '下载并核验',
       actionKey: 'app-update-download-confirm',
     );
-    if (consent != true || !mounted) return;
+    if (consent != true || !mounted || _releaseIssue(release) != null) return;
     _task.current = _current;
     _offerDownloadedWhenReady = true;
     _task.start(release).ignore();
@@ -816,13 +813,12 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
       () => showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
+          constraints: const BoxConstraints(maxWidth: 560),
           title: Text('${release.version} · 更新说明'),
           content: SizedBox(
-            width: 560,
+            width: 480,
             child: SingleChildScrollView(
-              child: SelectableText(
-                release.notes.isEmpty ? '此版本未提供更新说明。' : release.notes,
-              ),
+              child: SelectableText(release.notes.trim()),
             ),
           ),
           actions: [
@@ -897,6 +893,8 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
         ? '有新版本等你体验'
         : '当前已是最新构建';
     final issue = selected == null ? null : _releaseIssue(selected);
+    final notes = selected?.notes.trim() ?? '';
+    final downloadAsset = issue == null ? selected?.assets[_assetName] : null;
     return PopScope(
       canPop: !_busy || _observingDownload,
       onPopInvokedWithResult: (didPop, _) {
@@ -1178,7 +1176,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                             ],
                           ),
                           Text(
-                            '${selected.advertisedBuild == null ? '正式版' : '构建 ${selected.advertisedBuild}'} · ${_releaseDate(selected.publishedAt)}',
+                            _releaseDate(selected.publishedAt),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -1191,32 +1189,19 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                               style: theme.textTheme.titleSmall,
                             ),
                           ],
-                          const SizedBox(height: AppSpacing.md),
-                          Container(
-                            padding: const EdgeInsets.all(AppSpacing.sm),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.surfaceContainerLow,
-                              borderRadius: AppRadius.controlRadius,
-                            ),
-                            child: Text(
-                              issue ??
-                                  (selected.advertisedBuild == null
-                                      ? '${current!.version} → ${selected.version} · 下载后核验实际构建'
-                                      : '构建 ${current!.versionCode} → ${selected.advertisedBuild} · 可更新'),
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                          ),
+                          if (issue != null) ...[
+                            const SizedBox(height: AppSpacing.sm),
+                            Text(issue, style: theme.textTheme.bodySmall),
+                          ],
                           const SizedBox(height: AppSpacing.md),
                           Text('更新内容', style: theme.textTheme.titleSmall),
                           const SizedBox(height: AppSpacing.xs),
                           Text(
-                            selected.notes.isEmpty
-                                ? '此版本未提供更新说明。'
-                                : selected.notes,
+                            notes.isEmpty ? '此版本未提供更新说明。' : notes,
                             maxLines: 5,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          if (selected.notes.isNotEmpty)
+                          if (notes.isNotEmpty)
                             Align(
                               alignment: Alignment.centerLeft,
                               child: TextButton.icon(
@@ -1230,8 +1215,7 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                                 label: const Text('完整更新说明'),
                               ),
                             ),
-                          if (selected.assets[_assetName]
-                              case final asset?) ...[
+                          if (downloadAsset case final asset?) ...[
                             const SizedBox(height: AppSpacing.sm),
                             Container(
                               padding: const EdgeInsets.all(AppSpacing.sm),
@@ -1272,60 +1256,26 @@ class _AppUpdatePageState extends State<AppUpdatePage> {
                                 ],
                               ),
                             ),
-                          ],
-                          const SizedBox(height: AppSpacing.md),
-                          if (candidate == null)
-                            FilledButton(
-                              key: const ValueKey('app-update-download'),
-                              style: FilledButton.styleFrom(
-                                minimumSize: const Size(48, 48),
+                            const SizedBox(height: AppSpacing.md),
+                            if (candidate == null)
+                              FilledButton(
+                                key: const ValueKey('app-update-download'),
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size(48, 48),
+                                ),
+                                onPressed: _locked ? null : _downloadRelease,
+                                child: const Text('下载更新'),
+                              )
+                            else
+                              OutlinedButton(
+                                key: const ValueKey('app-update-download'),
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size(48, 48),
+                                ),
+                                onPressed: _locked ? null : _downloadRelease,
+                                child: const Text('重新下载此版本'),
                               ),
-                              onPressed: _locked || issue != null
-                                  ? null
-                                  : _downloadRelease,
-                              child: const Text('下载更新'),
-                            )
-                          else
-                            OutlinedButton(
-                              key: const ValueKey('app-update-download'),
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size(48, 48),
-                              ),
-                              onPressed: _locked || issue != null
-                                  ? null
-                                  : _downloadRelease,
-                              child: const Text('重新下载此版本'),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (current != null) ...[
-                    const SizedBox(height: AppSpacing.lg),
-                    AppCard(
-                      padding: EdgeInsets.zero,
-                      child: ExpansionTile(
-                        leading: const Icon(Icons.verified_user_outlined),
-                        title: const Text('安装身份与安全信息'),
-                        subtitle: const Text('实际版本、证书及完整性校验'),
-                        childrenPadding: const EdgeInsets.fromLTRB(
-                          AppSpacing.md,
-                          0,
-                          AppSpacing.md,
-                          AppSpacing.md,
-                        ),
-                        children: [
-                          SelectableText(_currentIdentity(current)),
-                          if (_android &&
-                              current.signerSha256 !=
-                                  appUpdateProductionSigner) ...[
-                            const SizedBox(height: AppSpacing.sm),
-                            const Text('当前证书与正式证书不同。更新 APK 必须匹配当前安装证书。'),
                           ],
-                          const SizedBox(height: AppSpacing.sm),
-                          const Text(
-                            '官方仓库：HyperionHXH/triomi。SHA-256 仅核验文件完整性；Windows 包未作发布者签名。',
-                          ),
                         ],
                       ),
                     ),
@@ -1395,10 +1345,3 @@ String _releaseDate(String value) {
   if (date == null) return '发布日期未提供';
   return '${date.year} 年 ${date.month} 月 ${date.day} 日';
 }
-
-String _currentIdentity(AppUpdateInfo info) =>
-    '${info.packageName}\n'
-    '版本 ${info.version} · 构建 ${info.versionCode}\n'
-    '字节 SHA-256：${info.sha256}'
-    '${info.artifactSha256 == null ? '' : '\nEXE SHA-256：${info.artifactSha256}'}\n'
-    '签名证书 SHA-256：${info.signerSha256 ?? 'Windows 未签名；仅核验完整性'}';
