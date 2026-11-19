@@ -10,6 +10,8 @@ Mac 静态分析通过，Flutter 全量回归 2606 通过、27 项按平台跳�
 
 解锁后复用构建 208 的独立验收包，在 USB iPhone（iOS 15.8.3）完成 441 项巡检，零失败。包含 WebDAV 同步与备份目标隔离、路线 WebDAV 条件写入、旧 E-Hentai 规则迁移、AVPlayer 实播和 IPA 原生身份校验。使用受控测试数据与独立应用身份，未覆盖手机上的正式 Triomi。
 
+已从 `24dc2798f9` 独立发布 [v0.18.3-ios.208](https://github.com/HyperionHXH/triomi/releases/tag/v0.18.3-ios.208)；[GitHub Actions 44529851195](https://github.com/HyperionHXH/triomi/actions/runs/44529851195) 的编译与发布均通过。四项公开资产已重新下载核验，IPA 14,358,472 字节，SHA-256 `1806b91e857e03a12daca6c09cdac8e0c91f1a4e078f01d5d11a5ed9868d47b5`，包内身份、版本、更新清单和校验和一致；62 个既有发布的资产未改动。独立验收 App 已移除，手机上的正式版仍为 0.18.1 / 206。
+
 ## iOS 主线同步：0.18.1 / 构建 206
 
 同步 `9132fd7..b6b6df9`：漫画半页与全局布局、章节预读、小说详情和书架、跨媒体补完路线、Bangumi／聚合搜索分离及滚动分页、弹幕匹配。漫画详情标签按主线改为全源关键词；站内筛选仍由对应来源处理。保留 iOS AVPlayer、画中画、章节图片头与评论、更新限流回退和 IPA 外部交接。独立工作树不覆盖已有未提交内容。
