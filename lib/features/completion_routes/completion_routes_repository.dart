@@ -265,6 +265,39 @@ class CompletionRoutesRepository {
     );
   });
 
+  CompletionRoutesImportPreview previewSync(CompletionRoutesSnapshot remote) {
+    final local = read();
+    final outcome = _merge(local, remote, sync: true);
+    return CompletionRoutesImportPreview(
+      local: local,
+      imported: remote,
+      merged: outcome.snapshot,
+      conflicts: outcome.conflicts,
+      addedRoutes: outcome.addedRoutes,
+      replacedRoutes: outcome.replacedRoutes,
+      keptLocalRoutes: outcome.keptLocalRoutes,
+      skippedDeletedRoutes: outcome.skippedDeletedRoutes,
+    );
+  }
+
+  /// Keep local route edits queued while publishing the confirmed snapshot.
+  Future<void> applySync(
+    CompletionRoutesImportPreview preview,
+    Future<void> Function(CompletionRoutesSnapshot) publish,
+  ) => _serialized(() async {
+    if (!_sameSnapshotContent(read(), preview.local)) {
+      throw const CompletionRoutesException('本地路线已变化，请重新同步');
+    }
+    await publish(preview.merged);
+    final current = read();
+    if (!_sameSnapshotContent(current, preview.local)) {
+      throw const CompletionRoutesException('本地路线已变化，请重新同步');
+    }
+    if (!_sameSnapshotContent(current, preview.merged)) {
+      await _save(preview.merged);
+    }
+  });
+
   Future<CompletionRoute> _updateRoute(
     String routeId,
     CompletionRoute Function(CompletionRoute route, DateTime now) change,
@@ -364,10 +397,11 @@ class CompletionRoutesRepository {
 
   _MergeOutcome _merge(
     CompletionRoutesSnapshot local,
-    CompletionRoutesSnapshot imported,
-  ) {
+    CompletionRoutesSnapshot imported, {
+    bool sync = false,
+  }) {
     final conflicts = <CompletionRoutesConflict>[];
-    if (imported.updatedAt.isBefore(local.updatedAt)) {
+    if (!sync && imported.updatedAt.isBefore(local.updatedAt)) {
       conflicts.add(
         CompletionRoutesConflict(
           routeId: '',
@@ -457,17 +491,18 @@ class CompletionRoutesRepository {
     }
 
     for (final tombstone in imported.tombstones) {
-      final localRoute = local.routeById(tombstone.id);
-      if (localRoute == null) continue;
-      if (tombstone.deletedAt.isAfter(localRoute.updatedAt)) {
+      final route = routes.where((route) => route.id == tombstone.id).firstOrNull;
+      if (route == null) continue;
+      if (sync ? !tombstone.deletedAt.isBefore(route.updatedAt) : tombstone.deletedAt.isAfter(route.updatedAt)) {
+        if (sync) routes.remove(route);
         conflicts.add(
           CompletionRoutesConflict(
             routeId: tombstone.id,
-            routeName: tombstone.name ?? localRoute.name,
+            routeName: tombstone.name ?? route.name,
             kind: CompletionRoutesConflictKind.importedDeleted,
-            message:
-                '导入快照记录了路线「${tombstone.name ?? localRoute.name}」已删除，'
-                '但本地仍有该路线；保留本地路线。',
+            message: sync
+                ? '删除本地路线「${route.name}」'
+                : '导入记录包含「${route.name}」的删除；保留本地路线。',
           ),
         );
       }

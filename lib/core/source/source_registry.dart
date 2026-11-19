@@ -4,12 +4,14 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../db/app_database.dart' show SourceRow;
 import '../models/media_type.dart';
 import '../models/source_descriptor.dart';
 import '../models/source_exception.dart';
 import 'bangumi_public_client.dart';
 import 'bangumi_source.dart';
 import 'declarative_source.dart';
+import 'ehentai/ehentai_source.dart';
 import 'host_features.dart';
 import 'http_client.dart';
 import 'js/js_runtime.dart';
@@ -203,6 +205,54 @@ class SourceRegistry {
       sha256.convert(utf8.encode(text.replaceAll('\r\n', '\n'))).toString() ==
           'c0adc77c4118399cd9077790840e2133e74517b992e84220c700d931279f0063';
 
+  static const _legacyEhentaiRules = {
+    // App assets 1.0.0 (67ce2cd) and 1.0.1 (6488305).
+    '1.0.0': 'f594f8f85c9b88e8fecffb54bb4c8bf2c8f213a7ad9e691865b9cfe1b5a0f4a2',
+    '1.0.1': '8f8cfe710335ff147ee48a7b9a5eb6c5a2fe224e43910e14047363aa4351636d',
+    // Official compatibility repository 1.1.0 (ba20792) and 1.1.1 (ef7e075).
+    '1.1.0': '8776c623916f6963c64a2cda4d264405fb9333dceba09af2e28427f508ef1aef',
+    '1.1.1': 'b7d6f4641bb8a5bb21afe90a9cf4064bc0a9a7a7bf4253e4e93934e1ec1c3982',
+  };
+
+  Future<bool> _upgradeLegacyEhentai(SourceRow? installed) async {
+    if (jsSourceFactory == null) return false;
+    if (installed == null ||
+        !installed.enabled ||
+        installed.type != MediaType.manga) {
+      return false;
+    }
+    final fingerprint = _legacyEhentaiRules[installed.version];
+    final text = installed.ruleText;
+    if (fingerprint == null ||
+        text == null ||
+        sha256.convert(utf8.encode(text.replaceAll('\r\n', '\n'))).toString() !=
+            fingerprint) {
+      return false;
+    }
+    final replacement = await _bundle.loadString('assets/rules/ehentai-js.json');
+    final rule = SourceRule.parseJson(replacement);
+    if (!supportsEhentaiNative(rule) || rule.descriptor.type != installed.type) {
+      throw StateError('打包的 E-Hentai 原生规则身份不一致');
+    }
+    if (_disposed) return false;
+    try {
+      await repository.replaceRule(
+        expected: installed,
+        id: installed.id,
+        name: installed.name,
+        type: installed.type,
+        lang: installed.lang,
+        version: rule.descriptor.version!,
+        ruleText: replacement,
+        repoUrl: installed.repoUrl,
+      );
+    } on StateError {
+      // A simultaneous user update, disable or removal wins over migration.
+      if (await repository.byId(installed.id) == installed) rethrow;
+    }
+    return true;
+  }
+
   Future<void> _ensureInternalMetadata() async {
     final text = await (_metadataText ??= _bundle.loadString(
       'assets/rules/bangumi-anime.json',
@@ -337,7 +387,12 @@ class SourceRegistry {
     if (_disposed) throw StateError('来源注册表已关闭');
     await _ensureInternalMetadata();
     final canonicalAgeInstalled = await _retireLegacyAge();
-    final rows = await repository.all();
+    var rows = await repository.all();
+    if (await _upgradeLegacyEhentai(
+      rows.where((row) => row.id == 'ehentai').firstOrNull,
+    )) {
+      rows = await repository.all();
+    }
     if (_disposed) throw StateError('来源注册表已关闭');
     final ids = <String>{};
     for (final row in rows) {

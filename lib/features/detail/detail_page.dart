@@ -1094,13 +1094,17 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                   context: context,
                   isScrollControlled: true,
                   showDragHandle: true,
-                  builder: (_) => AnimeInfoSheet(id: item.remoteId),
+                  builder: (_) => AnimeInfoSheet(
+                    id: item.remoteId,
+                    initialSection: 'episodes',
+                    showSectionSelector: false,
+                  ),
                 );
             }
           },
           itemBuilder: (_) => [
             if (item.sourceId == 'bangumi-anime')
-              const PopupMenuItem(value: 'info', child: Text('完整番剧资料')),
+              const PopupMenuItem(value: 'info', child: Text('分集资料')),
             if (item.type == MediaType.novel) ...[
               if (item.sourceId == LnsSource.id)
                 const PopupMenuItem(
@@ -1196,7 +1200,6 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                     _AnimeHero(
                       item: item,
                       onPlay: _continueAnime,
-                      onComments: () => _selectAnimeSection('comments'),
                     )
                   else if (item.type == MediaType.manga)
                     _MangaHeader(
@@ -1302,43 +1305,19 @@ class _DetailPageState extends ConsumerState<DetailPage> {
                         });
                       },
                     ),
-                  if (item.type == MediaType.anime) ...[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: AppCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              '播放来源',
-                              style: Theme.of(context).textTheme.titleSmall,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _playback == null
-                                  ? '尚未选择播放来源'
-                                  : _playback!.sourceName.isNotEmpty
-                                  ? _playback!.sourceName
-                                  : '已选择播放来源',
-                            ),
-                            if (_playback?.item != null)
-                              Text(_playback!.item!.title),
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: OutlinedButton.icon(
-                                onPressed: _chooseSource,
-                                icon: const Icon(Icons.video_library_outlined),
-                                label: Text(
-                                  _playback == null ? '选择来源' : '更换来源',
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                  if (item.type == MediaType.anime)
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                      leading: const Icon(Icons.video_library_outlined),
+                      title: Text(_playback?.sourceName.isNotEmpty == true
+                          ? _playback!.sourceName : '播放来源'),
+                      subtitle: _playback?.item?.title == item.title
+                          ? null : Text(_playback?.item?.title ?? ''),
+                      trailing: TextButton(
+                        onPressed: _chooseSource,
+                        child: Text(_playback == null ? '选择来源' : '更换来源'),
                       ),
                     ),
-                  ],
                   if (_directoryBusy &&
                       (item.type != MediaType.novel || _novelSection == 2))
                     const ListTile(

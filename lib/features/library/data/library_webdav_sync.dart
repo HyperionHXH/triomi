@@ -1374,7 +1374,9 @@ class _Favorite {
     type: view.item.type,
     item: _PortableItem(view.item, hint),
     status: view.entry.status,
-    progress: view.entry.progress,
+    // The shelf summary treats nonpositive chapter numbers as no count.
+    // Preserve the signed chapter number and exact position in chapter/history.
+    progress: view.entry.progress < 0 ? 0 : view.entry.progress,
     updatedAt: membershipAt,
   );
 

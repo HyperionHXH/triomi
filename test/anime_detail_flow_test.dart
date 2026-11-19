@@ -259,11 +259,12 @@ void main() {
         child: MaterialApp.router(routerConfig: router),
       ),
     );
-    await tester.tap(find.text('查看分集资料'));
+    expect(find.text('作品简介'), findsOneWidget);
+    expect(http.requests, isEmpty);
+    await tester.ensureVisible(find.text('分集资料'));
+    await tester.tap(find.text('分集资料'));
     await tester.pumpAndSettle();
     expect(find.textContaining('只读分集简介'), findsOneWidget);
-    Navigator.of(tester.element(find.textContaining('只读分集简介'))).pop();
-    await tester.pumpAndSettle();
     await tester.tap(find.text('吐槽'));
     await tester.pumpAndSettle();
     expect(find.textContaining('429'), findsOneWidget);

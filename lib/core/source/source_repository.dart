@@ -84,7 +84,7 @@ class SourceRepository {
     required String lang,
     required String version,
     required String ruleText,
-    required String repoUrl,
+    required String? repoUrl,
     bool allowMetadataPlaceholder = false,
     bool enabledWhenNew = true,
   }) => _db.transaction(() async {

@@ -1,8 +1,10 @@
+import '../test/completion_routes_webdav_test.dart' as route_sync;
 import '../test/novel_illustration_retry_test.dart' as illustration_retry;
 import '../test/profile_page_test.dart' as profile_routes;
 import '../test/search_isolation_test.dart' as search_parity;
 import '../test/tag_rule_update_test.dart' as tag_rule_updates;
 import '../test/tag_search_route_test.dart' as tag_routes;
+import '../test/webdav_library_sync_ui_test.dart' as webdav_ui;
 import 'fixtures/ios_test_binding.dart';
 import 'ios_anime_metadata_search_test.dart' as anime_search;
 import 'ios_chinese_rules_test.dart' as chinese_rules;
@@ -30,6 +32,8 @@ void main() {
   reader_state.main();
   manga_zoom.main();
   profile_routes.main();
+  route_sync.main();
+  webdav_ui.main();
   storage.main();
   video.main();
   search_parity.main(capture: captureIosDeviceEvidence);

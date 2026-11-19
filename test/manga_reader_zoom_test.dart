@@ -161,8 +161,13 @@ void main() {
         ),
       ),
     );
-    await settle(tester);
-    expect(find.textContaining('1/2'), findsWidgets);
+    final firstPage = find.textContaining('1/2');
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (firstPage.evaluate().isEmpty && DateTime.now().isBefore(deadline)) {
+      await settle(tester);
+    }
+    expect(firstPage, findsWidgets,
+        reason: 'The local chapter must load before sending zoom gestures');
   }
 
   MangaZoomViewState zoomState(WidgetTester tester) =>

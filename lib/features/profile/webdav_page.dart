@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/backup/backup_artifact_recovery.dart';
 import '../../core/backup/backup_restore_preview.dart';
@@ -10,7 +9,6 @@ import '../../core/backup/versioned_webdav_backup.dart';
 import '../../core/backup/webdav_client.dart';
 import '../../core/db/database_provider.dart';
 import '../../core/models/source_exception.dart';
-import '../../core/router/app_router.dart';
 import '../../core/source/source_providers.dart';
 import '../../core/storage/preferences.dart';
 import '../../core/theme/app_tokens.dart';
@@ -26,14 +24,7 @@ import 'webdav_status_cards.dart';
 
 /// Lightweight cross-device sync and full backups share one WebDAV connection.
 class WebDavSyncPage extends ConsumerStatefulWidget {
-  const WebDavSyncPage({
-    super.key,
-    this.fullBackup = false,
-    this.animeCollectionOnly = false,
-  });
-
-  final bool fullBackup;
-  final bool animeCollectionOnly;
+  const WebDavSyncPage({super.key});
 
   @override
   ConsumerState<WebDavSyncPage> createState() => _WebDavSyncPageState();
@@ -55,7 +46,6 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
   bool _failed = false;
   Future<void> Function()? _retry;
   String? _status;
-  RemoteBackupInfo? _remote;
 
   @override
   void initState() {
@@ -104,13 +94,6 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
     child: AppCard(child: child),
   );
 
-  static String _formatTime(DateTime value) {
-    final local = value.toLocal();
-    String two(int number) => number.toString().padLeft(2, '0');
-    return '${local.year}-${two(local.month)}-${two(local.day)} '
-        '${two(local.hour)}:${two(local.minute)}';
-  }
-
   void _resetHttpConsent() {
     if (_urlController.text.trim() != _consentedBaseUrl) {
       _allowInsecureHttp = false;
@@ -118,7 +101,7 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
     }
   }
 
-  Future<WebDavConfig?> _prepareConfig() async {
+  Future<WebDavConfig?> _prepareConfig({bool forBackup = false}) async {
     if (!_config.isConfigured) {
       setState(() {
         _status = '请先填写服务器地址与用户名';
@@ -165,7 +148,7 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
         _consentedBaseUrl = endpoint;
       }
       final config = _config;
-      if (widget.fullBackup) {
+      if (forBackup) {
         config.fileUrl;
       } else {
         config.directoryUrl;
@@ -185,8 +168,6 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
     }
   }
 
-  Future<void> _saveAndCheck() => _checkRemote();
-
   Future<bool> _requireConnection() async {
     await ref.read(libraryAutoSyncProvider.notifier).checkConnection();
     if (!mounted) return false;
@@ -197,34 +178,18 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
     return true;
   }
 
-  Future<void> _checkRemote() async {
+  Future<void> _saveAndCheck() async {
     if (_busy) return;
-    _retry = _checkRemote;
+    _retry = _saveAndCheck;
     final config = await _prepareConfig();
     if (config == null || !mounted) return;
     setState(() {
       _localBusy = true;
       _failed = false;
-      _status = '正在检测远端…';
+      _status = null;
     });
     try {
-      if (!await _requireConnection()) return;
-      final client = ref.read(webDavClientProvider);
-      final document = widget.fullBackup
-          ? VersionedWebDavBackup(client).head(config)
-          : widget.animeCollectionOnly
-          ? ref.read(legacyAnimeWebDavImportProvider).document
-          : ref.read(libraryWebDavSyncProvider).document;
-      final info = await client.stat(document);
-      if (!mounted) return;
-      setState(() {
-        _remote = info;
-        _status = widget.fullBackup
-            ? (info.exists ? '远端备份可用' : '远端尚无完整备份')
-            : widget.animeCollectionOnly
-            ? (info.exists ? '旧版追番收藏可用，可执行一次性兼容导入' : '远端没有旧版追番收藏文件')
-            : (info.exists ? '连接成功，收藏与历史会按自动同步设置合并' : '连接成功；首次自动同步会创建收藏与历史文档');
-      });
+      await ref.read(libraryAutoSyncProvider.notifier).checkConnection();
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -272,10 +237,7 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
       ref.invalidate(animeFollowsProvider);
       ref.invalidate(inLibraryProvider);
       if (mounted) {
-        setState(
-          () => _status =
-              '兼容导入完成：追番收藏 $count 部。此为一次性旧版导入；后续上传和修改请使用漫画、动画收藏与历史同步。',
-        );
+        setState(() => _status = '已导入 $count 部追番收藏');
       }
     } catch (error) {
       if (mounted) {
@@ -292,7 +254,7 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
   Future<void> _upload() async {
     if (_busy) return;
     _retry = _upload;
-    final config = await _prepareConfig();
+    final config = await _prepareConfig(forBackup: true);
     if (config == null || !mounted) return;
     setState(() {
       _localBusy = true;
@@ -335,12 +297,6 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
             includeDownloadedMedia: _includeDownloadedMedia,
             expected: expected,
           );
-      if (!mounted) return;
-      final result = ref.read(webDavBackupOperationProvider);
-      if (result.phase == WebDavBackupPhase.complete) {
-        final remote = await client.stat(store.head(config));
-        if (mounted) setState(() => _remote = remote);
-      }
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -356,7 +312,7 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
   Future<void> _download() async {
     if (_busy) return;
     _retry = _download;
-    final config = await _prepareConfig();
+    final config = await _prepareConfig(forBackup: true);
     if (config == null || !mounted) return;
     setState(() {
       _localBusy = true;
@@ -459,91 +415,20 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
     final automatic = ref.watch(libraryAutoSyncProvider);
     final backup = ref.watch(webDavBackupOperationProvider);
     return PageScaffold(
-      title: widget.fullBackup ? 'WebDAV 应用备份' : 'WebDAV 收藏与历史',
+      title: 'WebDAV 同步与备份',
       child: ListView(
         padding: const EdgeInsets.only(bottom: AppSpacing.xl),
         children: <Widget>[
-          _card(
-            child: WebDavConnectionStatus(
-              state: automatic,
-              onCheck: _busy || automatic.checking ? null : _checkRemote,
-            ),
-          ),
-          _card(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.fullBackup
-                      ? '完整应用备份'
-                      : widget.animeCollectionOnly
-                      ? '旧版追番收藏兼容'
-                      : '漫画与动画跨设备同步',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  widget.fullBackup
-                      ? '保存完整快照，用于换机或恢复。日常进度请使用收藏与历史同步。'
-                      : widget.animeCollectionOnly
-                      ? '导入 anime-follows.v1.json 收藏，后续使用统一同步。'
-                      : '同步收藏、章节与页码 / 秒数。',
-                ),
-                if (!widget.fullBackup && !widget.animeCollectionOnly) ...[
-                  ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    childrenPadding: const EdgeInsets.only(
-                      bottom: AppSpacing.sm,
-                    ),
-                    title: const Text('同步范围与缺失来源处理'),
-                    children: [
-                      Text(
-                        '同步漫画与动画收藏、取消收藏、历史和来源身份。'
-                        '不上传媒体、下载、插件代码、账号凭据或播放链接。'
-                        '同源采用最近访问位置；缺少插件请手动安装，换源需核对作品及章节。',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: AppSpacing.sm),
-                TextButton.icon(
-                  onPressed: _busy
-                      ? null
-                      : () => context.push(
-                          widget.fullBackup || widget.animeCollectionOnly
-                              ? AppRoutes.webdav
-                              : AppRoutes.webdavBackup,
-                        ),
-                  icon: Icon(
-                    widget.fullBackup || widget.animeCollectionOnly
-                        ? Icons.cloud_sync_outlined
-                        : Icons.archive_outlined,
-                  ),
-                  label: Text(
-                    widget.fullBackup || widget.animeCollectionOnly
-                        ? '前往收藏与历史同步'
-                        : '前往完整应用备份',
-                  ),
-                ),
-              ],
-            ),
-          ),
           _card(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  '共用 WebDAV 连接',
+                  'WebDAV 连接',
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  widget.animeCollectionOnly
-                      ? '旧版导入仅读取 anime-follows.v1.json；密码仍只在本机设置。'
-                      : '收藏与历史、完整备份使用同一服务器和账号。密码保存在本机安全存储，不随同步或备份导出。',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                const SizedBox(height: AppSpacing.sm),
+                WebDavConnectionStatus(state: automatic),
                 const SizedBox(height: AppSpacing.sm),
                 TextField(
                   controller: _urlController,
@@ -578,129 +463,109 @@ class _WebDavSyncPageState extends ConsumerState<WebDavSyncPage> {
                     hintText: 'triomi',
                   ),
                 ),
-                if (widget.fullBackup) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  TextField(
-                    controller: _fileController,
-                    enabled: _initialized && !_busy,
-                    decoration: const InputDecoration(
-                      labelText: '备份文件名',
-                      hintText: 'backup.zip',
-                    ),
-                  ),
-                ],
                 const SizedBox(height: AppSpacing.sm),
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.xs,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: <Widget>[
-                    FilledButton.icon(
-                      onPressed: _busy ? null : _saveAndCheck,
-                      icon: const Icon(Icons.check),
-                      label: const Text('保存并连接'),
+                FilledButton.icon(
+                  onPressed: _busy ? null : _saveAndCheck,
+                  icon: const Icon(Icons.check),
+                  label: const Text('保存并连接'),
+                ),
+              ],
+            ),
+          ),
+          _card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '收藏与历史同步',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const Text('在设备间同步漫画和番剧的收藏与进度。'),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('自动同步'),
+                  value: automatic.enabled,
+                  onChanged: automatic.configured && !_busy
+                      ? _setAutomaticSync
+                      : null,
+                ),
+                if (automatic.configured &&
+                    (automatic.syncing ||
+                        automatic.pending ||
+                        automatic.lastSuccess != null))
+                  Text(webDavSyncLabel(automatic)),
+                OutlinedButton.icon(
+                  onPressed: _busy || automatic.syncing || !automatic.configured
+                      ? null
+                      : _syncLibrary,
+                  icon: const Icon(Icons.sync),
+                  label: const Text('立即同步一次'),
+                ),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('旧版追番收藏'),
+                  children: [
+                    TextButton.icon(
+                      onPressed: _busy ? null : _syncAnimeCollection,
+                      icon: const Icon(Icons.file_download_outlined),
+                      label: const Text('导入旧版收藏'),
                     ),
                   ],
                 ),
               ],
             ),
           ),
-          if (widget.animeCollectionOnly)
-            _card(
-              child: FilledButton.icon(
-                onPressed: _busy ? null : _syncAnimeCollection,
-                icon: const Icon(Icons.file_download_outlined),
-                label: const Text('兼容导入旧版追番收藏'),
-              ),
-            )
-          else if (!widget.fullBackup)
-            _card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('自动同步收藏与历史'),
-                    subtitle: const Text('启动、返回应用或记录变化时合并'),
-                    value: automatic.enabled,
-                    onChanged: automatic.configured ? _setAutomaticSync : null,
+          _card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('应用备份', style: Theme.of(context).textTheme.titleSmall),
+                const Text('手动备份设置和应用数据，用于换机或重装。'),
+                const SizedBox(height: AppSpacing.sm),
+                TextField(
+                  controller: _fileController,
+                  enabled: _initialized && !_busy,
+                  decoration: const InputDecoration(
+                    labelText: '备份文件名',
+                    hintText: 'backup.zip',
                   ),
-                  const SizedBox(height: AppSpacing.xs),
-                  OutlinedButton.icon(
-                    onPressed:
-                        _busy ||
-                            automatic.syncing ||
-                            !automatic.configured
-                        ? null
-                        : _syncLibrary,
-                    icon: const Icon(Icons.sync),
-                    label: const Text('立即同步一次'),
-                  ),
-                ],
-              ),
-            ),
-          if (widget.fullBackup) ...[
-            _card(
-              child: SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _includeDownloadedMedia,
-                onChanged: _busy
-                    ? null
-                    : (value) =>
-                          setState(() => _includeDownloadedMedia = value),
-                title: const Text('包含已完成/部分下载媒体'),
-                subtitle: const Text('仅影响完整备份；收藏与历史同步始终不含媒体或插件代码。'),
-              ),
-            ),
-            _card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text('完整备份传输', style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    _remote == null
-                        ? '尚未检测远端状态'
-                        : _remote!.exists
-                        ? '远端已有备份：${((_remote!.sizeBytes ?? 0) / 1024).toStringAsFixed(1)} KB'
-                              '${_remote!.modifiedAt == null ? '' : ' · ${_formatTime(_remote!.modifiedAt!)}'}'
-                        : '远端还没有备份文件',
-                    style: Theme.of(context).textTheme.bodySmall,
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _includeDownloadedMedia,
+                  onChanged: _busy
+                      ? null
+                      : (value) => setState(() => _includeDownloadedMedia = value),
+                  title: const Text('包含下载媒体'),
+                ),
+                if (backup.phase != WebDavBackupPhase.idle) ...[
+                  WebDavBackupProgress(
+                    state: backup,
+                    onCancel: ref
+                        .read(webDavBackupOperationProvider.notifier)
+                        .cancel,
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  if (backup.phase != WebDavBackupPhase.idle) ...[
-                    WebDavBackupProgress(
-                      state: backup,
-                      onCancel: ref
-                          .read(webDavBackupOperationProvider.notifier)
-                          .cancel,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                  ],
-                  FilledButton.icon(
-                    onPressed: _busy ? null : _upload,
-                    icon: const Icon(Icons.cloud_upload_outlined, size: 18),
-                    label: const Text('上传本机备份'),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  OutlinedButton.icon(
-                    onPressed: _busy ? null : _download,
-                    icon: const Icon(Icons.cloud_download_outlined, size: 18),
-                    label: const Text('拉取远端备份并合并'),
-                  ),
                 ],
-              ),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _busy ? null : _upload,
+                      icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                      label: const Text('上传本机备份'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _download,
+                      icon: const Icon(Icons.cloud_download_outlined, size: 18),
+                      label: const Text('拉取远端备份并合并'),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
-          if (!widget.fullBackup && backup.busy)
-            _card(
-              child: WebDavBackupProgress(
-                state: backup,
-                onCancel: ref
-                    .read(webDavBackupOperationProvider.notifier)
-                    .cancel,
-              ),
-            ),
+          ),
           if (_localBusy && !backup.busy)
             const Padding(
               padding: EdgeInsets.all(AppSpacing.lg),

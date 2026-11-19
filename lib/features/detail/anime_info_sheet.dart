@@ -342,30 +342,9 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
               if (tag is Map && tag['name'] is String) '${tag['name']}',
           ]
         : item?.tags ?? const <String>[];
-    final rating = row['rating'];
-    final date = '${row['date'] ?? ''}';
-    final platform = '${row['platform'] ?? item?.status ?? ''}';
-    final episodes = row['total_episodes'] ?? row['eps'];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (platform.isNotEmpty || date.isNotEmpty || episodes != null)
-          Text(
-            [
-              platform,
-              date,
-              if (episodes != null) '$episodes 集',
-            ].where((v) => v.isNotEmpty).join(' · '),
-          ),
-        if (rating is Map && rating['score'] != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              '★ ${rating['score']}  ·  ${rating['total'] ?? 0} 人评分${rating['rank'] == null ? '' : '  ·  #${rating['rank']}'}',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-        const SizedBox(height: 12),
         Text('简介', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         if (summary.isNotEmpty) ...[
@@ -409,30 +388,6 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
             ],
           ),
         ],
-        if (row['infobox'] is List) ...[
-          const SizedBox(height: 20),
-          Text('作品资料', style: Theme.of(context).textTheme.titleMedium),
-          for (final field in row['infobox'] as List)
-            if (field is Map)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 5),
-                child: SelectableText(
-                  '${field['key']}：${_value(field['value'])}',
-                ),
-              ),
-        ],
-        const SizedBox(height: 12),
-        TextButton.icon(
-          onPressed: () => showModalBottomSheet<void>(
-            context: context,
-            isScrollControlled: true,
-            showDragHandle: true,
-            builder: (_) =>
-                AnimeInfoSheet(id: widget.id, initialSection: 'episodes'),
-          ),
-          icon: const Icon(Icons.info_outline),
-          label: const Text('查看分集资料'),
-        ),
       ],
     );
   }
@@ -656,9 +611,7 @@ class _AnimeInfoSheetState extends ConsumerState<AnimeInfoSheet> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                for (final entry in sections.entries.where(
-                  (entry) => !widget.embedded || entry.key != 'episodes',
-                ))
+                for (final entry in sections.entries)
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: ChoiceChip(

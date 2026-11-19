@@ -30,6 +30,7 @@ List<AppUpdateRelease> _releases(
   Set<int> missing = const {},
   String platform = 'android',
   String? stableVersion,
+  String? notes,
 }) => AppUpdateRelease.parse(
   utf8.encode(
     jsonEncode([
@@ -44,7 +45,7 @@ List<AppUpdateRelease> _releases(
           'draft': false,
           'prerelease': stableVersion == null,
           'published_at': '2026-10-18T10:00:00Z',
-          'body': 'Release $code\n\n- Keep the complete release notes.',
+          'body': notes ?? 'Release $code\n\n- Keep the complete release notes.',
           'assets': [
             if (!missing.contains(code))
               for (final name
@@ -516,14 +517,7 @@ void main() {
       );
       await _tap(tester, 'app-update-history');
       await _tap(tester, 'app-update-release-0.11.0-test.159');
-      expect(
-        tester
-            .widget<FilledButton>(
-              find.byKey(const ValueKey('app-update-download')),
-            )
-            .onPressed,
-        isNull,
-      );
+      expect(find.byKey(const ValueKey('app-update-download')), findsNothing);
       expect(service.downloaded, isEmpty);
       await _tap(tester, 'app-update-history');
       await _tap(tester, 'app-update-release-0.11.0-test.163');
@@ -543,27 +537,52 @@ void main() {
     );
     await _open(tester, service);
     await _tap(tester, 'app-update-check');
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.byKey(const ValueKey('app-update-download')),
-          )
-          .onPressed,
-      isNull,
-    );
+    expect(find.byKey(const ValueKey('app-update-download')), findsNothing);
     await _tap(tester, 'app-update-history');
     await _tap(tester, 'app-update-release-0.11.0-test.162');
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.byKey(const ValueKey('app-update-download')),
-          )
-          .onPressed,
-      isNull,
-    );
+    expect(find.byKey(const ValueKey('app-update-download')), findsNothing);
     expect(service.downloaded, isEmpty);
     expect(service.permissionReads, 0);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('current stable release keeps its notes without a download action', (
+    tester,
+  ) async {
+    final notes = List.generate(12, (index) => '更新事项 ${index + 1}').join('\n');
+    final service = _UpdateService(
+      available: _releases([162], stableVersion: '0.11.0', notes: notes),
+    );
+    await _open(tester, service);
+    await _tap(tester, 'app-update-check');
+    expect(find.text('当前已是最新构建'), findsOneWidget);
+    expect(find.text('最新发布'), findsOneWidget);
+    expect(find.byKey(const ValueKey('app-update-download')), findsNothing);
+    expect(tester.widget<Text>(find.text(notes)).maxLines, 5);
+    await tester.tap(await _reveal(tester, find.text('完整更新说明')));
+    await tester.pumpAndSettle();
+    final detail = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(SelectableText),
+    );
+    expect(tester.widget<SelectableText>(detail).data, notes);
+    expect(service.downloaded, isEmpty);
+  });
+
+  testWidgets('a newer Windows revision can update at the same version and build', (
+    tester,
+  ) async {
+    final offer = _releases([162], platform: 'windows', stableVersion: '0.11.0')
+        .single
+        .withWindowsManifest(1, 162);
+    final service = _UpdateService(platform: 'windows', available: [offer]);
+    await _open(tester, service);
+    await _tap(tester, 'app-update-check');
+    final download = await _reveal(tester, find.byKey(const ValueKey('app-update-download')));
+    await tester.tap(download);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('app-update-download-confirm')), findsOneWidget);
+    expect(service.tokens, isEmpty);
   });
 
   testWidgets(

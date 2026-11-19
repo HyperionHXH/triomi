@@ -150,8 +150,13 @@ void main() {
         child: MaterialApp(home: MangaReaderPage(args: args)),
       ),
     );
-    await settle(tester);
-    expect(find.byType(PageView), findsOneWidget);
+    final pages = find.byType(PageView);
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (pages.evaluate().isEmpty && DateTime.now().isBefore(deadline)) {
+      await settle(tester);
+    }
+    expect(pages, findsOneWidget,
+        reason: 'The real local chapter must finish loading before navigation');
     return (container: container, downloads: downloads);
   }
 
