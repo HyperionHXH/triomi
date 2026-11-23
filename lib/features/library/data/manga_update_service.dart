@@ -17,6 +17,52 @@ import '../../../core/storage/preferences.dart';
 import '../../downloads/data/download_providers.dart';
 import 'library_repository.dart';
 
+typedef MangaUpdateChapter = ({
+  MangaUpdateChapterRow update,
+  ChapterRow chapter,
+  bool isRead,
+});
+
+final mangaUpdateChaptersProvider =
+    StreamProvider.autoDispose<List<MangaUpdateChapter>>((ref) {
+      final db = ref.watch(databaseProvider);
+      final updates = db.mangaUpdateChapters;
+      final chapters = db.chapters;
+      final states = db.mangaChapterStates;
+      final query =
+          db.select(updates).join([
+            innerJoin(
+              chapters,
+              chapters.itemSourceId.equalsExp(updates.sourceId) &
+                  chapters.itemRemoteId.equalsExp(updates.remoteId) &
+                  chapters.sourceId.equalsExp(updates.sourceId) &
+                  chapters.remoteId.equalsExp(updates.chapterId),
+            ),
+            leftOuterJoin(
+              states,
+              states.sourceId.equalsExp(updates.sourceId) &
+                  states.remoteId.equalsExp(updates.remoteId) &
+                  states.chapterSourceId.equalsExp(updates.sourceId) &
+                  states.chapterRemoteId.equalsExp(updates.chapterId),
+            ),
+          ])..orderBy([
+            OrderingTerm.desc(updates.discoveredAt),
+            OrderingTerm.asc(updates.sourceId),
+            OrderingTerm.asc(updates.remoteId),
+            OrderingTerm.desc(chapters.sortIndex),
+          ]);
+      return query.watch().map(
+        (rows) => [
+          for (final row in rows)
+            (
+              update: row.readTable(updates),
+              chapter: row.readTable(chapters),
+              isRead: row.readTableOrNull(states)?.isRead ?? false,
+            ),
+        ],
+      );
+    });
+
 final mangaUpdateLibraryProvider = FutureProvider(
   (ref) =>
       LibraryRepository(ref.watch(databaseProvider))
@@ -343,6 +389,26 @@ class MangaUpdateService {
           throw const _MangaUpdateCancelled();
         }
         await _state(row, 'success', null, added: added.length);
+        if (added.isNotEmpty) {
+          final now = DateTime.now();
+          await db.batch((batch) {
+            batch.insertAll(db.mangaUpdateChapters, [
+              for (final chapter in added)
+                MangaUpdateChaptersCompanion.insert(
+                  sourceId: row.sourceId,
+                  remoteId: row.remoteId,
+                  chapterId: chapter.remoteId,
+                  discoveredAt: now,
+                ),
+            ], mode: InsertMode.insertOrIgnore);
+            batch.deleteWhere(
+              db.mangaUpdateChapters,
+              (entry) => entry.discoveredAt.isSmallerThanValue(
+                now.subtract(const Duration(days: 90)),
+              ),
+            );
+          });
+        }
         if (_cancelled || shouldContinue?.call() == false) {
           _cancelled = true;
           throw const _MangaUpdateCancelled();

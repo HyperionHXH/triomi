@@ -26,6 +26,7 @@ part 'app_database.g.dart';
     AnimeSourceLinks,
     MangaFeeds,
     MangaUpdates,
+    MangaUpdateChapters,
     MigrationPlans,
     MergedMangaReferences,
     AnimeFollowSyncStates,
@@ -43,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   /// **改表约定**：改表 → 版本号 +1 → `onUpgrade` 增量迁移。
   /// `test/database_migration_test.dart` 用历史库验证数据保留与新功能可用。
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -128,6 +129,9 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 15) {
         await m.addColumn(histories, histories.mangaPart);
+      }
+      if (from < 16) {
+        await m.createTable(mangaUpdateChapters);
       }
     },
   );

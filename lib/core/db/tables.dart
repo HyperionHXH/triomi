@@ -366,6 +366,18 @@ class MangaUpdates extends Table {
   Set<Column<Object>> get primaryKey => {sourceId, remoteId};
 }
 
+/// Recently discovered chapters, independent of the latest check result.
+@DataClassName('MangaUpdateChapterRow')
+class MangaUpdateChapters extends Table {
+  TextColumn get sourceId => text()();
+  TextColumn get remoteId => text()();
+  TextColumn get chapterId => text()();
+  DateTimeColumn get discoveredAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {sourceId, remoteId, chapterId};
+}
+
 @DataClassName('MigrationPlanRow')
 class MigrationPlans extends Table {
   TextColumn get id => text()();

@@ -27,7 +27,9 @@ class _UpdateSource implements DetailProvider {
   final started = Completer<void>();
   @override
   SourceDescriptor get descriptor => const SourceDescriptor(
-    id: 'updates-source', name: 'Updates source', type: MediaType.manga,
+    id: 'updates-source',
+    name: 'Updates source',
+    type: MediaType.manga,
     kind: SourceKind.plugin,
   );
   @override
@@ -42,101 +44,184 @@ class _UpdateSource implements DetailProvider {
 }
 
 void main() {
-  testWidgets('refresh remains active until requests finish, then shows new chapters', (tester) async {
-    final directory = Directory.systemTemp.createTempSync('manga-update-page-');
-    const paths = MethodChannel('plugins.flutter.io/path_provider');
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(paths, (_) async => directory.path);
-    addTearDown(() async {
+  testWidgets(
+    'refresh remains active until requests finish, then shows new chapters',
+    (tester) async {
+      final directory = Directory.systemTemp.createTempSync(
+        'manga-update-page-',
+      );
+      const paths = MethodChannel('plugins.flutter.io/path_provider');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(paths, null);
-      await tester.runAsync(() => directory.delete(recursive: true));
-    });
-    final db = openTestDatabase();
-    final source = _UpdateSource();
-    const item = MediaItem(sourceId: 'updates-source', remoteId: 'one',
-      type: MediaType.manga, title: 'Owned title');
-    await LibraryRepository(db).addToLibrary(item);
-    await LibraryRepository(db).saveChapters(
-      itemSourceId: item.sourceId,
-      itemRemoteId: item.remoteId,
-      chapters: const [Chapter(sourceId: 'updates-source', remoteId: 'c0', title: 'Chapter 0')],
-    );
-    final service = MangaUpdateService(
-      db: db,
-      snapshot: () async => SourceRegistrySnapshot(entries: [
-        SourceEntry(descriptor: source.descriptor, source: source, enabled: true),
-      ], failures: const []),
-      options: const MangaUpdateOptions(), constraintsAllow: () async => true,
-    );
-    final container = ProviderContainer(overrides: [
-      databaseProvider.overrideWithValue(db),
-      preferencesProvider.overrideWithValue(memoryPreferences()),
-      mangaUpdateServiceProvider.overrideWithValue(service),
-    ]);
-    await tester.pumpWidget(UncontrolledProviderScope(container: container,
-      child: const MaterialApp(home: MangaUpdatesPage())));
-    await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView), const Offset(0, 350));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
-    for (var attempt = 0; attempt < 100 && !source.started.isCompleted; attempt++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+          .setMockMethodCallHandler(paths, (_) async => directory.path);
+      addTearDown(() async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(paths, null);
+        await tester.runAsync(() => directory.delete(recursive: true));
+      });
+      final db = openTestDatabase();
+      final source = _UpdateSource();
+      const item = MediaItem(
+        sourceId: 'updates-source',
+        remoteId: 'one',
+        type: MediaType.manga,
+        title: 'Owned title',
+      );
+      await LibraryRepository(db).addToLibrary(item);
+      await LibraryRepository(db).saveChapters(
+        itemSourceId: item.sourceId,
+        itemRemoteId: item.remoteId,
+        chapters: const [
+          Chapter(
+            sourceId: 'updates-source',
+            remoteId: 'c0',
+            title: 'Chapter 0',
+          ),
+        ],
+      );
+      final service = MangaUpdateService(
+        db: db,
+        snapshot: () async => SourceRegistrySnapshot(
+          entries: [
+            SourceEntry(
+              descriptor: source.descriptor,
+              source: source,
+              enabled: true,
+            ),
+          ],
+          failures: const [],
+        ),
+        options: const MangaUpdateOptions(),
+        constraintsAllow: () async => true,
+      );
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          preferencesProvider.overrideWithValue(memoryPreferences()),
+          mangaUpdateServiceProvider.overrideWithValue(service),
+        ],
+      );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: MangaUpdatesPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, 350));
       await tester.pump();
-    }
-    expect(source.started.isCompleted, isTrue, reason: 'refresh must reach the source directory request');
-    await tester.pump();
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
-    source.pending.complete(const [
-      Chapter(sourceId: 'updates-source', remoteId: 'c0', title: 'Chapter 0'),
-      Chapter(sourceId: 'updates-source', remoteId: 'c1', title: 'Chapter 1', sortIndex: 1),
-    ]);
-    for (var attempt = 0; attempt < 100 &&
-        find.byType(LinearProgressIndicator).evaluate().isNotEmpty; attempt++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.pump(const Duration(milliseconds: 200));
+      for (
+        var attempt = 0;
+        attempt < 100 && !source.started.isCompleted;
+        attempt++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      expect(
+        source.started.isCompleted,
+        isTrue,
+        reason: 'refresh must reach the source directory request',
+      );
       await tester.pump();
-    }
-    await tester.pumpAndSettle();
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    expect(find.text('Owned title'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.runAsync(() async {
-      container.dispose();
-      await service.dispose();
-      await db.close();
-    });
-  });
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      source.pending.complete(const [
+        Chapter(sourceId: 'updates-source', remoteId: 'c0', title: 'Chapter 0'),
+        Chapter(
+          sourceId: 'updates-source',
+          remoteId: 'c1',
+          title: 'Chapter 1',
+          sortIndex: 1,
+        ),
+      ]);
+      for (
+        var attempt = 0;
+        attempt < 100 &&
+            find.byType(LinearProgressIndicator).evaluate().isNotEmpty;
+        attempt++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.text('Owned title'), findsOneWidget);
+      expect(find.text('Chapter 1'), findsOneWidget);
+      expect(find.text('Chapter 0'), findsNothing);
+      await (db.update(db.mangaUpdates))
+          .write(const MangaUpdatesCompanion(added: Value(0)));
+      await tester.pumpAndSettle();
+      expect(find.text('Chapter 1'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(() async {
+        container.dispose();
+        await service.dispose();
+        await db.close();
+      });
+    },
+  );
 
-  testWidgets('completed empty results stay empty and failures remain visible without queue controls', (tester) async {
-    final db = openTestDatabase();
-    const item = MediaItem(sourceId: 'offline', remoteId: 'one',
-      type: MediaType.manga, title: 'Failed title');
-    await LibraryRepository(db).addToLibrary(item);
-    await db.into(db.mangaUpdates).insert(MangaUpdatesCompanion.insert(
-      sourceId: item.sourceId, remoteId: item.remoteId,
-      status: const Value('success'), added: const Value(0),
-    ));
-    final container = ProviderContainer(overrides: [
-      databaseProvider.overrideWithValue(db),
-      preferencesProvider.overrideWithValue(memoryPreferences()),
-    ]);
-    await tester.pumpWidget(UncontrolledProviderScope(container: container,
-      child: const MaterialApp(home: MangaUpdatesPage())));
-    await tester.pumpAndSettle();
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    expect(find.text('Failed title'), findsNothing);
-    await (db.update(db.mangaUpdates)).write(const MangaUpdatesCompanion(
-      status: Value('failed'), error: Value('HTTP 503 from source'),
-    ));
-    await tester.pumpAndSettle();
-    expect(find.text('Failed title'), findsOneWidget);
-    expect(find.textContaining('HTTP 503 from source'), findsOneWidget);
-    expect(find.byIcon(Icons.stop), findsNothing);
-    expect(find.byType(FilledButton), findsNothing);
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.runAsync(() async {
-      container.dispose();
-      await db.close();
-    });
-  });
+  testWidgets(
+    'completed empty results stay empty and failures remain visible without queue controls',
+    (tester) async {
+      final db = openTestDatabase();
+      const item = MediaItem(
+        sourceId: 'offline',
+        remoteId: 'one',
+        type: MediaType.manga,
+        title: 'Failed title',
+      );
+      await LibraryRepository(db).addToLibrary(item);
+      await db
+          .into(db.mangaUpdates)
+          .insert(
+            MangaUpdatesCompanion.insert(
+              sourceId: item.sourceId,
+              remoteId: item.remoteId,
+              status: const Value('success'),
+              added: const Value(0),
+            ),
+          );
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          preferencesProvider.overrideWithValue(memoryPreferences()),
+        ],
+      );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: MangaUpdatesPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.text('Failed title'), findsNothing);
+      await (db.update(db.mangaUpdates)).write(
+        const MangaUpdatesCompanion(
+          status: Value('failed'),
+          error: Value('SourceException(internal-id, network): Error: 521 -'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Failed title'), findsNothing);
+      await tester.tap(find.text('1 部检查未完成'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('来源服务异常（521）'), findsOneWidget);
+      expect(find.textContaining('internal-id'), findsNothing);
+      await tester.tap(find.text('漫画来源'));
+      await tester.pumpAndSettle();
+      expect(find.text('Failed title'), findsOneWidget);
+      expect(find.text('重试此来源'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(() async {
+        container.dispose();
+        await db.close();
+      });
+    },
+  );
 }

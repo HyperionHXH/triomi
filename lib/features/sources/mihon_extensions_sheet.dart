@@ -94,6 +94,96 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
   final _searchController = TextEditingController();
   bool _savingRepositories = false;
   int _repositoryGeneration = 0;
+  bool _checkingUpdates = false;
+  int _updateCheckGeneration = 0;
+  final _updates = <String, (MihonExtension, MihonRepositoryIndex)>{};
+
+  String _installedVersionLabel(String package) {
+    final host = _hostStatus[package];
+    return '${_installed[package] ?? host?['versionName'] ?? host?['versionCode'] ?? '未知'}';
+  }
+
+  bool _isUpgrade(MihonExtension extension) {
+    final status = _hostStatus[extension.packageName];
+    final version = int.tryParse('${status?['versionCode']}');
+    final signer = status?['signerSha256']?.toString().toLowerCase();
+    final advertisedSigner = extension.publisherSignerSha256?.toLowerCase();
+    return version != null &&
+        extension.versionCode > version &&
+        signer != null &&
+        RegExp(r'^[0-9a-f]{64}$').hasMatch(signer) &&
+        (advertisedSigner == null || advertisedSigner == signer);
+  }
+
+  Future<void> _checkUpdates() async {
+    if (_checkingUpdates || _savingRepositories) return;
+    if (_repositories.isEmpty) {
+      _toast('请先添加仓库');
+      return;
+    }
+    final generation = ++_updateCheckGeneration;
+    final client = MihonRepositoryClient(ref.read(sourceHttpClientProvider));
+    final found = <String, (MihonExtension, MihonRepositoryIndex)>{};
+    var failures = 0;
+    setState(() => _checkingUpdates = true);
+    for (final url in _repositories) {
+      try {
+        final index = await client.fetch(url);
+        if (!mounted || generation != _updateCheckGeneration) return;
+        for (final extension in index.extensions) {
+          if (!_isUpgrade(extension)) continue;
+          final current = found[extension.packageName];
+          if (current == null ||
+              extension.versionCode > current.$1.versionCode) {
+            found[extension.packageName] = (extension, index);
+          }
+        }
+      } catch (_) {
+        if (!mounted || generation != _updateCheckGeneration) return;
+        failures++;
+      }
+    }
+    found.removeWhere((_, offer) => !_isUpgrade(offer.$1));
+    setState(() {
+      _updates
+        ..clear()
+        ..addAll(found);
+      _checkingUpdates = false;
+    });
+    if (failures != 0) {
+      _toast('$failures 个仓库检查失败');
+    } else if (found.isEmpty) {
+      _toast('没有可用更新');
+    }
+  }
+
+  Future<void> _installUpdate(
+    MihonExtension extension,
+    MihonRepositoryIndex index,
+  ) async {
+    if (!_isUpgrade(extension)) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('更新 ${extension.name}'),
+        content: Text(
+          'v${_installedVersionLabel(extension.packageName)} → v${extension.versionName}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('更新'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true || !_isUpgrade(extension)) return;
+    await _download(extension, index);
+  }
 
   void _setFilters(SourceFilters value) {
     setState(() => _filters = value);
@@ -366,6 +456,9 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
           .set(_mihonRepositoriesKey, repositories);
       if (!mounted) return;
       setState(() {
+        _updateCheckGeneration++;
+        _checkingUpdates = false;
+        _updates.clear();
         _repositories = repositories;
         _selectedRepository =
             selected ??
@@ -509,6 +602,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
           );
       _installed[extension.packageName] = extension.versionName;
       _hostStatus[extension.packageName] = probe;
+      _updates.remove(extension.packageName);
       if (probe['filterProbe'] == 'unknown') {
         _enabled.remove(extension.packageName);
       }
@@ -635,6 +729,7 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
         _enabled.remove(packageName);
         _installed.remove(packageName);
         _hostStatus.remove(packageName);
+        _updates.remove(packageName);
         _installErrors.remove(packageName);
         _failedExtensions.remove(packageName);
         _installationIssues.remove(packageName);
@@ -852,6 +947,12 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
               : '插件库',
         ),
         actions: [
+          if (_section == _ExtensionSection.installed)
+            IconButton(
+              tooltip: '检查插件更新',
+              icon: const Icon(Icons.system_update_alt_outlined),
+              onPressed: _checkingUpdates ? null : _checkUpdates,
+            ),
           if (!searchPage)
             IconButton(
               tooltip: '搜索插件',
@@ -1031,6 +1132,8 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
                       _setFilters(value);
                     },
                   ),
+                if (_section == _ExtensionSection.installed && _checkingUpdates)
+                  const LinearProgressIndicator(minHeight: 2),
                 if (_section == _ExtensionSection.installed)
                   Expanded(
                     child: ListView(
@@ -1139,6 +1242,10 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
         !_installationIssues.containsKey(package);
     final enabled = ready && _enabled.contains(package);
     final busy = _downloading.contains(package) || _removing.contains(package);
+    final candidate = _updates[package];
+    final update = candidate != null && _isUpgrade(candidate.$1)
+        ? candidate
+        : null;
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: MihonExtensionIcon(
@@ -1148,12 +1255,25 @@ class _MihonExtensionsSheetState extends ConsumerState<MihonExtensionsSheet> {
       onTap: () => unawaited(_details(package)),
       title: Text(_packageName(package)),
       subtitle: Text(
-        'v${_installed[package] ?? host?['versionName'] ?? host?['versionCode'] ?? '未知'}'
+        'v${_installedVersionLabel(package)}'
+        '${update == null ? '' : ' → v${update.$1.versionName}'}'
         '${host?['filterProbe'] == 'unknown' ? ' · 筛选待验证，$_unknownProbeAction' : ''}',
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (_downloading.contains(package))
+            const SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else if (update != null)
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () => _installUpdate(update.$1, update.$2),
+              child: const Text('更新'),
+            ),
           PopupMenuButton<String>(
             tooltip: '插件操作',
             onSelected: (action) {

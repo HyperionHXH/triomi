@@ -116,6 +116,60 @@ Future<void> _openManagement(
   }
 }
 
+void _installedUpdateTest() {
+  testWidgets(
+    'host-recorded plugins offer only newer builds and require confirmation',
+    (tester) async {
+      const package = 'eu.kanade.tachiyomi.extension.all.mangadex';
+      const other = 'eu.kanade.tachiyomi.extension.all.other';
+      final signer = List.filled(64, 'a').join();
+      final preferences = memoryPreferences();
+      await preferences.set('mihon.repositories', [
+        'https://example.com/index.json',
+      ]);
+      await preferences.set('mihon.installedPackages', {other: '1.6.0'});
+      await preferences.set('mihon.hostStatus', {
+        for (final id in [package, other])
+          id: {'ok': true, 'versionCode': 106000, 'signerSha256': signer},
+      });
+      final http = FakeHttpClient((request) async {
+        expect(request.url, 'https://example.com/index.json');
+        return SourceResponse(
+          statusCode: 200,
+          body: jsonEncode({
+            'name': '测试仓库',
+            'extensionList': {
+              'extensions': [
+                {...extensionJson(), 'versionCode': 106001},
+                {
+                  ...extensionJson(packageName: other),
+                  'versionCode': 105999,
+                  'versionName': '1.5.9',
+                },
+              ],
+            },
+          }),
+        );
+      });
+      await _openManagement(tester, preferences, http);
+      await tester.tap(find.byTooltip('检查插件更新'));
+      await tester.pumpAndSettle();
+      final update = find.widgetWithText(TextButton, '更新');
+      expect(update, findsOneWidget);
+      await tester.tap(update);
+      await tester.pumpAndSettle();
+      expect(find.text('更新 MangaDex'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(http.requests.map((request) => request.url), [
+        'https://example.com/index.json',
+      ]);
+      expect(find.widgetWithText(TextButton, '更新'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+}
+
 Future<void> _repositories(WidgetTester tester) async {
   await tester.tap(find.byType(PopupMenuButton<String>).first);
   await tester.pump();
@@ -173,6 +227,7 @@ Future<void> _enterRepository(
 }
 
 void main() {
+  _installedUpdateTest();
   TestWidgetsFlutterBinding.ensureInitialized();
   test('modern repository content warning retains explicit NSFW declaration in browse filtering', () {
     final index = MihonRepositoryParser.parse(

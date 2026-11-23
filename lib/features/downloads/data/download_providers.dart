@@ -247,7 +247,22 @@ class DownloadController extends AsyncNotifier<List<DownloadGroup>> {
       itemRemoteId: item.remoteId,
       chapters: chapters,
     );
+    return _enqueueChapters(item, chapters, selectedChapterIds);
+  }
 
+  /// Use the current local directory without rewriting it during an update.
+  Future<int> enqueueCachedChapter(MediaItem item, String chapterId) async {
+    final chapters = await ref
+        .read(libraryRepositoryProvider)
+        .loadChapters(item.sourceId, item.remoteId);
+    return _enqueueChapters(item, chapters, {chapterId});
+  }
+
+  Future<int> _enqueueChapters(
+    MediaItem item,
+    List<Chapter> chapters,
+    Set<String>? selectedChapterIds,
+  ) async {
     var added = 0;
     for (final chapter in chapters) {
       if (chapter.locked ||
