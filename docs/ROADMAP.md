@@ -2,7 +2,7 @@
 
 ## 当前增量：0.18.5 漫画更新与插件升级
 
-按日期展示新章节，按来源收纳检查未完成项，插件库提供主动检查和确认升级。原 API35 设备使用 Keiyoushi 公开仓库完成 MangaFire 与 MangaDex 的安装升级、重启和复查，旧安装漏报已修复。修正旧库迁移测试后使用 0.18.5 发布，验收记录见 [CURRENT_STATUS](CURRENT_STATUS.md)。
+按日期展示新章节，按来源收纳检查未完成项，插件库提供主动检查和确认升级。原 API35 设备使用 Keiyoushi 公开仓库完成 MangaFire 与 MangaDex 的安装升级、重启和复查，旧安装漏报已修复。[0.18.5 已发布](https://github.com/HyperionHXH/triomi/releases/tag/v0.18.5)，Android 和 Windows 正式文件均已公开回下载核验。见 [CURRENT_STATUS](CURRENT_STATUS.md)。
 
 ## 当前增量：R197 阅读与聚合搜索精简
 
