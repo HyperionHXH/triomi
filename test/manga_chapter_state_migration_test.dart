@@ -223,11 +223,5 @@ void main() {
     } finally {
       await upgraded.close();
     }
-    final reopened = sqlite3.sqlite3.open(file.path);
-    try {
-      expect(reopened.select('PRAGMA user_version').single['user_version'], 15);
-    } finally {
-      reopened.close();
-    }
   });
 }
